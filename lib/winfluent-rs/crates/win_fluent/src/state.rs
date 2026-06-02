@@ -6,6 +6,9 @@ pub struct ControlState {
     pub hovered: bool,
     pub pressed: bool,
     pub focused: bool,
+    /// Whether the control is in a persistent "selected"/"checked" state — e.g.
+    /// the active tab. Distinct from `focused` (keyboard focus ring).
+    pub selected: bool,
     pub validation: ValidationState,
 }
 
@@ -34,6 +37,11 @@ impl ControlState {
         self
     }
 
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
     pub fn validation(mut self, validation: ValidationState) -> Self {
         self.validation = validation;
         self
@@ -51,6 +59,7 @@ impl Default for ControlState {
             hovered: false,
             pressed: false,
             focused: false,
+            selected: false,
             validation: ValidationState::default(),
         }
     }
@@ -60,8 +69,8 @@ impl fmt::Display for ControlState {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "enabled={},hovered={},pressed={},focused={},validation={}",
-            self.enabled, self.hovered, self.pressed, self.focused, self.validation
+            "enabled={},hovered={},pressed={},focused={},selected={},validation={}",
+            self.enabled, self.hovered, self.pressed, self.focused, self.selected, self.validation
         )
     }
 }

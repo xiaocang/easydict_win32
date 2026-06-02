@@ -16,6 +16,8 @@ pub enum Task<Message> {
     Stream(Pin<Box<dyn Stream<Item = Message> + Send + 'static>>),
     Window(WindowCommand<Message>),
     Platform(PlatformCommand),
+    /// Snap the scroll view with the given id back to the top (offset 0).
+    ScrollToTop(String),
     ReadClipboardText(Box<dyn Fn(Option<String>) -> Message + Send + 'static>),
     CaptureScreenRegion {
         request: ScreenCaptureRequest,
@@ -71,6 +73,11 @@ impl<Message> Task<Message> {
 
     pub fn window(command: WindowCommand<Message>) -> Self {
         Self::Window(command)
+    }
+
+    /// Snaps the scroll view with the given id back to the top.
+    pub fn scroll_to_top(id: impl Into<String>) -> Self {
+        Self::ScrollToTop(id.into())
     }
 
     pub fn clipboard_text(text: impl Into<String>) -> Self {

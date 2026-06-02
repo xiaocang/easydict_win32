@@ -68,6 +68,22 @@ public static class ScrollHelper
     }
 
     /// <summary>
+    /// Scroll an element with physical mouse-wheel input toward an absolute
+    /// percentage. If ScrollPattern is unavailable (for example in the Rust
+    /// preview window), this resets to the top before applying an approximate
+    /// percentage-derived wheel count.
+    /// </summary>
+    public static void MouseScrollToPercent(
+        AutomationElement scrollTarget,
+        double verticalPercent,
+        Action<string>? log = null,
+        Point? scrollPoint = null)
+    {
+        ScrollByMouseToPercent(scrollTarget, verticalPercent, log, scrollPoint);
+        Thread.Sleep(ScrollSettleMs);
+    }
+
+    /// <summary>
     /// Scroll to an approximate percentage, then scan incrementally until
     /// <paramref name="finder"/> returns a non-null element.
     /// </summary>
@@ -153,8 +169,15 @@ public static class ScrollHelper
 
     private static void MoveMouseToScrollTarget(
         AutomationElement scrollViewer,
-        Action<string>? log)
+        Action<string>? log,
+        Point? scrollPoint = null)
     {
+        if (scrollPoint.HasValue)
+        {
+            Mouse.MoveTo(scrollPoint.Value);
+            return;
+        }
+
         try
         {
             Mouse.MoveTo(scrollViewer.GetClickablePoint());
@@ -197,10 +220,21 @@ public static class ScrollHelper
     private static void ScrollByMouseToPercent(
         AutomationElement scrollViewer,
         double verticalPercent,
-        Action<string>? log)
+        Action<string>? log,
+        Point? scrollPoint = null)
     {
         var targetPercent = Math.Clamp(verticalPercent, 0, 100);
-        MoveMouseToScrollTarget(scrollViewer, log);
+        MoveMouseToScrollTarget(scrollViewer, log, scrollPoint);
+
+        var hasReadablePercent = TryGetVerticalScrollPercent(scrollViewer, out _);
+        if (!hasReadablePercent && targetPercent > 0)
+        {
+            for (var i = 0; i < MouseFallbackMaxWheelTicks; i++)
+            {
+                Mouse.Scroll(MouseFallbackScrollStep);
+                Thread.Sleep(MouseFallbackSettleMs);
+            }
+        }
 
         var fallbackDelta = GetMouseScrollDeltaForTargetPercent(targetPercent);
         var wheelTicks = GetMouseScrollTickCountForTargetPercent(targetPercent);

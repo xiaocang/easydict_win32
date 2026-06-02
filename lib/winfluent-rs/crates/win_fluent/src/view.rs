@@ -112,14 +112,18 @@ pub enum ViewToken<Message> {
     Spacer(SpacerToken),
     TextEditor(TextEditorToken<Message>),
     ToggleSwitch(ToggleSwitchToken<Message>),
+    Slider(SliderToken<Message>),
     ComboBox(ComboBoxToken<Message>),
     CommandBar(CommandBarToken<Message>),
     NavigationView(NavigationViewToken<Message>),
     Dialog(DialogToken<Message>),
     Layout(LayoutToken<Message>),
+    Wrap(WrapToken<Message>),
+    Overlay(OverlayToken<Message>),
     AdaptiveSwitch(AdaptiveSwitchToken<Message>),
     Lazy(LazyToken<Message>),
     ScrollView(ScrollViewToken<Message>),
+    Expander(ExpanderToken<Message>),
     SettingsRow(SettingsRowToken<Message>),
     ResultCard(ResultCardToken<Message>),
     ResultList(ResultListToken<Message>),
@@ -148,6 +152,32 @@ pub enum LayoutDistribution {
     SpaceBetween,
 }
 
+/// Per-side outer spacing (margin) in device-independent pixels.
+///
+/// Modeled separately from `padding` (which is a uniform inner inset) so that
+/// Tailwind-style `m-*`/`mx-*`/`my-*` classes map to a real, rendered offset
+/// rather than being silently dropped.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Edges {
+    pub top: u16,
+    pub right: u16,
+    pub bottom: u16,
+    pub left: u16,
+}
+
+impl Edges {
+    pub const ZERO: Self = Self {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+    };
+
+    pub fn is_zero(self) -> bool {
+        self == Self::ZERO
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextStyle {
     Caption,
@@ -165,6 +195,7 @@ pub enum ButtonKind {
     Primary,
     Chip,
     Subtle,
+    Link,
     Tile,
     Icon,
     ResultAction,
@@ -457,6 +488,19 @@ pub struct ToggleSwitchToken<Message> {
     pub a11y: A11yHint,
 }
 
+#[derive(Clone, Debug)]
+pub struct SliderToken<Message> {
+    pub id: Option<String>,
+    pub value: f32,
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub width: Length,
+    pub state: ControlState,
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComboBoxItem {
     pub id: String,
@@ -553,10 +597,91 @@ pub struct LayoutToken<Message> {
     pub spacing: u16,
     pub width: Length,
     pub height: Length,
+    pub max_width: Option<u16>,
+    pub center_x: bool,
+    pub margin: Edges,
     pub align: Alignment,
     pub distribution: LayoutDistribution,
     pub style: FluentStyle,
     pub a11y: A11yHint,
+}
+
+/// A flow layout that arranges children into rows, wrapping to a new row after
+/// `max_columns` items.
+///
+/// Mirrors WinUI `ItemsWrapGrid` with `MaximumRowsOrColumns`: at typical widths
+/// the items fit on as few rows as the column cap allows. (Width-responsive
+/// narrow reflow is a future backend enhancement; the token already carries the
+/// column cap so the app-level API will not change.)
+#[derive(Clone, Debug)]
+pub struct WrapToken<Message> {
+    pub id: Option<String>,
+    pub children: Vec<View<Message>>,
+    pub max_columns: u16,
+    pub spacing: u16,
+    pub run_spacing: u16,
+    pub a11y: A11yHint,
+}
+
+/// A z-stacked layering primitive: a `base` view with zero or more `layers`
+/// drawn on top, each independently aligned, optionally dimming the content
+/// behind it (`scrim`) and/or blocking input to it (`blocks_input`).
+///
+/// This is the shared mechanism behind floating action bars (aligned, no scrim,
+/// pass-through) and modal dialogs (centered, scrim, input-blocking), mirroring
+/// WinUI Grid Z-stacking + ContentDialog overlays.
+#[derive(Clone, Debug)]
+pub struct OverlayToken<Message> {
+    pub id: Option<String>,
+    pub base: Box<View<Message>>,
+    pub layers: Vec<OverlayLayer<Message>>,
+    pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug)]
+pub struct OverlayLayer<Message> {
+    pub content: Box<View<Message>>,
+    pub align_x: Alignment,
+    pub align_y: Alignment,
+    /// Scrim (dim) opacity behind this layer in `0.0..=1.0`; `None` = transparent.
+    pub scrim: Option<f32>,
+    pub blocks_input: bool,
+}
+
+impl<Message> OverlayLayer<Message> {
+    pub fn new(content: impl IntoView<Message>) -> Self {
+        Self {
+            content: Box::new(content.into_view()),
+            align_x: Alignment::Center,
+            align_y: Alignment::Center,
+            scrim: None,
+            blocks_input: false,
+        }
+    }
+
+    pub fn align(mut self, x: Alignment, y: Alignment) -> Self {
+        self.align_x = x;
+        self.align_y = y;
+        self
+    }
+
+    pub fn scrim(mut self, opacity: f32) -> Self {
+        self.scrim = Some(opacity);
+        self
+    }
+
+    pub fn blocks_input(mut self, value: bool) -> Self {
+        self.blocks_input = value;
+        self
+    }
+
+    /// Convenience for a centered, scrimmed, input-blocking modal layer.
+    pub fn modal(content: impl IntoView<Message>) -> Self {
+        Self::new(content)
+            .align(Alignment::Center, Alignment::Center)
+            .scrim(0.4)
+            .blocks_input(true)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -582,6 +707,19 @@ pub struct ScrollViewToken<Message> {
     pub content: Option<Box<View<Message>>>,
     pub horizontal: ScrollPolicy,
     pub vertical: ScrollPolicy,
+    pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExpanderToken<Message> {
+    pub id: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub icon: Option<IconToken>,
+    pub expanded: bool,
+    pub content: Option<Box<View<Message>>>,
+    pub trailing: Vec<View<Message>>,
+    pub action: Action<Message>,
     pub a11y: A11yHint,
 }
 
@@ -1095,6 +1233,20 @@ pub fn toggle_switch<Message>(
     }
 }
 
+pub fn slider<Message>(value: f32) -> SliderBuilder<Message> {
+    SliderBuilder {
+        id: None,
+        value,
+        min: 0.0,
+        max: 1.0,
+        step: 0.1,
+        width: Length::Fill,
+        state: ControlState::default(),
+        action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
 pub fn combo_box<Message>(
     items: impl IntoIterator<Item = ComboBoxItem>,
 ) -> ComboBoxBuilder<Message> {
@@ -1164,6 +1316,40 @@ where
     LayoutBuilder::new(LayoutKind::Row, children.into_children())
 }
 
+/// A flow layout that wraps children into rows of at most `max_columns` items.
+///
+/// Use instead of hand-splitting children across fixed rows. Set the column cap
+/// with [`max_columns`](WrapBuilder::max_columns) (defaults to 1).
+pub fn wrap<Message, Children>(children: Children) -> WrapBuilder<Message>
+where
+    Children: IntoChildren<Message>,
+{
+    WrapBuilder {
+        id: None,
+        children: children.into_children(),
+        max_columns: 1,
+        spacing: 0,
+        run_spacing: 0,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A z-stacked layering: `base` with [`layer`](OverlayBuilder::layer)s on top.
+///
+/// Use for floating action bars and modal dialogs instead of stacking siblings
+/// in a column. See [`OverlayLayer`] for per-layer alignment / scrim / input.
+pub fn overlay<Message, Base>(base: Base) -> OverlayBuilder<Message>
+where
+    Base: IntoView<Message>,
+{
+    OverlayBuilder {
+        id: None,
+        base: Box::new(base.into_view()),
+        layers: Vec::new(),
+        a11y: A11yHint::default(),
+    }
+}
+
 pub fn adaptive_switch<Message, Wide, Narrow>(
     breakpoint_width: u16,
     wide: Wide,
@@ -1223,6 +1409,20 @@ where
         right_down_action: Action::None,
         wheel_action: PointerRegionAction::None,
         escape_action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+pub fn expander<Message>(title: impl Into<String>) -> ExpanderBuilder<Message> {
+    ExpanderBuilder {
+        id: None,
+        title: title.into(),
+        description: None,
+        icon: None,
+        expanded: false,
+        content: None,
+        trailing: Vec::new(),
+        action: Action::None,
         a11y: A11yHint::default(),
     }
 }
@@ -1468,6 +1668,13 @@ impl<Message> ButtonBuilder<Message> {
         self
     }
 
+    /// Marks the button as persistently selected (e.g. the active tab), distinct
+    /// from keyboard focus. Renders the theme's selected surface.
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.state.selected = selected;
+        self
+    }
+
     pub fn validation(mut self, validation: ValidationState) -> Self {
         self.state.validation = validation;
         self
@@ -1475,6 +1682,11 @@ impl<Message> ButtonBuilder<Message> {
 
     pub fn subtle(mut self) -> Self {
         self.kind = ButtonKind::Subtle;
+        self
+    }
+
+    pub fn link(mut self) -> Self {
+        self.kind = ButtonKind::Link;
         self
     }
 
@@ -1721,6 +1933,13 @@ impl<Message> BusyOverlayBuilder<Message> {
     pub fn active(mut self, active: bool) -> Self {
         self.active = active;
         self
+    }
+
+    /// Drives the overlay directly from a [`Loadable`](crate::loadable::Loadable):
+    /// the busy indicator is shown while the value is loading. This is the
+    /// packaged "async load → loading state → overlay" interface.
+    pub fn loading<T, E>(self, loadable: &crate::loadable::Loadable<T, E>) -> Self {
+        self.active(loadable.is_loading())
     }
 
     pub fn opacity(mut self, opacity: f32) -> Self {
@@ -2065,6 +2284,88 @@ impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct SliderBuilder<Message> {
+    id: Option<String>,
+    value: f32,
+    min: f32,
+    max: f32,
+    step: f32,
+    width: Length,
+    state: ControlState,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> SliderBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn range(mut self, min: f32, max: f32) -> Self {
+        self.min = min;
+        self.max = max;
+        self
+    }
+
+    pub fn step(mut self, step: f32) -> Self {
+        self.step = step;
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    pub fn on_change(
+        mut self,
+        map: impl Fn(f32) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::number_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for SliderBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        let min = self.min.min(self.max);
+        let max = self.max.max(self.min);
+        let step = if self.step.is_finite() && self.step > 0.0 {
+            self.step
+        } else {
+            1.0
+        };
+        View::new(ViewToken::Slider(SliderToken {
+            id: self.id,
+            value: self.value.clamp(min, max),
+            min,
+            max,
+            step,
+            width: self.width,
+            state: self.state,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ComboBoxBuilder<Message> {
     id: Option<String>,
     label: Option<String>,
@@ -2328,6 +2629,9 @@ pub struct LayoutBuilder<Message> {
     spacing: u16,
     width: Length,
     height: Length,
+    max_width: Option<u16>,
+    center_x: bool,
+    margin: Edges,
     align: Alignment,
     distribution: LayoutDistribution,
     style: FluentStyle,
@@ -2344,6 +2648,9 @@ impl<Message> LayoutBuilder<Message> {
             spacing: 0,
             width: Length::Shrink,
             height: Length::Shrink,
+            max_width: None,
+            center_x: false,
+            margin: Edges::ZERO,
             align: Alignment::Start,
             distribution: LayoutDistribution::Start,
             style: FluentStyle::new(),
@@ -2386,6 +2693,28 @@ impl<Message> LayoutBuilder<Message> {
         self
     }
 
+    /// Caps the layout's width, filling available space up to `value` dips.
+    pub fn max_width(mut self, value: u16) -> Self {
+        self.max_width = Some(value);
+        self
+    }
+
+    /// Centers the (bounded-width) layout horizontally within its parent.
+    ///
+    /// Equivalent to Tailwind `mx-auto`. Only has a visible effect when the
+    /// layout's width is bounded (e.g. via [`max_width`](Self::max_width) or a
+    /// fixed width); centering a fill-width layout is a no-op, matching CSS.
+    pub fn center_x(mut self, value: bool) -> Self {
+        self.center_x = value;
+        self
+    }
+
+    /// Sets per-side outer spacing (margin) in dips.
+    pub fn margin(mut self, value: Edges) -> Self {
+        self.margin = value;
+        self
+    }
+
     pub fn space_between(mut self) -> Self {
         self.distribution = LayoutDistribution::SpaceBetween;
         self.width = Length::Fill;
@@ -2401,12 +2730,15 @@ impl<Message> LayoutBuilder<Message> {
                 self.padding = value;
             } else if let Some(value) = class.strip_prefix("gap-").and_then(utility_scale) {
                 self.spacing = value;
+            } else if let Some(value) = class.strip_prefix("max-w-").and_then(utility_scale) {
+                self.max_width = Some(value);
             } else {
                 match class {
                     "w-full" | "w-fill" => self.width = Length::Fill,
                     "w-fit" | "w-auto" => self.width = Length::Shrink,
                     "h-full" | "h-fill" => self.height = Length::Fill,
                     "h-fit" | "h-auto" => self.height = Length::Shrink,
+                    "mx-auto" => self.center_x = true,
                     "items-start" => self.align = Alignment::Start,
                     "items-center" => self.align = Alignment::Center,
                     "items-end" => self.align = Alignment::End,
@@ -2416,7 +2748,40 @@ impl<Message> LayoutBuilder<Message> {
                         self.width = Length::Fill;
                     }
                     _ => {
-                        if let Some(value) = class.strip_prefix("w-").and_then(utility_scale) {
+                        if let Some(value) = class.strip_prefix("mx-").and_then(utility_scale) {
+                            self.margin.left = value;
+                            self.margin.right = value;
+                        } else if let Some(value) =
+                            class.strip_prefix("my-").and_then(utility_scale)
+                        {
+                            self.margin.top = value;
+                            self.margin.bottom = value;
+                        } else if let Some(value) =
+                            class.strip_prefix("mt-").and_then(utility_scale)
+                        {
+                            self.margin.top = value;
+                        } else if let Some(value) =
+                            class.strip_prefix("mr-").and_then(utility_scale)
+                        {
+                            self.margin.right = value;
+                        } else if let Some(value) =
+                            class.strip_prefix("mb-").and_then(utility_scale)
+                        {
+                            self.margin.bottom = value;
+                        } else if let Some(value) =
+                            class.strip_prefix("ml-").and_then(utility_scale)
+                        {
+                            self.margin.left = value;
+                        } else if let Some(value) = class.strip_prefix("m-").and_then(utility_scale)
+                        {
+                            self.margin = Edges {
+                                top: value,
+                                right: value,
+                                bottom: value,
+                                left: value,
+                            };
+                        } else if let Some(value) = class.strip_prefix("w-").and_then(utility_scale)
+                        {
                             self.width = Length::Fixed(value);
                         } else if let Some(value) = class.strip_prefix("h-").and_then(utility_scale)
                         {
@@ -2441,9 +2806,107 @@ impl<Message> IntoView<Message> for LayoutBuilder<Message> {
             spacing: self.spacing,
             width: self.width,
             height: self.height,
+            max_width: self.max_width,
+            center_x: self.center_x,
+            margin: self.margin,
             align: self.align,
             distribution: self.distribution,
             style: self.style,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WrapBuilder<Message> {
+    id: Option<String>,
+    children: Vec<View<Message>>,
+    max_columns: u16,
+    spacing: u16,
+    run_spacing: u16,
+    a11y: A11yHint,
+}
+
+impl<Message> WrapBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Maximum number of items per row before wrapping (defaults to 1).
+    pub fn max_columns(mut self, value: u16) -> Self {
+        self.max_columns = value.max(1);
+        self
+    }
+
+    /// Gap between items within a row.
+    pub fn spacing(mut self, value: u16) -> Self {
+        self.spacing = value;
+        self
+    }
+
+    /// Gap between wrapped rows. Defaults to `spacing` when left unset.
+    pub fn run_spacing(mut self, value: u16) -> Self {
+        self.run_spacing = value;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for WrapBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        let run_spacing = if self.run_spacing == 0 {
+            self.spacing
+        } else {
+            self.run_spacing
+        };
+        View::new(ViewToken::Wrap(WrapToken {
+            id: self.id,
+            children: self.children,
+            max_columns: self.max_columns.max(1),
+            spacing: self.spacing,
+            run_spacing,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct OverlayBuilder<Message> {
+    id: Option<String>,
+    base: Box<View<Message>>,
+    layers: Vec<OverlayLayer<Message>>,
+    a11y: A11yHint,
+}
+
+impl<Message> OverlayBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Adds a layer drawn on top of the base (and any earlier layers).
+    pub fn layer(mut self, layer: OverlayLayer<Message>) -> Self {
+        self.layers.push(layer);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for OverlayBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Overlay(OverlayToken {
+            id: self.id,
+            base: self.base,
+            layers: self.layers,
             a11y: self.a11y,
         }))
     }
@@ -2540,6 +3003,17 @@ impl<Message> ScrollViewBuilder<Message> {
 
     pub fn vertical(mut self, policy: ScrollPolicy) -> Self {
         self.vertical = policy;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Sets the accessibility help text (UIA automation hook) for this scroll view.
+    pub fn help_text(mut self, help_text: impl Into<String>) -> Self {
+        self.a11y.help_text = Some(help_text.into());
         self
     }
 }
@@ -2673,6 +3147,77 @@ pub struct SettingsRowBuilder<Message> {
     content: Option<Box<View<Message>>>,
     trailing: Vec<View<Message>>,
     a11y: A11yHint,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExpanderBuilder<Message> {
+    id: Option<String>,
+    title: String,
+    description: Option<String>,
+    icon: Option<IconToken>,
+    expanded: bool,
+    content: Option<Box<View<Message>>>,
+    trailing: Vec<View<Message>>,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> ExpanderBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn description(mut self, value: impl Into<String>) -> Self {
+        self.description = Some(value.into());
+        self
+    }
+
+    pub fn icon(mut self, icon: IconToken) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn expanded(mut self, expanded: bool) -> Self {
+        self.expanded = expanded;
+        self
+    }
+
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
+        self.content = Some(Box::new(content.into_view()));
+        self
+    }
+
+    pub fn trailing(mut self, children: impl IntoChildren<Message>) -> Self {
+        self.trailing = children.into_children();
+        self
+    }
+
+    pub fn on_toggle(mut self, map: impl Fn(bool) -> Message + Send + Sync + 'static) -> Self {
+        self.action = Action::bool_input(map);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for ExpanderBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Expander(ExpanderToken {
+            id: self.id,
+            title: self.title,
+            description: self.description,
+            icon: self.icon,
+            expanded: self.expanded,
+            content: self.content,
+            trailing: self.trailing,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
 }
 
 impl<Message> SettingsRowBuilder<Message> {
@@ -3000,6 +3545,119 @@ mod tests {
                 assert_eq!(command_bar.distribution, LayoutDistribution::SpaceBetween);
             }
             _ => panic!("expected command bar"),
+        }
+    }
+
+    #[test]
+    fn tw_parses_max_width_and_centering() {
+        let view: View<Msg> = column((text("A"),))
+            .width(Length::Fill)
+            .tw("max-w-[1040px] mx-auto")
+            .into_view();
+
+        match view.token() {
+            ViewToken::Layout(layout) => {
+                assert_eq!(layout.max_width, Some(1040));
+                assert!(layout.center_x);
+                // Raw classes are still retained for the visual style backend.
+                assert_eq!(layout.style.summary(), "max-w-[1040px] mx-auto");
+            }
+            _ => panic!("expected column layout"),
+        }
+    }
+
+    #[test]
+    fn tw_parses_max_width_with_scale_units() {
+        // `max-w-N` uses the same ×4 spacing scale as p-/gap-.
+        let view: View<Msg> = column((text("A"),)).tw("max-w-64").into_view();
+        match view.token() {
+            ViewToken::Layout(layout) => assert_eq!(layout.max_width, Some(256)),
+            _ => panic!("expected column layout"),
+        }
+    }
+
+    #[test]
+    fn tw_parses_margin_shorthands() {
+        let uniform: View<Msg> = column((text("A"),)).tw("m-2").into_view();
+        let axis: View<Msg> = column((text("A"),)).tw("mx-3 my-1").into_view();
+        let sides: View<Msg> = column((text("A"),)).tw("mt-1 mr-2 mb-3 ml-4").into_view();
+
+        let margin = |view: &View<Msg>| match view.token() {
+            ViewToken::Layout(layout) => layout.margin,
+            _ => panic!("expected column layout"),
+        };
+
+        assert_eq!(
+            margin(&uniform),
+            Edges {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8
+            }
+        );
+        assert_eq!(
+            margin(&axis),
+            Edges {
+                top: 4,
+                right: 12,
+                bottom: 4,
+                left: 12
+            }
+        );
+        assert_eq!(
+            margin(&sides),
+            Edges {
+                top: 4,
+                right: 8,
+                bottom: 12,
+                left: 16
+            }
+        );
+    }
+
+    #[test]
+    fn tw_leaves_layout_box_defaults_when_classes_absent() {
+        // Regression guard against the original bug class: the previous parser
+        // had no fields for these, so they could never be asserted.
+        let view: View<Msg> = column((text("A"),)).tw("p-6 gap-4 w-full").into_view();
+        match view.token() {
+            ViewToken::Layout(layout) => {
+                assert_eq!(layout.max_width, None);
+                assert!(!layout.center_x);
+                assert!(layout.margin.is_zero());
+            }
+            _ => panic!("expected column layout"),
+        }
+    }
+
+    #[test]
+    fn wrap_builder_carries_column_cap_and_spacing() {
+        let view: View<Msg> = wrap((text("A"), text("B"), text("C")))
+            .id("tabs")
+            .max_columns(7)
+            .spacing(10)
+            .into_view();
+
+        match view.token() {
+            ViewToken::Wrap(token) => {
+                assert_eq!(token.id.as_deref(), Some("tabs"));
+                assert_eq!(token.children.len(), 3);
+                assert_eq!(token.max_columns, 7);
+                assert_eq!(token.spacing, 10);
+                // run_spacing defaults to spacing when unset.
+                assert_eq!(token.run_spacing, 10);
+            }
+            _ => panic!("expected wrap"),
+        }
+    }
+
+    #[test]
+    fn wrap_builder_clamps_zero_columns_to_one() {
+        let view: View<Msg> = wrap((text("A"),)).max_columns(0).into_view();
+        match view.token() {
+            ViewToken::Wrap(token) => assert_eq!(token.max_columns, 1),
+            _ => panic!("expected wrap"),
         }
     }
 

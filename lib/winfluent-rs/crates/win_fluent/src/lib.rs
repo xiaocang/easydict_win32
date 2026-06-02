@@ -6,6 +6,7 @@ pub mod command;
 pub mod diff;
 pub mod i18n;
 pub mod icon;
+pub mod loadable;
 pub mod motion;
 pub mod performance;
 pub mod platform;
@@ -27,6 +28,7 @@ pub use command::{command, CommandBuilder, CommandPlacement, CommandToken, Keybo
 pub use diff::{diff_views, ViewChange, ViewChangeKind, ViewPath};
 pub use i18n::{t, I18n, I18nArg, I18nBundle, LocaleId, LocalizedText, Localizer};
 pub use icon::IconToken;
+pub use loadable::Loadable;
 pub use motion::{
     Easing, Transition, CONTROL_FASTER_ANIMATION_MS, CONTROL_FAST_ANIMATION_MS,
     CONTROL_NORMAL_ANIMATION_MS,
@@ -49,19 +51,21 @@ pub use theme::{
     Stroke, ThemeMode, ThemeTokens, Typography, VisualEffects,
 };
 pub use view::{
-    adaptive_switch, busy_overlay, button, card, column, combo_box, command_bar, dialog,
-    flyout_button, lazy, navigation_view, page, pointer_region, primary_button, progress_ring,
-    result_card, result_list, row, scroll_view, service_result_card, service_result_list,
-    settings_row, spacer, status_badge, text, text_editor, title_bar, toggle_switch,
-    AdaptiveSwitchBuilder, AdaptiveSwitchToken, Alignment, BusyOverlayBuilder, BusyOverlayToken,
-    ButtonKind, CardKind, CollapseTraceDirection, CollapseTraceSample, CollapseTransition,
-    ComboBoxItem, DialogKind, FlyoutButtonBuilder, FlyoutButtonToken, FlyoutMenuItem,
-    FlyoutMenuItemKind, IntoChildren, IntoView, LayoutDistribution, LayoutKind, LazyToken, Length,
-    NavigationItem, PointerPosition, PointerRegionAction, PointerRegionActionKind,
+    adaptive_switch, busy_overlay, button, card, column, combo_box, command_bar, dialog, expander,
+    flyout_button, lazy, navigation_view, overlay, page, pointer_region, primary_button,
+    progress_ring, result_card, result_list, row, scroll_view, service_result_card,
+    service_result_list, settings_row, slider, spacer, status_badge, text, text_editor, title_bar,
+    toggle_switch, wrap, AdaptiveSwitchBuilder, AdaptiveSwitchToken, Alignment, BusyOverlayBuilder,
+    BusyOverlayToken, ButtonKind, CardKind, CollapseTraceDirection, CollapseTraceSample,
+    CollapseTransition, ComboBoxItem, DialogKind, Edges, ExpanderBuilder, ExpanderToken,
+    FlyoutButtonBuilder, FlyoutButtonToken, FlyoutMenuItem, FlyoutMenuItemKind, IntoChildren,
+    IntoView, LayoutDistribution, LayoutKind, LazyToken, Length, NavigationItem, OverlayBuilder,
+    OverlayLayer, OverlayToken, PointerPosition, PointerRegionAction, PointerRegionActionKind,
     PointerRegionBuilder, PointerRegionToken, PointerWheel, ProgressRingBuilder, ProgressRingToken,
     ResultCardBuilder, ResultCardToken, ResultItem, ResultListBuilder, ResultListToken,
-    ResultStatus, ScrollPolicy, SettingsRowKind, SpacerBuilder, SpacerToken, TextEditorChrome,
-    TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextStyle, View, ViewToken,
+    ResultStatus, ScrollPolicy, SettingsRowKind, SliderBuilder, SliderToken, SpacerBuilder,
+    SpacerToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers,
+    TextStyle, View, ViewToken, WrapBuilder, WrapToken,
 };
 pub use window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,

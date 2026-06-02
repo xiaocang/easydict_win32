@@ -404,13 +404,16 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             };
             let _ = writeln!(
                 output,
-                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} align={:?} distribution={:?}",
+                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} max_width={:?} center_x={} margin={:?} align={:?} distribution={:?}",
                 token.id,
                 token.children.len(),
                 token.padding,
                 token.spacing,
                 token.width,
                 token.height,
+                token.max_width,
+                token.center_x,
+                token.margin,
                 token.align,
                 token.distribution
             );
@@ -419,6 +422,32 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             }
             for child in &token.children {
                 write_layout(output, child, indent + 2);
+            }
+        }
+        ViewToken::Wrap(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Wrap id={:?} children={} max_columns={} spacing={} run_spacing={}",
+                token.id,
+                token.children.len(),
+                token.max_columns,
+                token.spacing,
+                token.run_spacing
+            );
+            for child in &token.children {
+                write_layout(output, child, indent + 2);
+            }
+        }
+        ViewToken::Overlay(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Overlay id={:?} layers={}",
+                token.id,
+                token.layers.len()
+            );
+            write_layout(output, &token.base, indent + 2);
+            for layer in &token.layers {
+                write_layout(output, &layer.content, indent + 2);
             }
         }
         ViewToken::Page(token) => {
@@ -531,6 +560,23 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.id, token.width, token.height
             );
         }
+        ViewToken::Expander(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Expander id={:?} trailing={} expanded={}",
+                token.id,
+                token.trailing.len(),
+                token.expanded
+            );
+            if token.expanded {
+                if let Some(content) = &token.content {
+                    write_layout(output, content, indent + 2);
+                }
+            }
+            for child in &token.trailing {
+                write_layout(output, child, indent + 2);
+            }
+        }
         ViewToken::SettingsRow(token) => {
             let _ = writeln!(
                 output,
@@ -577,6 +623,7 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         | ViewToken::StatusBadge(_)
         | ViewToken::TextEditor(_)
         | ViewToken::ToggleSwitch(_)
+        | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_) => {}
@@ -587,8 +634,8 @@ fn write_a11y(output: &mut String, node: &A11yNode, indent: usize) {
     let pad = " ".repeat(indent);
     let _ = writeln!(
         output,
-        "{pad}{:?} name={:?} focusable={}",
-        node.role, node.name, node.focusable
+        "{pad}{:?} name={:?} focusable={} help_text={:?}",
+        node.role, node.name, node.focusable, node.help_text
     );
     for child in &node.children {
         write_a11y(output, child, indent + 2);

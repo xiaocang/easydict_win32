@@ -2935,8 +2935,11 @@ fn settings_button_routes_main_window_to_settings_and_back_restores_content() {
 
     let task = app.update(Message::OpenSettings);
 
-    assert_eq!(task_kind(&task), "none");
+    // Opening settings now spawns the async on-disk runtime-status check and
+    // shows the loading overlay until it resolves.
+    assert_eq!(task_kind(&task), "future");
     assert!(app.state.settings_open);
+    assert!(app.state.settings.settings_runtime.is_loading());
     assert_eq!(app.title(&main_window), "Easydict Settings");
     let settings_snapshot = win_fluent_testkit::view_snapshot(&app.view(&main_window));
     assert!(settings_snapshot.contains("Page title=\"Settings\""));
@@ -3598,6 +3601,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::Stream(_) => "stream",
         Task::Window(_) => "window",
         Task::Platform(_) => "platform",
+        Task::ScrollToTop(_) => "scroll_to_top",
         Task::ReadClipboardText(_) => "read_clipboard",
         Task::CaptureScreenRegion { .. } => "capture_screen",
         Task::OpenFileDialog { .. } => "file_dialog",

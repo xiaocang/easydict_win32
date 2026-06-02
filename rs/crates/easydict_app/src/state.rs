@@ -20,9 +20,50 @@ use std::path::{Path, PathBuf};
 use win_fluent::prelude::*;
 use win_fluent::IconToken;
 
-pub const TRANSLATION_LANGUAGE_IDS: [&str; 16] = [
-    "ar", "da", "de", "en", "es", "fr", "hi", "id", "it", "ja", "ko", "ms", "th", "vi", "zh-Hans",
+pub const TRANSLATION_LANGUAGE_IDS: [&str; 43] = [
+    "zh-Hans",
     "zh-Hant",
+    "ja",
+    "ko",
+    "en",
+    "de",
+    "nl",
+    "sv",
+    "no",
+    "da",
+    "fr",
+    "es",
+    "pt",
+    "it",
+    "ro",
+    "ru",
+    "pl",
+    "cs",
+    "uk",
+    "bg",
+    "sk",
+    "sl",
+    "et",
+    "lv",
+    "lt",
+    "el",
+    "hu",
+    "fi",
+    "tr",
+    "ar",
+    "fa",
+    "he",
+    "hi",
+    "bn",
+    "ta",
+    "te",
+    "ur",
+    "vi",
+    "th",
+    "id",
+    "ms",
+    "tl",
+    "zh-classical",
 ];
 
 pub const DEFAULT_OCR_SYSTEM_PROMPT: &str = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
@@ -692,6 +733,7 @@ pub struct SettingsState {
     pub first_language: String,
     pub second_language: String,
     pub selected_languages: Vec<String>,
+    pub translation_languages_expanded: bool,
     pub auto_select_target_language: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
@@ -715,6 +757,10 @@ pub struct SettingsState {
     pub vision_layout_service: String,
     pub layout_model_status: String,
     pub cjk_font_status: String,
+    /// Async lifecycle of the settings runtime-status check (model/font on-disk
+    /// availability). `is_loading()` drives the entry loading overlay; the
+    /// settled value carries the resolved availability.
+    pub settings_runtime: Loadable<crate::settings_status::SettingsRuntimeStatus>,
     pub formula_font_pattern: String,
     pub formula_char_pattern: String,
     pub translation_cache_enabled: bool,
@@ -801,6 +847,7 @@ impl Default for SettingsState {
             first_language: "zh".to_string(),
             second_language: "en".to_string(),
             selected_languages: default_selected_languages(),
+            translation_languages_expanded: false,
             auto_select_target_language: true,
             minimize_to_tray: true,
             start_minimized: false,
@@ -824,6 +871,7 @@ impl Default for SettingsState {
             vision_layout_service: "gemini".to_string(),
             layout_model_status: "Not downloaded".to_string(),
             cjk_font_status: "Not downloaded".to_string(),
+            settings_runtime: Loadable::Idle,
             formula_font_pattern: String::new(),
             formula_char_pattern: String::new(),
             translation_cache_enabled: true,
@@ -1125,6 +1173,14 @@ impl EasydictUiState {
             state.settings_open = true;
         }
 
+        if std::env::var("EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.settings.translation_languages_expanded = true;
+            state.saved_settings = sanitized_settings_snapshot(&state.settings);
+        }
+
         state
     }
 
@@ -1280,9 +1336,17 @@ impl EasydictUiState {
                 self.settings_open = true;
                 self.settings.show_unsaved_changes_dialog = false;
                 self.settings.save_error_message = None;
+                // Kick off the async runtime-status check (see lib.rs); the entry
+                // loading overlay is shown until SettingsRuntimeStatusLoaded.
+                self.settings.settings_runtime.begin();
                 if !self.settings.unsaved_changes {
                     self.saved_settings = sanitized_settings_snapshot(&self.settings);
                 }
+            }
+            Message::SettingsRuntimeStatusLoaded(status) => {
+                self.settings.layout_model_status = status.layout_model.clone();
+                self.settings.cjk_font_status = status.cjk_font.clone();
+                self.settings.settings_runtime.resolve(Ok(status));
             }
             Message::Back => {
                 if self.settings.unsaved_changes {
@@ -1741,6 +1805,9 @@ impl EasydictUiState {
                 if set_selected_language(&mut self.settings, &language_id, value) {
                     mark_settings_changed(&mut self.settings);
                 }
+            }
+            Message::ToggleTranslationLanguagesExpanded(value) => {
+                self.settings.translation_languages_expanded = value;
             }
             Message::ToggleHotkey(hotkey_id, value) => {
                 if let Some(setting) = hotkey_setting_mut(&mut self.settings, &hotkey_id) {
@@ -2456,18 +2523,44 @@ fn normalize_settings_language(language_id: &str) -> String {
         "zh" | "zh-cn" | "zh-hans" => "zh-Hans".to_string(),
         "zh-tw" | "zh-hant" => "zh-Hant".to_string(),
         "ar-sa" => "ar".to_string(),
+        "bg-bg" => "bg".to_string(),
+        "bn-in" => "bn".to_string(),
+        "cs-cz" => "cs".to_string(),
         "da-dk" => "da".to_string(),
         "de-de" => "de".to_string(),
+        "el-gr" => "el".to_string(),
         "en-us" | "en-gb" => "en".to_string(),
         "es-es" => "es".to_string(),
+        "et-ee" => "et".to_string(),
+        "fa-ir" => "fa".to_string(),
+        "fi-fi" => "fi".to_string(),
+        "fil" | "fil-ph" => "tl".to_string(),
         "fr-fr" => "fr".to_string(),
+        "he-il" | "iw" => "he".to_string(),
         "hi-in" => "hi".to_string(),
+        "hu-hu" => "hu".to_string(),
         "id-id" => "id".to_string(),
         "it-it" => "it".to_string(),
         "ja-jp" => "ja".to_string(),
         "ko-kr" => "ko".to_string(),
+        "lt-lt" => "lt".to_string(),
+        "lv-lv" => "lv".to_string(),
         "ms-my" => "ms".to_string(),
+        "nb" | "nb-no" => "no".to_string(),
+        "nl-nl" => "nl".to_string(),
+        "pl-pl" => "pl".to_string(),
+        "pt-br" | "pt-pt" => "pt".to_string(),
+        "ro-ro" => "ro".to_string(),
+        "ru-ru" => "ru".to_string(),
+        "sk-sk" => "sk".to_string(),
+        "sl-si" => "sl".to_string(),
+        "sv-se" => "sv".to_string(),
+        "ta-in" => "ta".to_string(),
+        "te-in" => "te".to_string(),
         "th-th" => "th".to_string(),
+        "tr-tr" => "tr".to_string(),
+        "uk-ua" => "uk".to_string(),
+        "ur-pk" => "ur".to_string(),
         "vi-vn" => "vi".to_string(),
         other => other.to_string(),
     }
@@ -3280,6 +3373,7 @@ pub enum Message {
     SecondLanguageChanged(String),
     ToggleAutoSelectTargetLanguage(bool),
     ToggleSelectedLanguage(String, bool),
+    ToggleTranslationLanguagesExpanded(bool),
     ToggleHotkey(String, bool),
     HotkeyShortcutChanged(String, String),
     ToggleMiniAutoClose(bool),
@@ -3337,6 +3431,10 @@ pub enum Message {
     SpeakResult,
     SpeakResultIn(QuickTranslateSurface, String),
     OpenSettings,
+    /// Result of the async settings runtime-status check (model/font on-disk
+    /// availability), used to settle the `settings_runtime` [`Loadable`] and
+    /// populate the displayed statuses.
+    SettingsRuntimeStatusLoaded(crate::settings_status::SettingsRuntimeStatus),
     Back,
     SaveSettingsChanges,
     DiscardSettingsChanges,

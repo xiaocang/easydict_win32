@@ -7,6 +7,7 @@ pub enum Action<Message> {
     Message(Message),
     TextInput(Arc<dyn Fn(String) -> Message + Send + Sync + 'static>),
     BoolInput(Arc<dyn Fn(bool) -> Message + Send + Sync + 'static>),
+    NumberInput(Arc<dyn Fn(f32) -> Message + Send + Sync + 'static>),
     SelectionInput(Arc<dyn Fn(String) -> Message + Send + Sync + 'static>),
 }
 
@@ -27,6 +28,10 @@ impl<Message> Action<Message> {
         Self::BoolInput(Arc::new(map))
     }
 
+    pub fn number_input(map: impl Fn(f32) -> Message + Send + Sync + 'static) -> Self {
+        Self::NumberInput(Arc::new(map))
+    }
+
     pub fn selection_input(map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
         Self::SelectionInput(Arc::new(map))
     }
@@ -37,6 +42,7 @@ impl<Message> Action<Message> {
             Self::Message(_) => ActionKind::Message,
             Self::TextInput(_) => ActionKind::TextInput,
             Self::BoolInput(_) => ActionKind::BoolInput,
+            Self::NumberInput(_) => ActionKind::NumberInput,
             Self::SelectionInput(_) => ActionKind::SelectionInput,
         }
     }
@@ -59,6 +65,13 @@ impl<Message> Action<Message> {
         }
     }
 
+    pub fn input_number(&self, value: f32) -> Option<Message> {
+        match self {
+            Self::NumberInput(map) => Some(map(value)),
+            _ => None,
+        }
+    }
+
     pub fn input_bool(&self, value: bool) -> Option<Message> {
         match self {
             Self::BoolInput(map) => Some(map(value)),
@@ -73,6 +86,7 @@ pub enum ActionKind {
     Message,
     TextInput,
     BoolInput,
+    NumberInput,
     SelectionInput,
 }
 
@@ -83,6 +97,7 @@ impl fmt::Debug for ActionKind {
             Self::Message => "message",
             Self::TextInput => "text_input",
             Self::BoolInput => "bool_input",
+            Self::NumberInput => "number_input",
             Self::SelectionInput => "selection_input",
         })
     }
@@ -98,6 +113,7 @@ impl<Message: fmt::Debug> fmt::Debug for Action<Message> {
                 .finish(),
             Self::TextInput(_) => formatter.write_str("Action::TextInput(<handler>)"),
             Self::BoolInput(_) => formatter.write_str("Action::BoolInput(<handler>)"),
+            Self::NumberInput(_) => formatter.write_str("Action::NumberInput(<handler>)"),
             Self::SelectionInput(_) => formatter.write_str("Action::SelectionInput(<handler>)"),
         }
     }

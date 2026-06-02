@@ -18,6 +18,7 @@ pub mod openai_compatible;
 pub mod quick_translate;
 pub mod screen_capture;
 pub mod settings_migration;
+pub mod settings_status;
 pub mod settings_storage;
 pub mod state;
 pub mod theme;
@@ -448,6 +449,13 @@ impl Application for EasydictApp {
         }
 
         let task = match &message {
+            // Opening settings kicks off a real async check of the on-disk
+            // layout-model / CJK-font availability; the entry loading overlay is
+            // shown until it resolves.
+            Message::OpenSettings => settings_runtime_status_task(),
+            // Switching settings tabs resets the shared scroll view to the top,
+            // matching WinUI `MainScrollViewer.ChangeView(null, 0, null)`.
+            Message::SettingsSectionChanged(_) => Task::scroll_to_top("MainScrollViewer"),
             Message::MinimizeWindow => Task::window(WindowCommand::MinimizeCurrent(true)),
             Message::ToggleMaximizeWindow => Task::window(WindowCommand::ToggleMaximizeCurrent),
             Message::CloseWindow => Task::window(WindowCommand::CloseCurrent),
@@ -912,6 +920,16 @@ pub fn default_protocol_registrations() -> Vec<ProtocolRegistration> {
 
 pub fn browser_registrar_task(command: &'static str) -> Task<Message> {
     Task::run_bundled_executable(BROWSER_REGISTRAR_EXE, [command])
+}
+
+/// Async task that checks on-disk availability of the layout model and CJK font
+/// under the conventional Easydict data directory, replacing the static
+/// placeholder statuses with real values once it resolves.
+fn settings_runtime_status_task() -> Task<Message> {
+    Task::perform(
+        async { settings_status::load_runtime_status() },
+        Message::SettingsRuntimeStatusLoaded,
+    )
 }
 
 fn push_configured_hotkey(hotkeys: &mut Vec<Hotkey>, id: &str, setting: &HotkeySetting) {

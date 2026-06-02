@@ -137,7 +137,15 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
     assert!(snapshot.contains("id=\"SettingsHeaderText\""));
     assert_control_contains(&snapshot, "SettingsHeaderText", "style=Title");
     assert!(snapshot.contains("id=\"MainScrollViewer\""));
+    // The settings content must be capped at 1040 dips and centered — asserted
+    // structurally (not via the raw style string) so a silently-dropped
+    // `max-w-[1040px] mx-auto` cannot pass this test, unlike the original bug.
+    assert_control_contains(&snapshot, "settings.content", "max_width=1040");
+    assert_control_contains(&snapshot, "settings.content", "center_x=true");
     assert!(snapshot.contains("id=\"settings.categories\""));
+    // Tab tiles are arranged by the framework wrap primitive (7-column cap),
+    // not a hand-rolled fixed row split.
+    assert_control_contains(&snapshot, "settings.categories", "max_columns=7");
     assert!(snapshot.contains("id=\"SettingsTabSwitchRing\""));
     assert_control_contains(&snapshot, "SettingsTabSwitchRing", "active=false");
     assert_control_contains(&snapshot, "SettingsTabSwitchRing", "size=20");
@@ -160,6 +168,11 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
         assert_control_contains(&snapshot, &format!("SettingsTab_{section}"), "kind=Tile");
     }
 
+    // The active tab carries a persistent `selected` state (not keyboard focus),
+    // which drives the themed selected-tab surface.
+    assert_control_contains(&snapshot, "SettingsTab_General", "selected=true");
+    assert_control_contains(&snapshot, "SettingsTab_Services", "selected=false");
+
     assert!(snapshot.contains("title=\"App Theme\""));
     assert!(snapshot.contains("id=\"AppThemeCombo\""));
     assert!(!snapshot.contains("High Contrast"));
@@ -181,6 +194,14 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
     assert!(snapshot.contains("title=\"Hide dictionaries with no result\""));
     assert!(snapshot.contains("id=\"SettingsGeneralTtsHeader\""));
     assert!(snapshot.contains("id=\"TtsSpeedSlider\""));
+    assert_control_contains(&snapshot, "TtsSpeedSlider", "Slider");
+    assert_control_contains(&snapshot, "TtsSpeedSlider", "value=1.00");
+    assert_control_contains(&snapshot, "TtsSpeedSlider", "min=0.50");
+    assert_control_contains(&snapshot, "TtsSpeedSlider", "max=3.00");
+    assert_control_contains(&snapshot, "TtsSpeedSlider", "step=0.50");
+    assert_control_contains(&snapshot, "TtsSpeedSlider", "action=number_input");
+    assert!(!snapshot.contains("ComboBox id=\"TtsSpeedSlider\""));
+    assert!(snapshot.contains("id=\"TtsSpeedValueText\""));
     assert!(snapshot.contains("id=\"AutoPlayTranslationToggle\""));
     assert!(!snapshot.contains("id=\"SaveButton\""));
     assert!(snapshot.contains("id=\"SettingsBottomSpacer\""));
@@ -190,6 +211,14 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
     let dirty_snapshot = win_fluent_testkit::view_snapshot(&settings_view(&dirty_state.settings));
     assert!(dirty_snapshot.contains("id=\"SaveButton\""));
     assert_control_contains(&dirty_snapshot, "SaveButton", "label=\"Save Settings\"");
+    // The save bar floats over the content as an overlay layer (bottom-right,
+    // no scrim, pass-through), rather than being a scroll sibling.
+    assert_control_contains(&dirty_snapshot, "settings.root", "layers=1");
+    assert_control_contains(
+        &dirty_snapshot,
+        "settings.root",
+        "End/End/scrim=None/block=false",
+    );
 }
 
 #[test]
@@ -226,6 +255,42 @@ fn general_settings_mouse_selection_excluded_apps_panel_tracks_toggle() {
 }
 
 #[test]
+fn settings_scroll_view_exposes_selected_tab_help_text_hook() {
+    let mut state = EasydictUiState::default();
+    let a11y = win_fluent_testkit::accessibility_snapshot(&settings_view(&state.settings));
+    // UIA hook mirroring WinUI MainScrollViewer.HelpText, reflecting the section.
+    assert!(
+        a11y.contains("help_text=Some(\"SelectedSettingsTab:general\")"),
+        "missing selected-tab help text hook\n{a11y}"
+    );
+
+    state.settings.selected_section = easydict_app::SettingsSection::Advanced;
+    let a11y = win_fluent_testkit::accessibility_snapshot(&settings_view(&state.settings));
+    assert!(a11y.contains("help_text=Some(\"SelectedSettingsTab:advanced\")"));
+}
+
+#[test]
+fn settings_view_shows_loading_overlay_while_runtime_status_loads() {
+    let mut state = EasydictUiState::default();
+    assert!(
+        !win_fluent_testkit::view_snapshot(&settings_view(&state.settings))
+            .contains("id=\"SettingsLoadingRing\"")
+    );
+
+    state.settings.settings_runtime = win_fluent::Loadable::Loading;
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+
+    // Centered 32px ring hosted as an input-blocking, scrimmed overlay layer.
+    assert!(snapshot.contains("id=\"SettingsLoadingRing\""));
+    assert_control_contains(&snapshot, "SettingsLoadingRing", "size=32");
+    assert_control_contains(
+        &snapshot,
+        "settings.root",
+        "Center/Center/scrim=Some(0.3)/block=true",
+    );
+}
+
+#[test]
 fn settings_view_renders_unsaved_changes_dialog_contract() {
     let mut state = EasydictUiState::default();
     state.settings.unsaved_changes = true;
@@ -234,6 +299,12 @@ fn settings_view_renders_unsaved_changes_dialog_contract() {
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
     assert!(snapshot.contains("Dialog title=\"Unsaved Settings\" kind=Confirmation"));
+    // The dialog is hosted as a centered, scrimmed, input-blocking modal layer.
+    assert_control_contains(
+        &snapshot,
+        "settings.root",
+        "Center/Center/scrim=Some(0.4)/block=true",
+    );
     assert!(snapshot.contains("id=\"settings.unsaved_dialog\""));
     assert!(snapshot.contains("Text value=\"Save your settings changes before leaving?\""));
     assert!(snapshot.contains("id=\"settings.unsaved.save\""));
@@ -1122,7 +1193,7 @@ fn about_settings_renders_required_links_with_automation_ids() {
     ] {
         assert!(snapshot.contains(&format!("id=\"{id}\"")));
         assert_control_contains(&snapshot, id, &format!("label=\"{label}\""));
-        assert_control_contains(&snapshot, id, "kind=Subtle");
+        assert_control_contains(&snapshot, id, "kind=Link");
         assert_control_contains(&snapshot, id, &format!("tooltip=\"{url}\""));
         assert_control_contains(&snapshot, id, "action=message");
     }
@@ -1356,18 +1427,57 @@ fn language_settings_render_selected_language_toggles() {
         );
     }
     assert!(snapshot.contains("id=\"settings.language.translation_languages\""));
+    assert_control_contains(
+        &snapshot,
+        "settings.language.translation_languages",
+        "Expander",
+    );
+    assert_control_contains(
+        &snapshot,
+        "settings.language.translation_languages",
+        "expanded=false",
+    );
+    assert_control_contains(
+        &snapshot,
+        "settings.language.translation_languages",
+        "action=bool_input",
+    );
+    assert!(!snapshot.contains("id=\"settings.language.selected_languages\""));
+
+    state.apply(easydict_app::Message::ToggleTranslationLanguagesExpanded(
+        true,
+    ));
+    state.settings.selected_section = easydict_app::SettingsSection::Language;
+
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+
+    assert_control_contains(
+        &snapshot,
+        "settings.language.translation_languages",
+        "expanded=true",
+    );
     assert!(snapshot.contains("id=\"settings.language.selected_languages\""));
+    assert_control_contains(
+        &snapshot,
+        "settings.language.selected_languages",
+        "max_columns=4",
+    );
     assert!(snapshot.contains("id=\"settings.language.selected.fr\""));
     assert!(snapshot.contains("id=\"settings.language.selected.fr.toggle\""));
     assert!(snapshot.contains("ToggleSwitch label=\"French\" checked=true"));
     assert!(snapshot.contains("id=\"settings.language.selected.zh-Hans\""));
     assert!(snapshot.contains("ToggleSwitch label=\"Chinese (Simplified)\" checked=true"));
+    assert!(snapshot.contains("id=\"settings.language.selected.pt\""));
+    assert!(snapshot.contains("ToggleSwitch label=\"Portuguese\" checked=true"));
+    assert!(snapshot.contains("id=\"settings.language.selected.zh-classical\""));
+    assert!(snapshot.contains("ToggleSwitch label=\"Classical Chinese\" checked=true"));
 
     state.apply(easydict_app::Message::ToggleSelectedLanguage(
         "fr".to_string(),
         false,
     ));
     state.settings.selected_section = easydict_app::SettingsSection::Language;
+    state.settings.translation_languages_expanded = true;
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
@@ -1377,6 +1487,7 @@ fn language_settings_render_selected_language_toggles() {
     state.settings.first_language = "en".to_string();
     state.settings.second_language = "ja".to_string();
     state.settings.selected_section = easydict_app::SettingsSection::Language;
+    state.settings.translation_languages_expanded = true;
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 

@@ -126,11 +126,26 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         ViewToken::NavigationView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Dialog(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Layout(token) => token.children.iter().collect(),
+        ViewToken::Wrap(token) => token.children.iter().collect(),
+        ViewToken::Overlay(token) => {
+            let mut children: Vec<&View<Message>> = vec![token.base.as_ref()];
+            children.extend(token.layers.iter().map(|layer| layer.content.as_ref()));
+            children
+        }
         ViewToken::AdaptiveSwitch(token) => vec![token.wide.as_ref(), token.narrow.as_ref()],
         ViewToken::Lazy(token) => vec![token.content.as_ref()],
         ViewToken::ScrollView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Card(token) => {
             let mut children: Vec<&View<Message>> = token.content.iter().map(Box::as_ref).collect();
+            children.extend(token.trailing.iter());
+            children
+        }
+        ViewToken::Expander(token) => {
+            let mut children: Vec<&View<Message>> = if token.expanded {
+                token.content.iter().map(Box::as_ref).collect()
+            } else {
+                Vec::new()
+            };
             children.extend(token.trailing.iter());
             children
         }
@@ -149,6 +164,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         | ViewToken::Spacer(_)
         | ViewToken::TextEditor(_)
         | ViewToken::ToggleSwitch(_)
+        | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_) => Vec::new(),
@@ -169,6 +185,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::Spacer(_) => "Spacer",
         ViewToken::TextEditor(_) => "TextEditor",
         ViewToken::ToggleSwitch(_) => "ToggleSwitch",
+        ViewToken::Slider(_) => "Slider",
         ViewToken::ComboBox(_) => "ComboBox",
         ViewToken::CommandBar(_) => "CommandBar",
         ViewToken::NavigationView(_) => "NavigationView",
@@ -177,9 +194,12 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
             LayoutKind::Column => "Column",
             LayoutKind::Row => "Row",
         },
+        ViewToken::Wrap(_) => "Wrap",
+        ViewToken::Overlay(_) => "Overlay",
         ViewToken::AdaptiveSwitch(_) => "AdaptiveSwitch",
         ViewToken::Lazy(_) => "Lazy",
         ViewToken::ScrollView(_) => "ScrollView",
+        ViewToken::Expander(_) => "Expander",
         ViewToken::SettingsRow(_) => "SettingsRow",
         ViewToken::ResultCard(_) => "ResultCard",
         ViewToken::ResultList(_) => "ResultList",
@@ -202,14 +222,18 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::Spacer(token) => token.id.as_deref(),
         ViewToken::TextEditor(token) => token.id.as_deref(),
         ViewToken::ToggleSwitch(token) => token.id.as_deref(),
+        ViewToken::Slider(token) => token.id.as_deref(),
         ViewToken::ComboBox(token) => token.id.as_deref(),
         ViewToken::CommandBar(token) => token.id.as_deref(),
         ViewToken::NavigationView(token) => token.id.as_deref(),
         ViewToken::Dialog(token) => token.id.as_deref(),
         ViewToken::Layout(token) => token.id.as_deref(),
+        ViewToken::Wrap(token) => token.id.as_deref(),
+        ViewToken::Overlay(token) => token.id.as_deref(),
         ViewToken::AdaptiveSwitch(token) => token.id.as_deref(),
         ViewToken::Lazy(token) => token.id.as_deref().or(Some(token.key.as_str())),
         ViewToken::ScrollView(token) => token.id.as_deref(),
+        ViewToken::Expander(token) => token.id.as_deref(),
         ViewToken::SettingsRow(token) => token.id.as_deref(),
         ViewToken::ResultCard(token) => token.id.as_deref(),
         ViewToken::ResultList(token) => token.id.as_deref(),
@@ -295,6 +319,16 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.state,
             token.action.kind()
         ),
+        ViewToken::Slider(token) => format!(
+            "{:.2}|{:.2}..={:.2}|step={:.2}|{:?}|{}|{:?}",
+            token.value,
+            token.min,
+            token.max,
+            token.step,
+            token.width,
+            token.state,
+            token.action.kind()
+        ),
         ViewToken::ComboBox(token) => format!(
             "{:?}|{:?}|items={}|{:?}|{}|{:?}",
             token.label,
@@ -324,20 +358,49 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.secondary.is_some()
         ),
         ViewToken::Layout(token) => format!(
-            "padding={}|spacing={}|{:?}|{:?}|{:?}|{:?}|style={:?}",
+            "padding={}|spacing={}|{:?}|{:?}|max_width={:?}|center_x={}|margin={:?}|{:?}|{:?}|style={:?}",
             token.padding,
             token.spacing,
             token.width,
             token.height,
+            token.max_width,
+            token.center_x,
+            token.margin,
             token.align,
             token.distribution,
             token.style.summary()
         ),
+        ViewToken::Wrap(token) => format!(
+            "max_columns={}|spacing={}|run_spacing={}",
+            token.max_columns, token.spacing, token.run_spacing
+        ),
+        ViewToken::Overlay(token) => {
+            let layers = token
+                .layers
+                .iter()
+                .map(|layer| {
+                    format!(
+                        "{:?}/{:?}/scrim={:?}/block={}",
+                        layer.align_x, layer.align_y, layer.scrim, layer.blocks_input
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("layers=[{layers}]")
+        }
         ViewToken::AdaptiveSwitch(token) => {
             format!("breakpoint_width={}", token.breakpoint_width)
         }
         ViewToken::Lazy(token) => token.key.clone(),
         ViewToken::ScrollView(token) => format!("{:?}|{:?}", token.horizontal, token.vertical),
+        ViewToken::Expander(token) => format!(
+            "{:?}|{:?}|expanded={}|action={:?}|{:?}",
+            token.title,
+            token.description,
+            token.expanded,
+            token.action.kind(),
+            token.icon.as_ref().map(|icon| icon.name)
+        ),
         ViewToken::SettingsRow(token) => format!(
             "{:?}|{:?}|{:?}|{:?}",
             token.title,

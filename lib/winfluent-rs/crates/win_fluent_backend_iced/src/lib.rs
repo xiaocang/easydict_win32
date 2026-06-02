@@ -17,15 +17,16 @@ use iced::advanced::{
 };
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
-    button as iced_button, checkbox as iced_checkbox, column as iced_column,
-    container as iced_container, opaque as iced_opaque, pick_list as iced_pick_list,
-    responsive as iced_responsive, row as iced_row, scrollable as iced_scrollable,
-    space as iced_space, stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
-    text_input as iced_text_input,
+    button as iced_button, column as iced_column, container as iced_container,
+    opaque as iced_opaque, pick_list as iced_pick_list, responsive as iced_responsive,
+    row as iced_row, scrollable as iced_scrollable, slider as iced_slider, space as iced_space,
+    stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
+    text_input as iced_text_input, toggler as iced_toggler,
 };
 use iced::{
     alignment, font, keyboard, window, Background, Border, Color, Element, Event, Font,
-    Length as IcedLength, Point, Rectangle, Shadow, Size, Subscription, Vector,
+    Length as IcedLength, Padding as IcedPadding, Point, Rectangle, Shadow, Size, Subscription,
+    Vector,
 };
 use win_fluent::action::{Action, ActionKind};
 use win_fluent::command::CommandToken;
@@ -45,11 +46,12 @@ use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
     AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CardKind, CardToken, CollapseTransition,
-    ComboBoxItem, FlyoutButtonToken, LayoutDistribution, LayoutKind, Length, PointerPosition,
-    PointerRegionAction, PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken,
-    ResultItem, ResultListToken, ResultStatus, SettingsRowToken, StatusBadgeToken,
-    TextEditorChrome, TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken,
-    TextStyle, TitleBarToken, View, ViewToken,
+    ComboBoxItem, ExpanderToken, FlyoutButtonToken, LayoutDistribution, LayoutKind, LayoutToken,
+    Length, OverlayToken, PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel,
+    ProgressRingToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus,
+    SettingsRowToken, SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey,
+    TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken, TextStyle, TitleBarToken, View,
+    ViewToken, WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -304,6 +306,10 @@ where
             FluentTask::Stream(stream) => iced::Task::stream(stream).map(IcedRuntimeMessage::App),
             FluentTask::Window(command) => self.window_command(command),
             FluentTask::Platform(command) => self.platform_command(command),
+            FluentTask::ScrollToTop(id) => iced::widget::operation::snap_to(
+                iced::advanced::widget::Id::from(id),
+                iced::widget::scrollable::RelativeOffset::START,
+            ),
             FluentTask::ReadClipboardText(map) => {
                 iced::clipboard::read().map(move |text| IcedRuntimeMessage::App(map(text)))
             }
@@ -901,6 +907,17 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
                 collect_text_editor_values(child, values);
             }
         }
+        ViewToken::Wrap(token) => {
+            for child in &token.children {
+                collect_text_editor_values(child, values);
+            }
+        }
+        ViewToken::Overlay(token) => {
+            collect_text_editor_values(&token.base, values);
+            for layer in &token.layers {
+                collect_text_editor_values(&layer.content, values);
+            }
+        }
         ViewToken::AdaptiveSwitch(token) => {
             collect_text_editor_values(&token.wide, values);
             collect_text_editor_values(&token.narrow, values);
@@ -909,6 +926,16 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         ViewToken::ScrollView(token) => {
             if let Some(content) = &token.content {
                 collect_text_editor_values(content, values);
+            }
+        }
+        ViewToken::Expander(token) => {
+            if token.expanded {
+                if let Some(content) = &token.content {
+                    collect_text_editor_values(content, values);
+                }
+            }
+            for trailing in &token.trailing {
+                collect_text_editor_values(trailing, values);
             }
         }
         ViewToken::SettingsRow(token) => {
@@ -932,6 +959,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         | ViewToken::ProgressRing(_)
         | ViewToken::Spacer(_)
         | ViewToken::ToggleSwitch(_)
+        | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_) => {}
@@ -1022,11 +1050,26 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         }
         ViewToken::Dialog(token) => token.content.as_deref().and_then(focused_text_editor_id),
         ViewToken::Layout(token) => token.children.iter().find_map(focused_text_editor_id),
+        ViewToken::Wrap(token) => token.children.iter().find_map(focused_text_editor_id),
+        ViewToken::Overlay(token) => focused_text_editor_id(&token.base).or_else(|| {
+            token
+                .layers
+                .iter()
+                .find_map(|layer| focused_text_editor_id(&layer.content))
+        }),
         ViewToken::AdaptiveSwitch(token) => {
             focused_text_editor_id(&token.wide).or_else(|| focused_text_editor_id(&token.narrow))
         }
         ViewToken::Lazy(token) => focused_text_editor_id(&token.content),
         ViewToken::ScrollView(token) => token.content.as_deref().and_then(focused_text_editor_id),
+        ViewToken::Expander(token) => {
+            let content_focus = if token.expanded {
+                token.content.as_deref().and_then(focused_text_editor_id)
+            } else {
+                None
+            };
+            content_focus.or_else(|| token.trailing.iter().find_map(focused_text_editor_id))
+        }
         ViewToken::SettingsRow(token) => token
             .content
             .as_deref()
@@ -1039,6 +1082,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         | ViewToken::Spacer(_)
         | ViewToken::Text(_)
         | ViewToken::ToggleSwitch(_)
+        | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_)
@@ -1080,7 +1124,13 @@ where
                 visual,
             ))
             .style(move |_, status| {
-                button_style_with_state(visual, kind, token.state.focused, status)
+                button_style_with_state(
+                    visual,
+                    kind,
+                    token.state.focused,
+                    token.state.selected,
+                    status,
+                )
             });
 
             control = match kind {
@@ -1109,6 +1159,7 @@ where
                     .height(IcedLength::Fixed(76.0))
                     .padding([8, 10]),
                 ButtonKind::Subtle => control.padding([6, 10]),
+                ButtonKind::Link => control.padding([2, 0]),
                 ButtonKind::Standard => control.padding([6, 12]),
             };
 
@@ -1131,9 +1182,12 @@ where
             .into(),
         ViewToken::TextEditor(token) => compile_text_editor(token, provider, visual),
         ViewToken::ToggleSwitch(token) => {
-            let mut control = iced_checkbox(token.checked)
-                .label(token.label.clone())
-                .style(move |_, status| checkbox_style(visual, status));
+            let mut control = iced_toggler(token.checked)
+                .label(toggle_switch_label(&token.label, token.checked))
+                .size(20)
+                .spacing(8)
+                .text_size(visual.body_size)
+                .style(move |_, status| toggle_switch_style(visual, status));
 
             if token.state.enabled && token.action.kind() == ActionKind::BoolInput {
                 let action = token.action.clone();
@@ -1146,6 +1200,7 @@ where
 
             control.into()
         }
+        ViewToken::Slider(token) => compile_slider(token, visual),
         ViewToken::ComboBox(token) => compile_combo_box(
             &token.items,
             token.selected.as_deref(),
@@ -1258,8 +1313,12 @@ where
                     .into(),
             };
 
-            apply_layout_style(content, &token.style, token.width, token.height, visual)
+            let styled =
+                apply_layout_style(content, &token.style, token.width, token.height, visual);
+            apply_layout_box(styled, token)
         }
+        ViewToken::Wrap(token) => compile_wrap(token, provider, visual),
+        ViewToken::Overlay(token) => compile_overlay(token, provider, visual),
         ViewToken::AdaptiveSwitch(token) => compile_adaptive_switch(token, provider, visual),
         ViewToken::Lazy(token) => {
             compile_view_with_text_editors_and_visual(&token.content, provider, visual)
@@ -1270,11 +1329,16 @@ where
                 .as_deref()
                 .map(|content| compile_view_with_text_editors_and_visual(content, provider, visual))
                 .unwrap_or_else(empty);
-            iced_scrollable(iced_container(content).width(IcedLength::Fill))
+            let mut scroll = iced_scrollable(iced_container(content).width(IcedLength::Fill))
                 .width(IcedLength::Fill)
-                .height(IcedLength::Fill)
-                .into()
+                .height(IcedLength::Fill);
+            if let Some(id) = &token.id {
+                // Expose the scroll id so `Task::scroll_to_top` can target it.
+                scroll = scroll.id(iced::advanced::widget::Id::from(id.clone()));
+            }
+            scroll.into()
         }
+        ViewToken::Expander(token) => compile_expander(token, provider, visual),
         ViewToken::SettingsRow(token) => compile_settings_row(token, provider, visual),
         ViewToken::ResultCard(token) => compile_result_card(token, visual),
         ViewToken::ResultList(token) => compile_result_list(token, visual),
@@ -1322,6 +1386,32 @@ where
         .size(text_size(style, visual))
         .color(text_color(style, visual))
         .into()
+}
+
+fn compile_slider<'a, Message>(
+    token: &'a SliderToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    if !token.state.enabled || token.action.kind() != ActionKind::NumberInput {
+        return iced_container(iced_text(format!("{:.1}x", token.value)))
+            .width(iced_length(token.width))
+            .into();
+    }
+
+    let action = token.action.clone();
+    iced_slider(token.min..=token.max, token.value, move |value| {
+        action
+            .input_number(value)
+            .expect("slider action must produce a message")
+    })
+    .step(token.step)
+    .width(iced_length(token.width))
+    .height(20)
+    .style(move |_, status| slider_style(visual, status))
+    .into()
 }
 
 struct PointerRegionWidget<'a, Message> {
@@ -1848,43 +1938,102 @@ where
         return content;
     }
 
-    let overlay = iced_container(
-        iced_column(vec![
-            compile_progress_ring(
-                &ProgressRingToken {
-                    id: None,
-                    active: true,
-                    size: 20,
-                    label: None,
-                    a11y: win_fluent::A11yHint::default(),
-                },
-                visual,
-            ),
-            compile_text(
-                token.label.as_deref().unwrap_or("Loading"),
-                TextStyle::Caption,
-                visual,
-            ),
-        ])
-        .spacing(8)
-        .align_x(alignment::Horizontal::Center),
-    )
-    .width(IcedLength::Fill)
-    .height(IcedLength::Fill)
+    // The busy overlay is a specialized centered, scrimmed layer built on the
+    // same stack-layer mechanism as the general `overlay` primitive.
+    let indicator: IcedElement<'a, Message> = iced_column(vec![
+        compile_progress_ring(
+            &ProgressRingToken {
+                id: None,
+                active: true,
+                size: 20,
+                label: None,
+                a11y: win_fluent::A11yHint::default(),
+            },
+            visual,
+        ),
+        compile_text(
+            token.label.as_deref().unwrap_or("Loading"),
+            TextStyle::Caption,
+            visual,
+        ),
+    ])
+    .spacing(8)
     .align_x(alignment::Horizontal::Center)
-    .align_y(alignment::Vertical::Center)
-    .style({
-        let opacity = token.opacity;
-        move |_| busy_overlay_style(visual, opacity)
-    });
+    .into();
 
-    let overlay: IcedElement<'a, Message> = if token.blocks_input {
-        iced_opaque(overlay)
-    } else {
-        overlay.into()
-    };
+    let overlay = overlay_layer_element(
+        indicator,
+        alignment::Horizontal::Center,
+        alignment::Vertical::Center,
+        Some(token.opacity),
+        token.blocks_input,
+        visual,
+    );
 
     iced_stack(vec![content, overlay]).into()
+}
+
+/// Builds a single overlay stack-layer: a full-size container that aligns its
+/// content, optionally paints a scrim behind it, and optionally captures input
+/// (so content beneath cannot be interacted with). Shared by `compile_overlay`
+/// and `compile_busy_overlay`.
+fn overlay_layer_element<'a, Message>(
+    content: IcedElement<'a, Message>,
+    align_x: alignment::Horizontal,
+    align_y: alignment::Vertical,
+    scrim: Option<f32>,
+    blocks_input: bool,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let mut layer = iced_container(content)
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fill)
+        .align_x(align_x)
+        .align_y(align_y);
+
+    if let Some(opacity) = scrim {
+        layer = layer.style(move |_| busy_overlay_style(visual, opacity));
+    }
+
+    if blocks_input {
+        iced_opaque(layer)
+    } else {
+        layer.into()
+    }
+}
+
+fn compile_overlay<'a, Message, Provider>(
+    token: &'a OverlayToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let base = compile_view_with_text_editors_and_visual(&token.base, provider, visual);
+    if token.layers.is_empty() {
+        return base;
+    }
+
+    let mut stack = Vec::with_capacity(token.layers.len() + 1);
+    stack.push(base);
+    for layer in &token.layers {
+        let content = compile_view_with_text_editors_and_visual(&layer.content, provider, visual);
+        stack.push(overlay_layer_element(
+            content,
+            horizontal_alignment(layer.align_x),
+            vertical_alignment(layer.align_y),
+            layer.scrim,
+            layer.blocks_input,
+            visual,
+        ));
+    }
+
+    iced_stack(stack).into()
 }
 
 fn compile_adaptive_switch<'a, Message, Provider>(
@@ -1908,6 +2057,53 @@ where
         }
     })
     .into()
+}
+
+fn compile_wrap<'a, Message, Provider>(
+    token: &'a WrapToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    // Chunk children into rows of at most `max_columns`, matching WinUI
+    // ItemsWrapGrid's column cap. (Width-responsive narrow reflow can later be
+    // layered in here via `iced_responsive` without changing the token API.)
+    let compiled = token
+        .children
+        .iter()
+        .map(|child| compile_view_with_text_editors_and_visual(child, provider, visual))
+        .collect::<Vec<_>>();
+
+    let rows = chunk_for_wrap(compiled, usize::from(token.max_columns.max(1)))
+        .into_iter()
+        .map(|row| iced_row(row).spacing(u32::from(token.spacing)).into())
+        .collect::<Vec<IcedElement<'a, Message>>>();
+
+    iced_column(rows)
+        .spacing(u32::from(token.run_spacing))
+        .width(IcedLength::Fill)
+        .into()
+}
+
+/// Splits `items` into consecutive chunks of at most `max_columns` (>= 1),
+/// the row-wrapping rule used by [`compile_wrap`].
+fn chunk_for_wrap<T>(items: Vec<T>, max_columns: usize) -> Vec<Vec<T>> {
+    let max = max_columns.max(1);
+    let mut rows: Vec<Vec<T>> = Vec::new();
+    let mut current: Vec<T> = Vec::with_capacity(max);
+    for item in items {
+        current.push(item);
+        if current.len() == max {
+            rows.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        rows.push(current);
+    }
+    rows
 }
 
 fn apply_layout_style<'a, Message>(
@@ -1940,6 +2136,55 @@ fn layout_style_needs_container(style: &FluentStyle) -> bool {
         || style.has("border")
         || style.has_prefix("rounded")
         || style.has_prefix("shadow")
+}
+
+/// Applies the geometric "box" properties (`max-w-*`, `mx-auto`, `m-*`) that are
+/// parsed structurally on the layout token, on top of any visual styling.
+///
+/// `max-width` + centering uses the nested double-container idiom verified in
+/// `nested_container_centers_and_caps_max_width_in_layout_engine`: a single
+/// capped container collapses to its max-width and sits flush-left, so an OUTER
+/// fill-width container is required to center the capped INNER container within
+/// the available space. `margin` becomes an outer transparent container padding.
+fn apply_layout_box<'a, Message, Theme, Renderer>(
+    content: Element<'a, Message, Theme, Renderer>,
+    token: &LayoutToken<Message>,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: iced::widget::container::Catalog + 'a,
+    Renderer: iced::advanced::Renderer + 'a,
+{
+    let mut element = content;
+
+    if let Some(max) = token.max_width {
+        let inner = iced_container(element)
+            .max_width(f32::from(max))
+            .width(IcedLength::Fill);
+        element = if token.center_x {
+            iced_container(inner).center_x(IcedLength::Fill).into()
+        } else {
+            inner.into()
+        };
+    } else if token.center_x {
+        // `mx-auto` without an explicit max-width centers a bounded-width child;
+        // a fill-width child stays full-bleed, matching CSS auto-margins.
+        element = iced_container(element).center_x(IcedLength::Fill).into();
+    }
+
+    if !token.margin.is_zero() {
+        let margin = token.margin;
+        element = iced_container(element)
+            .padding(IcedPadding {
+                top: f32::from(margin.top),
+                right: f32::from(margin.right),
+                bottom: f32::from(margin.bottom),
+                left: f32::from(margin.left),
+            })
+            .into();
+    }
+
+    element
 }
 
 fn compile_card<'a, Message, Provider>(
@@ -2137,6 +2382,90 @@ where
     .into()
 }
 
+fn compile_expander<'a, Message, Provider>(
+    token: &'a ExpanderToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
+    let mut text_column =
+        iced_column(vec![compile_text(&title, TextStyle::Subtitle, visual)]).spacing(6);
+
+    if let Some(description) = &token.description {
+        text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
+    }
+
+    let mut trailing = iced_row(Vec::new()).spacing(8);
+    for child in &token.trailing {
+        trailing = trailing.push(compile_view_with_text_editors_and_visual(
+            child, provider, visual,
+        ));
+    }
+
+    if token.action.kind() == ActionKind::BoolInput {
+        let icon = win_fluent::IconToken::with_glyph(
+            "expander-chevron",
+            if token.expanded {
+                '\u{E70E}'
+            } else {
+                '\u{E70D}'
+            },
+        );
+        let action = token.action.clone();
+        let next_expanded = !token.expanded;
+        let expand_button = iced_button(button_content("", ButtonKind::Icon, Some(&icon), visual))
+            .width(IcedLength::Fixed(32.0))
+            .height(IcedLength::Fixed(32.0))
+            .padding(0)
+            .style(move |_, status| button_style(visual, ButtonKind::Icon, status))
+            .on_press(
+                action
+                    .input_bool(next_expanded)
+                    .expect("expander action must produce a message"),
+            );
+        trailing = trailing.push(expand_button);
+    }
+
+    let has_header_controls =
+        !token.trailing.is_empty() || token.action.kind() == ActionKind::BoolInput;
+    let header = if has_header_controls {
+        iced_row(vec![
+            text_column.width(IcedLength::Fill).into(),
+            trailing.into(),
+        ])
+        .spacing(12)
+        .width(IcedLength::Fill)
+        .align_y(alignment::Vertical::Center)
+    } else {
+        iced_row(vec![text_column.width(IcedLength::Fill).into()])
+            .spacing(12)
+            .width(IcedLength::Fill)
+            .align_y(alignment::Vertical::Center)
+    };
+
+    let mut layout = iced_column(vec![header.into()])
+        .padding(24)
+        .spacing(12)
+        .width(IcedLength::Fill);
+
+    if token.expanded {
+        if let Some(content) = &token.content {
+            layout = layout.push(compile_view_with_text_editors_and_visual(
+                content, provider, visual,
+            ));
+        }
+    }
+
+    iced_container(layout)
+        .width(IcedLength::Fill)
+        .style(move |_| settings_row_container_style(visual))
+        .into()
+}
+
 fn compile_settings_row<'a, Message, Provider>(
     token: &'a SettingsRowToken<Message>,
     provider: Provider,
@@ -2161,13 +2490,21 @@ where
         ));
     }
 
-    let header = iced_row(vec![
-        text_column.width(IcedLength::Fill).into(),
-        trailing.into(),
-    ])
-    .spacing(12)
-    .width(IcedLength::Fill)
-    .align_y(alignment::Vertical::Center);
+    let has_header_controls = !token.trailing.is_empty();
+    let header = if has_header_controls {
+        iced_row(vec![
+            text_column.width(IcedLength::Fill).into(),
+            trailing.into(),
+        ])
+        .spacing(12)
+        .width(IcedLength::Fill)
+        .align_y(alignment::Vertical::Center)
+    } else {
+        iced_row(vec![text_column.width(IcedLength::Fill).into()])
+            .spacing(12)
+            .width(IcedLength::Fill)
+            .align_y(alignment::Vertical::Center)
+    };
 
     let mut layout = iced_column(vec![header.into()])
         .padding(24)
@@ -3036,23 +3373,30 @@ where
 {
     let icon_color = match kind {
         ButtonKind::Primary => visual.text_on_accent,
-        ButtonKind::FloatingAction => visual.accent,
+        ButtonKind::FloatingAction | ButtonKind::Link => visual.accent,
         _ => visual.text_primary,
     };
 
     match (kind, icon, label.trim().is_empty()) {
-        (ButtonKind::Tile, Some(icon), false) => iced_column(vec![
-            icon_element(icon, button_icon_size(kind), icon_color),
-            iced_text(label.to_string())
-                .font(text_font(TextStyle::Caption))
-                .size(button_text_size(kind, visual))
-                .color(icon_color)
-                .into(),
-        ])
-        .spacing(6)
-        .align_x(alignment::Horizontal::Center)
-        .width(IcedLength::Fill)
-        .into(),
+        (ButtonKind::Tile, Some(icon), false) => {
+            let content = iced_column(vec![
+                icon_element(icon, button_icon_size(kind), icon_color),
+                iced_text(label.to_string())
+                    .font(text_font(TextStyle::Caption))
+                    .size(button_text_size(kind, visual))
+                    .color(icon_color)
+                    .into(),
+            ])
+            .spacing(6)
+            .align_x(alignment::Horizontal::Center);
+
+            iced_container(content)
+                .width(IcedLength::Fill)
+                .height(IcedLength::Fill)
+                .align_x(alignment::Horizontal::Center)
+                .align_y(alignment::Vertical::Center)
+                .into()
+        }
         (
             ButtonKind::Icon | ButtonKind::FloatingAction | ButtonKind::ResultAction,
             Some(icon),
@@ -3177,7 +3521,9 @@ fn button_text_size(kind: ButtonKind, visual: IcedVisualTheme) -> f32 {
     match kind {
         ButtonKind::Icon | ButtonKind::ResultAction | ButtonKind::FloatingAction => 18.0,
         ButtonKind::Primary => visual.body_size,
-        ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Chip => visual.body_size,
+        ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::Chip => {
+            visual.body_size
+        }
         ButtonKind::Tile => visual.caption_size,
     }
 }
@@ -3187,7 +3533,7 @@ fn button_icon_size(kind: ButtonKind) -> f32 {
         ButtonKind::Icon | ButtonKind::ResultAction => 18.0,
         ButtonKind::FloatingAction => 16.0,
         ButtonKind::Primary => 20.0,
-        ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Chip => 16.0,
+        ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::Chip => 16.0,
         ButtonKind::Tile => 22.0,
     }
 }
@@ -3303,6 +3649,7 @@ struct IcedVisualTheme {
     background: Color,
     surface: Color,
     surface_alt: Color,
+    selected_surface: Color,
     input_surface: Color,
     result_surface: Color,
     result_header: Color,
@@ -3365,6 +3712,7 @@ impl IcedVisualTheme {
             background: iced_color(theme.background),
             surface: iced_color(theme.surface),
             surface_alt: iced_color(theme.surface_alt),
+            selected_surface: iced_color(theme.selected_surface),
             input_surface: iced_color(theme.input_surface),
             result_surface: iced_color(theme.result_surface),
             result_header: iced_color(theme.result_header),
@@ -3513,6 +3861,11 @@ fn utility_radius(style: &FluentStyle, visual: IcedVisualTheme) -> f32 {
 }
 
 fn utility_shadow(style: &FluentStyle, visual: IcedVisualTheme) -> Option<Shadow> {
+    // Minimal and high-contrast themes are intentionally flat: elevation shadows
+    // are suppressed (matching WinUI dropping `ThemeShadow` in the Minimal theme).
+    if matches!(visual.mode, ThemeMode::Minimal | ThemeMode::HighContrast) {
+        return None;
+    }
     match style.last_with_prefix("shadow") {
         Some("shadow-none") => Some(Shadow::default()),
         Some("shadow-sm") => Some(elevation_shadow(visual, 2.0)),
@@ -3528,13 +3881,14 @@ fn button_style(
     kind: ButtonKind,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
-    button_style_with_state(visual, kind, false, status)
+    button_style_with_state(visual, kind, false, false, status)
 }
 
 fn button_style_with_state(
     visual: IcedVisualTheme,
     kind: ButtonKind,
     focused: bool,
+    selected: bool,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
     let (background, text_color, border_color) = match kind {
@@ -3550,6 +3904,20 @@ fn button_style_with_state(
             iced::widget::button::Status::Active => {
                 (Some(visual.accent), visual.text_on_accent, visual.accent)
             }
+        },
+        ButtonKind::Link => match status {
+            iced::widget::button::Status::Hovered => {
+                (Some(visual.button_hover), visual.accent, visual.border)
+            }
+            iced::widget::button::Status::Pressed => {
+                (Some(visual.button_pressed), visual.accent, visual.border)
+            }
+            iced::widget::button::Status::Disabled => (
+                None,
+                visual.accent.scale_alpha(visual.disabled_opacity),
+                visual.border,
+            ),
+            iced::widget::button::Status::Active => (None, visual.accent, visual.border),
         },
         ButtonKind::Subtle | ButtonKind::Icon | ButtonKind::ResultAction => match status {
             iced::widget::button::Status::Hovered => (
@@ -3582,22 +3950,15 @@ fn button_style_with_state(
                 visual.floating_action_border.scale_alpha(opacity),
             )
         }
-        ButtonKind::Tile if focused => match status {
-            iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => (
-                Some(visual.accent.scale_alpha(0.12)),
-                visual.accent,
-                visual.accent,
-            ),
+        ButtonKind::Tile if selected => match status {
             iced::widget::button::Status::Disabled => (
                 Some(visual.surface_alt),
                 visual.text_secondary.scale_alpha(visual.disabled_opacity),
                 visual.border,
             ),
-            iced::widget::button::Status::Active => (
-                Some(visual.accent.scale_alpha(0.10)),
-                visual.accent,
-                visual.accent,
-            ),
+            // Selected tab: themed selected surface (#EAF3FF / #243247) with an
+            // accent foreground and border, per the migration spec.
+            _ => (Some(visual.selected_surface), visual.accent, visual.accent),
         },
         ButtonKind::Standard | ButtonKind::Chip | ButtonKind::Tile => match status {
             iced::widget::button::Status::Hovered => (
@@ -3622,10 +3983,10 @@ fn button_style_with_state(
     };
     let border_width = match (kind, status) {
         (
-            ButtonKind::Icon | ButtonKind::Subtle | ButtonKind::ResultAction,
+            ButtonKind::Icon | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::ResultAction,
             iced::widget::button::Status::Active,
         ) => 0.0,
-        (ButtonKind::Tile, _) if focused => visual.stroke_focus,
+        (ButtonKind::Tile, _) if selected || focused => visual.stroke_focus,
         _ => visual.stroke_control,
     };
     let border_radius = match kind {
@@ -3705,13 +4066,13 @@ fn text_input_style(
     chrome: TextEditorChrome,
 ) -> iced::widget::text_input::Style {
     let border = match (chrome, status) {
+        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (_, iced::widget::text_input::Status::Focused { .. }) => {
             control_border(visual, visual.focus, visual.stroke_focus)
         }
         (_, iced::widget::text_input::Status::Hovered) => {
             control_border(visual, visual.accent, visual.stroke_control)
         }
-        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (
             _,
             iced::widget::text_input::Status::Disabled | iced::widget::text_input::Status::Active,
@@ -3727,10 +4088,6 @@ fn text_input_style(
     iced::widget::text_input::Style {
         background: Background::Color(if status == iced::widget::text_input::Status::Disabled {
             visual.surface_alt
-        } else if chrome == TextEditorChrome::Frameless
-            && matches!(status, iced::widget::text_input::Status::Focused { .. })
-        {
-            visual.accent_light_alt
         } else {
             visual.input_surface
         }),
@@ -3748,13 +4105,13 @@ fn text_editor_style(
     chrome: TextEditorChrome,
 ) -> iced::widget::text_editor::Style {
     let border = match (chrome, status) {
+        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (_, iced::widget::text_editor::Status::Focused { .. }) => {
             control_border(visual, visual.focus, visual.stroke_focus)
         }
         (_, iced::widget::text_editor::Status::Hovered) => {
             control_border(visual, visual.accent, visual.stroke_control)
         }
-        (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (
             _,
             iced::widget::text_editor::Status::Disabled | iced::widget::text_editor::Status::Active,
@@ -3770,12 +4127,6 @@ fn text_editor_style(
     iced::widget::text_editor::Style {
         background: Background::Color(if status == iced::widget::text_editor::Status::Disabled {
             visual.surface_alt
-        } else if chrome == TextEditorChrome::Frameless
-            && matches!(status, iced::widget::text_editor::Status::Focused { .. })
-        {
-            visual.accent_light_alt
-        } else if chrome == TextEditorChrome::Frameless {
-            visual.input_surface
         } else {
             visual.input_surface
         }),
@@ -3786,49 +4137,102 @@ fn text_editor_style(
     }
 }
 
-fn checkbox_style(
-    visual: IcedVisualTheme,
-    status: iced::widget::checkbox::Status,
-) -> iced::widget::checkbox::Style {
-    let (is_checked, disabled, hovered) = match status {
-        iced::widget::checkbox::Status::Active { is_checked } => (is_checked, false, false),
-        iced::widget::checkbox::Status::Hovered { is_checked } => (is_checked, false, true),
-        iced::widget::checkbox::Status::Disabled { is_checked } => (is_checked, true, false),
-    };
-
-    let background = if is_checked {
-        if hovered {
-            visual.accent_light
-        } else {
-            visual.accent
-        }
-    } else if hovered {
-        visual.surface_alt
+fn toggle_switch_label(label: &str, checked: bool) -> String {
+    if label == "On" && !checked {
+        "Off".to_string()
     } else {
-        visual.surface
+        label.to_string()
+    }
+}
+
+fn slider_style(
+    visual: IcedVisualTheme,
+    status: iced::widget::slider::Status,
+) -> iced::widget::slider::Style {
+    let accent = match status {
+        iced::widget::slider::Status::Active => visual.accent,
+        iced::widget::slider::Status::Hovered => visual.accent_hover,
+        iced::widget::slider::Status::Dragged => visual.accent_pressed,
     };
 
-    iced::widget::checkbox::Style {
-        background: Background::Color(if disabled {
-            visual.surface_alt
-        } else {
-            background
-        }),
-        icon_color: visual.text_on_accent,
-        border: control_border(
-            visual,
-            if is_checked && !disabled {
-                visual.accent
-            } else {
-                visual.border
+    iced::widget::slider::Style {
+        rail: iced::widget::slider::Rail {
+            backgrounds: (
+                Background::Color(accent),
+                Background::Color(visual.button_pressed),
+            ),
+            width: 4.0,
+            border: Border {
+                radius: 2.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT,
             },
-            visual.stroke_control,
-        ),
-        text_color: Some(if disabled {
-            visual.text_secondary
+        },
+        handle: iced::widget::slider::Handle {
+            shape: iced::widget::slider::HandleShape::Circle { radius: 8.0 },
+            background: Background::Color(visual.surface),
+            border_width: visual.stroke_control,
+            border_color: accent,
+        },
+    }
+}
+
+fn toggle_switch_style(
+    visual: IcedVisualTheme,
+    status: iced::widget::toggler::Status,
+) -> iced::widget::toggler::Style {
+    let (is_toggled, is_hovered, is_disabled) = match status {
+        iced::widget::toggler::Status::Active { is_toggled } => (is_toggled, false, false),
+        iced::widget::toggler::Status::Hovered { is_toggled } => (is_toggled, true, false),
+        iced::widget::toggler::Status::Disabled { is_toggled } => (is_toggled, false, true),
+    };
+
+    let (track, track_border, thumb) = if is_disabled {
+        (
+            visual.surface_alt,
+            visual.border,
+            visual.text_secondary.scale_alpha(visual.disabled_opacity),
+        )
+    } else if is_toggled {
+        (
+            if is_hovered {
+                visual.accent_hover
+            } else {
+                visual.accent
+            },
+            if is_hovered {
+                visual.accent_hover
+            } else {
+                visual.accent
+            },
+            visual.text_on_accent,
+        )
+    } else {
+        (
+            if is_hovered {
+                visual.button_hover
+            } else {
+                visual.surface
+            },
+            visual.border,
+            visual.text_secondary,
+        )
+    };
+
+    iced::widget::toggler::Style {
+        background: Background::Color(track),
+        background_border_width: visual.stroke_control,
+        background_border_color: track_border,
+        foreground: Background::Color(thumb),
+        foreground_border_width: 0.0,
+        foreground_border_color: Color::TRANSPARENT,
+        text_color: Some(if is_disabled {
+            visual.text_secondary.scale_alpha(visual.disabled_opacity)
         } else {
             visual.text_primary
         }),
+        border_radius: None,
+        padding_ratio: 0.15,
     }
 }
 
@@ -4470,10 +4874,10 @@ mod tests {
         );
         assert_eq!(
             frameless_editor.background,
-            Background::Color(iced_color(theme.accent.light_2))
+            Background::Color(iced_color(theme.input_surface))
         );
-        assert_eq!(frameless_editor.border.color, iced_color(theme.focus));
-        assert_eq!(frameless_editor.border.width, theme.stroke.focus);
+        assert_eq!(frameless_editor.border.color, iced_color(theme.border));
+        assert_eq!(frameless_editor.border.width, 0.0);
     }
 
     #[test]
@@ -4481,16 +4885,34 @@ mod tests {
         let theme = ThemeTokens::fluent_light();
         let visual = IcedVisualTheme::from_tokens(&theme);
 
-        let checked = checkbox_style(
+        let toggle_on = toggle_switch_style(
             visual,
-            iced::widget::checkbox::Status::Active { is_checked: true },
+            iced::widget::toggler::Status::Active { is_toggled: true },
         );
         assert_eq!(
-            background_color(checked.background),
+            background_color(toggle_on.background),
             iced_color(theme.accent.base)
         );
-        assert_eq!(checked.text_color, Some(iced_color(theme.text_primary)));
-        assert_eq!(checked.border.width, theme.stroke.control);
+        assert_eq!(
+            background_color(toggle_on.foreground),
+            iced_color(theme.accent_foreground)
+        );
+        assert_eq!(toggle_on.background_border_width, theme.stroke.control);
+        assert_eq!(toggle_switch_label("On", true), "On");
+        assert_eq!(toggle_switch_label("On", false), "Off");
+
+        let toggle_off = toggle_switch_style(
+            visual,
+            iced::widget::toggler::Status::Active { is_toggled: false },
+        );
+        assert_eq!(
+            background_color(toggle_off.background),
+            iced_color(theme.surface)
+        );
+        assert_eq!(
+            background_color(toggle_off.foreground),
+            iced_color(theme.text_secondary)
+        );
 
         let pick_list = pick_list_style(visual, iced::widget::pick_list::Status::Hovered);
         assert_eq!(
@@ -4631,6 +5053,200 @@ mod tests {
         let data = HotkeySubscriptionData::from(hotkey.clone());
 
         assert_eq!(data.to_hotkey(), hotkey);
+    }
+
+    // Render-level proof that `apply_layout_box` produces centered + capped
+    // geometry for `max-w-[1040px] mx-auto` — driving the REAL production
+    // function through the real iced layout engine headlessly via the `()` null
+    // renderer (the framework's compiled `IcedElement` is pinned to the GPU
+    // renderer, so we feed `apply_layout_box` a `()`-typed content element).
+    //
+    // Background (source analysis: iced_widget-0.14.2 container::layout +
+    // iced_core-0.14.0 Limits::resolve): a SINGLE
+    // `container(c).max_width(1040).center_x(Fill)` resolves to 1040 (Fill fills
+    // the *capped* limit) and sits flush-left — it does NOT center in the
+    // viewport. `apply_layout_box` therefore uses a NESTED double container.
+    fn layout_token_with(
+        max_width: Option<u16>,
+        center_x: bool,
+        margin: Edges,
+    ) -> LayoutToken<Msg> {
+        LayoutToken {
+            id: None,
+            kind: LayoutKind::Column,
+            children: Vec::new(),
+            padding: 0,
+            spacing: 0,
+            width: Length::Fill,
+            height: Length::Shrink,
+            max_width,
+            center_x,
+            margin,
+            align: Alignment::Start,
+            distribution: LayoutDistribution::Start,
+            style: FluentStyle::new(),
+            a11y: Default::default(),
+        }
+    }
+
+    fn measure_layout_box(viewport_w: f32, token: &LayoutToken<Msg>) -> (f32, f32, f32) {
+        use iced::advanced::layout::Limits;
+        use iced::advanced::widget::Tree;
+        use iced::widget::Space;
+
+        let content: iced::Element<'static, Msg, iced::Theme, ()> = Space::new()
+            .width(IcedLength::Fill)
+            .height(IcedLength::Fixed(50.0))
+            .into();
+        let mut element = apply_layout_box(content, token);
+        let mut tree = Tree::new(element.as_widget());
+        let limits = Limits::new(Size::ZERO, Size::new(viewport_w, 900.0));
+        let node = element.as_widget_mut().layout(&mut tree, &(), &limits);
+        let outer_w = node.size().width;
+        let child = node.children()[0].bounds();
+        (outer_w, child.x, child.width)
+    }
+
+    #[test]
+    fn apply_layout_box_centers_and_caps_max_width() {
+        let token = layout_token_with(Some(1040), true, Edges::ZERO);
+
+        // Wide viewport: inner capped at 1040 and horizontally centered.
+        let (outer_w, inner_x, inner_w) = measure_layout_box(1400.0, &token);
+        assert_eq!(outer_w, 1400.0, "outer fills viewport width");
+        assert_eq!(inner_w, 1040.0, "inner capped at max-width");
+        assert!(
+            (inner_x - 180.0).abs() < 0.5,
+            "inner centered within viewport, got x={inner_x}"
+        );
+
+        // Narrow viewport (< max-width): inner fills, flush left, no negative offset.
+        let (outer_w, inner_x, inner_w) = measure_layout_box(800.0, &token);
+        assert_eq!(outer_w, 800.0);
+        assert_eq!(inner_w, 800.0, "inner fills when viewport < max-width");
+        assert!(
+            inner_x.abs() < 0.5,
+            "inner flush left when uncapped, got x={inner_x}"
+        );
+    }
+
+    #[test]
+    fn apply_layout_box_caps_without_centering_when_no_mx_auto() {
+        // max-w without mx-auto: capped at 1040 and flush-left (no centering).
+        let token = layout_token_with(Some(1040), false, Edges::ZERO);
+        let (_outer_w, inner_x, inner_w) = measure_layout_box(1400.0, &token);
+        assert_eq!(inner_w, 1040.0, "capped at max-width");
+        assert!(
+            inner_x.abs() < 0.5,
+            "flush-left without mx-auto, got x={inner_x}"
+        );
+    }
+
+    #[test]
+    fn apply_layout_box_applies_margin_as_outer_offset() {
+        // m-* becomes outer container padding: content is inset by the margin.
+        let token = layout_token_with(
+            None,
+            false,
+            Edges {
+                top: 8,
+                right: 12,
+                bottom: 8,
+                left: 12,
+            },
+        );
+        let (_outer_w, inner_x, _inner_w) = measure_layout_box(800.0, &token);
+        assert!(
+            (inner_x - 12.0).abs() < 0.5,
+            "left margin offsets content, got x={inner_x}"
+        );
+    }
+
+    #[test]
+    fn selected_tile_renders_theme_selected_surface() {
+        // Style-level (not token-level) check: the selected tab tile actually
+        // paints the theme's selected surface with an accent foreground, while
+        // an unselected tile does not — closing the "selected=true but wrong
+        // color" gap that a schema test alone cannot catch.
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+
+        let selected = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            true,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(
+            optional_background_color(selected.background),
+            iced_color(theme.selected_surface)
+        );
+        assert_eq!(selected.text_color, iced_color(theme.accent.base));
+
+        let unselected = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            false,
+            iced::widget::button::Status::Active,
+        );
+        assert_ne!(
+            optional_background_color(unselected.background),
+            iced_color(theme.selected_surface),
+            "unselected tile must not paint the selected surface"
+        );
+    }
+
+    #[test]
+    fn overlay_scrim_dims_with_requested_opacity() {
+        // The modal/loading scrim uses the requested opacity over surface_alt.
+        let visual = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+        let scrim = busy_overlay_style(visual, 0.4);
+        let background = background_color(scrim.background.expect("scrim has a background"));
+        assert!(
+            (background.a - 0.4).abs() < 0.001,
+            "scrim alpha should match requested opacity, got {}",
+            background.a
+        );
+    }
+
+    #[test]
+    fn shadow_is_suppressed_in_flat_themes() {
+        let style = FluentStyle::from_classes("shadow-lg");
+
+        let light = IcedVisualTheme::from_tokens(&ThemeTokens::fluent_light());
+        assert!(
+            utility_shadow(&style, light).is_some(),
+            "light theme keeps elevation shadow"
+        );
+
+        for flat in [ThemeTokens::minimal(), ThemeTokens::high_contrast()] {
+            let visual = IcedVisualTheme::from_tokens(&flat);
+            assert!(
+                utility_shadow(&style, visual).is_none(),
+                "{:?} theme suppresses shadow",
+                flat.mode
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_for_wrap_respects_column_cap() {
+        // 7 tabs, cap 7 → a single row (wide-screen behavior).
+        assert_eq!(
+            chunk_for_wrap((1..=7).collect(), 7),
+            vec![vec![1, 2, 3, 4, 5, 6, 7]]
+        );
+        // 7 tabs, cap 5 → two rows [5, 2].
+        assert_eq!(
+            chunk_for_wrap((1..=7).collect(), 5),
+            vec![vec![1, 2, 3, 4, 5], vec![6, 7]]
+        );
+        // Empty input → no rows.
+        assert_eq!(chunk_for_wrap(Vec::<i32>::new(), 3), Vec::<Vec<i32>>::new());
+        // Zero cap is clamped to 1 (one item per row).
+        assert_eq!(chunk_for_wrap(vec![1, 2], 0), vec![vec![1], vec![2]]);
     }
 
     fn optional_background_color(background: Option<Background>) -> iced::Color {

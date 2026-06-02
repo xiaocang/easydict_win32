@@ -168,6 +168,14 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("checked", token.checked.to_string())
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::Slider(token) => SchemaNode::new("Slider", token.id.clone())
+            .property("value", format!("{:.2}", token.value))
+            .property("min", format!("{:.2}", token.min))
+            .property("max", format!("{:.2}", token.max))
+            .property("step", format!("{:.2}", token.step))
+            .property("width", format!("{:?}", token.width))
+            .property("state", token.state.to_string())
+            .property("action", format!("{:?}", token.action.kind())),
         ViewToken::ComboBox(token) => SchemaNode::new("ComboBox", token.id.clone())
             .property("label", optional_string(token.label.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
@@ -203,10 +211,38 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("spacing", token.spacing.to_string())
                 .property("width", format!("{:?}", token.width))
                 .property("height", format!("{:?}", token.height))
+                .property("max_width", optional_u16(token.max_width))
+                .property("center_x", token.center_x.to_string())
+                .property("margin", format!("{:?}", token.margin))
                 .property("align", format!("{:?}", token.align))
                 .property("distribution", format!("{:?}", token.distribution))
                 .property("style", quoted(&token.style.summary()))
                 .children(token.children.iter().map(schema_node))
+        }
+        ViewToken::Wrap(token) => SchemaNode::new("Wrap", token.id.clone())
+            .property("children", token.children.len().to_string())
+            .property("max_columns", token.max_columns.to_string())
+            .property("spacing", token.spacing.to_string())
+            .property("run_spacing", token.run_spacing.to_string())
+            .children(token.children.iter().map(schema_node)),
+        ViewToken::Overlay(token) => {
+            let layers = token
+                .layers
+                .iter()
+                .map(|layer| {
+                    format!(
+                        "{:?}/{:?}/scrim={:?}/block={}",
+                        layer.align_x, layer.align_y, layer.scrim, layer.blocks_input
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let children = std::iter::once(token.base.as_ref())
+                .chain(token.layers.iter().map(|layer| layer.content.as_ref()));
+            SchemaNode::new("Overlay", token.id.clone())
+                .property("layers", token.layers.len().to_string())
+                .property("layout", quoted(&layers))
+                .children(children.map(schema_node))
         }
         ViewToken::AdaptiveSwitch(token) => SchemaNode::new("AdaptiveSwitch", token.id.clone())
             .property("breakpoint_width", token.breakpoint_width.to_string())
@@ -219,6 +255,22 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("horizontal", format!("{:?}", token.horizontal))
             .property("vertical", format!("{:?}", token.vertical))
             .children(token.content.iter().map(|content| schema_node(content))),
+        ViewToken::Expander(token) => {
+            let mut node = SchemaNode::new("Expander", token.id.clone())
+                .property("title", quoted(&token.title))
+                .property("description", optional_string(token.description.as_deref()))
+                .property("icon", optional_icon(token.icon.as_ref()))
+                .property("expanded", token.expanded.to_string())
+                .property("action", format!("{:?}", token.action.kind()))
+                .property("trailing", token.trailing.len().to_string());
+            if token.expanded {
+                if let Some(content) = &token.content {
+                    node = node.child(schema_node(content));
+                }
+            }
+            node.children.extend(token.trailing.iter().map(schema_node));
+            node
+        }
         ViewToken::SettingsRow(token) => {
             let mut node = SchemaNode::new("SettingsRow", token.id.clone())
                 .property("title", quoted(&token.title))

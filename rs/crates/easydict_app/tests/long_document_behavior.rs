@@ -458,6 +458,26 @@ fn run_long_document_request_preserves_backend_events() {
     assert!(backend.events.is_empty());
 }
 
+#[test]
+fn settings_section_change_emits_scroll_reset_to_top() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let task = app.update(Message::SettingsSectionChanged("services".to_string()));
+
+    assert_eq!(task_kind(&task), "scroll_to_top");
+    match task {
+        Task::ScrollToTop(id) => assert_eq!(id, "MainScrollViewer"),
+        other => panic!("expected scroll-to-top task, got {}", task_kind(&other)),
+    }
+    // The section change is still applied.
+    assert_eq!(
+        app.state.settings.selected_section,
+        easydict_app::SettingsSection::Services
+    );
+}
+
 fn task_kind(task: &Task<Message>) -> &'static str {
     match task {
         Task::None => "none",
@@ -467,6 +487,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::Stream(_) => "stream",
         Task::Window(_) => "window",
         Task::Platform(_) => "platform",
+        Task::ScrollToTop(_) => "scroll_to_top",
         Task::ReadClipboardText(_) => "read_clipboard",
         Task::CaptureScreenRegion { .. } => "capture_screen",
         Task::OpenFileDialog { .. } => "file_dialog",

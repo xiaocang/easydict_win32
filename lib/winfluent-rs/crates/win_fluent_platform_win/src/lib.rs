@@ -228,6 +228,7 @@ pub enum WindowsUiaControlType {
     List,
     ListItem,
     Pane,
+    Slider,
     Text,
     Window,
 }
@@ -898,6 +899,7 @@ fn uia_control_type(role: &A11yRole) -> WindowsUiaControlType {
         A11yRole::List => WindowsUiaControlType::List,
         A11yRole::ListItem => WindowsUiaControlType::ListItem,
         A11yRole::Pane | A11yRole::ScrollView => WindowsUiaControlType::Pane,
+        A11yRole::Slider => WindowsUiaControlType::Slider,
         A11yRole::StaticText => WindowsUiaControlType::Text,
         A11yRole::TextInput => WindowsUiaControlType::Edit,
     }

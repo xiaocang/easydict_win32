@@ -674,7 +674,7 @@ public static class TextSelectionService
                 var clipboardChanged = GetClipboardSequenceNumber() != baselineSequence;
                 Debug.WriteLine($"[TextSelectionService] Clipboard changed: {clipboardChanged}");
 
-                var (restoreAction, textToRestore) = ResolveClipboardRestore(originalClipboard, originalWasEmpty, clipboardChanged);
+                var (restoreAction, textToRestore) = ResolveClipboardRestore(originalClipboard, originalWasEmpty, clipboardChanged, selectedText);
                 switch (restoreAction)
                 {
                     case ClipboardRestoreAction.RestoreText:
@@ -728,13 +728,16 @@ public static class TextSelectionService
 
     /// <summary>
     /// Decides how the clipboard should be restored after a Ctrl+C selection capture,
-    /// given the original clipboard state and whether Ctrl+C actually changed the
-    /// clipboard (<paramref name="clipboardChanged"/>, observed via the clipboard
-    /// sequence number).
+    /// given the original clipboard state, whether Ctrl+C actually changed the clipboard
+    /// (<paramref name="clipboardChanged"/>, observed via the clipboard sequence number),
+    /// and the text Ctrl+C placed on the clipboard (<paramref name="copiedText"/>).
     /// <list type="bullet">
     /// <item>Clipboard unchanged (e.g. an empty cell that copied nothing) → do nothing;
     /// the original is still intact.</item>
-    /// <item>Original had text → restore it.</item>
+    /// <item>Original had text, but Ctrl+C produced the identical text → do nothing.
+    /// Re-writing a plain-text <c>DataPackage</c> would needlessly strip any richer
+    /// formats (HTML/RTF) that accompany the same text now on the clipboard.</item>
+    /// <item>Original had text that differs from what was copied → restore it.</item>
     /// <item>Original was genuinely empty (zero formats) → clear back to empty.</item>
     /// <item>Original had a non-text payload (e.g. an image/RTF) → leave the clipboard as
     /// is. We only captured the text form of the original, so we cannot faithfully
@@ -745,7 +748,7 @@ public static class TextSelectionService
     /// </list>
     /// </summary>
     internal static (ClipboardRestoreAction Action, string? Text) ResolveClipboardRestore(
-        string? originalText, bool originalWasEmpty, bool clipboardChanged)
+        string? originalText, bool originalWasEmpty, bool clipboardChanged, string? copiedText)
     {
         if (!clipboardChanged)
         {
@@ -754,7 +757,11 @@ public static class TextSelectionService
 
         if (originalText != null)
         {
-            return (ClipboardRestoreAction.RestoreText, originalText);
+            // Identical text already on the clipboard — skip the restore so we don't
+            // strip richer formats by overwriting with a plain-text package.
+            return originalText == copiedText
+                ? (ClipboardRestoreAction.None, null)
+                : (ClipboardRestoreAction.RestoreText, originalText);
         }
 
         if (originalWasEmpty)

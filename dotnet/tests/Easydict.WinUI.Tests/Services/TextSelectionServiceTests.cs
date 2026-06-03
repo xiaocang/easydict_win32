@@ -257,13 +257,25 @@ public class TextSelectionServiceTests
     // corrupted unrelated copy/paste flows.
 
     [Fact]
-    public void ResolveClipboardRestore_RestoresText_WhenClipboardChanged_AndOriginalHadText()
+    public void ResolveClipboardRestore_RestoresText_WhenClipboardChanged_AndCopiedTextDiffers()
     {
         var (action, text) = TextSelectionService.ResolveClipboardRestore(
-            "user copied text", originalWasEmpty: false, clipboardChanged: true);
+            "user copied text", originalWasEmpty: false, clipboardChanged: true, copiedText: "selected cell text");
 
         action.Should().Be(TextSelectionService.ClipboardRestoreAction.RestoreText);
         text.Should().Be("user copied text");
+    }
+
+    [Fact]
+    public void ResolveClipboardRestore_DoesNothing_WhenChanged_ButCopiedTextEqualsOriginal()
+    {
+        // Ctrl+C produced the same text already on the clipboard. Re-writing a plain-text
+        // package would needlessly strip richer formats (HTML/RTF) — so skip the restore.
+        var (action, text) = TextSelectionService.ResolveClipboardRestore(
+            "same text", originalWasEmpty: false, clipboardChanged: true, copiedText: "same text");
+
+        action.Should().Be(TextSelectionService.ClipboardRestoreAction.None);
+        text.Should().BeNull();
     }
 
     [Fact]
@@ -272,7 +284,7 @@ public class TextSelectionServiceTests
         // Ctrl+C copied nothing (e.g. an empty cell) — the original is still intact,
         // so there is nothing to put back regardless of what it held.
         var (action, text) = TextSelectionService.ResolveClipboardRestore(
-            "user copied text", originalWasEmpty: false, clipboardChanged: false);
+            "user copied text", originalWasEmpty: false, clipboardChanged: false, copiedText: null);
 
         action.Should().Be(TextSelectionService.ClipboardRestoreAction.None);
         text.Should().BeNull();
@@ -284,7 +296,7 @@ public class TextSelectionServiceTests
         // The clipboard had no formats at all; Ctrl+C polluted it with the selection.
         // Restoring the true (empty) original state means clearing it back to empty.
         var (action, text) = TextSelectionService.ResolveClipboardRestore(
-            null, originalWasEmpty: true, clipboardChanged: true);
+            null, originalWasEmpty: true, clipboardChanged: true, copiedText: "selected cell text");
 
         action.Should().Be(TextSelectionService.ClipboardRestoreAction.ClearToEmpty);
         text.Should().BeNull();
@@ -297,7 +309,7 @@ public class TextSelectionServiceTests
         // text form, so we can't restore the payload, and we must not clear it on every
         // selection (issue #168) — leave the (overwritten) clipboard alone.
         var (action, text) = TextSelectionService.ResolveClipboardRestore(
-            null, originalWasEmpty: false, clipboardChanged: true);
+            null, originalWasEmpty: false, clipboardChanged: true, copiedText: "selected cell text");
 
         action.Should().Be(TextSelectionService.ClipboardRestoreAction.None);
         text.Should().BeNull("a non-text payload can't be restored and must never trigger a clear (issue #168)");

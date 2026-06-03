@@ -610,7 +610,7 @@ public class SettingsPageSplitTabsTests
     {
         var xaml = File.ReadAllText(SettingsPageXamlPath);
 
-        var manager = new TranslationManager();
+        using var manager = new TranslationManager();
         var servicesRequiringConfiguration = manager.Services.Values
             .Where(service => service.RequiresApiKey)
             .Select(service => service.ServiceId)

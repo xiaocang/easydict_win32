@@ -115,14 +115,51 @@ function Wait-File([string]$Path, [int]$TimeoutSeconds, $GuardProcess) {
 }
 
 function Get-ProcessCounterInstance([int]$ProcessId) {
-    $counter = Get-Counter "\Process(*)\ID Process"
-    foreach ($sample in $counter.CounterSamples) {
-        if ([int]$sample.CookedValue -ne $ProcessId) {
-            continue
+    # Get-Counter "\Process(*)\ID Process" snapshots every process at once. On busy
+    # CI runners a process can exit while the snapshot is being taken, which makes the
+    # whole call fail with "The data in one of the performance counter samples is not
+    # valid" (and with $ErrorActionPreference='Stop' that aborts the entire gate).
+    # Retry the snapshot a few times and skip individual invalid samples instead of
+    # letting one transient bad sample fail the run.
+    $attempts = 5
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        $counter = $null
+        try {
+            $counter = Get-Counter "\Process(*)\ID Process" -ErrorAction Stop
+        }
+        catch {
+            Write-Warning "Get-ProcessCounterInstance: Get-Counter attempt $attempt/$attempts failed: $($_.Exception.Message)"
+            $counter = $null
         }
 
-        if ($sample.Path -match "\\Process\((?<name>.+)\)\\ID Process$") {
-            return $Matches["name"]
+        if ($null -ne $counter) {
+            foreach ($sample in $counter.CounterSamples) {
+                # Skip samples whose data is invalid (Status != 0); reading CookedValue
+                # on those is what raises the "performance counter sample is not valid" error.
+                if ($sample.Status -ne 0) {
+                    continue
+                }
+
+                $samplePid = $null
+                try {
+                    $samplePid = [int]$sample.CookedValue
+                }
+                catch {
+                    continue
+                }
+
+                if ($samplePid -ne $ProcessId) {
+                    continue
+                }
+
+                if ($sample.Path -match "\\Process\((?<name>.+)\)\\ID Process$") {
+                    return $Matches["name"]
+                }
+            }
+        }
+
+        if ($attempt -lt $attempts) {
+            Start-Sleep -Milliseconds 500
         }
     }
 

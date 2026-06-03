@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Easydict.TranslationService;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Views;
 using FluentAssertions;
@@ -574,6 +575,58 @@ public class SettingsPageSplitTabsTests
         {
             File.Exists(Path.Combine(iconDir, $"{assetName}.scale-100.png")).Should().BeTrue(
                 $"theme-specific service icon asset {assetName} should be available");
+        }
+    }
+
+    /// <summary>
+    /// Maps each registered service that <see cref="ITranslationService.RequiresApiKey"/>
+    /// to a token that must appear in SettingsPage.xaml, proving the service has a
+    /// configuration entry users can fill in.
+    /// </summary>
+    /// <remarks>
+    /// The set of services to verify is derived from the live <see cref="TranslationManager"/>
+    /// registry (the source of truth), not a hand-maintained list. Adding a new service that
+    /// requires an API key without also adding configuration UI (the root cause of issue #167,
+    /// where Volcano Engine was registered and advertised in the README but had no settings entry)
+    /// fails this test until both a config marker and the UI are added.
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, string> ServiceConfigurationMarkers =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["openai"] = "x:Name=\"OpenAIKeyBox\"",
+            ["deepseek"] = "x:Name=\"DeepSeekKeyBox\"",
+            ["groq"] = "x:Name=\"GroqKeyBox\"",
+            ["zhipu"] = "x:Name=\"ZhipuKeyBox\"",
+            ["github"] = "x:Name=\"GitHubModelsTokenBox\"",
+            ["gemini"] = "x:Name=\"GeminiKeyBox\"",
+            ["doubao"] = "x:Name=\"DoubaoKeyBox\"",
+            ["caiyun"] = "x:Name=\"CaiyunKeyBox\"",
+            ["niutrans"] = "x:Name=\"NiuTransKeyBox\"",
+            ["volcano"] = "x:Name=\"VolcanoAccessKeyIdBox\"",
+        };
+
+    [Fact]
+    public void SettingsPage_ProvidesConfigurationUiForEveryServiceRequiringApiKey()
+    {
+        var xaml = File.ReadAllText(SettingsPageXamlPath);
+
+        var manager = new TranslationManager();
+        var servicesRequiringConfiguration = manager.Services.Values
+            .Where(service => service.RequiresApiKey)
+            .Select(service => service.ServiceId)
+            .ToList();
+
+        servicesRequiringConfiguration.Should().NotBeEmpty(
+            "the translation registry should expose services that require API keys");
+
+        foreach (var serviceId in servicesRequiringConfiguration)
+        {
+            ServiceConfigurationMarkers.Should().ContainKey(serviceId,
+                $"service '{serviceId}' requires an API key, so it must expose a configuration entry " +
+                "on the settings page (see issue #167); add its UI and a marker to ServiceConfigurationMarkers");
+
+            xaml.Should().Contain(ServiceConfigurationMarkers[serviceId],
+                $"SettingsPage.xaml should contain the configuration UI for the '{serviceId}' service");
         }
     }
 

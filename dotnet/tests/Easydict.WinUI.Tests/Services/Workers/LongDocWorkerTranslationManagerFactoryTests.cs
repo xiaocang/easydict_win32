@@ -12,15 +12,14 @@ namespace Easydict.WinUI.Tests.Services.Workers;
 public sealed class LongDocWorkerTranslationManagerFactoryTests
 {
     [Fact]
-    public void Build_RegistersWindowsLocalAiProxyService()
+    public void Build_DoesNotRegisterWindowsLocalAiProxyService()
     {
         using var manager = WorkerTranslationManagerFactory.Build(new SettingsSnapshot
         {
             LocalAIProvider = LocalAiProviderModes.OpenVINO,
         });
 
-        manager.Services.Should().ContainKey("windows-local-ai");
-        manager.Services["windows-local-ai"].DisplayName.Should().Be("Windows Local AI");
+        manager.Services.Should().NotContainKey("windows-local-ai");
     }
 
     [Fact]

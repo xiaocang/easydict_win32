@@ -21,14 +21,3 @@ public sealed class IpcEvent
     public JsonElement? Data { get; init; }
 }
 
-/// <summary>
-/// Well-known event types from the protocol.
-/// </summary>
-public static class IpcEventTypes
-{
-    public const string TranslateChunk = "translate_chunk";
-    public const string TranslateDone = "translate_done";
-    public const string GrammarChunk = "grammar_chunk";
-    public const string GrammarDone = "grammar_done";
-}
-

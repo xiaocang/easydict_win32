@@ -141,11 +141,15 @@
              own workflow steps, so WinUI should not also build them through ProjectReference
              in CI; otherwise test/release graphs can compile the same worker into the same
              obj path concurrently. Local dev keeps the default worker-copy behavior. -->
+        <RuntimeProfile Condition="'$(RuntimeProfile)' == ''">Hybrid</RuntimeProfile>
+        <IsRustOnlyRuntimeProfile Condition="'$(RuntimeProfile)' == 'RustOnly' or '$(RuntimeProfile)' == 'rust-only' or '$(RuntimeProfile)' == 'rustonly' or '$(RuntimeProfile)' == 'rust_only'">true</IsRustOnlyRuntimeProfile>
+        <BuildWorkerOutputs Condition="'$(IsRustOnlyRuntimeProfile)' == 'true'">false</BuildWorkerOutputs>
         <BuildWorkerOutputs Condition="'$(BuildWorkerOutputs)' == '' and '$(CI)' == 'true'">false</BuildWorkerOutputs>
         <!-- Release artifacts always ship the long-document worker, so do not also
              carry the in-process PDF/MuPDF/PdfPig implementation in the host. Debug
              keeps it for local diagnostics and unit-test coverage. Override with
              -p:EnableInProcLongDocFallback=true for one-off local Release debugging. -->
+        <EnableInProcLongDocFallback Condition="'$(IsRustOnlyRuntimeProfile)' == 'true'">false</EnableInProcLongDocFallback>
         <EnableInProcLongDocFallback Condition="'$(EnableInProcLongDocFallback)' == '' and '$(Configuration)' == 'Release'">false</EnableInProcLongDocFallback>
         <EnableInProcLongDocFallback Condition="'$(EnableInProcLongDocFallback)' == ''">true</EnableInProcLongDocFallback>
 
@@ -239,7 +243,7 @@
             Inputs="$(ProjectDir)Assets\macos\white-black-icon.appiconset\icon_512x512@2x.png"
             Outputs="&quot;$(IntermediateOutputPath)AppIcon.ico&quot;">
         <Exec
-            Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\\..\\scripts\\generate-app-icon-ico.ps1&quot; -SourcePng &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; -OutputIco &quot;$(IntermediateOutputPath)AppIcon.ico&quot; -OutputTrayPng &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
+            Command="cargo run --manifest-path &quot;$(ProjectDir)..\\..\\..\\rs\\Cargo.toml&quot; -p easydict_icon_generator -- --source-png &quot;$(ProjectDir)Assets\\macos\\white-black-icon.appiconset\\icon_512x512@2x.png&quot; --output-ico &quot;$(IntermediateOutputPath)AppIcon.ico&quot; --output-tray-png &quot;$(IntermediateOutputPath)TrayIcon.png&quot;" />
     </Target>
 
     <Target Name="CopyAppIconToOutput"
@@ -294,18 +298,15 @@
            executables — host doesn't link them. They're built whenever WinUI is built and
            their output is copied to bin\workers\{kind}\ by the CopyWorkerOutput target below.
            For MSIX, those files must be included as Content in the package; this PR wires
-           the local build copy but leaves the MSIX Content packaging as a follow-up. -->
+           the local build copy but leaves the MSIX Content packaging as a follow-up.
+           OCR no longer participates here because recognition has moved to the Rust
+           Windows.Media.Ocr path and release outputs no longer ship the old worker. -->
       <ProjectReference Include="..\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj"
                         Condition="'$(BuildWorkerOutputs)' != 'false'"
                         ReferenceOutputAssembly="false"
                         OutputItemType="WorkerOutput"
                         SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
       <ProjectReference Include="..\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj"
-                        Condition="'$(BuildWorkerOutputs)' != 'false'"
-                        ReferenceOutputAssembly="false"
-                        OutputItemType="WorkerOutput"
-                        SetTargetFramework="TargetFramework=net8.0-windows10.0.22621.0" />
-      <ProjectReference Include="..\Easydict.Workers.Ocr\Easydict.Workers.Ocr.csproj"
                         Condition="'$(BuildWorkerOutputs)' != 'false'"
                         ReferenceOutputAssembly="false"
                         OutputItemType="WorkerOutput"
@@ -332,10 +333,6 @@
                                      Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
         <_LocalAiWorkerFilesAnyCpu  Include="..\Easydict.Workers.LocalAi\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
                                      Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
-        <_OcrWorkerFilesPlatform Include="..\Easydict.Workers.Ocr\bin\$(Platform)\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
-                                     Condition="'$(Platform)' != '' AND '$(Platform)' != 'AnyCPU'" />
-        <_OcrWorkerFilesAnyCpu  Include="..\Easydict.Workers.Ocr\bin\$(Configuration)\net8.0-windows10.0.22621.0\**\*.*"
-                                     Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'" />
       </ItemGroup>
       <Copy SourceFiles="@(_LongDocWorkerFilesPlatform);@(_LongDocWorkerFilesAnyCpu)"
             DestinationFiles="@(_LongDocWorkerFilesPlatform->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)');@(_LongDocWorkerFilesAnyCpu->'$(TargetDir)workers\longdoc\%(RecursiveDir)%(Filename)%(Extension)')"
@@ -345,10 +342,6 @@
             DestinationFiles="@(_LocalAiWorkerFilesPlatform->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)');@(_LocalAiWorkerFilesAnyCpu->'$(TargetDir)workers\localai\%(RecursiveDir)%(Filename)%(Extension)')"
             SkipUnchangedFiles="true"
             Condition="'@(_LocalAiWorkerFilesPlatform)@(_LocalAiWorkerFilesAnyCpu)' != ''" />
-      <Copy SourceFiles="@(_OcrWorkerFilesPlatform);@(_OcrWorkerFilesAnyCpu)"
-            DestinationFiles="@(_OcrWorkerFilesPlatform->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)');@(_OcrWorkerFilesAnyCpu->'$(TargetDir)workers\ocr\%(RecursiveDir)%(Filename)%(Extension)')"
-            SkipUnchangedFiles="true"
-            Condition="'@(_OcrWorkerFilesPlatform)@(_OcrWorkerFilesAnyCpu)' != ''" />
     </Target>
 
     <!-- FlaUI for proper UI Automation text selection -->

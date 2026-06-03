@@ -19,24 +19,3 @@ public sealed class IpcRequest
     public object? Params { get; init; }
 }
 
-/// <summary>
-/// Parameters for the "translate" method.
-/// </summary>
-public sealed class TranslateParams
-{
-    [JsonPropertyName("text")]
-    public required string Text { get; init; }
-
-    [JsonPropertyName("from")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? From { get; init; }
-
-    [JsonPropertyName("to")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? To { get; init; }
-
-    [JsonPropertyName("services")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string[]? Services { get; init; }
-}
-

@@ -11,7 +11,7 @@ namespace Easydict.Workers.LocalAi.Infrastructure;
 /// Process-local worker state: holds the SettingsSnapshot received via "configure"
 /// and lazily builds the local AI provider instances on first use. Provider
 /// instances are cached for the lifetime of the worker process (which is
-/// scoped to a single translate / prepare call per the "exit on completion"
+/// scoped to a single translate_stream / grammar_stream call per the "exit on completion"
 /// lifecycle).
 /// </summary>
 internal sealed class WorkerState

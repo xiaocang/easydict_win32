@@ -19,7 +19,6 @@ public sealed class SettingsService
     private const string SettingsDirectoryEnvironmentVariable = "EASYDICT_SETTINGS_DIR";
     private const string DisableLongDocWorkerEnvironmentVariable = "EASYDICT_DISABLE_LONGDOC_WORKER";
     private const string DisableLocalAiWorkerEnvironmentVariable = "EASYDICT_DISABLE_LOCALAI_WORKER";
-    private const string DisableOcrWorkerEnvironmentVariable = "EASYDICT_DISABLE_OCR_WORKER";
     private static readonly JsonSerializerOptions SettingsJsonOptions = new() { WriteIndented = true };
 
     public sealed class ImportedMdxDictionary
@@ -216,13 +215,11 @@ public sealed class SettingsService
     public bool UseLocalAiWorker { get; set; } = true;
 
     /// <summary>
-    /// When true, Windows Native OCR runs in a short-lived child worker process
-    /// so WinRT OCR/bitmap resources are reclaimed by process exit. API-based OCR
-    /// engines continue to use their existing in-proc HTTP path.
-    /// Runtime-only: not persisted to settings.json. Use
-    /// EASYDICT_DISABLE_OCR_WORKER=1 for development diagnostics.
+    /// Legacy runtime-only flag retained only so older settings are cleaned up.
+    /// OCR recognition has moved to Rust and the old .NET OCR worker is no
+    /// longer selected by the WinUI service factory or release packaging.
     /// </summary>
-    public bool UseOcrWorker { get; set; } = true;
+    public bool UseOcrWorker { get; set; }
 
     /// <summary>
     /// Enable mouse selection translation: a floating translate button appears
@@ -733,7 +730,7 @@ public sealed class SettingsService
         AutoTranslate = GetValue(nameof(AutoTranslate), false);
         UseLongDocWorker = ResolveWorkerIsolationSetting(nameof(UseLongDocWorker), DisableLongDocWorkerEnvironmentVariable);
         UseLocalAiWorker = ResolveWorkerIsolationSetting(nameof(UseLocalAiWorker), DisableLocalAiWorkerEnvironmentVariable);
-        UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);
+        UseOcrWorker = false;
         MouseSelectionTranslate = GetValue(nameof(MouseSelectionTranslate), true);
         MouseSelectionExcludedApps = GetStringList(nameof(MouseSelectionExcludedApps), ["code"]);
         ShellContextMenu = GetValue(nameof(ShellContextMenu), false);

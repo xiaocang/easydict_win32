@@ -7,7 +7,7 @@ using Easydict.Workers.LocalAi.Infrastructure;
 namespace Easydict.Workers.LocalAi;
 
 /// <summary>
-/// Local-AI translation worker. Spawned per translate / prepare request by the
+/// Local-AI translation worker. Spawned per translate_stream / grammar_stream request by the
 /// host's LocalAiWorkerClient. Wraps PhiSilica / Foundry Local / OpenVINO so
 /// their native runtimes (Windows AI, OpenVINO ORT sessions, model bytes) sit
 /// in this child process — completion exits the worker and reclaims that memory.
@@ -15,8 +15,7 @@ namespace Easydict.Workers.LocalAi;
 /// Lifecycle:
 ///   1. Worker emits "ready" on startup.
 ///   2. Host sends "configure" with a SettingsSnapshot.
-///   3. Host optionally sends "prepare_model" / "is_available" / "list_models".
-///   4. Host sends one of "translate" / "translate_stream" / "grammar_stream".
+///   3. Host sends one of "translate_stream" / "grammar_stream".
 ///   5. After the translate request completes (or stdin EOF / shutdown), the
 ///      worker calls Environment.Exit(0).
 /// </summary>
@@ -38,14 +37,10 @@ internal static class Program
         var state = new WorkerState();
 
         dispatcher.Register(WorkerMethods.Configure, new ConfigureHandler(state).HandleAsync);
-        dispatcher.Register(LocalAiMethods.Translate, new TranslateHandler(state).HandleAsync);
         dispatcher.Register(LocalAiMethods.TranslateStream,
             new TranslateStreamHandler(state, writer).HandleAsync);
         dispatcher.Register(LocalAiMethods.GrammarStream,
             new GrammarStreamHandler(state, writer).HandleAsync);
-        dispatcher.Register(LocalAiMethods.PrepareModel, new PrepareModelHandler(state, writer).HandleAsync);
-        dispatcher.Register(LocalAiMethods.IsAvailable, new IsAvailableHandler(state).HandleAsync);
-        dispatcher.Register(LocalAiMethods.ListModels, new ListModelsHandler(state).HandleAsync);
         dispatcher.Register(WorkerMethods.Cancel, new CancelHandler(dispatcher).HandleAsync);
         dispatcher.Register(WorkerMethods.Shutdown, (_, _, _) =>
         {
@@ -61,12 +56,8 @@ internal static class Program
             Capabilities = new[]
             {
                 WorkerMethods.Configure,
-                LocalAiMethods.Translate,
                 LocalAiMethods.TranslateStream,
                 LocalAiMethods.GrammarStream,
-                LocalAiMethods.PrepareModel,
-                LocalAiMethods.IsAvailable,
-                LocalAiMethods.ListModels,
                 WorkerMethods.Cancel,
                 WorkerMethods.Shutdown,
             },
@@ -97,13 +88,12 @@ internal static class Program
 
     /// <summary>
     /// Worker exits after the first non-prepare request completes. This matches
-    /// the "exit on completion" lifecycle: host calls prepare_model (or skips it),
-    /// then translate / translate_stream / grammar_stream, then closes stdin.
+    /// the "exit on completion" lifecycle: host calls translate_stream /
+    /// grammar_stream, then closes stdin.
     /// </summary>
     private static void OnRequestCompleted(string method)
     {
-        if (method == LocalAiMethods.Translate
-            || method == LocalAiMethods.TranslateStream
+        if (method == LocalAiMethods.TranslateStream
             || method == LocalAiMethods.GrammarStream)
         {
             Trace.WriteLine($"[LocalAiWorker] Completion of terminal method '{method}' requested shutdown.");

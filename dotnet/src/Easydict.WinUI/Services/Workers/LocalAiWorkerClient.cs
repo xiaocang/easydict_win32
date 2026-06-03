@@ -111,15 +111,17 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
         await using var clientLease = client.ConfigureAwait(false);
         try
         {
-            var result = await client.SendRequestAsync<LocalAiTranslateResult>(
-                LocalAiMethods.Translate,
+            var sw = Stopwatch.StartNew();
+            var result = await client.SendRequestAsync<TranslateStreamResult>(
+                LocalAiMethods.TranslateStream,
                 BuildParams(request),
                 timeoutMs: 0,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+            sw.Stop();
 
-            if (result is null)
+            if (result is null || !result.Done)
             {
-                throw new TranslationException("Worker returned null result")
+                throw new TranslationException("Worker returned an invalid streaming result")
                 {
                     ErrorCode = TranslationErrorCode.Unknown,
                     ServiceId = ServiceId,
@@ -128,11 +130,11 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
             return new TranslationResult
             {
-                TranslatedText = result.TranslatedText,
+                TranslatedText = result.FullText ?? string.Empty,
                 OriginalText = request.Text,
-                ServiceName = result.ServiceName,
-                TimingMs = result.TimingMs,
-                DetectedLanguage = Enum.TryParse<Language>(result.DetectedLanguage, out var lang) ? lang : Language.Auto,
+                ServiceName = DisplayName,
+                TimingMs = sw.ElapsedMilliseconds,
+                DetectedLanguage = Language.Auto,
                 TargetLanguage = request.ToLanguage,
             };
         }
@@ -479,9 +481,8 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
 
     public LocalModelStatus GetStatus()
     {
-        // Synchronous call would block on a worker spawn; we conservatively report
-        // Ready so the Settings UI doesn't gray out. Real availability comes via
-        // PrepareAsync which spawns the worker async.
+        // Synchronous status is advisory only; worker model-management RPCs are
+        // retired, while real preparation lives in the injected provider or Rust UI.
         return new LocalModelStatus(LocalModelState.Ready, ResourceKey: string.Empty);
     }
 
@@ -489,39 +490,16 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LocalAiWorkerClient));
 
-        SidecarClient.SidecarClient client;
-        try
+        if (_fallbackModelProvider is not null)
         {
-            client = await SpawnConfiguredAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && _fallbackModelProvider is not null)
-        {
-            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc PrepareAsync: {ex.Message}");
             return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await using var clientLease = client.ConfigureAwait(false);
-        var providerMode = _settings.LocalAIProvider ?? LocalAiProviderModes.Auto;
-        var provider = providerMode == LocalAiProviderModes.Auto
-            ? LocalAiProviderModes.WindowsAI // pick a concrete one for prepare
-            : providerMode;
-
-        LocalModelStatusDto? status;
-        try
-        {
-            status = await client.SendRequestAsync<LocalModelStatusDto>(
-                LocalAiMethods.PrepareModel,
-                new PrepareModelParams { Provider = provider },
-                timeoutMs: 0,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        catch (SidecarProcessExitedException ex) when (CanFallbackToInProc(ex) && CanFallbackToInProcForCurrentProvider() && _fallbackModelProvider is not null)
-        {
-            Debug.WriteLine($"[LocalAiWorker] Falling back to in-proc PrepareAsync after worker exit: {ex.Message}");
-            return await _fallbackModelProvider.PrepareAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        return MapStatus(status);
+        await Task.Yield();
+        return new LocalModelStatus(
+            LocalModelState.NotCompatible,
+            ResourceKey: "LocalAiWorkerPrepareRetired",
+            DetailMessage: "Local AI worker model preparation is no longer exposed; use Rust-native Foundry Local preparation or the in-process provider.");
     }
 
     private async Task<SidecarClient.SidecarClient> SpawnConfiguredAsync(CancellationToken ct)
@@ -574,13 +552,6 @@ internal sealed class LocalAiWorkerClient : IStreamTranslationService, IGrammarC
             or WorkerVersionMismatchException
             or FileNotFoundException
             or SidecarProcessExitedException;
-    }
-
-    private static LocalModelStatus MapStatus(LocalModelStatusDto? dto)
-    {
-        if (dto is null) return new LocalModelStatus(LocalModelState.Failed, ResourceKey: "WorkerReturnedNoStatus");
-        var state = Enum.TryParse<LocalModelState>(dto.State, out var s) ? s : LocalModelState.Failed;
-        return new LocalModelStatus(state, dto.StatusKey ?? string.Empty, DetailMessage: dto.Detail);
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

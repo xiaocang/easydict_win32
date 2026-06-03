@@ -52,17 +52,27 @@ public sealed class ThemeRegressionMemoryAutomationTests
     public void UiScreenshotSummaryScript_BuildsInlineGalleryForStepSummary()
     {
         var script = File.ReadAllText(UiScreenshotSummaryScriptPath);
+        var repoRoot = Path.GetFullPath(Path.Combine(ProjectRoot, ".."));
+        var rustSummary = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_ui_parity_analyzer",
+            "src",
+            "lib.rs"));
 
         script.Should().Contain("GITHUB_STEP_SUMMARY");
-        script.Should().Contain("ui-screenshot-gallery.jpg");
-        script.Should().Contain("data:image/jpeg;base64");
-        script.Should().Contain("Review priority");
-        script.Should().Contain("visual diff");
-        script.Should().Contain("suspicious screenshot dimensions",
+        script.Should().Contain("cargo @arguments");
+        script.Should().Contain("easydict_ui_parity_analyzer");
+        script.Should().Contain("screenshot-summary");
+        script.Should().NotContain("System.Drawing");
+        script.Should().NotContain("Add-Type -AssemblyName");
+        rustSummary.Should().Contain("ui-screenshot-gallery.jpg");
+        rustSummary.Should().Contain("data:image/jpeg;base64");
+        rustSummary.Should().Contain("Review priority");
+        rustSummary.Should().Contain("visual diff");
+        rustSummary.Should().Contain("suspicious screenshot dimensions",
             "1x1 or otherwise undersized captures should be review blockers, not buried in the gallery");
-        script.Should().Contain("[System.Drawing.Image]::FromFile",
-            "the summary should read screenshot dimensions for review triage");
-        script.Should().Contain("Get-ChildItem");
     }
 
     [Fact]

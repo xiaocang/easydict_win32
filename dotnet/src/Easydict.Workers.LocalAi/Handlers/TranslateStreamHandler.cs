@@ -28,10 +28,10 @@ internal sealed class TranslateStreamHandler
         if (!_state.IsConfigured)
             throw new WorkerHandlerException(WorkerErrorCodes.InvalidParams, "Worker not configured");
 
-        var p = TranslateHandler.ParseParams(parameters);
-        var request = TranslateHandler.BuildRequest(p);
+        var p = TranslateRequestHelpers.ParseParams(parameters);
+        var request = TranslateRequestHelpers.BuildRequest(p);
 
-        var candidates = new TranslateHandler(_state).ResolveCandidates(p.ProviderMode).ToList();
+        var candidates = TranslateRequestHelpers.ResolveCandidates(_state, p.ProviderMode).ToList();
         Trace.WriteLine(
             $"[LocalAiWorker] translate_stream start. requestId={requestId}, providerMode={p.ProviderMode}, from={request.FromLanguage}, to={request.ToLanguage}, textLength={p.Text?.Length ?? 0}, candidates={string.Join(">", candidates.Select(c => c.DisplayName))}");
 

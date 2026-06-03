@@ -28,17 +28,18 @@ internal sealed class GrammarStreamHandler
         if (!_state.IsConfigured)
             throw new WorkerHandlerException(WorkerErrorCodes.InvalidParams, "Worker not configured");
 
-        var p = TranslateHandler.ParseParams(parameters);
+        var p = TranslateRequestHelpers.ParseParams(parameters);
         var grammarRequest = new GrammarCorrectionRequest
         {
             Text = p.Text,
-            Language = Enum.TryParse<Language>(p.FromLanguage, out var lang) ? lang : Language.Auto,
+            Language = TranslateRequestHelpers.ParseLanguage(p.FromLanguage, Language.Auto),
+            IncludeExplanations = p.IncludeExplanations ?? true,
         };
 
         // Currently Phi Silica + Foundry Local + OpenVINO each implement (or don't)
         // IGrammarCorrectionService. Try them in the order requested, fall back
         // through the chain in Auto mode.
-        var orderedCandidates = new TranslateHandler(_state).ResolveCandidates(p.ProviderMode).ToList();
+        var orderedCandidates = TranslateRequestHelpers.ResolveCandidates(_state, p.ProviderMode).ToList();
         Trace.WriteLine(
             $"[LocalAiWorker] grammar_stream start. requestId={requestId}, providerMode={p.ProviderMode}, language={grammarRequest.Language}, textLength={p.Text?.Length ?? 0}, candidates={string.Join(">", orderedCandidates.Select(c => c.DisplayName))}");
         var aggregated = new StringBuilder();

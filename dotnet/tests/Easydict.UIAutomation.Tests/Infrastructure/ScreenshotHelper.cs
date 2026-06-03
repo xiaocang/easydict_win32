@@ -98,28 +98,49 @@ public static class ScreenshotHelper
         return path;
     }
 
+    /// <summary>
+    /// Capture a visible HWND without activating or raising it. This is intended for
+    /// WS_EX_NOACTIVATE utility windows such as PopButton where foreground changes are
+    /// part of the behavior under test.
+    /// </summary>
+    public static string CaptureWindowHandlePhysical(IntPtr hwnd, string name)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            throw new ArgumentException("Window handle must be non-zero.", nameof(hwnd));
+        }
+
+        var bounds = GetWindowPhysicalBounds(hwnd);
+        bounds = IntersectWithVirtualScreen(bounds);
+        if (bounds.Width <= 1 || bounds.Height <= 1)
+        {
+            throw new InvalidOperationException(
+                $"Screenshot '{name}' cannot capture HWND=0x{hwnd.ToInt64():X}; bounds were {bounds}.");
+        }
+
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.CopyFromScreen(
+                bounds.Left,
+                bounds.Top,
+                0,
+                0,
+                bounds.Size,
+                CopyPixelOperation.SourceCopy);
+        }
+
+        var path = SaveBitmap(bitmap, name);
+        ValidateSavedScreenshot(path, name);
+        return path;
+    }
+
     public static Rectangle GetWindowPhysicalBounds(Window window)
     {
         var hwnd = window.Properties.NativeWindowHandle.Value;
         if (hwnd != IntPtr.Zero)
         {
-            if (DwmGetWindowAttribute(
-                    hwnd,
-                    DwmWindowAttributeExtendedFrameBounds,
-                    out var frameBounds,
-                    Marshal.SizeOf<WindowRect>()) == 0)
-            {
-                var frame = ToRectangle(frameBounds);
-                if (frame.Width > 1 && frame.Height > 1)
-                {
-                    return frame;
-                }
-            }
-
-            if (GetWindowRect(hwnd, out var rect))
-            {
-                return ToRectangle(rect);
-            }
+            return GetWindowPhysicalBounds(hwnd);
         }
 
         var bounds = window.BoundingRectangle;
@@ -128,6 +149,29 @@ public static class ScreenshotHelper
             (int)Math.Round(Convert.ToDouble(bounds.Top)),
             (int)Math.Round(Convert.ToDouble(bounds.Right)),
             (int)Math.Round(Convert.ToDouble(bounds.Bottom)));
+    }
+
+    public static Rectangle GetWindowPhysicalBounds(IntPtr hwnd)
+    {
+        if (DwmGetWindowAttribute(
+                hwnd,
+                DwmWindowAttributeExtendedFrameBounds,
+                out var frameBounds,
+                Marshal.SizeOf<WindowRect>()) == 0)
+        {
+            var frame = ToRectangle(frameBounds);
+            if (frame.Width > 1 && frame.Height > 1)
+            {
+                return frame;
+            }
+        }
+
+        if (GetWindowRect(hwnd, out var rect))
+        {
+            return ToRectangle(rect);
+        }
+
+        return Rectangle.Empty;
     }
 
     public static bool TrySetWindowPhysicalBounds(Window window, Rectangle bounds)

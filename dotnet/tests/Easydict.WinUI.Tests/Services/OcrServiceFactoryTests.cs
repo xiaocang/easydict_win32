@@ -1,7 +1,6 @@
 using Easydict.TranslationService.Services;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
-using Easydict.WinUI.Services.Workers;
 using FluentAssertions;
 using Xunit;
 
@@ -20,10 +19,10 @@ public class OcrServiceFactoryTests
     private readonly SettingsService _settings = SettingsService.Instance;
 
     [Theory]
-    [InlineData(OcrEngineType.WindowsNative, typeof(OcrWorkerClient))]
+    [InlineData(OcrEngineType.WindowsNative, typeof(WindowsOcrService))]
     [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
     [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
-    public void Create_ReturnsImplementationMatchingSelectedEngine(
+    public void Create_IgnoresLegacyWorkerFlag_AndReturnsImplementationMatchingSelectedEngine(
         OcrEngineType engine, System.Type expected)
     {
         var original = _settings.OcrEngine;
@@ -45,14 +44,14 @@ public class OcrServiceFactoryTests
     }
 
     [Fact]
-    public void Create_ReturnsInProcWindowsOcr_WhenWorkerDisabled()
+    public void Create_IgnoresLegacyWorkerFlag_ForWindowsNative()
     {
         var original = _settings.OcrEngine;
         var originalUseWorker = _settings.UseOcrWorker;
         try
         {
             _settings.OcrEngine = OcrEngineType.WindowsNative;
-            _settings.UseOcrWorker = false;
+            _settings.UseOcrWorker = true;
 
             var svc = OcrServiceFactory.Create();
 
@@ -84,10 +83,10 @@ public class OcrServiceFactoryTests
     }
 
     [Theory]
-    [InlineData(OcrEngineType.WindowsNative, typeof(OcrWorkerClient))]
+    [InlineData(OcrEngineType.WindowsNative, typeof(WindowsOcrService))]
     [InlineData(OcrEngineType.Ollama, typeof(OllamaOcrService))]
     [InlineData(OcrEngineType.CustomApi, typeof(CustomApiOcrService))]
-    public void Create_WithOptions_UsesProvidedEngineIndependentOfSavedSetting(
+    public void Create_WithOptions_UsesProvidedEngineIndependentOfSavedSettingOrLegacyWorkerFlag(
         OcrEngineType engine, System.Type expected)
     {
         var original = _settings.OcrEngine;

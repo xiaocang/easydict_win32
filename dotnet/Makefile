@@ -9,7 +9,7 @@
 .PHONY: publish publish-x64 publish-x86 publish-arm64
 .PHONY: publish-msix-x64 publish-msix-x86 publish-msix-arm64
 .PHONY: msix msix-x64 msix-x86 msix-arm64 msix-all
-.PHONY: fix-msix-minversion
+.PHONY: fix-msix-minversion validate-msix encrypt-secret pdf-to-images
 .PHONY: cert-generate cert-install sign sign-all
 .PHONY: installer-x64 installer-x86 installer-arm64 installer
 
@@ -19,6 +19,9 @@ CERT_PATH ?= ./certs/dev.pfx
 
 # Default version for local builds
 VERSION ?= 0.1.0.0
+DPI ?= 144
+FORMAT ?= png
+RUNTIME_PROFILE ?= hybrid
 
 # WinUI target framework used by Easydict.WinUI.csproj.
 WINUI_TFM ?= net8.0-windows10.0.22621.0
@@ -35,15 +38,15 @@ restore:
 
 # Build (default: Debug)
 build: restore
-	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug
+	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug -p:RuntimeProfile=$(RUNTIME_PROFILE)
 
 # Build Release
 build-release: restore
-	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release
+	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release -p:RuntimeProfile=$(RUNTIME_PROFILE)
 
 # Build Debug (explicit)
 build-debug: restore
-	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug
+	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug -p:RuntimeProfile=$(RUNTIME_PROFILE)
 
 # Run all tests
 test: restore
@@ -121,16 +124,14 @@ clean:
 
 # Publish for distribution (portable)
 publish: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true -p:BuildWorkerOutputs=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish
 
-# Publish for specific platform (includes NativeBridge + BrowserRegistrar + Rust helpers + CompatHost + workers).
-# Easydict.CompatHost is a temporary Rust migration bridge and is published
-# beside the app executable so Rust can resolve AppContext.BaseDirectory +
-# "Easydict.CompatHost.exe".
+# Publish for specific platform (includes Rust NativeBridge/BrowserRegistrar helpers + retained workers).
 # Rust helpers are copied beside the app executable so the Rust desktop can run
-# easydict_browser_registrar.exe and the browser manifest can point at
-# easydict-native-bridge.exe.
+# easydict_browser_registrar.exe, the legacy WinUI browser service can run
+# BrowserHostRegistrar.exe, and the browser manifest can point at
+# easydict-native-bridge.exe without publishing the old .NET helper projects.
 # Portable / Inno-installer output ships to users who may not have the WindowsAppSDK
 # framework package installed, so the workers self-contain everything they need
 # (the size penalty here is ~30 MB per worker, accepted as the cost of a portable
@@ -140,66 +141,62 @@ publish: restore
 # x86 omits the workers because MuPDF.NET 3.2.12 doesn't ship a stable x86 runtime
 # and the worker csproj RuntimeIdentifiers exclude win-x86. Worker settings default
 # on, but missing-worker startup is guarded and falls back to the in-proc path.
+# OCR recognition is now Rust-native, so release outputs no longer publish the
+# old .NET OCR worker.
 publish-x64: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64
-	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:PublishTrimmed=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64
-	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64
-	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/ocr -p:Platform=x64
+	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64; \
+	else \
+		echo "Skipping retained .NET workers for RustOnly runtime profile."; \
+	fi
 
 publish-x86: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86
-	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:PublishTrimmed=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86
 
 publish-arm64: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64
-	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:PublishTrimmed=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64
-	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64
-	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/ocr -p:Platform=arm64
+	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64; \
+	else \
+		echo "Skipping retained .NET workers for RustOnly runtime profile."; \
+	fi
 
 # Publish for MSIX (without bundled Windows App SDK DLLs)
 # MSIX declares a framework package dependency so bundled DLLs are redundant and cause launch failures.
-# Includes NativeBridge + BrowserRegistrar + Rust helpers + CompatHost + workers published into the same output directory.
+# Includes Rust NativeBridge/BrowserRegistrar helpers + retained workers published into the same output directory.
 publish-msix-x64: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:PublishTrimmed=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64
-	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/ocr -p:Platform=x64
-	pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64
-	pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet
+	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
+		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64; \
+		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet; \
+	else \
+		echo "Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile."; \
+	fi
 
 publish-msix-x86: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:PublishTrimmed=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish-msix/x86
 
 publish-msix-arm64: restore
-	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:PublishTrimmed=true
-	dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:PublishTrimmed=false
+	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64
-	dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false
-	dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/ocr -p:Platform=arm64
-	pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64
-	pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet
+	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
+		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64; \
+		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet; \
+	else \
+		echo "Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile."; \
+	fi
 
 # ============================================================
 # MSIX Packaging (requires WinApp CLI: winget install Microsoft.winappcli)
@@ -313,13 +310,29 @@ ifndef MSIX
 endif
 	@pwsh -ExecutionPolicy Bypass -File scripts/Fix-MsixMinVersion.ps1 -MsixPath "$(MSIX)"
 
-# Validate MSIX identity, MinVersion, and signature presence.
-# Usage: make validate-msix MSIX=./msix/Easydict-x64.msix
+# Validate MSIX identity, MinVersion, signature presence, and runtime payload profile.
+# Usage: make validate-msix MSIX=./msix/Easydict-x64.msix [RUNTIME_PROFILE=hybrid|rust-only]
 validate-msix:
 ifndef MSIX
 	$(error MSIX is required. Usage: make validate-msix MSIX=./msix/Easydict-x64.msix)
 endif
-	@dotnet run --project tools/MsixValidate -- "$(MSIX)"
+	@cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$(MSIX)" --runtime-profile "$(RUNTIME_PROFILE)"
+
+# Encrypt a built-in secret for EncryptedSecrets.json.
+# Usage: make encrypt-secret SECRET=your-secret
+encrypt-secret:
+ifndef SECRET
+	$(error SECRET is required. Usage: make encrypt-secret SECRET=your-secret)
+endif
+	@cargo run --manifest-path ../rs/Cargo.toml -p easydict_encrypt_secret -- "$(SECRET)"
+
+# Render PDF pages to PNG/JPG images for diagnostics.
+# Usage: make pdf-to-images PDF=./docs/paper.pdf [OUT=./pages] [DPI=144] [FORMAT=png]
+pdf-to-images:
+ifndef PDF
+	$(error PDF is required. Usage: make pdf-to-images PDF=./docs/paper.pdf [OUT=./pages] [DPI=144] [FORMAT=png])
+endif
+	@pwsh -NoProfile -File scripts/pdf-to-images.ps1 "$(PDF)" "$(OUT)" -Dpi $(DPI) -Format "$(FORMAT)"
 
 # ============================================================
 # EXE Installer (requires Inno Setup 6: https://jrsoftware.org/isinfo.php)
@@ -394,11 +407,14 @@ help:
 	@echo "  make msix-x86     - Create MSIX package for x86"
 	@echo "  make msix-arm64   - Create MSIX package for ARM64"
 	@echo "  make msix-all     - Create all MSIX packages"
+	@echo "  make validate-msix MSIX=... [RUNTIME_PROFILE=hybrid|rust-only] - Validate package payload"
 	@echo "  make cert-generate CERT_PASSWORD=... - Generate development certificate"
 	@echo "  make cert-install CERT_PASSWORD=...  - Install certificate (requires admin)"
 	@echo "  make sign CERT=... CERT_PASSWORD=... MSIX=... - Sign MSIX package"
 	@echo "  make sign-all CERT=... CERT_PASSWORD=...      - Sign all MSIX packages"
 	@echo "  make fix-msix-minversion MSIX=...             - Fix MinVersion in MSIX (WindowsAppSDK #5598)"
+	@echo "  make encrypt-secret SECRET=...                - Encrypt a built-in secret with the Rust helper"
+	@echo "  make pdf-to-images PDF=...                    - Render PDF pages with the Rust helper"
 	@echo ""
 	@echo "EXE Installer (requires Inno Setup 6):"
 	@echo "  make installer      - Create EXE installer (x64)"

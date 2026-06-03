@@ -30,13 +30,6 @@ public static class OcrServiceFactory
         var resolved = options ?? OcrServiceOptions.FromSettings(SettingsService.Instance);
         var client = httpClient ?? GetSharedHttpClient(SettingsService.Instance);
 
-        if (SettingsService.Instance.UseOcrWorker && resolved.Engine == OcrEngineType.WindowsNative)
-        {
-            return new Workers.OcrWorkerClient(
-                SettingsService.Instance,
-                CreateInProc(resolved, client));
-        }
-
         return CreateInProc(resolved, client);
     }
 

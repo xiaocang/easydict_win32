@@ -201,7 +201,7 @@ public class SettingsServiceTests
     }
 
     [Fact]
-    public void UseOcrWorker_DefaultsToTrue()
+    public void UseOcrWorker_IsLegacyOnlyAndDefaultsToFalse()
     {
         var current = AppDomain.CurrentDomain.BaseDirectory;
         while (!string.IsNullOrEmpty(current) &&
@@ -212,9 +212,11 @@ public class SettingsServiceTests
 
         current.Should().NotBeNullOrEmpty();
         var source = File.ReadAllText(Path.Combine(current!, "src", "Easydict.WinUI", "Services", "SettingsService.cs"));
-        source.Should().Contain("public bool UseOcrWorker { get; set; } = true;");
-        source.Should().Contain("UseOcrWorker = ResolveWorkerIsolationSetting(nameof(UseOcrWorker), DisableOcrWorkerEnvironmentVariable);");
-        source.Should().Contain("EASYDICT_DISABLE_OCR_WORKER");
+        source.Should().Contain("public bool UseOcrWorker { get; set; }");
+        source.Should().Contain("UseOcrWorker = false;");
+        source.Should().Contain("Legacy runtime-only flag retained only so older settings are cleaned up.");
+        source.Should().NotContain("DisableOcrWorkerEnvironmentVariable");
+        source.Should().NotContain("EASYDICT_DISABLE_OCR_WORKER");
         source.Should().Contain("RemoveRuntimeOnlyWorkerIsolationSettings();");
         source.Should().NotContain("_settings[nameof(UseOcrWorker)] =");
     }

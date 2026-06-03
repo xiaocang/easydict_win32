@@ -24,6 +24,8 @@ internal sealed class WorkerLongDocumentPipeline
         CancellationToken cancellationToken,
         Func<BlockTranslatedEventData, CancellationToken, Task>? onBlockTranslated = null)
     {
+        RejectNativeLocalAiServiceId(p.ServiceId);
+
         var mode = ParseInputMode(p.InputMode);
         using var sourceBuilder = new WorkerLongDocumentSourceDocumentBuilder();
         var sourceDocument = await sourceBuilder.BuildAsync(
@@ -83,17 +85,12 @@ internal sealed class WorkerLongDocumentPipeline
             FromLanguage = ParseLanguage(p.From),
             ToLanguage = ParseLanguage(p.To),
             EnableFormulaProtection = true,
-            EnableDocumentContextPass = (settings.LongDocEnableDocumentContextPass ?? true) &&
-                !UsesFoundryLocalLongDocProfile(p.ServiceId, settings.LocalAIProvider),
+            EnableDocumentContextPass = settings.LongDocEnableDocumentContextPass ?? true,
             EnableOcrFallback = true,
             EnableQualityFeedbackRetry = true,
             MaxRetriesPerBlock = 1,
-            MaxConcurrency = UsesFoundryLocalLongDocProfile(p.ServiceId, settings.LocalAIProvider)
-                ? 1
-                : Math.Clamp(settings.LongDocMaxConcurrency ?? 1, 1, 16),
-            RequestTimeoutMs = UsesFoundryLocalLongDocProfile(p.ServiceId, settings.LocalAIProvider)
-                ? 120_000
-                : 30_000,
+            MaxConcurrency = Math.Clamp(settings.LongDocMaxConcurrency ?? 1, 1, 16),
+            RequestTimeoutMs = 30_000,
             FormulaFontPattern = string.IsNullOrWhiteSpace(settings.FormulaFontPattern) ? null : settings.FormulaFontPattern,
             FormulaCharPattern = string.IsNullOrWhiteSpace(settings.FormulaCharPattern) ? null : settings.FormulaCharPattern,
             PageRange = p.PageRange,
@@ -365,21 +362,21 @@ internal sealed class WorkerLongDocumentPipeline
         return Path.Combine(directory, $"{name}.translated{extension}");
     }
 
-    private static bool UsesFoundryLocalLongDocProfile(string serviceId, string? localAIProvider)
+    private static void RejectNativeLocalAiServiceId(string serviceId)
     {
-        if (serviceId.Equals("foundry-local", StringComparison.OrdinalIgnoreCase))
+        if (!IsNativeLocalAiServiceId(serviceId))
         {
-            return true;
+            return;
         }
 
-        if (!serviceId.Equals("windows-local-ai", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var provider = NormalizeToken(localAIProvider);
-        return provider is "" or "auto" or "foundrylocal";
+        throw new WorkerHandlerException(
+            WorkerErrorCodes.InvalidParams,
+            "Windows Local AI Long Document translation requires a Rust-native route; the LongDoc worker must not chain to the LocalAI worker.");
     }
+
+    private static bool IsNativeLocalAiServiceId(string serviceId) =>
+        serviceId.Equals("windows-local-ai", StringComparison.OrdinalIgnoreCase) ||
+        serviceId.Equals("foundry-local", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeToken(string? value)
     {

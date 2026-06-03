@@ -30,11 +30,9 @@ internal static class WorkerTranslationManagerFactory
         };
 
         var manager = new TranslationManager(options);
-        manager.RegisterService(new WorkerLocalAiTranslationService(snapshot));
 
-        // Configure each cloud LLM service from the snapshot. Workers register only
-        // the services they may need to call — we keep the full set so any serviceId
-        // the host requests in translate_document resolves.
+        // Configure each retained-worker supported service from the snapshot. Native
+        // Local AI service ids are rejected before this manager is asked to translate.
         ConfigureIfPresent(manager, "openai", svc =>
         {
             if (svc is OpenAIService openai)

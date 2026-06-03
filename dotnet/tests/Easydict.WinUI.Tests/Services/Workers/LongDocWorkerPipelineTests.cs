@@ -8,6 +8,7 @@ using FluentAssertions;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
+using WorkerHandlerException = LongDocWorker::Easydict.Workers.LongDoc.Infrastructure.WorkerHandlerException;
 using WorkerLongDocumentPipeline = LongDocWorker::Easydict.Workers.LongDoc.Infrastructure.WorkerLongDocumentPipeline;
 using WorkerLongDocumentSourceDocumentBuilder = LongDocWorker::Easydict.Workers.LongDoc.Infrastructure.WorkerLongDocumentSourceDocumentBuilder;
 using WinUiLongDocumentTranslationService = Easydict.WinUI.Services.LongDocumentTranslationService;
@@ -18,6 +19,35 @@ namespace Easydict.WinUI.Tests.Services.Workers;
 [Trait("Category", "WinUI")]
 public sealed class LongDocWorkerPipelineTests
 {
+    [Theory]
+    [InlineData("windows-local-ai")]
+    [InlineData("foundry-local")]
+    public async Task TranslateAsync_NativeLocalAiService_FailsBeforeWorkerNestedLocalAiRoute(
+        string serviceId)
+    {
+        var pipeline = new WorkerLongDocumentPipeline(FakeTranslateAsync);
+
+        var act = async () => await pipeline.TranslateAsync(
+            new TranslateDocumentParams
+            {
+                InputPath = "missing-input.txt",
+                OutputPath = "unused.txt",
+                InputMode = "PlainText",
+                From = "English",
+                To = "SimplifiedChinese",
+                ServiceId = serviceId,
+                OutputMode = "Monolingual",
+            },
+            new SettingsSnapshot(),
+            progress: null,
+            CancellationToken.None);
+
+        var error = await act.Should().ThrowAsync<WorkerHandlerException>();
+        error.Which.Code.Should().Be(WorkerErrorCodes.InvalidParams);
+        error.Which.Message.Should().Contain("requires a Rust-native route");
+        error.Which.Message.Should().Contain("LocalAI worker");
+    }
+
     [Fact]
     public async Task TranslateAsync_PlainText_WritesFlatResultFile()
     {

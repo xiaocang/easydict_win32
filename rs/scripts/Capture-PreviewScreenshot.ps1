@@ -3,6 +3,7 @@ param(
     [string]$ProcessName = "easydict_preview_iced",
     [string]$OutputDir,
     [switch]$StartIfMissing,
+    [switch]$StartNewInstance,
     [string]$Executable
 )
 
@@ -21,7 +22,50 @@ if ([string]::IsNullOrWhiteSpace($Executable)) {
     $Executable = Join-Path $rsRoot "target\debug\easydict_preview_iced.exe"
 }
 
+$previewWindow = if ([string]::IsNullOrWhiteSpace($env:EASYDICT_PREVIEW_WINDOW)) {
+    "main"
+} else {
+    $env:EASYDICT_PREVIEW_WINDOW.Trim().ToLowerInvariant()
+}
+
+$defaultWindowTitle = "Easydict Rust Main Window Preview"
+if ([string]::IsNullOrWhiteSpace($WindowTitle) -or $WindowTitle -eq $defaultWindowTitle) {
+    $WindowTitle = switch ($previewWindow) {
+        { $_ -in @("settings") } { "Easydict Settings"; break }
+        { $_ -in @("mini") } { "Easydict Mini"; break }
+        { $_ -in @("fixed") } { "Easydict Fixed"; break }
+        { $_ -in @("capture", "capture-overlay", "ocr", "ocr-overlay") } { "Easydict Capture"; break }
+        { $_ -in @("popbutton", "pop-button") } { "Easydict Selection"; break }
+        default { $defaultWindowTitle; break }
+    }
+}
+
+$script:previewMinWidth = 200
+$script:previewMinHeight = 200
+switch ($previewWindow) {
+    { $_ -in @("popbutton", "pop-button") } {
+        $script:previewMinWidth = 30
+        $script:previewMinHeight = 30
+        break
+    }
+    { $_ -in @("capture", "capture-overlay", "ocr", "ocr-overlay") } {
+        $script:previewMinWidth = 120
+        $script:previewMinHeight = 80
+        break
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+$script:StartedPreviewProcess = $null
+$script:CapturedPreviewWindow = $null
+
+trap {
+    if ($null -ne $script:StartedPreviewProcess -and -not $script:StartedPreviewProcess.HasExited) {
+        Stop-Process -Id $script:StartedPreviewProcess.Id -ErrorAction SilentlyContinue
+    }
+    throw
+}
 
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
@@ -163,42 +207,51 @@ function Get-TopLevelWindowsForProcess($processIds) {
 }
 
 function Get-PreviewWindowHandle {
-    $processes = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)
+    if ($StartNewInstance) {
+        $processes = @()
+    } else {
+        $processes = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)
+    }
+
     if ($processes.Count -gt 0) {
         $window = Get-TopLevelWindowsForProcess ($processes | ForEach-Object { $_.Id }) |
-            Where-Object { $_.Visible -and $_.Width -ge 200 -and $_.Height -ge 200 -and $_.Title -like "*$WindowTitle*" } |
+            Where-Object { $_.Visible -and $_.Width -ge $script:previewMinWidth -and $_.Height -ge $script:previewMinHeight -and $_.Title -like "*$WindowTitle*" } |
             Sort-Object Area -Descending |
             Select-Object -First 1
 
         if ($null -ne $window) {
+            $script:CapturedPreviewWindow = $window
             return $window.Handle
         }
 
         $window = Get-TopLevelWindowsForProcess ($processes | ForEach-Object { $_.Id }) |
-            Where-Object { $_.Visible -and $_.Width -ge 200 -and $_.Height -ge 200 } |
+            Where-Object { $_.Visible -and $_.Width -ge $script:previewMinWidth -and $_.Height -ge $script:previewMinHeight } |
             Sort-Object Area -Descending |
             Select-Object -First 1
 
         if ($null -ne $window) {
+            $script:CapturedPreviewWindow = $window
             return $window.Handle
         }
     }
 
-    if ($StartIfMissing) {
+    if ($StartIfMissing -or $StartNewInstance) {
         if (-not (Test-Path -LiteralPath $Executable)) {
             throw "Preview executable not found: $Executable"
         }
 
         $started = Start-Process -FilePath $Executable -WorkingDirectory $rsRoot -PassThru
+        $script:StartedPreviewProcess = $started
         for ($i = 0; $i -lt 80; $i++) {
             Start-Sleep -Milliseconds 100
             $started.Refresh()
             $window = Get-TopLevelWindowsForProcess @($started.Id) |
-                Where-Object { $_.Visible -and $_.Width -ge 200 -and $_.Height -ge 200 } |
+                Where-Object { $_.Visible -and $_.Width -ge $script:previewMinWidth -and $_.Height -ge $script:previewMinHeight } |
                 Sort-Object @{ Expression = { $_.Title -like "*$WindowTitle*" }; Descending = $true }, Area -Descending |
                 Select-Object -First 1
 
             if ($null -ne $window) {
+                $script:CapturedPreviewWindow = $window
                 return $window.Handle
             }
         }
@@ -332,6 +385,11 @@ $metadata = [ordered]@{
         width = $virtual.Width
         height = $virtual.Height
     }
+    previewProcess = [ordered]@{
+        processId = if ($null -ne $script:CapturedPreviewWindow) { [int]$script:CapturedPreviewWindow.ProcessId } else { $null }
+        title = if ($null -ne $script:CapturedPreviewWindow) { $script:CapturedPreviewWindow.Title } else { $null }
+        startedNewInstance = [bool]$StartNewInstance
+    }
     output = [ordered]@{
         window = $windowPath
         desktop = $desktopPath
@@ -345,3 +403,7 @@ Write-Host "Window screenshot: $windowPath"
 Write-Host "Desktop screenshot: $desktopPath"
 Write-Host "Metadata: $metadataPath"
 Write-Host ("DPI: {0} ({1:P0}), window: {2}x{3} physical, {4}x{5} DIP" -f $dpiX, $scale, $windowWidth, $windowHeight, [Math]::Round($windowWidth / $scale, 2), [Math]::Round($windowHeight / $scale, 2))
+
+if ($null -ne $script:StartedPreviewProcess -and -not $script:StartedPreviewProcess.HasExited) {
+    Stop-Process -Id $script:StartedPreviewProcess.Id -ErrorAction SilentlyContinue
+}

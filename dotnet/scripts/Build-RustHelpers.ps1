@@ -56,7 +56,8 @@ $CargoArgs = @(
     "--target", $CargoTarget,
     "--bin", "easydict-native-bridge",
     "--bin", "easydict_browser_registrar",
-    "--bin", "easydict_cli"
+    "--bin", "easydict_cli",
+    "--bin", "easydict_long_doc"
 )
 
 if ($Configuration -eq "Release") {
@@ -78,7 +79,8 @@ $BuiltDir = Join-Path $RustWorkspace "target\$CargoTarget\$ProfileDir"
 $HelperExecutables = @(
     "easydict-native-bridge.exe",
     "easydict_browser_registrar.exe",
-    "easydict_cli.exe"
+    "easydict_cli.exe",
+    "easydict_long_doc.exe"
 )
 
 foreach ($ExeName in $HelperExecutables) {
@@ -90,3 +92,8 @@ foreach ($ExeName in $HelperExecutables) {
     Copy-Item $Source -Destination (Join-Path $OutputPath $ExeName) -Force
     Write-Host "Copied $ExeName to $OutputPath" -ForegroundColor Green
 }
+
+$RegistrarSource = Join-Path $BuiltDir "easydict_browser_registrar.exe"
+$LegacyRegistrarName = "BrowserHostRegistrar.exe"
+Copy-Item $RegistrarSource -Destination (Join-Path $OutputPath $LegacyRegistrarName) -Force
+Write-Host "Copied $LegacyRegistrarName to $OutputPath" -ForegroundColor Green

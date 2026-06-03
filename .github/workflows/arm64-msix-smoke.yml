@@ -2,6 +2,15 @@ name: ARM64 MSIX Smoke Test
 
 on:
   workflow_dispatch:
+    inputs:
+      runtime_profile:
+        description: 'Runtime payload profile to build and validate'
+        required: false
+        default: 'hybrid'
+        type: choice
+        options:
+          - hybrid
+          - rust-only
 
 permissions:
   contents: read
@@ -10,6 +19,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}
 
 jobs:
   arm64-msix-smoke:
@@ -44,7 +54,7 @@ jobs:
         working-directory: dotnet
         shell: pwsh
         run: |
-          dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-arm64 -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
+          dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-arm64 -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
 
       - name: Clean publish output directory (arm64)
         shell: pwsh
@@ -68,42 +78,10 @@ jobs:
             -p:Platform=arm64 `
             -p:BuildWorkerOutputs=false `
             -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:PublishReadyToRun=false `
             -p:WindowsAppSDKSelfContained=false
-
-      - name: Publish NativeBridge (arm64)
-        working-directory: dotnet
-        shell: pwsh
-        run: |
-          dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
-            --configuration Release `
-            --runtime win-arm64 `
-            --self-contained true `
-            --output ./publish-msix/arm64 `
-            -p:PublishTrimmed=true
-
-      - name: Publish BrowserRegistrar (arm64)
-        working-directory: dotnet
-        shell: pwsh
-        run: |
-          dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
-            --configuration Release `
-            --runtime win-arm64 `
-            --self-contained true `
-            --output ./publish-msix/arm64 `
-            -p:PublishTrimmed=true
-
-      - name: Publish .NET Compat Host (arm64)
-        working-directory: dotnet
-        shell: pwsh
-        run: |
-          dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
-            --configuration Release `
-            --runtime win-arm64 `
-            --self-contained true `
-            --output ./publish-msix/arm64 `
-            -p:PublishTrimmed=false
 
       - name: Publish Rust helper executables (arm64)
         working-directory: dotnet
@@ -115,6 +93,7 @@ jobs:
             -OutputDir ./publish-msix/arm64
 
       - name: Publish LongDoc Worker (arm64)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         working-directory: dotnet
         shell: pwsh
         run: |
@@ -128,6 +107,7 @@ jobs:
             -p:WindowsAppSDKSelfContained=false
 
       - name: Publish LocalAi Worker (arm64)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         working-directory: dotnet
         shell: pwsh
         run: |
@@ -140,7 +120,16 @@ jobs:
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
+      - name: Dedupe worker shared files (arm64)
+        if: env.RUNTIME_PROFILE != 'rust-only'
+        working-directory: dotnet
+        shell: pwsh
+        run: |
+          ./scripts/Dedupe-WorkerSharedFiles.ps1 `
+            -PublishDir ./publish-msix/arm64
+
       - name: Bundle .NET 8 Runtime (arm64)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         shell: pwsh
         working-directory: dotnet
         run: |
@@ -157,6 +146,15 @@ jobs:
             -ManifestPath "dotnet/src/Easydict.WinUI/Package.appxmanifest" `
             -OutputMsixPath "dotnet/msix/Easydict-arm64-smoke.msix" `
             -VerifyTargetsizeIcons
+
+      - name: Validate MSIX (identity, MinVersion, runtime payload)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- `
+            "msix/Easydict-arm64-smoke.msix" `
+            --runtime-profile "${{ env.RUNTIME_PROFILE }}" `
+            --allow-unsigned
 
       - name: Trust signing certificate
         shell: pwsh

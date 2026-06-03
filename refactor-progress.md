@@ -19,7 +19,7 @@ During the transition, Rust is the only desktop owner. The Rust app owns UI, win
 
 The existing .NET implementation may remain as a `.NET Compat Host`, but only as an out-of-process worker. Do not host CoreCLR inside the Rust process. The compatibility host should expose behavior through JSON Lines, stdio, named pipes, or the existing Sidecar-style IPC pattern.
 
-The compatibility host must not contain .NET UI or WinUI surfaces. It exists only to preserve behavior while Rust replacements are built for translation, OCR, long document translation, local AI, MDX/MDD lookup, and settings migration.
+The compatibility host must not contain .NET UI or WinUI surfaces. It exists only to preserve behavior while Rust replacements are built for translation, long document translation, local AI, and MDX/MDD lookup.
 
 ## Migration Phases
 
@@ -29,15 +29,16 @@ The compatibility host must not contain .NET UI or WinUI surfaces. It exists onl
    - Existing .NET tests remain the source of behavior evidence.
 
 2. **Locked IPC contracts**
-   - Stabilize contracts for `translate`, `translate_stream`, `grammar_correct`, `ocr_recognize`, `longdoc_translate`, `local_ai_prepare`, `local_ai_translate`, `mdx_lookup`, and `settings_migrate`.
+   - Stabilize the direct worker contracts for LongDoc/LocalAI (`translate_document`, `translate_stream`, `grammar_stream`) while those workers remain.
+   - The earlier generic `translate`, `translate_stream`, `grammar_correct`, OCR, LongDoc, LocalAI, settings migration, and MDX CompatHost facade contracts are retired once provider-specific Rust routes, direct worker routes, or local unsupported errors cover them.
    - Add contract tests on both Rust and .NET sides before moving implementations.
 
 3. **Lower-risk Rust replacements**
    - Move SSE parsing, OpenAI-compatible translation services, settings/security, translation cache, and LexIndex-style local indexing to Rust first.
    - Route migrated capabilities directly in Rust while keeping the .NET host as fallback.
 
-4. **Heavy modules stay behind the host**
-   - Keep long document/PDF processing, WindowsAI/PhiSilica/OpenVINO, MDX/PdfPig, and OCR worker fallback behind `.NET Compat Host` until Rust-native replacements are accepted.
+4. **Heavy modules stay isolated while Rust routes them**
+   - Keep complex long document/PDF processing and WindowsAI/PhiSilica/OpenVINO behind retained worker processes until Rust-native replacements are accepted; unsupported or ambiguous MDX encryption modes now fail locally instead of using a `.NET Compat Host` bridge.
    - Each retained module must keep explicit fallback and failure-mode tests.
 
 5. **Remove .NET runtime**
@@ -51,7 +52,7 @@ Foundry Local via the Rust SDK should become the preferred Rust-native local AI 
 
 Phi Silica/WindowsAI should remain a temporary .NET-backed provider during the transition because the current implementation and test coverage already exist there, and the Windows AI API path carries packaging and hardware constraints.
 
-OpenVINO should remain behind `.NET Compat Host` until a Rust replacement is proven or the Foundry Local path fully covers the needed user scenarios.
+OpenVINO should remain behind the retained LocalAI worker until a Rust replacement is proven or the Foundry Local path fully covers the needed user scenarios.
 
 The provider order during the hybrid period should preserve the behavior described in [`migration-list.md`](migration-list.md): Auto should continue to try Phi Silica, then Foundry Local, then OpenVINO, unless a specific provider is selected.
 
@@ -70,7 +71,7 @@ Initial library scouting notes:
 - OpenAI-compatible clients: evaluate `async-openai` (`https://github.com/64bit/async-openai`) and multiprovider clients such as `genai` (`https://github.com/jeremychone/rust-genai`) before expanding hand-written provider HTTP code.
 - PDF parsing/rendering: evaluate `pdfium-render` (`https://github.com/ajrcarey/pdfium-render`) and other Pdfium bindings before replacing the PDF/PdfPig/MuPDF stack.
 - Text shaping/layout: evaluate `cosmic-text` (`https://github.com/pop-os/cosmic-text`) before porting complex shaping, bidi, font fallback, or rasterization behavior.
-- OCR: evaluate the official Tesseract engine (`https://github.com/tesseract-ocr/tesseract`) and Rust wrappers such as `leptess` (`https://github.com/houqp/leptess`) for non-Windows OCR paths, while preserving Windows OCR behavior behind the bridge until parity is clear.
+- OCR: Windows Native OCR now uses Microsoft's `windows`/windows-rs projection directly; evaluate the official Tesseract engine (`https://github.com/tesseract-ocr/tesseract`) and Rust wrappers such as `leptess` (`https://github.com/houqp/leptess`) only for future non-Windows or scanned-document OCR experiments.
 - Local dictionary indexing: evaluate mature FST/search crates before porting LexIndex internals wholesale, while retaining exact prefix/wildcard/normalization parity tests as the acceptance gate.
 
 1. `Easydict.Llm.Streaming`
@@ -79,11 +80,11 @@ Initial library scouting notes:
 
 2. Settings, security, and settings migration logic
    - Move settings snapshots, credential protection, legacy settings migration, proxy configuration, and service configuration models to Rust-owned storage.
-   - Keep `.NET Compat Host` settings migration as fallback until migrated settings round-trip tests pass.
+   - The `.NET Compat Host` settings migration fallback is retired once Rust migration and storage round-trip tests pass.
 
 3. `Easydict.TranslationService` core
    - Move `Language`, request/result/error models, service registration, `TranslationManager`, retry policy boundaries, and shared service abstractions.
-   - Keep the Rust facade compatible with the locked `translate`, `translate_stream`, and `grammar_correct` contracts while individual services are moved.
+   - Retire generic `translate`, `translate_stream`, and `grammar_correct` CompatHost fallbacks once individual providers route through Rust-native or provider-specific worker paths.
 
 4. Translation cache, phonetic enrichment, and grammar parsing
    - Move short-text cache keys, cache hit behavior, stampede prevention, Youdao phonetic enrichment, and grammar result parsing.
@@ -115,7 +116,7 @@ Initial library scouting notes:
 
 11. OCR logic and OCR providers
     - Move lightweight OCR logic first: `OcrTextMerger`, OCR service selection, Ollama OCR, and Custom API OCR.
-    - Move Windows OCR and worker fallback later because WinRT language-pack behavior and desktop capture integration are higher-risk.
+    - Windows Native OCR is now Rust-native through windows-rs; the `.NET` OCR worker, `OcrWorkerClient`, and CompatHost `ocr_recognize` facade are retired. Keep future OCR work focused on provider parity and non-Windows/scanned-document options, not on reintroducing `workers/ocr`.
 
 12. `Easydict.DocumentExport` for Markdown and text
     - Move TXT/Markdown export, bilingual/mono/both output modes, and stable output path generation before the PDF stack.
@@ -144,7 +145,7 @@ During the hybrid period, release artifacts may include:
 - `easydict.exe`: Rust desktop owner.
 - `.NET Compat Host`: out-of-process compatibility worker.
 - Bundled .NET runtime: temporary bridge dependency.
-- Existing worker folders for long document, local AI, and OCR where still needed.
+- Existing worker folders for long document and local AI where still needed.
 
 The final Rust-only package must remove `.NET Compat Host`, the bundled .NET runtime, and .NET worker packaging scripts.
 
@@ -160,7 +161,15 @@ Worker fallback must be tested in both available and missing/failed host modes, 
 - Rust UI/application work exists under `rs/`.
 - Generic Rust UI framework work exists under `lib/winfluent-rs/`.
 - The root migration checklist remains [`migration-list.md`](migration-list.md).
-- `.NET Compat Host` now exists as a temporary out-of-process bridge; it is not the final architecture.
+- `.NET Compat Host` has been removed from the tree and from packaging/protocol scripts; Rust production paths should not reintroduce it.
+- Active `.NET Compat Host` runtime use is removed from Quick Translate, local dictionary suggestions, OCR, LongDoc, and LocalAI. Retained LongDoc and LocalAI paths now run their worker processes directly from Rust, common `Encrypted=1` credential dictionaries plus `Encrypted=2` key-info dictionaries route natively, and unsupported/unknown MDX encryption modes fail locally.
+- OCR is no longer an active `.NET` runtime dependency: Windows Native OCR, Ollama OCR, Custom API OCR, DTO mapping, and text merging are covered by Rust paths, while legacy `UseOcrWorker` is only a cleanup flag for old settings.
+- Rust now owns the Foundry Local CLI runtime/status control surface for the native Windows Local AI Foundry route: status parsing, runtime three-state mapping, loopback endpoint refresh, model load sequencing, and start-status polling are covered before the remaining full Foundry SDK provider wrapper work.
+- Rust now owns the MDX type-2 credential crypto primitives (Base64 regcode parsing, RIPEMD-128, email/device-id key derivation, Salsa20/8 fixed-vector behavior, key-header decryption, and record-block decryption) for the native `Encrypted=1` route.
+- Rust now owns the pure formula-aware letter geometry reconstructor that rebuilds formula-sensitive text from glyph boxes; PDF extraction and export wiring remain separate follow-up slices.
+- Rust now owns the pure character-level formula evidence builder that creates `{vN}` hard placeholders and low-confidence `$...$` soft formula text from PDF-neutral character data; PDF character-source adapters remain separate follow-up slices.
+- Rust now owns the PDF source-block evidence-to-export metadata bridge for PDFium text chars: layout region/source ids, source block type, formula-like context, font/style, fallback text, reading order, and preserve-original intent are now available before the remaining complex ML layout and PDF backfill/content-stream export work.
+- Rust now owns the first native LongDoc PDF exact content-stream export path for simple selectable PDFs: literal/TJ source text operators can be rewritten with translated ASCII text, preserved/formula blocks keep original PDF text, page-level patch failures preserve the original page, and page ranges are cropped to selected pages; CJK/non-ASCII `NeedsFontEmbedding` now routes through the isolated Rust overlay/font wrapper when a usable font and bbox plan are available. Complex layout/backfill remain later parity gates, while native PDF extraction/export failures now fail locally or downgrade to native text export instead of starting the retained LongDoc worker.
 
 ## Completed Migration Steps
 
@@ -670,7 +679,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - The parser exposes chunk iterators so Rust callers can stop after a yielded chunk, matching the migration-list cancellation requirement at the parser boundary before a full async HTTP stream runner is wired.
   - Adds `llm_streaming_behavior` parity coverage against `migration-list.md` section 4 OpenAI-compatible behavior and section 16 `Easydict.Llm.Streaming.Tests` coverage: SSE data lines, multiple chunks, blank/non-data ignore, `[DONE]`, malformed JSON, empty choices, empty stream, cancellation-by-stopping-iteration, Unicode, and Responses API delta events.
 - 2026-05-31: Started Rust-native Settings replacement with legacy settings file migration.
-  - Added `rs/crates/easydict_app/src/settings_migration.rs` as a Rust-owned replacement for `FileSettingsCompatMigrator` while preserving the locked `SettingsMigrateParams`/`SettingsMigrateResult` DTOs.
+  - Added `rs/crates/easydict_app/src/settings_migration.rs` as a Rust-owned replacement for `FileSettingsCompatMigrator` while preserving the `SettingsMigrateParams`/`SettingsMigrateResult` local migration DTO shape.
   - The Rust migrator resolves explicit/default settings paths, expands Windows-style `%ENV%` path segments, returns a warning instead of failing when the source settings file is missing, and writes to either the original file or a requested target path.
   - It preserves legacy migration behavior for `WindowWidth`/`WindowHeight` to `WindowWidthDips`/`WindowHeightDips`, Mini/Fixed `PositionSaved` inference from saved coordinates, runtime-only worker isolation key cleanup, and `openvino-local-ai` service id merge into `windows-local-ai`.
   - The OpenVINO merge keeps the legacy standalone OpenVINO preference by setting `LocalAIProvider=OpenVINO` only when needed, replaces service-list entries case-insensitively, removes duplicates when `windows-local-ai` already exists, and moves enabled-query dictionary keys without overwriting an existing new key.
@@ -744,7 +753,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Verified: full `cargo test -p easydict_app` and full `cargo test --workspace` for winfluent-rs both green; `cargo fmt --check` clean on both workspaces.
 - 2026-06-01: Deferred simplify findings (genuine, multi-agent-confirmed, but out of scope for a low-risk parity pass — logged here so they are not lost):
   - Cross-module helper duplication that wants a small shared util module: `base64_encode` (`ocr.rs` + `credential_protection.rs`), `normalized_optional` (`ocr.rs`/`custom_streaming.rs`/`openai_compatible.rs`), `is_loopback_url` (same trio, with minor variations — verify before merging), `parent_folder`/`non_empty`-style helpers (`long_document.rs` + `state.rs`). Skipped because it spans many files and `is_loopback_url` variants differ.
-  - C# CompatHost: `CompatHostDispatcher` repeats the `if (_service is null) { WriteError(...) }` guard ~7× → an `EnsureService(method)` helper; and `OcrWorkerCompatRecognizer`/`LongDocWorkerCompatTranslator`/`LocalAiWorkerCompatService` re-implement worker startup that may overlap `WorkerSpawner` (needs parity verification before delegating — large/risky).
+  - C# CompatHost: `CompatHostDispatcher` repeats the `if (_service is null) { WriteError(...) }` guard ~7× → an `EnsureService(method)` helper; and `LongDocWorkerCompatTranslator`/`LocalAiWorkerCompatService` re-implement worker startup that may overlap `WorkerSpawner` (needs parity verification before delegating — large/risky).
   - Demo-only duplication left as-is: `mini_window_options`/`delayed_message_task`/`stream_translation_task` repeated across `win_fluent_backend_iced` bins + the separate `win_fluent_gallery` crate (cross-crate coupling not worth it for example binaries).
 - 2026-06-01: Added Rust-owned Caiyun and NiuTrans traditional HTTP execution.
   - Scouted official/community Rust options first: `fusion-translator`/`poly-translator` include Caiyun wrappers but are broad unofficial clients with extra provider dependencies; `translation-api-cn` includes NiuTrans request/response structs for a markdown CLI helper but does not cover Easydict's exact DTO/error/quick-translate behavior; the official NiuTrans GitHub organization focuses on MT systems/research projects rather than a Rust cloud API SDK.
@@ -791,9 +800,1258 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Carried `alternatives` into `TranslationResultPreview` (new field, populated in `apply_success`, cleared on query start, streaming start, and error so stale alternatives cannot persist); `result_body()` now renders them as an `Also: alt1; alt2` line appended below the primary translation, reusing the existing string-body rendering path (no new UI widget).
   - Adds tests: Linguee alternatives parsing (primary + alternatives, single-translation, empty fallback), DTO camelCase serialization round-trip + absent-field omission, and an end-to-end apply+render test proving the preview hydrates alternatives, renders the `Also:` line, and clears them on the next query. `traditional_http_behavior` 36, `quick_translate_behavior` +1, `compat_protocol` +1. Full Rust suite + `cargo check --workspace` + fmt green; .NET CompatHost build + `CompatHostProtocolSerializationTests` (7) green.
   - Next: add `word_result` (phonetics/definitions/examples) to the DTO + preview rendering alongside the Google Web/Dict port, then Youdao.
+- 2026-06-02: Added `wordResult` rich-result DTO plumbing across the Rust/.NET facade boundary as the precondition for Google Web/Dict and Youdao native migration.
+  - Scouted reusable libraries first: `ydt` (`https://docs.rs/ydt/latest/ydt/`) provides a small Youdao HTML word lookup helper; `tagent` (`https://docs.rs/tagent/latest/tagent/`) embeds a broader Google-backed translator/orchestrator; `rtranslate` (`https://docs.rs/rtranslate/`) is a minimal Google web translation wrapper; Google now publishes Rust Cloud client libraries including `google-cloud-translation-v3` (`https://cloud.google.com/rust/docs/reference`), but that official API does not match Easydict's free Google Web/Dict rich dictionary endpoint or Youdao web/openapi parity. Kept a narrow local DTO/protocol port for now; provider execution can still reuse a library later if it preserves Easydict's exact rich-result and packaging constraints.
+  - Added Rust facade DTOs for `WordResultDto`, `PhoneticDto`, `DefinitionDto`, `WordFormDto`, and `SynonymDto` under optional `TranslationResultDto.word_result`, preserving absent-field wire back-compat.
+  - Added matching .NET `TranslationResultDto.WordResult` and child DTOs, and mapped legacy `.NET TranslationResult.WordResult` inside `TranslationManagerCompatTranslator`, so CompatHost-backed Google Dict/Youdao results can now carry phonetics, definitions, examples, forms, and synonyms to the Rust shell.
+  - Extended `TranslationResultPreview` to hydrate, render, and clear word results. Rendering is intentionally text-first for this parity stage: phonetics, definitions, examples, forms, and synonyms are appended under the primary body while future UI work can replace it with dedicated controls.
+  - Adds tests: Rust `compat_protocol` round-trip for camelCase `wordResult`, Rust `quick_translate_behavior` preview rendering/clearing, and .NET `CompatHostProtocolSerializationTests` rich-result round-trip. Verified targeted Rust behavior, Rust workspace check, and .NET protocol tests green.
+- 2026-06-02: Added Rust-owned Google Web/Dict traditional HTTP execution.
+  - Reused the library scouting from the `wordResult` slice: available Rust Google web wrappers (`tagent`, `rtranslate`) target plain translation/orchestrator behavior, while Google's official Rust Cloud Translation client targets authenticated Cloud Translation rather than the free WebApp dictionary array payload. Kept a local parser to preserve Easydict's exact `dt=at/bd/ex/ld/md/qca/rw/rm/ss/t` request shape and rich-result fields.
+  - Added `TraditionalHttpServiceConfig::GoogleWeb` and `TraditionalHttpServiceKind::GoogleWeb`, `build_google_web_translation_request_plan`, and `parse_google_web_translation_response` for the legacy nested-array response.
+  - Parser parity covers translated sentence concatenation, detected language fallback (`root[8]` then `root[2]`), source phonetic at `root[0][last][3]`, dictionary definitions from `root[1]`, simple-word fallback from `entry[2]`, and example extraction from `root[13]` with HTML tags stripped.
+  - `traditional_http_config_for_service("google_web", ...)` now routes to Rust-native traditional HTTP, and `NativeTraditionalHttpQuickTranslateBackend` handles `google_web` without the CompatHost fallback while preserving `word_result` in the returned DTO.
+  - Adds tests: Google Web request/parser fixture, native traditional executor coverage, and quick-translate native routing with rich `word_result`.
+- 2026-06-02: Added Rust-owned Youdao official OpenAPI execution while keeping the default web/AES path behind CompatHost for the next slice.
+  - Scouted Youdao options first: `ydt` remains a narrow HTML word-lookup helper, and no official/provider-maintained Rust SDK was found for Youdao translation. The official Youdao Zhiyun API documents the HTTP `appKey`/`salt`/`curtime`/`signType=v3` SHA-256 signing contract, so this slice keeps a local request/parser implementation for Easydict's exact DTO and error behavior.
+  - Added `TraditionalHttpServiceConfig::YoudaoOpenApi` and `TraditionalHttpServiceKind::YoudaoOpenApi`, plus deterministic-testable `build_youdao_openapi_translation_request_plan_with_nonce`, `compute_youdao_openapi_sign`, and `youdao_openapi_signature_input`.
+  - Added `parse_youdao_openapi_response` with legacy behavior for `errorCode` mapping (`401`/`108` invalid key, `411` rate limit), joined `translation` text, `basic` US/UK phonetics with audio URLs, `basic.explains` definition splitting, and detected-language hydration from `l` when source is Auto.
+  - `traditional_http_config_for_service("youdao", ...)` now routes natively only when `youdaoUseOfficialApi=true` and both AppKey/AppSecret are present; default web dictionary/webtranslate was left for the next query-aware slice.
+  - Adds tests for signing, form body fields, language-code parity, response parsing/error mapping, generic native executor coverage, and quick-translate native routing for configured Youdao OpenAPI.
+- 2026-06-02: Added Rust-owned default Youdao web dictionary execution for word/short-phrase queries.
+  - Scouted reuse again before replacing the path: `ydt` (`https://docs.rs/ydt/latest/ydt/`) is still too narrow because it returns normalized display text from Youdao HTML rather than Easydict's rich `WordResult`; for the MD5 webdict signature, added RustCrypto `md-5` (`https://docs.rs/md-5`) instead of hand-writing MD5.
+  - Added `TraditionalHttpServiceConfig::YoudaoWebDict` and `TraditionalHttpServiceKind::YoudaoWebDict`, `build_youdao_web_dict_translation_request_plan`, `youdao_web_dict_time`, `compute_youdao_web_dict_sign`, and `youdao_web_dict_language_code`.
+  - Parser parity covers `simple.word`/`ec.word` object-or-array normalization, US/UK phonetics and dictvoice audio URLs, `ec.word.trs` definitions, `ec.word.wfs` word forms split by `或`, and `syno.synos` synonyms with both flat string and `{w: ...}` word entries.
+  - Added `traditional_http_config_for_request(...)` so quick translate can route default `youdao` word queries to Rust while keeping sentence translation available for a follow-up webtranslate executor. Official OpenAPI mode still wins when fully configured.
+  - Adds tests for webdict signing/form fields/language selection, rich dictionary parsing, generic native executor coverage, and query-aware quick-translate routing.
+- 2026-06-02: Added Rust-owned default Youdao webtranslate execution, removing the default Youdao web-mode CompatHost dependency for both words and sentences.
+  - Reused high-quality RustCrypto crates for the protocol pieces instead of local crypto: `md-5` for the dynamic-key/request signatures, `aes` (`https://docs.rs/aes/latest/aes/`) + `cbc` (`https://docs.rs/cbc/latest/cbc/`) for AES-128-CBC/PKCS7 response decryption, and `base64` (`https://docs.rs/base64/latest/base64/`) for URL-safe encrypted payload decoding.
+  - Added `TraditionalHttpServiceConfig::YoudaoWebTranslate`, `TraditionalHttpServiceKind::{YoudaoWebTranslateKey, YoudaoWebTranslate}`, deterministic key/translate request-plan builders, `compute_youdao_web_translate_sign`, `parse_youdao_web_translate_key_response`, `decrypt_youdao_web_translate_response`, and `parse_youdao_web_translate_response`.
+  - The native executor now mirrors the legacy two-step flow: GET `webtranslate/key` with the fixed initial key, parse `data.secretKey`, POST `webtranslate` with a fresh `mysticTime`, decrypt non-JSON responses, and parse nested or flat `translateResult` arrays. Plain JSON responses remain supported for provider-side error/success payloads.
+  - `TraditionalHttpServiceConfig::YoudaoWebDict` now preserves the legacy dictionary fallback: if the word dictionary has no definitions and returns the original text unchanged, the executor falls through to webtranslate.
+  - `traditional_http_config_for_request(...)` now routes default `youdao` sentence/non-word queries to Rust `YoudaoWebTranslate`, while word/short-phrase queries start with Rust `YoudaoWebDict`; fully configured official API mode still takes precedence.
+  - Adds tests for webtranslate dynamic-key signing and request fields, key parser errors, AES decrypt known-answer vector, nested/flat response parsing, two-step native executor coverage, dictionary fallback-to-webtranslate, and quick-translate native routing.
+- 2026-06-02: Added Rust-owned default DeepL web JSON-RPC execution, removing the default keyless DeepL CompatHost dependency.
+  - Scouted reusable libraries first: `deeplx` (`https://docs.rs/deeplx/latest/deeplx/`) targets the DeepLX API/wrapper shape, and `deepl`/`deeprl` focus on official DeepL API clients. None preserve Easydict's exact no-key `www2.deepl.com/jsonrpc` payload, anti-detection spacing, timestamp alignment, API fallback behavior, and DTO mapping, so this slice keeps a narrow local implementation using the existing `reqwest`/`serde_json` stack.
+  - Added `TraditionalHttpServiceConfig::DeepLWeb`, `TraditionalHttpServiceKind::DeepLWeb`, `DEEPL_WEB_ENDPOINT`, deterministic `build_deepl_web_translation_request_plan_with_values`, and helpers for the legacy request id spacing rule, lowercase-`i` counting, and timestamp alignment.
+  - Added `parse_deepl_web_translation_response` for JSON-RPC success/error payloads and `deepl_web_error_from_status` matching the legacy web path's `ServiceUnavailable` classification.
+  - Added `translate_deepl_web_service`: default `deepl` now runs web JSON-RPC natively; if the web call fails and an API key is configured while still in web-first mode, it falls back to the existing native official API executor just like `DeepLService.TranslateInternalAsync`.
+  - `traditional_http_config_for_service("deepl", ...)` now returns `DeepLWeb` for the default/free-web mode, and still returns `DeepLApi` for API-only or quality-optimized mode.
+  - Adds tests for JSON-RPC request fields/headers, anti-detection spacing/timestamp helpers, web parser success/errors, status classification, API fallback, generic native executor coverage, and quick-translate default DeepL web routing.
+- 2026-06-02: Added Rust-native quick-translate routing for Foundry Local endpoint mode, reducing the Local AI `.NET CompatHost` dependency when users select `FoundryLocal` and either configure an endpoint or already have a running Foundry service.
+  - Scouted reusable/provider-owned options first: Microsoft Foundry Local's official repository documents Rust SDK samples and an OpenAI-compatible API (`https://github.com/microsoft/foundry-local`), the Foundry Local REST reference documents `POST /v1/chat/completions` as OpenAI Chat Completions compatible (`https://learn.microsoft.com/en-us/azure/foundry-local/reference/reference-rest`), and the Rust web-server sample uses `foundry-local-sdk` to start the service before calling the same REST endpoint with `reqwest` (`https://learn.microsoft.com/en-us/azure/foundry-local/how-to/how-to-integrate-with-inference-sdks`). For this lower-risk slice, the existing Rust OpenAI-compatible executor is reused; full SDK lifecycle control remains a later Local AI worker migration item.
+  - Added `FOUNDRY_LOCAL_DEFAULT_MODEL`, `foundry_local_service_config`, and `normalize_foundry_local_chat_completions_endpoint` to preserve the .NET endpoint normalization shape (`/v1`, `/status`, `/openai/status`, `/openai/load/...` -> `/v1/chat/completions`) while requiring no API key and pinning Chat Completions format.
+  - Added a Rust `FoundryLocalEndpointResolver` abstraction plus a default `CommandFoundryLocalEndpointResolver` that runs `foundry service status`, `foundry service status --verbose`, and `foundry service status --json` with an 8-second timeout, extracts status/load URLs, prefers loopback endpoints, and normalizes them to `/v1/chat/completions`.
+  - `openai_compatible_service_can_route_natively("windows-local-ai", ...)` now routes explicit `FoundryLocal` mode even when `foundryLocalEndpoint` is empty; the native backend resolves the endpoint at execution time. `Auto`, `WindowsAI`, and `OpenVINO` still use CompatHost so the legacy provider order remains intact.
+  - `NativeOpenAiQuickTranslateBackend` now covers Foundry Local translation streams and grammar correction through the aggregate `windows-local-ai` service id in explicit endpoint mode; results still use the user-visible `Windows Local AI` service name.
+  - The full Foundry Local SDK lifecycle (`foundry-local-sdk` model download/load, Start button prepare flow, and Auto-mode provider fallback) remains a later Local AI worker migration item; this slice only replaces translation/grammar calls once an endpoint is configured or discoverable from the running service.
+  - Adds tests for endpoint normalization/extraction, config mapping, Auto-mode non-interception, resolver-backed endpoint discovery, no-authorization Foundry Local request planning, and quick-translate native streaming through both configured and discovered endpoints.
+- 2026-06-02: Added Rust-native Built-in AI proxy-mode routing, reducing another short-text `.NET CompatHost` dependency.
+  - Scouted reusable crypto/runtime options first: RustCrypto `aes` documents a pure-Rust AES block cipher (`https://docs.rs/crate/aes/0.8.2`), RustCrypto `cbc` documents CBC mode with PKCS7 padding while warning that CBC is unauthenticated and should be treated as compatibility/hazmat crypto (`https://docs.rs/cbc/latest/cbc/`), `base64` exposes the standard padded engine used for the legacy payload (`https://docs.rs/base64/latest/base64/engine/general_purpose/`), and the already-present `ring` crate exposes SHA-256 (`https://docs.rs/ring/latest/ring/digest/static.SHA256.html`). Kept this as a narrow compatibility port of the existing `SecretKeyManager` AES-128-CBC format rather than inventing a new secret scheme.
+  - Added Rust helpers for the embedded Built-in AI proxy config: AES-CBC decrypt of `Resources/EncryptedSecrets.json`, the legacy SHA-256/hex-prefix key derivation from `Easydict.TranslationService`, proxy model allowlist/default fallback, and `X-Device-Id`/`X-Device-Token` header construction.
+  - `openai_compatible_config_for_service("builtin", ...)` now preserves the previous direct-user-key path and also routes the default no-user-key proxy mode natively when the embedded endpoint/key decrypt successfully.
+  - `SettingsState`, settings storage, and `settings_snapshot(...)` now preserve `DeviceId`/`DeviceToken` so Rust-native proxy requests can carry the same device headers as the .NET service when those values already exist.
+  - The background device-registration/writeback flow remains a follow-up because it mutates settings and belongs with the remaining settings/runtime lifecycle migration; this slice replaces translation and grammar requests once settings already carry a device identity/token.
+  - Adds tests for proxy config/decryption without asserting plaintext secrets, model fallback, settings snapshot routing, quick-translate proxy-mode native execution, and legacy settings storage of `DeviceId`/`DeviceToken`.
+- 2026-06-02: Migrated the Built-in AI device registration network flow to Rust.
+  - Scouted runtime/library options before replacing the .NET `RegisterDeviceAsync` call: the existing `reqwest` dependency already provides a blocking HTTP client with `post(...)` support (`https://docs.rs/reqwest/latest/reqwest/blocking/`), and `serde_json` documents parsing received JSON text into `Value` via `from_str` (`https://docs.rs/serde_json/latest/serde_json/value/`). No additional crate was needed.
+  - Added `BuiltInAiDeviceRegistrationRequestPlan`, `BuiltInAiDeviceRegistrationHttpClient`, `build_built_in_ai_device_registration_request_plan`, `built_in_ai_device_registration_endpoint`, `parse_built_in_ai_device_registration_response`, and `register_built_in_ai_device`.
+  - The Rust registration path mirrors .NET behavior: derive `/v1/device/register` from the embedded proxy endpoint origin, POST with `X-Device-Id` and optional bearer proxy key, return no token for missing device id, invalid endpoint, non-success HTTP status, invalid JSON, or missing/blank `device_token`.
+  - `EasydictApp::new(...)` now starts a background registration task when Built-in AI is in proxy mode, `DeviceId` exists, and `DeviceToken` is empty. `Message::BuiltInAiDeviceRegistrationFinished` writes a successful token into both current settings and `saved_settings` without marking the settings page dirty.
+  - Successful registration now schedules a settings save using `saved_settings`, so the new token is persisted while any unrelated unsaved settings-page edits remain unsaved in memory instead of being accidentally written to disk.
+  - Adds tests for registration URL/header planning, embedded plan creation, JSON parser fallbacks, registration executor status handling, startup task gating, state update semantics, and save-task triggering.
+- 2026-06-02: Migrated the explicit Foundry Local Start/Prepare settings action to Rust, further reducing Local AI `.NET CompatHost` usage for the lowest-risk local provider.
+  - Rechecked provider-owned reuse options first: Microsoft documents Foundry Local as an OpenAI-compatible local web service and ships Rust samples/SDK support (`https://github.com/microsoft/foundry-local`, `https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/how-to/how-to-integrate-with-inference-sdks`, `https://docs.rs/foundry-local/latest/foundry_local/`). This slice still keeps a local CLI/runtime controller because the existing settings action only needs `foundry service start`, `foundry model load`, status endpoint extraction, and then the already-migrated OpenAI-compatible executor; full SDK lifecycle adoption remains the next larger Foundry Local worker migration item.
+  - Added `FoundryLocalPrepareOutcome` and `FoundryLocalRuntimeController`, with `CommandFoundryLocalEndpointResolver` now able to start the service, load the selected model, and resolve the local endpoint through the existing status probes.
+  - `prepare_foundry_local_service(...)` treats non-loopback configured endpoints as user-managed and skips CLI control, while empty or loopback endpoints run the native start/load/resolve flow and normalize any reported `/status` or `/openai/status` URL to `/v1/chat/completions`.
+  - `EasydictApp::update(Message::StartFoundryLocal)` now runs a Rust-native prepare task and applies a ready/not-ready status message instead of routing the settings button through the Local AI worker bridge.
+  - Adds tests for start/load/resolve sequencing, user-managed endpoint bypass, missing endpoint reporting, and app-level task/result handling.
+- 2026-06-02: Added Rust-native fast-path routing to `easydict_cli`, so developer/script translation commands no longer require `.NET CompatHost` for requests whose effective service has already been migrated.
+  - Scouted this as a routing/runtime slice rather than a provider implementation slice: `clap` (`https://github.com/clap-rs/clap`) is a mature CLI parser, but replacing the existing small parser would add churn without reducing `.NET runtime` usage. No new external crate was needed; the CLI reuses the existing Rust `settings_storage` loader, `settings_snapshot(...)`, and the already-validated native quick-translate backends (`reqwest`-based OpenAI-compatible, custom streaming, traditional HTTP, and Bing).
+  - Exposed narrow quick-translate helpers for native-route detection and execution, keeping unsupported-service CLI behavior on the existing host fallback.
+  - `easydict_cli` now delays spawning CompatHost until fallback is actually needed. With the default `Auto` host target, translation/stream/batch use the first requested service or the legacy default `google`, while grammar uses the first requested grammar-capable service, matching the CompatHost selection rules closely enough for CLI routing.
+  - Explicit `--host`/`--app-dir` still forces the compatibility path for regression tests and manual bridge debugging.
+  - Stream and batch commands share the same fast-path. Native streaming emits the same plain/chunk/done output shape from collected Rust chunks, while unsupported requests continue through the facade.
+  - Adds CLI behavior tests proving native OpenAI configuration validation happens without trying to spawn a deliberately missing CompatHost, including a multi-service translate request and a grammar request where `google` is skipped in favor of `openai`; existing mock-host tests lock compatibility fallback.
+- 2026-06-02: Added a constrained Rust-native Long Document path for PlainText/Markdown documents, reducing another major `.NET CompatHost` dependency when the selected service already has a native quick-translate route.
+  - Scouted reusable libraries first: `text-splitter` (`https://docs.rs/text-splitter/latest/text_splitter/`) provides TextSplitter/MarkdownSplitter semantic chunking, so the Rust path reuses it instead of hand-rolling paragraph/chunk boundary logic. PDF/layout/formula-heavy flows still remain on the LongDoc worker.
+  - `run_long_document_request_with_current_app_dir(...)` and `run_long_document_request_with_packaged_host(...)` now check the native route before resolving/spawning `Easydict.CompatHost.exe`; Markdown/PlainText requests with no page range and a migrated service run directly in Rust.
+  - The native runner reads UTF-8 text input, chunks at a conservative 2,500-character limit, translates chunks through the existing native quick-translate backends, emits status/progress/block events, preserves the first provider error when all chunks fail, and writes simple monolingual/bilingual text outputs.
+  - The route is intentionally narrow: page ranges, PDF layout/formula/export-heavy flows, MDX dictionaries, and services without native quick-translate coverage still fall back to the CompatHost long-document bridge.
+  - Adds long-document behavior tests for native route gating, Markdown output generation with a fake native translator, and a missing-CompatHost regression proving native OpenAI validation happens locally without spawning the `.NET` host.
+- 2026-06-02: Added a Rust-native MDX lookup route for unencrypted dictionaries, reducing `.NET CompatHost` usage for local dictionary quick-translate hits and input suggestions.
+  - Scouted Rust MDX/MDD readers first: `mdict-rs` has stronger parser-quality signals but is `AGPL-3.0-only`, while `rs-mdict` is MIT and exposes the exact lower-risk APIs needed here (`Mdx::lookup`, `fuzzy_search`, and MDD support) (`https://docs.rs/crate/mdict-rs/0.1.4`, `https://docs.rs/crate/rs-mdict/0.1.1`). This slice uses `rs-mdict` and keeps encrypted credential/MDD-rich rendering parity behind CompatHost.
+  - Added `mdx_native` with a testable reader/factory abstraction, exact lookup, fuzzy candidate lookup, `@@@LINK=` redirect following with the same 5-hop cap, empty-result behavior for missing dictionary ids, and native route gating for unencrypted `mdx::*` snapshots.
+  - Quick Translate `mdx::*` non-streaming requests now check the native route before spawning `Easydict.CompatHost.exe`; unsupported encrypted dictionaries still fall back to the existing `MDict.Csharp` CompatHost path.
+  - Local dictionary suggestions now use the native MDX reader when all requested dictionaries are native-compatible, so common unencrypted suggestion queries avoid starting the .NET host.
+  - Adds MDX native behavior tests plus no-CompatHost regression tests proving unencrypted quick-translate lookup and local suggestions fail locally with an MDX file error instead of a CompatHost spawn error.
+- 2026-06-02: Added Rust-native MDD resource lookup primitives on top of the same `rs-mdict` migration path.
+  - Reused `rs-mdict::Mdd` because the crate already exposes raw and base64 resource lookup plus MIME-relevant resource metadata helpers; no extra dependency was needed.
+  - Added native MDD reader/factory abstractions, `run_native_mdd_resource_lookup(...)`, resource-key normalization (`/` -> `\`, automatic leading `\`), MIME type inference for image/audio/CSS/font/common web assets, and C#-compatible tolerance for missing or failed individual MDD files.
+  - This does not yet change the Rust UI rendering path; it moves the verifiable “MDD resource key can be read” behavior into Rust so later dictionary WebView/rich HTML rendering can avoid delegating resource resolution to .NET.
+  - Extends `mdx_native_behavior` coverage for normalized key lookup across multiple MDD files, failed-file skipping, neutral misses, and MIME mapping.
+- 2026-06-02: Migrated Windows Native OCR recognition to Rust, removing another common `.NET CompatHost` OCR worker runtime path.
+  - Rechecked reuse options first: Tesseract/leptess remain useful for non-Windows OCR, but the existing Easydict behavior is specifically `Windows.Media.Ocr`; this slice uses Microsoft `windows` WinRT bindings directly so it preserves the same installed-language-pack behavior without adding an OCR engine dependency (`https://microsoft.github.io/windows-docs-rs/doc/windows/Media/Ocr/struct.OcrEngine.html`).
+  - Added `WindowsNativeOcrRecognizer` and `SystemWindowsNativeOcrRecognizer`, converting captured BGRA files to `SoftwareBitmap` (`Bgra8`, premultiplied alpha), selecting the preferred language before falling back to user profile languages, running `OcrEngine::RecognizeAsync`, and mapping recognized lines/text angle/language into the existing OCR DTOs.
+  - `run_ocr_recognize_with_packaged_host(...)` now routes all OCR engines through Rust-native providers; Ollama and Custom API keep their existing HTTP path, while Windows Native no longer spawns `Easydict.CompatHost.exe` for recognition.
+  - This does not replace the screen capture overlay, WinUI settings surface, or non-OCR desktop activation plumbing; it only removes the recognition worker dependency for the default OCR engine.
+  - Adds OCR behavior tests for injected Windows OCR recognition and a missing-CompatHost regression proving the Windows Native path fails locally on missing pixel data instead of trying to start the .NET host.
+- 2026-06-02: Switched browser Native Messaging helper packaging to Rust, removing the `.NET NativeBridge` and `.NET BrowserRegistrar` publish/runtime steps from release outputs.
+  - Scouted reusable Native Messaging support first: the `native_messaging` Rust crate provides framing and manifest install helpers, and the Chrome/Edge docs confirm the required behavior is a length-prefixed JSON stdio host plus Windows registry manifest registration (`https://docs.rs/native_messaging`, `https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging`, `https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/native-messaging`). The repo already had a smaller Rust implementation tailored to Easydict's existing host name, extension ids, HKCU paths, named-event activation, and tests, so no new dependency was added.
+  - `Build-RustHelpers.ps1` now builds and copies the Rust `easydict-native-bridge.exe`, `easydict_browser_registrar.exe`, and `easydict_cli.exe`, then aliases the Rust registrar to the legacy `BrowserHostRegistrar.exe` file name so the transitional WinUI browser-support service can still launch it.
+  - `Makefile`, `scripts/publish.ps1`, `scripts/package-and-install.ps1`, `release-publish.yml`, and `arm64-msix-smoke.yml` no longer publish `src/Easydict.NativeBridge` or `src/Easydict.BrowserRegistrar` as self-contained .NET helper binaries.
+  - Packaging tests now lock the new contract: Rust helpers must include both registrar names, and the primary release scripts/workflows must not call the old .NET helper projects.
+  - The historical .NET helper parity is now covered by the Rust registrar/bridge behavior tests plus WinUI packaging assertions, so the old projects no longer need to remain as release-output references.
+- 2026-06-02: Removed the retired `.NET NativeBridge` and `.NET BrowserRegistrar` projects from the solution and source tree.
+  - Rechecked Native Messaging reuse before deleting the source: `native_messaging` is a useful generic Rust crate for frame and manifest management, while Easydict's current Rust implementation already preserves the exact host name, Chrome/Firefox manifest contents, HKCU registry locations, named-event/protocol activation, legacy registrar executable alias, and test coverage needed here (`https://docs.rs/native_messaging`, `https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging`, `https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging`).
+  - Deleted `src/Easydict.NativeBridge`, `src/Easydict.BrowserRegistrar`, and `tests/Easydict.BrowserRegistrar.Tests`, and removed all three projects from `Easydict.Win32.sln`.
+  - Strengthened `WorkerPackagingTests` so the solution cannot reintroduce the old .NET helper projects and the old helper `.csproj` files must remain absent.
+  - Rust browser registrar behavior tests remain the canonical parity suite for install/status/uninstall JSON, manifest generation, extension IDs, registry paths, and bridge deployment behavior.
+- 2026-06-02: Removed the OCR worker from release packaging now that OCR recognition is Rust-native.
+  - Rechecked OCR reuse options before cutting the worker: Tesseract/leptess are high-quality general OCR options, but the shipped behavior is Windows `Windows.Media.Ocr`; the current Rust path already uses Microsoft `windows` WinRT bindings for that behavior, so replacing the packaging did not require another OCR library (`https://microsoft.github.io/windows-docs-rs/doc/windows/Media/Ocr/struct.OcrEngine.html`, `https://github.com/tesseract-ocr/tesseract`, `https://github.com/houqp/leptess`).
+  - `Makefile`, `scripts/publish.ps1`, `scripts/package-and-install.ps1`, and `release-publish.yml` now publish WinUI with `BuildWorkerOutputs=false` so the WinUI project cannot implicitly copy the old OCR worker back into release outputs.
+  - Those packaging paths explicitly publish only LongDoc and LocalAI worker folders; LongDoc and LocalAI remain because PDF/layout and WindowsAI/OpenVINO paths still have retained .NET runtime behavior.
+  - Packaging tests now assert the release workflow, Makefile, and PowerShell publish scripts publish LongDoc/LocalAI worker folders but do not reference the OCR worker project or `workers/ocr` outputs.
+  - This was initially a release-runtime reduction; later cleanup removed the historical .NET OCR worker/client source as well.
+- 2026-06-02: Removed the OCR worker from the legacy WinUI build/runtime path.
+  - WinUI no longer has a project reference to the OCR worker, no longer copies `workers/ocr` during local builds, and the legacy `Services/Workers/OcrWorkerClient.cs` source has now been deleted.
+  - `OcrServiceFactory` now always returns the in-proc `WindowsOcrService` for Windows Native OCR; the legacy `UseOcrWorker` setting is forced to `false` and retained only so older runtime-only settings can still be cleaned from saved JSON.
+  - Removed the obsolete WinUI `OcrWorkerClientFallbackTests`; remaining tests lock the new behavior that setting the legacy flag cannot select the old worker.
+  - Later cleanup deleted the historical OCR worker project and detached OCR DTOs from the shared CompatHost/worker protocol surface.
+- 2026-06-02: Removed OCR recognition from the `.NET CompatHost` facade.
+  - No new OCR library was needed for this cut: OCR recognition had already moved to the Rust `windows` WinRT path after checking Tesseract/leptess tradeoffs, so this step deletes the obsolete bridge instead of introducing another provider.
+  - `CompatHostDispatcher`, `Program`, `CompatHostMethods`, and Rust `CompatHostFacade` no longer expose or route `ocr_recognize`; a literal `ocr_recognize` request is now treated as `method_not_found`.
+  - Deleted the CompatHost-only `ICompatHostOcrRecognizer` and `OcrWorkerCompatRecognizer` adapter, plus the matching dispatcher/client tests.
+  - The OCR DTOs were temporarily retained for Rust-native OCR data mapping, then moved into the Rust `ocr` module once the retired worker project was deleted.
+- 2026-06-02: Removed settings migration from the `.NET CompatHost` facade.
+  - Rechecked reusable Rust options first: the existing `serde_json` crate already provides the needed `Value` parsing and pretty JSON writing APIs, so no additional dependency is needed for this file/JSON migration slice (`https://docs.rs/serde_json/latest/serde_json/`, `https://docs.rs/serde_json/latest/serde_json/fn.to_string_pretty.html`).
+  - `CompatHostDispatcher`, `Program`, `CompatHostMethods`, and Rust `CompatHostFacade` no longer expose or route `settings_migrate`; a literal `settings_migrate` request is now treated as `method_not_found`.
+  - Deleted the CompatHost-only `ICompatHostSettingsMigrator` and `FileSettingsCompatMigrator`, plus the matching dispatcher/client/protocol tests.
+  - Rust `settings_migration` remains the active settings migration path, with `settings_storage` applying it during local settings load; the Rust `SettingsMigrateParams`/`SettingsMigrateResult` DTOs remain local migration data structures rather than CompatHost methods.
+- 2026-06-02: Detached Rust settings migration DTOs from the CompatHost protocol module.
+  - Moved `SettingsMigrateParams` and `SettingsMigrateResult` from `compat_protocol` into `settings_migration`, keeping their camelCase JSON shape for local migration callers.
+  - `compat_protocol` tests now only cover active bridge and worker contracts; settings migration JSON-shape coverage lives with `settings_migration_behavior`.
+  - This keeps the temporary CompatHost protocol surface aligned with the remaining `.NET` runtime dependencies instead of preserving retired settings migration contract types.
+- 2026-06-02: Routed remaining Windows Local AI quick-translate fallback through LocalAI-specific CompatHost methods instead of the generic TranslationManager facade.
+  - Rechecked Local AI Rust reuse options first: Microsoft's Foundry Local documentation now describes an official Rust SDK crate (`foundry-local = "0.1.0"`) and the Microsoft Foundry Local repository lists Rust SDK support, while `rs_ai_phi_silica` exists for Phi Silica/Windows ML but is explicitly unstable and still bridges Phi Silica through C#/Windows App SDK (`https://learn.microsoft.com/en-us/azure/foundry-local/reference/reference-sdk`, `https://github.com/microsoft/foundry-local`, `https://docs.rs/rs_ai_phi_silica/latest/rs_ai_phi_silica/`). Full LocalAI worker removal remains a later, larger slice; this step narrows the temporary .NET surface without changing provider behavior.
+  - Added CompatHost facade methods `local_ai_translate_stream` and `local_ai_grammar_stream`, both forwarding to the existing LocalAI worker's `translate_stream`/`grammar_stream` methods and preserving `chunk` event-before-response behavior.
+  - Added Rust `LocalAiCompatQuickTranslateBackend`; `windows-local-ai` requests that cannot already use the Rust-native Foundry Local OpenAI-compatible route now call LocalAI-specific facade methods instead of generic `translate`, `translate_stream`, or `grammar_correct`.
+  - The CLI Auto-host fast path also uses `LocalAiCompatQuickTranslateBackend` for `windows-local-ai` fallback.
+  - Rust maps BCP-47/ISO language codes to the .NET LocalAI worker enum names before crossing the bridge, and the LocalAI worker now accepts both enum names and ISO codes, forwards `CustomPrompt`, and honors `IncludeExplanations` for grammar streams.
+  - This does not remove the `.NET` LocalAI worker/runtime yet, but it makes the generic TranslationManager facade closer to removable because LocalAI fallback no longer depends on that facade path.
+- 2026-06-02: Retired the generic TranslationManager facade from `.NET CompatHost`.
+  - Rechecked reusable Rust library options first: `async-openai` is an active OpenAI client with Responses/streaming support, `genai` is an active multi-provider client, and `deepl`/`deepl-api` crates exist for DeepL; this cut does not add a dependency because the relevant Quick Translate provider routes are already Rust-native and the goal is to delete the obsolete generic bridge.
+  - Removed active `translate`, `translate_stream`, and `grammar_correct` CompatHost method constants and Rust `CompatHostFacade` methods; literal requests for these method names now fall through to `method_not_found` on the .NET dispatcher.
+  - Deleted `TranslationManagerCompatTranslator`/`ICompatHostTranslator`, removed the C# `TranslateParams` and generic translation/grammar DTOs from the active CompatHost protocol, and removed the direct `Easydict.TranslationService` project reference from `Easydict.CompatHost`, shrinking the host to retained heavy modules only.
+  - Quick Translate packaged-host fallback now routes only Rust-native providers, the LocalAI-specific bridge, or MDX lookup bridge; unsupported ordinary services fail locally with a Rust-native route error instead of spawning the generic .NET host.
+  - The CLI no longer uses explicit `--host` for generic translate/stream/grammar regression paths; `--host` remains useful for retained bridge modules such as `windows-local-ai`.
+- 2026-06-02: Narrowed the remaining MDX CompatHost fallback to encrypted dictionaries with configured credentials.
+  - Rechecked MDX library options before changing the route: `rs-mdict` documents built-in key-info/record-block MDX encryption support but exposes no passcode constructor in 0.1.1, `mdict-rs` exposes a passcode-aware API but is `AGPL-3.0-only`, and `readmdict` is MIT with Salsa20/passcode pieces but lower-level and less suitable as a quick drop-in (`https://docs.rs/crate/rs-mdict/0.1.1`, `https://docs.rs/crate/mdict-rs/0.1.4`, `https://docs.rs/readmdict/latest/readmdict/`). The safe cut is route reduction rather than a library swap.
+  - `native_mdx_dictionary_can_route_natively(...)` now ignores stale credential fields on plain dictionaries, while the new credential helpers distinguish native dictionaries, encrypted dictionaries that need user credentials, and encrypted dictionaries that still require the retained `MDict.Csharp` bridge because credentials are configured.
+  - Quick Translate no longer starts `Easydict.CompatHost.exe` for encrypted MDX dictionaries that have no regcode/email configured; those requests now fail locally with a credential-required error. The bridge remains only for encrypted MDX snapshots with credentials, where C# still has passcode parity.
+  - Local dictionary suggestions use the same gate, so unencrypted dictionaries and encrypted-unconfigured misses can complete on the Rust path instead of forcing all suggestions through the .NET host.
+  - Adds MDX/quick-translate regression coverage for plain dictionaries with stale credentials, encrypted dictionaries with and without credentials, and no-CompatHost failures for encrypted-unconfigured quick translate and suggestions.
+- 2026-06-02: Expanded the Rust-native Long Document text route to infer PlainText/Markdown from selected file extensions when the UI state still carries the default PDF mode.
+  - Rechecked file-type reuse options first: `mime_guess` maps extensions to MIME types and `infer` detects binary signatures, but this route only needs the existing deterministic `.txt`/`.text`/`.md`/`.markdown`/`.pdf` Long Document UI contract, so adding a dependency would not remove more `.NET` runtime behavior (`https://docs.rs/mime_guess/latest/mime_guess/`, `https://lib.rs/crates/infer`).
+  - `build_long_document_request(...)` now resolves selected-file input mode from the file extension when the configured mode maps to `Pdf`; explicit user-selected `PlainText` or `Markdown` still wins.
+  - Text/Markdown file requests created from stale/default state now use the existing Rust text/Markdown runner and can bypass `Easydict.Workers.LongDoc.exe` instead of falling back to the LongDoc CompatHost bridge.
+  - Adds long-document behavior coverage for inferred `.txt` and `.markdown` request modes plus a missing-CompatHost regression for a `.txt` file with default PDF mode.
+- 2026-06-02: Cleared stale Long Document page ranges for non-PDF inputs before routing.
+  - Rechecked reuse options first and did not add a library: this is a request-shaping fix, not a document parser replacement. Page ranges are meaningful for PDF pages, but not for PlainText/Markdown content already handled by the Rust `text-splitter` route.
+  - `build_long_document_request(...)` now sends `page_range` only for `Pdf` input mode. PlainText/Markdown requests with old UI page-range text can stay on the Rust-native text runner instead of falling back to `Easydict.Workers.LongDoc.exe`.
+  - The lower-level native route gate still refuses manually constructed requests that carry a page range, keeping PDF/page-specific behavior conservative; the UI request builder is the place that strips stale non-PDF page ranges.
+  - Adds behavior coverage for Text staying native with stale page range, PDF preserving page range for the worker route, and the missing-CompatHost `.txt` regression with stale/default PDF state.
+- 2026-06-02: Let Windows Local AI `Auto` mode use the Rust-native Foundry Local fast path when a Foundry endpoint is already configured.
+  - Rechecked Foundry Local Rust reuse options first: Microsoft Learn now ships a Rust native chat-completions sample using `foundry-local-sdk`, the Microsoft Foundry Local repository lists Rust language samples and SDK support, and docs.rs documents a `foundry-local` Rust SDK for service/model management (`https://learn.microsoft.com/en-us/azure/foundry-local/get-started`, `https://github.com/microsoft/foundry-local`, `https://docs.rs/foundry-local/latest/foundry_local/`). No new dependency is added in this slice because the existing Rust OpenAI-compatible executor already handles configured Foundry endpoints.
+  - `openai_compatible_config_for_service("windows-local-ai", ...)` now treats `LocalAIProvider=Auto` plus non-empty `foundry_local_endpoint` as a native Foundry Local route, normalizing the endpoint to `/v1/chat/completions` and preserving the configured model/default.
+  - `Auto` with no configured endpoint still stays on the LocalAI worker bridge, preserving the legacy provider order Phi Silica -> Foundry Local -> OpenVINO instead of letting Rust endpoint discovery intercept the whole Auto chain.
+  - Adds config and quick-translate regression coverage for Auto+configured endpoint native routing, missing-CompatHost packaged-host behavior, and Auto-without-endpoint LocalAI bridge behavior.
+- 2026-06-02: Retired `local_ai_prepare` from the active `.NET CompatHost` facade.
+  - Rechecked usage first: Rust settings now uses the Rust-native Foundry prepare flow, and no Rust runtime caller still invokes `CompatHostFacade::local_ai_prepare(...)`. The remaining `prepare_model` DTO and worker method stay as worker-level/parity protocol because the historical .NET WinUI worker path still references them.
+  - Removed the Rust CompatHost facade method/active method constant and the .NET `CompatHostMethods.LocalAiPrepare` dispatcher case, so literal `local_ai_prepare` requests now return `method_not_found` like the already-retired generic translation, OCR, and settings migration facade methods.
+  - `LocalAiWorkerCompatService` keeps the retained LocalAI translation bridge separate from model preparation; model preparation is no longer a CompatHost runtime surface.
+- 2026-06-02: Retired non-streaming `local_ai_translate` from the active `.NET CompatHost` facade.
+  - Rechecked usage first: the retained LocalAI worker already exposes `translate_stream`, and Rust `LocalAiCompatQuickTranslateBackend::translate(...)` can reuse that stream facade and return the final DTO without requiring a separate non-streaming bridge.
+  - Removed the Rust `CompatHostFacade::local_ai_translate(...)` method/active method constant and the .NET `CompatHostMethods.LocalAiTranslate` dispatcher case; literal `local_ai_translate` requests now return `method_not_found`.
+  - `LocalAiWorkerCompatService` now exposes only `local_ai_translate_stream` and `local_ai_grammar_stream` for LocalAI fallback, shrinking the active CompatHost surface while preserving non-streaming Rust callers through stream result collection.
+- 2026-06-02: Retired non-streaming `translate` from the retained LocalAI worker protocol.
+  - Rechecked reuse options first: this does not need a new Rust or .NET library because `translate_stream` already carries chunk events plus an aggregated `fullText` result. The smaller runtime shrink is to reuse that existing stream protocol and delete the duplicate worker entrypoint.
+  - `Easydict.Workers.LocalAi` no longer registers `LocalAiMethods.Translate`, advertises it in ready capabilities, or treats it as a terminal method; the shared parsing/provider-order logic moved into `TranslateRequestHelpers` for the remaining stream handlers.
+  - The retained LongDoc worker adapter and legacy WinUI `LocalAiWorkerClient.TranslateAsync` now call `translate_stream` and hydrate ordinary `TranslationResult` values from the final stream result, so callers keep the synchronous API without requiring the worker's non-streaming method.
+  - Removed the `LocalAiMethods.Translate` constant and `LocalAiTranslateResult` DTO from the shared C# protocol and the matching Rust worker protocol constants/DTOs.
+  - Adds a packaging/protocol guard proving the LocalAI worker exposes only streaming terminal translation, plus Rust protocol coverage for the stream request/result JSON shape.
+- 2026-06-02: Retired LocalAI worker model-management RPC methods.
+  - Rechecked SDK/library needs first: Rust already owns the Foundry Local start/prepare action through the existing CLI/runtime controller path, and OpenVINO/Phi Silica worker preparation still implies retained native/.NET components. No new dependency is added; the safe reduction is to remove unused worker RPC surface instead of introducing another model-management SDK.
+  - `Easydict.Workers.LocalAi` no longer registers or advertises `prepare_model`, `is_available`, or `list_models`; the matching C# protocol constants/DTOs and Rust worker protocol constants/DTOs were removed.
+  - The legacy WinUI `LocalAiWorkerClient.PrepareAsync` now uses the injected in-process model provider when available and otherwise reports a local not-compatible status instead of starting the worker for model preparation.
+  - Deleted the retained worker handlers for prepare/list/availability and extended the packaging/protocol guard so those methods cannot reappear in the LocalAI worker contract accidentally.
+- 2026-06-02: Added Rust MDX header encryption detection during dictionary import.
+  - Rechecked MDX parser reuse before changing import behavior: `mdict-rs` has a better passcode/lazy lookup API but is `AGPL-3.0-only`, while `readmdict` is MIT but currently lower-level, eager, and not a safe replacement for the existing `rs-mdict` lookup path. No new dependency is added in this slice.
+  - Rust import now reads only the MDX header length and XML metadata, decodes the UTF-16LE header, and marks dictionaries with `Encrypted` values other than `No`/`0`/`false` as encrypted.
+  - Encrypted dictionaries imported through the Rust settings UI now enter the existing credential-aware MDX route gate instead of being misclassified as plain dictionaries and incorrectly sent to the native `rs-mdict` reader.
+  - Plain dictionaries and invalid/missing test paths remain unencrypted by default, preserving the native unencrypted MDX route and current fixture behavior.
+  - Adds import coverage for encrypted and plain MDX headers plus the existing MDX route regression group.
+- 2026-06-02: Locked Windows Local AI `Auto` + configured Foundry endpoint grammar correction to the Rust-native OpenAI-compatible route.
+  - Rechecked Foundry Local reuse options first: Microsoft Learn documents Rust Foundry Local samples/SDK support, the Microsoft Foundry Local repository advertises Rust SDK support, and the REST reference keeps chat completions OpenAI-compatible (`https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-local/get-started`, `https://github.com/microsoft/foundry-local`, `https://learn.microsoft.com/en-us/azure/foundry-local/reference/reference-rest`). No dependency is added because this narrow route already has a configured endpoint and the existing Rust OpenAI-compatible executor preserves behavior.
+  - Adds regression coverage that `windows-local-ai` grammar correction in `Auto` mode with `foundry_local_endpoint` configured is considered Rust-native, sends the request to `/v1/chat/completions`, keeps the configured model, and returns the structured grammar preview without using `local_ai_grammar_stream`.
+  - `Auto` without a configured Foundry endpoint still remains on the LocalAI worker bridge, preserving Phi Silica -> Foundry Local -> OpenVINO fallback ordering.
+- 2026-06-02: Split mixed local dictionary suggestion requests so plain MDX entries stay Rust-native even when encrypted dictionaries still need the MDX bridge.
+  - Rechecked MDX/MDD library options first: current `rs-mdict` already covers the plain MDX/MDD native route, `readmdict` remains MIT with encryption primitives but is lower-level/eager for this route, and `mdict-rs` has a newer passcode-aware parser but is still `AGPL-3.0-only` (`https://docs.rs/crate/rs-mdict/0.1.1`, `https://docs.rs/readmdict/latest/readmdict/`, `https://docs.rs/crate/mdict-rs/0.1.4`). No new dependency is added because this slice reuses the existing Rust `rs-mdict` backend.
+  - Local dictionary suggestions now route each dictionary independently inside mixed requests: unencrypted dictionaries and encrypted dictionaries without credentials finish through Rust, while only encrypted dictionaries with configured credentials call `mdx_lookup`.
+  - If `Easydict.CompatHost.exe` is missing in a mixed request, Rust still attempts the dictionaries it can handle locally instead of failing the whole suggestion request before native MDX lookup.
+  - The suggestion runner now shares one accumulator for native, bridge, and mixed routes, preserving dictionary order, fuzzy-result deduplication, the 20-item cap, and the existing rule that errors are shown only when no suggestions were produced.
+- 2026-06-02: Normalized the Long Document Local AI service id so text/Markdown Local AI requests can use the existing Rust-native Windows Local AI route.
+  - Rechecked reusable-library needs first: this cut does not need a document-processing dependency because the native PlainText/Markdown runner already uses `text-splitter` (`https://docs.rs/text-splitter/latest/text_splitter/struct.MarkdownSplitter.html`), and it does not need a Local AI SDK dependency because configured Foundry endpoints already route through the Rust OpenAI-compatible executor while Microsoft documents Rust Foundry Local SDK support separately (`https://learn.microsoft.com/en-us/azure/foundry-local/reference/reference-sdk`, `https://docs.rs/foundry-local`).
+  - The Long Document service picker now emits the canonical `windows-local-ai` service id instead of the legacy `local-ai` alias.
+  - `build_long_document_request(...)` maps existing/stale `local-ai` state to `windows-local-ai`, so older UI state can still route through the migrated Rust provider path.
+  - Text/Markdown Long Document requests using Local AI plus a configured Foundry endpoint now satisfy `long_document_request_can_route_natively(...)` and fail locally on invalid native endpoint configuration instead of falling through to `longdoc_translate`.
+- 2026-06-02: Expanded the Long Document service picker to expose migrated Rust-native text translation providers for PlainText/Markdown documents.
+  - Rechecked reusable provider clients first: `async-openai` now provides an active configurable OpenAI-compatible Rust client with streaming support, and `genai` provides a broad multi-provider Rust client, but this UI-routing slice does not add a dependency because the project already has provider-specific Rust executors and parity tests for the services being exposed (`https://docs.rs/crate/async-openai/latest`, `https://docs.rs/crate/genai/latest`).
+  - The Long Document service picker now derives options from the shared translation service catalog and excludes only dictionary/MDX services, so migrated providers such as Ollama, DeepSeek, Groq, Zhipu, GitHub Models, Custom OpenAI, Gemini, Doubao, Caiyun, NiuTrans, Volcano, and Windows Local AI are visible for document translation.
+  - PlainText/Markdown Long Document requests for these migrated services satisfy `long_document_request_can_route_natively(...)`, letting them use the Rust text runner instead of defaulting to the `longdoc_translate` bridge.
+  - Adds UI contract coverage for the expanded picker and behavior coverage that representative migrated service ids are accepted by the Rust-native text Long Document route.
+- 2026-06-02: Preserved custom long-document prompts on Rust-native text/Markdown translation chunks.
+  - Rechecked template reuse options first: `minijinja` is a strong general-purpose Jinja-compatible Rust template engine and `tinytemplate` is a lightweight static-template renderer, but this cut only needs to pass the user's custom prompt through existing provider request builders, so no new template dependency is added (`https://docs.rs/minijinja/latest/minijinja/`, `https://docs.rs/tinytemplate/latest/tinytemplate/`).
+  - `TranslateParams` now carries an optional `custom_prompt`; the native OpenAI-compatible backend, native custom-streaming backend, and LocalAI-specific bridge preserve it when building provider requests.
+  - The Rust-native Long Document text runner forwards `settings.long_doc_custom_prompt` into each chunk request, so PlainText/Markdown jobs that already bypass `longdoc_translate` keep the same prompt semantics instead of needing the .NET LongDoc worker for custom instructions.
+  - Adds regression coverage for OpenAI-compatible request bodies, LocalAI bridge JSONL params, and native Long Document chunk requests with custom prompts.
+- 2026-06-02: Added a Rust-native simple PDF text Long Document route.
+  - Rechecked reusable PDF libraries first: `pdf-extract` is MIT, pure Rust, and exposes direct text extraction helpers; `lopdf` is also MIT and lower-level; `pdf-text-extract` is promising but newer and requires Rust 1.85. This slice uses `pdf-extract` because it gives the smallest text-only bridge reduction without taking on PDF rendering/layout work (`https://docs.rs/pdf-extract/latest`, `https://docs.rs/lopdf/latest/lopdf/`, `https://docs.rs/pdf-text-extract/latest`).
+  - Rechecked the scanned-PDF/OCR route before widening the native path: `pdfium-render` can render pages through Pdfium and `leptess` binds Tesseract/Leptonica, but both imply larger native runtime/packaging and OCR parity work. This slice keeps them as future candidates and uses `pdf-extract` only as the selectable-text detector (`https://docs.rs/pdfium-render/latest/pdfium_render/`, `https://docs.rs/crate/leptess/latest`).
+  - `long_document_request_can_route_natively(...)` now accepts simple `Pdf` inputs with empty/all/page-range selection when the selected service already has a Rust-native quick-translate route.
+  - The native runner extracts selectable PDF text via `pdf_extract::extract_text(...)` for all pages or `pdf_extract::extract_text_by_pages(...)` for ranged requests, then reuses the existing Rust chunk/translate/export path. Native PDF text outputs are coerced to `.txt` so the route does not write plain text into a `.pdf` path.
+  - The Rust page-range parser mirrors the retained C# `PageRangeParser` behavior: empty/all/null means all pages, ranges clamp to total pages, invalid fragments are ignored, and no valid page falls back to all pages.
+  - If the native PDF probe yields no non-whitespace selectable text or `pdf-extract` fails to parse/extract an existing PDF, the request now falls back to `longdoc_translate`/`Easydict.Workers.LongDoc` instead of failing locally, preserving scanned-page OCR/PdfPig/MuPDF fallback for PDFs that still need the retained worker. Missing PDF files remain local input errors and do not start the worker.
+  - Layout detection, formula-preserving IR, scanned-page OCR processing, and real PDF output still remain on `longdoc_translate`/`Easydict.Workers.LongDoc`.
+  - Adds long-document behavior coverage for native PDF route gating, a minimal PDF file that extracts text, a three-page PDF page-range fixture, empty/failed PDF text fallback to the worker backend, missing-file local error behavior, and monolingual/bilingual `.txt` outputs without spawning CompatHost.
+- 2026-06-02: Removed the retired `.NET` OCR worker project and WinUI worker client source.
+  - Rechecked OCR reuse options first: the active Rust OCR path already uses Microsoft's official Rust for Windows API projection (`windows`/windows-rs) for WinRT APIs including `Windows.Media.Ocr`, so there is no need to add a third-party OCR wrapper such as `win_ocr` for this cleanup (`https://github.com/microsoft/windows-rs`, `https://microsoft.github.io/windows-docs-rs/doc/windows/Media/Ocr/index.html`, `https://docs.rs/win_ocr/latest/win_ocr/`).
+  - Deleted `dotnet/src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj`, `dotnet/src/Easydict.Workers.Ocr/Program.cs`, and the excluded legacy `dotnet/src/Easydict.WinUI/Services/Workers/OcrWorkerClient.cs`.
+  - Removed the OCR worker project from `Easydict.Win32.sln`, removed the stale WinUI `Compile Remove` entry for the deleted client, and narrowed worker shared-file dedupe to the remaining LongDoc/LocalAI worker directories.
+  - Strengthened packaging tests so the solution, WinUI project, source tree, publish scripts, Makefile, and dedupe script cannot accidentally reintroduce the retired OCR worker runtime.
+- 2026-06-02: Detached OCR DTOs from the shared Sidecar/CompatHost worker protocol.
+  - Rechecked OCR reuse options first: Windows Native OCR is already implemented through Microsoft `windows`/windows-rs, and the high-quality third-party OCR candidates are engine replacements rather than protocol cleanup helpers, so this slice adds no dependency.
+  - Moved `OcrRecognizeParams`, `OcrResultDto`, `OcrLineDto`, `OcrRectDto`, and `OcrLanguageDto` out of Rust `compat_protocol` and into the Rust `ocr` module, where they now describe Rust-native OCR data instead of a .NET worker contract.
+  - Deleted `dotnet/src/Easydict.SidecarClient/Protocol/OcrProtocol.cs` plus the matching .NET worker serialization tests, and removed the retired OCR worker kind/method constants from both Rust and C# protocol surfaces.
+  - Rust `ocr_behavior` remains the canonical OCR contract coverage for provider selection, DTO mapping, text merging, and the missing-CompatHost regression.
+- 2026-06-02: Narrowed OCR worker/runtime tests and documentation to the Rust-native route.
+  - `OcrServiceFactoryTests` now names the legacy `UseOcrWorker` setting as an ignored cleanup flag rather than a worker-selection input.
+  - Migration docs now state that bundled `.NET` runtime extraction is only for retained LongDoc/LocalAI workers and must not imply an OCR runtime payload.
+  - This cleanup intentionally does not delete LongDoc, LocalAI, or the remaining MDX-only CompatHost bridge.
+- 2026-06-02: Made the Rust-native Bing quick-translate route honor the international-services setting.
+  - Rechecked reusable Bing/Rust options first: crates.io/GitHub search still does not show a mature Bing web-translate SDK. The visible `bing-dict` crate is dictionary-only, low-activity, and GPL-3.0, while other hits are generic translator tools rather than Easydict-compatible Bing `ttranslatev3` clients (`https://crates.io/crates/bing-dict`, `https://github.com/EAimTY/bing-dict-rs`). No new dependency is added.
+  - `NativeBingQuickTranslateBackend` now stores the latest `SettingsSnapshot`; `enableInternationalServices=false` selects `cn.bing.com`, while `true` or a missing setting keeps `www.bing.com`, matching the legacy C# `BingTranslateService.Configure(useChinaHost: !EnableInternationalServices)` behavior.
+  - The Bing provider remains Rust-native and still uses the existing two-phase translator-page/session-token flow; this slice only removes the stale global-host assumption from the native backend.
+  - Adds quick-translate behavior coverage proving both the default global host and the China host are used for the translator-page fetch and generated `ttranslatev3` request plan.
+- 2026-06-02: Narrowed the encrypted-MDX CompatHost bridge by failing invalid dictionary file paths locally.
+  - Rechecked MDX reuse options first: `rs-mdict` remains the active MIT native route for unencrypted MDX/MDD, while `readmdict` has very low adoption and no license in crates.io metadata, `mdict-rs`/related repositories have unclear or AGPL-risk licensing, and no provider-quality Rust library was found that can safely replace Easydict's encrypted passcode behavior this slice (`https://crates.io/crates/rs-mdict`, `https://crates.io/crates/readmdict`, `https://crates.io/crates/mdict-rs`). No new dependency is added.
+  - Added a Rust local-input check for imported MDX dictionaries. If the MDX file path is empty or the file no longer exists, Quick Translate and local dictionary suggestions now return the local MDX input error instead of spawning `Easydict.CompatHost.exe`.
+  - Valid encrypted dictionaries with configured email/regcode still stay on the remaining `mdx_lookup` bridge, preserving the C# encrypted MDX/passcode path until a proven Rust replacement exists.
+  - Adds MDX-native, Quick Translate, and local dictionary suggestion coverage for the new no-CompatHost missing-file behavior.
+- 2026-06-02: Added Long Document file-input preflight before starting the retained LongDoc worker bridge.
+  - Rechecked path/file helper crates first: `camino` and `dunce` are mature path helpers, but this slice does not need UTF-8 path modeling or Windows path normalization; it only needs to verify the user-selected file exists and is a regular file. The Rust standard library `fs::metadata` keeps the behavior smaller and avoids a dependency that would not replace more `.NET` runtime.
+  - Worker-routed Long Document requests now fail locally when a selected file path is empty, missing, or not a regular file, instead of spawning `Easydict.CompatHost.exe` and only then discovering the local input is invalid.
+  - The existing native text/PDF routes still do their own content reads, and existing scanned/complex PDF fallback to `longdoc_translate` remains intact when the file exists but needs the retained PdfPig/MuPDF/OCR path.
+  - Adds a missing-file regression for a `windows-local-ai` Long Document request that intentionally cannot use the native quick-translate path, proving the missing input is caught before a missing CompatHost can surface.
+- 2026-06-02: Added Long Document service preflight before starting the retained LongDoc worker bridge.
+  - Rechecked service-metadata reuse first: `strum` and `enum-map` are mature enum/string helper crates, but this slice only needs to reuse Easydict's existing `translation_services` descriptor catalog so Long Document, Quick Translate, and Settings share the same service registry. No new dependency is added.
+  - Worker-routed Long Document requests now fail locally when stale settings contain an empty, unknown, dictionary, or `mdx::*` service id, instead of spawning `Easydict.CompatHost.exe` for a service the Rust Long Document picker no longer exposes.
+  - Valid retained worker services, especially `windows-local-ai` Auto/WindowsAI/OpenVINO and complex/scanned PDF fallback, still stay on `longdoc_translate` when they cannot use a Rust-native route.
+  - Adds regressions for stale MDX dictionary service ids and unknown service ids with a missing CompatHost path, proving the local service error wins before worker startup.
+- 2026-06-02: Applied the Long Document service-type gate to the Rust-native text/PDF route.
+  - Rechecked service-metadata helper options first: `strum` can derive enum/string conversions and `enum-map` can store enum-keyed tables, but the existing `TranslationServiceDescriptor.kind` already carries the Long Document eligibility signal. No new dependency is added (`https://docs.rs/strum/latest/strum/`, `https://docs.rs/enum-map/latest/enum_map/`).
+  - `native_quick_translate_request_for_chunk(...)` now rejects registered dictionary/imported-MDX descriptors before building a chunk request, so stale `google_web`/`youdao`/`linguee` Long Document settings cannot bypass the worker preflight through the Quick Translate native route.
+  - Worker-routed registered dictionary services still fail locally with the same "not available for Long Document translation" message, preserving the picker contract while avoiding `Easydict.CompatHost.exe` startup for impossible requests.
+  - Adds route-gating coverage for `google_web` plus a missing-CompatHost regression proving a registered dictionary service fails locally before worker startup.
+- 2026-06-02: Added Long Document output-path preflight before native translation or retained worker startup.
+  - Rechecked path helper options first: `camino` is useful when a path model must be guaranteed UTF-8, `dunce` mainly normalizes Windows canonicalized paths away from UNC form, and `path-absolutize` handles non-filesystem absolute path conversion. This cut only needs filesystem metadata on the target output path and its parent, so the Rust standard library keeps the behavior smaller (`https://docs.rs/camino/latest/camino/`, `https://docs.rs/dunce/latest/dunce/`, `https://docs.rs/path-absolutize/latest/path_absolutize/`).
+  - Long Document requests now fail locally when the resolved output path is already a directory or when the output parent path exists as a non-directory. Missing output directories are still allowed so the native exporter or retained worker can create them as before.
+  - The preflight runs before the Rust-native text/PDF route as well as before `longdoc_translate`, preventing both unnecessary provider calls and unnecessary `Easydict.CompatHost.exe` startup for impossible output destinations.
+  - Adds regressions for native-routed and worker-routed Long Document requests whose configured output folder is actually a file, proving the local output error wins before API-key or missing-CompatHost failures.
+- 2026-06-02: Added a Rust LocalAI grammar capability preflight for explicit OpenVINO.
+  - Rechecked Rust inference options first: the `openvino` crate provides Rust bindings to OpenVINO, and `ort` exposes an OpenVINO execution provider option over ONNX Runtime (`https://docs.rs/openvino/latest/openvino/`, `https://docs.rs/ort/latest/ort/execution_providers/`, `https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html`). This slice does not replace the OpenVINO NLLB runtime; it only mirrors the existing capability boundary that OpenVINO is translation-only and does not implement grammar correction.
+  - `windows-local-ai` grammar requests with explicit `LocalAIProvider=OpenVINO` now fail locally with the same worker-facing “No local AI provider supports grammar correction” message before spawning `Easydict.CompatHost.exe` or `Easydict.Workers.LocalAi.exe`.
+  - `Auto`, `WindowsAI`/Phi Silica, and Foundry Local grammar routing are unchanged: Auto still keeps the retained provider-order fallback, while configured/discovered Foundry routes can still use the Rust-native OpenAI-compatible executor.
+  - Adds a missing-CompatHost regression proving explicit OpenVINO grammar correction is handled locally instead of surfacing a CompatHost startup error.
+- 2026-06-02: Added a Rust LocalAI language-pair preflight for explicit OpenVINO translation.
+  - Rechecked Rust inference options first and kept the same decision as the grammar slice: `openvino`/`ort` are viable future runtime candidates, but this step only needs the static NLLB/FLORES support boundary already encoded in .NET, so no new dependency or native runtime is introduced.
+  - `windows-local-ai` translation requests with explicit `LocalAIProvider=OpenVINO` now fail locally when the target language is `Auto` or cannot map to the NLLB support table, returning “No local AI provider supports this language pair” before spawning `Easydict.CompatHost.exe` or the LocalAI worker.
+  - Supported explicit OpenVINO language pairs still stay on the LocalAI bridge until the OpenVINO NLLB inference stack itself is migrated.
+  - Rust-to-worker language mapping now covers the remaining NLLB-supported Easydict languages: ClassicalChinese, Slovak, Slovenian, Estonian, Latvian, and Lithuanian, avoiding accidental fallback to English across the LocalAI bridge.
+- 2026-06-02: Added a Rust LocalAI aggregate target-language preflight before native Foundry or retained worker dispatch.
+  - Rechecked local-AI replacement options first: Microsoft Foundry Local now has Rust SDK/sample support, and `rs_ai_phi_silica` exists for Phi Silica/Windows AI, but this step only mirrors the existing aggregate provider candidate rule, so no new SDK/runtime dependency is added (`https://github.com/microsoft/foundry-local`, `https://docs.rs/rs_ai_phi_silica/latest/rs_ai_phi_silica/`).
+  - `windows-local-ai` translation requests whose target language is explicitly `Auto` now fail locally with “No local AI provider supports this language pair” before both the Rust-native Foundry Local fast path and the retained LocalAI worker bridge.
+  - This preserves .NET `LocalAITranslationService` behavior, where Phi Silica, Foundry Local, and OpenVINO all reject `Language.Auto` as a translation target and the aggregate service produces no candidate provider.
+- 2026-06-02: Added a Rust Long Document target-language preflight before native translation or retained worker startup.
+  - Rechecked language/enum helper options first: `unic-langid` can parse and canonicalize Unicode language identifiers, `isolang` provides ISO-639 language tables, and `strum` can derive enum/string conversions, but this slice only needs to enforce Easydict's existing Long Document target picker/protocol rule that the target cannot be `Auto`. The existing `map_document_language(...)` contract is enough, so no new dependency is added (`https://docs.rs/crate/unic-langid/0.9.6/source/README.md`, `https://docs.rs/isolang`, `https://docs.rs/strum`).
+  - Long Document requests whose target language maps to `Auto` now fail locally with “Long Document target language cannot be Auto” before the Rust-native text/PDF route can call a provider and before `Easydict.CompatHost.exe` can be spawned for worker-routed requests.
+  - Source language `Auto` remains allowed, matching the retained .NET long-document/translation behavior where auto-detect is valid for the source side but not for the target side.
+  - Adds regressions for both a native-routed OpenAI text request and a worker-routed Windows Local AI text request, proving target-`Auto` errors win before API-key, provider, or missing-CompatHost failures.
+- 2026-06-02: Restored Rust Long Document language mapping to the retained .NET worker protocol.
+  - Rechecked the same language/enum helper crates first and kept the no-dependency decision: Long Document already has the authoritative Rust `TRANSLATION_LANGUAGE_IDS` set and the retained worker expects .NET `Language` enum names, so a generic language-id parser would not remove more runtime behavior.
+  - `map_document_language(...)` now emits .NET enum names such as `SimplifiedChinese` and `TraditionalChinese` instead of stale `ChineseSimplified`/`ChineseTraditional` aliases that the retained worker parsed as `Auto`.
+  - The mapping now covers every selectable Long Document language, including Portuguese, Dutch, Swedish, Norwegian, Romanian, Russian, Polish, Czech, Ukrainian, Bulgarian, Slovak, Slovenian, Estonian, Latvian, Lithuanian, Greek, Hungarian, Finnish, Turkish, Persian, Hebrew, Bengali, Tamil, Telugu, Urdu, Filipino, and Classical Chinese.
+  - Rust-native text/PDF chunk translation maps those worker-facing enum names back to quick-translate service codes, so native Long Document routing keeps working for extended languages while worker-routed requests keep protocol parity.
+- 2026-06-02: Added Rust OpenAI-compatible language-pair preflight before native provider execution.
+  - Rechecked language helper/library options first: `unic-langid` handles Unicode language identifiers, `isolang` provides ISO-639 tables, and `strum` can derive enum/string conversions, but this slice needs exact parity with `.NET BaseOpenAIService.OpenAILanguages`, not a generic standard-language table. No new dependency is added (`https://docs.rs/crate/unic-langid/0.9.6/source/README.md`, `https://docs.rs/isolang`, `https://docs.rs/strum`).
+  - `build_openai_translation_request_plan(...)` now rejects unsupported OpenAI-compatible language pairs locally with `UnsupportedLanguage`, matching `.NET BaseTranslationService`: source `Auto` remains allowed when the target is supported, while target `Auto` and unsupported source/target languages such as Malay fail before HTTP execution.
+  - The same plan-level gate covers non-streaming, streaming, Built-in AI, Ollama, Foundry Local endpoint mode, and other OpenAI-compatible native quick-translate paths because they share the Rust request planner.
+  - Adds regressions proving unsupported pairs do not call the OpenAI HTTP client from either the low-level executor or `NativeOpenAiQuickTranslateBackend`.
+- 2026-06-02: Delayed the local-dictionary suggestion MDX bridge until encrypted dictionaries are actually needed.
+  - Rechecked MDX/MDD Rust parser options first: `rs-mdict` is already the current native unencrypted MDX/MDD parser, while newer `mdict-rs` and `readmdict` expose broader MDX/MDD parser surfaces that remain candidates for the later encrypted-dictionary replacement. This slice does not change parser dependencies because it only improves routing around the existing native path (`https://docs.rs/crate/rs-mdict/0.1.1`, `https://docs.rs/crate/mdict-rs/0.1.4`, `https://docs.rs/readmdict`).
+  - Mixed local-dictionary suggestion requests now process Rust-finishable dictionaries first and create/configure the MDX CompatHost bridge lazily only when the first bridge-required dictionary is reached.
+  - If the Rust-native prefix fills the `MAX_SUGGESTIONS` limit, the request now returns those suggestions without spawning `Easydict.CompatHost.exe`, reducing .NET startup in common mixed imported-dictionary setups.
+  - Existing mixed behavior is preserved when encrypted dictionaries are still needed: native dictionaries use the Rust backend, encrypted-with-credentials dictionaries still use `mdx_lookup`, and missing bridge errors only surface when no native suggestions satisfy the request.
+- 2026-06-02: Tightened Rust OpenAI-compatible language preflight to honor service-specific `.NET SupportedLanguages` tables.
+  - Rechecked language helper options first and kept the same no-dependency decision: `unic-langid`/`isolang` model standard language identifiers and `strum` can derive enum/string helpers, but the compatibility requirement is exact Easydict service metadata. The source of truth is the existing `.NET` service support lists, not a generic language registry (`https://docs.rs/crate/unic-langid/0.9.6/source/README.md`, `https://docs.rs/isolang`, `https://docs.rs/strum`).
+  - Ollama and Built-in AI now use their narrower `.NET` language sets before native OpenAI-compatible execution, while OpenAI, Custom OpenAI, DeepSeek, Groq, Zhipu, GitHub Models, and Foundry Local keep using `BaseOpenAIService.OpenAILanguages`.
+  - Service-specific unsupported language pairs such as Ollama English -> Ukrainian and Built-in AI English -> Thai now fail locally with `UnsupportedLanguage` before any HTTP request is sent to a local model, proxy, or direct provider.
+  - Adds low-level executor coverage and a Quick Translate native-route regression proving the Ollama route does not touch the HTTP client for a language pair `.NET` would reject.
+- 2026-06-02: Added Rust custom-streaming language preflight for Gemini and Doubao.
+  - Rechecked reusable language/enum helper crates first and kept the no-dependency decision: `unic-langid` can parse/canonicalize language identifiers, `isolang` provides ISO-639 tables, and `strum` can derive enum/string conversions, but none of them encode Easydict provider metadata. This slice needs exact `.NET SupportedLanguages` parity, so the Rust route now carries explicit Gemini/Doubao support tables (`https://docs.rs/crate/unic-langid/0.9.6/source/README.md`, `https://docs.rs/isolang`, `https://docs.rs/strum`).
+  - Gemini custom streaming now rejects unsupported language pairs locally using the same list as `.NET GeminiService.SupportedLanguages` (`BaseOpenAIService.OpenAILanguages`), while preserving its Gemini-specific endpoint/body/SSE path and grammar support.
+  - Doubao custom streaming now uses the `.NET DoubaoService._doubaoLanguages` whitelist before building the Ark Responses request, so unsupported targets such as Bengali fail with `UnsupportedLanguage` before the HTTP client is touched.
+  - Adds low-level plan coverage and a Quick Translate native-route regression proving the Doubao stream path does not send provider HTTP for a pair `.NET` would reject.
+- 2026-06-02: Added Rust traditional-HTTP language-pair preflight before provider request planning.
+  - Rechecked reusable language/enum helper crates first and kept the no-dependency decision: `unic-langid` handles Unicode language identifiers, `isolang` provides ISO-639 metadata, and `strum` can reduce enum conversion boilerplate, but none of them encode Easydict's per-provider `.NET SupportedLanguages` tables. Exact service metadata remains local and explicit (`https://docs.rs/crate/unic-langid/0.9.6/source/README.md`, `https://docs.rs/isolang`, `https://docs.rs/strum`).
+  - Rust traditional HTTP now mirrors `.NET BaseTranslationService.SupportsLanguagePair` for Google, Google Web, Bing, DeepL, Youdao, Caiyun, NiuTrans, Volcano, and Linguee before building request plans. This preserves service lists that include `Auto` (for example Caiyun/NiuTrans/Volcano/Youdao) instead of imposing a global target-Auto rule.
+  - Unsupported pairs that previously could leak into provider requests, such as Google English -> Auto, DeepL English -> Arabic, and Youdao English -> Persian, now fail locally with `UnsupportedLanguage`.
+  - Two-phase services are guarded at executor entry too: Bing rejects unsupported pairs before fetching translator-page credentials, and Youdao webtranslate rejects them before fetching the dynamic sign key.
+  - Adds low-level plan/executor coverage plus a Quick Translate native-route regression proving unsupported traditional-HTTP pairs do not touch the HTTP client.
+- 2026-06-02: Routed retained LongDoc and LocalAI workers directly from Rust instead of through `.NET CompatHost`.
+  - Rechecked reusable JSONL/RPC options first: `serde-jsonlines` is a good crate for generic newline-delimited JSON streams, and `jsonrpsee` is mature for JSON-RPC transports, but Easydict workers use a custom JSON Lines protocol with unprompted `ready` events, request ids, and provider-specific event streams. The existing `serde_json` + `std::process` client already matches that protocol, so this slice adds no new dependency (`https://docs.rs/serde-jsonlines/latest/serde_jsonlines/`, `https://docs.rs/jsonrpsee/latest/jsonrpsee/`, `https://docs.rs/serde_json/latest/serde_json/`).
+  - Added a Rust direct worker facade that starts `workers/longdoc/Easydict.Workers.LongDoc.exe` or `workers/localai/Easydict.Workers.LocalAi.exe`, applies the same shared worker environment contract, waits for `ready`, validates `workerKind`/`protocolVersion`, and then sends `configure`.
+  - Worker-routed Long Document requests now call worker method `translate_document` directly; LocalAI fallback requests now call `translate_stream`/`grammar_stream` directly and keep chunk observation. This removes the extra `Easydict.CompatHost.exe` process from these retained runtime paths.
+  - Encrypted MDX with configured credentials still uses the remaining `mdx_lookup` CompatHost bridge; unencrypted/missing/credentialless MDX behavior is unchanged.
+  - Adds Rust compat-client handshake/method coverage plus Quick Translate and Long Document missing-worker regressions proving the retained worker path reports `Local AI worker` / `Long Document worker` instead of falling back through CompatHost.
+- 2026-06-02: Routed the CLI `windows-local-ai` fallback through the direct LocalAI worker path.
+  - Reused the existing direct JSON Lines worker facade; no new library was needed because this is the same worker protocol already validated for app-side LocalAI fallback.
+  - `easydict_cli translate/stream/grammar --service windows-local-ai` now resolves `workers/localai/Easydict.Workers.LocalAi.exe` from `--app-dir`, the legacy `--host` directory hint, or the packaged executable directory, then starts the worker directly instead of spawning `Easydict.CompatHost.exe`.
+  - Missing CLI LocalAI worker packages now report `Local AI worker executable not found` and the CLI help text no longer describes ordinary target-language behavior as CompatHost-owned.
+- 2026-06-02: Removed retired LongDoc and LocalAI methods from the `.NET CompatHost` facade contract.
+  - Reused the existing direct worker IPC path instead of introducing another RPC/library layer; LongDoc and LocalAI still speak their worker methods (`translate_document`, `translate_stream`, `grammar_stream`) directly through Rust `DirectWorkerFacade`.
+  - Rust `CompatHostFacade` now exposes only `configure` and `mdx_lookup`; the old `longdoc_translate`, `local_ai_translate_stream`, and `local_ai_grammar_stream` facade methods were removed from Rust protocol constants, C# `CompatHostMethods`, the C# dispatcher, and the host process wiring.
+  - Deleted the C# `LongDocWorkerCompatTranslator` and `LocalAiWorkerCompatService` adapters. The remaining CompatHost runtime use is the encrypted MDX credential bridge; removed methods now return `method_not_found`.
+- 2026-06-02: Renamed the remaining Rust CompatHost facade to an MDX-only bridge.
+  - No external library was needed for this slice because it only narrows the existing JSON Lines client surface; the unresolved replacement question remains encrypted MDX parsing/decryption itself.
+  - Rust now exposes `MdxCompatHostFacade` instead of a generic `CompatHostFacade`, so Quick Translate and local-dictionary suggestions can only use the temporary `.NET CompatHost` for configured encrypted MDX lookup.
+  - Direct worker routing still uses `DirectWorkerFacade`; the old generic facade name no longer appears in Rust source/tests, making accidental LongDoc/LocalAI/translation bridge regressions easier to catch by search.
+- 2026-06-02: Added Rust-native MDX type-2 credential crypto primitives.
+  - Rechecked reusable Rust crypto libraries first: RustCrypto `ripemd` provides a pure-Rust `Ripemd128` hasher and is used for the digest step; RustCrypto `salsa20` exposes `Salsa8` but its public key type is 32 bytes, while `.NET MDict.Csharp`/BouncyCastle must support the 16-byte RIPEMD-128 key path. A small local Salsa20/8 compatibility layer was added instead of pulling in a mismatching stream-cipher API (`https://docs.rs/ripemd/latest/ripemd/`, `https://docs.rs/salsa20/latest/salsa20/type.Salsa8.html`).
+  - Rust now derives encrypted-MDX keys for `RegisterBy=EMail` using UTF-16LE email bytes and for device ids using raw device bytes, matching the C# `DecryptRegcodeByEmail` / `DecryptRegcodeByDeviceId` flow.
+  - Added fixed vectors generated from BouncyCastle `Salsa20Engine(8)` and RIPEMD-128 vectors for empty input, `abc`, email digest, 16-byte/32-byte Salsa keys, and regcode-derived header decryption.
+  - Invalid encrypted-MDX credentials are now caught before the bridge: existing encrypted MDX files with non-Base64 regcode values, or regcodes that do not decode to a 16/32 byte Salsa key, fail locally in Quick Translate and local dictionary suggestions instead of spawning `Easydict.CompatHost.exe`.
+  - This does not yet route configured encrypted MDX dictionaries through `rs-mdict`; valid encrypted dictionaries still use the remaining `mdx_lookup` bridge until key-header and record-block decryption are wired into the Rust reader.
+- 2026-06-02: Added Rust-native MDX key-info/record-block decryption primitives.
+  - Rechecked parser reuse before replacing more `.NET MDict.Csharp`: `rs-mdict` 0.1.1 is MIT and already contains private `fast_decrypt`/`mdx_decrypt` helpers plus public plain MDX/MDD lookup APIs, but it has no passcode constructor; `readmdict` 0.1.0 is MIT and exposes passcode constructors but its crypto helpers do not match the current C# algorithm closely enough for a drop-in; `mdict-rs` 0.1.4 has stronger passcode-aware APIs and hardening notes, but is `AGPL-3.0-only` (`https://docs.rs/crate/rs-mdict/0.1.1`, `https://docs.rs/crate/readmdict/latest`, `https://docs.rs/crate/mdict-rs/0.1.4`).
+  - Added local pure-Rust `mdx_fast_decrypt` matching C# `FastDecrypt` nibble swap, previous-byte chaining, index xor, and repeating key behavior, with a local empty-key error instead of modulo-by-zero.
+  - Added local pure-Rust `mdx_decrypt_block` matching C# `MdxDecrypt`: preserve the first 8 bytes, derive the RIPEMD-128 key from bytes 4..8 plus the `0x95 0x36 0x00 0x00` suffix, then fast-decrypt the tail. Short encrypted blocks now fail locally before any parser or bridge handoff.
+  - Added fixed vectors generated from the `.NET MDict.Csharp` RIPEMD-128/FastDecrypt flow for both the raw fast-decrypt primitive and an MDX encrypted compression block.
+  - Valid encrypted MDX lookup still remains on the narrow `mdx_lookup` bridge until these primitives are wired into an end-to-end Rust reader path with real encrypted dictionary coverage.
+- 2026-06-02: Routed `Encrypted=2` MDX key-info dictionaries natively instead of through the MDX CompatHost bridge.
+  - Rechecked the MDX parser choices again before changing routing: current `rs-mdict` is still the best permissive dependency for this slice because it already implements key-info block decryption and plain lookup APIs under MIT; `readmdict` remains MIT but crypto behavior is weaker for Easydict parity; `mdict-rs` has passcode-aware APIs but is `AGPL-3.0-only` (`https://docs.rs/crate/rs-mdict/0.1.1`, `https://docs.rs/crate/readmdict/latest`, `https://docs.rs/crate/mdict-rs/0.1.4`).
+  - Rust now parses the MDX header encryption mode instead of treating the imported `is_encrypted` flag as a single credential-required bucket. `Encrypted=2` maps to key-info-only encryption and can route through `rs-mdict` without regcode/email, while `Encrypted=1` / `Yes` / unknown encrypted modes previously required credentials at this stage; the following MDX slice moves common `Encrypted=1` dictionaries off the `mdx_lookup` bridge.
+  - Stale or invalid regcode values no longer block key-info-only dictionaries, matching the C# behavior where `Encrypted=2` uses `MdxDecrypt(keyInfoBuff)` rather than `DecryptRegcodeByEmail`.
+  - Quick Translate now proves `Encrypted=2` dictionaries do not spawn `Easydict.CompatHost.exe`; record/key-header credential-encrypted dictionaries still did at this stage, preserving the last unresolved .NET runtime dependency until passcode-aware reader wiring was complete.
+- 2026-06-02: Aligned the settings UI with Rust-native MDX encryption-mode routing.
+  - No additional library was needed for this UI slice; the parser/dependency decision remains the previously verified `rs-mdict` route for key-info-only dictionaries, with credential-required encrypted lookup still isolated behind the MDX-only bridge.
+  - The imported MDX configuration expander now reuses Rust header detection before showing email/regcode fields. `Encrypted=2` key-info-only dictionaries render as ready without credential inputs, while `Encrypted=1` / `Yes` / unreadable encrypted headers stay conservative and keep the credential fields.
+  - Added UI contract coverage for both key-info-only and record-encrypted MDX headers so settings no longer trains users into stale `.NET CompatHost` credential workflows for dictionaries Rust can already read.
+- 2026-06-02: Routed common credential-encrypted `Encrypted=1` MDX dictionaries through Rust-native lookup.
+  - Rechecked reusable parser options before replacing the remaining `.NET MDict.Csharp` passcode path: `mdict-rs` 0.1.4 exposes passcode-aware keyword-header APIs but is `AGPL-3.0-only`; `readmdict` 0.1.0 is MIT but its source uses a 32-byte Salsa20 API and different RIPEMD/key mixing than Easydict's C# behavior; `rs-mdict` 0.1.1 remains MIT and already owns the MDX/MDD parsing, key-info decryption, record-block decryption, lookup, fuzzy search, and MDD resource APIs used by the Rust route (`https://docs.rs/crate/mdict-rs/0.1.4`, `https://docs.rs/crate/readmdict/latest`, `https://docs.rs/crate/rs-mdict/0.1.1`).
+  - Added a local MIT `rs-mdict` path dependency with a minimal `Mdx::new_with_key_header_transform(...)` entrypoint. Easydict supplies the passcode-derived key-header decrypt transform from its own C#-compatible RIPEMD-128/Salsa20/8 code, while reusing the existing `rs-mdict` parser and record-block `mdx_decrypt` path.
+  - `Encrypted=1` dictionaries with valid regcode/email or device id now satisfy `native_mdx_lookup_can_route(...)`, and Quick Translate plus local dictionary suggestions no longer spawn `Easydict.CompatHost.exe` for that common credential path. Missing credentials, missing files, invalid Base64, and invalid Salsa key lengths still fail locally.
+  - Added real minimal encrypted MDX fixture tests: the key header is encrypted with the email-derived or device-id-derived Salsa20/8 key and the zlib record block is encrypted with the MDX block algorithm, then Rust native lookup returns the expected HTML entry.
+  - The remaining MDX CompatHost bridge is now reserved for unsupported/ambiguous encrypted modes such as combined or unknown encryption until equivalent Rust fixture coverage exists.
+- 2026-06-02: Added Rust-native LexIndex parity for local dictionary indexing.
+  - Rechecked reusable index/search options before replacing more `.NET LexIndex`: `fst` 0.4.7 is MIT/Unlicense and offers compact finite-state transducers plus prefix/Levenshtein automata, making it the preferred future backing store for a new index format; `tantivy` is mature but too heavy for single-key dictionary completion; `unicode-normalization` 0.1.25 directly covers the C# `NormalizationForm.FormKC` requirement (`https://docs.rs/fst/latest/fst/automaton/index.html`, `https://docs.rs/fst/latest/fst/automaton/struct.Levenshtein.html`, `https://docs.rs/unicode-normalization/`).
+  - Added a Rust `lex_index` module that can build and open the existing `LXDX` binary format without the .NET library. It preserves NFKC + invariant lowercase normalization, original variant payloads for identical normalized keys, prefix completion, `*`/`?` wildcard matching, local invalid-header/version/edge-table errors, and readable empty indexes.
+  - Added `lex_index_behavior` tests mirroring the C# `LexIndexBuilderTests` acceptance cases. The following local dictionary slice connects fingerprinted index build/load to local dictionary suggestions before deleting the C# `LocalDictionaryIndexService` dependency.
+- 2026-06-02: Added Rust-native local dictionary index service parity around `LexIndex`.
+  - No additional search/index dependency was needed for this slice: `fst` remains the preferred future backing store for a new compact index format, but the migration still needs to read/write the existing `LXDX` files and preserve `.NET LocalDictionaryIndexService` manifest semantics.
+  - Added `local_dictionary_index` with per-dictionary `index.bin` and `manifest.json`, .NET-compatible PascalCase manifest fields, `%LocalAppData%\Easydict\mdx_index` default root, `Uri.EscapeDataString`-compatible service-id folders, source path/mtime/length fingerprints, rebuild skip on matching manifests, temp-file replace, lazy index loading, corrupt manifest/index skip, descriptor registration, encrypted-without-credentials blocking, service-order merging, case-insensitive cross-dictionary dedupe, and best-effort folder deletion.
+  - Quick Translate local dictionary suggestions now use the Rust persistent index for all dictionaries that can finish without the MDX CompatHost bridge. The runner opens MDX through the native reader only when the manifest fingerprint requires key enumeration, supports prefix and wildcard queries, preserves local missing-file/missing-credential/invalid-regcode errors, and keeps unsupported or ambiguous encrypted modes on the existing bridge path.
+  - Tightened the local index implementation after review: querying no longer clones the full `LexIndex`, and temp index/manifest files now use unique names plus a NotFound-tolerant replace path so overlapping suggestion builds do not fight over fixed `.tmp` files.
+  - Added `local_dictionary_index_behavior` tests covering build/load, manifest contents, fingerprint skip/rebuild, `mdx::` folder escaping, encrypted descriptor gating, existing-index registration, cross-index prefix/wildcard query ordering, corrupt local state handling, concurrent builds, and deletion. Added Quick Translate coverage proving native suggestions build the persistent index once and reuse a fresh manifest without reopening MDX.
+- 2026-06-02: Started Rust-native `Polyglot.TextLayout` with the pure segmentation/kinsoku slice.
+  - Reused `unicode-segmentation` for UAX #29 grapheme enumeration instead of introducing a shaping/layout engine; `cosmic-text` remains a later candidate for real font shaping/measuring, not for this deterministic segmentation pass.
+  - Added `text_layout` with C#-compatible script classification, CJK range detection including supplementary CJK planes, open/close punctuation tables, whitespace normalization, hard breaks, soft hyphen segments, CJK single-character segmentation, closing-punctuation grouping, and kinsoku line-start/line-end/left-sticky tables.
+  - Added `text_layout_behavior` tests covering the first pure algorithm parity gate. Real font measurement, greedy line layout, incremental layout, prepared paragraphs, and font fitting remain for the next TextLayout slices.
+- 2026-06-02: Extended Rust-native `Polyglot.TextLayout` into PreparedParagraph metadata.
+  - Rechecked text-layout reuse before this slice: `unicode-linebreak` is a good future candidate for UAX #14 line-break opportunities, and `cosmic-text`/`rustybuzz` remain stronger candidates for actual shaping and font fallback, but PreparedParagraph only needs deterministic segment/grapheme measurement through the existing `unicode-segmentation` path (`https://docs.rs/unicode-linebreak/latest/unicode_linebreak/`, `https://unicode.org/reports/tr14/`, `https://docs.rs/cosmic-text/latest/cosmic_text/`).
+  - Added `TextMeasurer`, `TextPrepareOptions`, and `PreparedParagraph`, including per-segment widths, grapheme prefix sums, hard-break indexes, soft-hyphen metadata, hanging trailing whitespace, and kinsoku start/end flags.
+  - Added deterministic fixed-width `text_layout_behavior` coverage for measured mixed Latin/CJK text, soft hyphen and hard break metadata, kinsoku flags, and prepare options. Greedy line layout, incremental layout, real font shaping, and font fitting remain for later slices.
+- 2026-06-02: Added Rust-native `Polyglot.TextLayout` greedy line layout.
+  - Rechecked reuse before this line-layout slice: Unicode UAX #14 and `unicode-linebreak` are useful for future break-opportunity discovery, while `cosmic-text` and `rustybuzz` target shaping/font fallback. The current C# parity slice chooses actual line breaks from already segmented/measured text, so no new dependency was introduced (`https://www.unicode.org/reports/tr14/`, `https://docs.rs/unicode-linebreak/latest/unicode_linebreak/`, `https://docs.rs/cosmic-text/latest/cosmic_text/`, `https://docs.rs/rustybuzz/`).
+  - Added Rust `LayoutCursor`, `LayoutLine`, `LayoutLineRange`, `LayoutResult`, `LayoutLinesResult`, single-width and per-line-width layout entrypoints, `walk_line_ranges`, and `layout_next_line`.
+  - The Rust core mirrors the C# greedy first-fit behavior for leading-space skipping, trailing-space trimming, hard breaks, close-punctuation grouping, kinsoku line-start carry, left-sticky ASCII punctuation after CJK, variable per-line widths, count-only ranges, incremental cursor layout, and long-word grapheme breaking.
+  - Expanded `text_layout_behavior` to cover fixed-width layout, CJK/kinsoku wrapping, variable widths, walk ranges, incremental next-line, and long segment grapheme breaks. Real font shaping, bidi/font fallback, and PDF line-rect integration remain later TextLayout slices.
+- 2026-06-02: Added Rust-native `Polyglot.TextLayout` FontFitSolver parity.
+  - Rechecked text-fit reuse before replacing more `.NET Polyglot.TextLayout`: `cosmic-text` is a strong later candidate for full shaping/font discovery/fallback/layout, `rustybuzz` covers HarfBuzz-style shaping, and `fontdue` covers font parsing/rasterization/layout, but the C# `FontFitSolver` slice only performs deterministic binary search over an injected measurer plus the existing layout engine, so no new dependency was introduced (`https://docs.rs/cosmic-text/latest/cosmic_text/`, `https://docs.rs/rustybuzz/latest/rustybuzz/`, `https://docs.rs/fontdue/latest/fontdue/`).
+  - Added Rust `FontFitRequest`, `FontFitResult`, and `solve_font_fit` with C#-compatible original-size fast path, `[MinFontSize, StartFontSize]` binary search at 0.25pt tolerance, block-rect width/height fitting, line-rect width arrays, optional max line count, max height, line-height multiplier, per-line height ceilings, and whitespace normalization control.
+  - Expanded `text_layout_behavior` to cover no-shrink, shrink, min-size truncation, line-rect constraints, line-height ceilings, convergence, and the end-to-end line-count contract after laying out with the chosen size. Real shaping, bidi/font fallback, and PDF render-line integration remain later TextLayout slices.
+- 2026-06-02: Added Rust-native font metrics and glyph advance measurement for document text layout.
+  - Rechecked font parser reuse before replacing `.NET TrueTypeCmapParser`/`GlyphAdvanceMeasurer`: `ttf-parser` 0.25.1 is MIT/Apache-2.0, safe, zero-allocation, zero-unsafe, and exposes high-level `Face::glyph_index`, `Face::glyph_hor_advance`, and `Face::units_per_em`, making it a better replacement than preserving the hand-rolled Format 4 + hmtx parser (`https://docs.rs/ttf-parser/latest/ttf_parser/`, `https://docs.rs/ttf-parser/latest/ttf_parser/struct.Face.html`).
+  - Added Rust `font_metrics` with `FontMetrics`, `load_font_metrics`, `parse_font_metrics_from_bytes`, `parse_cmap_from_bytes`, `glyph_advance_em`, `is_script_signal`, and `GlyphAdvanceMeasurer` implementing the TextLayout `TextMeasurer` trait.
+  - The Rust measurer mirrors the C# document-export rules: `^`/`_` script signals are zero-width, CJK characters are full em, CJK-primary ASCII uses Latin fallback metrics when available or 0.55em otherwise, spaces use Latin/primary/Noto metrics or the 0.3em fallback as appropriate, and non-CJK glyphs fall through primary -> Noto -> 0.6em fallback.
+  - Added `font_metrics_behavior` tests using the vendored PdfPig Roboto fixture for real TrueType glyph/advance parsing plus synthetic metrics for exact C# fallback parity. Full PDF render-operation integration and complex shaping still remain later document-export slices.
+- 2026-06-02: Locked the remaining MDX native/bridge encryption-mode boundary.
+  - No new MDX parser dependency was needed; this slice only hardens tests around the existing `rs-mdict` route and the remaining MDX-only `.NET CompatHost` fallback.
+  - Added Rust MDX header boundary coverage for single-quoted `Encrypted='yes'`, UTF-8 odd-byte headers, missing `Encrypted`, `Encrypted=3`, and unknown encrypted values.
+  - The tests prove common record/key-header and key-info modes stay native, while combined/unknown encryption stays on the explicit MDX bridge boundary until fixture-backed Rust decryption exists.
+- 2026-06-02: Tightened packaging/runtime guardrails for the remaining .NET payloads.
+  - Added a `.NET` packaging regression proving `Easydict.CompatHost` remains MDX-only: it may reference `MDict.Csharp`, but it must not regain TranslationService, OCR, LongDoc, LocalAI, or settings-migration facades.
+  - Updated the ARM64 MSIX smoke workflow to run `Dedupe-WorkerSharedFiles.ps1` before extracting the bundled .NET runtime, matching the release MSIX layout for retained LongDoc/LocalAI workers.
+  - Added guard coverage that the worker shared-file dedupe allowlist stays in sync with `WorkerSharedAssemblyResolver`, so moved shared DLLs remain resolvable at worker startup.
+- 2026-06-03: Added Rust-native document layout geometry for PDF line rectangles.
+  - Rechecked geometry reuse before replacing more `.NET PdfExportService` helpers: `kurbo` and `euclid` are both high-quality MIT/Apache-2.0 geometry crates, but this slice only needs `XRect`-compatible right/bottom access, clamping, and baseline-derived line rectangles, so a small local DTO avoids adding broad geometry dependencies or conversion layers (`https://docs.rs/kurbo/latest/kurbo/`, `https://docs.rs/euclid/latest/euclid/struct.Rect.html`).
+  - Added Rust `document_layout` with `PdfRect`, `BlockLinePosition`, `BlockTextStyle`, `try_build_line_rects`, `looks_like_grid_line_positions`, `expand_line_rects_for_cell`, `split_line_rects_for_inline_script_protection`, `looks_like_inline_script_line`, and `should_apply_formula_hole`.
+  - The Rust helpers mirror the C# document-export rules for distinct-baseline line rect construction, same-baseline grid fallback, single-baseline virtual lines, vertical/horizontal block clamping, cell-like line expansion, short/small inline script protection, and formula-hole overlap rejection.
+  - Added `document_layout_behavior` tests mirroring the key `PdfExportServiceLayoutTests` geometry cases. Full overlay translation normalization, inline subscript attachment, PDF content-stream replacement, and MuPDF/PdfPig integration remain later document-export slices.
+- 2026-06-03: Hardened Rust local dictionary index parity before removing more `.NET LocalDictionaryIndexService` dependencies.
+  - Added coverage that Rust reuses an existing index when the manifest is written in the `.NET` PascalCase JSON shape and the source fingerprint still matches, proving the C#-compatible manifest contract can skip key enumeration.
+  - Added Quick Translate native-index coverage for wildcard suggestion queries so the app-level runner exercises `LexIndex::match_pattern(...)`, not only the lower-level local-index test.
+  - No new index dependency was added: `unicode-normalization` remains the required C# normalization parity crate, while `fst` is still reserved for a future new-format compact index instead of the current `LXDX` compatibility path.
+- 2026-06-03: Replaced the standalone `.NET LexIndex.Cli` tool with a Rust CLI.
+  - Rechecked reusable index/search options before removing this runtime entry: `fst` 0.4.7 remains the high-quality future candidate for compact FST-backed dictionary indexes, and `unicode-normalization` 0.1.25 remains the exact NFKC parity dependency. This tool keeps the existing `LXDX` compatibility format, so no new dependency or format migration was introduced.
+  - Added the `easydict-lex-index` Rust binary under `easydict_app`, preserving the old two-argument diagnostic shape: input key list path plus output `index.bin` path.
+  - Removed `dotnet/lib/LexIndex/tools/LexIndex.Cli` so manual index-building no longer needs a `.NET` tool process. The C# `LexIndex` library itself remains in place while WinUI-side `LocalDictionaryIndexService` still references it.
+  - Added CLI tests proving wrong arguments, missing input, and generated `LXDX` output behavior. `lex_index_behavior` now also opens a fixed C# `LexIndexBuilder`-built `LXDX` fixture, proving Rust can consume real `.NET` index bytes rather than only Rust self-built output.
+- 2026-06-03: Extended Rust-native document layout into PDF inline script overlay post-processing.
+  - Rechecked PDF reuse before this slice: `lopdf` is a strong MIT crate for future PDF object/content-stream manipulation, and shaping crates such as `rustybuzz` belong to later text-rendering work, but inline script attachment is only deterministic string/rectangle logic. No new dependency was added, and any future large PDF wrapper should live under `lib/` rather than inside the app crate.
+  - Added Rust overlay helpers for Unicode subscript conversion, inline subscript attachment, citation-like inline script folding, translation-line normalization, and `handle_inline_script_lines_for_overlay`.
+  - Expanded `document_layout_behavior` from line-rect geometry into C# `PdfExportServiceLayoutTests` parity for `t/t−1` subscript augmentation, existing-subscript skip, `[13]` citation folding, background/render rect selection, and protected inline rect handling. Full PDF content-stream replacement and MuPDF/PdfPig integration remain later slices.
+- 2026-06-03: Added Rust-native PDF content-stream helper parity.
+  - Rechecked content-stream libraries before replacing more `.NET` helpers: `lopdf` is appropriate for future PDF object/stream manipulation and `pdf-writer` is useful for low-level PDF generation, but this slice only needs deterministic text operator formatting plus lightweight literal/TJ parsing. No new dependency was added; a larger PDF wrapper should live under `lib/` or a dedicated PDF crate instead of the app-level helper module.
+  - Added Rust `pdf_content_stream` with `cid_to_hex`, `generate_text_operator`, `build_content_stream`, PDF literal escape/parse/extract helpers, normalized text matching, text-operator range lookup, literal/TJ token patching, and a pure `hide_text_operator_in_stream` helper for `3 Tr ... 0 Tr` wrapping.
+  - Added `pdf_content_stream_behavior` tests covering C# `ContentStreamInterpreterTests` formatting contracts and `PdfExportService` literal/TJ helper behavior, including escaped parentheses, nested literals, multi-segment `TJ` arrays, `Tj0` guard, translation-length rejection, source hiding, raw graphics byte preservation, and erase-op wrapping.
+- 2026-06-03: Added Rust-native PDF math-font and formula fragment helpers.
+  - Rechecked reusable Unicode crates before replacing the remaining `.NET PdfExportService` formula helpers: `unicode-math-class` can classify mathematical characters, while `unicode-general-category` and `unicode-script` expose broader Unicode properties. This slice keeps the explicit C# Unicode ranges and `_`/`^` parser instead, because PDF export parity depends on the current Cambria Math fallback rules rather than generalized Unicode math semantics (`https://docs.rs/unicode-math-class/latest/unicode_math_class/`, `https://docs.rs/unicode-general-category/latest/unicode_general_category/`, `https://docs.rs/unicode-script/latest/unicode_script/`).
+  - Added Rust `needs_math_font`, `segment_line_by_font`, and `parse_formula_fragments` with `FontSegment`, `FormulaFragmentKind`, and `FormulaFragment` DTOs.
+  - Expanded `document_layout_behavior` to mirror `PdfExportServiceLayoutTests` for mathematical operator/Greek/regular character detection, mixed math/non-math font segmentation, subscript/superscript patterns, nested grouped fragments, and empty-line fallback.
+- 2026-06-03: Added Rust-native Text/Markdown long-document export composer parity.
+  - Rechecked Markdown reuse before replacing `.NET PlainTextExportService`/`MarkdownExportService` composition helpers: `pulldown-cmark` is a mature MIT CommonMark pull parser and `comrak` is a BSD-2-Clause CommonMark/GFM parser/AST, but the current export behavior is fixed string composition over translated chunks rather than Markdown AST transformation. No new dependency was added to avoid changing the exact output contract (`https://docs.rs/pulldown-cmark/latest/pulldown_cmark/`, `https://docs.rs/comrak/latest/comrak/`).
+  - Added Rust `long_document_export` with lightweight checkpoint metadata DTOs, monolingual/bilingual plain-text composition, monolingual/bilingual Markdown composition, C#-style CRLF line joining with trailing whitespace trim, heading/page/blockquote/separator handling, and `*-bilingual.*` output path construction.
+  - Added `long_document_export_behavior` tests covering page/order/chunk sorting, failed chunk markers without fallback-source leakage, Markdown heading preservation, multi-page headers, source blockquotes per line, bilingual separators, and bilingual output paths. File writing/deletion remains with the existing long-document runner/export integration slices.
+- 2026-06-03: Added Rust-native PDF erase/backfill geometry helpers.
+  - Rechecked geometry reuse before this slice: `kurbo` 0.13.1 and `euclid` 0.22.14 are high-quality MIT/Apache-2.0 2D geometry crates, but the required `.NET MuPdfExportService` behavior is limited to rectangle span, width-list expansion, and horizontal erase-band clustering. No new dependency was added, and no large third-party wrapper is needed under `lib/` for this app-specific helper set (`https://docs.rs/kurbo/latest/kurbo/`, `https://docs.rs/euclid/latest/euclid/`).
+  - Extended Rust `document_layout` with `resolve_available_height`, `expand_line_widths`, `rects_belong_to_same_erase_band`, and `build_final_erase_rects_top_left`.
+  - Expanded `document_layout_behavior` to mirror the C# `MuPdfExportService` edge cases: background span priority over render span, bbox fallback minimum height, empty width fallback to at least one `100`, repeated final width, overlap/gap thresholds, invalid erase-rect filtering, cluster bridging, and final bounds ordering. Full MuPDF/PdfPig export wiring remains a later integration slice.
+- 2026-06-03: Added Rust-native PDF export block render policy parity.
+  - Rechecked PDF library reuse before this slice: `lopdf`/`pdf-writer` remain useful for a future full PDF object/content-stream wrapper, which should live under `lib/` or a dedicated crate. This slice only decides which checkpoint chunks become renderable PDF blocks, so no new dependency was added.
+  - Added Rust `pdf_export_blocks` with lightweight checkpoint/metadata/block DTOs, failed-source fallback resolution, page lookup construction, vertical-rotation skip handling, preserve-original flag clearing for vertical blocks, default font-size behavior, and `should_render_block_text` / `should_erase_block_background`.
+  - Added `pdf_export_blocks_behavior` tests for translated-text priority, failed-chunk metadata fallback, source fallback, missing metadata skip, preserved formula no-render/no-erase, vertical block skip, detected-font carry-through, and default font size.
+- 2026-06-03: Added Rust-native LaTeX formula render-text simplifier parity.
+  - Rechecked reusable LaTeX libraries first: `pulldown-latex` 0.7.1 is MIT and parses LaTeX math to events/MathML, but its output path needs MathML styling/fonts rather than the current PDF renderer's plain Unicode/script-signal text; `tectonic` 0.16.9 is MIT but is a complete embeddable TeX/LaTeX-to-PDF engine and far too heavy for this compatibility scanner (`https://docs.rs/pulldown-latex/latest/pulldown_latex/`, `https://docs.rs/tectonic/latest/tectonic/`).
+  - Added Rust `latex_formula` for Greek/operator Unicode mapping, `\frac`/`\sqrt`, matrix placeholders, formatting/generic command stripping, grouped subscript/superscript expansion into per-character script signals, single-letter digit implicit subscript normalization, and blank-safe PDF render text preparation.
+  - Added `latex_formula_behavior` tests mirroring the C# `LatexFormulaSimplifierTests` acceptance cases plus PDF render blank handling.
+- 2026-06-03: Added Rust-native long-document context and preservation-hint helpers.
+  - Rechecked parser reuse before replacing more `.NET DocumentContextExtractor`: the project already depends on `serde_json`, which is sufficient after a lightweight fenced/prose JSON boundary scan. No JSON repair or LLM-output parser dependency was added (`https://docs.rs/serde_json/latest/serde_json/`).
+  - Added Rust `long_document_context` with loose page-partial JSON parsing, summary fallback reduction, glossary majority/earliest-page merge, preservation-hint de-dupe and length filtering, IR block preservation rewrites, control-character cleanup, and per-line leading-whitespace trimming.
+  - Added `long_document_context_behavior` tests for fenced/prose-wrapped JSON, short hint filtering, invalid partial rejection, glossary vote/tie behavior, preservation-hint exact and hint-contains-block matching, long-prose guard, short/long block ignores, and text cleanup helpers.
+- 2026-06-03: Removed production MDX CompatHost fallback from Rust routing.
+  - Rechecked MDX parser reuse before replacing the last bridge trigger: the existing local `rs-mdict` path dependency remains the best fit for supported MDX/MDD lookup and resource behavior; `mdict-rs` still carries AGPL-3.0-only licensing, `readmdict` is MIT but does not match Easydict's C#-compatible Base64/RIPEMD/Salsa passcode path closely enough, and `opendict-rs` does not support Salsa20 keyword-header encryption (`https://docs.rs/crate/rs-mdict/0.1.1`, `https://docs.rs/crate/mdict-rs/0.1.4`, `https://docs.rs/crate/readmdict/latest`, `https://docs.rs/crate/opendict-rs/latest`).
+  - Quick Translate no longer dispatches any MDX request through `MdxCompatHostFacade::spawn_packaged(...)`. Unsupported or unknown encrypted modes such as `Encrypted=3` and unknown encrypted values now return a Rust-native unsupported error instead of probing `Easydict.CompatHost.exe`.
+  - Local dictionary suggestions now always use the Rust native index/MDX route from the packaged-host entrypoint. Unsupported encrypted dictionaries accumulate the same local unsupported error, while native dictionaries and local input errors still finish without bridge startup.
+  - The `native_mdx_lookup_requires_credential_bridge(...)` compatibility helper is now a false boundary for callers/tests while `native_mdx_lookup_local_input_error(...)` owns unsupported encryption-mode errors. The remaining `.NET CompatHost` project/protocol is now a packaging/protocol deletion candidate rather than an active production route.
+- 2026-06-03: Removed the remaining Rust-side MDX CompatHost facade and moved the MDX reader fork under `lib/`.
+  - Follow-up subagent scouting confirmed the production MDX/Quick Translate/local dictionary paths no longer spawn `Easydict.CompatHost.exe`; the remaining .NET runtime entrypoints are retained LocalAI direct worker fallback and LongDoc worker fallback.
+  - Deleted `MdxCompatHostFacade`, the `compat_methods::MDX_LOOKUP` constant, and the compat-client tests that still simulated an MDX bridge. Native MDX keeps the `MdxLookupParams`/`MdxLookupResult` DTOs for now, but no Rust code has a packaged MDX CompatHost launcher anymore.
+  - Moved the local MIT `rs-mdict` fork from `rs/crates/rs-mdict` to `lib/rs-mdict` and updated the path dependency. This matches the rule that large third-party forks/wrappers should live under `lib/`, while Easydict-specific credential derivation and route policy remain in `mdx_native.rs`.
+  - Cleaned CLI/README wording so `easydict_cli` describes Rust-native routes plus retained worker `--app-dir` discovery, not legacy `Easydict.CompatHost.exe` auto-detection.
+  - Next high-value candidates from the parallel library research are a Foundry Local Rust provider spike (`foundry-local-sdk`) to reduce LocalAI worker usage, and a dedicated PDF wrapper under `lib/` using `lopdf`/`pdf-writer` or a `pdfium-render` probe for the larger LongDoc worker migration.
+- 2026-06-03: Removed the .NET CompatHost project and packaging payload after native MDX routing took over.
+  - No new replacement library was needed in this slice; the earlier MDX migration already selected the local MIT `rs-mdict` fork under `lib/rs-mdict` after checking `mdict-rs`, `readmdict`, and `opendict-rs`. This step removes the now-unreachable .NET bridge rather than changing the MDX parser.
+  - Deleted `dotnet/src/Easydict.CompatHost`, `dotnet/src/Easydict.SidecarClient/Protocol/CompatHostProtocol.cs`, and the CompatHost dispatcher/protocol tests. Removed the CompatHost project reference from the solution and WinUI test project.
+  - Removed CompatHost publish steps from `dotnet/Makefile`, `dotnet/scripts/publish.ps1`, `dotnet/scripts/package-and-install.ps1`, `.github/workflows/release-publish.yml`, and `.github/workflows/arm64-msix-smoke.yml`.
+  - Kept LongDoc/LocalAI worker publishing, `Dedupe-WorkerSharedFiles.ps1`, and `Extract-DotnetRuntime.ps1` intact because those retained workers still require the shared .NET runtime until their Rust-native replacements land.
+  - Added packaging regression coverage that solution/scripts/workflows no longer reference `Easydict.CompatHost`, while `workers/longdoc` and `workers/localai` remain published.
+- 2026-06-03: Locked the Rust-native Foundry Local boundary for Windows Local AI Quick Translate.
+  - Rechecked reusable library options before expanding LocalAI replacement: `foundry-local-sdk` is current on crates.io at 1.2.0 with MIT licensing, and Microsoft Learn/GitHub document Rust SDK support for model lifecycle, hardware/runtime management, and OpenAI-compatible integration (`https://learn.microsoft.com/en-gb/azure/foundry-local/reference/reference-sdk-current`, `https://github.com/microsoft/Foundry-Local`). It remains the preferred candidate for the larger in-proc Foundry provider; any substantial SDK wrapper should live under `lib/` rather than inside an app module.
+  - Kept this slice on the existing Rust OpenAI-compatible HTTP route instead of adding a dependency: explicit `FoundryLocal` translation and grammar correction already route through `NativeOpenAiQuickTranslateBackend`, including endpoint discovery when the configured endpoint is empty.
+  - Added the missing Rust resolver fallback for `~/.foundry/logs/foundry*.log`: after `foundry service status`, `--verbose`, and `--json` fail to reveal an endpoint, `CommandFoundryLocalEndpointResolver` now scans the newest Foundry logs and reuses the existing endpoint normalization.
+  - Added Quick Translate regression coverage that explicit FoundryLocal grammar discovers its endpoint natively, explicit FoundryLocal target `Auto` fails locally before native/worker startup, and `Auto` provider with an empty Foundry endpoint stays on the LocalAI worker route to preserve the hybrid Phi Silica → Foundry Local → OpenVINO order.
+- 2026-06-03: Renamed the remaining Rust worker IPC surface away from `CompatHost`.
+  - The retained LongDoc/LocalAI worker bridge now uses `WorkerCommand`, `WorkerClient`, `WorkerClientError`, `WorkerTarget`, and `*_with_packaged_app_dir` naming. This keeps the direct JSON Lines worker path distinct from the deleted `.NET CompatHost` project/protocol.
+  - Updated Quick Translate, LongDoc, OCR, LocalDictionary, CLI, and worker IPC tests to the new names without changing retained worker behavior. LongDoc and LocalAI workers still remain intentional temporary .NET runtime users until their Rust-native replacements land.
+  - A follow-up scan still finds some historical `CompatHost` wording in negative regression test names/messages that assert the old host is not spawned; those are descriptive guard strings rather than active launcher APIs.
+- 2026-06-03: Added Foundry Local model alias parity and prepare write-back on the Rust route.
+  - Rechecked reuse before expanding Foundry further: `foundry-local-sdk` 1.2.0 remains MIT and suitable for a future larger provider wrapper, but this parity slice only needs the existing `reqwest`/`serde_json` HTTP path. If the SDK is adopted, keep the wrapper under `lib/`.
+  - Rust now derives the Foundry `/models` endpoint from `/v1/chat/completions`, parses model list JSON, and resolves short configured aliases the same way as `.NET FoundryLocalService`: exact id match first, then `configured-instruct-*` candidates ordered NPU → GPU → CPU. Quick Translate Foundry requests use this best-effort resolved model id before posting SSE.
+  - `FoundryLocalPrepareFinished(Ok(...))` now writes discovered endpoint/model into empty settings fields and marks settings changed, while preserving user-managed non-empty endpoint/model values. This makes subsequent Auto/Foundry queries more likely to route Rust-native instead of falling through to the LocalAI worker.
+- 2026-06-03: Blocked the LongDoc → LocalAI nested `.NET` worker path.
+  - No new library was needed for this guard. Future OpenVINO/PhiSilica replacement still needs a separate library spike (`openvino`/`openvino-sys`, `ort`, `tokenizers`/SentencePiece-style tokenizer support), and any substantial inference wrapper should live under `lib/`.
+  - `windows-local-ai` LongDoc requests that cannot be handled by the Rust-native text/markdown/selectable-PDF route now fail locally before packaged worker startup. This prevents the old chain where Rust starts the retained LongDoc worker and that `.NET` worker then delegates translation to the LocalAI worker/provider stack.
+  - Removed the LongDoc worker's internal `WorkerLocalAiTranslationService` registration and implementation, so even direct LongDoc worker construction no longer exposes `windows-local-ai` or starts the sibling LocalAI worker.
+  - Hardened `WorkerLongDocumentPipeline` itself to reject `windows-local-ai` and stale `foundry-local` service ids with a Rust-native-route error before source parsing or translation. This catches direct retained-worker invocations that bypass the Rust host and factory guard, and removes the now-dead Foundry Local profile branch from the worker pipeline.
+  - Non-LocalAI LongDoc worker fallback remains available only for still-retained document-processing paths; subsequent PDF slices moved empty/unparseable native PDF outcomes to local failure after Rust extraction/OCR attempts.
+- 2026-06-03: Added a Rust retained-worker policy for no-`.NET` runtime verification.
+  - Parallel subagent scans confirmed the remaining runtime blockers are the retained LocalAI and LongDoc workers plus their packaging/runtime extraction paths; OCR, browser bridge/registrar, MDX, and LexIndex are already native on the active Rust routes.
+  - No new library was needed for this boundary hardening. The next substantial replacements still need library spikes: Foundry Local SDK wrapping under `lib/`, OpenVINO/ONNX/tokenizer inference under `lib/easydict-local-ai` or a dedicated crate, and a complex PDF wrapper under `lib/`.
+  - Added `RetainedWorkerPolicy`, defaulting to the existing hybrid behavior but honoring `EASYDICT_DISABLE_LOCALAI_WORKER=1` and `EASYDICT_DISABLE_LONGDOC_WORKER=1` in production entrypoints. Tests can inject the policy directly without process-wide environment races.
+  - Quick Translate `windows-local-ai` requests that would otherwise require the retained LocalAI worker now fail locally with a Rust-native-route requirement when the LocalAI worker is disabled. Rust-native Foundry routes are unaffected.
+  - LongDoc requests still try Rust-native text/markdown/selectable-PDF first; the disabled LongDoc policy returns a local Rust-native-route error only for still-retained paths that genuinely require `workers/longdoc`.
+- 2026-06-03: Extended the retained LocalAI worker disable policy to the CLI path.
+  - Rechecked reuse before choosing this slice: `pdfium-render` is the stronger future PDFium/text/rendering wrapper candidate, `lopdf`/`pdf-extract` remain useful for object/text-only PDF work, and `ort`/OpenVINO/tokenizer crates still belong to a larger LocalAI inference wrapper under `lib/`; this CLI hardening does not need a new dependency (`https://docs.rs/pdfium-render/latest/pdfium_render/`, `https://docs.rs/lopdf/latest/lopdf/`, `https://docs.rs/pdf-extract/latest/pdf_extract/`, `https://github.com/pykeio/ort`).
+  - Exported the existing LocalAI quick-translate preflight helper and reused it in `easydict_cli` before native dispatch or packaged worker lookup.
+  - `EASYDICT_DISABLE_LOCALAI_WORKER=1 easydict_cli translate --service windows-local-ai ...` now fails locally with the retained `.NET` worker-disabled message instead of searching `workers/localai` or surfacing a missing executable.
+- 2026-06-03: Reduced LongDoc selectable-PDF false-negative fallback to the retained worker.
+  - Reused the existing `pdf-extract` crate instead of adding a PDF runtime. The crate exposes both whole-document and per-page text extraction, while `pdfium-render`/`lopdf` remain future candidates for a larger PDF wrapper under `lib/`.
+  - Native LongDoc PDF text reading now keeps the existing whole-document extraction result when it is non-empty, but falls back to `extract_text_by_pages` when the whole-document path is empty or fails.
+  - Added a packaged-app-dir regression for selectable PDF with `page_range=all`, proving the Rust-native PDF text route reaches the native provider error and does not probe a missing retained LongDoc worker.
+- 2026-06-03: Kept stale text/Markdown LongDoc page ranges on the Rust-native route.
+  - No new library was needed: this preserves the existing UI request-builder rule at the native runner boundary, where PlainText/Markdown do not have page semantics and should ignore stale `page_range` fields.
+  - Direct/external LongDoc requests with `PlainText` or `Markdown` plus a leftover page range now still qualify for Rust-native chunk translation instead of falling through to the retained LongDoc worker.
+- 2026-06-03: Wired the Rust-native LongDoc runner to the migrated export composer.
+  - Reused the existing `long_document_export` helper instead of adding a Markdown parser or keeping duplicate app-level string composition. Earlier library checks still apply: `pulldown-cmark`/`comrak` are useful for larger Markdown AST work, but this production path only needs checkpoint composition parity.
+  - Native Text/Markdown/selectable-PDF-text LongDoc export now builds a lightweight checkpoint and calls `compose_monolingual_text`, `compose_bilingual_text`, `compose_monolingual_markdown`, `compose_bilingual_markdown`, and `build_bilingual_output_path`.
+  - This moves the runner onto the same CRLF, failed-chunk marker, Markdown blockquote/separator, heading, and bilingual path rules already covered by `long_document_export_behavior`.
+- 2026-06-03: Added a narrow Rust-native PDF content-stream extraction fallback.
+  - Rechecked PDF reuse before widening the native route: `lopdf` is a mature Rust PDF document/object manipulation crate and is already used transitively by `pdf-extract`; production code now declares it explicitly because this slice reads page content streams directly (`https://docs.rs/lopdf/latest/lopdf/`).
+  - `pdf-extract` remains the primary selectable-text extractor. If it cannot extract by pages, or if the per-page result is empty, the Rust LongDoc reader now tries `lopdf::Document::load` plus the existing `pdf_content_stream::extract_pdf_literal_strings` helper before falling back to the retained LongDoc worker.
+  - This is intentionally not a full PDF runtime wrapper. Larger `lopdf`/`pdf-writer`/Pdfium integration for layout, fonts, rendering, OCR, or content-stream replacement should move under `lib/easydict-pdf` instead of growing inside `easydict_app`.
+  - While wiring export reuse, `long_document_export` also normalizes embedded source/translation line endings to CRLF so native Text/Markdown/simple-PDF-text outputs do not mix LF with C#-style export separators.
+- 2026-06-03: Widened the narrow PDF content-stream fallback through `lopdf` parsed text chunks.
+  - Rechecked `lopdf` API surface before hand-writing a parser: `Document::extract_text_chunks(...)` and `Content::decode(...)` already parse content stream operators and PDF string objects, so the native fallback now tries those parsed text chunks first and only falls back to the existing raw literal scanner when `lopdf` cannot decode text.
+  - This adds support for simple hex-string text streams such as `<48656C6C6F> Tj` without taking on full font/CMap/layout responsibilities. Complex encodings, scanned pages, and visual PDF export still remain on the retained LongDoc worker or future `lib/easydict-pdf` work.
+  - Added a full packaged-app-dir regression proving simple hex content-stream PDFs reach the Rust-native provider route and do not probe the retained LongDoc worker.
+- 2026-06-03: Tightened Rust screen-capture overlay mouse-move parity.
+  - Rechecked the legacy `ScreenCaptureWindow` behavior before changing the Rust state machine: no new third-party library is needed, because this slice is pure interaction parity rather than a Win32/GDI wrapper.
+  - `CaptureInteractionState::on_mouse_move(...)` now requests redraws even when the pointer is over blank desktop space and no detected window changed, matching the C# overlay's continuous repaint path for magnifier, coordinates, pixel color, and highlight feedback.
+  - The existing same-window hover optimization remains intact for detected regions, while `screen_capture_behavior` now locks blank-area redraw parity and the under-threshold drag case that previously returned `None`.
+- 2026-06-03: Added a Rust/WinFluent platform window snapshot path for OCR capture.
+  - Rechecked library reuse before replacing more `WindowDetector` behavior: no extra crate is needed for this slice because the existing `lib/winfluent-rs` Windows platform layer already uses official `windows-sys`; larger Win32 overlay/GDI wrappers should continue to live under `lib/`.
+  - `win_fluent` now exposes `ScreenWindow`, `ScreenWindowSnapshotRequest`, and a `Task::CaptureScreenWindows` runtime task; `win_fluent_platform_win` enumerates visible top-level windows and direct child chains with `EnumWindows`/`EnumChildWindows`, skips desktop background classes, and can exclude the Easydict capture overlay title.
+  - `easydict_app` converts the flat platform snapshot into the existing `DetectedWindow` tree and requests that snapshot whenever OCR/Silent OCR opens the capture overlay, so double-click window detection no longer depends only on injected tests.
+  - `CaptureWindowsChanged` now updates only the detector instead of resetting an active selection, preserving C#'s snapshot-before-interaction semantics even though the Rust platform snapshot arrives asynchronously.
+- 2026-06-03: Wired Rust short-text translation cache into Quick Translate.
+  - Rechecked reusable library options before wiring: no external cache crate is needed for this in-memory parity slice because `translation_cache.rs` already implements the .NET-compatible SHA-256 key, UTF-16 size accounting, LRU eviction, bypass, and cache-hit marking. A future persistent cache can evaluate `rusqlite`/SQLite separately, but this avoids adding a dependency for behavior already covered in-tree.
+  - `EasydictUiState` now owns `TranslationMemoryCache` plus pending per-query cache requests. Cacheable non-streaming translation requests check the cache before starting provider tasks; hits emit `QuickTranslateServiceFinished` immediately, while misses record the original cache request for completion-time storage.
+  - Quick Translate does not cache streaming, grammar-correction, MDX dictionary, custom-prompt, or error results. Retrying a result bypasses the read side but still refreshes the stored value after the provider returns.
+  - Store-time conversion preserves alternatives and word-result payloads. Auto-source requests also write a detected-language alias when the provider reports a detected source, so the next Rust UI query after detection still hits cache while retaining the original .NET Auto key.
+  - `ClearTranslationCache` now clears the Rust memory cache and pending cache requests instead of only updating a placeholder status.
+- 2026-06-03: Added persistent SQLite cache support for Rust-native LongDoc text routes.
+  - Rechecked reusable library options before replacing the `.NET TranslationCacheService` behavior on native LongDoc routes: `rusqlite` 0.39.0 is a maintained ergonomic SQLite wrapper, and its `bundled` feature pulls in `libsqlite3-sys/bundled` plus `modern_sqlite`, avoiding a system SQLite dependency on Windows (`https://docs.rs/crate/rusqlite/latest/features`). This is a narrow wrapper in `translation_cache.rs`; a larger cache/storage abstraction can move under `lib/` later if it grows.
+  - Added `LongDocumentTranslationCache` with the same `translation_cache` table shape, `service_id/from_lang/to_lang/source_hash` uniqueness, SHA-256 UTF-8 uppercase source hashes, hit-count/last-used update on reads, upsert writes, entry count, and clear behavior.
+  - `SettingsSnapshot` now carries `enable_translation_cache`, and the Rust-native Text/Markdown/simple-PDF-text LongDoc loop opens `translation_cache.db` from `cache_dir` or `%LOCALAPPDATA%/Easydict`. Cache hits skip `NativeLongDocumentTranslator::translate_chunk`; successful provider results are written back. Cache open/read/write failures remain best-effort and do not block translation.
+  - The settings `ClearTranslationCache` action now also clears the default persistent SQLite cache, while test-only native requests can route cache files to a temp `cache_dir`.
+- 2026-06-03: Added bounded concurrency to the Rust-native LongDoc text runner.
+  - Rechecked reusable concurrency libraries before replacing the `.NET` per-block parallel translation behavior. `rayon` is the only strong external candidate and is already present transitively, but this slice only needs blocking chunk calls capped at 1..16, ordered result slots, and pre-submit cache checks. `std::thread::scope` keeps that local and auditable without adding a direct dependency; `crossbeam` overlaps std scoped threads, while `tokio`/`futures` would introduce async runtime concerns for synchronous provider calls.
+  - `NativeLongDocumentTranslator` is now `Clone + Send`, and the native Text/Markdown/simple-PDF-text runner translates cache misses in bounded scoped-thread batches. Cache hits are resolved before work submission, so they do not occupy translator slots, and batch results are applied by original chunk index to keep output order stable even when chunks complete out of order.
+  - Failed chunk results now preserve their original indexes in `failed_chunk_indexes` and `block_translated.last_error` events. Empty cached translations are ignored and overwritten by a successful provider result.
+  - Added Rust `long_document_behavior` coverage for request concurrency clamp, bounded concurrency clamp, out-of-order completion ordering, original failed chunk indexes, mixed cache hit/miss slot behavior, and blank cache fallback.
+- 2026-06-03: Ported the Foundry Local LongDoc profile into Rust request building.
+  - Rechecked reusable library options before changing the LocalAI/LongDoc boundary: no new crate is needed because this slice only preserves `.NET LongDocumentTranslationService.CreateCoreTranslationOptions(...)` policy using existing `SettingsSnapshot` provider fields. The larger LocalAI runtime replacements still point to `foundry-local-sdk` for future Foundry wrapping and `ort`/OpenVINO/WinRT APIs for future in-proc inference work.
+  - Rust LongDoc requests for `windows-local-ai` with Auto or FoundryLocal provider now force `long_doc_max_concurrency=1` and set `long_doc_enable_document_context_pass=false`, matching the `.NET` Foundry LongDoc profile that avoids two-pass context and high parallelism for local model calls.
+  - Explicit WindowsAI/Phi provider requests keep the user concurrency and context-pass setting, so the Foundry profile is not applied too broadly.
+  - The `.NET` profile's longer `RequestTimeoutMs=120000` remains a noted parity gap because the current Rust/worker `SettingsSnapshot` and `TranslateDocumentParams` contract do not expose a request-timeout field.
+- 2026-06-03: Added per-chunk retry parity to the Rust-native LongDoc text runner.
+  - Rechecked reusable retry libraries before replacing this `.NET MaxRetriesPerBlock=1` behavior: `retry`, `backoff`, and `backon` are viable crates for richer retry/backoff policies, but this slice only needs one deterministic synchronous retry for a blocking chunk translation call. The implementation stays local in `long_document.rs` without adding another dependency or async runtime assumption.
+  - Native Text/Markdown/simple-PDF-text chunk translation now retries once when the provider fails or returns blank text. Successful retries emit `block_translated.retry_count=1` with no last error, matching the core `.NET` model where `LastError` is only populated for unresolved failures.
+  - Final failures keep the original chunk index, emit `block_translated.last_error`, set `retry_count=1`, use the original chunk text as the event `translated_text` fallback, and still export successful chunks as `PartiallyCompleted`.
+  - Added Rust `long_document_behavior` coverage for transient chunk failure recovery and permanent failure after the single retry.
+- 2026-06-03: Let the Rust Foundry Local start/prepare entry reduce Auto-mode LocalAI worker usage.
+  - Rechecked reusable Foundry options before changing the settings action: Microsoft Foundry Local still exposes Rust SDK/support, but this slice only connects the existing Rust `CommandFoundryLocalEndpointResolver`/prepare task to the visible settings entrypoint. No new crate is needed; a full Foundry SDK wrapper remains a larger `lib/` candidate.
+  - `StartFoundryLocal` now runs the Rust-native prepare task in both Auto and FoundryLocal provider modes. When prepare discovers an endpoint/model, the existing write-back path stores them into empty settings so later Auto `windows-local-ai` requests can take the Rust-native Foundry route.
+  - The generic `PrepareLocalAiModel` action only dispatches to Foundry prepare when the provider is explicitly FoundryLocal; Auto with no endpoint still preserves the Phi Silica -> Foundry Local -> OpenVINO worker-order fallback for normal translation requests.
+  - Added Rust `quick_translate_behavior` coverage that Auto-mode Start Foundry Local writes an endpoint and makes a subsequent Auto LocalAI request natively routable, plus FoundryLocal generic Prepare coverage.
+- 2026-06-03: Ported Foundry Local runtime/status parity into the Rust control plane.
+  - Rechecked provider-owned reuse before deepening the Foundry route: Microsoft Learn documents `foundry-local-sdk` for Rust, model lifecycle management, OpenAI-compatible integration, and optional in-process/runtime packaging, while docs.rs currently lists `foundry-local-sdk` 1.2.0. This is still the preferred future provider wrapper and should live under `lib/`; this slice stays on the existing CLI/status controller and does not add a dependency (`https://learn.microsoft.com/en-gb/azure/foundry-local/reference/reference-sdk-current`, `https://docs.rs/crate/foundry-local-sdk/latest`, `https://learn.microsoft.com/en-us/azure/foundry-local/reference/reference-cli`).
+  - Added Rust `FoundryLocalRuntimeState`, `FoundryLocalRuntimeStatus`, `FoundryLocalModelState`, and `FoundryLocalStatusCheck`, plus `.NET`-style CLI output parsing for missing CLI, not-running service output, decorative status prefixes, running-without-endpoint output, and loopback endpoint extraction.
+  - `CommandFoundryLocalEndpointResolver` now exposes `get_status()` and starts Foundry Local by launching `foundry service start` while polling `foundry service status`; it returns as soon as status reports `Running` instead of waiting for the start process to exit.
+  - `prepare_foundry_local_service(...)` now checks runtime status before startup: `NotInstalled` returns a local non-ready status without start/load, `NotRunning` starts before loading, `Running` skips start but still loads the model, non-loopback endpoints remain user-managed, and configured loopback endpoints refresh from runtime status/resolver to avoid stale ports.
+  - Added Rust `openai_compatible_behavior` coverage for status parser parity, runtime status mapping, already-running prepare, not-installed prepare, configured loopback refresh, user-managed endpoint bypass, and missing endpoint failure.
+- 2026-06-03: Wired Foundry Local runtime-status into the Rust settings status loader.
+  - Rechecked reuse before wiring settings status: the same `foundry-local-sdk`/Foundry CLI references remain the larger provider-wrapper path, but this slice only needs the existing Rust `CommandFoundryLocalEndpointResolver` plus the just-migrated status mapping. No new crate was added, and a substantial SDK wrapper should still live under `lib/`.
+  - `SettingsRuntimeStatus` now carries `foundry_local_status`; opening Settings captures the current `SettingsSnapshot` so Foundry status can respect user-managed endpoints and OpenVINO status can continue using an explicit cache directory.
+  - The settings runtime-status task reports Foundry Local ready/not-installed/not-running/running-without-endpoint status through the Rust CLI/runtime probe, while keeping directory-only `status_for_directory(...)` tests on the default auto-detected message.
+  - `SettingsRuntimeStatusLoaded` writes Foundry status only when the panel is idle/default or already showing a probe-derived status, so late async probes do not overwrite `Starting Foundry Local service...`, install-link, or docs-link feedback.
+  - Added Rust `settings_status` and `quick_translate_behavior` coverage for Foundry status messages, user-managed endpoint CLI bypass, settings write-back, and starting-state preservation.
+- 2026-06-03: Migrated the OpenVINO settings runtime-status check to Rust.
+  - Rechecked reusable OpenVINO replacement options before changing the settings path: `openvino` provides safe Rust bindings to OpenVINO, `ort` exposes ONNX Runtime execution-provider configuration including OpenVINO, and `rust_tokenizers` documents NLLB tokenizer support (`https://docs.rs/openvino/latest/openvino/`, `https://docs.rs/ort/latest/ort/execution_providers/`, `https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html`, `https://docs.rs/rust_tokenizers/latest/rust_tokenizers/`). This slice only replaces the on-disk status probe, so no new dependency is added; a real inference wrapper should live under `lib/`.
+  - `SettingsRuntimeStatus` now includes OpenVINO status/progress and checks the same cache contract as `.NET ModelDownloadService`/`OpenVinoRuntimeDownloadService`: `%LOCALAPPDATA%\Easydict\models\nllb-200-distilled-600M` and `%LOCALAPPDATA%\Easydict\runtimes\openvino\1.21.0\win-x64\native` must contain `.complete` plus every expected model/runtime file.
+  - The settings page preserves .NET's user-facing `NotDownloaded` behavior when either the model or runtime file set is incomplete, reports ready only when both are complete, and keeps Windows x64 as the supported OpenVINO runtime architecture.
+  - `SettingsRuntimeStatusLoaded` now writes the OpenVINO panel status when the download state is idle, but preserves an already queued OpenVINO download so a late filesystem probe does not overwrite the user's action.
+  - Added Rust coverage for absent/incomplete/ready OpenVINO caches, unsupported architecture mapping, idle status write-back, and queued-download preservation.
+- 2026-06-03: Added Rust OpenVINO cache readiness preflight before the retained LocalAI worker.
+  - Reused the OpenVINO cache-status probe instead of adding an inference dependency. The same library review still applies: `openvino`/`ort`/tokenizer crates are candidates for the later NLLB inference replacement, and any substantial wrapper should live under `lib/`.
+  - Explicit `windows-local-ai` requests with `LocalAIProvider=OpenVINO` now check the `.NET` model/runtime cache contract after language-pair validation and before retained-worker startup. If either the NLLB model files or OpenVINO runtime files are incomplete, Rust returns the existing `.NET` service-unavailable wording and does not probe `workers/localai`.
+  - Complete OpenVINO caches still keep supported language pairs on the retained LocalAI bridge until the actual NLLB tokenizer/inference stack is migrated, so this is a failure-path runtime reduction rather than a full provider replacement.
+  - `SettingsSnapshot.cache_dir` can point tests at an alternate Easydict cache root, while production still falls back to `%LOCALAPPDATA%\Easydict`.
+  - Added Rust `quick_translate_behavior` coverage for cache-missing local failure and cache-ready retained-worker preservation.
+- 2026-06-03: Replaced the `.NET` MSIX validator tool with a Rust crate.
+  - Rechecked reusable library options before replacing `dotnet/tools/MsixValidate`: the `zip` crate exposes `ZipArchive` for structured MSIX/ZIP reads, and `quick-xml` provides a fast XML event reader for `AppxManifest.xml` (`https://docs.rs/zip/latest/zip/`, `https://docs.rs/quick-xml/latest/quick_xml/`). This is a small release tool, so it lives as `rs/crates/easydict_msix_validate` rather than under `lib/`.
+  - The Rust tool preserves the previous command contract: identity name/publisher validation, `TargetDeviceFamily MinVersion` validation, optional `--allow-unsigned`, and signature-file presence checks with exit codes 0/1/2.
+  - `make validate-msix` and the release workflow now call `cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate`; `dotnet/tools/MsixValidate` was removed so this publishing validation no longer needs a .NET project.
+  - Added Rust unit coverage for valid, unsigned/skipped, unsigned-failing, and identity/min-version-failing MSIX archives, plus a `WorkerPackagingTests` guard that the workflow/Makefile do not regress to `dotnet run --project tools/MsixValidate`.
+- 2026-06-03: Replaced the `.NET` built-in secret encryption helper with a Rust crate.
+  - Reused the already-approved RustCrypto compatibility stack before replacing `dotnet/tools/EncryptSecret`: `aes` provides the AES-128 block cipher, `cbc` provides CBC mode with PKCS7 padding for the legacy format, `base64` provides the standard padded encoding, and `ring` provides SHA-256 for the legacy `SecretKeyManager` key derivation (`https://docs.rs/aes/latest/aes/`, `https://docs.rs/cbc/latest/cbc/`, `https://docs.rs/base64/latest/base64/`, `https://docs.rs/ring/latest/ring/digest/static.SHA256.html`).
+  - Added `rs/crates/easydict_encrypt_secret` with the same `SHA256("Easydict.TranslationService").hex[..16]` ASCII key derivation, AES-128-CBC IV=key behavior, and `EncryptedSecrets.json` output format. The regression vector `my-api-key -> SNtcOSNOR+8Y18pItZdXlg==` matches the old .NET tool.
+  - `make encrypt-secret SECRET=...` now invokes the Rust helper, and `dotnet/tools/EncryptSecret` was removed. `PdfToImages` remains a separate follow-up because it depends on MuPDF.NET rendering rather than the small AES compatibility surface.
+  - Added Rust unit/CLI tests for roundtrip and output behavior plus a `WorkerPackagingTests` guard that the Makefile does not regress to `dotnet run --project tools/EncryptSecret`.
+- 2026-06-03: Replaced the `.NET` PDF-to-images diagnostic tool with a Rust/Pdfium wrapper.
+  - Rechecked reusable PDF rendering options before replacing `dotnet/tools/PdfToImages`: `pdfium-render` is a high-level MIT/Apache-2.0 Rust wrapper around Pdfium, supports rendering pages to bitmap images, and documents runtime binding to system or colocated Pdfium dynamic libraries (`https://docs.rs/pdfium-render/0.9.1/pdfium_render/`). This is a real third-party PDF wrapper, so the integration lives under `lib/easydict-pdf-render` with a small CLI in `rs/crates/easydict_pdf_to_images`.
+  - The Rust CLI preserves the old diagnostic contract: positional or `--input` PDF path, default `<pdf-name>_pages` output directory, `--dpi`/`--scale`, `png`/`jpg`, `--page`, and `--page-range` selection. It adds `--pdfium-dir` plus `EASYDICT_PDFIUM_DIR` lookup so users can point the tool at `pdfium.dll` without any .NET/MuPDF runtime.
+  - `dotnet/scripts/pdf-to-images.ps1` and `make pdf-to-images PDF=...` now invoke `cargo run --manifest-path rs/Cargo.toml -p easydict_pdf_to_images`; `dotnet/tools/PdfToImages` was removed.
+  - Added Rust CLI coverage for help/output routing and wrapper tests for argument parsing, legacy page-range behavior, default output naming, plus a `WorkerPackagingTests` guard that the script/Makefile do not regress to the `.NET` PdfToImages project.
+- 2026-06-03: Hardened stale Foundry Local LongDoc service ids before retained worker startup.
+  - No new library was needed because this is a routing-boundary guard, not a provider/runtime replacement. The larger LocalAI replacements still point to `foundry-local-sdk` for future Foundry lifecycle wrapping and OpenVINO/ONNX/tokenizer crates under `lib/` for future in-proc inference.
+  - Rust LongDoc request building now maps stale `foundry-local`/`foundrylocal` service ids to the canonical `windows-local-ai` aggregate service id, matching the already-migrated `local-ai` alias behavior.
+  - Direct/external LongDoc requests that still carry `foundry-local` now fail with the Rust-native-route requirement before service registry lookup or retained LongDoc worker probing, so the old id cannot fall through to `.NET` worker startup with an unrelated “not registered” error.
+  - Added Rust `long_document_behavior` coverage for both build-time canonicalization and manually constructed stale service-id requests.
+- 2026-06-03: Migrated stale Foundry Local settings service ids to the Windows Local AI aggregate.
+  - No new library was needed; this only mirrors the existing `openvino-local-ai` settings migration rule for the other historical local-provider service id.
+  - Rust settings migration now rewrites `foundry-local` entries in per-window enabled-service lists and enabled-query maps to `windows-local-ai`. If the old settings had Foundry Local but no aggregate service and no explicit `LocalAIProvider`, it writes `LocalAIProvider=FoundryLocal` so the user's provider preference survives the merge.
+  - Existing aggregate service entries are preserved and stale `foundry-local` duplicates are removed without overwriting the aggregate enabled-query value, preventing older settings from surfacing an unregistered service or falling into retained worker paths under a stale id.
+  - Added Rust `settings_migration_behavior` coverage for Foundry Local migration and duplicate removal.
+- 2026-06-03: Tightened Rust MSIX payload layout validation.
+  - Rechecked reusable tooling before widening the validator: `zip` already provides structured `ZipArchive` reads, `quick-xml` already handles `AppxManifest.xml`, and Microsoft documents `AppxManifest.xml` as the package identity/deployment manifest plus `AppxSignature.p7x` as the signed-package marker (`https://docs.rs/zip/latest/zip/`, `https://docs.rs/quick-xml/latest/quick_xml/`, `https://learn.microsoft.com/en-us/windows/msix/overview`). No new dependency was needed.
+  - `easydict_msix_validate` now builds a package-entry index and runs `PackagePayloadLayoutValidator` after identity/min-version/signature checks. All MSIX packages must include the Rust helper executables and `BrowserHostRegistrar.exe` alias, and must reject retired `.NET CompatHost`, OCR worker, old .NET helper-tool payloads, and root-level in-proc LongDoc PDF/export DLLs.
+  - x64/arm64 MSIX packages must include retained LongDoc/LocalAI worker executables plus `dotnet/host/fxr/*/hostfxr.dll` and `dotnet/shared/Microsoft.NETCore.App/*/coreclr.dll`; x86 remains exempt because the current packaging plan omits retained workers for that architecture.
+  - Added Rust unit coverage for valid x64 payloads, x86 helper-only payloads, missing retained worker/runtime payloads, retired .NET payload rejection, and root-level LongDoc dependency rejection.
+- 2026-06-03: Hardened direct retained-worker ready capability validation.
+  - No new library was needed; this uses the existing JSON Lines worker handshake and `ReadyEventData.capabilities` field.
+  - `DirectWorkerFacade::spawn_worker(...)` now rejects a LongDoc worker before `configure` unless ready capabilities include `configure`, `translate_document`, `cancel`, and `shutdown`; LocalAI workers must include `configure`, `translate_stream`, `grammar_stream`, `cancel`, and `shutdown`. Extra future-compatible capabilities remain accepted.
+  - Added Rust `compat_client` coverage for missing LongDoc, LocalAI stream, and lifecycle capabilities so stale or mismatched worker binaries fail at handshake time instead of later returning method-not-found or losing cancel/shutdown control.
+- 2026-06-03: Hardened Rust BrowserRegistrar status manifest integrity.
+  - No new library was needed; the registrar continues using `serde_json` plus filesystem canonicalization.
+  - `status` now treats a registration as installed only when the native messaging manifest declares `com.easydict.bridge`, `type=stdio`, and a manifest `path` that canonicalizes to the registrar-managed `easydict-native-bridge.exe`.
+  - Custom Chrome/Firefox extension ids remain allowed because status validates host identity and bridge path rather than forcing default extension-id lists.
+  - Added Rust `browser_registrar_behavior` coverage for invalid host name/type/path and custom extension-id status preservation.
+- 2026-06-03: Cleaned stale CompatHost commands out of the current verification list.
+  - No new library was needed; this is a migration-control cleanup after the `.NET CompatHost` project and tests were deleted.
+  - The `Current Verification` section no longer asks future agents to build `dotnet/src/Easydict.CompatHost`, run deleted `CompatHostDispatcherTests` / `CompatHostProtocolSerializationTests`, or smoke-test `easydict_cli --host` against a deleted CompatHost executable.
+  - Kept the `rg` no-match guard that intentionally searches packaging and Rust runtime surfaces for stale CompatHost references, and restored `Earlier Verification` history so old migration evidence is not lost.
+  - Parallel scouting ranked the next larger non-UI candidates as a Foundry Local SDK boundary under or near `lib/`, a PDFium-backed PDF text/render wrapper under `lib/`, and retained-worker IPC timeout/stderr/cancel parity. This turn stayed on the smaller verification cleanup to avoid pulling heavy SDK/native payloads without a wrapper design.
+- 2026-06-03: Added Rust-owned resource download and CJK font download library layers.
+  - Rechecked reusable downloader options before replacing the C# `ModelDownloadClient`/`FontDownloadService` slice. Generic downloader/progress crates were less useful than the already-present `reqwest` stack because Easydict needs exact multi-mirror ordering, proxy/bypass-local settings, temp-file cleanup, retry policy, and deterministic mock-client tests.
+  - Added `resource_download` with a testable `ResourceDownloadClient` trait, `ReqwestResourceDownloadClient`, HEAD-based source ordering, retry/fallback, progress reporting, temp-file-to-final move, minimum-size validation, and best-effort cleanup.
+  - Added `font_download` with the legacy Noto Sans CJK SC/TC/JP/KR asset names and mirrors, target-language requirement mapping, exact-language cache lookup with any-CJK fallback, total-size/delete helpers, and settings-aware proxy download entrypoint.
+  - `settings_status` now recognizes known Rust-managed `Fonts/NotoSans*.ttf` CJK font assets while preserving the previous broad `fonts/*.{ttf,otf,ttc}` status check. UI button wiring and ONNX/TATR artifact download remain separate follow-up slices.
+  - Added `resource_download_behavior` coverage for probe ordering, retry fallback, temp-file move/progress, file-size validation, CJK font metadata/cache/fallback, ensure/download stage, unsupported-language rejection, total-size accounting, and delete behavior.
+- 2026-06-03: Added Rust-owned Layout Model download library layer for DocLayout-YOLO and TATR artifacts.
+  - Rechecked reusable libraries before replacing the C# `LayoutModelDownloadService` slice: `reqwest` already covers blocking HTTP, timeout, and proxy behavior, while the mature `zip` crate already used by `easydict_msix_validate` exposes `ZipArchive` entry lookup/extraction for the ONNX Runtime zip. Added `zip` to `easydict_app` rather than hand-parsing archives (`https://docs.rs/reqwest/latest/reqwest/`, `https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html`).
+  - Added `layout_model_download` with legacy-compatible `%LOCALAPPDATA%/Easydict/Models` paths, `onnxruntime.dll`, `doclayout_yolo.onnx`, `tatr_structure.onnx`, ONNX Runtime 1.21.0 zip entry path, DocLayout-YOLO/HuggingFace/mirror URLs, TATR URLs, minimum-size checks, invalid-file cleanup, delete-all helpers, and settings-aware proxy download entrypoints.
+  - The DocLayout ensure path downloads/extracts ONNX Runtime first, then orders/downloads the DocLayout model by probe latency; TATR remains a separate lazy ensure path matching the C# optional stage-2 behavior.
+  - `settings_status` now prefers the Rust exact runtime+DocLayout status check while retaining the previous loose `models/*.onnx` compatibility signal until UI/runtime wiring fully moves over.
+  - Added `layout_model_download_behavior` coverage for default metadata parity, status paths, runtime zip extraction, fastest-source model selection, skip-existing behavior, invalid-file cleanup, TATR lazy download, invalid model deletion, missing zip-entry errors, and managed-file deletion.
+- 2026-06-03: Added Rust-owned Vision layout request/parser library layer.
+  - Rechecked reusable libraries before replacing the pure C# `VisionLayoutDetectionService` request/parse slice: existing `serde_json::Value` covers dynamic response extraction, existing OCR image encoders already provide BGRA -> BMP/JPEG data URLs, and OpenAI's Responses API shape accepts `input_image.image_url`. No new crate was needed (`https://docs.rs/serde_json/latest/serde_json/`, `https://docs.rs/image/latest/image/`, `https://platform.openai.com/docs/api-reference/responses/compact?api-mode=responses`).
+  - Added `vision_layout` with the legacy prompt, layout-region enum parity, detection DTO, Chat Completions and Responses request planning, optional Authorization header emission, BGRA-aware BMP/JPEG encoding selection, response-content extraction, markdown-tolerant JSON-array slicing, default confidence, and percent-bbox-to-pixel mapping.
+  - This is intentionally a pure library slice; long-document strategy wiring, real HTTP execution, settings UI button hookup, and ONNX/TATR inference remain follow-up work.
+  - Added `vision_layout_behavior` coverage for parser mappings, malformed JSON handling, Chat Completions/Responses payload shapes, Responses `output_text`/`output.content.text`, local endpoint auth omission, and BGRA encoder selection.
+- 2026-06-03: Added Rust-owned TATR table-structure helper layer.
+  - Rechecked reusable libraries before replacing `TableStructureRecognitionService` static helpers: `ort` is the higher-quality Rust ONNX Runtime candidate for a future inference wrapper, and `ndarray` is a mature multidimensional-array option, but this slice only needs deterministic crop resizing, flat tensor fill, DETR softmax parsing, IoU dedupe, and cell-grid geometry. No new crate was added (`https://docs.rs/ort`, `https://docs.rs/ndarray/latest/ndarray/`); a substantial ONNX/TATR runtime wrapper should live under `lib/` when adopted.
+  - Added `table_structure` with TATR constants, table element/detection/cell DTOs, .NET-compatible crop resize rounding, BGRA crop preprocessing with ImageNet normalization, DETR logits + normalized box parser, normalized-to-page-space conversion, row/column/spanning-cell structure assembly, duplicate IoU filtering, cell-grid generation, and shared rectangle IoU.
+  - This is intentionally pure helper parity. It does not load `tatr_structure.onnx`, create an ONNX session, or connect table structure output into the long-document PDF strategy yet.
+  - Added `table_structure_behavior` coverage mirroring the C# static-helper tests: resize dimensions, ImageNet normalization, low-confidence filtering, no-object dominance filtering, box clamping, page-space translation, 3x4 grid construction, sub-minimum cell skipping, duplicate retention by confidence, structure assembly, and IoU.
+- 2026-06-03: Added Rust-owned formula protection detector/protector/restorer layer.
+  - Rechecked reusable regex options before replacing the core `FormulaDetector` / `FormulaProtector` / `FormulaRestorer` slice: Rust's stock `regex` crate is high quality but lacks some .NET-style regex features, while `fancy-regex` can cover lookaround/backtracking when truly needed. This first parity slice avoids both dependencies by using a deterministic scanner for the known formula grammar, keeping dependency surface small until the broader character-level preservation service is migrated (`https://docs.rs/regex/latest/regex/`, `https://docs.rs/fancy-regex/latest/fancy_regex/`).
+  - Added `formula_protection` with token type parity, formula match DTOs, detector/classifier helpers, high-confidence classification, exact soft-preservation tuple detection, hard `{vN}` placeholder protection, low-confidence `$...$` soft wrapping, retry demotion for ambiguous notation, trailing formula-parentheses grouping, raw/simplified token storage, placeholder restoration, delimiter-balance validation, partial-restore thresholds, and fallback diagnostics.
+  - This is intentionally pure formula-span logic. Character-level evidence, `FormulaPreservationService` block-level analyze/protect/restore, soft-span post-translation validation, and LongDoc pipeline integration remain follow-up work.
+  - Added `formula_protection_behavior` coverage for known pattern detection, natural-language tuple rejection, classifier/confidence tables, exact soft-preservation candidates, sequential placeholder protection, trailing parentheses grouping, two-tier soft wrapping, demote-level behavior, raw/simplified restore, partial/fallback thresholds, diagnostics, bad-index fallback, and delimiter-corruption fallback.
+- 2026-06-03: Added Rust-owned formula content-preservation service layer.
+  - Rechecked reusable libraries before replacing `FormulaPreservationService`: `regex` remains the right lightweight crate for user-provided formula font/character patterns and built-in font matching, while `fancy-regex`, Markdown parsers, syntax highlighters, Tree-sitter LaTeX, and MathML converters do not replace Easydict's product-specific hard/soft placeholder recovery policy (`https://docs.rs/regex/latest/regex/`, `https://docs.rs/fancy-regex/latest/fancy_regex/`, `https://comrak.ee/`, `https://github.com/pulldown-cmark/pulldown-cmark`, `https://docs.rs/tree-sitter-latex/latest/tree_sitter_latex/`).
+  - Added `content_preservation` with `BlockContext`, `ProtectionPlan`, `ProtectedBlock`, `RestoreOutcome`, `PreservationMode`, source-block type parity, formula character evidence DTOs, block-level analyze heuristics, character-level protected text precedence, exact-soft tuple bypass, retry demotion gate, formula-only opaque classification, `[[EQ_SOFT]]` wrapping, restore/fallback mapping, synthetic delimiter stripping, exact soft-span mutation fallback, and LaTeX-equivalent tuple normalization.
+  - This is intentionally a pure service/facade slice. `CharacterParagraphBuilder` evidence generation, `FormulaAwareTextReconstructor` letter-geometry reconstruction, native LongDoc prompt injection, quality-feedback retry, fallback-text retry, and PDF `PreserveOriginalTextInPdfExport` wiring remain follow-up work.
+  - Added `content_preservation_behavior` coverage for block type/math-font/custom-regex/math-Unicode/subscript-density/NumericData/display-equation analyze decisions, character-level path preference, formula-only opaque decisions, EqSoft metadata, retry demotion, exact-soft tuple regex fallback, hard placeholder restore, soft delimiter normalization, soft mutation fallback, EqSoft mutation fallback, and LaTeX-equivalent tuple comparison.
+- 2026-06-03: Wired Rust formula preservation into the native Text/Markdown/simple-PDF-text LongDoc route.
+  - Reused the local `content_preservation` service instead of introducing a generic Markdown/LaTeX parser: the native LongDoc text route needs product-specific placeholder preservation, custom prompt composition, retry demotion, cache semantics, and restored-output events rather than AST parsing.
+  - Native text chunks now build a `BlockContext`, analyze/protect before provider calls, skip formula-only/math-Unicode/NumericData chunks locally, send protected text to native quick-translate services, append formula-specific prompt instructions after the existing long-doc custom prompt, restore hard placeholders and exact soft spans before event/cache/export, and keep the persistent cache keyed by the original chunk hash.
+  - Formula quality feedback now participates in the existing one-retry native text policy: missing hard placeholders or failed exact soft validation generate a retry prompt, demote ambiguous formula spans on retry, preserve `[[EQ_SOFT]]` wrapping after equation-soft failures, and surface unresolved protected-content loss as a chunk error.
+  - This slice intentionally stays text-route-only. PDF character-level evidence generation, `FormulaAwareTextReconstructor` letter geometry, PDF preserve-original export flags, fallback-text retry, and document IR/page-block formula metadata remain follow-up work.
+  - Added Rust `long_document_behavior` coverage for protected provider requests plus restored output, formula-only local preserve without translator calls, quality-loss retry with demoted soft spans, and original-hash/restored-text cache behavior.
+- 2026-06-03: Added Rust-owned formula-aware letter geometry text reconstruction.
+  - Rechecked reusable library options before replacing `.NET FormulaAwareTextReconstructor`: `cosmic-text` is a forward shaping/layout/rasterization stack rather than a reverse glyph-geometry reconstructor, `pdfium-render` can be a future source of per-character geometry but does not provide formula-aware line/script recovery, and `unicode-segmentation` is useful Unicode infrastructure but cannot replace coordinate clustering or formula continuation heuristics (`https://docs.rs/cosmic-text/latest/cosmic_text/`, `https://docs.rs/pdfium-render/latest/pdfium_render/`, `https://docs.rs/unicode-segmentation/`).
+  - Added `formula_text_reconstruction` with `LetterGeometry`, letter-based block activation, baseline/script-tolerant reading-line grouping, word-gap scale, script-aware token reconstruction, simple indexed-token preservation, formula continuation line merging, and reconstruction quality gates for alphanumeric loss, tuple/equation anchor loss, space density, and merged Latin words.
+  - This is intentionally a pure algorithm slice. It does not yet generate `LetterGeometry` from PDF pages, wire `CharacterParagraphBuilder` evidence, retry via fallback text, or set PDF preserve-original export flags.
+  - Added Rust `formula_text_reconstruction_behavior` coverage for empty input, tuple sequence preservation, non-simple subscript markers, superscript markers, non-math script runs, word-gap retry behavior, formula continuation merging/newline retention, activation heuristics, descender-loss rejection, tuple-anchor restoration, and merged-word quality rejection.
+- 2026-06-03: Added Rust-owned character-level formula paragraph/evidence builder.
+  - Rechecked reusable library options before replacing `.NET CharacterParagraphBuilder`: `pdfium-render` and `pdf-extract::OutputDev` can provide character geometry, `pdfplumber` can be a reference/spike candidate, and Unicode/regex crates can help classify characters, but none replace Easydict's layout-class segmentation, math-font/math-Unicode/subscript/vertical/U+FFFD evidence, bracket continuation, hard placeholder, and low-confidence soft formula policy (`https://docs.rs/pdfium-render/latest/pdfium_render/`, `https://docs.rs/pdf-extract/latest/pdf_extract/trait.OutputDev.html`, `https://docs.rs/pdfplumber/latest/pdfplumber/`, `https://docs.rs/regex/latest/regex/`).
+  - Added `character_paragraph` with PDF-neutral `CharInfo`, `TextMatrix`, `CharParagraph`, `FormulaVariableGroup`, `CharParagraphResult`, `FormulaConfidence`, `CharTextInfo`, and `CharacterLevelProtection` DTOs plus `build_char_paragraphs`, `build_char_paragraphs_with_classifier`, `is_formula_character`, `get_formula_confidence`, `get_bracket_delta`, `build_character_level_protection`, `reconstruct_latex_from_chars`, and `strip_subset_prefix`.
+  - The Rust behavior mirrors the C# two-tier character path: high-confidence groups become sequential `{vN}` `FormulaTokenType::InlineMath` hard tokens; low/none confidence groups become `$latex$` text without registering `SoftProtectedSpan`, matching the legacy character-level soft tier.
+  - This remains a pure evidence-building slice. It does not yet adapt `pdfium-render`/`pdf-extract` page characters into `CharInfo`, pass character-level evidence into native PDF `BlockContext`, or mark PDF export blocks as preserve-original.
+  - Added Rust `character_paragraph_behavior` coverage for empty/plain paragraph building, math font/subscript/math-Unicode/Greek/excluded-region classification, layout-class paragraph splitting, bounds/protected text, common-font false positives, vertical text guards, U+2002/U+200B split, confidence/bracket rules, plain-bracket no-backfill, math-bracket continuation, hard placeholder generation, low-confidence soft wrapping, size-only subscript soft tier, mixed-confidence demotion, and reverse-LaTeX reconstruction.
+- 2026-06-03: Added Rust PDF formula evidence adapter and extended the PDFium wrapper to text chars.
+  - Rechecked reusable PDF libraries before wiring more PDF formula preservation: `pdfium-render` is the preferred source for font name, font size, bounds, matrix, and rotation; `lopdf` remains the object/content-stream writer; `pdf-extract::OutputDev` can expose transform/width/font-size/char but lacks font name/CID/color, so it is not enough for high-confidence math-font evidence by itself. Newer Rust PDF extraction SDKs such as `pdf_oxide`, `pdfluent_extract`, and `pdfplumber-rs` may be useful spike/reference candidates, but this slice keeps production binding conservative (`https://docs.rs/pdfium-render/latest/pdfium_render/prelude/struct.PdfPageTextChar.html`, `https://docs.rs/lopdf/latest/lopdf/`, `https://docs.rs/pdf-extract/latest/pdf_extract/trait.OutputDev.html`).
+  - Added `pdf_formula_adapter` with PDF-neutral `PdfGlyph`, `PdfBlockBounds`, glyph bounds/orientation DTOs, block tolerance filtering, subset font prefix stripping, rotated glyph to vertical `TextMatrix`, `CharInfo`/`LetterGeometry` conversion, `BlockFormulaCharacters` generation, character-level evidence aggregation, and formula-aware block text reconstruction with the C# default/0.5 word-gap retry policy.
+  - Extended `lib/easydict-pdf-render` so the existing Pdfium wrapper can also extract per-character text DTOs (`unicode`, `font_name`, scaled/unscaled font size, bounds, origin, matrix, angle) without exposing `pdfium-render` types to the app crate. This keeps the heavier third-party PDF boundary under `lib/`.
+  - This remains an adapter/wrapper slice. Production PDF source extraction still needs to convert `ExtractedPdfTextChar` into `PdfGlyph`, group chars into page blocks/lines, fill PDF-native `BlockContext`, and mark preserve-original/fallback metadata for export.
+  - Added Rust `pdf_formula_adapter_behavior` coverage for tolerance filters, subset fonts, rotated glyph matrix guards, hard character-level placeholders, letter geometry, script detection, 0.5 word-gap retry, and fallback text preservation; added `lib/easydict-pdf-render` option-shape coverage for the new text extraction boundary.
+- 2026-06-03: Added Rust PDF source extraction DTO-to-block evidence layer.
+  - Continued from the PDFium wrapper/adapter slice without adding another third-party dependency: the app now depends on the local `lib/easydict-pdf-render` wrapper so future native PDF paths can consume PDFium text chars directly, while the heavy `pdfium-render` binding remains encapsulated under `lib/`.
+  - Added `pdf_source_extraction` with conversion from `ExtractedPdfTextChar` to `PdfGlyph`, point-size fallback, angle/matrix orientation mapping, baseline-driven line grouping, conservative line-to-block grouping, source block bounds, detected font names with subset-prefix stripping, formula-aware block text, fallback text, character-level tokens, and `BlockContext` hydration for PDF-native formula preservation.
+  - Wired the native PDF text route to try `extract_pdf_text_chars()` first, convert source blocks into metadata-bearing native chunks, carry page/source-block ids through progress events, translation events, cache, retry, and text export metadata, then fall back to the existing `pdf-extract` / `lopdf` simple text path when PDFium is unavailable, extraction fails, or no source blocks are produced.
+  - This still does not replace complex layout block extraction or propagate `PreserveOriginalTextInPdfExport` metadata into PDF export blocks.
+  - Added Rust `pdf_source_extraction_behavior` coverage for PDFium DTO conversion, rotated matrix preservation, conservative line/block grouping, formula evidence hydration into `BlockContext`, detected font names, and empty-character filtering.
+- 2026-06-03: Extended Rust PDF source blocks into PDF export metadata and preserve-original policy.
+  - Rechecked the retained .NET behavior before changing Rust: worker checkpoint metadata forces `PreserveOriginalTextInPdfExport` for formula source blocks and inferred formula regions, while export fallback resolves nonblank translations first and only uses source/fallback text for failed chunks. The Rust slice stayed in pure metadata/render-plan code and did not touch UI or PDF drawing.
+  - `pdf_source_extraction` now guesses source block type using the C# formula/prose/heading heuristic, preserves Formula context in `BlockContext`, computes simple PDF export text style from glyphs, emits stable source block ids, and can map a `PdfSourceBlock` into `PdfExportChunkMetadata` with bbox, font names, fallback text, reading-order score, retry count, and preserve-original intent.
+  - The native PDF text route no longer overwrites PDF-provided `BlockContext.block_type` as Paragraph, so formula/source-block decisions survive into formula preservation.
+  - Fixed `pdf_export_blocks::try_get_renderable_text` to resolve metadata fallback by `metadata.chunk_index` instead of vector position, matching the richer checkpoint contract where metadata can be reordered.
+  - Added Rust coverage for source block type guessing, Formula context preservation, PDF export metadata mapping, and reordered metadata fallback selection.
+- 2026-06-03: Added native LongDoc PDF source fallback-text retry.
+  - Rechecked the .NET retry semantics before changing Rust: failed chunks remain absent from translated output, but source extraction `FallbackText` can be used as an extra request text after original retries are exhausted, while export fallback still prefers translated text and only uses source/fallback text for failed chunks.
+  - `NativeTextSourceChunk` now carries optional nonblank fallback text from PDF source blocks. The native Text/Markdown/simple-PDF-text retry loop keeps the original chunk/hash for cache and events, but can rebuild request/protection around fallback text for one extra attempt after normal retries or unresolved formula-protection quality loss.
+  - Added an internal Rust unit test proving two failed original requests are followed by a fallback-text request while reporting `.NET`-style `retry_count=1`.
+- 2026-06-03: Added Rust PDF source layout-region and source-block id parity.
+  - Rechecked the retained .NET source extraction rules before changing Rust and found no high-quality Rust crate that replaces Easydict's product-specific region/id heuristics; `pdfium-render` remains the geometry source inside `lib/easydict-pdf-render`, while the layout policy stays local Rust.
+  - `lib/easydict-pdf-render` text page DTO now carries page width/height, allowing app-side PDF blocks to build C#-style layout profiles from real page dimensions.
+  - `pdf_source_extraction` now splits wide same-baseline lines at column gaps, orders two-column pages left-column first unless they look like row-aligned grids, applies C# same-row/horizontal-offset block splitting, maps table-like regions to `TableCell`, emits `p{page}-{region}-b{n}` source block ids, and parses region info from C# tag substrings including ML-style figure/formula/caption/title ids.
+  - Native PDF text export ordering now accepts the C# `bN` block-id suffix when deriving order-in-page from source block ids.
+  - Added Rust coverage for same-baseline column splitting, two-column block ordering, C# region-id inference tags and unknown sidebar/plain ids, geometry priority, reading-order score clamping, and `bN` order suffix parsing.
+- 2026-06-03: Added Rust direct-worker lifecycle protocol APIs.
+  - Rechecked the retained worker IPC surface and did not add a new library: the active LongDoc/LocalAI workers already speak JSON Lines and advertise `cancel`/`shutdown`.
+  - `DirectWorkerFacade` now exposes typed `cancel_request(...)` and `shutdown()` methods, and `WorkerClient` has request-id observer variants for plain and event-observing requests so future cancellation work can capture the target request id before the blocking wait.
+  - This slice intentionally does not claim full in-flight cancellation from UI tasks; the current Rust client is still synchronous, so true concurrent cancel delivery needs a later reader/writer split or async worker client.
+  - Added Rust `compat_client` coverage for cancel/shutdown round trips, request-id observer callbacks, and event-observing request id capture, plus `compat_protocol` coverage for lifecycle JSON field names.
+- 2026-06-03: Added an Auto-mode Foundry Local native probe before retained LocalAI worker fallback.
+  - Rechecked reusable/provider-owned options first: Microsoft documents `foundry-local-sdk` 1.2.0 for Rust with in-process Core API and optional OpenAI-compatible REST service, but the crate's native payload/download behavior makes it a future `lib/` boundary candidate rather than a small app-crate dependency for this slice.
+  - Auto `windows-local-ai` requests with an empty saved endpoint now ask the existing Rust Foundry endpoint resolver whether a local Foundry service is already running. If an endpoint is found, the request is cloned with that endpoint and uses the already-migrated native OpenAI-compatible route; if not, it preserves the retained LocalAI worker order.
+  - `quick_translate_request_can_route_natively(...)` remains conservative for static planning; the probe only runs in the packaged-app dispatch path immediately before worker fallback.
+  - Added Rust `quick_translate_behavior` coverage for discovered-endpoint native request construction and missing-endpoint worker-route preservation.
+- 2026-06-03: Added native LongDoc PDF exact content-stream export MVP.
+  - Rechecked OSS options before replacing more .NET PDF export: `lopdf` is already present and sufficient for conservative PDF object/content-stream read-write, while `lib/easydict-pdf-render`/Pdfium remains the source for text geometry and `pdf-extract` remains the simple text fallback. No new production crate was added; heavier PDF export/layout wrappers remain future `lib/` candidates if needed.
+  - Added `pdf_native_export`, which opens the source PDF with `lopdf`, builds a render plan from `PdfExportCheckpoint`, rewrites matching literal/TJ text operators through the existing content-stream parser, preserves formula/translation-skipped/source-fallback blocks without erasing or patching, rejects non-ASCII replacement text until font embedding exists, and can crop output to selected pages.
+  - Wired native PDF LongDoc export so successful simple content-stream replacement writes a real `.pdf` instead of coercing to `.txt`; `Both` mode now writes monolingual PDF plus bilingual `.txt`. PDF native export failures use a dedicated fallback error prefix so the packaged route can hand complex cases back to the retained LongDoc worker, while worker-disabled/LocalAI cases still fail locally.
+  - Updated fallback PDF text chunking to keep original page numbers for `pdf-extract`/`lopdf` page text routes, which lets PDF export and page-range crop preserve selected-page semantics even when PDFium source blocks are unavailable.
+  - Added Rust `pdf_native_export_behavior` coverage for openable PDF output, selected-page retention, and non-ASCII font-embedding guard; updated `long_document_behavior native_pdf` to assert real PDF output and page-range crop.
+- 2026-06-03: Added page-level preserve fallback for native PDF content-stream export.
+  - Rechecked the next PDF library options before expanding the MVP: `pdf-writer` exposes Type0/CID/font writer APIs, `printpdf` is stronger for generated PDFs, and `harumi` claims high-level CJK text overlays on existing PDFs. They remain future candidates for a `lib/` wrapper because this slice only needed `lopdf` page/content mutation already in the tree.
+  - `pdf_native_export` now treats unmatched text operators per page: if a page cannot patch every expected operator, it discards partial page changes and keeps that page's original PDF content while still writing other successfully patched pages. If no text operator can be patched anywhere, native export reports a typed error to the native LongDoc export caller.
+  - Added Rust `pdf_native_export_behavior` coverage for partial page preservation and all-unmatched fallback errors.
+- 2026-06-03: Extended native PDF content-stream export to hex and byte-safe text operator patching.
+  - Rechecked the remaining simple PDF fallback surface with subagents before changing code. The highest-value small slice was not full CJK font embedding yet, but fixing export-side operator matching for PDFs whose extraction already succeeds: hex `Tj`, hex/literal `TJ` arrays, source text whose whitespace differs from the stream, and content streams containing raw bytes that are not valid UTF-8.
+  - `pdf_content_stream` now exposes byte-level text operator range/rewrite APIs. They parse literal and hex PDF strings, match normalized source text for direct `Tj` and `TJ` arrays, and return byte ranges so `pdf_native_export` can splice only the matched operator instead of decoding the whole page content stream as UTF-8.
+  - `pdf_native_export` now keeps the original page content bytes while patching ASCII-safe translated text, preserving unrelated raw bytes and reducing retained LongDoc worker fallback for simple hex/binary content-stream PDFs. A later slice added the isolated `lib/easydict-pdf-overlay` font-embedding route for CJK/non-ASCII output.
+  - Follow-up OSS research: `harumi` is the best current MVP candidate for an embedded-font overlay wrapper because it targets existing PDF CJK text overlays with deferred font subsetting and ToUnicode. A later slice adopted it as an isolated `lib/easydict-pdf-overlay` wrapper. `pdf-writer` remains a lower-level fallback for hand-written Type0/CID font objects, while `printpdf` is less aligned with preserving existing PDF mutation.
+  - Added Rust coverage in `pdf_content_stream_behavior` for normalized literal `Tj`, hex `Tj`, hex `TJ`, and byte-safe rewriting; in `pdf_native_export_behavior` for hex operator replacement and raw-byte stream preservation; and in `long_document_behavior` for native LongDoc hex PDF export to a real `.pdf`.
+- 2026-06-03: Added loose-bounds retry for Rust PDFium source-block extraction.
+  - Rechecked the existing PDF extraction wrapper before adding another dependency. `lib/easydict-pdf-render` already exposes `PdfTextExtractionOptions::prefer_loose_bounds`, so this slice reused the existing Pdfium boundary instead of adding a new PDF parser or layout crate.
+  - `try_read_native_pdf_source_chunks` now attempts PDFium source blocks with the default tight bounds first, then retries with loose bounds when the tight attempt fails or produces no source chunks. If both attempts fail, the original tight-bounds error is preserved so the existing `pdf-extract` / `lopdf` simple text fallback remains the next route.
+  - This reduces retained LongDoc worker fallback for PDFs where Pdfium can read text but tight character bounds are unavailable or too sparse, while keeping page-range selection and the existing source-block metadata/formula evidence path.
+  - Added internal Rust coverage for no-retry-on-tight-success, empty-tight-to-loose recovery, page selection propagation, and preserving the tight error when loose extraction also fails.
+- 2026-06-03: Added Auto Foundry Local endpoint probing before retained LongDoc worker fallback.
+  - Rechecked the existing provider path before adding a new SDK. Quick Translate already owns the Rust resolver probe for Auto `windows-local-ai` with an empty Foundry endpoint, so this slice reused `auto_foundry_local_native_probe_request` and the existing `CommandFoundryLocalEndpointResolver`.
+  - LongDoc packaged dispatch now tries the static Rust-native Text/Markdown/simple-PDF route first as before, then, before starting the retained LongDoc worker, builds the same quick-translate probe request. If Foundry Local reports a chat-completions endpoint, the endpoint is injected into the LongDoc settings snapshot and the existing native LongDoc text runner handles the request through the Rust OpenAI-compatible provider path.
+  - This reduces `.NET` LongDoc/LocalAI fallback for Auto provider scenarios where Foundry Local is already running but the saved endpoint is empty. If the resolver finds no endpoint, the previous worker/native-unsupported behavior is preserved.
+  - Added internal Rust coverage proving Auto Foundry endpoint discovery routes LongDoc to the native provider path before any retained worker requirement is reported.
+- 2026-06-03: Added Rust PDF OCR fallback for empty selectable-text PDFs.
+  - Rechecked reusable options with parallel subagents before replacing more `.NET` LongDoc fallback. No new OCR dependency was added: the slice reuses `lib/easydict-pdf-render`/Pdfium for page rendering and the already-migrated Rust OCR providers (`WindowsNative`, `Ollama`, `CustomApi`) instead of introducing Tesseract/leptess. A separate CJK PDF overlay review found `harumi` is a promising future `lib/easydict-pdf-overlay` wrapper candidate, but too risky to wire directly into the main export path in this slice because it brings a newer `lopdf` and font-subsetting surface.
+  - `lib/easydict-pdf-render` now exposes `PdfToBgraOptions`, `RenderedBgraPage`, `BgraRenderSummary`, and `render_pdf_pages_to_bgra_files()`, rendering selected PDF pages to raw BGRA files with Pdfium reverse-byte-order disabled so they match the existing OCR backend input contract.
+  - Native LongDoc PDF input now tries PDFium source blocks, `pdf-extract` / content-stream text, then a soft PDF OCR fallback when selectable text is empty. OCR fallback renders selected pages to temporary BGRA files, runs the configured Rust OCR provider, creates `PdfOcr` source chunks, and then uses the existing native text translation/cache/export pipeline.
+  - `PdfOcr` chunks intentionally skip native PDF content-stream replacement and export as `.txt` / bilingual `.txt`, because scanned PDFs have no source text operators to patch. If rendering/OCR fails or returns no text, the native LongDoc route now fails locally instead of launching retained LongDoc worker fallback.
+  - Added internal Rust coverage for PDF OCR page rendering/recognition glue, page range propagation, source ids, OCR chunks skipping PDF patch, OCR text export, and local failure for empty PDFs when OCR cannot produce native chunks.
+- 2026-06-03: Added the typed native PDF export boundary and neutral overlay-block plan for the next PDF font-embedding slice.
+  - Split the work across subagents: one added `NativePdfContentStreamExportFailureKind` and `NativePdfContentStreamExportError.kind`, while another added `PdfOverlayRect`, `PdfOverlayBlock`, `build_pdf_overlay_blocks(...)`, and `checkpoint_to_overlay_blocks(...)`.
+  - Native PDF content-stream errors now preserve the old user-facing `message` while exposing typed reasons such as `NeedsFontEmbedding` and `NoReplacements`, so future Rust routing can choose overlay/font embedding without matching error strings.
+  - `pdf_export_blocks` now produces a crate-neutral overlay plan from `PdfExportCheckpoint`, keeping page number/index, source block id, translated text, bbox, font size/style, and detected fonts, while filtering missing bbox, rotated/vertical text, preserve-original/formula blocks, source fallback, translation-skipped blocks, and unchanged source text.
+  - Rechecked PDF overlay libraries in parallel before wiring a dependency: `harumi 0.5.1` is still the best fit for the `lib/easydict-pdf-overlay` spike because it targets existing-PDF text overlays with CJK font subsetting and ToUnicode, but it is very new and depends on newer `lopdf`, so the wrapper starts isolated before later production routing. `pdf-writer` is the low-level fallback and `printpdf` is better suited to generated PDFs than preserving/mutating existing documents.
+  - Added Rust coverage for non-ASCII native export returning `NeedsFontEmbedding`, ASCII export unchanged, and overlay-block filtering for bbox/rotation/preserve/source-fallback/unchanged-text cases.
+- 2026-06-03: Added an isolated Rust PDF CJK overlay wrapper under `lib/easydict-pdf-overlay`.
+  - Rechecked `harumi 0.5.1` against docs.rs/source and a subagent before adopting it: the real API supports `Document::from_file(...)`, `embed_font(&font_bytes)`, `page(n)?.add_text_box(...)`, `page.add_rect(...)` behind the `draw` feature, and `save(...)`; coordinates are PDF points with bottom-left origin, matching the existing PDF bbox DTOs.
+  - Added `easydict_pdf_overlay` as a narrow wrapper crate with only path/DTO APIs: `PdfOverlayOptions`, `PdfOverlayBlock`, `PdfOverlayRect`, `PdfOverlaySummary`, `PdfOverlayErrorKind`, `PdfOverlayError`, and `overlay_pdf_text_blocks(...)`. It loads an existing PDF, embeds a caller-provided CJK font, optionally paints a white background rectangle, writes visible wrapped text inside each bbox, and saves the result without exposing `harumi` or `lopdf` types to app code.
+  - The wrapper validates source/font/output paths, rejects source/output path aliasing, checks page ranges before touching `harumi`, requires finite bbox/color/font values, positive width/height/font size, nonnegative line height, nonempty text, nonempty block lists, and bbox containment within the target page size before writing. This keeps third-party/font failures contained under `lib/` as requested.
+  - Verified the wrapper with a smoke test that uses an available Windows CJK font, writes visible Chinese overlay text to a minimal existing PDF, reopens the result through `harumi`, and extracts the overlaid text. Production LongDoc routing was intentionally unchanged in this wrapper-only slice.
+- 2026-06-03: Wired Rust PDF CJK overlay into native LongDoc PDF export.
+  - Kept `pdf_native_export` focused on exact content-stream replacement and used its typed `NeedsFontEmbedding` error as the routing signal instead of matching strings.
+  - Added `easydict_pdf_overlay` as an app dependency without exposing `harumi`/`lopdf` types. `try_export_native_pdf_document(...)` now first attempts ASCII-safe content-stream replacement, then on `NeedsFontEmbedding` builds the neutral overlay plan, resolves a CJK font from `SettingsSnapshot.cjk_font_path` or the existing cached font directory, and calls the wrapper.
+  - Extended the wrapper DTO with optional selected-page retention, so `page_range` keeps the same crop semantics in the overlay fallback path.
+  - Added a CJK LongDoc integration test that returns Chinese text from a native translator and asserts the overlay PDF is openable/extractable, plus wrapper coverage for selected-page overlay retention. Overlay plan/font/wrapper failures still surface through the existing native PDF export prefix so non-LocalAI routes can use the retained LongDoc worker as a conservative fallback.
+- 2026-06-03: Added a Rust-only runtime profile to the MSIX payload validator.
+  - Rechecked the retained-worker/package boundary before changing code: current hybrid x64/arm64 packages still intentionally require retained LongDoc/LocalAI workers plus the shared `.NET` runtime, while the final Rust-only package must reject those payloads entirely.
+  - No new third-party crate was needed for this slice; the validator already uses local policy code over the existing `zip`/`quick_xml` package parser surface, and there is no useful OSS library that should own Easydict-specific runtime layout rules.
+  - `MsixValidationOptions` now carries `PackageRuntimeProfile` with default `hybrid`; `rust-only` still requires Rust helpers/legacy aliases and retired payload bans, but rejects `workers/longdoc/`, `workers/localai/`, and `dotnet/` in any architecture.
+  - The CLI accepts `--runtime-profile hybrid|rust-only` and the shortcut `--rust-only`, so release validation can keep the temporary hybrid gate today while adding an explicit final no-.NET-runtime gate.
+- 2026-06-03: Added a unified Rust-only runtime profile for retained worker policy.
+  - Rechecked the runtime fallback boundary before changing code: Quick Translate, CLI, and LongDoc already consume `RetainedWorkerPolicy::from_environment()` or injected policy, so the smallest safe Rust-only switch is policy parsing rather than touching UI or worker launch code.
+  - No third-party library was added; runtime profile parsing is a local Easydict deployment policy and reuses the existing retained-worker guard surface.
+  - `EASYDICT_RUNTIME_PROFILE=rust-only` / `rustonly` / `rust_only` now disables both retained LocalAI and LongDoc workers. Existing per-worker flags (`EASYDICT_DISABLE_LOCALAI_WORKER`, `EASYDICT_DISABLE_LONGDOC_WORKER`) remain supported in hybrid mode.
+  - Added unit coverage for the unified profile and re-ran existing Quick Translate / LongDoc disabled-worker tests to prove the older single-worker policy paths still fail locally before probing retained `.NET` workers.
+- 2026-06-03: Wired Rust-only runtime profile into packaging and CI validation entry points.
+  - Rechecked release script/workflow structure before changing code. No library is appropriate here: this is Easydict-specific package layout policy over existing PowerShell, Makefile, GitHub Actions, and the Rust MSIX validator.
+  - `publish.ps1` and `package-and-install.ps1` now accept `RuntimeProfile=Hybrid|RustOnly`. RustOnly skips retained LongDoc/LocalAI worker publishing; the MSIX install script also skips bundled worker `.NET` runtime extraction and validates the generated MSIX with `easydict_msix_validate --runtime-profile rust-only --allow-unsigned` before signing/installing.
+  - The Makefile now has `RUNTIME_PROFILE ?= hybrid`; x64/arm64 portable and MSIX publish targets skip retained workers/runtime when `RUNTIME_PROFILE=rust-only`, and `validate-msix` passes the same profile through to the Rust validator.
+  - Release and ARM64 smoke workflows gained a `runtime_profile` workflow_dispatch input, default to `hybrid`, guard retained worker/runtime publishing when `rust-only` is selected, and pass the profile into the Rust MSIX validator. Tag releases remain hybrid by default.
+- 2026-06-03: Stopped native PDF failures from falling back to retained LongDoc workers.
+  - Rechecked available libraries before changing behavior: the Rust native PDF route already tries `lib/easydict-pdf-render`/Pdfium source blocks, `pdf-extract`, `lopdf` content streams, the existing Rust OCR providers, and `lib/easydict-pdf-overlay` for CJK overlays. No new third-party crate is needed for this policy slice.
+  - `try_run_native_text_long_document_request(...)` now treats native PDF outcomes as handled once the request can route natively. Empty/no selectable text PDFs and unparseable PDFs fail locally after Rust extraction/OCR attempts instead of launching retained `.NET` LongDoc worker fallback.
+  - Native PDF export failures no longer surface through the worker fallback prefix. When content-stream replacement or overlay writing cannot produce a PDF, `try_export_native_pdf_document(...)` returns `None` so the existing native text export path writes `.txt` / bilingual `.txt` output instead of starting a retained worker.
+  - Updated behavior coverage for empty PDF text, malformed PDF extraction, packaged-runner no-worker probing, and export-failure-to-TXT fallback.
+- 2026-06-03: Reduced CLI/OpenVINO LocalAI worker fallback with native preflight.
+  - Rechecked the LocalAI residual worker surface with subagents before changing behavior. No new third-party crate was needed: the CLI now reuses the existing Rust `CommandFoundryLocalEndpointResolver` and `auto_foundry_local_native_probe_request(...)` before falling back to `workers/localai`.
+  - Added `EASYDICT_FOUNDRY_LOCAL_CLI` as a narrow Foundry CLI path override for deterministic probing/tests while keeping `foundry` as the default executable.
+  - `easydict_cli --service windows-local-ai` in Auto mode now probes a running Foundry Local endpoint before starting the retained LocalAI worker, matching the GUI packaged quick-translate route.
+  - Explicit OpenVINO quick translation now uses strict language mapping for its local preflight: unknown target/source language codes fail locally with `No local AI provider supports this language pair` before OpenVINO cache checks or retained worker startup. BCP-47 primary subtags such as `sk-SK` and `lt-LT` still map to the .NET/NLLB language names instead of silently falling back to English.
+- 2026-06-03: Made CLI retained LocalAI worker fallback explicit-only.
+  - Rechecked the CLI fallback surface with a subagent before changing behavior. No library is involved: this is a local command-line routing policy over the existing direct worker facade.
+  - `easydict_cli --service windows-local-ai` still tries Rust-native routes and the Auto Foundry endpoint probe first, but retained `workers/localai` startup now requires `--app-dir`. Automatic package discovery and legacy `--host` directory hints now fail locally with an explicit `--app-dir` opt-in message.
+  - Existing explicit `--app-dir` retained-worker diagnostics and disabled-worker policy behavior remain covered, while new CLI tests prove Auto and legacy `--host` no longer probe retained worker paths.
+- 2026-06-03: Moved the long document helper script default to the Rust CLI.
+  - Rechecked reusable OSS CLI parsers before adding the helper. `clap` remains a high-quality Rust command-line parser with derive support for generated help and validation ([docs.rs](https://docs.rs/clap), [GitHub](https://github.com/clap-rs/clap)), so the new CLI uses `clap` instead of expanding the older hand-written parser.
+  - Added `easydict_long_doc` as a thin Rust CLI around the existing LongDoc request builder and runner. It loads persisted settings plus common `.env` aliases, constructs `LongDocumentServiceRequest` through `EasydictUiState`, lists supported LongDoc services through a new public service-filter helper, and prints text or JSON outcome/event output.
+  - `scripts/translate-long-doc.ps1` now defaults to `easydict_long_doc.exe` or source-checkout development mode via `cargo run -p easydict_app --bin easydict_long_doc`; it no longer runs the WinUI long-document debug entry point unless explicitly asked.
+  - Added `-UseDotnetLegacy` for the old `.NET` path as an intentional comparison route; the Rust helper owns the normal script arguments, including `-EnvFile`, layout, PDF export mode, and Vision options.
+  - `Build-RustHelpers.ps1`, `easydict_msix_validate`, and `WorkerPackagingTests` now treat `easydict_long_doc.exe` as a packaged Rust helper beside `easydict_cli.exe`.
+  - Documented the Rust LongDoc CLI argument surface and script behavior in `rs/README.md` and `migration-list.md`.
+- 2026-06-03: Replaced the default Sidecar E2E acceptance command with a Rust test.
+  - Rechecked reusable IPC/process libraries first. `jsonrpsee` is a mature Rust JSON-RPC stack but does not match Easydict's existing line-delimited stdio protocol, while `tokio::process` and `async-process` would add an async runtime for a small E2E-only surface. This slice keeps a local standard-library test client over the existing project JSON Lines contract.
+  - Added Rust `sidecar_ipc_e2e` coverage against `sidecar_mock/ipc_mock_service.py` for health, translate, unknown-method remote errors, 10 concurrent in-flight requests keyed by id, per-request timeout, crash exit code, shutdown process exit, and stderr structured-log collection.
+  - Updated `migration-list.md` and `rs/README.md` so the Sidecar E2E gate no longer defaults to `dotnet run --project e2e/E2E.SidecarClient.csproj`.
+  - Removed the now-replaced `dotnet/e2e/E2E.SidecarClient.csproj` from the solution and deleted the old root-level duplicate `dotnet/Easydict.SidecarClient*` E2E/client projects. The active `dotnet/src/Easydict.SidecarClient` project remains for retained LongDoc/LocalAI worker parity while those workers still exist.
+  - `WorkerPackagingTests` now guards that the solution and source tree do not reintroduce the old Sidecar E2E console projects and that the Rust `sidecar_ipc_e2e` gate stays documented.
+- 2026-06-03: Removed a residual `.NET` invocation from the Rust PDF-to-images diagnostic script.
+  - Rechecked the existing replacement boundary: `dotnet/tools/PdfToImages` is already replaced by `rs/crates/easydict_pdf_to_images` and the isolated `lib/easydict-pdf-render` wrapper around `pdfium-render`, which is a maintained high-level Rust Pdfium binding ([docs.rs](https://docs.rs/pdfium-render), [GitHub](https://github.com/ajrcarey/pdfium-render)).
+  - `dotnet/scripts/pdf-to-images.ps1` now invokes `cargo @arguments` instead of the stale `dotnet @arguments`, and `WorkerPackagingTests` guards against that regression.
+- 2026-06-03: Replaced the `.NET` UI parity analyzer tool with a Rust crate.
+  - Rechecked reusable OSS crates before replacing `dotnet/tools/UiParityAnalyzer`: `image` provides native Rust PNG/JPEG decoding, encoding, image buffers, and basic image operations with a safe common-operation focus ([docs.rs](https://docs.rs/image/latest/image/)); `clap` provides the established derive-based CLI parser and help/validation behavior ([docs.rs](https://docs.rs/clap/latest/clap/)); `walkdir` provides efficient cross-platform recursive screenshot discovery ([docs.rs](https://docs.rs/walkdir/latest/walkdir/)). No large third-party wrapper is needed here, so the replacement stays under `rs/crates/easydict_ui_parity_analyzer` rather than `lib/`.
+  - Added Rust manifest/pair discovery, PNG normalization, diff heatmap/contact sheet generation, pixel/hash/SSIM/palette/semantic/window-runtime scoring, score-gate resolution, coverage matrix, threshold policy output, LLM review request/prompt generation, and synthetic self-test parity.
+  - `dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1` now defaults to `cargo run --manifest-path ..\rs\Cargo.toml -p easydict_ui_parity_analyzer`, including self-test, manifest forwarding, score gates, threshold gates, and coverage gates.
+  - Removed the old `dotnet/tools/UiParityAnalyzer` project and added a `WorkerPackagingTests` guard that the wrapper/workflow stay routed through the Rust analyzer instead of `dotnet run --project`.
+- 2026-06-03: Moved UI screenshot summary/gallery generation into the Rust analyzer.
+  - Rechecked reusable crates before replacing the `System.Drawing` path in `dotnet/scripts/ci/Publish-UiScreenshotSummary.ps1`: `image` already provides PNG dimension reads, thumbnail resizing, and JPEG encoding, while `base64` is enough for GitHub Step Summary inline gallery embedding. `imageproc`/`ab_glyph` were considered for text labels, but the Markdown file list already carries paths and categories, so adding a font-rendering stack was unnecessary for this CI utility.
+  - Added an `easydict_ui_parity_analyzer screenshot-summary` subcommand that mirrors the old script parameters, reads screenshots recursively, keeps the visual-diff/suspicious-size/baseline/failure priority categories, writes `ui-screenshot-gallery.jpg`, emits inline `data:image/jpeg;base64` when under budget, and appends the Markdown summary to `GITHUB_STEP_SUMMARY` or the requested summary path.
+  - `dotnet/scripts/ci/Publish-UiScreenshotSummary.ps1` is now a Cargo shim, so UI automation workflows keep the old script entry point without loading PowerShell drawing APIs.
+  - `ThemeRegressionMemoryAutomationTests` now guards both the shim route and the Rust summary behavior.
+- 2026-06-03: Propagated Rust-only runtime profile into WinUI MSBuild.
+  - Rechecked whether a library boundary was appropriate before changing this slice. No third-party library applies: this is Easydict-specific MSBuild/Makefile/PowerShell/GitHub Actions policy for disabling retained `.NET` worker build edges when the Rust-only profile is requested.
+  - `Easydict.WinUI.csproj` now recognizes `RuntimeProfile=RustOnly|rust-only|rustonly|rust_only` and forces `BuildWorkerOutputs=false` plus `EnableInProcLongDocFallback=false`, so a Rust-only build does not accidentally build/copy retained LongDoc/LocalAI workers or compile the in-proc PDF/MuPDF fallback.
+  - Makefile build/publish targets, local publish/package scripts, and release/ARM64 smoke workflows now pass the same runtime profile into WinUI restore/publish calls; existing outer guards still skip retained worker publishing and bundled `.NET` runtime extraction.
+  - `WorkerPackagingTests` guards the new MSBuild property wiring and RuntimeProfile propagation.
+- 2026-06-03: Replaced build-time WinUI icon generation with a Rust helper.
+  - Rechecked reusable OSS crates before replacing `dotnet/scripts/generate-app-icon-ico.ps1`: `image` provides native Rust PNG decoding, encoding, image buffers, and common image operations such as resizing ([docs.rs](https://docs.rs/image/latest/image/)); `ico` is a focused ICO/CUR encoder/decoder that supports creating ICO files from raw RGBA or PNG-backed icon entries ([docs.rs](https://docs.rs/ico/latest/ico/)). No large wrapper is needed, so this stays in `rs/crates/easydict_icon_generator` rather than `lib/`.
+  - Added `easydict_icon_generator` with a small CLI for `--source-png`, `--output-ico`, optional `--output-tray-png`, and configurable icon sizes. It writes PNG-encoded ICO entries for 16/24/32/48/64/128/256 px and a 32 px tray PNG.
+  - `Easydict.WinUI.csproj` now calls the Rust helper from the `GenerateAppIconIco` MSBuild target, keeping `AppIcon.ico` and `TrayIcon.png` in the intermediate/output/publish layout.
+  - The same Rust helper now owns Windows PNG asset generation, existing asset refresh, and service icon scale conversion through `windows-assets`, `refresh-assets-from-macos-icon`, and `service-icons` subcommands. `generate-windows-assets.ps1`, `generate-assets-from-macos-icon.ps1`, and `convert-service-icons.ps1` are compatibility shims that call Cargo instead of doing image work in PowerShell.
+  - Removed the old build-time PowerShell drawing script and added `WorkerPackagingTests` guards so the build target and retained asset-generation script names stay routed through Cargo.
+- 2026-06-03: Moved the MSIX TargetDeviceFamily MinVersion fixer into Rust.
+  - Rechecked reusable crates before replacing `dotnet/scripts/Fix-MsixMinVersion.ps1`: `quick-xml` already fits manifest event parsing/editing, `zip` already fits structured MSIX reads, and `tempfile` provides safer temporary extraction/repack staging. This belongs in `rs/crates/easydict_msix_validate`, which already owns MSIX validation, rather than a new crate or `lib/` wrapper.
+  - Added `easydict_msix_validate fix-minversion <msix>` while preserving the existing path-first validation CLI. The fixer keeps the default required MinVersion `10.0.19041.0`, rewrites only `Dependencies/TargetDeviceFamily/@MinVersion` when the current value is lower, and leaves `Identity/@Version`, architecture, publisher, and `MaxVersionTested` untouched.
+  - Low-version packages are re-packed through `MakeAppx pack /d <extractDir> /p <MsixPath> /o` after resolving MakeAppx from the newest Windows SDK or NuGet buildtools fallback. No-op packages do not search for or call MakeAppx, and MakeAppx failures keep the original MSIX intact.
+  - `dotnet/scripts/Fix-MsixMinVersion.ps1` is now a compatibility shim to the Rust subcommand, so existing packaging scripts keep their call site while the runtime logic is Rust-owned.
+- 2026-06-03: Removed the duplicate release-workflow MSIX ZIP inspection.
+  - Rechecked the release workflow's remaining `System.IO.Compression.ZipFile` usage before replacing it. The Rust `zip` crate already exposes `ZipArchive` for structured ZIP/MSIX entry reads ([docs.rs](https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html)), and `easydict_msix_validate` already uses it for `PackagePayloadLayoutValidator`; no new crate or wrapper is needed.
+  - Deleted the inline PowerShell `Verify MSIX worker-only longdoc payload` step from `release-publish.yml`. The preceding Rust MSIX validation step now owns the root-level in-proc LongDoc payload rejection through `FORBIDDEN_ROOT_LONGDOC_PAYLOADS`.
+  - `WorkerPackagingTests` now guards that the release workflow does not regress to `System.IO.Compression.ZipFile` or a duplicate worker-only longdoc step, and that the Rust validator still includes the forbidden root LongDoc payload list.
+- 2026-06-03: Moved release MSIX bundle MinVersion verification into Rust.
+  - Rechecked reusable crates before replacing the workflow's PowerShell `Expand-Archive` and XML DOM bundle verification. The existing `zip` crate can read the outer `.msixbundle` and nested `.appx`/`.msix` packages as ZIP archives, while existing `quick-xml` manifest parsing already handles `TargetDeviceFamily` attributes; no new dependency or large `lib/` wrapper is needed.
+  - Added `easydict_msix_validate verify-bundle-minversion <msixbundle> [--required-min-version <ver>]`, defaulting to `10.0.19041.0`. It reports whether `AppxMetadata/AppxBundleManifest.xml` is present, walks every nested `.appx`/`.msix`, parses each `AppxManifest.xml`, and fails if any nested package omits or undershoots `Dependencies/TargetDeviceFamily/@MinVersion`.
+  - Replaced the release workflow's `Verify bundle MinVersion` PowerShell extraction step with the Rust validator subcommand. The `create-bundle` job now checks out the repository before validation so the Cargo workspace is available after artifact downloads.
+  - `WorkerPackagingTests` now guards that the workflow no longer contains the old bundle `Expand-Archive`/`AppxBundleManifest.xml` inspection and does contain `verify-bundle-minversion`.
+- 2026-06-03: Moved retained worker shared-file dedupe into Rust.
+  - Rechecked reusable crates before replacing `dotnet/scripts/Dedupe-WorkerSharedFiles.ps1`: the `sha2` crate is a mature RustCrypto implementation for SHA-256 hashing, and the directory walking needed here is shallow enough for the standard library. No new `lib/` wrapper is needed because this is Easydict-specific packaging policy.
+  - Added `easydict_msix_validate dedupe-worker-shared <publish-dir>`. It preserves the previous allowlist, only considers `workers/longdoc` and `workers/localai`, moves only identical allowlisted DLLs into `workers/shared`, skips hash mismatches, removes the duplicated worker copies, and prints the same size-summary style output.
+  - `dotnet/scripts/Dedupe-WorkerSharedFiles.ps1` is now a Cargo shim to the Rust subcommand. Release, ARM64 smoke, Makefile, and local packaging call sites can keep their script entry point while the hashing/removal logic no longer lives in PowerShell.
+  - `WorkerPackagingTests` now checks the allowlist and SHA-256 ownership in the Rust validator source and guards that the PowerShell script does not regress to `Get-FileHash`/`Remove-Item` logic.
+- 2026-06-03: Added a first-version Rust portable-only package path.
+  - Rechecked the packaging boundary after deciding that the first Rust release should coexist with the existing .NET release. No third-party wrapper is needed here: `cargo` builds the Rust binaries and PowerShell is only a packaging shim for copying/ZIP creation.
+  - Added `rs/scripts/Package-Portable.ps1`. It builds `easydict_preview_iced` plus Rust helper binaries, copies the GUI runtime as `Easydict.Rust.exe`, includes browser/CLI/LongDoc helpers and the `BrowserHostRegistrar.exe` alias, and writes a `README-portable.txt` that states the package has no MSIX metadata, installer, retained `.NET` workers, or bundled `.NET` runtime.
+  - The release workflow now has a separate `publish-rs-portable` job that uploads `easydict-rs-portable-<tag>-win-x64.zip` as an additional release asset. It does not participate in the dotnet MSIX bundle, WinApp CLI, Inno installer, WinGet, or Store submission flow.
+  - `WorkerPackagingTests` guards the portable-only/coexistence contract: Rust package names stay under `easydict-rs-portable*`, the entry point remains `Easydict.Rust.exe`, and the script must not regress to `Easydict.WinUI.exe`, MSIX, `dotnet publish`, retained worker, or bundled runtime packaging.
+- 2026-06-03: Replaced portable ZIP archive creation with a Rust packager.
+  - Rechecked reusable crates before replacing `Compress-Archive`: the `zip` crate already used elsewhere in the workspace provides structured ZIP writing with Deflate compression and stable entry naming, so no bespoke archive writer or third-party `lib/` wrapper is needed.
+  - Added `rs/crates/easydict_packager` with `zip-directory --source <dir> --destination <zip> [--exclude-extension <ext>]`. It writes source directory contents at the archive root, preserves empty directories, rejects destination zips inside the source tree, and supports extension exclusion for release PDB stripping.
+  - The release workflow's dotnet portable ZIP step now calls `easydict_packager zip-directory --exclude-extension .pdb` instead of staging files and running PowerShell `Compress-Archive`. `dotnet/scripts/publish.ps1 -CreateZip` and `rs/scripts/Package-Portable.ps1` also route ZIP creation through the Rust packager.
+  - `WorkerPackagingTests` guards that `easydict_packager` stays in the workspace and that release/Rust portable/local publish ZIP paths do not regress to `Compress-Archive`.
+- 2026-06-03: Moved Store listing validation/preview/summary payload logic into Rust.
+  - Rechecked reusable crates before replacing `.winstore/scripts/Sync-StoreListings.ps1`: `serde_yaml` is deprecated/no longer maintained, so this slice uses `serde-saphyr` for Serde YAML parsing instead; `clap` covers typed subcommands and `serde_json` covers Store submission payloads (`https://docs.rs/serde_yaml/latest/serde_yaml/`, `https://docs.rs/serde-saphyr/latest/serde_saphyr/`, `https://docs.rs/clap/latest/clap/_derive/`, `https://docs.rs/serde_json/latest/serde_json/`).
+  - Added `rs/crates/easydict_store_listings` with `validate`, `preview`, `submit`, and `summary` subcommands. It reads `.winstore/store-config.json`, parses `.winstore/listings/*.yaml`, preserves Microsoft Store length/count checks, rejects unsupported Store languages beyond the approved five, rejects third-party product names in keywords, truncates submit keywords to the first seven, and generates GitHub Actions step summaries.
+  - `.winstore/scripts/Sync-StoreListings.ps1` is now a Cargo shim. `.github/workflows/store-listings.yml` no longer installs `powershell-yaml` or uses `ConvertFrom-Yaml`; submit still installs/configures the external `msstore` CLI, while the JSON payload passed to `msstore submission update` is generated by Rust.
+  - `WorkerPackagingTests` guards that Store listing sync stays on `easydict_store_listings` and does not regress to PowerShell YAML/JSON conversion.
+- 2026-06-03: Moved bundled .NET runtime download/extract logic into Rust.
+  - Rechecked reusable crates before replacing `dotnet/scripts/Extract-DotnetRuntime.ps1`: `reqwest` is already used in the Rust workspace and provides a blocking HTTP client suitable for one-shot release downloads, while `zip` already backs package/archive work and exposes `ZipArchive` extraction APIs (`https://docs.rs/reqwest/latest/reqwest/`, `https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html`). No new third-party wrapper under `lib/` is needed because the policy is Easydict packaging-specific.
+  - Added `easydict_packager extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>]`. It downloads from Microsoft's official runtime CDN, rejects unsupported RIDs and too-small archives, extracts entries through safe enclosed ZIP paths, strips duplicate `LICENSE.txt` / `ThirdPartyNotices.txt`, verifies `host/fxr` and `shared/Microsoft.NETCore.App`, and reports bundled runtime version plus size.
+  - `dotnet/scripts/Extract-DotnetRuntime.ps1` is now a Cargo shim, so Makefile, local packaging, release workflow, and ARM64 smoke call sites keep their existing script boundary while avoiding PowerShell `Invoke-WebRequest` and `Expand-Archive`.
+  - `WorkerPackagingTests` guards that the script stays on `easydict_packager extract-dotnet-runtime` and does not regress to PowerShell download/archive/removal logic.
 
 ## Current Verification
 
+- `cd rs; cargo test -p easydict_packager -- --nocapture`
+- `cd rs; cargo fmt -p easydict_packager --check`
+- `cd rs; cargo test -p easydict_store_listings -- --nocapture`
+- `cd rs; cargo run -p easydict_store_listings -- validate --winstore-root ..\.winstore`
+- PowerShell parser check for `dotnet/scripts/Extract-DotnetRuntime.ps1`
+- Expected-failure CLI smoke for `cargo run -p easydict_packager -- extract-dotnet-runtime --rid win-x86 --output-dir <temp-dir>`
+- Temp-output smoke for `cargo run -p easydict_packager -- zip-directory --source <temp-dir> --destination <temp.zip> --exclude-extension .pdb`
+- `cd rs; cargo test -p easydict_msix_validate -- --nocapture`
+- Temp-output smoke for `dotnet/scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir <temp-publish-dir>`
+- PowerShell parser check for `rs/scripts/Package-Portable.ps1`
+- Temp-output smoke for `rs/scripts/Package-Portable.ps1 -Platform x64 -Configuration Debug -NoZip`, verifying `Easydict.Rust.exe` and helper executables exist while `Easydict.WinUI.exe`, `dotnet/`, and `workers/` are absent
+- Temp-output smoke for `rs/scripts/Package-Portable.ps1 -Platform x64 -Configuration Debug -PackageVersion v0.0.0-packager`, verifying the Rust portable ZIP is created by `easydict_packager` and non-empty
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~WorkerPackagingTests --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test sidecar_ipc_e2e -- --nocapture`
+- PowerShell parser check for `dotnet/scripts/pdf-to-images.ps1`
+- `cd dotnet; dotnet sln Easydict.Win32.sln list`
+- `rg -n "B2C3D4E5|E2E\\.SidecarClient|Easydict\\.SidecarClient\\.E2E|dotnet run --project e2e/E2E\\.SidecarClient" dotnet/Easydict.Win32.sln dotnet/Makefile dotnet/scripts .github rs/README.md --glob "!**/bin/**" --glob "!**/obj/**"` (no solution/script/workflow active legacy E2E entry)
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate -- --nocapture`
+- PowerShell parser check for `scripts/translate-long-doc.ps1`
+- `cd rs; cargo run -p easydict_app --bin easydict_long_doc -- --list-services`
+- `cd rs; cargo run -p easydict_app --bin easydict_long_doc -- --help`
+- `.\scripts\translate-long-doc.ps1 -ListServices -UseCargo`
+- `.\scripts\translate-long-doc.ps1 -ListServices -UseCargo -UseDotnetLegacy` (expected mode-conflict rejection)
+- `cd rs; $env:EASYDICT_FOUNDRY_LOCAL_CLI='__missing_foundry_cli__.cmd'; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib long_document -- --nocapture`
+- `dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~WorkerPackagingTests`
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\long_document_cli.rs rs\crates\easydict_app\src\bin\easydict_long_doc.rs rs\crates\easydict_app\src\long_document.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_msix_validate\src\lib.rs rs\crates\easydict_app\tests\long_document_cli_behavior.rs`
+- `git diff --check -- scripts/translate-long-doc.ps1 rs/README.md migration-list.md refactor-progress.md dotnet/scripts/Build-RustHelpers.ps1 dotnet/tests/Easydict.WinUI.Tests/Services/WorkerPackagingTests.cs rs/Cargo.lock rs/crates/easydict_app/Cargo.toml rs/crates/easydict_app/src/long_document_cli.rs rs/crates/easydict_app/src/bin/easydict_long_doc.rs rs/crates/easydict_app/src/long_document.rs rs/crates/easydict_app/src/lib.rs rs/crates/easydict_msix_validate/src/lib.rs rs/crates/easydict_app/tests/long_document_cli_behavior.rs`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/bin/easydict_cli.rs crates/easydict_app/src/cli_translate.rs crates/easydict_app/tests/cli_translate_behavior.rs`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior openvino_local_ai_ -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_worker_backend_stream_maps_extended_nllb_languages -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/openai_compatible.rs crates/easydict_app/src/lib.rs crates/easydict_app/src/bin/easydict_cli.rs crates/easydict_app/src/quick_translate.rs crates/easydict_app/tests/quick_translate_behavior.rs crates/easydict_app/tests/cli_translate_behavior.rs`
+- `cd rs; cargo test -p easydict_app native_pdf_export_failure_allows_text_export_fallback --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior empty_native_pdf_text_fails_locally_without_long_document_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior failed_native_pdf_text_extraction_fails_locally_without_long_document_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior failed_native_pdf_text_extraction_does_not_probe_packaged_longdoc_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf --jobs 2 -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_native_export_behavior native_pdf_export --jobs 2 -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/long_document.rs crates/easydict_app/tests/long_document_behavior.rs`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter WorkerPackagingTests --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- PowerShell parser check for `dotnet/scripts/publish.ps1` and `dotnet/scripts/package-and-install.ps1`
+- PowerShell workflow text check for `runtime_profile`, rust-only guards, and `--runtime-profile "${{ env.RUNTIME_PROFILE }}"` in `.github/workflows/release-publish.yml` and `.github/workflows/arm64-msix-smoke.yml`
+- `git diff --check -- .github/workflows/release-publish.yml .github/workflows/arm64-msix-smoke.yml dotnet/scripts/publish.ps1 dotnet/scripts/package-and-install.ps1 dotnet/Makefile dotnet/tests/Easydict.WinUI.Tests/Services/WorkerPackagingTests.cs`
+- `cd rs; cargo test -p easydict_app retained_workers --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_route -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior failed_native_pdf_text_extraction_does_not_probe_packaged_longdoc_worker -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/retained_workers.rs crates/easydict_app/src/lib.rs`
+- `cd rs; cargo test -p easydict_msix_validate -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate rust_only -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate runtime_profile -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_msix_validate/src/lib.rs crates/easydict_msix_validate/src/main.rs`
+- `cd rs; cargo run -p easydict_msix_validate -- C:\missing\package.msix --runtime-profile dotnet` (expected profile-parse failure before reading the MSIX)
+- release workflow text check that `System.IO.Compression.ZipFile` and `Verify MSIX worker-only longdoc payload` are absent while `easydict_msix_validate` remains present
+- `cd rs; cargo test -p easydict_icon_generator -- --nocapture`
+- `cd rs; cargo run -p easydict_icon_generator -- --source-png ..\dotnet\src\Easydict.WinUI\Assets\macos\white-black-icon.appiconset\icon_512x512@2x.png --output-ico $env:TEMP\easydict-appicon-test.ico --output-tray-png $env:TEMP\easydict-trayicon-test.png`
+- `cd rs; rustfmt --edition 2021 --check crates\easydict_icon_generator\src\lib.rs crates\easydict_icon_generator\src\main.rs`
+- PowerShell parser check for `dotnet/scripts/generate-windows-assets.ps1`, `dotnet/scripts/generate-assets-from-macos-icon.ps1`, `dotnet/scripts/convert-service-icons.ps1`, and `dotnet/scripts/Fix-MsixMinVersion.ps1`
+- Temp-output smoke checks for `generate-windows-assets.ps1`, `generate-assets-from-macos-icon.ps1`, and `convert-service-icons.ps1`
+- `cd rs; cargo test --manifest-path ..\lib\easydict-pdf-overlay\Cargo.toml -- --nocapture`
+- `cd rs; cargo test -p easydict_app native_pdf_export_uses_overlay_font_embedding_for_cjk_translation -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf --jobs 2 -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_export_blocks_behavior pdf_overlay --jobs 2 -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_native_export_behavior native_pdf_export --jobs 2 -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets --jobs 2`
+- `cd rs; cargo test -p easydict_app native_pdf_ocr --jobs 2 -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior empty_native_pdf_text_fails_locally_without_long_document_backend --jobs 2 -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf --jobs 2 -- --nocapture`
+- `cd rs; cargo test --manifest-path ..\lib\easydict-pdf-render\Cargo.toml -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets --jobs 2`
+- `cd rs; cargo test -p easydict_app --test pdf_source_extraction_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_native_export_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_formula_adapter_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test content_preservation_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_pdf_to_images -- --nocapture`
+- `cd rs; cargo check -p easydict_pdf_to_images`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test --manifest-path ..\lib\easydict-pdf-render\Cargo.toml -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test character_paragraph_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test formula_text_reconstruction_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_formula -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test content_preservation_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test formula_protection_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test table_structure_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test vision_layout_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test layout_model_download_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test resource_download_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app settings_status -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_ui_parity_analyzer -- --nocapture`
+- `cd rs; cargo run -p easydict_ui_parity_analyzer -- --self-test`
+- `cd rs; cargo run -p easydict_ui_parity_analyzer -- screenshot-summary --screenshot-root <temp-screenshot-dir> --artifact-name ui-screenshots-smoke --summary-path <temp-summary.md>`
+- PowerShell parser check for `dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1`
+- PowerShell parser check and temp-output smoke for `dotnet/scripts/ci/Publish-UiScreenshotSummary.ps1`
+- `dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1 -ScreenshotRoot <empty-temp-dir>` (runs Rust analyzer self-test, then skips missing pairs)
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~ThemeRegressionMemoryAutomationTests --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~WorkerPackagingTests`
+- `git diff --check -- dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1 dotnet/tests/Easydict.WinUI.Tests/Services/WorkerPackagingTests.cs rs/Cargo.toml rs/Cargo.lock rs/crates/easydict_ui_parity_analyzer migration-list.md rs/README.md refactor-progress.md`
+- `cd dotnet; dotnet msbuild src\Easydict.WinUI\Easydict.WinUI.csproj -nologo -getProperty:BuildWorkerOutputs -p:RuntimeProfile=RustOnly -p:Configuration=Debug` (`false`)
+- `cd dotnet; dotnet msbuild src\Easydict.WinUI\Easydict.WinUI.csproj -nologo -getProperty:EnableInProcLongDocFallback -p:RuntimeProfile=rust-only -p:Configuration=Debug` (`false`)
+- `cd dotnet; dotnet msbuild src\Easydict.WinUI\Easydict.WinUI.csproj -nologo -getProperty:EnableInProcLongDocFallback -p:Configuration=Debug` (`true`)
+- `cd rs; cargo test -p easydict_app --test settings_migration_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior stale_foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior direct_stale_foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior local_ai_long_document -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib settings_status -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior openvino_local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior openvino_local_ai_supported_translation -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior settings_runtime_status_loaded -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_local_ai_exposes_provider_configuration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior quick_translate_cache -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mixed_cache_hit_and_miss_keeps_query_running_until_all_services_finish -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior translation_cache_disabled_and_clear_affect_quick_translate_cache -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test translation_cache_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_foundry_local_profile_forces_sequential_translation_and_skips_context_pass -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_request_clamps_max_concurrency_setting -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_runner_respects_clamped_max_concurrency -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_runner_retries_failed_chunk_once_and_keeps_output_order -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_runner_fails_after_single_retry_with_original_index -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior quick_translate_cache -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd lib/winfluent-rs; cargo test -p win_fluent -- --nocapture`
+- `cd lib/winfluent-rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test screen_capture_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior tray_commands_route_to_existing_desktop_actions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior startup_activation_reuses_hotkey_ocr_overlay_path -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior capture_overlay -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_runner_translates_chunks_and_writes_outputs -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_export_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_content_stream_fallback_extracts_literal_text_by_page -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_content_stream_fallback_extracts_hex_text_by_page -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_hex_content_stream_packaged_app_dir_runner_does_not_spawn_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_text_long_document_runner_extracts_pdf_and_writes_text_outputs -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior stale_text_page_range_long_document_packaged_app_dir_runner_does_not_spawn_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_all_pages_packaged_app_dir_runner_does_not_spawn_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_fallback_honors_disabled_retained_worker_policy -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_route -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior failed_native_pdf_text_extraction_does_not_probe_packaged_longdoc_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior app_start_foundry_local_in_auto_provider_enables_native_auto_foundry_route -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior app_prepare_local_ai_model_routes_foundry_provider_to_native_prepare_task -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract services_settings_local_ai_exposes_provider_configuration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior local_ai_long_document_worker_route_fails_locally_without_nested_dotnet_workers -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_packaged_app_dir_runner_does_not_spawn_packaged_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior failed_native_pdf_text_extraction_fails_locally_without_long_document_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_client -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet build src/Easydict.SidecarClient/Easydict.SidecarClient.csproj -c Debug -p:UseSharedCompilation=false`
+- `rg -n "Easydict\\.CompatHost|CompatHostProtocol|CompatHostMethods|MdxLookup|mdx_lookup" dotnet/Easydict.Win32.sln dotnet/Makefile dotnet/scripts .github/workflows dotnet/src --glob "!dotnet/src/Easydict.CompatHost/bin/**" --glob "!dotnet/src/Easydict.CompatHost/obj/**"` (no matches)
+- `git diff --check` (passes with LF/CRLF warnings only)
+- `cd rs; cargo test -p easydict_app --test compat_client -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check` (passes with LF/CRLF warnings only)
+- `rg -n "MdxCompatHostFacade|compat_methods|MDX_LOOKUP|default_compat_host_path|CompatHostCommand::packaged|Easydict\\.CompatHost\\.exe|common_dev_host_candidates" rs/crates/easydict_app/src rs/crates/easydict_app/tests rs/README.md` (no matches)
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo test -p easydict_app --test pdf_export_blocks_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test latex_formula_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_context_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test document_layout_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test text_layout_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test text_layout_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test lex_index_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --bin easydict-lex-index -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test document_layout_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_content_stream_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_export_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test font_metrics_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestion_runner_uses_persistent_native_index_and_skips_fresh_key_reload -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestion_runner_routes_wildcard_queries_through_native_index -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior mdx_encryption -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior invalid_encrypted_regcode -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior invalid_regcode -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior encrypted_mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_client -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior openvino_local_ai_supported_translation_stays_on_local_ai_worker_route -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior worker_routed_long_document_uses_direct_longdoc_worker_instead_of_compat_host -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior preflight -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional_http -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test custom_streaming_behavior unsupported -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_custom_streaming -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior service_specific -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior ollama_service_unsupported -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_prefix_fills -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior unsupported -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior dotnet_unsupported -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior target_auto -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior maps -- --nocapture`
+- `cd rs; cargo check -p easydict_app --test long_document_behavior`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior target_auto -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior openvino_local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_compat_backend_stream_maps_extended_nllb_languages -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior openvino_local_ai_grammar -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior output_folder -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd dotnet; dotnet build src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj -c Debug -p:UseSharedCompilation=false`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd dotnet; dotnet build src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj -c Debug -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet build src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj -c Debug -p:UseSharedCompilation=false`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior registered_dictionary_long_document_service_fails_locally_without_compat_host_spawn -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_native_route_is_limited_to_text_modes_and_migrated_services -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior stale_dictionary_long_document_service_fails_locally_without_compat_host_spawn -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior unknown_long_document_service_fails_locally_without_compat_host_spawn -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior missing_worker_file_long_document_packaged_runner_does_not_spawn_missing_compat_host -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior native_mdx_lookup_reports_missing_encrypted_file_before_credential_bridge -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior encrypted_mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_bing_quick_translate_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior bing -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo check --workspace --all-targets`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior empty_native_pdf_text_fails_locally_without_long_document_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior failed_native_pdf_text_extraction_fails_locally_without_long_document_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior missing_native_pdf_file_does_not_fall_back_to_long_document_backend -- --nocapture`
+- `cd rs; cargo test -p easydict_app selected_pdf_page_indexes_matches_compat_page_range_parser -- --nocapture`
+- `cd rs; cargo fmt --all --check`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~OcrServiceFactoryTests|FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Debug -p:Platform=x64 -m:1 -p:UseSharedCompilation=false -v:minimal`
+- `git diff --check`
+- `cd dotnet; dotnet sln Easydict.Win32.sln list`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter WorkerPackagingTests --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_openai_quick_translate_stream_uses_settings_and_parses_chunks -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_compat_backend_stream_uses_dedicated_facade_and_maps_languages -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_runner_translates_chunks_and_writes_outputs -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior migrated_text_translation_services -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract long_document_mode_keeps_file_controls_output_and_history -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior legacy_local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ui_contract long_document_mode_keeps_file_controls_output_and_history -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mixed_local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior auto_foundry_local_grammar -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx_header -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior foundry_local -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior auto_foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_compat -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol --test compat_client`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior page_range -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior --test quick_translate_behavior`
+- `cd rs; cargo test -p easydict_app --test compat_protocol --test compat_client --test quick_translate_behavior`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior --test quick_translate_behavior`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test compat_protocol --test compat_client`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior packaged_host_runner_uses_native_windows_ocr_without_compat_host_spawn -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo fmt --all`
+- `cd rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~OcrServiceFactoryTests|FullyQualifiedName~SettingsServiceTests|FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet build tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj -c Debug -m:1 -p:UseSharedCompilation=false -v:minimal`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter WorkerPackagingTests --logger "console;verbosity=minimal"`
+- PowerShell parser check for `dotnet/scripts/publish.ps1`, `dotnet/scripts/package-and-install.ps1`, and `dotnet/scripts/Build-RustHelpers.ps1`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior packaged_host_runner_uses_native_windows_ocr_without_compat_host_spawn -- --nocapture`
+- `cd rs; cargo build -p easydict_app --bin easydict-native-bridge --bin easydict_browser_registrar --bin easydict_cli`
+- `pwsh -NoProfile -File dotnet/scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Debug -OutputDir $env:TEMP/<temp-dir>`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior --test native_bridge_behavior`
+- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter WorkerPackagingTests --logger "console;verbosity=minimal"`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior packaged_host_runner_uses_native_windows_ocr_without_compat_host_spawn -- --nocapture`
+- `cd rs; cargo test -p easydict_windows_ocr`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdx -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_packaged_runner_does_not_spawn_missing_compat_host -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo fmt --all`
+- `cd rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app cli_translate -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior foundry_local_prepare -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior app_start_foundry_local_runs_native_prepare_task_and_applies_result -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior builtin_device_registration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior builtin_device_registration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior app_startup_registers_builtin_device_when_token_is_missing -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior app_persists_builtin_device_token_after_successful_registration -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior builtin -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior builtin_proxy -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior config_for_service_uses_settings_snapshot_fields -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
+- `cd rs; cargo fmt --all --check`
+- `git diff --check`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior foundry_local -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior deepl -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional_http_quick_translate_routes_default_deepl_web_mode -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior youdao_web_dict -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior youdao_webtranslate -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional_http_quick_translate_routes_default_youdao_web_mode -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional_http_quick_translate_supports_caiyun_deepl_niutrans_volcano_and_youdao -- --nocapture`
+- `cd rs; cargo check --workspace --all-targets`
 - `cd rs; cargo test -p easydict_app --test traditional_http_behavior -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_traditional -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test compat_client -- --nocapture`
@@ -802,7 +2060,6 @@ Worker fallback must be tested in both available and missing/failed host modes, 
 - `cd rs; cargo fmt --all --check`
 - `python3 /tmp/volcano_ref.py  # known-answer signature/epoch cross-check vs .NET signing algorithm`
 - `cd dotnet; dotnet build src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj -c Debug -p:UseSharedCompilation=false`
-- `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~CompatHostProtocolSerializationTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
 
 ## Earlier Verification
 
@@ -920,6 +2177,9 @@ Worker fallback must be tested in both available and missing/failed host modes, 
 - `cd rs; cargo test -p easydict_app --test ui_contract services_settings_render_traditional_http_provider_configuration -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test compat_protocol configure_params_preserve_dotnet_settings_snapshot_names -- --nocapture`
 - `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~LongDocWorkerTranslationManagerFactoryTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --filter "FullyQualifiedName~LongDocWorkerTranslationManagerFactoryTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests --filter "FullyQualifiedName~LongDocWorkerPipelineTests|FullyQualifiedName~LongDocWorkerTranslationManagerFactoryTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior local_ai_long_document_worker_route_fails_locally_without_nested_dotnet_workers -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test ui_contract services_settings_render_llm_provider_configuration_rows -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test compat_protocol -- --nocapture`
 - `cd dotnet; dotnet test tests/Easydict.WinUI.Tests --filter "FullyQualifiedName~WorkerProtocolSerializationTests|FullyQualifiedName~WorkerPackagingTests" --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
@@ -1065,7 +2325,10 @@ Worker fallback must be tested in both available and missing/failed host modes, 
 - `cd rs; cargo test -p easydict_app --test compat_protocol`
 - `cd rs; cargo test -p easydict_app cli_translate -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test cli_translate_behavior -- --nocapture`
+- `cd dotnet; dotnet build src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Debug`
 - `cd rs; cargo run -p easydict_app --bin easydict_cli -- --help`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- translate --host ..\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe --service google --from en --to zh-Hans --text "Hello" --json`
+- `cd rs; cargo run -p easydict_app --bin easydict_cli -- stream --host ..\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe --service google --from en --to zh-Hans --text "Good morning" --json`
 - `cd rs; cargo run -p easydict_app --bin easydict_cli -- translate --service google --from en --to zh-Hans --text "Hello" --json`
 - `cd rs; cargo run -p easydict_app --bin easydict_cli -- stream --service google --from en --to zh-Hans --text "Good morning" --json`
 - `pwsh -NoProfile -File dotnet\scripts\Build-RustHelpers.ps1 -Platform x64 -Configuration Debug -OutputDir $env:TEMP\easydict-rust-helpers-check`
@@ -1101,10 +2364,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
 - `cd lib/winfluent-rs; cargo fmt --all --check`
 - `cd lib/winfluent-rs; cargo check --workspace --all-targets`
 - `cd lib/winfluent-rs; cargo test --workspace`
-- `cd dotnet; dotnet build src/Easydict.CompatHost/Easydict.CompatHost.csproj -c Debug`
 - `cd rs; cargo run -p easydict_app --bin easydict_cli -- --help`
-- `cd rs; cargo run -p easydict_app --bin easydict_cli -- translate --host ..\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe --service google --from en --to zh-Hans --text "Hello" --json`
-- `cd rs; cargo run -p easydict_app --bin easydict_cli -- stream --host ..\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe --service google --from en --to zh-Hans --text "Good morning" --json`
 - `git diff --check`
 - `cd rs; cargo test -p easydict_app --test quick_translate_behavior floating_window -- --nocapture`
 - `cd lib/winfluent-rs; cargo check -p win_fluent_backend_iced --all-targets`

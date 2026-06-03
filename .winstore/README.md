@@ -9,15 +9,13 @@ This directory maintains the Microsoft Store listing metadata for Easydict for W
 ├── README.md              # This file
 ├── store-config.json      # Store-level configuration (app ID, languages, submission settings)
 ├── listings/              # Per-language listing metadata
-│   ├── en-us.json         # English (primary)
-│   ├── zh-cn.json         # Simplified Chinese
-│   ├── zh-tw.json         # Traditional Chinese
-│   ├── ja-jp.json         # Japanese
-│   ├── ko-kr.json         # Korean
-│   ├── fr-fr.json         # French
-│   └── de-de.json         # German
+│   ├── en-us.yaml         # English (primary)
+│   ├── zh-cn.yaml         # Simplified Chinese
+│   ├── zh-tw.yaml         # Traditional Chinese
+│   ├── ja-jp.yaml         # Japanese
+│   └── ko-kr.yaml         # Korean
 └── scripts/
-    └── Sync-StoreListings.ps1  # Sync script for Partner Center
+    └── Sync-StoreListings.ps1  # Cargo shim for the Rust listing tool
 ```
 
 ## Important Notes
@@ -37,7 +35,8 @@ These names may appear in the `description` and `features` fields when describin
 ### Content Guidelines
 
 - **Open-source emphasis**: The `description` must highlight "free and open-source" and the GPL-3.0 license in the first sentence.
-- **Primary language**: `en-us` is the primary language. When making content changes, update `en-us.json` first, then translate to other languages.
+- **Supported languages**: Store listings are limited to `en-us`, `zh-cn`, `zh-tw`, `ja-jp`, and `ko-kr`. Do not add another Store listing language without explicit approval.
+- **Primary language**: `en-us` is the primary language. When making content changes, update `en-us.yaml` first, then translate to other languages.
 - **Consistency**: All language files must have the same structure and cover the same features. Do not add features to one language that are missing from others.
 
 ### Microsoft Store Limits
@@ -51,12 +50,14 @@ These names may appear in the `description` and `features` fields when describin
 | keywords (each)   | 40 chars  | 7 items   |
 | releaseNotes      | 1500 chars | -        |
 
-The validation script (`Sync-StoreListings.ps1 -Mode validate`) checks these limits automatically.
+The Rust validation tool (`Sync-StoreListings.ps1 -Mode validate`, backed by `easydict_store_listings`) checks these limits automatically.
 
 ### Adding a New Language
 
+Store listing languages are currently capped at the five languages above. Do not follow these steps without explicit approval to expand the Microsoft Store listing language set.
+
 1. Add the language code to `store-config.json` > `listing.languages`
-2. Create a new `listings/<lang>.json` file by copying `en-us.json` as the template
+2. Create a new `listings/<lang>.yaml` file by copying `en-us.yaml` as the template
 3. Translate all fields
 4. Run validation: `.\scripts\Sync-StoreListings.ps1 -Mode validate -Languages <lang>`
 5. Add the corresponding language resource in `dotnet/src/Easydict.WinUI/Strings/<lang>/` and update `Package.appxmanifest`

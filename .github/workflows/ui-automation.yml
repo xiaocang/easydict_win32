@@ -434,6 +434,14 @@ jobs:
             -ArtifactName "ui-screenshots-${{ matrix.shard.suffix }}" `
             -Title "UI automation screenshots (${{ matrix.shard.name }})"
 
+      - name: Run UI parity analysis
+        if: always()
+        shell: pwsh
+        run: |
+          & "${{ github.workspace }}/dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1" `
+            -ScreenshotRoot "${{ github.workspace }}/artifacts/ui-screenshots/${{ matrix.shard.suffix }}" `
+            -OutputDir "${{ github.workspace }}/artifacts/ui-screenshots/${{ matrix.shard.suffix }}/ui-parity"
+
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()

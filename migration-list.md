@@ -14,16 +14,20 @@
   - `dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"`
   - `dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"`
   - `dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"`
-  - `dotnet test lib/LexIndex/tests/LexIndex.Tests --logger "console;verbosity=minimal"`
+  - `cd ..\rs; cargo test -p easydict_app --test lex_index_behavior -- --nocapture; cd ..\dotnet`
+  - `cd ..\rs; cargo test -p easydict_app --bin easydict-lex-index -- --nocapture; cd ..\dotnet`
+  - `cd ..\rs; cargo run -p easydict_app --bin easydict_long_doc -- --list-services; cd ..\dotnet`
 - UI 自动化
   - `dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation"`
   - 需要 MSIX 安装包或设置 `EASYDICT_EXE_PATH`。
+  - `cd ..\rs; cargo run -p easydict_ui_parity_analyzer -- --self-test; cd ..\dotnet`
+  - `dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1` 默认调用 Rust analyzer，不再运行 `.NET` analyzer 工具。
 - 集成测试
   - `make test-integration`
   - 可按服务筛选：`make test-integration SERVICE=openai`
   - 需要相应环境变量；部分上游不可用测试显式跳过。
 - Sidecar E2E
-  - `dotnet run --project e2e/E2E.SidecarClient.csproj`
+  - `cd ..\rs; cargo test -p easydict_app --test sidecar_ipc_e2e -- --nocapture; cd ..\dotnet`
   - 覆盖 health、translate、未知方法、并发、超时、崩溃、shutdown、stderr 日志。
 
 ## 1. 项目边界与运行形态
@@ -46,30 +50,38 @@
   - 已有覆盖：`LocalAiWorkerClientFallbackTests`、`OpenVINO`、`PhiSilica`、`FoundryLocal` recovery 相关测试。
 - Worker 进程
   - `src/Easydict.Workers.LongDoc`：长文档 worker，启动后发送 `ready` 事件，支持 `configure`、`translate_document`、`cancel`、`shutdown`，翻译结束后退出。
-  - `src/Easydict.Workers.LocalAi`：本地 AI worker，支持翻译、流式翻译、语法纠错、模型准备、模型列表、可用性检查。
-  - `src/Easydict.Workers.Ocr`：Windows OCR worker，接收 BGRA8 像素和语言标签，返回文本、行框、语言。
-  - 可验证标准：worker 协议版本一致；ready/configure 超时失败可回退；取消请求可传递到 worker。
-  - 已有覆盖：`WorkerProtocolSerializationTests`、`LongDocWorkerPipelineTests`、`LongDocWorkerLifecycleTests`、`LocalAiWorkerClientFallbackTests`、`OcrWorkerClientFallbackTests`。
+  - `src/Easydict.Workers.LocalAi`：本地 AI worker 仅支持流式翻译、流式语法纠错、`configure`、`cancel`、`shutdown`；非流式 `translate`、`prepare_model`、`is_available`、`list_models` 不应再作为 worker 能力暴露，普通翻译调用应聚合 `translate_stream` 结果，模型准备应走 Rust-native Foundry Local 或 in-proc provider。
+  - LongDoc worker 内部不应注册 `windows-local-ai` / `foundry-local` 代理服务，也不应链式启动 LocalAI worker；`windows-local-ai` / `foundry-local` LongDoc 必须由 Rust-native 路线处理，不能处理时由 Rust host 本地失败。即使直接调用 retained LongDoc worker pipeline，也应在 worker 本地报 requires Rust-native route。
+  - Rust 运行时应直接启动保留 worker（`workers/longdoc`、`workers/localai`）、等待 unprompted `ready`、校验 `protocolVersion` 和 ready `capabilities` 后发送 `configure`；长文档、LocalAI fallback、CLI `windows-local-ai` 和 MDX 查词/建议路径不应再通过 `Easydict.CompatHost.exe` 中转。CLI 的 retained LocalAI worker fallback 必须显式传入 `--app-dir` 才能启动，不能通过自动扫描或 legacy `--host` hint 误触发。未迁出的未知/组合加密 MDX 模式应在 Rust 本地返回明确 unsupported 错误；Rust 侧 MDX `CompatHost` facade、`mdx_lookup` 方法常量、`.NET CompatHost` 项目、Sidecar `CompatHostProtocol` 和发布脚本中的 CompatHost payload 均已移除。
+  - Rust retained-worker fallback 必须支持硬禁用策略：`EASYDICT_RUNTIME_PROFILE=rust-only` 时 GUI/CLI/LongDoc/LocalAI 都必须禁用 retained `.NET` worker fallback；`EASYDICT_DISABLE_LOCALAI_WORKER=1` 时 GUI 和 CLI 的 `windows-local-ai` 都只允许 Rust-native route，否则本地报 “requires a Rust-native route”；`EASYDICT_DISABLE_LONGDOC_WORKER=1` 时复杂 LongDoc fallback 不应启动 retained `.NET` LongDoc worker，而应本地报同类 Rust-native route 错误。
+  - 可验证标准：worker 协议版本一致；LongDoc ready capabilities 必须包含 `configure`/`translate_document`/`cancel`/`shutdown`，LocalAI ready capabilities 必须包含 `configure`/`translate_stream`/`grammar_stream`/`cancel`/`shutdown`；额外向后兼容 capability 可接受；Rust direct-worker IPC 表面应暴露 request id、`cancel_request` 和 `shutdown`；ready/configure 超时失败可回退；取消请求可传递到 worker。
+  - 已有覆盖：`WorkerProtocolSerializationTests`、`LongDocWorkerPipelineTests`、`LongDocWorkerLifecycleTests`、`LocalAiWorkerClientFallbackTests`。
 - Sidecar/IPC
   - `src/Easydict.SidecarClient`：JSON Lines stdio IPC、请求 ID 多路复用、事件、stderr、超时、进程退出。
   - 可验证标准：并发 10 个请求响应不串线；未知方法映射 remote error；子进程崩溃触发退出异常。
-  - 已有覆盖：`e2e/E2E.SidecarClient.csproj`、`WorkerProtocolSerializationTests`。
+  - 已有覆盖：Rust `sidecar_ipc_e2e` 覆盖 Python mock 的通用 JSON Lines IPC E2E；Rust `compat_client` 覆盖 retained LongDoc/LocalAI worker ready/capability/event/cancel/shutdown/exit；`.NET` `WorkerProtocolSerializationTests` 仍保留 worker DTO parity。旧 `dotnet/e2e/E2E.SidecarClient.csproj` 与根目录重复的 `dotnet/Easydict.SidecarClient*` E2E 项目已退役，默认 solution 不再构建它们。
 - 浏览器与原生桥
-  - `src/Easydict.NativeBridge`：浏览器 Native Messaging host，接收浏览器消息并触发 Easydict OCR。
-  - `src/Easydict.BrowserRegistrar`：MSIX 沙盒外写入 Chrome/Firefox Native Messaging 注册表。
+  - Rust `easydict-native-bridge`：浏览器 Native Messaging host，接收浏览器消息并触发 Easydict OCR。
+  - Rust `easydict_browser_registrar` / legacy alias `BrowserHostRegistrar.exe`：MSIX 沙盒外写入 Chrome/Firefox Native Messaging 注册表。
   - 可验证标准：manifest JSON 合法，Chrome allowed origins 包含 Web Store 和 sideload ID，Firefox extension ID 正确，install/uninstall/status 输出 JSON。
-  - 已有覆盖：`Easydict.BrowserRegistrar.Tests` 26 个测试。
+  - 已有覆盖：Rust `browser_registrar_behavior`、Rust `native_bridge` 行为测试、WinUI `BrowserSupportServiceTests` / `WorkerPackagingTests`。
 - 本地库
   - `src/Polyglot.TextLayout`：文本分段、禁则、行布局、字体缩放。
   - `lib/LexIndex`：本地词典补全/通配索引。
   - `lib/PdfPig`：vendored PDF 解析库，包含 `UglyToad.PdfPig.Core`、`UglyToad.PdfPig.Fonts`、`UglyToad.PdfPig.Tokenization`、`UglyToad.PdfPig.Tokens`、`UglyToad.PdfPig`。
+  - `lib/rs-mdict`：本地 fork 的第三方 Rust MDX/MDD reader；Easydict 自有凭据派生和路由逻辑仍在 `rs/crates/easydict_app/src/mdx_native.rs`。
   - 可验证标准：CJK/Latin 混排换行、通配查询、Unicode normalization 行为一致。
-  - 已有覆盖：`Polyglot.TextLayout.Tests` 121 个测试；`LexIndex.Tests` 10 个测试。
+  - 已有覆盖：Rust `text_layout_behavior` 覆盖 TextLayout 纯算法分段/禁则、PreparedParagraph 测宽元数据、固定/可变宽 greedy line layout、增量 next-line、长 segment grapheme breaking 和 FontFitSolver 二分字体缩放；Rust `font_metrics_behavior` 覆盖 TrueType/OpenType glyph id/advance 解析和 GlyphAdvanceMeasurer 测宽规则；Rust `document_layout_behavior` 覆盖 PDF line rect 几何、grid baseline 检测、cell line rect 扩展、inline script rect 保护、inline subscript/citation overlay 后处理、math-font 分段、formula fragment parsing 和 formula hole overlap；Rust `pdf_content_stream_behavior` 覆盖 CID hex、PDF text operator/content-stream 拼接、literal/TJ parser、source hide 和 token patch；Rust `lex_index_behavior` + `easydict-lex-index` CLI tests 覆盖 `LXDX` 索引读写；`Polyglot.TextLayout.Tests` 121 个测试。
 - 工具项目
-  - `tools/EncryptSecret`：对需要随包发布或本地保存的 secret 做加密辅助。
-  - `tools/PdfToImages`：PDF 页面转图片的诊断/验证工具。
-  - `tools/MsixValidate`：MSIX 输出和依赖结构验证工具。
-  - 可验证标准：工具项目可独立构建；发布流程或手工诊断引用路径保持一致。
+  - Rust `rs/crates/easydict_encrypt_secret`：对需要随包发布或本地保存的 secret 做 AES-128-CBC/PKCS7 兼容加密辅助；`dotnet/tools/EncryptSecret` 不应再作为入口。
+  - Rust `lib/easydict-pdf-render` + `rs/crates/easydict_pdf_to_images`：PDF 页面转图片的诊断/验证工具；通过 Pdfium 动态库渲染 PNG/JPG，`dotnet/tools/PdfToImages` 不应再作为入口。`lib/easydict-pdf-render` 同时提供 PDFium 字符级 text extraction DTO（unicode、font name、font size、bounds、origin、matrix、angle），作为后续 PDF source extraction 接线的第三方 wrapper 边界。
+  - Rust `easydict-lex-index`（`rs/crates/easydict_app/src/bin/easydict_lex_index.rs`）：本地词典 `LXDX` 索引构建诊断工具；`dotnet/lib/LexIndex/tools/LexIndex.Cli` 不应再作为入口。
+  - Rust `rs/crates/easydict_msix_validate`：MSIX 输出、MSIX bundle、retained worker shared-file dedupe、依赖结构验证和 TargetDeviceFamily MinVersion 修复/校验工具；`dotnet/tools/MsixValidate` 不应再作为发布验证入口，`dotnet/scripts/Fix-MsixMinVersion.ps1` 只作为 Rust `fix-minversion` subcommand shim 保留，`dotnet/scripts/Dedupe-WorkerSharedFiles.ps1` 只作为 Rust `dedupe-worker-shared` subcommand shim 保留；release workflow 的 bundle MinVersion 校验必须走 Rust `verify-bundle-minversion`，不应再用 PowerShell `Expand-Archive` + XML DOM 展开检查；默认 `hybrid` profile 验证当前 retained worker/runtime 布局，`--runtime-profile rust-only`/`--rust-only` 验证最终 Rust-only 包不能携带 retained `.NET` worker 或 bundled `.NET` runtime；发布脚本、Makefile 和 CI 的 MSIX 验证入口必须使用同一 runtime profile。
+  - Rust `rs/crates/easydict_ui_parity_analyzer`：UI parity 截图评分、coverage matrix、LLM review prompt、threshold policy 和 UI screenshot summary/gallery 报告工具；`dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1` 和 `dotnet/scripts/ci/Publish-UiScreenshotSummary.ps1` 必须通过 `cargo run --manifest-path ..\rs\Cargo.toml -p easydict_ui_parity_analyzer` 调用它，`dotnet/tools/UiParityAnalyzer` 和 PowerShell drawing gallery logic 不应再作为入口。
+  - Rust `rs/crates/easydict_icon_generator`：WinUI build-time `AppIcon.ico` / `TrayIcon.png`、Windows PNG assets 和 service icon scale variants 生成工具；`dotnet/scripts/generate-app-icon-ico.ps1` 已移除，`generate-windows-assets.ps1`、`generate-assets-from-macos-icon.ps1`、`convert-service-icons.ps1` 只作为 Rust shim 保留。
+  - Rust `rs/crates/easydict_packager`：portable ZIP 生成和 retained worker 共享 `.NET` runtime 下载/解压工具；release workflow 的 dotnet portable ZIP 和 `rs/scripts/Package-Portable.ps1` 的 Rust portable ZIP 都必须通过 Rust `zip-directory` subcommand 创建，避免回退到 PowerShell `Compress-Archive`；`dotnet/scripts/Extract-DotnetRuntime.ps1` 只作为 Rust `extract-dotnet-runtime` subcommand shim 保留，避免回退到 PowerShell `Invoke-WebRequest` / `Expand-Archive`。
+  - Rust `rs/crates/easydict_store_listings`：Microsoft Store listing YAML 解析、validate/preview、GitHub Actions summary 和 submit payload 生成工具；`.winstore/scripts/Sync-StoreListings.ps1` 只作为 Cargo shim 保留，`.github/workflows/store-listings.yml` 不应再安装 `powershell-yaml` 或用 `ConvertFrom-Yaml` 解析 listing。submit 仍通过外部 `msstore` CLI 更新 Partner Center，validate/preview/summary 不依赖 PowerShell YAML 模块或 `.NET` 工具。
+  - 可验证标准：工具项目可独立构建；发布流程或手工诊断引用路径保持一致；旧 `.NET` 工具项目和 PowerShell GDI+/drawing 图标生成逻辑不能重新出现在 Makefile/发布入口中。
 
 ## 2. 快速翻译主流程
 
@@ -200,16 +212,28 @@
   - 支持 Chat Completions 和 Responses API；根据 endpoint 后缀自动识别，也可在设置中 pin 格式。
   - 支持流式翻译和流式语法纠错。
   - 自定义 prompt 可拼入系统提示。
+  - 翻译请求必须保留 `.NET SupportedLanguages` 语言白名单语义：源语言 `Auto` 可用但目标语言不能为 `Auto`，且非 `Auto` 源/目标都必须在对应服务支持列表中；大多数 OpenAI-compatible 服务使用 `.NET BaseOpenAIService.OpenAILanguages`，但 Ollama、Built-in AI 等服务的专属支持表必须单独保留。不支持的语言对应在本地返回 unsupported-language 错误，不应发送 provider HTTP 请求或启动 Foundry/CompatHost 路径。
   - API key 缺失时按服务配置状态失败，不应发送请求。
   - 可验证标准：`/responses` endpoint 走 Responses parser；其他 endpoint 默认 Chat Completions；stream `[DONE]` 后停止。
   - 已有覆盖：`BaseOpenAIServiceTests`、`OpenAIApiFormatDetectionTests`、`ResponsesSseParserTests`、`Easydict.Llm.Streaming.Tests`。
+- 自定义流式协议行为
+  - `gemini` 使用 Gemini 专属 endpoint/body/SSE parser，但支持语言表必须保留 `.NET GeminiService.SupportedLanguages` 语义，也就是 `BaseOpenAIService.OpenAILanguages`。
+  - `doubao` 使用 Doubao/火山 Ark Responses 风格 body、命名 SSE event parser、单引号清理和 `.NET DoubaoService._doubaoLanguages` 语言白名单。
+  - 翻译请求同样必须在本地执行语言对预检：源语言 `Auto` 可用但目标语言不能为 `Auto`，非 `Auto` 源/目标都必须在对应服务支持表内；不支持时返回 unsupported-language，不应发送 provider HTTP 请求或启动 CompatHost。
+- 传统 HTTP 服务行为
+  - `google`、`google_web`、`bing`、`deepl`、`youdao`、`caiyun`、`niutrans`、`volcano`、`linguee` 的 Rust-native request plan 必须保留 `.NET SupportedLanguages` 语言白名单语义。
+  - 规则按 `.NET BaseTranslationService.SupportsLanguagePair` 执行：源语言 `Auto` 时只检查目标语言是否在该服务支持表中；否则源/目标都必须在支持表中。部分传统服务的 `.NET` 支持表显式包含 `Auto`，迁移时应保留这一点，不要改成全局禁用目标 `Auto`。
+  - 不支持的语言对应在本地返回 unsupported-language；两阶段服务如 Bing session token 获取、Youdao webtranslate dynamic key 获取之前也必须先完成预检，不应为了无效语言对发送 provider HTTP 请求。
 - 翻译缓存和音标增强
   - 行为：
     - `TranslationManager`/`TranslationCacheService` 短文本缓存按 service/source/target/text SHA key 命中。
+    - Rust Quick Translate 非流式普通翻译请求在 app 层复用同一 in-memory cache：缓存命中直接发 `QuickTranslateServiceFinished`，未命中才启动 provider task；streaming、grammar、MDX 和自定义 prompt 请求不参与该短文本缓存。
+    - Rust cache 写入保留 `.NET` Auto source key；当 provider 返回 detected source language 时额外写入 detected-language alias，以匹配 Rust UI 下一次重复查询会使用 detected source 的状态流转。
+    - Rust LongDoc Text/Markdown/simple-PDF-text 原生路线使用与 `.NET TranslationCacheService` 兼容的 SQLite 表和 `service/from/to/source_hash` lookup；`EnableTranslationCache=false` 时忽略 persistent cache，`ClearTranslationCache` 同时清理 Rust memory cache 和默认 SQLite cache；空白 cached translation 不命中，会回到 provider 并覆盖缓存。
     - 目标为英文且服务结果缺少目标音标、结果像单词/短语时，使用 Youdao 补目标音标。
     - 同一音标查询 stampede 被合并，避免并发重复请求。
-  - 可验证标准：重复查询应返回缓存；并发同词音标补全只触发一次 Youdao fetch。
-  - 已有覆盖：`TranslationManagerTests`、`PhoneticEnrichmentIntegrationTests`、`PhoneticCacheStampedeTests`。
+  - 可验证标准：重复查询应返回缓存；Quick Translate cache hit 不启动 provider future/stream；混合命中/未命中只在所有服务完成后结束 query；LongDoc native text cache hit 不调用 chunk translator，且混合命中/未命中时缓存命中块不占 translator 并发槽；禁用或清除缓存后应回到 provider task；并发同词音标补全只触发一次 Youdao fetch。
+  - 已有覆盖：`TranslationManagerTests`、`PhoneticEnrichmentIntegrationTests`、`PhoneticCacheStampedeTests`；Rust `translation_cache_behavior` 覆盖 .NET-compatible key/LRU/bypass/phonetic gates、LongDoc SQLite schema/hash/set/get/upsert/clear；Rust `quick_translate_behavior` 覆盖 Quick Translate cache request、hit、miss-store、mixed hit/miss、disable/clear；Rust `long_document_behavior` 覆盖 LongDoc native text persistent cache hit/write/disable、混合 cache hit/miss、空白 cache value fallback。
 - 外部服务集成测试
   - Google：英文到中文、中文到英文。
   - Youdao：英文词、短语、句子、中文到英文、多行、US/UK 音标、释义、音频 URL。
@@ -231,9 +255,22 @@
     - 支持翻译、流式翻译、语法纠错、模型准备状态。
   - 可验证标准：
     - Auto 模式中前一个 provider 网络/运行时失败且未输出 chunk 时，回退到下一个。
+    - Windows Local AI 翻译目标为 Auto 时没有可用 provider，应在 Rust 本地报 “No local AI provider supports this language pair”，不应启动 Foundry Local native request、LocalAI worker 或 CompatHost。
     - Explicit FoundryLocal 不应回退 OpenVINO。
+    - Explicit FoundryLocal 的普通翻译和语法纠错应优先走 Rust `NativeOpenAiQuickTranslateBackend`；endpoint 为空时可通过 Foundry Local resolver 发现 endpoint，不应启动 LocalAI worker/CompatHost。
+    - Explicit FoundryLocal 请求前应 best-effort 查询 `/models`，将短模型别名解析为 Foundry 实际 model id；匹配策略与 `.NET FoundryLocalService` 一致：exact match 优先，其次 `configured-instruct-*`，设备偏好 NPU → GPU → CPU。
+    - Rust-native Foundry prepare 成功后，应把发现到的 endpoint/model 写回空的设置字段，使后续 Auto/Foundry 查询可直接走 native route；不得覆盖用户已手填的 endpoint/model。
+    - `Start Foundry Local` 可在 Auto 或 FoundryLocal provider 下运行 Rust-native prepare/status 写回；通用 `Prepare model` 只在 FoundryLocal provider 下分派到 Foundry prepare，Auto 仍保留 Phi Silica → Foundry Local → OpenVINO 的运行时顺序。
+    - Rust Foundry Local runtime/status 控制面应复用 `.NET FoundryLocalService` 三态：`NotInstalled` → `NotCompatible/FoundryLocal_Status_NotInstalled`，`NotRunning` → `NeedsPreparation/FoundryLocal_Status_NotRunning`，`Running` 但 status/resolver 都无 endpoint → `Failed/FoundryLocal_Status_StartFailed`；非 loopback 显式 endpoint 视为用户自管并跳过 CLI lifecycle；loopback endpoint 必须用 runtime status/resolver 刷新，避免 stale 端口。
+    - Auto provider 在已配置 Foundry endpoint 或 Rust resolver 能发现正在运行的 Foundry endpoint 时可走 Rust native Foundry route；Quick Translate、CLI quick translate 和 Rust-native Text/Markdown/simple-PDF LongDoc route 都应在进入 retained LocalAI/LongDoc worker 前尝试该 Foundry endpoint probe；Auto 且 endpoint 为空、resolver 也找不到 endpoint 时，GUI 必须继续保留 LocalAI worker route，直到 Rust-native Auto provider chain 能按 Phi Silica → Foundry Local → OpenVINO 顺序决策；CLI 只能在用户显式传入 `--app-dir` 时启动 retained LocalAI worker，否则本地提示需要显式 opt-in。
+    - 当 retained LocalAI worker 被禁用时（例如 `EASYDICT_RUNTIME_PROFILE=rust-only` 或 Rust-only runtime 验证），Auto 且 Foundry endpoint 为空、WindowsAI/Phi、有效 OpenVINO 语言对等原本需要 worker 的场景应本地报 “requires a Rust-native route”，GUI 与 CLI 都不应探测 `workers/localai` 或 CompatHost。
+    - `windows-local-ai` 长文档在 Auto/FoundryLocal provider profile 下应沿用 .NET Foundry LongDoc profile：强制单并发、关闭两阶段 context pass；显式 WindowsAI/Phi 不应套用该 profile。
+    - Explicit FoundryLocal 翻译目标为 Auto 时也应在 Rust 本地报 “No local AI provider supports this language pair”，不应启动 Foundry endpoint discovery、native request、LocalAI worker 或 CompatHost。
+    - Explicit OpenVINO 语法纠错应在 Rust 本地报 “No local AI provider supports grammar correction”，不应启动 LocalAI worker/CompatHost。
+    - Explicit OpenVINO 翻译目标为 Auto 或无法映射到 NLLB/FLORES 支持语言时，应在 Rust 本地报 “No local AI provider supports this language pair”，不应启动 LocalAI worker/CompatHost；支持的非 Auto 语言对如果模型/runtime 缓存未完整，应在 Rust 本地报 OpenVINO runtime/model not downloaded，也不应启动 LocalAI worker/CompatHost；缓存完整时 GUI 仍保留到 LocalAI bridge，CLI 仅在显式 `--app-dir` opt-in 时保留到 LocalAI bridge，直到 OpenVINO 推理本体迁移。
+    - Rust 到 LocalAI worker 的语言名桥接必须覆盖 NLLB 支持表中的 Slovak、Slovenian、Estonian、Latvian、Lithuanian、ClassicalChinese 等扩展语言，不能静默降级为 English。
     - Warmup 失败会标记 Phi 不健康并回退。
-  - 已有覆盖：`LocalAITranslationServiceIntegrationTests`、`LocalAITranslationServiceLazyInitTests`、`OpenVinoTranslationServiceTests`、`PhiSilicaTranslationServiceTests`、`FoundryLocalServiceTests`。
+  - 已有覆盖：`LocalAITranslationServiceIntegrationTests`、`LocalAITranslationServiceLazyInitTests`、`OpenVinoTranslationServiceTests`、`PhiSilicaTranslationServiceTests`、`FoundryLocalServiceTests`；Rust `quick_translate_behavior` 覆盖 Auto/explicit Foundry native route、empty endpoint worker route、disabled-worker policy、target Auto 本地失败、OpenVINO unknown target 本地失败和 BCP-47 extended NLLB language bridge；Rust `cli_translate_behavior` 覆盖 CLI Auto Foundry endpoint probe 在 LocalAI worker fallback 前发生、retained LocalAI worker 只允许 `--app-dir` 显式 opt-in、Auto/legacy `--host` 不再触发 worker 查找；Rust `long_document` 内部测试覆盖 Auto Foundry endpoint discovery 在 LongDoc 进入 retained worker 前切到 native route。
 - Foundry Local
   - 行为：
     - Endpoint 可空，为空时通过 CLI/runtime status/log 自动解析 endpoint。
@@ -245,7 +282,7 @@
   - 行为：
     - 支持 NLLB tokenizer/inference、设备配置、模型/运行时下载、CPU/OpenVINO EP 包体约束。
     - 支持与 worker fallback 配合。
-  - 可验证标准：模型未下载时状态提示；下载进度可上报；worker 包不默认携带 OpenVINO native EP。
+  - 可验证标准：设置页状态检查和 Quick Translate explicit OpenVINO preflight 应由 Rust 读取 `%LOCALAPPDATA%\Easydict\models\nllb-200-distilled-600M` 与 `%LOCALAPPDATA%\Easydict\runtimes\openvino\1.21.0\win-x64\native` 的 `.complete` sentinel 和 manifest 文件列表；模型或 runtime 任一不完整时沿用 .NET `NotDownloaded` 语义并在 Rust 本地失败；下载进度可上报；worker 包不默认携带 OpenVINO native EP。
   - 已有覆盖：`OpenVinoTranslationServiceTests`、`ModelDownloadService` 相关测试、`WorkerPackagingTests`。
 
 ## 6. OCR 截图翻译
@@ -262,12 +299,13 @@
     - 独立 STA 线程运行 Win32/GDI+ overlay，不阻塞 UI 线程。
     - BitBlt 冻结多屏虚拟桌面，显示半透明遮罩、窗口检测高亮、放大镜、尺寸/提示。
     - Hover 自动检测窗口；滚轮改变检测深度。
+    - 进入 OCR capture 时应先获取一次可见窗口 Z-order 快照并排除自身 overlay；后续 hit-test 使用缓存快照，避免底层窗口变化导致闪烁。
     - 双击检测窗口直接确认。
     - 点击拖拽超过 5px 进入自由框选，松开确认。
     - 右键/Esc 在 Selecting 返回 Detecting；Detecting 中右键/Esc 取消。
     - 并发 capture 被拒绝返回 null。
   - 可验证标准：Overlay 出现；Esc 取消；第二次 hotkey 仍能打开；捕获结果为 BGRA8、宽高和屏幕矩形有效。
-  - 已有覆盖：UI `OcrHotkey_ShouldShowCaptureOverlay`、`OcrHotkey_EscapeShouldCancelOverlay`、`OcrHotkey_SecondTriggerShouldWork`；单元 `WindowDetectorTests`、`GdiSafeHandleTests`。
+  - 已有覆盖：UI `OcrHotkey_ShouldShowCaptureOverlay`、`OcrHotkey_EscapeShouldCancelOverlay`、`OcrHotkey_SecondTriggerShouldWork`；单元 `WindowDetectorTests`、`GdiSafeHandleTests`；Rust `screen_capture_behavior` 覆盖窗口命中、窗口快照树转换、滚轮深度、拖拽/双击确认、取消/重置，以及空白区域鼠标移动仍触发重绘以保留放大镜/坐标刷新语义；Rust `ocr_behavior` 覆盖 OCR hotkey 请求平台窗口快照并喂入 detector。
 - OCR 引擎
   - Windows Native：
     - 使用 `Windows.Media.Ocr`，支持用户系统语言包；首选语言不可用时回退用户 profile。
@@ -276,13 +314,12 @@
     - 使用本地 VLM endpoint/model/system prompt。
   - Custom API OCR：
     - 使用 OpenAI-compatible image request，支持 Responses/Chat 风格解析。
-  - Worker：
-    - `UseOcrWorker=true` 时短生命周期 worker 执行 Windows OCR；worker 不可用或退出时回退 in-proc。
+  - OCR 不再依赖 `.NET` worker、`OcrWorkerClient` 或 CompatHost `ocr_recognize` facade；旧 `UseOcrWorker` 设置只用于迁移清理，不能重新启用 `workers/ocr` 发布物。
   - 可验证标准：
     - CJK 连续字符不插入空格，Latin word 间插入空格。
     - 同一视觉行按 Y 容差分组、每行从左到右排序。
     - 自定义 API 返回文本可解析，错误响应不崩溃 UI。
-  - 已有覆盖：`OcrTextMergerTests`、`OcrServiceFactoryTests`、`CustomApiOcrServiceTests`、`OllamaOcrServiceTests`、`OcrWorkerClientFallbackTests`。
+  - 已有覆盖：`OcrTextMergerTests`、`OcrServiceFactoryTests`、`CustomApiOcrServiceTests`、`OllamaOcrServiceTests`、Rust `ocr_behavior`。
 
 ## 7. 鼠标选词翻译与 Pop Button
 
@@ -335,23 +372,39 @@
     - 支持多文件选择，形成队列逐个处理；每个文件有状态、进度、输出路径、失败信息。
     - 运行中锁定设置，取消可停止当前单任务/队列。
     - History 最多 50 条，可清空。
-  - 可验证标准：
+    - 可验证标准：
     - LongDoc tab 控件全部可见可交互；输入/输出模式下拉切换；并发 NumberBox 可输入；页码 TextBox 可输入。
     - 多文件队列中一个失败不应阻断后续文件状态更新。
-  - 已有覆盖：UI `LongDocTranslationTests`、`LongDocumentServiceSupportTests`。
+    - 已选择的本地文件不存在或不是普通文件时，应在 Rust 本地报输入错误，不应启动 LongDoc worker/CompatHost。
+    - 输出路径明显无效时（例如输出路径本身是目录，或输出父路径已经是普通文件），应在 Rust 本地报错，不应启动 LongDoc worker/CompatHost，也不应先发起 native provider 翻译。
+    - 旧设置中的 `mdx::*`、字典类服务或未注册服务不应启动 LongDoc worker/CompatHost，应在 Rust 本地提示该服务不可用于长文档翻译。
+    - Rust-native Text/Markdown/PDF 简单文本路线也必须应用同一服务类型过滤；`google_web`、`youdao`、`linguee` 等已注册词典服务不能借 Quick Translate native route 绕过 LongDoc 服务约束。
+    - PlainText/Markdown 请求中的残留 `page_range` 应视作旧状态噪音并继续走 Rust-native 文本路线，不应因为页码字段误回退 retained LongDoc worker。
+    - `windows-local-ai` / 旧状态中的 `foundry-local` 长文档请求如果不能被 Rust-native LongDoc text/PDF 路线处理，应在 Rust 本地报 “requires a Rust-native route”，不应启动 LongDoc worker；`.NET` LongDoc worker 本身也不得注册或链式拉起 LocalAI worker，直接 pipeline 调用也必须拒绝这些 service id。
+    - 当 retained LongDoc worker 被禁用时（例如 `EASYDICT_RUNTIME_PROFILE=rust-only` 或 Rust-only runtime 验证），复杂/不可解析 PDF 等原本允许非 LocalAI 回退 worker 的场景也应本地报 “requires a Rust-native route”，不应探测 `workers/longdoc`。
+    - 目标语言为 `Auto` 的旧状态/异常状态应在 Rust 本地报 “Long Document target language cannot be Auto”，不应启动 native provider、LongDoc worker 或 CompatHost；源语言 `Auto` 仍然允许。
+    - LongDoc 请求发给 worker 的语言名必须使用 .NET `Language` enum 名（例如 `SimplifiedChinese`/`TraditionalChinese`），并覆盖 `TRANSLATION_LANGUAGE_IDS` 中全部可选语言；Rust-native chunk 翻译再映射回服务语言代码。
+    - `scripts/translate-long-doc.ps1` 默认必须调用 Rust `easydict_long_doc.exe`，或在源码 checkout 中使用 `cargo run -p easydict_app --bin easydict_long_doc` 开发模式；默认路径不得再 `dotnet run` WinUI。
+    - Rust LongDoc CLI 参数面为 `--list-services`、`--input`、`--target-language`、`--from`、`--output`、`--service`、`--output-mode`、`--layout`、`--pdf-export-mode`、`--page`、`--page-range`、`--max-concurrency`、`--env-file`、vision 参数和 `--app-dir`。旧 WinUI 调试 CLI 仅通过脚本的显式 `-UseDotnetLegacy` 作为对照/兼容路径使用。
+  - 已有覆盖：UI `LongDocTranslationTests`、`LongDocumentServiceSupportTests`；Rust `long_document_cli_behavior` 覆盖 Rust LongDoc CLI help/list/required参数/页码互斥，`long_document_behavior` 覆盖 native/retained-worker routing，`WorkerPackagingTests` 和 `easydict_msix_validate` 覆盖 `easydict_long_doc.exe` helper 包体要求。
 - 输入解析
   - Text：按文本块处理，导出 txt。
   - Markdown：保留 Markdown 结构，导出 md，支持双语 interleave。
   - PDF：
+    - 简单 selectable-text PDF、空/all/有效页码范围、且所选服务已有 Rust-native 快译路线时，可先走 Rust PDFium source blocks / `pdf-extract` / `lopdf` 文本提取并绕过 LongDoc worker；PDFium source-block 路线默认使用 tight bounds，抽取失败或无 block 时会用 loose bounds 二次尝试以保留 PDF source metadata/formula context；当源 PDF content stream 可 exact literal/TJ operator replacement 且译文无需额外字体嵌入时，Rust-native route 可直接导出真实 `.pdf`；当译文触发 `NeedsFontEmbedding` 且有可用 CJK 字体/bbox overlay plan 时，可用 Rust `lib/easydict-pdf-overlay` 在原 PDF 上白底覆盖并嵌入字体写回译文。当 selectable text 为空但 Pdfium 能渲染页面时，Rust 可把页图渲染为 BGRA 并复用现有 OCR provider 生成 PDF OCR text chunks；OCR chunks 第一版输出 `.txt` / bilingual `.txt`，不尝试原位 PDF patch。`Both` 模式下 selectable-text 单语输出为 PDF，双语输出仍为 `.txt`。
+    - `pdf-extract` 无法解析/抽取或逐页结果为空、但 `lopdf` 仍可读取 page content stream 时，Rust 可用 `lopdf` content parser + 轻量 literal-string fallback 继续提取简单 selectable text，包括基础 literal/hex text strings；这个 fallback 不替代复杂 PDF 布局/OCR/字体映射。
     - 使用 PdfPig/MuPDF 读取文字、坐标、字体、颜色、行位置、旋转。
     - 可按页码范围 `1-3,5,7-10` 过滤。
-    - 扫描页可走 OCR fallback。
+    - Rust 简单 PDF 路线抽取不到 selectable text 且 PDF OCR fallback 也没有可用文本、或 PDF 结构不可解析时，应在 Rust 本地失败，不再回退 retained LongDoc worker；PDF native export 没有任何可替换 text operator、`NeedsFontEmbedding` overlay 分流缺少可用字体/overlay plan、或其他写回失败时，应降级到已有 `.txt` / bilingual `.txt` 输出路径，不再启动 retained worker。native export 仍保留 typed failure kind（例如 `NeedsFontEmbedding` / `NoReplacements`）供本地分流；单页存在 unmatched text operator 时可保留该页原始 PDF 内容并继续输出已成功替换的其他页；ASCII-only export 支持 literal/hex `Tj`、literal/hex `TJ` array、normalized whitespace matching，并对原始 content-stream bytes 做 range patch，避免因 inline/raw bytes 不是 UTF-8 而回退；`windows-local-ai` 必须本地报错，避免 `.NET` LongDoc/LocalAI 双层 worker。
     - 布局识别模式：Auto、OnnxLocal、VisionLLM、Heuristic。
     - ONNX DocLayout-YOLO 和 TATR 相关模型可下载；Vision LLM 可选 OpenAI/Gemini/Custom OpenAI。
   - 可验证标准：
+    - 简单 PDF 文本路线在 content-stream exact patch 可用时输出可打开 `.pdf`，按页码范围筛选并裁掉未选页；页级 patch 失败保留原页、不写入半替换内容；有 selectable text 且 PDF export 成功时不会尝试启动缺失的 CompatHost。
+    - content-stream fallback 只应减少简单 literal/hex text PDF 的本地失败面；空文本/扫描页可先走 Rust PDF OCR fallback，OCR 不可用或无文本时应本地报 unsupported/no selectable text，不应启动 retained worker。
+    - 空文本/疑似扫描/复杂 PDF 不应被 Rust 简单文本路线吞掉；Rust OCR fallback 识别到文本时走 native text export，识别失败/不可用时应在 Rust 本地失败；缺失输入文件仍应停留在本地输入错误，不应启动 worker。
     - 页码解析：空/all/null 为全部；越界 clamp；非法片段跳过或返回 null，符合 `PageRangeParserTests`。
     - PDF 无文字且无扫描页时抛出 “No source text found”。
-  - 已有覆盖：`PageRangeParserTests`、`DocLayoutYoloServiceTests`、`LayoutDetectionStrategyTests`、`TableStructureRecognitionServiceTests`。
+  - 已有覆盖：Rust `long_document_behavior` 覆盖 selectable PDF、literal/hex content-stream fallback、PDF exact content-stream export、hex content-stream native PDF export、CJK `NeedsFontEmbedding` overlay 分流、PDF export failure → TXT 降级、空/不可解析 PDF 本地失败、PDFium tight/loose bounds source extraction retry policy、PDF OCR fallback glue、page range 裁页、simple PDF packaged route 不启动 retained worker、stale `foundry-local` LongDoc id 本地失败；Rust `pdf_native_export_behavior` 覆盖 PDF 写回、hex text operator 写回、binary/raw-byte content-stream range patch、选页保留、页级 patch 失败原页保留、全页无匹配时 fallback error 和非 ASCII `NeedsFontEmbedding` typed guard；Rust `pdf_export_blocks_behavior` 覆盖 overlay block adapter 的 bbox/旋转/preserve/source-fallback/未变化文本过滤；`lib/easydict-pdf-overlay` tests 覆盖 CJK 字体嵌入、白底覆盖、选页保留和输入验证；`lib/easydict-pdf-render` tests 覆盖 BGRA render option shape；`PageRangeParserTests`、`DocLayoutYoloServiceTests`、`LayoutDetectionStrategyTests`、`TableStructureRecognitionServiceTests`。
 - 核心 pipeline
   - 阶段：
     - Parsing → BuildingIr → FormulaProtection → DocumentContext → Translating → Exporting。
@@ -365,30 +418,47 @@
     - Pass 2 将 summary/glossary 注入 block prompt。
     - preservation hints 命中块跳过翻译并在 PDF 中保留原文。
     - Pass 1 失败降级为空 context，不阻断 Pass 2。
+    - Rust `long_document_context` 需要保留宽松/fenced JSON partial 解析、glossary 多数决/最早页平手规则、preservation hint 去重/长度过滤、hint 命中 IR block 后 `TranslationSkipped` + `PreserveOriginalTextInPdfExport` 重写，以及 control character/leading-space 清理。
   - 并发：
     - `MaxConcurrency` 下限 1，上限 UI clamp 到 16。
+    - `windows-local-ai` + Auto/FoundryLocal provider 的 LongDoc profile 固定 `MaxConcurrency=1`，避免 Foundry Local 在长文档 chunk 并发下过载；WindowsAI/Phi profile 保留用户并发设置。
     - per-block 翻译并发执行；跳过块不占翻译调用。
+    - Rust-native Text/Markdown/simple-PDF-text route 使用 `std::thread::scope` 对阻塞 chunk 翻译做 bounded batch 并发，按原始 chunk index 写回结果；cache hit 在 batch 之前处理，不占 translator slot。
+    - Rust-native Text/Markdown/simple-PDF-text route 对失败或空白翻译的 chunk 最多重试 1 次，`retry_count` 使用 `.NET MaxRetriesPerBlock` 语义记录额外尝试次数；PDF source block 若有 `FallbackText`，在原文本重试耗尽或公式保护质量失败后可用 fallback text 重新保护并额外尝试一次，但 cache key/source chunk 仍使用原始文本；最终失败仍按原始 chunk index 写入 `failed_chunk_indexes` 和 `block_translated.last_error`，事件 `translated_text` 回退为原 chunk 文本。
     - 取消 token 应及时停止。
   - 可验证标准：
-    - 100 blocks 在时间预算内完成；并发 4 快于顺序；取消中途在预算内返回。
+    - 100 blocks 在时间预算内完成；并发 4 快于顺序；Rust-native batch 必须 clamp 到 1..16、乱序完成仍按源顺序导出；失败 chunk 只重试 1 次且成功/失败事件 retry count 正确；取消中途在预算内返回。
     - 失败块记录 retry count、last error 和 quality report。
-  - 已有覆盖：`LongDocumentTranslationServiceTests`、`ParallelTranslationTests`、`LongDocUIFreezeTests`、`LongDocumentTwoPassTests`。
+  - 已有覆盖：Rust `long_document_behavior` 覆盖 native text concurrency clamp、Foundry Local LongDoc profile、bounded concurrency、out-of-order completion ordering、failed chunk indexes、per-chunk retry success/final failure、cache hit slot behavior；Rust `long_document_context_behavior`、`LongDocumentTranslationServiceTests`、`ParallelTranslationTests`、`LongDocUIFreezeTests`、`LongDocumentTwoPassTests`。
 - 公式与内容保护
   - 行为：
     - 支持字体 regex、数学 Unicode regex、上下标密度、字符级重构、公式 token `{v0}` 等。
     - 公式-only/数学字体密集/NumericData/LlmHint 等块可跳过翻译并保留原 PDF text operators。
     - 翻译后恢复 placeholder；delimiter 不平衡或 soft span 被破坏时回退原文/重试。
     - 支持自定义公式字体/字符 regex 设置。
+    - Rust `latex_formula` 需要保留 LaTeX render-text simplifier：Greek/operator Unicode map、`\frac`/`\sqrt`/matrix placeholder、格式命令剥离、`_{}`/`^{}` per-character script signals、单字母数字隐式 subscript、PDF render blank input。
+    - Rust `formula_protection` 已提供 detector/protector/restorer 纯逻辑：LaTeX delimiter/env/command、显式上下标、tuple/equation soft span、high/low confidence split、demote retry、`{vN}` placeholder、trailing formula parentheses grouping、simplified/raw restore、partial/fallback diagnostics。
+    - Rust `content_preservation` 已提供 `FormulaPreservationService` 纯门面：block type / math-font / math-Unicode / subscript-density / NumericData / display-equation analyze heuristics、character-level protected text 优先和 retry demotion gate、formula-only opaque 判定、`[[EQ_SOFT]]` exact soft span、soft-span translation restore validation、synthetic delimiter stripping、LaTeX-equivalent tuple normalization 和 fallback diagnostics。
+    - Rust `character_paragraph` 已提供 `CharacterParagraphBuilder` 纯字符级 evidence：`CharInfo` / `TextMatrix`、layout class 分段、math-font/math-Unicode/subscript/vertical/U+FFFD 公式分类、confidence、bracket-depth continuation、`{vN}` hard token、`$...$` low-confidence soft wrapping 和 reverse-LaTeX helper。
+    - Rust `pdf_formula_adapter` 已提供 PDF-neutral glyph/block adapter：`PdfGlyph` / bounds / orientation DTO、block ±1pt/1.5pt tolerance 过滤、subset font prefix strip、旋转 glyph → vertical `TextMatrix`、`CharInfo` 与 `LetterGeometry` 转换、`BlockFormulaCharacters` 脚本标记、character-level protection evidence 生成，以及 C# 同款 default/0.5 word-gap formula-aware block text retry。
+    - Rust `pdf_source_extraction` 已把 `lib/easydict-pdf-render` 的 PDFium text-char DTO 接到 app 侧：`ExtractedPdfTextChar` → `PdfGlyph`、angle/matrix orientation 映射、baseline/line grouping、列间大 gap 拆线、C# 同款 layout profile/region 推断、two-column reading order、same-row/horizontal-offset block split、source block type 猜测、detected font names、text style、formula-aware block text、character-level tokens 和 `BlockContext` evidence hydration。Rust-native PDF text route 会优先尝试 PDFium source blocks，tight bounds 抽取失败或无 block 时会用 loose bounds 二次尝试；PDFium 不可用、两次抽取仍失败或无 block 时回退现有 `pdf-extract` / `lopdf` 简单文本路线；selectable text 全空时可通过 Pdfium BGRA page render + Rust OCR provider 生成 PDF OCR text chunks。`PdfSourceBlock` 也可生成 C# 风格 `p{page}-{region}-b{n}` source block id 和 PDF export chunk metadata，带 bbox、font/style、fallback text、formula/preserve-original intent 和 reading-order score。Rust `pdf_native_export` 已提供第一版 exact content-stream replacement：用 `lopdf` 重写匹配源文本的 literal/TJ text operator、保留公式/跳过块原文、页级 patch 失败时保留原页、按页码范围裁页；当写回因 CJK/非 ASCII 译文触发 `NeedsFontEmbedding` 时，Rust route 可用 `lib/easydict-pdf-overlay` 嵌入字体并按 bbox overlay 译文。复杂 ML layout/source extraction 和更高保真 backfill 绘制仍是后续切片。
+    - Rust `formula_text_reconstruction` 已提供 `FormulaAwareTextReconstructor` 纯 letter-geometry 重建：`LetterGeometry`、letter-based block 启用启发、baseline/script tolerance 分行、word-gap scale、sub/sup marker、公式续行合并、tuple/equation anchor 和 descender-loss 质量门。
+    - Rust-native Text/Markdown/simple-PDF-text LongDoc runner 已接入文本级公式保护：provider 请求使用 protected text，custom prompt 后追加公式保护指令，公式-only / 数学 Unicode 密集 / NumericData chunk 本地保留原文不调用 translator，翻译结果先 restore 再写 event/cache/export，cache key 仍使用 original chunk hash，质量反馈失败会执行一次 demote retry；PDF source block 的 nonblank `FallbackText` 会在原文本 retry 用尽后作为备用请求文本再试一次。
   - 可验证标准：
     - 多公式 placeholder 按顺序恢复；公式 prompt 仅在有公式时注入；公式-only 块不调用翻译。
-  - 已有覆盖：`FormulaProtection/*Tests.cs`、`ContentPreservation/*Tests.cs`、`FormulaDetectionTests`。
+  - 已有覆盖：Rust `latex_formula_behavior`、Rust `formula_protection_behavior`、Rust `character_paragraph_behavior`、Rust `pdf_formula_adapter_behavior`、Rust `pdf_source_extraction_behavior`、Rust `formula_text_reconstruction_behavior`、Rust `content_preservation_behavior`、Rust `long_document_behavior native_text_long_document_formula*`、`FormulaProtection/*Tests.cs`、`ContentPreservation/*Tests.cs`、`FormulaDetectionTests`。
 - 导出
   - PDF：
     - `Overlay`：PdfSharpCore 白框覆盖+重绘。
     - `ContentStreamReplacement`：MuPDF.NET 替换 content stream，保留图形和字体，默认更高质量。
     - CJK 字体按目标语言下载/解析，避免缺字。
+    - Rust `document_layout` 需要保留 PDF erase/backfill 几何：available height 优先 background line span，其次 render line span，最后 bbox；line widths 不足时重复最后一项；最终 erase rects 按横向 band 聚类并输出 cluster bounds。
+    - Rust `pdf_export_blocks` 需要保留 checkpoint chunk → renderable block policy：非空 translated 优先；只有 failed chunk 可用 fallback/source；metadata fallback text 按 `chunk_index` 优先 source chunk；缺 metadata 跳过；旋转角绝对值大于 15° 的 vertical block 不渲染/不擦除且不走 preserve-original；preserved formula 不重绘也不擦除。
+    - Rust `pdf_native_export` 已覆盖 simple PDF exact content-stream replacement MVP；当 replacement 成功时输出真实 PDF，页级 patch 失败保留原页，整份 PDF 无任何可 patch text operator 时以 native export typed failure kind 退回本地 TXT / bilingual TXT 导出，不再启动 retained LongDoc worker。该 MVP 支持 literal/hex `Tj` 与 `TJ` array、normalized whitespace matching 和 byte-range patch，不要求整页 content stream 是 UTF-8。Rust `pdf_export_blocks` 已提供中立 `PdfOverlayBlock` / `PdfOverlayRect` adapter，从 checkpoint 生成只包含可重绘译文、bbox、字号、字体名和页码的 overlay plan，并过滤 missing bbox、旋转、preserve formula、source fallback、translation skipped 和未变化文本。Rust `lib/easydict-pdf-overlay` 已把 `harumi` 隔离成路径/DTO wrapper：加载 existing PDF、嵌入 CJK font bytes、可选白底擦除、在 bbox 内写入 visible text box、按页码范围保留 selected pages、保存 PDF，且不向 app 暴露 `harumi`/`lopdf` 类型；native LongDoc PDF export 在 `NeedsFontEmbedding` typed error 时已优先接入该 wrapper，字体来源为设置中的 `cjk_font_path` 或已缓存的 CJK 字体，overlay/font 失败同样降级为本地文本导出。`harumi` 是当前优先候选（现有 PDF CJK text overlay、font subsetting、ToUnicode），其次才是更低层的 `pdf-writer` Type0/CID/font writer；`printpdf` 更适合生成/重建 PDF，不是当前保留原 PDF mutation 的首选。
   - Markdown/Text：
     - 输出 translated-only、bilingual 或 both。
+    - Rust `long_document_export` 需要保留 Text/Markdown composer 的 chunk 排序、失败 marker、Markdown heading/blockquotes/page headers 和 bilingual output path 规则。
+    - Rust-native Text/Markdown/simple-PDF-text runner 应复用 `long_document_export` checkpoint composer，保持 C# 风格 CRLF、失败块 marker、Markdown blockquote/separator 和 bilingual output path 规则；生产导出路径不应保留另一套 ad hoc composer。
   - Cache/dedup：
     - `EnableTranslationCache` 时读写持久缓存。
     - 同一输入/服务/目标可 dedup 到已有输出路径。
@@ -398,7 +468,7 @@
     - PDF 输出可打开且页数/页码范围符合预期。
     - Bilingual/Both 模式输出路径正确，双语文件非空。
     - Retry 后失败集合缩小或状态保持 PartialSuccess 并报告错误。
-  - 已有覆盖：`DocumentExportServiceTests`、`PdfExportServiceLayoutTests`、`MuPdfExportServiceSpacingTests`、`LongDocWorkerPipelineTests`、`PdfTranslationVisualTest`。
+  - 已有覆盖：Rust `long_document_export_behavior`、Rust `document_layout_behavior`、Rust `pdf_export_blocks_behavior`、`DocumentExportServiceTests`、`PdfExportServiceLayoutTests`、`MuPdfExportServiceSpacingTests`、`LongDocWorkerPipelineTests`、`PdfTranslationVisualTest`。
 
 ## 9. 本地 MDX/MDD 词典
 
@@ -406,7 +476,8 @@
   - 行为：
     - 设置页可导入 MDX；自动发现同目录 MDD，或使用保存的 MDD 路径。
     - 每个词典注册为 `mdx::*` 服务，显示名来自导入配置。
-    - 加密词典需要 regcode/email；未配置时 `RequiresApiKey=true`，不应加载查询。
+    - 需要凭据的加密模式（例如 `Encrypted=1` / key-header credential path）需要 regcode/email；未配置时 `RequiresApiKey=true`，不应加载查询。`Encrypted=1` 配置合法凭据后应走 Rust-native MDX reader；`Encrypted=2` key-info-only 模式不需要 regcode/email，也应走 Rust-native MDX reader。
+    - 设置页动态 MDX 配置区必须按实际加密模式显示凭据字段：`Encrypted=2` key-info-only 字典不显示 email/regcode，`Encrypted=1` / `Yes` / 未知加密模式仍显示凭据输入。
   - 可验证标准：导入后服务列表出现；删除后服务注销且索引文件可删除。
   - 已有覆盖：`MdxDictionaryTranslationServiceTests`、`SettingsPageMdxServiceIdTests`。
 - 查词与资源
@@ -414,16 +485,25 @@
     - 支持 MDX lookup、`@@@LINK` redirect，限制过多 redirect。
     - HTML 定义可走 WebView 展示；MDD 图片/资源可解析。
     - 词典 miss 应是中性空结果，不应作为严重错误影响其他服务。
+    - 加密词典配置了凭据但 MDX 文件路径为空或文件不存在时，应在 Rust 本地报输入错误，不应启动 CompatHost。
+    - 加密词典配置了凭据但 regcode 不是合法 Base64，或解码后不是 16/32 字节 Salsa key 时，应在 Rust 本地报输入错误，不应启动 CompatHost。
+    - `Encrypted=1` record/key-header 字典配置合法 regcode/email 或 device id 后，应在 Rust 中派生 key-header 解密 key 并通过 `rs-mdict` route 查询，不应启动 CompatHost。
+    - `Encrypted=2` key-info-only 字典应通过 Rust `rs-mdict` route 查询，且不应因缺失/陈旧 regcode 而启动 CompatHost 或返回 credential-required。
+    - Rust MDX 加密基础必须匹配 `.NET MDict.Csharp`：Base64 regcode、RIPEMD-128、`RegisterBy=EMail` 的 UTF-16LE user id、`RegisterBy=DeviceID` 的 UTF-8/device bytes、Salsa20/8 零 IV、`FastDecrypt` nibble-swap/previous-byte 算法、`MdxDecrypt` key-info/record-block 解密；`Encrypted='yes'`/UTF-8 header 边界应可分类，未知/`Encrypted=3` 组合加密模式应本地返回明确 unsupported 错误，不应启动 CompatHost。
   - 可验证标准：MDD resource key 可读取；加密词典正确/错误密钥行为明确；dictionary webview 有截图可复查。
   - 已有覆盖：`MdxMddResourceTests`、`MdxEncryptedLookupTests`、`MdxEncryptionTests`、UI `DictionaryWebViewRenderingTests`。
 - 索引和建议
   - 行为：
     - `LocalDictionaryIndexService` 为每个词典维护 manifest/fingerprint。
     - 源文件 fingerprint 改变时 rebuild。
+    - Rust `lex_index` 必须保留 `.NET LexIndex` 的 `LXDX` 二进制格式、NFKC + invariant lowercase normalization、原始变体 payload、prefix completion、`*`/`?` wildcard match 和本地无效索引错误。
+    - Rust `local_dictionary_index` 必须保留 per-dictionary `index.bin`/`manifest.json` 生命周期、`mdx::` service id 目录转义、manifest 命中跳过重建、懒加载坏索引跳过、`RegisterDescriptor` 复用已有索引和删除词典清理索引目录。
     - 多词典结果按请求服务顺序合并并去重。
     - 加密词典没有凭据时跳过索引。
-  - 可验证标准：manifest 匹配 service/source fingerprint；通配查询跨多索引返回顺序正确。
-  - 已有覆盖：`LocalDictionaryIndexServiceTests`、`LexIndexBuilderTests`。
+    - Quick Translate 本地词典建议应优先使用 Rust 持久 `LexIndex`；manifest/fingerprint 新鲜时不应重新打开 MDX 枚举 keys；wildcard query 应在 app-level runner 走 Rust `match_pattern`；缺失文件、缺失凭据、非法 regcode 等本地输入错误仍应返回原有错误，不应被索引空结果吞掉。
+    - 混合明文/加密词典建议时，应先按顺序执行可 Rust-native 完成的词典；配置合法凭据的 `Encrypted=1` 字典也应走 native suggestions；如果前序 native 结果已填满建议列表，不应再启动 CompatHost 查询后续未迁移词典。
+  - 可验证标准：manifest 匹配 service/source fingerprint，且 Rust 能复用 `.NET` PascalCase manifest；通配查询跨多索引返回顺序正确，Quick Translate native-index runner 也覆盖 wildcard route。
+  - 已有覆盖：Rust `lex_index_behavior`、Rust `easydict-lex-index` CLI tests、Rust `local_dictionary_index_behavior`、`LocalDictionaryIndexServiceTests`。
 
 ## 10. 设置页
 
@@ -450,12 +530,12 @@
 - Services tab
   - 顶部 Enabled Services section 包含说明、`ImportMdxDictionaryButton`、导入摘要文本和 Enable International Services 开关；国际服务开关说明部分服务需要国际网络访问。
   - Service Configuration section 由 Expander 组成，header 左侧显示服务图标，图标加载失败要折叠不留破图；右侧可显示配置成功/失败状态。
+  - 动态 MDX 配置区显示导入字典，支持保存凭据型加密字典的邮箱/regcode、删除确认、自动引用同目录 MDD 或保存路径；`Encrypted=2` key-info-only 字典应显示为可直接使用，不暴露不需要的凭据输入。
   - DeepL：API key PasswordBox、眼睛 reveal 按钮、Use Free API、Use quality-optimized model、说明和 Test 按钮；质量优化模式需要 API key。
-  - Windows Local AI：Provider combo 选 Auto、WindowsAI/Phi Silica、Foundry Local、OpenVINO；显示 provider 星级/说明。Auto 顺序是 Phi Silica -> Foundry Local -> OpenVINO。包含 Prepare model、Windows Update 进度入口、Foundry endpoint/model/start/install/docs、OpenVINO download/progress。
+  - Windows Local AI：Provider combo 选 Auto、WindowsAI/Phi Silica、Foundry Local、OpenVINO；显示 provider 星级/说明。Auto 顺序是 Phi Silica -> Foundry Local -> OpenVINO。包含 Prepare model、Windows Update 进度入口、Foundry endpoint/model/start/install/docs、OpenVINO download/progress；OpenVINO 设置状态由 Rust runtime-status 检查模型/runtime 缓存契约后写回；Foundry Local 设置状态由 Rust runtime-status task 读取当前 settings snapshot 后执行 CLI/runtime 三态探测并写回，且不得覆盖正在启动/准备中的 Foundry 状态。
   - Ollama：endpoint 文本框、editable model combo、Refresh models、Test。
   - OpenAI-compatible 服务：OpenAI、DeepSeek、Groq、Zhipu、GitHub Models、Gemini、Custom OpenAI、Built-in AI、Doubao 均提供 key/token reveal、model 或 endpoint/model、Test；OpenAI 额外有 API Format Auto/Responses/Chat Completions 和 detected format 文本。
   - 传统 HTTP 服务：Caiyun、NiuTrans、Youdao 提供 key/secret 与 Test；Youdao 有 Use Official API 开关。Google/Google Dict/Linguee 属于免配置服务区，Linguee 只在条件编译开启时显示。
-  - 动态 MDX 配置区显示导入字典，支持保存加密邮箱/regcode、删除确认、自动引用同目录 MDD 或保存路径。
 - Views tab
   - 主题是 Window Results，说明文案为“选择每个窗口显示哪些结果，以及每个结果是否自动查询”。
   - Main Window、Mini Window、Fixed Window 三组共用同一行布局：左侧服务 CheckBox，中间 `EnabledQuery` ToggleSwitch，右侧仅在 reorder mode 中显示 Move up / Move down 图标按钮。
@@ -474,8 +554,8 @@
   - 说明文案提示重启/保存后应用，Mini/Fixed toggle 热键由基础热键自动加 Shift，例如 `Ctrl+Alt+Shift+M`。
 - Advanced tab
   - OCR section：`OcrEngineCombo` 选 Default/Windows Native、Ollama Local VLM、Custom API。选择高级 OCR engine 时显示 API key reveal、endpoint、model、system prompt、Test OCR Connection 和只读 Test Result。
-  - Layout Detection section：Detection Mode 选 Auto、Local ONNX Model、Vision LLM、Heuristic Only。ONNX panel 显示下载状态、Download Model (~75MB)、Delete、ProgressBar 和进度文本；Vision LLM panel 只在 Vision LLM 模式显示，可选 OpenAI、Gemini、Custom OpenAI。
-  - CJK Font section：Download CJK Font、Delete、ProgressBar、状态文本和 Noto Sans CJK 说明。
+  - Layout Detection section：Detection Mode 选 Auto、Local ONNX Model、Vision LLM、Heuristic Only。ONNX panel 显示下载状态、Download Model (~75MB)、Delete、ProgressBar 和进度文本；Vision LLM panel 只在 Vision LLM 模式显示，可选 OpenAI、Gemini、Custom OpenAI；Rust 已拥有 `layout_model_download` 库层（ONNX Runtime zip entry 抽取、DocLayout-YOLO/TATR 模型 URL、最小大小校验、清理/删除/状态判定、代理下载）、`vision_layout` 纯请求/解析层（Chat Completions / Responses vision payload、BGRA BMP/JPEG data URL、JSON array 抽取、类型/百分比 bbox 映射）和 `table_structure` TATR helper 层（crop resize/preprocess、DETR logits/box parser、IoU 去重、row/column cell grid）。UI 按钮接线、真实 Vision LLM 调用接入长文档 strategy、ONNX/TATR 推理仍是后续切片。
+  - CJK Font section：Download CJK Font、Delete、ProgressBar、状态文本和 Noto Sans CJK 说明；Rust 已拥有 `resource_download` / `font_download` 库层（Noto Sans CJK 元数据、镜像排序、retry、temp file、代理配置、缓存/删除/状态判定），UI 按钮接线仍是后续切片。
   - Formula Detection section：Font Pattern regex、Character Pattern regex；空值使用内置公式保护规则。
   - Translation Cache section：Enable Translation Cache、Clear Cache、缓存条目状态；清除失败只更新状态，不崩溃页面。
   - Custom Translation Prompt section：120px 多行输入框，写入长文档/LLM 翻译附加指令。
@@ -494,7 +574,7 @@
   - 交互：首次进入后 `MainScrollViewer` 可立即滚动；首次物理鼠标点击 Hotkeys tab 1 秒内出现 `ShowHotkeyBox`；已加载 tabs 1 秒内切换完成；切 tab 后内容不能残留 General stale UI。
   - 自动化：`BackButton`、`MainScrollViewer`、`SettingsTab_*`、`AppThemeCombo`、`SettingsGeneralBehaviorHeader`、`MouseSelectionTranslateToggle`、`DeepLServiceExpander`、`MainWindowReorderModeButton`、`ShowHotkeyBox`、About links 的 AutomationId 必须保留。
   - 验证：First/Second language 相同、DeepL quality 无 key、启用 proxy 但 URL 空/非法都必须阻止保存并显示错误 dialog。
-  - 保存后 settings JSON 不写回 legacy `TargetLanguage`；worker isolation persisted false 会被忽略，除非对应 disable env var 为 1。
+  - 保存后 settings JSON 不写回 legacy `TargetLanguage`；worker isolation persisted false 会被忽略，除非对应 disable env var 为 1；旧 `openvino-local-ai` / `foundry-local` service id 会迁到聚合 `windows-local-ai`，并在无聚合服务且无显式 provider 时分别保留 `LocalAIProvider=OpenVINO` / `FoundryLocal` 偏好。
   - 主题和语言切换后页面文本/颜色更新，不发生 opposite palette 泄漏；深色/浅色/中文 UI 下 tab 和 section 文本不截断、不重叠。
 - 已有覆盖
   - UI：`SettingsPageTests`、`SettingsPageScrollTests`、`ThemeContrastTests`、`DarkModeTests`。
@@ -544,25 +624,33 @@
   - 行为：
     - Chrome host：HKCU `Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge`。
     - Firefox host：HKCU `Software\Mozilla\NativeMessagingHosts\com.easydict.bridge`。
-    - manifest path 指向部署目录；bridge exe 接收 native message 后触发 named event/protocol。
-    - MSIX 通过 `BrowserHostRegistrar.exe` 在沙盒外安装。
-  - 可验证标准：install/status/uninstall JSON 正确；manifest schema 正确；Chrome allowed origins 包含两个 extension id。
-  - 已有覆盖：`BrowserRegistrarCoreTests`、`ProgramTests`、`BrowserSupportServiceTests`。
+    - manifest path 指向 Rust helper 部署目录；bridge exe 接收 native message 后触发 named event/protocol。
+    - MSIX 通过 Rust `BrowserHostRegistrar.exe` legacy alias 在沙盒外安装。
+  - 可验证标准：install/status/uninstall JSON 正确；manifest schema 正确；status 必须验证 native host name、`stdio` 类型和 canonical bridge exe 路径，但不能强制默认 extension id；Chrome allowed origins 包含两个 extension id。
+  - 已有覆盖：Rust `browser_registrar_behavior`、Rust `native_bridge` 行为测试、`BrowserSupportServiceTests`、`WorkerPackagingTests`。
 
 ## 14. 打包、发布和 Store 相关
 
 - Makefile
   - `make build`、`build-release`、`test`、`test-ui`、`test-integration`。
-  - `publish-x64/x86/arm64` 便携版：x64/arm64 包含 NativeBridge、BrowserRegistrar、LongDoc/LocalAi/Ocr workers；x86 不含 worker。
-  - `publish-msix-*`：MSIX 使用 Windows App SDK framework package，不捆绑 WindowsAppSDK DLL；worker no-self-contained，并抽取共享 .NET runtime。
+  - `publish-x64/x86/arm64` 便携版：三架构均包含 Rust NativeBridge、BrowserRegistrar legacy alias、CLI helper 和 LongDoc CLI helper；x64/arm64 仍包含 LongDoc/LocalAi workers；OCR worker 和 CompatHost 均已迁出/移除；LongDoc/LocalAI 由 Rust 直接启动 worker，CompatHost 不再作为这两类 worker 的中转层。
+  - `publish-msix-*`：MSIX 使用 Windows App SDK framework package，不捆绑 WindowsAppSDK DLL；保留的 LongDoc/LocalAI worker no-self-contained，并抽取共享 .NET runtime；该 runtime 不再服务 OCR 或 CompatHost。
+  - Rust 第一版发布：`rs/scripts/Package-Portable.ps1` 只生成 portable zip，不生成 MSIX/installer/Store 包；输出名必须使用 `easydict-rs-portable-*`，主程序别名为 `Easydict.Rust.exe`，不得覆盖 dotnet 版 `Easydict.WinUI.exe` 或 `easydict_win32-*` 包名；包内不携带 retained `.NET` workers 或 bundled `.NET` runtime，允许与 dotnet 版本并存；ZIP 创建必须走 Rust `easydict_packager`，不使用 PowerShell `Compress-Archive`。
+  - Rust-only profile：`RuntimeProfile=RustOnly` / `RUNTIME_PROFILE=rust-only` / workflow `runtime_profile=rust-only` 时，WinUI MSBuild 必须禁用 retained worker ProjectReference/copy 和 in-proc LongDoc fallback；发布入口必须跳过 retained LongDoc/LocalAI worker、worker shared-file dedupe 和 bundled worker `.NET` runtime，并用 Rust MSIX validator 的 `rust-only` profile 检查包体。
   - `msix-*`：生成架构 manifest 并调用 WinApp CLI。
 - 可验证标准
-  - x64/arm64 publish 输出包含 `workers/longdoc`、`workers/localai`、`workers/ocr`。
-  - MSIX publish 后执行 `Dedupe-WorkerSharedFiles.ps1` 和 `Extract-DotnetRuntime.ps1`。
+  - release workflow 必须把 Rust portable zip 作为独立 artifact/release asset 上传，但 Rust 第一版不得接入 MSIX bundle、WinApp CLI、Inno installer 或 Store submission；dotnet 版现有 MSIX/installer/portable artifact 继续存在。
+  - release workflow 的 dotnet portable ZIP 必须走 Rust `easydict_packager zip-directory --exclude-extension .pdb`，确保 PDB 排除和相对路径布局由 Rust 工具统一维护。
+  - Store listing workflow 的 validate/preview/summary 必须走 Rust `easydict_store_listings`；Store listing 只支持 `en-us`、`zh-cn`、`zh-tw`、`ja-jp`、`ko-kr` 五种语言；keywords 不能包含第三方产品名；submit 可继续调用外部 `msstore` CLI，但 JSON payload 必须由 Rust 工具生成。
+  - Retained worker shared `.NET` runtime bundling 必须走 Rust `easydict_packager extract-dotnet-runtime`；输出仍保持标准 `DOTNET_ROOT` layout（`host/fxr/{version}` 和 `shared/Microsoft.NETCore.App/{version}`），并删除重复 `LICENSE.txt` / `ThirdPartyNotices.txt`。
+  - x64/arm64 publish 输出包含 `workers/longdoc`、`workers/localai`，不包含 `workers/ocr` 或 `Easydict.CompatHost.exe`。
+  - Rust `easydict_msix_validate` 必须验证 MSIX 包体布局：Rust helper/legacy alias 存在，旧 `.NET CompatHost`、OCR worker、旧 .NET tool payload 和根目录 in-proc LongDoc PDF/export DLL 不存在；默认 `hybrid` profile 下 x64/arm64 包还必须包含 retained LongDoc/LocalAI worker 和共享 `.NET` runtime 布局，x86 不要求 retained worker/runtime；`rust-only` profile 下任何架构都必须拒绝 `workers/longdoc`、`workers/localai` 和 `dotnet/` payload；release MSIX bundle 中每个嵌套 `.appx`/`.msix` 的 `Dependencies/TargetDeviceFamily/@MinVersion` 必须由同一 Rust 工具校验，默认不低于 `10.0.19041.0`。
+  - MSIX publish 后执行 Rust-owned `Dedupe-WorkerSharedFiles.ps1` shim 和 `Extract-DotnetRuntime.ps1` shim；ARM64 smoke workflow 应保持同一 dedupe/runtime 顺序，避免烟测包体布局与正式 release 分叉。
+  - `Dedupe-WorkerSharedFiles.ps1` 的 shared DLL allowlist 必须与 `WorkerSharedAssemblyResolver` 可解析程序集保持一致。
   - `Package.appxmanifest` 的 identity、protocol、capabilities、file associations 与发布脚本生成的架构 manifest 一致。
   - 包体大小预算测试通过。
 - 已有覆盖
-  - `WorkerPackagingTests`、`MsixValidate` 工具、发布脚本。
+  - `WorkerPackagingTests`、Rust `easydict_msix_validate` 工具、发布脚本。
 
 ## 15. UI/UX 迁移细则
 
@@ -858,20 +946,20 @@
 ## 16. 测试覆盖索引
 
 - 测试总量
-  - `Easydict.BrowserRegistrar.Tests`：2 files / 26 tests。
+  - Rust `browser_registrar_behavior` / `native_bridge`：浏览器注册与 Native Messaging 行为覆盖。
   - `Easydict.Llm.Streaming.Tests`：1 file / 12 tests。
   - `Easydict.TranslationService.Tests`：63 files / 778 tests。
   - `Easydict.UIAutomation.Tests`：17 files / 68 tests。
   - `Easydict.WinUI.Tests`：73 files / 973 tests。
   - `Polyglot.TextLayout.Tests`：11 files / 121 tests。
-  - `LexIndex.Tests`：1 file / 10 tests。
+  - Rust `lex_index_behavior` / `easydict-lex-index`：`LXDX` parity 与 CLI 覆盖。
 - 测试类清单
-  - `LexIndex.Tests`：`LexIndexBuilderTests`。
+  - Rust LexIndex：`lex_index_behavior`、`easydict-lex-index` CLI unit tests。
   - `Polyglot.TextLayout.Tests`：`EndToEndLayoutTests`、`FixedWidthLayoutTests`、`FontFitSolverTests`、`IncrementalLayoutTests`、`KinsokuLayoutTests`、`KinsokuTableTests`、`LongSegmentBreakingTests`、`PreparedParagraphTests`、`ScriptClassifierTests`、`TextSegmenterTests`、`VariableWidthLayoutTests`。
-  - `Easydict.BrowserRegistrar.Tests`：`BrowserRegistrarCoreTests`、`ProgramTests`。
+  - Rust browser bridge：`browser_registrar_behavior`、`native_bridge`。
   - `Easydict.Llm.Streaming.Tests`：`SseParserTests`。
   - `Easydict.TranslationService.Tests`：`BaseOpenAIServiceTests`、`BingTranslateServiceIntegrationTests`、`BingTranslateServiceTests`、`BuiltInAIServiceTests`、`CaiyunServiceIntegrationTests`、`CaiyunServiceTests`、`CustomOpenAIServiceTests`、`DeepLServiceIntegrationTests`、`DeepLServiceMockTests`、`DeepLServiceTests`、`DeepSeekServiceIntegrationTests`、`DeepSeekServiceTests`、`DocumentContextExtractorTests`、`DoubaoServiceIntegrationTests`、`DoubaoServiceTests`、`FormulaAwareTextReconstructorTests`、`FormulaConfidenceTests`、`FormulaDetectionTests`、`FormulaDetectorTests`、`FormulaLatexReconstructorTests`、`FormulaPreservationServiceTests`、`FormulaProtectorTests`、`FormulaRestorerTests`、`GeminiServiceIntegrationTests`、`GeminiServiceTests`、`GitHubModelsServiceIntegrationTests`、`GitHubModelsServiceTests`、`GoogleTranslateServiceIntegrationTests`、`GoogleTranslateServiceTests`、`GoogleWebTranslateServiceTests`、`GrammarCorrectionParserTests`、`GroqServiceIntegrationTests`、`GroqServiceTests`、`LanguageBcp47Tests`、`LatexFormulaSimplifierTests`、`LingueeServiceIntegrationTests`、`LingueeServiceTests`、`LongDocUIFreezeTests`、`LongDocumentE2EBaselineTests`、`LongDocumentTranslationServiceTests`、`LongDocumentTwoPassTests`、`MathPatternsTests`、`MemoryBudgetTests`、`NiuTransServiceIntegrationTests`、`NiuTransServiceTests`、`OllamaServiceTests`、`OpenAIApiFormatDetectionTests`、`OpenAIServiceIntegrationTests`、`OpenAIServiceTests`、`PageRangeParserTests`、`ParallelTranslationTests`、`PhoneticCacheStampedeTests`、`PhoneticDisplayHelperTests`、`PhoneticEnrichmentIntegrationTests`、`ResponsesSseParserTests`、`ServiceQueryResultTests`、`ShortTextUIFreezeTests`、`StartupPerformanceTests`、`TranslationManagerTests`、`VolcanoServiceIntegrationTests`、`VolcanoServiceTests`、`YoudaoServiceIntegrationTests`、`YoudaoServiceTests`、`ZhipuServiceIntegrationTests`、`ZhipuServiceTests`。
-  - `Easydict.WinUI.Tests`：`AppProfilingDiagnosticsTests`、`BrowserSupportServiceTests`、`BuildModeConsistencyTests`、`CharacterParagraphBuilderTests`、`ContentStreamInterpreterTests`、`CustomApiOcrServiceTests`、`DocLayoutYoloServiceTests`、`DocumentExportServiceTests`、`FontDownloadServiceTests`、`FoundryLocalRecoveryCoordinatorTests`、`FoundryLocalServiceTests`、`GdiSafeHandleTests`、`GlyphAdvanceMeasurerTests`、`KanbanTodoUxRegressionTests`、`LanguageDetectionServiceTests`、`LayoutDetectionStrategyTests`、`LayoutModelDownloadServiceTests`、`LocalAITranslationServiceIntegrationTests`、`LocalAITranslationServiceLazyInitTests`、`LocalAiWorkerClientFallbackTests`、`LocalCredentialProtectorTests`、`LocalDictionaryIndexServiceTests`、`LocalizationServiceTests`、`LongDocumentServiceSupportTests`、`LongDocumentTranslationServiceReviewFixTests`、`LongDocWorkerClientResultHydrationTests`、`LongDocWorkerLifecycleTests`、`LongDocWorkerPipelineTests`、`LongDocWorkerTranslationManagerFactoryTests`、`MainPageLifecycleLeakTests`、`MainPageSuggestionLogicTests`、`MdxDictionaryTranslationServiceTests`、`MdxEncryptedLookupTests`、`MdxEncryptionTests`、`MdxMddResourceTests`、`MemoryProfilingAutomationTests`、`MouseHookServiceTests`、`MuPdfExportServiceSpacingTests`、`OcrServiceFactoryTests`、`OcrTextMergerTests`、`OcrWorkerClientFallbackTests`、`OllamaOcrServiceTests`、`OpenVinoTranslationServiceTests`、`Page2TranslationQualityTests`、`PdfExportServiceFontTests`、`PdfExportServiceLayoutTests`、`PhiSilicaTranslationServiceTests`、`PooledDenseTensorTests`、`PopButtonServiceTests`、`ProtectedCursorHelperTests`、`QueryOutcomeSummaryTests`、`ResultsInputRouterTests`、`SelectionPerformanceTests`、`ServiceResultDemotionHelperTests`、`ServiceResultItemLifecycleLeakTests`、`SettingsPageLifecycleLeakTests`、`SettingsPageMdxServiceIdTests`、`SettingsPageSplitTabsTests`、`SettingsServiceTests`、`TableStructureRecognitionServiceTests`、`TargetLanguageSelectorTests`、`TextInsertionServiceTests`、`TextSelectionServiceTests`、`ThemeRegressionMemoryAutomationTests`、`TitleBarDragRegionHelperTests`、`TranslationCacheServiceTests`、`TranslationManagerServiceTests`、`UiThreadHotspotDiagnosticsTests`、`UnsavedChangesDialogTests`、`VisionLayoutDetectionServiceTests`、`WindowClosedLifecycleTests`、`WindowDetectorTests`、`WindowPositionHelperTests`、`WorkerPackagingTests`、`WorkerProtocolSerializationTests`。
+  - `Easydict.WinUI.Tests`：`AppProfilingDiagnosticsTests`、`BrowserSupportServiceTests`、`BuildModeConsistencyTests`、`CharacterParagraphBuilderTests`、`ContentStreamInterpreterTests`、`CustomApiOcrServiceTests`、`DocLayoutYoloServiceTests`、`DocumentExportServiceTests`、`FontDownloadServiceTests`、`FoundryLocalRecoveryCoordinatorTests`、`FoundryLocalServiceTests`、`GdiSafeHandleTests`、`GlyphAdvanceMeasurerTests`、`KanbanTodoUxRegressionTests`、`LanguageDetectionServiceTests`、`LayoutDetectionStrategyTests`、`LayoutModelDownloadServiceTests`、`LocalAITranslationServiceIntegrationTests`、`LocalAITranslationServiceLazyInitTests`、`LocalAiWorkerClientFallbackTests`、`LocalCredentialProtectorTests`、`LocalDictionaryIndexServiceTests`、`LocalizationServiceTests`、`LongDocumentServiceSupportTests`、`LongDocumentTranslationServiceReviewFixTests`、`LongDocWorkerClientResultHydrationTests`、`LongDocWorkerLifecycleTests`、`LongDocWorkerPipelineTests`、`LongDocWorkerTranslationManagerFactoryTests`、`MainPageLifecycleLeakTests`、`MainPageSuggestionLogicTests`、`MdxDictionaryTranslationServiceTests`、`MdxEncryptedLookupTests`、`MdxEncryptionTests`、`MdxMddResourceTests`、`MemoryProfilingAutomationTests`、`MouseHookServiceTests`、`MuPdfExportServiceSpacingTests`、`OcrServiceFactoryTests`、`OcrTextMergerTests`、`OllamaOcrServiceTests`、`OpenVinoTranslationServiceTests`、`Page2TranslationQualityTests`、`PdfExportServiceFontTests`、`PdfExportServiceLayoutTests`、`PhiSilicaTranslationServiceTests`、`PooledDenseTensorTests`、`PopButtonServiceTests`、`ProtectedCursorHelperTests`、`QueryOutcomeSummaryTests`、`ResultsInputRouterTests`、`SelectionPerformanceTests`、`ServiceResultDemotionHelperTests`、`ServiceResultItemLifecycleLeakTests`、`SettingsPageLifecycleLeakTests`、`SettingsPageMdxServiceIdTests`、`SettingsPageSplitTabsTests`、`SettingsServiceTests`、`TableStructureRecognitionServiceTests`、`TargetLanguageSelectorTests`、`TextInsertionServiceTests`、`TextSelectionServiceTests`、`ThemeRegressionMemoryAutomationTests`、`TitleBarDragRegionHelperTests`、`TranslationCacheServiceTests`、`TranslationManagerServiceTests`、`UiThreadHotspotDiagnosticsTests`、`UnsavedChangesDialogTests`、`VisionLayoutDetectionServiceTests`、`WindowClosedLifecycleTests`、`WindowDetectorTests`、`WindowPositionHelperTests`、`WorkerPackagingTests`、`WorkerProtocolSerializationTests`。
   - `Easydict.UIAutomation.Tests`：`DarkModeTests`、`DictionaryWebViewRenderingTests`、`LongDocTranslationTests`、`MainWindowTests`、`MemoryGateTests`、`MiniWindowFocusTests`、`MiniWindowLongTextTests`、`OcrTests`、`PhoneticTranscriptionTests`、`PopButtonSelectionTests`、`PopButtonTests`、`SettingsPageScrollTests`、`SettingsPageTests`、`ThemeContrastTests`、`TranslationTests`、`UiThreadHotspotProbeTests`、`WindowLifecycleTests`。
 - `Easydict.UIAutomation.Tests` 明细
   - `MainWindowTests`
@@ -972,8 +1060,8 @@
 - `Easydict.WinUI.Tests` 覆盖点
   - 设置/本地化/生命周期：SettingsService、SettingsPage split tabs/lifecycle/unsaved dialog、Localization、`AppProfilingDiagnosticsTests`。
   - 窗口/布局：WindowPosition、WindowClosedLifecycle、TitleBarDragRegion、DPI 相关辅助。
-  - OCR/截图：OcrTextMerger、OcrServiceFactory、Windows/Ollama/Custom API worker fallback、WindowDetector、GDI handles。
-  - 长文档 UI 服务：LongDocumentServiceSupport、LongDocumentTranslationService review fixes、PDF export、MuPDF spacing、layout model download、DocLayoutYolo、TATR、font download。
+  - OCR/截图：OcrTextMerger、OcrServiceFactory、Windows/Ollama/Custom API in-proc service selection、WindowDetector、GDI handles；Rust `ocr_behavior` 覆盖 native OCR DTO/HTTP/provider route。
+  - 长文档 UI 服务：LongDocumentServiceSupport、LongDocumentTranslationService review fixes、PDF export、MuPDF spacing、layout model download、DocLayoutYolo、TATR、font download、VisionLayoutDetection；Rust `vision_layout_behavior` 覆盖 Vision LLM 请求规划和 response parser 纯逻辑，Rust `table_structure_behavior` 覆盖 TATR 静态 helper 纯逻辑。
   - 本地 AI：LocalAI worker fallback/lazy init/integration、OpenVINO、PhiSilica、FoundryLocal recovery。
   - 本地词典：MDX/MDD、加密、索引、建议逻辑、WebView rendering 相关。
   - 输入/选词：MouseHook、PopButtonService、TextSelection、TextInsertion、ProtectedCursor、ResultsInputRouter。
@@ -982,14 +1070,19 @@
 - `Polyglot.TextLayout.Tests` 覆盖点
   - Segmentation：Latin/CJK/mixed/punctuation/soft hyphen/whitespace。
   - Kinsoku：禁则表、CJK 标点。
+  - Rust `text_layout_behavior`：已覆盖 script classify、UAX #29 grapheme enumeration、hard break、whitespace collapse、soft hyphen、CJK 单字切分、closing punctuation 粘连、kinsoku 表、PreparedParagraph、固定/可变宽 greedy layout、增量 next-line、长段 grapheme breaking 和 FontFitSolver。
   - Layout：固定宽、可变宽、增量布局、长段拆分、禁则布局。
   - FontFitting：二分缩放、最小字号、行矩形/高度约束。
+  - Rust `font_metrics_behavior`：已覆盖 `ttf-parser` 真实 TrueType fixture 解析、Unicode → GID、GID → advance width、unitsPerEm、script signal 零宽、CJK 主字体 ASCII/space fallback、Latin/Noto fallback 和无 metrics fallback。
+  - Rust `document_layout_behavior`：已覆盖 PDF line rect 构建、单 baseline 虚拟行、重复 baseline grid fallback、cell-like line rect 扩展、inline script 小行保护、Unicode subscript 转换、inline subscript attachment、citation line folding、math-font 字符 range、按 font 需求分段、formula subscript/superscript fragment parsing 和 formula hole overlap 判断。
+  - Rust `pdf_content_stream_behavior`：已覆盖 `ContentStreamInterpreter` 的 CID hex、pdf2zh text operator、q/Q + BT/ET content stream 拼接，以及 `PdfExportService` 的 escaped literal parser、TJ array text matching、literal/TJ token patch、source text `3 Tr ... 0 Tr` hide helper。
+  - Rust `long_document_export_behavior`：已覆盖 PlainText/Markdown monolingual 与 bilingual composer、page/order/chunk 排序、失败 chunk marker 不使用 fallback source、Markdown heading `###`、多页 `## Page N`、source blockquote、bilingual separator 和 `*-bilingual.*` output path。
   - Integration：CJK/英文/混排端到端、字体缩放后布局、PDF line positions 模拟。
 - `Easydict.Llm.Streaming.Tests` 覆盖点
   - SSE data lines、多个 chunk、blank/non-data 忽略、`[DONE]`、malformed JSON、空 choices、空流、取消、Unicode。
-- `BrowserRegistrar.Tests` 覆盖点
-  - CLI 参数、JSON snake_case、manifest 写入、Chrome/Firefox install/uninstall/status、多个 Chrome extension id、bridge path。
-- `LexIndex.Tests` 覆盖点
+- Rust Browser Native Messaging 覆盖点
+  - CLI 参数、JSON snake_case、manifest 写入、Chrome/Firefox install/uninstall/status、多个 Chrome extension id、bridge path、Native Messaging frame。
+- Rust LexIndex 覆盖点
   - prefix/wildcard roundtrip、Unicode normalization、variant preservation、metadata、空 key、invalid header/version/edge table。
 
 ## 17. 已知测试缺口/迁移风险
@@ -1000,7 +1093,7 @@
 - OCR overlay、global hook、托盘和 Shell context menu 强依赖 Windows 桌面环境；CI 可覆盖启动/截图/基础交互，但仍需要本机手测。
 - UI/UX 视觉验收不能只看控件存在；必须保留截图基线并人工抽查 hover、pressed、loading、error、长文本、中文界面和主题切换矩阵。
 - PDF 视觉质量有 `PdfTranslationVisualTest` 和 baseline，但公式/复杂排版仍需抽样人工检查。
-- Worker fallback 是重要兼容路径；迁移时必须同时验证 worker 可用路径和 worker 缺失/协议不匹配路径。
+- LongDoc/LocalAI worker fallback 是重要兼容路径；迁移时必须同时验证 worker 可用路径和 worker 缺失/协议不匹配路径。OCR worker 已退休，不应再作为 fallback 目标。
 
 ## 18. 三轮复查记录
 

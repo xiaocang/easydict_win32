@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
 use easydict_msix_validate::{
-    dedupe_worker_shared_files, fix_msix_min_version, validate_msix, verify_bundle_min_version,
-    BundleMinVersionOptions, FixMinVersionOptions, FixMinVersionOutcome, MsixValidationOptions,
-    PackageRuntimeProfile, WorkerSharedDedupeStatus, DEFAULT_EXPECTED_NAME, DEFAULT_MIN_VERSION,
+    dedupe_worker_shared_files, fix_msix_min_version, prepare_package_inputs, validate_msix,
+    verify_bundle_min_version, BundleMinVersionOptions, FixMinVersionOptions,
+    FixMinVersionOutcome, MsixValidationOptions, PackageRuntimeProfile,
+    PreparePackageInputsOptions, WorkerSharedDedupeStatus, DEFAULT_EXPECTED_NAME,
+    DEFAULT_MIN_VERSION,
 };
 
 fn main() {
@@ -24,6 +26,9 @@ fn run(args: Vec<String>) -> i32 {
     }
     if args[0] == "dedupe-worker-shared" {
         return run_dedupe_worker_shared(&args[1..]);
+    }
+    if args[0] == "prepare-package-inputs" {
+        return run_prepare_package_inputs(&args[1..]);
     }
 
     run_validate(&args)
@@ -243,6 +248,122 @@ fn run_dedupe_worker_shared(args: &[String]) -> i32 {
     }
 }
 
+fn run_prepare_package_inputs(args: &[String]) -> i32 {
+    let mut platform = None;
+    let mut publish_dir = None;
+    let mut manifest_path = None;
+    let mut output_manifest = None;
+    let mut msix_version = None;
+    let mut verify_targetsize_icons = false;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--platform" => {
+                let Some(value) = read_value(args, &mut index, "--platform") else {
+                    return 2;
+                };
+                platform = Some(value);
+            }
+            "--publish-dir" => {
+                let Some(value) = read_value(args, &mut index, "--publish-dir") else {
+                    return 2;
+                };
+                publish_dir = Some(PathBuf::from(value));
+            }
+            "--manifest" => {
+                let Some(value) = read_value(args, &mut index, "--manifest") else {
+                    return 2;
+                };
+                manifest_path = Some(PathBuf::from(value));
+            }
+            "--output-manifest" => {
+                let Some(value) = read_value(args, &mut index, "--output-manifest") else {
+                    return 2;
+                };
+                output_manifest = Some(PathBuf::from(value));
+            }
+            "--msix-version" => {
+                let Some(value) = read_value(args, &mut index, "--msix-version") else {
+                    return 2;
+                };
+                if !value.trim().is_empty() {
+                    msix_version = Some(value);
+                }
+            }
+            "--verify-targetsize-icons" => verify_targetsize_icons = true,
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(platform) = platform else {
+        eprintln!("error: prepare-package-inputs requires --platform");
+        print_usage();
+        return 2;
+    };
+    if !matches!(platform.as_str(), "x64" | "x86" | "arm64") {
+        eprintln!("error: --platform must be x64, x86, or arm64");
+        return 2;
+    }
+    let Some(publish_dir) = publish_dir else {
+        eprintln!("error: prepare-package-inputs requires --publish-dir");
+        print_usage();
+        return 2;
+    };
+    let Some(manifest_path) = manifest_path else {
+        eprintln!("error: prepare-package-inputs requires --manifest");
+        print_usage();
+        return 2;
+    };
+    let Some(output_manifest) = output_manifest else {
+        eprintln!("error: prepare-package-inputs requires --output-manifest");
+        print_usage();
+        return 2;
+    };
+
+    match prepare_package_inputs(&PreparePackageInputsOptions {
+        platform,
+        publish_dir,
+        manifest_path,
+        output_manifest,
+        msix_version,
+        verify_targetsize_icons,
+    }) {
+        Ok(outcome) => {
+            println!("[MSIX] Required assets verified");
+            match outcome.targetsize_icon_count {
+                Some(count) => println!("[MSIX] Found {count} targetsize icons"),
+                None => println!("[MSIX] Targetsize icon verification skipped"),
+            }
+            if outcome.copied_pri {
+                println!("[MSIX] Copied Easydict.WinUI.pri -> resources.pri");
+            } else if outcome.resources_pri_already_present {
+                println!("[MSIX] resources.pri already exists");
+            } else {
+                println!("[MSIX] No PRI file found; localization may be incomplete");
+            }
+            println!(
+                "[MSIX] Prepared manifest: {}",
+                outcome.output_manifest.display()
+            );
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
+        }
+    }
+}
+
 fn run_fix_minversion(args: &[String]) -> i32 {
     if args.is_empty() || args[0] == "-h" || args[0] == "--help" {
         print_usage();
@@ -328,6 +449,9 @@ fn print_usage() {
         "       easydict_msix_validate verify-bundle-minversion <path-to-msixbundle> [--required-min-version <ver>]"
     );
     println!("       easydict_msix_validate dedupe-worker-shared <publish-dir>");
+    println!(
+        "       easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons]"
+    );
     println!("  defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}");
     println!(
         "  --runtime-profile rust-only: reject retained .NET workers and bundled .NET runtime payloads"

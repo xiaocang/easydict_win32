@@ -16,7 +16,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$toolProject = Join-Path $repoRoot "tools\PdfToImages\PdfToImages.csproj"
+$workspaceRoot = Split-Path -Parent $repoRoot
+$rustManifest = Join-Path $workspaceRoot "rs\Cargo.toml"
 $resolvedFormat = if ($Format -eq "jpeg") { "jpg" } else { $Format }
 
 if (-not (Test-Path $InputPdf)) {
@@ -37,13 +38,14 @@ $resolvedOutputDir = [System.IO.Path]::GetFullPath($resolvedOutputDir)
 New-Item -ItemType Directory -Path $resolvedOutputDir -Force | Out-Null
 
 Write-Host "Converting PDF pages to images..."
-Write-Host "Tool project: $toolProject"
+Write-Host "Tool       : easydict_pdf_to_images"
 Write-Host "Input PDF   : $resolvedInput"
 Write-Host "Output dir  : $resolvedOutputDir"
 
 $arguments = @(
     "run",
-    "--project", $toolProject,
+    "--manifest-path", $rustManifest,
+    "-p", "easydict_pdf_to_images",
     "--",
     "--input", $resolvedInput,
     "--output-dir", $resolvedOutputDir,
@@ -57,7 +59,7 @@ else {
     $arguments += @("--dpi", $Dpi.ToString([System.Globalization.CultureInfo]::InvariantCulture))
 }
 
-& dotnet @arguments
+& cargo @arguments
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

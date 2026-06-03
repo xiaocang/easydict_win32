@@ -20,6 +20,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      runtime_profile:
+        description: 'Runtime payload profile to build and validate'
+        required: false
+        default: 'hybrid'
+        type: choice
+        options:
+          - hybrid
+          - rust-only
 
 permissions:
   contents: write
@@ -28,6 +37,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}
 
 jobs:
   # Parse and validate the version tag once; downstream jobs consume these outputs.
@@ -109,7 +119,7 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }} -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-${{ matrix.platform }} -p:Configuration=Release -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
 
       # Build and publish the application (portable: ZIP and EXE)
       - name: Publish WinUI App (portable)
@@ -125,40 +135,7 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:BuildWorkerOutputs=false `
             -p:EnableInProcLongDocFallback=false `
-            -p:PublishTrimmed=false
-
-      # Publish NativeBridge (for portable/Inno installer)
-      - name: Publish NativeBridge
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }} `
-            -p:PublishTrimmed=true
-
-      # Publish BrowserRegistrar (for portable/Inno installer)
-      - name: Publish BrowserRegistrar
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }} `
-            -p:PublishTrimmed=true
-
-      # Temporary Rust migration bridge. Published beside the app executable so
-      # Rust resolves it as AppContext.BaseDirectory + "Easydict.CompatHost.exe".
-      - name: Publish .NET Compat Host
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }} `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false
 
       - name: Publish Rust helper executables
@@ -177,6 +154,7 @@ jobs:
       # workers self-contain both .NET and WindowsAppSDK. The MSIX path below strips
       # this back to a shared .NET 8 runtime via Extract-DotnetRuntime.ps1.
       - name: Publish LongDoc Worker
+        if: env.RUNTIME_PROFILE != 'rust-only'
         working-directory: dotnet
         run: |
           dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
@@ -188,6 +166,7 @@ jobs:
             -p:PublishTrimmed=false
 
       - name: Publish LocalAi Worker
+        if: env.RUNTIME_PROFILE != 'rust-only'
         working-directory: dotnet
         run: |
           dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
@@ -198,16 +177,7 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:PublishTrimmed=false
 
-      - name: Publish OCR Worker
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish/${{ matrix.platform }}/workers/ocr `
-            -p:Platform=${{ matrix.platform }} `
-            -p:PublishTrimmed=false
+      # OCR recognition is now Rust-native; do not publish the old .NET OCR worker.
 
       # Publish again for MSIX without bundled Windows App SDK DLLs.
       # MSIX declares a framework package dependency (Microsoft.WindowsAppRuntime)
@@ -225,41 +195,10 @@ jobs:
             -p:Platform=${{ matrix.platform }} `
             -p:BuildWorkerOutputs=false `
             -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:PublishReadyToRun=false `
             -p:WindowsAppSDKSelfContained=false
-
-      # Publish NativeBridge into MSIX output (for browser extension support)
-      - name: Publish NativeBridge (MSIX)
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish-msix/${{ matrix.platform }} `
-            -p:PublishTrimmed=true
-
-      # Publish BrowserRegistrar into MSIX output (for browser extension support)
-      - name: Publish BrowserRegistrar (MSIX)
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish-msix/${{ matrix.platform }} `
-            -p:PublishTrimmed=true
-
-      - name: Publish .NET Compat Host (MSIX)
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --self-contained true `
-            --output ./publish-msix/${{ matrix.platform }} `
-            -p:PublishTrimmed=false
 
       - name: Publish Rust helper executables (MSIX)
         shell: pwsh
@@ -275,6 +214,7 @@ jobs:
       # let the host CreateProcess this exe without a separate manifest declaration.
       # WindowsAppSDKSelfContained=false because the MSIX declares the framework dep already.
       - name: Publish LongDoc Worker (MSIX)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         working-directory: dotnet
         run: |
           dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
@@ -287,6 +227,7 @@ jobs:
             -p:WindowsAppSDKSelfContained=false
 
       - name: Publish LocalAi Worker (MSIX)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         working-directory: dotnet
         run: |
           dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
@@ -298,18 +239,10 @@ jobs:
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
-      - name: Publish OCR Worker (MSIX)
-        working-directory: dotnet
-        run: |
-          dotnet publish src/Easydict.Workers.Ocr/Easydict.Workers.Ocr.csproj `
-            --configuration Release `
-            --runtime win-${{ matrix.platform }} `
-            --no-self-contained `
-            --output ./publish-msix/${{ matrix.platform }}/workers/ocr `
-            -p:Platform=${{ matrix.platform }} `
-            -p:PublishTrimmed=false
+      # OCR recognition is now Rust-native; do not publish the old .NET OCR worker.
 
       - name: Dedupe worker shared assemblies (MSIX)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         shell: pwsh
         working-directory: dotnet
         run: |
@@ -317,6 +250,7 @@ jobs:
             -PublishDir ./publish-msix/${{ matrix.platform }}
 
       - name: Bundle .NET 8 Runtime (MSIX)
+        if: env.RUNTIME_PROFILE != 'rust-only'
         shell: pwsh
         working-directory: dotnet
         run: |
@@ -339,41 +273,10 @@ jobs:
         shell: pwsh
         working-directory: dotnet
         run: |
-          dotnet run --project tools/MsixValidate -- `
+          cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- `
             "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
+            --runtime-profile "${{ env.RUNTIME_PROFILE }}" `
             --allow-unsigned
-
-      - name: Verify MSIX worker-only longdoc payload
-        shell: pwsh
-        working-directory: dotnet
-        run: |
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $msix = Resolve-Path "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix"
-          $forbiddenRootFiles = @(
-            "Easydict.DocumentExport.dll",
-            "MuPDF.NET.dll",
-            "PdfSharpCore.dll",
-            "UglyToad.PdfPig.dll",
-            "libSkiaSharp.dll",
-            "SkiaSharp.dll"
-          )
-
-          $zip = [System.IO.Compression.ZipFile]::OpenRead($msix.Path)
-          try {
-            $rootHits = @(
-              $zip.Entries |
-                Where-Object { $_.FullName -notlike "*/*" -and $forbiddenRootFiles -contains $_.Name } |
-                Select-Object -ExpandProperty FullName
-            )
-
-            if ($rootHits.Count -gt 0) {
-              throw "In-proc longdoc payload leaked into MSIX root: $($rootHits -join ', ')"
-            }
-
-            Write-Host "MSIX root is worker-only for longdoc payload."
-          } finally {
-            $zip.Dispose()
-          }
 
       # Windows App Certification Kit — required for Microsoft Store submission.
       # Both x64 and arm64 hard-fail on WACK violations: cross-arch validation on the
@@ -404,17 +307,12 @@ jobs:
         run: |
           $source = "dotnet/publish/${{ matrix.platform }}"
           $destination = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
-          $tempDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\zip-staging" -Force
 
-          # Copy all files to temp directory, then remove PDBs recursively
-          Copy-Item -Path "$source\*" -Destination $tempDir -Recurse
-          Get-ChildItem -Path $tempDir -Filter "*.pdb" -Recurse | Remove-Item -Force
-
-          # Create ZIP from temp directory (ensures relative paths in archive)
-          Compress-Archive -Path "$tempDir\*" -DestinationPath $destination
-
-          # Cleanup temp directory
-          Remove-Item -Path $tempDir -Recurse -Force
+          cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- `
+            zip-directory `
+            --source $source `
+            --destination $destination `
+            --exclude-extension .pdb
 
       # Build EXE installer using Inno Setup (no code signing needed)
       - name: Install Inno Setup
@@ -481,13 +379,50 @@ jobs:
           path: dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
           retention-days: 7
 
+  # First Rust release artifact: portable-only, named separately from the .NET package.
+  publish-rs-portable:
+    name: Build Rust Portable Package
+    runs-on: windows-latest
+    needs: [prepare, integration-tests]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Rust portable ZIP
+        shell: pwsh
+        working-directory: rs
+        run: |
+          ./scripts/Package-Portable.ps1 `
+            -Platform ${{ matrix.platform }} `
+            -Configuration Release `
+            -PackageVersion "${{ github.ref_name }}"
+
+      - name: Upload Rust portable ZIP as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easydict-rs-portable-${{ matrix.platform }}
+          path: rs/dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip
+          retention-days: 7
+
   # Create MSIX bundle containing all architectures and upload all release assets
   create-bundle:
     name: Create MSIX Bundle
     runs-on: windows-latest
-    needs: [prepare, publish-msix]
+    needs: [prepare, publish-msix, publish-rs-portable]
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Download all MSIX artifacts
         uses: actions/download-artifact@v4
         with:
@@ -507,6 +442,13 @@ jobs:
         with:
           pattern: easydict-installer-*
           path: installer-packages
+          merge-multiple: true
+
+      - name: Download Rust portable artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: easydict-rs-portable-*
+          path: rs-portable
           merge-multiple: true
 
       - name: Create MSIX Bundle
@@ -555,47 +497,14 @@ jobs:
             throw "MSIX bundle is over the 400 MB budget: $bundleSize bytes"
           }
 
-      # Verify bundle manifest MinVersion
-      - name: Verify bundle MinVersion
+      # Verify bundle manifest MinVersion via the Rust validator.
+      - name: Validate bundle MinVersion
         shell: pwsh
+        working-directory: dotnet
         run: |
-          $bundlePath = "Easydict-${{ github.ref_name }}.unsigned.msixbundle"
-          $extractDir = "$env:RUNNER_TEMP\bundle-verify"
-
-          # Extract bundle (ZIP format)
-          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-          Expand-Archive -Path $bundlePath -DestinationPath $extractDir -Force
-
-          # Check AppxBundleManifest.xml
-          $bundleManifest = Join-Path $extractDir "AppxMetadata\AppxBundleManifest.xml"
-          if (Test-Path $bundleManifest) {
-            Write-Host "=== AppxBundleManifest.xml ==="
-            Get-Content $bundleManifest | Write-Host
-          }
-
-          # Also check individual package manifests inside the bundle
-          Get-ChildItem $extractDir -Filter "*.appx" -Recurse | ForEach-Object {
-            Write-Host "`n=== Checking: $($_.Name) ==="
-            $pkgDir = "$env:RUNNER_TEMP\pkg-$($_.BaseName)"
-            New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
-            Expand-Archive -Path $_.FullName -DestinationPath $pkgDir -Force
-            $appxManifest = Join-Path $pkgDir "AppxManifest.xml"
-            if (Test-Path $appxManifest) {
-              [xml]$xml = Get-Content $appxManifest -Raw
-              $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-              $ns.AddNamespace("f", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
-              $tdf = $xml.SelectSingleNode("//f:Dependencies/f:TargetDeviceFamily", $ns)
-              if ($tdf) {
-                Write-Host "  Name: $($tdf.GetAttribute('Name'))"
-                Write-Host "  MinVersion: $($tdf.GetAttribute('MinVersion'))"
-                Write-Host "  MaxVersionTested: $($tdf.GetAttribute('MaxVersionTested'))"
-              }
-            }
-            Remove-Item $pkgDir -Recurse -Force
-          }
-
-          # Cleanup
-          Remove-Item $extractDir -Recurse -Force
+          cargo run --manifest-path ..\rs\Cargo.toml -p easydict_msix_validate -- `
+            verify-bundle-minversion `
+            "..\Easydict-${{ github.ref_name }}.unsigned.msixbundle"
 
       - name: Upload all release assets
         uses: softprops/action-gh-release@v1
@@ -606,6 +515,7 @@ jobs:
           files: |
             Easydict-${{ github.ref_name }}.unsigned.msixbundle
             zip-packages/*.zip
+            rs-portable/*.zip
             installer-packages/*.exe
           generate_release_notes: true
 

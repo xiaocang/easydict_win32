@@ -7,6 +7,9 @@ param(
     
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
+
+    [ValidateSet("Hybrid", "RustOnly")]
+    [string]$RuntimeProfile = "Hybrid",
     
     [switch]$CreateZip
 )
@@ -14,8 +17,11 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SolutionDir = Split-Path -Parent $ScriptDir
+$RepoRoot = Split-Path -Parent $SolutionDir
+$CargoManifest = Join-Path $RepoRoot "rs\Cargo.toml"
 $ProjectPath = Join-Path $SolutionDir "src\Easydict.WinUI\Easydict.WinUI.csproj"
 $PublishDir = Join-Path $SolutionDir "src\Easydict.WinUI\bin\publish\win-$Platform"
+$IsRustOnlyRuntime = $RuntimeProfile -eq "RustOnly"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Easydict WinUI Publisher" -ForegroundColor Cyan
@@ -23,6 +29,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Platform:      $Platform"
 Write-Host "Configuration: $Configuration"
+Write-Host "Runtime:       $RuntimeProfile"
 Write-Host "Output:        $PublishDir"
 Write-Host ""
 
@@ -38,83 +45,45 @@ dotnet publish $ProjectPath `
     -c $Configuration `
     -p:Platform=$Platform `
     --self-contained true `
-    -o $PublishDir
+    -o $PublishDir `
+    -p:BuildWorkerOutputs=false `
+    -p:EnableInProcLongDocFallback=false `
+    -p:RuntimeProfile=$RuntimeProfile
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Publish failed!" -ForegroundColor Red
     exit 1
 }
 
-# Publish NativeBridge and copy to WinUI publish output
-$BridgeProject = Join-Path $SolutionDir "src\Easydict.NativeBridge\Easydict.NativeBridge.csproj"
-$BridgePublishDir = Join-Path $SolutionDir "src\Easydict.NativeBridge\bin\publish\win-$Platform"
+if ($IsRustOnlyRuntime) {
+    Write-Host "Skipping retained .NET workers for RustOnly runtime profile." -ForegroundColor Yellow
+} elseif ($Platform -ne "x86") {
+    Write-Host "Publishing remaining .NET workers..." -ForegroundColor Green
+    dotnet publish (Join-Path $SolutionDir "src\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj") `
+        -c $Configuration `
+        -r "win-$Platform" `
+        --self-contained true `
+        -o (Join-Path $PublishDir "workers\longdoc") `
+        -p:Platform=$Platform `
+        -p:PublishTrimmed=false
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "LongDoc worker publish failed!" -ForegroundColor Red
+        exit 1
+    }
 
-Write-Host "Publishing NativeBridge..." -ForegroundColor Green
-dotnet publish $BridgeProject `
-    -c $Configuration `
-    -r "win-$Platform" `
-    --self-contained true `
-    -o $BridgePublishDir
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "NativeBridge publish failed!" -ForegroundColor Red
-    exit 1
-}
-
-$BridgeExe = Join-Path $BridgePublishDir "easydict-native-bridge.exe"
-if (Test-Path $BridgeExe) {
-    Copy-Item $BridgeExe -Destination $PublishDir
-    Write-Host "Copied easydict-native-bridge.exe to publish output" -ForegroundColor Green
+    dotnet publish (Join-Path $SolutionDir "src\Easydict.Workers.LocalAi\Easydict.Workers.LocalAi.csproj") `
+        -c $Configuration `
+        -r "win-$Platform" `
+        --self-contained true `
+        -o (Join-Path $PublishDir "workers\localai") `
+        -p:Platform=$Platform `
+        -p:PublishTrimmed=false
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "LocalAI worker publish failed!" -ForegroundColor Red
+        exit 1
+    }
 } else {
-    Write-Host "WARNING: easydict-native-bridge.exe not found at $BridgeExe" -ForegroundColor Yellow
-}
-
-# Publish BrowserRegistrar and copy to WinUI publish output
-$RegistrarProject = Join-Path $SolutionDir "src\Easydict.BrowserRegistrar\Easydict.BrowserRegistrar.csproj"
-$RegistrarPublishDir = Join-Path $SolutionDir "src\Easydict.BrowserRegistrar\bin\publish\win-$Platform"
-
-Write-Host "Publishing BrowserRegistrar..." -ForegroundColor Green
-dotnet publish $RegistrarProject `
-    -c $Configuration `
-    -r "win-$Platform" `
-    --self-contained true `
-    -o $RegistrarPublishDir `
-    -p:PublishTrimmed=true
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "BrowserRegistrar publish failed!" -ForegroundColor Red
-    exit 1
-}
-
-$RegistrarExe = Join-Path $RegistrarPublishDir "BrowserHostRegistrar.exe"
-if (Test-Path $RegistrarExe) {
-    Copy-Item $RegistrarExe -Destination $PublishDir
-    Write-Host "Copied BrowserHostRegistrar.exe to publish output" -ForegroundColor Green
-} else {
-    Write-Host "WARNING: BrowserHostRegistrar.exe not found at $RegistrarExe" -ForegroundColor Yellow
-}
-
-# Publish .NET Compat Host beside the app for the temporary Rust migration bridge
-$CompatHostProject = Join-Path $SolutionDir "src\Easydict.CompatHost\Easydict.CompatHost.csproj"
-
-Write-Host "Publishing .NET Compat Host..." -ForegroundColor Green
-dotnet publish $CompatHostProject `
-    -c $Configuration `
-    -r "win-$Platform" `
-    --self-contained true `
-    -o $PublishDir `
-    -p:PublishTrimmed=false
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host ".NET Compat Host publish failed!" -ForegroundColor Red
-    exit 1
-}
-
-$CompatHostExe = Join-Path $PublishDir "Easydict.CompatHost.exe"
-if (Test-Path $CompatHostExe) {
-    Write-Host "Published Easydict.CompatHost.exe to publish output" -ForegroundColor Green
-} else {
-    Write-Host "WARNING: Easydict.CompatHost.exe not found at $CompatHostExe" -ForegroundColor Yellow
+    Write-Host "Skipping .NET workers for x86; worker projects do not support win-x86." -ForegroundColor Yellow
 }
 
 # Build Rust-owned helper executables and copy them beside the app.
@@ -147,8 +116,14 @@ if ($CreateZip) {
     if (Test-Path $zipPath) {
         Remove-Item $zipPath -Force
     }
-    
-    Compress-Archive -Path "$PublishDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
+
+    cargo run --manifest-path $CargoManifest -p easydict_packager -- `
+        zip-directory `
+        --source $PublishDir `
+        --destination $zipPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Rust ZIP creation failed"
+    }
     
     $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
     Write-Host "ZIP created: $zipPath ($zipSize MB)" -ForegroundColor Green

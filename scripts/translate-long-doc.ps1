@@ -16,46 +16,230 @@ param(
     [string]$VisionEndpoint,
     [string]$VisionApiKey,
     [string]$VisionModel,
+    [string]$AppDir,
+    [string]$RustHelperPath,
+    [switch]$UseCargo,
+    [switch]$UseDotnetLegacy,
     [switch]$ListServices
 )
 
 $ErrorActionPreference = "Stop"
 
-$projectPath = Join-Path $PSScriptRoot "..\dotnet\src\Easydict.WinUI\Easydict.WinUI.csproj"
-$arguments = @(
-    "run",
-    "--project", $projectPath,
-    "-p:WindowsPackageType=None",
-    "-p:EnableLocalDebugLongDocCli=true",
-    "--",
-    "--translate-long-doc"
-)
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$rsRoot = Join-Path $repoRoot "rs"
+$scriptParameters = $PSBoundParameters
 
-if ($ListServices) {
-    $arguments += "--list-services"
-}
-else {
-    if (-not $InputFile) { throw "InputFile is required unless -ListServices is used." }
-    if (-not $TargetLanguage) { throw "TargetLanguage is required unless -ListServices is used." }
-    if ($PSBoundParameters.ContainsKey("Page") -and $PageRange) { throw "Use either -Page or -PageRange, not both." }
-    if ($PSBoundParameters.ContainsKey("Page") -and $Page -lt 1) { throw "Page must be >= 1." }
+function Test-Provided {
+    param([string]$Name)
 
-    $arguments += @("--input", $InputFile, "--target-language", $TargetLanguage)
+    if (-not $scriptParameters.ContainsKey($Name)) {
+        return $false
+    }
 
-    if ($SourceLanguage) { $arguments += @("--from", $SourceLanguage) }
-    if ($EnvFile) { $arguments += @("--env-file", $EnvFile) }
-    if ($OutputFile) { $arguments += @("--output", $OutputFile) }
-    if ($ServiceId) { $arguments += @("--service", $ServiceId) }
-    if ($OutputMode) { $arguments += @("--output-mode", $OutputMode) }
-    if ($Layout) { $arguments += @("--layout", $Layout) }
-    if ($PdfExportMode) { $arguments += @("--pdf-export-mode", $PdfExportMode) }
-    if ($PSBoundParameters.ContainsKey("Page")) { $arguments += @("--page", $Page) }
-    if ($PageRange) { $arguments += @("--page-range", $PageRange) }
-    if ($PSBoundParameters.ContainsKey("MaxConcurrency")) { $arguments += @("--max-concurrency", $MaxConcurrency) }
-    if ($VisionEndpoint) { $arguments += @("--vision-endpoint", $VisionEndpoint) }
-    if ($VisionApiKey) { $arguments += @("--vision-api-key", $VisionApiKey) }
-    if ($VisionModel) { $arguments += @("--vision-model", $VisionModel) }
+    $value = $scriptParameters[$Name]
+    if ($null -eq $value) {
+        return $false
+    }
+
+    if ($value -is [string]) {
+        return $value.Length -gt 0
+    }
+
+    return $true
 }
 
-& dotnet @arguments
-exit $LASTEXITCODE
+function Assert-RequestArguments {
+    if ($ListServices) {
+        return
+    }
+
+    if (-not $InputFile) {
+        throw "InputFile is required unless -ListServices is used."
+    }
+
+    if (-not $TargetLanguage) {
+        throw "TargetLanguage is required unless -ListServices is used."
+    }
+
+    if ($scriptParameters.ContainsKey("Page") -and $PageRange) {
+        throw "Use either -Page or -PageRange, not both."
+    }
+
+    if ($scriptParameters.ContainsKey("Page") -and $Page -lt 1) {
+        throw "Page must be >= 1."
+    }
+
+    if ($scriptParameters.ContainsKey("MaxConcurrency") -and $MaxConcurrency -lt 1) {
+        throw "MaxConcurrency must be >= 1."
+    }
+}
+
+function New-RustLongDocArguments {
+    $longDocArguments = @()
+
+    if ($ListServices) {
+        $longDocArguments += "--list-services"
+        if ($AppDir) {
+            $longDocArguments += @("--app-dir", $AppDir)
+        }
+
+        return $longDocArguments
+    }
+
+    $longDocArguments += @("--input", $InputFile, "--target-language", $TargetLanguage)
+
+    if ($SourceLanguage) { $longDocArguments += @("--from", $SourceLanguage) }
+    if ($EnvFile) { $longDocArguments += @("--env-file", $EnvFile) }
+    if ($OutputFile) { $longDocArguments += @("--output", $OutputFile) }
+    if ($ServiceId) { $longDocArguments += @("--service", $ServiceId) }
+    if ($OutputMode) { $longDocArguments += @("--output-mode", $OutputMode) }
+    if ($Layout) { $longDocArguments += @("--layout", $Layout) }
+    if ($PdfExportMode) { $longDocArguments += @("--pdf-export-mode", $PdfExportMode) }
+    if ($scriptParameters.ContainsKey("Page")) { $longDocArguments += @("--page", $Page) }
+    if ($PageRange) { $longDocArguments += @("--page-range", $PageRange) }
+    if ($scriptParameters.ContainsKey("MaxConcurrency")) { $longDocArguments += @("--max-concurrency", $MaxConcurrency) }
+    if ($VisionEndpoint) { $longDocArguments += @("--vision-endpoint", $VisionEndpoint) }
+    if ($VisionApiKey) { $longDocArguments += @("--vision-api-key", $VisionApiKey) }
+    if ($VisionModel) { $longDocArguments += @("--vision-model", $VisionModel) }
+    if ($AppDir) { $longDocArguments += @("--app-dir", $AppDir) }
+
+    return $longDocArguments
+}
+
+function New-LegacyLongDocArguments {
+    $longDocArguments = @()
+
+    if ($ListServices) {
+        $longDocArguments += "--list-services"
+        return $longDocArguments
+    }
+
+    $longDocArguments += @("--input", $InputFile, "--target-language", $TargetLanguage)
+
+    if ($SourceLanguage) { $longDocArguments += @("--from", $SourceLanguage) }
+    if ($EnvFile) { $longDocArguments += @("--env-file", $EnvFile) }
+    if ($OutputFile) { $longDocArguments += @("--output", $OutputFile) }
+    if ($ServiceId) { $longDocArguments += @("--service", $ServiceId) }
+    if ($OutputMode) { $longDocArguments += @("--output-mode", $OutputMode) }
+    if ($Layout) { $longDocArguments += @("--layout", $Layout) }
+    if ($PdfExportMode) { $longDocArguments += @("--pdf-export-mode", $PdfExportMode) }
+    if ($scriptParameters.ContainsKey("Page")) { $longDocArguments += @("--page", $Page) }
+    if ($PageRange) { $longDocArguments += @("--page-range", $PageRange) }
+    if ($scriptParameters.ContainsKey("MaxConcurrency")) { $longDocArguments += @("--max-concurrency", $MaxConcurrency) }
+    if ($VisionEndpoint) { $longDocArguments += @("--vision-endpoint", $VisionEndpoint) }
+    if ($VisionApiKey) { $longDocArguments += @("--vision-api-key", $VisionApiKey) }
+    if ($VisionModel) { $longDocArguments += @("--vision-model", $VisionModel) }
+
+    return $longDocArguments
+}
+
+function Resolve-RustHelper {
+    if ($RustHelperPath) {
+        if (-not (Test-Path -LiteralPath $RustHelperPath -PathType Leaf)) {
+            throw "Rust helper not found at '$RustHelperPath'."
+        }
+
+        return (Resolve-Path -LiteralPath $RustHelperPath).Path
+    }
+
+    $candidatePaths = @()
+    if ($AppDir) {
+        $candidatePaths += Join-Path $AppDir "easydict_long_doc.exe"
+    }
+
+    $candidatePaths += Join-Path $rsRoot "target\debug\easydict_long_doc.exe"
+    $candidatePaths += Join-Path $rsRoot "target\release\easydict_long_doc.exe"
+
+    foreach ($candidatePath in $candidatePaths) {
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidatePath).Path
+        }
+    }
+
+    $pathCommand = Get-Command "easydict_long_doc.exe" -ErrorAction SilentlyContinue
+    if ($pathCommand) {
+        return $pathCommand.Source
+    }
+
+    return $null
+}
+
+function Invoke-RustHelper {
+    param([string[]]$LongDocArguments)
+
+    $helperPath = Resolve-RustHelper
+    if ($helperPath) {
+        & $helperPath @LongDocArguments
+        exit $LASTEXITCODE
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $rsRoot "Cargo.toml") -PathType Leaf)) {
+        throw "Could not find easydict_long_doc.exe. Pass -RustHelperPath, pass -AppDir, place it on PATH, or run from a source checkout with rs/Cargo.toml for cargo development mode."
+    }
+
+    Invoke-RustCargo -LongDocArguments $LongDocArguments
+}
+
+function Invoke-RustCargo {
+    param([string[]]$LongDocArguments)
+
+    $cargoArguments = @(
+        "run",
+        "-p", "easydict_app",
+        "--bin", "easydict_long_doc",
+        "--"
+    ) + $LongDocArguments
+
+    Push-Location $rsRoot
+    try {
+        & cargo @cargoArguments
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+
+    exit $exitCode
+}
+
+function Invoke-DotnetLegacy {
+    param([string[]]$LongDocArguments)
+
+    $projectPath = Join-Path $repoRoot "dotnet\src\Easydict.WinUI\Easydict.WinUI.csproj"
+    $dotnetArguments = @(
+        "run",
+        "--project", $projectPath,
+        "-p:WindowsPackageType=None",
+        "-p:EnableLocalDebugLongDocCli=true",
+        "--",
+        "--translate-long-doc"
+    ) + $LongDocArguments
+
+    & dotnet @dotnetArguments
+    exit $LASTEXITCODE
+}
+
+if ($UseCargo -and $UseDotnetLegacy) {
+    throw "Use either -UseCargo or -UseDotnetLegacy, not both."
+}
+
+if ($UseDotnetLegacy -and $RustHelperPath) {
+    throw "-RustHelperPath is only valid in Rust helper mode."
+}
+
+if ($UseDotnetLegacy -and $AppDir) {
+    throw "-AppDir is only valid in Rust helper mode."
+}
+
+Assert-RequestArguments
+
+if ($UseDotnetLegacy) {
+    Invoke-DotnetLegacy -LongDocArguments (New-LegacyLongDocArguments)
+}
+
+$rustArguments = New-RustLongDocArguments
+if ($UseCargo) {
+    Invoke-RustCargo -LongDocArguments $rustArguments
+}
+
+Invoke-RustHelper -LongDocArguments $rustArguments

@@ -5,6 +5,8 @@ param(
     [string]$Version = "",
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
+    [ValidateSet("Hybrid", "RustOnly")]
+    [string]$RuntimeProfile = "Hybrid",
     [string]$CertPath = ".\certs\dev-signing.pfx",
     [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" }),
     [switch]$SkipInstall
@@ -20,6 +22,9 @@ Push-Location $dotnetDir
 try {
     Write-Host "=== Easydict MSIX Package and Install Script ===" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "Runtime profile: $RuntimeProfile" -ForegroundColor Gray
+    $isRustOnlyRuntime = $RuntimeProfile -eq "RustOnly"
+    $validatorRuntimeProfile = if ($isRustOnlyRuntime) { "rust-only" } else { "hybrid" }
 
     # Auto-detect version from csproj if not provided
     if (-not $Version) {
@@ -45,39 +50,13 @@ try {
         --output $publishDir `
         -p:Version=$Version `
         -p:Platform=$Platform `
+        -p:BuildWorkerOutputs=false `
+        -p:EnableInProcLongDocFallback=false `
+        -p:RuntimeProfile=$RuntimeProfile `
         -p:PublishTrimmed=false `
+        -p:PublishReadyToRun=false `
         -p:WindowsAppSDKSelfContained=false
     if ($LASTEXITCODE -ne 0) { throw "WinUI publish failed" }
-
-    # Publish NativeBridge into same output (for browser extension support)
-    Write-Host "  Publishing NativeBridge..." -ForegroundColor Gray
-    dotnet publish src/Easydict.NativeBridge/Easydict.NativeBridge.csproj `
-        -c $Configuration `
-        --runtime "win-$Platform" `
-        --self-contained true `
-        --output $publishDir `
-        -p:PublishTrimmed=true
-    if ($LASTEXITCODE -ne 0) { throw "NativeBridge publish failed" }
-
-    # Publish BrowserRegistrar into same output (for browser extension support)
-    Write-Host "  Publishing BrowserRegistrar..." -ForegroundColor Gray
-    dotnet publish src/Easydict.BrowserRegistrar/Easydict.BrowserRegistrar.csproj `
-        -c $Configuration `
-        --runtime "win-$Platform" `
-        --self-contained true `
-        --output $publishDir `
-        -p:PublishTrimmed=true
-    if ($LASTEXITCODE -ne 0) { throw "BrowserRegistrar publish failed" }
-
-    # Publish .NET Compat Host beside the app for the temporary Rust migration bridge
-    Write-Host "  Publishing .NET Compat Host..." -ForegroundColor Gray
-    dotnet publish src/Easydict.CompatHost/Easydict.CompatHost.csproj `
-        -c $Configuration `
-        --runtime "win-$Platform" `
-        --self-contained true `
-        --output $publishDir `
-        -p:PublishTrimmed=false
-    if ($LASTEXITCODE -ne 0) { throw ".NET Compat Host publish failed" }
 
     # Build Rust-owned helper executables and copy them beside the app.
     # Rust desktop actions resolve these names from the package/app directory.
@@ -86,6 +65,38 @@ try {
         -Platform $Platform `
         -Configuration $Configuration `
         -OutputDir $publishDir
+
+    if ($isRustOnlyRuntime) {
+        Write-Host "  Skipping retained .NET workers and bundled worker runtime for RustOnly profile." -ForegroundColor Yellow
+    } elseif ($Platform -ne "x86") {
+        Write-Host "  Publishing remaining .NET workers..." -ForegroundColor Gray
+        dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
+            -c $Configuration `
+            --runtime "win-$Platform" `
+            --no-self-contained `
+            --output "$publishDir/workers/longdoc" `
+            -p:Platform=$Platform `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+        if ($LASTEXITCODE -ne 0) { throw "LongDoc worker publish failed" }
+
+        dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj `
+            -c $Configuration `
+            --runtime "win-$Platform" `
+            --no-self-contained `
+            --output "$publishDir/workers/localai" `
+            -p:Platform=$Platform `
+            -p:PublishTrimmed=false `
+            -p:WindowsAppSDKSelfContained=false
+        if ($LASTEXITCODE -ne 0) { throw "LocalAI worker publish failed" }
+
+        & "$scriptDir/Dedupe-WorkerSharedFiles.ps1" -PublishDir $publishDir
+        & "$scriptDir/Extract-DotnetRuntime.ps1" `
+            -Rid "win-$Platform" `
+            -OutputDir "$publishDir/dotnet"
+    } else {
+        Write-Host "  Skipping .NET workers for x86; worker projects do not support win-x86." -ForegroundColor Yellow
+    }
 
     Write-Host "Publish completed successfully" -ForegroundColor Green
 
@@ -140,22 +151,32 @@ try {
     & "$scriptDir/Fix-MsixMinVersion.ps1" -MsixPath $msixPath
     Write-Host ""
 
-    # Step 5: Sign
-    Write-Host "[5/6] Signing MSIX..." -ForegroundColor Yellow
+    # Step 5: Validate package payload before signing/installing
+    Write-Host "[5/7] Validating MSIX..." -ForegroundColor Yellow
+    cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- `
+        $msixPath `
+        --runtime-profile $validatorRuntimeProfile `
+        --allow-unsigned
+    if ($LASTEXITCODE -ne 0) { throw "MSIX validation failed" }
+    Write-Host "Package validation succeeded" -ForegroundColor Green
+    Write-Host ""
+
+    # Step 6: Sign
+    Write-Host "[6/7] Signing MSIX..." -ForegroundColor Yellow
     winapp sign $msixPath $CertPath --password $CertPassword --verbose
     if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
     Write-Host "Package signed successfully" -ForegroundColor Green
     Write-Host ""
 
-    # Step 6: Reinstall
+    # Step 7: Reinstall
     if ($SkipInstall) {
-        Write-Host "[6/6] Skipping local install (-SkipInstall)" -ForegroundColor Yellow
+        Write-Host "[7/7] Skipping local install (-SkipInstall)" -ForegroundColor Yellow
         Write-Host ""
         Write-Host "=== Build Complete ===" -ForegroundColor Cyan
         Write-Host "Signed MSIX: $msixPath" -ForegroundColor White
         return
     }
-    Write-Host "[6/6] Reinstalling app..." -ForegroundColor Yellow
+    Write-Host "[7/7] Reinstalling app..." -ForegroundColor Yellow
 
     # Remove existing installation
     Write-Host "  - Removing existing installation..." -ForegroundColor Gray

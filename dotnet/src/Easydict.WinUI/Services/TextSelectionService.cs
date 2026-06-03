@@ -579,6 +579,8 @@ public static class TextSelectionService
             uint currentThreadId = 0;
             uint targetThreadId = 0;
             bool attached = false;
+            bool ctrlCSent = false;
+            var waitOutcome = ClipWaitResult.Timeout;
 
             try
             {
@@ -604,6 +606,7 @@ public static class TextSelectionService
                     if (actualForeground != targetWindow)
                     {
                         Debug.WriteLine($"[TextSelectionService] Focus verification failed: expected {targetWindow}, got {actualForeground}");
+                        // Ctrl+C was never sent, so the clipboard is untouched — nothing to restore.
                         return (null, ClipWaitResult.Timeout);
                     }
 
@@ -611,13 +614,13 @@ public static class TextSelectionService
                 }
 
                 SendCtrlC();
+                ctrlCSent = true;
 
                 // Use ClipWait with baseline sequence - polls for clipboard readiness
-                var waitOutcome = await WaitForClipboardTextAsync(dispatcherQueue, timeoutMs, pollIntervalMs, baselineSequence, cancellationToken);
+                waitOutcome = await WaitForClipboardTextAsync(dispatcherQueue, timeoutMs, pollIntervalMs, baselineSequence, cancellationToken);
                 if (waitOutcome != ClipWaitResult.Success)
                 {
                     Debug.WriteLine($"[TextSelectionService] ClipWait result={waitOutcome} after up to {timeoutMs}ms");
-                    return (null, waitOutcome);
                 }
             }
             finally
@@ -630,7 +633,8 @@ public static class TextSelectionService
                 }
             }
 
-            // 4. Read copied text from clipboard (awaitable — guarantees completion)
+            // 4. Read whatever Ctrl+C placed on the clipboard (the captured selection),
+            // BEFORE restoring so the read isn't clobbered by the restore write.
             string? selectedText = null;
             try
             {
@@ -650,34 +654,47 @@ public static class TextSelectionService
             catch (Exception ex)
             {
                 Debug.WriteLine($"[TextSelectionService] Failed to read clipboard: {ex.Message}");
-                return (null, ClipWaitResult.Timeout);
+                // Fall through to restore regardless — selectedText stays null.
             }
 
-            Debug.WriteLine($"[TextSelectionService] Clipboard changed: {originalClipboard != selectedText}");
-
-            // 5. Restore the original clipboard state (best-effort, but reliable).
-            // We restore saved text, or clear back to empty ONLY when the clipboard was
-            // genuinely empty to begin with. We deliberately never clear a non-text
-            // payload (e.g. an image): clearing it on every selection is exactly the
-            // corruption reported in issue #168, and the payload can't be restored anyway.
+            // 5. Restore the original clipboard state. This runs on EVERY path where Ctrl+C
+            // may have changed the clipboard — success, timeout, or non-text payload — not
+            // just the success path. Restoring only on success used to leave an empty or
+            // non-text Ctrl+C result stranded on the clipboard, re-introducing the data
+            // loss from issue #168. We drive the decision off the clipboard sequence number
+            // (did Ctrl+C actually change anything?) rather than the wait outcome. We restore
+            // saved text, or clear back to empty only when the clipboard was genuinely empty
+            // to begin with; a non-text original (image/RTF/etc.) can't be restored here
+            // because we only captured its text form, so we leave it rather than clearing it.
             // The write is awaited and retried (and intentionally not cancellable) so a
-            // transient lock held by another app (Office frequently holds the clipboard
-            // open) no longer silently loses the user's clipboard, and a late user action
-            // cannot leave the foreign (just-copied) text stranded on the clipboard.
-            var (restoreAction, textToRestore) = ResolveClipboardRestore(originalClipboard, originalWasEmpty, selectedText);
-            switch (restoreAction)
+            // transient lock held by another app (Office frequently holds the clipboard open)
+            // no longer silently loses the user's clipboard.
+            if (ctrlCSent)
             {
-                case ClipboardRestoreAction.RestoreText:
-                    await RunClipboardWriteWithRetryAsync(dispatcherQueue, () =>
-                    {
-                        var dataPackage = new DataPackage();
-                        dataPackage.SetText(textToRestore!);
-                        Clipboard.SetContent(dataPackage);
-                    }, "Clipboard restore");
-                    break;
-                case ClipboardRestoreAction.ClearToEmpty:
-                    await RunClipboardWriteWithRetryAsync(dispatcherQueue, Clipboard.Clear, "Clipboard clear-to-empty");
-                    break;
+                var clipboardChanged = GetClipboardSequenceNumber() != baselineSequence;
+                Debug.WriteLine($"[TextSelectionService] Clipboard changed: {clipboardChanged}");
+
+                var (restoreAction, textToRestore) = ResolveClipboardRestore(originalClipboard, originalWasEmpty, clipboardChanged);
+                switch (restoreAction)
+                {
+                    case ClipboardRestoreAction.RestoreText:
+                        await RunClipboardWriteWithRetryAsync(dispatcherQueue, () =>
+                        {
+                            var dataPackage = new DataPackage();
+                            dataPackage.SetText(textToRestore!);
+                            Clipboard.SetContent(dataPackage);
+                        }, "Clipboard restore");
+                        break;
+                    case ClipboardRestoreAction.ClearToEmpty:
+                        await RunClipboardWriteWithRetryAsync(dispatcherQueue, Clipboard.Clear, "Clipboard clear-to-empty");
+                        break;
+                }
+            }
+
+            // 6. Produce the return value based on the wait outcome.
+            if (waitOutcome != ClipWaitResult.Success)
+            {
+                return (null, waitOutcome);
             }
 
             var outcome = string.IsNullOrWhiteSpace(selectedText) ? ClipWaitResult.Timeout : ClipWaitResult.Success;
@@ -710,26 +727,37 @@ public static class TextSelectionService
     }
 
     /// <summary>
-    /// Decides how the clipboard should be restored after a Ctrl+C selection capture.
+    /// Decides how the clipboard should be restored after a Ctrl+C selection capture,
+    /// given the original clipboard state and whether Ctrl+C actually changed the
+    /// clipboard (<paramref name="clipboardChanged"/>, observed via the clipboard
+    /// sequence number).
     /// <list type="bullet">
-    /// <item>Original had text → restore it (when Ctrl+C actually changed the clipboard).</item>
+    /// <item>Clipboard unchanged (e.g. an empty cell that copied nothing) → do nothing;
+    /// the original is still intact.</item>
+    /// <item>Original had text → restore it.</item>
     /// <item>Original was genuinely empty (zero formats) → clear back to empty.</item>
-    /// <item>Original had a non-text payload (e.g. an image) → leave it alone: it can't
-    /// be restored, and clearing it on every selection is the corruption reported in
-    /// issue #168.</item>
+    /// <item>Original had a non-text payload (e.g. an image/RTF) → leave the clipboard as
+    /// is. We only captured the text form of the original, so we cannot faithfully
+    /// restore the payload; clearing it would still lose data and re-introduce the
+    /// corruption reported in issue #168. This is a known limitation of clipboard-based
+    /// selection capture: a non-text payload present at capture time is overwritten by
+    /// Ctrl+C and cannot be recovered here.</item>
     /// </list>
     /// </summary>
     internal static (ClipboardRestoreAction Action, string? Text) ResolveClipboardRestore(
-        string? originalText, bool originalWasEmpty, string? copiedText)
+        string? originalText, bool originalWasEmpty, bool clipboardChanged)
     {
-        if (originalText != null)
+        if (!clipboardChanged)
         {
-            return originalText != copiedText
-                ? (ClipboardRestoreAction.RestoreText, originalText)
-                : (ClipboardRestoreAction.None, null);
+            return (ClipboardRestoreAction.None, null);
         }
 
-        if (originalWasEmpty && copiedText != null)
+        if (originalText != null)
+        {
+            return (ClipboardRestoreAction.RestoreText, originalText);
+        }
+
+        if (originalWasEmpty)
         {
             return (ClipboardRestoreAction.ClearToEmpty, null);
         }

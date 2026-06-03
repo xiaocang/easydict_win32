@@ -155,6 +155,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
             children
         }
         ViewToken::PointerRegion(token) => vec![token.content.as_ref()],
+        ViewToken::CaptureOverlay(_) => Vec::new(),
         ViewToken::Custom(token) => token.children.iter().collect(),
         ViewToken::Text(_)
         | ViewToken::Button(_)
@@ -204,6 +205,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::ResultCard(_) => "ResultCard",
         ViewToken::ResultList(_) => "ResultList",
         ViewToken::PointerRegion(_) => "PointerRegion",
+        ViewToken::CaptureOverlay(_) => "CaptureOverlay",
         ViewToken::Custom(_) => "Custom",
     }
 }
@@ -238,6 +240,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::ResultCard(token) => token.id.as_deref(),
         ViewToken::ResultList(token) => token.id.as_deref(),
         ViewToken::PointerRegion(token) => token.id.as_deref(),
+        ViewToken::CaptureOverlay(token) => token.id.as_deref(),
         ViewToken::Custom(token) => token.id.as_deref(),
     }
 }
@@ -260,10 +263,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             format!("{:?}|{:?}|{}", token.value, token.style, token.selectable)
         }
         ViewToken::Button(token) => format!(
-            "{:?}|{:?}|{:?}|{}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}",
             token.label,
             token.kind,
             token.icon.as_ref().map(|icon| icon.name),
+            token.width,
+            token.height,
             token.state,
             token.action.kind()
         ),
@@ -288,8 +293,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             )
         }
         ViewToken::BusyOverlay(token) => format!(
-            "active={}|opacity={:.2}|blocks_input={}|{:?}",
-            token.active, token.opacity, token.blocks_input, token.label
+            "active={}|opacity={:.2}|fade_transition_ms={}|blocks_input={}|{:?}",
+            token.active,
+            token.opacity,
+            token.fade_transition_ms,
+            token.blocks_input,
+            token.label
         ),
         ViewToken::Card(token) => format!(
             "{:?}|{:?}|{:?}|{:?}|trailing={}",
@@ -402,9 +411,11 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.icon.as_ref().map(|icon| icon.name)
         ),
         ViewToken::SettingsRow(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
             token.title,
+            token.title_id,
             token.description,
+            token.description_id,
             token.kind,
             token.icon.as_ref().map(|icon| icon.name)
         ),
@@ -447,13 +458,23 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.wheel_action.kind(),
             token.escape_action.kind()
         ),
+        ViewToken::CaptureOverlay(token) => format!(
+            "{}|depth={}|dragging={}|detected={:?}|selection={:?}|handles={}|magnifier={}",
+            token.phase,
+            token.detection_depth,
+            token.dragging,
+            token.detected_rect,
+            token.selection_rect,
+            token.handles_visible,
+            token.magnifier_visible
+        ),
         ViewToken::Custom(token) => token.control.clone(),
     }
 }
 
 fn result_item_summary(item: &ResultItem) -> String {
     format!(
-        "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+        "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
         item.id,
         item.title,
         item.body,
@@ -463,7 +484,9 @@ fn result_item_summary(item: &ResultItem) -> String {
         item.expanded,
         item.toggleable,
         item.dimmed,
-        item.status
+        item.status,
+        item.header_state,
+        item.actions_visible
     )
 }
 

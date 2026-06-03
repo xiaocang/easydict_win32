@@ -10,9 +10,10 @@ pub use crate::motion::{
 };
 pub use crate::performance::{FrameCoalescer, TextStreamCoalescer};
 pub use crate::platform::{
-    ClipboardFormat, FileDialogFilter, FileDialogOptions, Hotkey, HotkeyKey, HotkeyModifier,
-    NamedEventRegistration, PlatformCommand, ProtocolRegistration, ScreenCaptureRequest,
-    ScreenCaptureResult, ScreenRect, ShellVerb, TrayMenu, TrayMenuItem,
+    ClipboardFormat, FileDialogFilter, FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey,
+    HotkeyModifier, NamedEventRegistration, PlatformCommand, ProtocolRegistration,
+    ScreenCaptureRequest, ScreenCaptureResult, ScreenRect, ScreenWindow,
+    ScreenWindowSnapshotRequest, ShellVerb, TrayMenu, TrayMenuItem,
 };
 pub use crate::runtime::{Application, DesktopIntegrationPlan, RuntimePlan};
 pub use crate::schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
@@ -26,15 +27,16 @@ pub use crate::theme::{
     Stroke, ThemeMode, ThemeTokens, Typography, VisualEffects,
 };
 pub use crate::view::{
-    adaptive_switch, busy_overlay, button, card, column, combo_box, command_bar, dialog, expander,
-    flyout_button, lazy, navigation_view, overlay, page, pointer_region, primary_button,
-    progress_ring, result_card, result_list, row, scroll_view, service_result_card,
+    adaptive_switch, busy_overlay, button, capture_overlay, card, column, combo_box, command_bar,
+    dialog, expander, flyout_button, lazy, navigation_view, overlay, page, pointer_region,
+    primary_button, progress_ring, result_card, result_list, row, scroll_view, service_result_card,
     service_result_list, settings_row, slider, spacer, status_badge, text, text_editor, title_bar,
     toggle_switch, wrap, AdaptiveSwitchBuilder, AdaptiveSwitchToken, Alignment, BusyOverlayBuilder,
-    BusyOverlayToken, ButtonKind, CardKind, CollapseTraceDirection, CollapseTraceSample,
-    CollapseTransition, ComboBoxItem, DialogKind, Edges, ExpanderBuilder, ExpanderToken,
-    FlyoutButtonBuilder, FlyoutButtonToken, FlyoutMenuItem, FlyoutMenuItemKind, IntoChildren,
-    IntoView, LayoutDistribution, LayoutKind, LazyToken, Length, NavigationItem, OverlayBuilder,
+    BusyOverlayToken, ButtonKind, CaptureOverlayBuilder, CaptureOverlayPhase, CaptureOverlayRect,
+    CaptureOverlayToken, CardKind, CollapseTraceDirection, CollapseTraceSample, CollapseTransition,
+    ComboBoxItem, DialogKind, Edges, ExpanderBuilder, ExpanderToken, FlyoutButtonBuilder,
+    FlyoutButtonToken, FlyoutMenuItem, FlyoutMenuItemKind, IntoChildren, IntoView,
+    LayoutDistribution, LayoutKind, LazyToken, Length, NavigationItem, OverlayBuilder,
     OverlayLayer, OverlayToken, PointerPosition, PointerRegionAction, PointerRegionActionKind,
     PointerRegionBuilder, PointerRegionToken, PointerWheel, ProgressRingBuilder, ProgressRingToken,
     ResultCardBuilder, ResultCardToken, ResultItem, ResultListBuilder, ResultListToken,

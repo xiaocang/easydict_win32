@@ -6,7 +6,8 @@ use win_fluent::a11y::{A11yNode, A11yRole};
 use win_fluent::action::ActionKind;
 use win_fluent::platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, NamedEventRegistration,
-    ProtocolRegistration, ScreenCaptureRequest, ScreenCaptureResult, ShellVerb, TrayMenu,
+    ProtocolRegistration, ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow,
+    ScreenWindowSnapshotRequest, ShellVerb, TrayMenu,
 };
 use win_fluent::runtime::DesktopIntegrationPlan;
 use win_fluent::subscription::{Subscription, SubscriptionKind};
@@ -102,6 +103,7 @@ pub struct ResolvedWindowPlacement {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WindowsMonitorMetrics {
     pub physical_work_area: WindowsRect,
+    pub physical_monitor_area: WindowsRect,
     pub dpi: u32,
 }
 
@@ -109,6 +111,19 @@ impl WindowsMonitorMetrics {
     pub fn new(physical_work_area: WindowsRect, dpi: u32) -> Self {
         Self {
             physical_work_area,
+            physical_monitor_area: physical_work_area,
+            dpi: dpi.max(1),
+        }
+    }
+
+    pub fn with_monitor_area(
+        physical_work_area: WindowsRect,
+        physical_monitor_area: WindowsRect,
+        dpi: u32,
+    ) -> Self {
+        Self {
+            physical_work_area,
+            physical_monitor_area,
             dpi: dpi.max(1),
         }
     }
@@ -119,6 +134,10 @@ impl WindowsMonitorMetrics {
 
     pub fn work_area_dips(self) -> WindowsRect {
         physical_rect_to_dips(self.physical_work_area, self.scale_factor())
+    }
+
+    pub fn monitor_area_dips(self) -> WindowsRect {
+        physical_rect_to_dips(self.physical_monitor_area, self.scale_factor())
     }
 }
 
@@ -238,6 +257,7 @@ pub struct WindowsUiaNodePlan {
     pub control_type: WindowsUiaControlType,
     pub name: Option<String>,
     pub description: Option<String>,
+    pub help_text: Option<String>,
     pub focusable: bool,
     pub children: Vec<WindowsUiaNodePlan>,
 }
@@ -278,6 +298,13 @@ impl WindowsPlatformAdapter {
             uses_acrylic: options.frame == WindowFrame::Acrylic,
             placement: None,
         }
+    }
+
+    pub fn apply_window_options_to_hwnd(
+        hwnd: isize,
+        options: &WindowOptions,
+    ) -> Result<(), WindowsPlatformError> {
+        native::apply_window_ex_style(hwnd, window_ex_style(options))
     }
 
     pub fn resolve_window_placement(
@@ -585,6 +612,16 @@ impl WindowsPlatformAdapter {
         native::capture_screen_region(request)
     }
 
+    pub fn capture_screen_windows() -> Result<Vec<ScreenWindow>, WindowsPlatformError> {
+        Self::capture_screen_windows_with_request(ScreenWindowSnapshotRequest::new())
+    }
+
+    pub fn capture_screen_windows_with_request(
+        request: ScreenWindowSnapshotRequest,
+    ) -> Result<Vec<ScreenWindow>, WindowsPlatformError> {
+        native::capture_screen_windows(request)
+    }
+
     pub fn has_text_insertion_target() -> Result<bool, WindowsPlatformError> {
         native::has_text_insertion_target()
     }
@@ -883,6 +920,7 @@ fn plan_uia_node(node: &A11yNode) -> WindowsUiaNodePlan {
         control_type: uia_control_type(&node.role),
         name: node.name.clone(),
         description: node.description.clone(),
+        help_text: node.help_text.clone(),
         focusable: node.focusable,
         children: node.children.iter().map(plan_uia_node).collect(),
     }
@@ -982,11 +1020,18 @@ fn window_ex_style(options: &WindowOptions) -> u32 {
     match options.level {
         WindowLevel::Normal => {}
         WindowLevel::TopMost => ex_style |= native::ws_ex_topmost(),
-        WindowLevel::ToolWindow => ex_style |= native::ws_ex_toolwindow(),
+        WindowLevel::ToolWindow => {
+            ex_style |= native::ws_ex_toolwindow();
+            ex_style |= native::ws_ex_topmost();
+        }
     }
 
     if options.skip_taskbar {
         ex_style |= native::ws_ex_toolwindow();
+    }
+
+    if options.no_activate {
+        ex_style |= native::ws_ex_noactivate();
     }
 
     ex_style
@@ -998,19 +1043,32 @@ fn resolve_window_placement_with(
     monitor: WindowsMonitorMetrics,
 ) -> ResolvedWindowPlacement {
     let work_area = monitor.work_area_dips();
+    let monitor_area = monitor.monitor_area_dips();
     let cursor = physical_point_to_dips(physical_cursor, monitor.scale_factor());
-    let requested_width = options.width.round().max(1.0) as i32;
-    let requested_height = options.height.round().max(1.0) as i32;
+    let requested_width = match options.placement {
+        WindowPlacement::Monitor => monitor_area.width(),
+        WindowPlacement::WorkArea => work_area.width(),
+        _ => options.width.round().max(1.0) as i32,
+    };
+    let requested_height = match options.placement {
+        WindowPlacement::Monitor => monitor_area.height(),
+        WindowPlacement::WorkArea => work_area.height(),
+        _ => options.height.round().max(1.0) as i32,
+    };
+    let constraint_area = match options.placement {
+        WindowPlacement::Monitor => monitor_area,
+        _ => work_area,
+    };
     let width = constrained_size(
         requested_width,
         options.min_width,
-        work_area.width(),
+        constraint_area.width(),
         options.screen_constraint,
     );
     let height = constrained_size(
         requested_height,
         options.min_height,
-        work_area.height(),
+        constraint_area.height(),
         options.screen_constraint,
     );
 
@@ -1019,6 +1077,8 @@ fn resolve_window_placement_with(
             work_area.left + (work_area.width() - width) / 2,
             work_area.top + (work_area.height() - height) / 2,
         ),
+        WindowPlacement::Monitor => (monitor_area.left, monitor_area.top),
+        WindowPlacement::WorkArea => (work_area.left, work_area.top),
         WindowPlacement::CursorOffset { x, y } => {
             (cursor.x + x.round() as i32, cursor.y + y.round() as i32)
         }
@@ -1031,8 +1091,8 @@ fn resolve_window_placement_with(
 
     let (x, y) = if clamps_position(options.screen_constraint) {
         (
-            clamp_axis(x, width, work_area.left, work_area.right),
-            clamp_axis(y, height, work_area.top, work_area.bottom),
+            clamp_axis(x, width, constraint_area.left, constraint_area.right),
+            clamp_axis(y, height, constraint_area.top, constraint_area.bottom),
         )
     } else {
         (x, y)
@@ -1155,10 +1215,13 @@ mod native {
         WindowsHotkeyHandle, WindowsMonitorMetrics, WindowsNamedEvent, WindowsNamedEventHandle,
         WindowsPlatformError, WindowsPoint, WindowsProcessMemory, WindowsRect,
     };
-    use win_fluent::platform::{ScreenCaptureRequest, ScreenCaptureResult, ScreenRect};
+    use win_fluent::platform::{
+        ScreenCaptureRequest, ScreenCaptureResult, ScreenRect, ScreenWindow,
+        ScreenWindowSnapshotRequest,
+    };
     use windows_sys::Win32::Foundation::{
         CloseHandle, GetLastError, GlobalFree, SetLastError, ERROR_FILE_NOT_FOUND, ERROR_SUCCESS,
-        HANDLE, HWND, POINT, WAIT_OBJECT_0, WAIT_TIMEOUT,
+        HANDLE, HWND, LPARAM, POINT, RECT, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows_sys::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
@@ -1202,10 +1265,14 @@ mod native {
     #[cfg(test)]
     use windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId, IsWindow,
-        PeekMessageW, SetForegroundWindow, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_SHOWNORMAL, WM_HOTKEY, WM_USER, WS_EX_TOOLWINDOW,
-        WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW, WS_POPUP, WS_THICKFRAME,
+        EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetParent,
+        GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+        GetWindowThreadProcessId, IsWindow, IsWindowVisible, PeekMessageW, SetForegroundWindow,
+        SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, MSG, PM_REMOVE,
+        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNORMAL,
+        WM_HOTKEY, WM_USER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX,
+        WS_OVERLAPPEDWINDOW, WS_POPUP, WS_THICKFRAME,
     };
 
     static TEXT_INSERTION_TARGET: Mutex<isize> = Mutex::new(0);
@@ -1462,6 +1529,53 @@ mod native {
         Ok(())
     }
 
+    pub fn apply_window_ex_style(hwnd: isize, ex_style: u32) -> Result<(), WindowsPlatformError> {
+        if ex_style == 0 {
+            return Ok(());
+        }
+
+        let hwnd = hwnd as HWND;
+        if !is_valid_window(hwnd) {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "IsWindow",
+                code: 0,
+            });
+        }
+
+        // Safety: hwnd was validated with IsWindow and GWL_EXSTYLE targets the window's extended style.
+        let current = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32;
+        let next = current | ex_style;
+        if next != current {
+            // Safety: SetLastError resets the current thread's Win32 error code before SetWindowLongPtrW.
+            unsafe { SetLastError(ERROR_SUCCESS) };
+            // Safety: hwnd was validated and next preserves existing style bits while adding requested ones.
+            let previous = unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next as isize) };
+            // Safety: GetLastError reads the current thread's Win32 error code.
+            let error = unsafe { GetLastError() };
+            if previous == 0 && error != ERROR_SUCCESS {
+                return Err(WindowsPlatformError::NativeCallFailed {
+                    operation: "SetWindowLongPtrW",
+                    code: error,
+                });
+            }
+        }
+
+        let mut flags = SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE;
+        let insert_after = if ex_style & WS_EX_TOPMOST != 0 {
+            HWND_TOPMOST
+        } else {
+            flags |= SWP_NOZORDER;
+            null_mut()
+        };
+
+        // Safety: hwnd was validated and SetWindowPos only refreshes frame/z-order without moving or sizing.
+        if unsafe { SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags) } == 0 {
+            return Err(last_error("SetWindowPos"));
+        }
+
+        Ok(())
+    }
+
     pub fn capture_screen_region(
         request: ScreenCaptureRequest,
     ) -> Result<ScreenCaptureResult, WindowsPlatformError> {
@@ -1565,6 +1679,178 @@ mod native {
             pixel_height: height as u32,
             screen_rect: ScreenRect::new(x, y, width as u32, height as u32),
         })
+    }
+
+    pub fn capture_screen_windows(
+        request: ScreenWindowSnapshotRequest,
+    ) -> Result<Vec<ScreenWindow>, WindowsPlatformError> {
+        let mut windows = Vec::new();
+        let mut context = WindowSnapshotContext {
+            request: &request,
+            windows: &mut windows,
+        };
+
+        // Safety: The callback only borrows `context` for the duration of EnumWindows.
+        let ok = unsafe {
+            EnumWindows(
+                Some(enum_top_level_window_proc),
+                &mut context as *mut WindowSnapshotContext<'_> as LPARAM,
+            )
+        };
+        if ok == 0 {
+            return Err(last_error("EnumWindows"));
+        }
+
+        Ok(windows)
+    }
+
+    struct WindowSnapshotContext<'a> {
+        request: &'a ScreenWindowSnapshotRequest,
+        windows: &'a mut Vec<ScreenWindow>,
+    }
+
+    struct ChildWindowSnapshotContext<'a> {
+        request: &'a ScreenWindowSnapshotRequest,
+        windows: &'a mut Vec<ScreenWindow>,
+        parent_hwnd: HWND,
+        parent_id: isize,
+    }
+
+    unsafe extern "system" fn enum_top_level_window_proc(hwnd: HWND, lparam: LPARAM) -> i32 {
+        let context = unsafe { &mut *(lparam as *mut WindowSnapshotContext<'_>) };
+        let Some(window) = screen_window_from_hwnd(hwnd, None, context.request, true) else {
+            return 1;
+        };
+
+        context.windows.push(window);
+        collect_direct_child_windows(hwnd, context.request, context.windows);
+        1
+    }
+
+    unsafe extern "system" fn enum_child_window_proc(hwnd: HWND, lparam: LPARAM) -> i32 {
+        let context = unsafe { &mut *(lparam as *mut ChildWindowSnapshotContext<'_>) };
+        let parent = unsafe { GetParent(hwnd) };
+        if parent != context.parent_hwnd {
+            return 1;
+        }
+
+        let Some(window) =
+            screen_window_from_hwnd(hwnd, Some(context.parent_id), context.request, false)
+        else {
+            return 1;
+        };
+
+        context.windows.push(window);
+        collect_direct_child_windows(hwnd, context.request, context.windows);
+        1
+    }
+
+    fn collect_direct_child_windows(
+        parent_hwnd: HWND,
+        request: &ScreenWindowSnapshotRequest,
+        windows: &mut Vec<ScreenWindow>,
+    ) {
+        let mut context = ChildWindowSnapshotContext {
+            request,
+            windows,
+            parent_hwnd,
+            parent_id: parent_hwnd as isize,
+        };
+
+        // Safety: The callback only borrows `context` for the duration of EnumChildWindows.
+        unsafe {
+            EnumChildWindows(
+                parent_hwnd,
+                Some(enum_child_window_proc),
+                &mut context as *mut ChildWindowSnapshotContext<'_> as LPARAM,
+            );
+        }
+    }
+
+    fn screen_window_from_hwnd(
+        hwnd: HWND,
+        parent_id: Option<isize>,
+        request: &ScreenWindowSnapshotRequest,
+        apply_top_level_filters: bool,
+    ) -> Option<ScreenWindow> {
+        if hwnd.is_null() {
+            return None;
+        }
+
+        // Safety: IsWindowVisible reads the borrowed HWND state without taking ownership.
+        if unsafe { IsWindowVisible(hwnd) } == 0 {
+            return None;
+        }
+
+        let class_name = window_class_name(hwnd);
+        if apply_top_level_filters && matches!(class_name.as_str(), "Progman" | "WorkerW") {
+            return None;
+        }
+
+        if apply_top_level_filters {
+            let title = window_title(hwnd);
+            if request
+                .excluded_titles
+                .iter()
+                .any(|excluded| title == *excluded)
+            {
+                return None;
+            }
+        }
+
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        // Safety: rect points to writable memory and hwnd is a borrowed window handle.
+        if unsafe { GetWindowRect(hwnd, &mut rect) } == 0 {
+            return None;
+        }
+
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+        if width <= 0 || height <= 0 {
+            return None;
+        }
+
+        Some(
+            ScreenWindow::new(
+                hwnd as isize,
+                parent_id,
+                ScreenRect::new(rect.left, rect.top, width as u32, height as u32),
+            )
+            .class_name(class_name),
+        )
+    }
+
+    fn window_class_name(hwnd: HWND) -> String {
+        let mut buffer = [0u16; 256];
+        // Safety: buffer is valid for 256 UTF-16 code units and hwnd is borrowed.
+        let len = unsafe { GetClassNameW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
+        if len <= 0 {
+            return String::new();
+        }
+
+        String::from_utf16_lossy(&buffer[..len as usize])
+    }
+
+    fn window_title(hwnd: HWND) -> String {
+        // Safety: GetWindowTextLengthW reads the title length for a borrowed HWND.
+        let len = unsafe { GetWindowTextLengthW(hwnd) };
+        if len <= 0 {
+            return String::new();
+        }
+
+        let mut buffer = vec![0u16; len as usize + 1];
+        // Safety: buffer is writable and includes space for the trailing null terminator.
+        let copied = unsafe { GetWindowTextW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
+        if copied <= 0 {
+            return String::new();
+        }
+
+        String::from_utf16_lossy(&buffer[..copied as usize])
     }
 
     fn screen_capture_rect(
@@ -2343,6 +2629,12 @@ try {
             right: info.rcWork.right,
             bottom: info.rcWork.bottom,
         };
+        let physical_monitor_area = WindowsRect {
+            left: info.rcMonitor.left,
+            top: info.rcMonitor.top,
+            right: info.rcMonitor.right,
+            bottom: info.rcMonitor.bottom,
+        };
 
         let mut dpi_x = 96u32;
         let mut dpi_y = 96u32;
@@ -2350,7 +2642,11 @@ try {
         let hr = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
         let dpi = if hr >= 0 && dpi_x > 0 { dpi_x } else { 96 };
 
-        Ok(WindowsMonitorMetrics::new(physical_work_area, dpi))
+        Ok(WindowsMonitorMetrics::with_monitor_area(
+            physical_work_area,
+            physical_monitor_area,
+            dpi,
+        ))
     }
 
     struct ClipboardGuard;
@@ -2543,6 +2839,10 @@ try {
     pub const fn ws_ex_topmost() -> u32 {
         WS_EX_TOPMOST
     }
+
+    pub const fn ws_ex_noactivate() -> u32 {
+        WS_EX_NOACTIVATE
+    }
 }
 
 #[cfg(not(windows))]
@@ -2553,7 +2853,9 @@ mod native {
         WindowsNamedEvent, WindowsNamedEventHandle, WindowsPlatformError, WindowsPoint,
         WindowsProcessMemory, WindowsRect,
     };
-    use win_fluent::platform::{ScreenCaptureRequest, ScreenCaptureResult};
+    use win_fluent::platform::{
+        ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow, ScreenWindowSnapshotRequest,
+    };
 
     #[derive(Debug)]
     pub struct NamedEventHandle;
@@ -2608,9 +2910,19 @@ mod native {
         Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
+    pub fn apply_window_ex_style(_hwnd: isize, _ex_style: u32) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
     pub fn capture_screen_region(
         _request: ScreenCaptureRequest,
     ) -> Result<ScreenCaptureResult, WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn capture_screen_windows(
+        _request: ScreenWindowSnapshotRequest,
+    ) -> Result<Vec<ScreenWindow>, WindowsPlatformError> {
         Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
@@ -2819,6 +3131,10 @@ mod native {
     pub const fn ws_ex_topmost() -> u32 {
         0x00000008
     }
+
+    pub const fn ws_ex_noactivate() -> u32 {
+        0x08000000
+    }
 }
 
 #[cfg(test)]
@@ -2921,7 +3237,8 @@ mod tests {
             .level(WindowLevel::TopMost)
             .frame(WindowFrame::Acrylic)
             .placement(WindowPlacement::CursorOffset { x: 12.0, y: 12.0 })
-            .skip_taskbar(true);
+            .skip_taskbar(true)
+            .no_activate(true);
 
         let plan = WindowsPlatformAdapter::plan_window(&options);
 
@@ -2929,7 +3246,72 @@ mod tests {
         assert_eq!(plan.style, native::ws_popup());
         assert!(plan.ex_style & native::ws_ex_topmost() != 0);
         assert!(plan.ex_style & native::ws_ex_toolwindow() != 0);
+        assert!(plan.ex_style & native::ws_ex_noactivate() != 0);
         assert!(plan.uses_acrylic);
+    }
+
+    #[test]
+    fn maps_tool_window_options_to_topmost_no_activate_native_plan() {
+        let options = WindowOptions::new("pop-button", "Selection")
+            .size(30.0, 30.0)
+            .min_size(30.0, 30.0)
+            .level(WindowLevel::ToolWindow)
+            .frame(WindowFrame::Borderless)
+            .resize_mode(WindowResizeMode::Fixed)
+            .skip_taskbar(true)
+            .no_activate(true);
+
+        let plan = WindowsPlatformAdapter::plan_window(&options);
+
+        assert_eq!(plan.id, "pop-button");
+        assert_eq!(plan.width, 30);
+        assert_eq!(plan.height, 30);
+        assert_eq!(plan.min_width, Some(30));
+        assert_eq!(plan.min_height, Some(30));
+        assert_eq!(plan.style, native::ws_popup());
+        assert!(plan.ex_style & native::ws_ex_toolwindow() != 0);
+        assert!(plan.ex_style & native::ws_ex_topmost() != 0);
+        assert!(plan.ex_style & native::ws_ex_noactivate() != 0);
+    }
+
+    #[test]
+    fn pop_button_show_at_clamps_to_work_area_near_edges() {
+        let options = WindowOptions::new("pop-button", "Selection")
+            .size(30.0, 30.0)
+            .min_size(30.0, 30.0)
+            .level(WindowLevel::ToolWindow)
+            .frame(WindowFrame::Borderless)
+            .resize_mode(WindowResizeMode::Fixed)
+            .placement(WindowPlacement::Explicit {
+                x: 1910.0,
+                y: 1070.0,
+            })
+            .skip_taskbar(true)
+            .no_activate(true);
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 1910, y: 1070 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+        let plan = WindowsPlatformAdapter::plan_window(&options);
+
+        assert_eq!(placement.x, 1890);
+        assert_eq!(placement.y, 1050);
+        assert_eq!(placement.width, 30);
+        assert_eq!(placement.height, 30);
+        assert!(placement.x >= placement.work_area.left);
+        assert!(placement.y >= placement.work_area.top);
+        assert!(placement.x + placement.width <= placement.work_area.right);
+        assert!(placement.y + placement.height <= placement.work_area.bottom);
+        assert!(plan.ex_style & native::ws_ex_toolwindow() != 0);
+        assert!(plan.ex_style & native::ws_ex_topmost() != 0);
+        assert!(plan.ex_style & native::ws_ex_noactivate() != 0);
     }
 
     #[test]
@@ -3083,6 +3465,71 @@ mod tests {
         assert_eq!(placement.y, 0);
         assert_eq!(placement.width, 940);
         assert_eq!(placement.height, 600);
+    }
+
+    #[test]
+    fn resolves_work_area_window_placement_to_monitor_bounds_in_dips() {
+        let options = WindowOptions::new("capture-overlay", "Capture")
+            .size(1920.0, 1080.0)
+            .min_size(1.0, 1.0)
+            .placement(WindowPlacement::WorkArea);
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_monitor(
+            &options,
+            WindowsPoint { x: 300, y: 200 },
+            WindowsMonitorMetrics::new(
+                WindowsRect {
+                    left: -1920,
+                    top: 0,
+                    right: 0,
+                    bottom: 1200,
+                },
+                120,
+            ),
+        );
+
+        assert_eq!(placement.dpi, 120);
+        assert_eq!(placement.work_area.left, -1536);
+        assert_eq!(placement.work_area.top, 0);
+        assert_eq!(placement.x, -1536);
+        assert_eq!(placement.y, 0);
+        assert_eq!(placement.width, 1536);
+        assert_eq!(placement.height, 960);
+    }
+
+    #[test]
+    fn resolves_monitor_window_placement_to_full_monitor_bounds_in_dips() {
+        let options = WindowOptions::new("capture-overlay", "Capture")
+            .size(1920.0, 1080.0)
+            .min_size(1.0, 1.0)
+            .placement(WindowPlacement::Monitor);
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_monitor(
+            &options,
+            WindowsPoint { x: 300, y: 200 },
+            WindowsMonitorMetrics::with_monitor_area(
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 2880,
+                    bottom: 1704,
+                },
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 2880,
+                    bottom: 1800,
+                },
+                192,
+            ),
+        );
+
+        assert_eq!(placement.dpi, 192);
+        assert_eq!(placement.work_area.height(), 852);
+        assert_eq!(placement.x, 0);
+        assert_eq!(placement.y, 0);
+        assert_eq!(placement.width, 1440);
+        assert_eq!(placement.height, 900);
     }
 
     #[test]
@@ -3491,6 +3938,7 @@ mod tests {
         let mut group = A11yNode::new(A11yRole::Group);
         let mut button = A11yNode::new(A11yRole::Button);
         button.name = Some("Translate".to_string());
+        button.help_text = Some("Runs the selected service".to_string());
         button.focusable = true;
         group.children.push(button);
         root.children.push(group);
@@ -3506,6 +3954,10 @@ mod tests {
         assert_eq!(
             plan.root.children[0].children[0].control_type,
             WindowsUiaControlType::Button
+        );
+        assert_eq!(
+            plan.root.children[0].children[0].help_text.as_deref(),
+            Some("Runs the selected service")
         );
         assert!(plan.root.children[0].children[0].focusable);
     }

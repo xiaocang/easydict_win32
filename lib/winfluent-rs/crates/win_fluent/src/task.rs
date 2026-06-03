@@ -2,8 +2,9 @@ use std::future::Future;
 use std::pin::Pin;
 
 use crate::platform::{
-    FileDialogOptions, PlatformCommand, ProtocolRegistration, ScreenCaptureRequest,
-    ScreenCaptureResult, ShellVerb,
+    FileDialogOptions, FolderDialogOptions, PlatformCommand, ProtocolRegistration,
+    ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow, ScreenWindowSnapshotRequest,
+    ShellVerb,
 };
 use crate::window::WindowCommand;
 use futures_core::Stream;
@@ -23,8 +24,16 @@ pub enum Task<Message> {
         request: ScreenCaptureRequest,
         map: Box<dyn Fn(Option<ScreenCaptureResult>) -> Message + Send + 'static>,
     },
+    CaptureScreenWindows {
+        request: ScreenWindowSnapshotRequest,
+        map: Box<dyn Fn(Vec<ScreenWindow>) -> Message + Send + 'static>,
+    },
     OpenFileDialog {
         options: FileDialogOptions,
+        map: Box<dyn Fn(Option<String>) -> Message + Send + 'static>,
+    },
+    OpenFolderDialog {
+        options: FolderDialogOptions,
         map: Box<dyn Fn(Option<String>) -> Message + Send + 'static>,
     },
 }
@@ -104,11 +113,37 @@ impl<Message> Task<Message> {
         }
     }
 
+    pub fn capture_screen_windows(
+        map: impl Fn(Vec<ScreenWindow>) -> Message + Send + 'static,
+    ) -> Self {
+        Self::capture_screen_windows_with_request(ScreenWindowSnapshotRequest::new(), map)
+    }
+
+    pub fn capture_screen_windows_with_request(
+        request: ScreenWindowSnapshotRequest,
+        map: impl Fn(Vec<ScreenWindow>) -> Message + Send + 'static,
+    ) -> Self {
+        Self::CaptureScreenWindows {
+            request,
+            map: Box::new(map),
+        }
+    }
+
     pub fn open_file_dialog(
         options: FileDialogOptions,
         map: impl Fn(Option<String>) -> Message + Send + 'static,
     ) -> Self {
         Self::OpenFileDialog {
+            options,
+            map: Box::new(map),
+        }
+    }
+
+    pub fn open_folder_dialog(
+        options: FolderDialogOptions,
+        map: impl Fn(Option<String>) -> Message + Send + 'static,
+    ) -> Self {
+        Self::OpenFolderDialog {
             options,
             map: Box::new(map),
         }
@@ -173,11 +208,14 @@ impl<Message> Default for Task<Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::{ScreenCaptureRequest, ScreenRect};
+    use crate::platform::{
+        ScreenCaptureRequest, ScreenRect, ScreenWindow, ScreenWindowSnapshotRequest,
+    };
 
     #[derive(Debug, Eq, PartialEq)]
     enum TestMessage {
         Captured(Option<ScreenCaptureResult>),
+        Windows(Vec<ScreenWindow>),
     }
 
     #[test]
@@ -205,5 +243,22 @@ mod tests {
 
         assert_eq!(request, ScreenCaptureRequest::region(region));
         assert_eq!(map(None), TestMessage::Captured(None));
+    }
+
+    #[test]
+    fn capture_screen_windows_with_request_preserves_excluded_titles_and_mapper() {
+        let expected_request = ScreenWindowSnapshotRequest::new().exclude_title("Capture Overlay");
+        let task = Task::capture_screen_windows_with_request(
+            expected_request.clone(),
+            TestMessage::Windows,
+        );
+
+        let Task::CaptureScreenWindows { request, map } = task else {
+            panic!("expected window snapshot task");
+        };
+
+        assert_eq!(request, expected_request);
+        let windows = vec![ScreenWindow::new(7, None, ScreenRect::new(1, 2, 30, 40))];
+        assert_eq!(map(windows.clone()), TestMessage::Windows(windows));
     }
 }

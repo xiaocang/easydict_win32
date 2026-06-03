@@ -13,7 +13,7 @@ use iced::advanced::{
     clipboard::Clipboard,
     layout, mouse, overlay, renderer,
     widget::{self, Operation, Tree},
-    Layout, Shell, Widget,
+    Layout, Renderer as _, Shell, Widget,
 };
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
@@ -32,12 +32,12 @@ use win_fluent::action::{Action, ActionKind};
 use win_fluent::command::CommandToken;
 use win_fluent::icon;
 use win_fluent::platform::{
-    FileDialogFilter, FileDialogOptions, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand,
-    ProtocolRegistration, ShellVerb,
+    FileDialogFilter, FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey, HotkeyModifier,
+    PlatformCommand, ProtocolRegistration, ShellVerb,
 };
 use win_fluent::runtime::{Application as FluentApplication, DesktopIntegrationPlan, RuntimePlan};
 use win_fluent::screenshot::WindowScreenshot;
-use win_fluent::state::ValidationSeverity;
+use win_fluent::state::{ControlState, ValidationSeverity};
 use win_fluent::style::FluentStyle;
 use win_fluent::subscription::{
     PlatformEvent, Subscription as FluentSubscription, SubscriptionKind as FluentSubscriptionKind,
@@ -45,13 +45,13 @@ use win_fluent::subscription::{
 use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
-    AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CardKind, CardToken, CollapseTransition,
-    ComboBoxItem, ExpanderToken, FlyoutButtonToken, LayoutDistribution, LayoutKind, LayoutToken,
-    Length, OverlayToken, PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel,
-    ProgressRingToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus,
-    SettingsRowToken, SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey,
-    TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken, TextStyle, TitleBarToken, View,
-    ViewToken, WrapToken,
+    AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind, CardToken,
+    CollapseTransition, ComboBoxItem, ExpanderToken, FlyoutButtonToken, LayoutDistribution,
+    LayoutKind, LayoutToken, Length, OverlayToken, PointerPosition, PointerRegionAction,
+    PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken, ResultItem,
+    ResultListToken, ResultStatus, SettingsRowToken, SliderToken, StatusBadgeToken,
+    TextEditorChrome, TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken,
+    TextStyle, TitleBarToken, View, ViewToken, WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -182,7 +182,7 @@ where
         IcedSingleWindowRuntime::<App>::update,
         IcedSingleWindowRuntime::<App>::view,
     )
-    .title(|state: &IcedSingleWindowRuntime<App>| state.app.title(&state.logical_window_id))
+    .title(|state: &IcedSingleWindowRuntime<App>| state.title(&state.logical_window_id))
     .window(window_settings)
     .subscription(IcedSingleWindowRuntime::<App>::subscription)
     .run()
@@ -200,6 +200,8 @@ enum IcedRuntimeMessage<Message> {
 struct IcedSingleWindowRuntime<App: FluentApplication> {
     app: App,
     logical_window_id: WindowId,
+    window_options: WindowOptions,
+    window_title_overrides: HashMap<WindowId, String>,
     native_window_id: Option<window::Id>,
     view: View<App::Message>,
     text_editors: TextEditorCache,
@@ -216,7 +218,7 @@ where
         options: WindowOptions,
     ) -> (Self, iced::Task<IcedRuntimeMessage<App::Message>>) {
         let plan = RuntimePlan::<App>::new(flags);
-        let runtime = Self::new(plan.app, options.id, plan.desktop_integration);
+        let mut runtime = Self::new(plan.app, options, plan.desktop_integration);
         let initial_task = runtime.fluent_task(plan.initial_task);
         let focus_task = runtime.delayed_focused_text_editor_task();
 
@@ -225,9 +227,10 @@ where
 
     fn new(
         app: App,
-        logical_window_id: WindowId,
+        window_options: WindowOptions,
         desktop_integration: DesktopIntegrationPlan<App::Message>,
     ) -> Self {
+        let logical_window_id = window_options.id.clone();
         let view = app.view(&logical_window_id);
         let mut text_editors = TextEditorCache::default();
         text_editors.sync(&view);
@@ -235,6 +238,8 @@ where
         Self {
             app,
             logical_window_id,
+            window_options,
+            window_title_overrides: HashMap::new(),
             native_window_id: None,
             view,
             text_editors,
@@ -245,6 +250,13 @@ where
     fn rebuild_view(&mut self) {
         self.view = self.app.view(&self.logical_window_id);
         self.text_editors.sync(&self.view);
+    }
+
+    fn title(&self, window: &WindowId) -> String {
+        self.window_title_overrides
+            .get(window)
+            .cloned()
+            .unwrap_or_else(|| self.app.title(window))
     }
 
     fn update(
@@ -269,7 +281,10 @@ where
             IcedRuntimeMessage::FocusWidget(id) => iced::widget::operation::focus(id),
             IcedRuntimeMessage::WindowOpened(window_id) => {
                 state.native_window_id = Some(window_id);
-                state.delayed_focused_text_editor_task()
+                iced::Task::batch([
+                    apply_native_window_options_task(window_id, state.window_options.clone(), true),
+                    state.delayed_focused_text_editor_task(),
+                ])
             }
         }
     }
@@ -293,7 +308,7 @@ where
     }
 
     fn fluent_task(
-        &self,
+        &mut self,
         task: FluentTask<App::Message>,
     ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
         match task {
@@ -317,8 +332,16 @@ where
                 iced::Task::future(async move { run_platform_capture_screen_region(request) })
                     .map(move |capture| IcedRuntimeMessage::App(map(capture)))
             }
+            FluentTask::CaptureScreenWindows { request, map } => {
+                iced::Task::future(async move { run_platform_capture_screen_windows(request) })
+                    .map(move |windows| IcedRuntimeMessage::App(map(windows)))
+            }
             FluentTask::OpenFileDialog { options, map } => {
                 iced::Task::future(async move { run_platform_open_file_dialog(options) })
+                    .map(move |path| IcedRuntimeMessage::App(map(path)))
+            }
+            FluentTask::OpenFolderDialog { options, map } => {
+                iced::Task::future(async move { run_platform_open_folder_dialog(options) })
                     .map(move |path| IcedRuntimeMessage::App(map(path)))
             }
         }
@@ -392,7 +415,7 @@ where
     }
 
     fn window_command(
-        &self,
+        &mut self,
         command: WindowCommand<App::Message>,
     ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
         match command {
@@ -407,11 +430,15 @@ where
                 .with_logical_window(&id, window::close)
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::Show(id) => self
-                .with_logical_window(&id, |window_id| {
-                    window::set_mode::<IcedRuntimeMessage<App::Message>>(
-                        window_id,
-                        window::Mode::Windowed,
-                    )
+                .with_logical_window(&id, {
+                    let options = self.window_options.clone();
+                    move |window_id| show_window_task::<App::Message>(window_id, options.clone())
+                })
+                .unwrap_or_else(iced::Task::none),
+            WindowCommand::ShowAt { id, x, y } => self
+                .with_logical_window(&id, {
+                    let options = show_at_window_options(&self.window_options, x, y);
+                    move |window_id| show_window_task::<App::Message>(window_id, options.clone())
                 })
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::Hide(id) => self
@@ -423,16 +450,21 @@ where
                 })
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::ToggleVisibility(id) => self
-                .with_logical_window(&id, |window_id| {
-                    window::mode(window_id).then(move |mode| {
-                        let next_mode = if mode == window::Mode::Hidden {
-                            window::Mode::Windowed
-                        } else {
-                            window::Mode::Hidden
-                        };
-
-                        window::set_mode::<IcedRuntimeMessage<App::Message>>(window_id, next_mode)
-                    })
+                .with_logical_window(&id, {
+                    let options = self.window_options.clone();
+                    move |window_id| {
+                        let show_options = options.clone();
+                        window::mode(window_id).then(move |mode| {
+                            if mode == window::Mode::Hidden {
+                                show_window_task::<App::Message>(window_id, show_options.clone())
+                            } else {
+                                window::set_mode::<IcedRuntimeMessage<App::Message>>(
+                                    window_id,
+                                    window::Mode::Hidden,
+                                )
+                            }
+                        })
+                    }
                 })
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::Focus(id) => self
@@ -461,9 +493,13 @@ where
                     window::set_level::<IcedRuntimeMessage<App::Message>>(window_id, level)
                 })
                 .unwrap_or_else(iced::Task::none),
-            WindowCommand::Open { .. }
-            | WindowCommand::ReplaceView { .. }
-            | WindowCommand::SetTitle { .. } => iced::Task::none(),
+            WindowCommand::SetTitle { id, title } => {
+                if self.matches_logical_window(&id) {
+                    self.window_title_overrides.insert(id, title);
+                }
+                iced::Task::none()
+            }
+            WindowCommand::Open { .. } | WindowCommand::ReplaceView { .. } => iced::Task::none(),
         }
     }
 
@@ -486,8 +522,153 @@ where
         id: &WindowId,
         command: impl Fn(window::Id) -> iced::Task<IcedRuntimeMessage<App::Message>> + Send + 'static,
     ) -> Option<iced::Task<IcedRuntimeMessage<App::Message>>> {
-        (id == &self.logical_window_id).then(|| self.with_current_window(command))
+        self.matches_logical_window(id)
+            .then(|| self.with_current_window(command))
     }
+
+    fn matches_logical_window(&self, id: &WindowId) -> bool {
+        id == &self.logical_window_id
+    }
+}
+
+fn show_at_window_options(options: &WindowOptions, x: f32, y: f32) -> WindowOptions {
+    options
+        .clone()
+        .placement(WindowPlacement::Explicit { x, y })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ShowWindowStep {
+    ApplyNativeOptions { delayed_check: bool },
+    ResolvePlacement,
+    ShowWindowed,
+}
+
+fn show_window_steps(options: &WindowOptions) -> Vec<ShowWindowStep> {
+    let mut steps = Vec::new();
+    if should_apply_native_options_before_show(options) {
+        steps.push(ShowWindowStep::ApplyNativeOptions {
+            delayed_check: false,
+        });
+    }
+
+    steps.push(ShowWindowStep::ResolvePlacement);
+    steps.push(ShowWindowStep::ShowWindowed);
+    steps.push(ShowWindowStep::ApplyNativeOptions {
+        delayed_check: true,
+    });
+    steps
+}
+
+fn should_apply_native_options_before_show(options: &WindowOptions) -> bool {
+    options.no_activate || options.skip_taskbar || options.level == WindowLevel::ToolWindow
+}
+
+fn show_window_task<Message>(
+    window_id: window::Id,
+    options: WindowOptions,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    let mut tasks = Vec::new();
+
+    for step in show_window_steps(&options) {
+        match step {
+            ShowWindowStep::ApplyNativeOptions { delayed_check } => tasks.push(
+                apply_native_window_options_task(window_id, options.clone(), delayed_check),
+            ),
+            ShowWindowStep::ResolvePlacement => {
+                #[cfg(windows)]
+                if let Some((position, size)) = resolved_window_position_and_size(&options) {
+                    tasks.push(window::resize::<IcedRuntimeMessage<Message>>(
+                        window_id, size,
+                    ));
+                    tasks.push(window::move_to::<IcedRuntimeMessage<Message>>(
+                        window_id, position,
+                    ));
+                }
+            }
+            ShowWindowStep::ShowWindowed => tasks.push(window::set_mode::<
+                IcedRuntimeMessage<Message>,
+            >(
+                window_id, window::Mode::Windowed
+            )),
+        }
+    }
+
+    iced::Task::batch(tasks)
+}
+
+#[cfg(windows)]
+fn resolved_window_position_and_size(options: &WindowOptions) -> Option<(Point, Size)> {
+    let placement =
+        win_fluent_platform_win::WindowsPlatformAdapter::resolve_window_placement(options).ok()?;
+    Some((
+        Point::new(placement.x as f32, placement.y as f32),
+        Size::new(placement.width as f32, placement.height as f32),
+    ))
+}
+
+fn apply_native_window_options_task<Message>(
+    window_id: window::Id,
+    options: WindowOptions,
+    delayed_check: bool,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    #[cfg(windows)]
+    {
+        let immediate_options = options.clone();
+        let immediate = window::run(window_id, move |handle| {
+            apply_native_window_options(handle, &immediate_options);
+        })
+        .discard();
+        if !delayed_check {
+            return immediate;
+        }
+
+        let delayed = iced::Task::perform(
+            async move {
+                std::thread::sleep(Duration::from_millis(150));
+                (window_id, options)
+            },
+            |options| options,
+        )
+        .then(|(window_id, options)| {
+            window::run(window_id, move |handle| {
+                apply_native_window_options(handle, &options);
+            })
+            .discard()
+        });
+
+        return iced::Task::batch([immediate, delayed]);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (window_id, options, delayed_check);
+        iced::Task::none()
+    }
+}
+
+#[cfg(windows)]
+fn apply_native_window_options(handle: &dyn window::Window, options: &WindowOptions) {
+    use iced::window::raw_window_handle::RawWindowHandle;
+
+    let Ok(window_handle) = handle.window_handle() else {
+        return;
+    };
+
+    let RawWindowHandle::Win32(raw_handle) = window_handle.as_raw() else {
+        return;
+    };
+
+    let _ = win_fluent_platform_win::WindowsPlatformAdapter::apply_window_options_to_hwnd(
+        raw_handle.hwnd.get(),
+        options,
+    );
 }
 
 fn fluent_subscription<Message>(
@@ -579,6 +760,54 @@ fn run_platform_open_file_dialog(options: FileDialogOptions) -> Option<String> {
         );
 
         let output = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-STA")
+            .arg("-WindowStyle")
+            .arg("Hidden")
+            .arg("-Command")
+            .arg(script)
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (!path.is_empty()).then_some(path)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = options;
+        None
+    }
+}
+
+fn run_platform_open_folder_dialog(options: FolderDialogOptions) -> Option<String> {
+    #[cfg(windows)]
+    {
+        let mut script = String::new();
+        script.push_str("Add-Type -AssemblyName System.Windows.Forms\n");
+        script.push_str("$dialog = New-Object System.Windows.Forms.FolderBrowserDialog\n");
+        script.push_str(&format!(
+            "$dialog.Description = {}\n",
+            ps_quote(&options.title)
+        ));
+        script.push_str("$dialog.ShowNewFolderButton = $true\n");
+
+        if let Some(directory) = options.initial_directory.as_deref() {
+            script.push_str(&format!("$initialDirectory = {}\n", ps_quote(directory)));
+            script.push_str(
+                "if ([System.IO.Directory]::Exists($initialDirectory)) { $dialog.SelectedPath = $initialDirectory }\n",
+            );
+        }
+
+        script.push_str(
+            "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }\n",
+        );
+
+        let output = Command::new("powershell")
             .arg("-NoProfile")
             .arg("-STA")
             .arg("-WindowStyle")
@@ -817,6 +1046,24 @@ fn run_platform_capture_screen_region(
     }
 }
 
+fn run_platform_capture_screen_windows(
+    request: win_fluent::platform::ScreenWindowSnapshotRequest,
+) -> Vec<win_fluent::platform::ScreenWindow> {
+    #[cfg(windows)]
+    {
+        win_fluent_platform_win::WindowsPlatformAdapter::capture_screen_windows_with_request(
+            request,
+        )
+        .unwrap_or_default()
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = request;
+        Vec::new()
+    }
+}
+
 fn run_platform_speak_text(text: String, language: Option<String>) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -947,6 +1194,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
             }
         }
         ViewToken::PointerRegion(token) => collect_text_editor_values(&token.content, values),
+        ViewToken::CaptureOverlay(_) => {}
         ViewToken::Custom(token) => {
             for child in &token.children {
                 collect_text_editor_values(child, values);
@@ -996,9 +1244,10 @@ fn window_settings(options: &WindowOptions) -> iced::window::Settings {
             WindowPlacement::Explicit { x, y } => {
                 iced::window::Position::Specific(Point::new(x, y))
             }
-            WindowPlacement::CursorOffset { .. } | WindowPlacement::TopRight { .. } => {
-                iced::window::Position::Default
-            }
+            WindowPlacement::Monitor
+            | WindowPlacement::WorkArea
+            | WindowPlacement::CursorOffset { .. }
+            | WindowPlacement::TopRight { .. } => iced::window::Position::Default,
         },
         ..iced::window::Settings::default()
     };
@@ -1086,6 +1335,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_)
+        | ViewToken::CaptureOverlay(_)
         | ViewToken::Custom(_) => None,
     }
 }
@@ -1117,6 +1367,7 @@ where
         ViewToken::Text(token) => compile_text(&token.value, token.style, visual),
         ViewToken::Button(token) => {
             let kind = token.kind;
+            let state = token.state.clone();
             let mut control = iced_button(button_content(
                 &token.label,
                 kind,
@@ -1124,13 +1375,8 @@ where
                 visual,
             ))
             .style(move |_, status| {
-                button_style_with_state(
-                    visual,
-                    kind,
-                    token.state.focused,
-                    token.state.selected,
-                    status,
-                )
+                let status = button_status_with_state(&state, status);
+                button_style_with_state(visual, kind, state.focused, state.selected, status)
             });
 
             control = match kind {
@@ -1163,6 +1409,13 @@ where
                 ButtonKind::Standard => control.padding([6, 12]),
             };
 
+            if let Some(width) = token.width {
+                control = control.width(iced_length(width));
+            }
+            if let Some(height) = token.height {
+                control = control.height(iced_length(height));
+            }
+
             if token.state.enabled {
                 if let Some(message) = token.action.press() {
                     control = control.on_press(message);
@@ -1187,7 +1440,14 @@ where
                 .size(20)
                 .spacing(8)
                 .text_size(visual.body_size)
-                .style(move |_, status| toggle_switch_style(visual, status));
+                .style({
+                    let state = token.state.clone();
+                    let checked = token.checked;
+                    move |_, status| {
+                        let status = toggle_switch_status_with_state(&state, checked, status);
+                        toggle_switch_style_with_state(visual, status, &state)
+                    }
+                });
 
             if token.state.enabled && token.action.kind() == ActionKind::BoolInput {
                 let action = token.action.clone();
@@ -1207,7 +1467,7 @@ where
             token.label.as_deref(),
             token.width,
             &token.action,
-            token.state.enabled,
+            &token.state,
             visual,
         ),
         ViewToken::CommandBar(token) => {
@@ -1343,6 +1603,7 @@ where
         ViewToken::ResultCard(token) => compile_result_card(token, visual),
         ViewToken::ResultList(token) => compile_result_list(token, visual),
         ViewToken::PointerRegion(token) => compile_pointer_region(token, provider, visual),
+        ViewToken::CaptureOverlay(token) => compile_capture_overlay(token, visual),
         ViewToken::Custom(token) => {
             let mut content = iced_column(vec![compile_text(
                 &token.control,
@@ -1373,6 +1634,127 @@ where
     PointerRegionWidget::new(token, content).into()
 }
 
+fn compile_capture_overlay<'a, Message>(
+    token: &'a CaptureOverlayToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let rect = token.selection_rect.or(token.detected_rect);
+    let Some(rect) = rect else {
+        return iced_container(iced_space())
+            .width(IcedLength::Fixed(1.0))
+            .height(IcedLength::Fixed(1.0))
+            .into();
+    };
+
+    let width = (rect.width.max(24) as f32).min(900.0);
+    let height = (rect.height.max(24) as f32).min(500.0);
+    let selected = token.selection_rect.is_some();
+    let border_color = if selected {
+        visual.accent
+    } else {
+        visual.warning
+    };
+    let fill_color = if selected {
+        visual.accent.scale_alpha(0.10)
+    } else {
+        visual.warning.scale_alpha(0.12)
+    };
+
+    let frame: IcedElement<'a, Message> = iced_container(iced_space())
+        .width(IcedLength::Fixed(width))
+        .height(IcedLength::Fixed(height))
+        .style(move |_| capture_overlay_frame_style(visual, border_color, fill_color, selected))
+        .into();
+
+    let framed: IcedElement<'a, Message> = if token.handles_visible {
+        capture_overlay_with_handles(frame, visual)
+    } else {
+        frame
+    };
+
+    let chip = iced_container(
+        iced_text(format!("{} x {}", rect.width.max(0), rect.height.max(0)))
+            .font(text_font(TextStyle::Caption))
+            .size(visual.caption_size)
+            .color(visual.text_on_accent),
+    )
+    .padding([2, 8])
+    .style(move |_| capture_overlay_size_chip_style(visual, selected));
+
+    let mut content = iced_column(vec![framed, chip.into()])
+        .spacing(6)
+        .align_x(alignment::Horizontal::Center);
+
+    if token.magnifier_visible {
+        content = content.push(capture_overlay_magnifier(width, height, visual));
+    }
+
+    content.into()
+}
+
+fn capture_overlay_with_handles<'a, Message>(
+    frame: IcedElement<'a, Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let handles = iced_row(vec![
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+        capture_overlay_handle(visual),
+    ])
+    .spacing(6)
+    .align_y(alignment::Vertical::Center);
+
+    iced_column(vec![frame, handles.into()])
+        .spacing(8)
+        .align_x(alignment::Horizontal::Center)
+        .into()
+}
+
+fn capture_overlay_handle<'a, Message>(visual: IcedVisualTheme) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    iced_container(iced_space())
+        .width(IcedLength::Fixed(9.0))
+        .height(IcedLength::Fixed(9.0))
+        .style(move |_| capture_overlay_handle_style(visual))
+        .into()
+}
+
+fn capture_overlay_magnifier<'a, Message>(
+    width: f32,
+    height: f32,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let inner = iced_container(
+        iced_text(format!("{width:.0} x {height:.0}"))
+            .font(text_font(TextStyle::Caption))
+            .size(visual.caption_size)
+            .color(visual.text_primary),
+    )
+    .width(IcedLength::Fixed(128.0))
+    .height(IcedLength::Fixed(76.0))
+    .align_x(alignment::Horizontal::Center)
+    .align_y(alignment::Vertical::Center)
+    .style(move |_| capture_overlay_magnifier_style(visual));
+
+    inner.into()
+}
+
 fn compile_text<'a, Message>(
     value: &str,
     style: TextStyle,
@@ -1396,9 +1778,7 @@ where
     Message: Clone + Send + 'static,
 {
     if !token.state.enabled || token.action.kind() != ActionKind::NumberInput {
-        return iced_container(iced_text(format!("{:.1}x", token.value)))
-            .width(iced_length(token.width))
-            .into();
+        return compile_read_only_slider(token, visual);
     }
 
     let action = token.action.clone();
@@ -1410,7 +1790,51 @@ where
     .step(token.step)
     .width(iced_length(token.width))
     .height(20)
-    .style(move |_, status| slider_style(visual, status))
+    .style({
+        let state = token.state.clone();
+        move |_, status| slider_style_with_state(visual, status, &state)
+    })
+    .into()
+}
+
+fn compile_read_only_slider<'a, Message>(
+    token: &'a SliderToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let span = (token.max - token.min).max(f32::EPSILON);
+    let ratio = ((token.value - token.min) / span).clamp(0.0, 1.0);
+    let active_portion = ((ratio * 998.0).round() as u16).saturating_add(1).min(999);
+    let inactive_portion = 1000_u16.saturating_sub(active_portion).max(1);
+    let state = token.state.clone();
+    let active_state = state.clone();
+    let inactive_state = state.clone();
+    let thumb_state = state;
+
+    let active_rail: IcedElement<'a, Message> = iced_container(iced_space())
+        .height(IcedLength::Fixed(4.0))
+        .width(IcedLength::FillPortion(active_portion))
+        .style(move |_| slider_read_only_rail_style(visual, &active_state, true))
+        .into();
+    let thumb: IcedElement<'a, Message> = iced_container(iced_space())
+        .height(IcedLength::Fixed(16.0))
+        .width(IcedLength::Fixed(16.0))
+        .style(move |_| slider_read_only_thumb_style(visual, &thumb_state))
+        .into();
+    let inactive_rail: IcedElement<'a, Message> = iced_container(iced_space())
+        .height(IcedLength::Fixed(4.0))
+        .width(IcedLength::FillPortion(inactive_portion))
+        .style(move |_| slider_read_only_rail_style(visual, &inactive_state, false))
+        .into();
+
+    iced_container(
+        iced_row(vec![active_rail, thumb, inactive_rail])
+            .align_y(alignment::Vertical::Center)
+            .height(IcedLength::Fixed(20.0)),
+    )
+    .width(iced_length(token.width))
     .into()
 }
 
@@ -1908,20 +2332,185 @@ fn compile_progress_ring<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let label = token
-        .label
-        .as_deref()
-        .unwrap_or(if token.active { "◌" } else { "" });
+    if token.active {
+        let ring: IcedElement<'a, Message> =
+            Element::new(AnimatedProgressRing::new(token.size, visual.accent));
+
+        if let Some(label) = &token.label {
+            return iced_row(vec![ring, compile_text(label, TextStyle::Caption, visual)])
+                .spacing(6)
+                .align_y(alignment::Vertical::Center)
+                .into();
+        }
+
+        return ring;
+    }
+
+    let label = token.label.as_deref().unwrap_or("");
 
     iced_text(label.to_string())
         .font(text_font(TextStyle::Caption))
         .size(token.size as f32)
-        .color(if token.active {
-            visual.accent
-        } else {
-            visual.text_secondary
-        })
+        .color(visual.text_secondary)
         .into()
+}
+
+const PROGRESS_RING_SEGMENTS: usize = 8;
+const PROGRESS_RING_FRAME_MS: u64 = 100;
+
+#[derive(Debug)]
+struct AnimatedProgressRing {
+    size: u16,
+    color: Color,
+}
+
+impl AnimatedProgressRing {
+    fn new(size: u16, color: Color) -> Self {
+        Self { size, color }
+    }
+}
+
+#[derive(Debug)]
+struct AnimatedProgressRingState {
+    started_at: Option<iced::time::Instant>,
+    frame_index: usize,
+}
+
+impl AnimatedProgressRingState {
+    fn new() -> Self {
+        Self {
+            started_at: None,
+            frame_index: 0,
+        }
+    }
+
+    fn tick(&mut self, active: bool, now: iced::time::Instant) -> (bool, bool) {
+        if !active {
+            let changed = self.started_at.take().is_some() || self.frame_index != 0;
+            self.frame_index = 0;
+            return (changed, false);
+        }
+
+        let started_at = *self.started_at.get_or_insert(now);
+        let next_frame = progress_ring_frame_index(started_at, now);
+        let changed = next_frame != self.frame_index;
+        self.frame_index = next_frame;
+        (changed, true)
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for AnimatedProgressRing {
+    fn tag(&self) -> widget::tree::Tag {
+        widget::tree::Tag::of::<AnimatedProgressRingState>()
+    }
+
+    fn state(&self) -> widget::tree::State {
+        widget::tree::State::new(AnimatedProgressRingState::new())
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        let size = f32::from(self.size);
+        Size::new(IcedLength::Fixed(size), IcedLength::Fixed(size))
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut Tree,
+        _renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let size = f32::from(self.size);
+        layout::Node::new(limits.resolve(
+            IcedLength::Fixed(size),
+            IcedLength::Fixed(size),
+            Size::new(size, size),
+        ))
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        _layout: Layout<'_>,
+        _cursor: mouse::Cursor,
+        _renderer: &iced::Renderer,
+        _clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        _viewport: &Rectangle,
+    ) {
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            let (_changed, animating) = tree
+                .state
+                .downcast_mut::<AnimatedProgressRingState>()
+                .tick(true, *now);
+
+            if animating {
+                shell.request_redraw();
+            }
+        }
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        _theme: &iced::Theme,
+        _style: &renderer::Style,
+        layout: Layout<'_>,
+        _cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let Some(bounds) = layout.bounds().intersection(viewport) else {
+            return;
+        };
+        let widget_bounds = layout.bounds();
+        let center = Point::new(
+            widget_bounds.x + widget_bounds.width / 2.0,
+            widget_bounds.y + widget_bounds.height / 2.0,
+        );
+        let state = tree.state.downcast_ref::<AnimatedProgressRingState>();
+        let frame_index = state.frame_index;
+        let dot_size = (widget_bounds.width.min(widget_bounds.height) / 5.5).max(2.0);
+        let radius = (widget_bounds.width.min(widget_bounds.height) - dot_size) / 2.0;
+
+        renderer.with_layer(bounds, |renderer| {
+            for segment in 0..PROGRESS_RING_SEGMENTS {
+                let angle = -std::f32::consts::FRAC_PI_2
+                    + (segment as f32 / PROGRESS_RING_SEGMENTS as f32) * std::f32::consts::TAU;
+                let alpha = progress_ring_segment_alpha(segment, frame_index);
+                let point = Point::new(
+                    center.x + angle.cos() * radius - dot_size / 2.0,
+                    center.y + angle.sin() * radius - dot_size / 2.0,
+                );
+
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle {
+                            x: point.x,
+                            y: point.y,
+                            width: dot_size,
+                            height: dot_size,
+                        },
+                        border: Border::default().rounded(dot_size / 2.0),
+                        shadow: Shadow::default(),
+                        snap: true,
+                    },
+                    self.color.scale_alpha(alpha),
+                );
+            }
+        });
+    }
+}
+
+fn progress_ring_frame_index(started_at: iced::time::Instant, now: iced::time::Instant) -> usize {
+    let elapsed_ms = now.saturating_duration_since(started_at).as_millis() as u64;
+    ((elapsed_ms / PROGRESS_RING_FRAME_MS) as usize) % PROGRESS_RING_SEGMENTS
+}
+
+fn progress_ring_segment_alpha(segment: usize, frame_index: usize) -> f32 {
+    let distance = (segment + PROGRESS_RING_SEGMENTS - (frame_index % PROGRESS_RING_SEGMENTS))
+        % PROGRESS_RING_SEGMENTS;
+    (1.0 - (distance as f32 * 0.095)).clamp(0.22, 1.0)
 }
 
 fn compile_busy_overlay<'a, Message, Provider>(
@@ -1934,12 +2523,6 @@ where
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     let content = compile_view_with_text_editors_and_visual(&token.content, provider, visual);
-    if !token.active {
-        return content;
-    }
-
-    // The busy overlay is a specialized centered, scrimmed layer built on the
-    // same stack-layer mechanism as the general `overlay` primitive.
     let indicator: IcedElement<'a, Message> = iced_column(vec![
         compile_progress_ring(
             &ProgressRingToken {
@@ -1961,16 +2544,348 @@ where
     .align_x(alignment::Horizontal::Center)
     .into();
 
-    let overlay = overlay_layer_element(
+    Element::new(AnimatedBusyOverlay::new(
+        content,
         indicator,
-        alignment::Horizontal::Center,
-        alignment::Vertical::Center,
-        Some(token.opacity),
+        token.active,
+        token.opacity,
+        token.fade_transition_ms,
         token.blocks_input,
         visual,
-    );
+    ))
+}
 
-    iced_stack(vec![content, overlay]).into()
+struct AnimatedBusyOverlay<'a, Message> {
+    content: IcedElement<'a, Message>,
+    indicator: IcedElement<'a, Message>,
+    active: bool,
+    opacity: f32,
+    fade_transition_ms: u16,
+    blocks_input: bool,
+    visual: IcedVisualTheme,
+}
+
+impl<'a, Message> AnimatedBusyOverlay<'a, Message> {
+    fn new(
+        content: IcedElement<'a, Message>,
+        indicator: IcedElement<'a, Message>,
+        active: bool,
+        opacity: f32,
+        fade_transition_ms: u16,
+        blocks_input: bool,
+        visual: IcedVisualTheme,
+    ) -> Self {
+        Self {
+            content,
+            indicator,
+            active,
+            opacity,
+            fade_transition_ms,
+            blocks_input,
+            visual,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct AnimatedBusyOverlayState {
+    progress: f32,
+    from: f32,
+    target: f32,
+    started_at: Option<iced::time::Instant>,
+}
+
+impl AnimatedBusyOverlayState {
+    fn new(active: bool) -> Self {
+        let progress = if active { 1.0 } else { 0.0 };
+        Self {
+            progress,
+            from: progress,
+            target: progress,
+            started_at: None,
+        }
+    }
+
+    fn set_target(&mut self, active: bool, duration_ms: u16) {
+        let target = if active { 1.0 } else { 0.0 };
+        if (self.target - target).abs() <= f32::EPSILON {
+            return;
+        }
+
+        self.from = self.progress;
+        self.target = target;
+        self.started_at = None;
+
+        if duration_ms == 0 {
+            self.progress = target;
+            self.from = target;
+        }
+    }
+
+    fn tick(&mut self, now: iced::time::Instant, duration_ms: u16) -> (bool, bool) {
+        if (self.progress - self.target).abs() <= 0.001 {
+            self.progress = self.target;
+            self.from = self.target;
+            self.started_at = None;
+            return (false, false);
+        }
+
+        if duration_ms == 0 {
+            let changed = (self.progress - self.target).abs() > 0.001;
+            self.progress = self.target;
+            self.from = self.target;
+            self.started_at = None;
+            return (changed, false);
+        }
+
+        let previous = self.progress;
+        let started_at = *self.started_at.get_or_insert(now);
+        let elapsed_ms = now.saturating_duration_since(started_at).as_secs_f32() * 1000.0;
+        self.progress = busy_overlay_fade_progress(self.from, self.target, elapsed_ms, duration_ms);
+
+        if elapsed_ms >= f32::from(duration_ms) {
+            self.progress = self.target;
+            self.from = self.target;
+            self.started_at = None;
+            return ((previous - self.progress).abs() > 0.001, false);
+        }
+
+        ((previous - self.progress).abs() > 0.001, true)
+    }
+
+    fn is_visible_or_targeting_visible(&self) -> bool {
+        self.progress > 0.001 || self.target > 0.001
+    }
+
+    fn opacity(&self, requested_opacity: f32) -> f32 {
+        requested_opacity.clamp(0.0, 1.0) * self.progress.clamp(0.0, 1.0)
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for AnimatedBusyOverlay<'_, Message> {
+    fn tag(&self) -> widget::tree::Tag {
+        widget::tree::Tag::of::<AnimatedBusyOverlayState>()
+    }
+
+    fn state(&self) -> widget::tree::State {
+        widget::tree::State::new(AnimatedBusyOverlayState::new(self.active))
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content), Tree::new(&self.indicator)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        let children = [&self.content, &self.indicator];
+        tree.diff_children(&children);
+        tree.state
+            .downcast_mut::<AnimatedBusyOverlayState>()
+            .set_target(self.active, self.fade_transition_ms);
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let content = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
+        let size = content.size();
+        let indicator_limits = layout::Limits::new(Size::ZERO, size);
+        let mut indicator = self.indicator.as_widget_mut().layout(
+            &mut tree.children[1],
+            renderer,
+            &indicator_limits,
+        );
+        let indicator_size = indicator.size();
+        indicator.move_to_mut(Point::new(
+            ((size.width - indicator_size.width) / 2.0).max(0.0),
+            ((size.height - indicator_size.height) / 2.0).max(0.0),
+        ));
+
+        layout::Node::with_children(size, vec![content, indicator])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let is_redraw = matches!(event, Event::Window(window::Event::RedrawRequested(_)));
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            let (changed, animating) = tree
+                .state
+                .downcast_mut::<AnimatedBusyOverlayState>()
+                .tick(*now, self.fade_transition_ms);
+            if changed {
+                shell.invalidate_widgets();
+            }
+            if animating {
+                shell.request_redraw();
+            }
+        }
+
+        let state = tree.state.downcast_ref::<AnimatedBusyOverlayState>();
+        let overlay_visible = state.is_visible_or_targeting_visible();
+        if overlay_visible {
+            self.indicator.as_widget_mut().update(
+                &mut tree.children[1],
+                event,
+                layout.child(1),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+        }
+
+        let blocks_input = self.blocks_input && overlay_visible && !is_redraw;
+        if blocks_input {
+            shell.capture_event();
+            return;
+        }
+
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.child(0),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            self.content.as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.child(0),
+                renderer,
+                operation,
+            );
+
+            if tree
+                .state
+                .downcast_ref::<AnimatedBusyOverlayState>()
+                .is_visible_or_targeting_visible()
+            {
+                self.indicator.as_widget_mut().operate(
+                    &mut tree.children[1],
+                    layout.child(1),
+                    renderer,
+                    operation,
+                );
+            }
+        });
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.child(0),
+            cursor,
+            viewport,
+        );
+
+        let state = tree.state.downcast_ref::<AnimatedBusyOverlayState>();
+        let opacity = state.opacity(self.opacity);
+        if opacity <= 0.001 {
+            return;
+        }
+
+        let Some(clipped) = layout.bounds().intersection(viewport) else {
+            return;
+        };
+        let bounds = layout.bounds();
+        renderer.with_layer(clipped, |renderer| {
+            renderer.fill_quad(
+                renderer::Quad {
+                    bounds,
+                    border: Border::default(),
+                    shadow: Shadow::default(),
+                    snap: true,
+                },
+                Color::BLACK.scale_alpha(opacity),
+            );
+            self.indicator.as_widget().draw(
+                &tree.children[1],
+                renderer,
+                theme,
+                &renderer::Style {
+                    text_color: self.visual.text_primary,
+                },
+                layout.child(1),
+                cursor,
+                viewport,
+            );
+        });
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        let state = tree.state.downcast_ref::<AnimatedBusyOverlayState>();
+        if self.blocks_input
+            && state.is_visible_or_targeting_visible()
+            && cursor.is_over(layout.bounds())
+        {
+            return mouse::Interaction::Wait;
+        }
+
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.child(0),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+}
+
+fn busy_overlay_fade_progress(from: f32, target: f32, elapsed_ms: f32, duration_ms: u16) -> f32 {
+    win_fluent::motion::Transition::fluent_content(duration_ms)
+        .value_at(elapsed_ms, from, target)
+        .clamp(0.0, 1.0)
 }
 
 /// Builds a single overlay stack-layer: a full-size container that aligns its
@@ -2196,38 +3111,51 @@ where
     Message: Clone + Send + 'static,
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
-    let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
-    let mut text_column =
-        iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
-
-    if let Some(description) = &token.description {
-        text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
-    }
-
-    let mut trailing = iced_row(Vec::new()).spacing(8);
-    for child in &token.trailing {
-        trailing = trailing.push(compile_view_with_text_editors_and_visual(
-            child, provider, visual,
-        ));
-    }
-
-    let header: IcedElement<'a, Message> = if token.trailing.is_empty() {
-        text_column.into()
+    let is_headerless_floating_input = token.kind == CardKind::FloatingInput
+        && token.title.trim().is_empty()
+        && token.description.is_none()
+        && token.icon.is_none()
+        && token.trailing.is_empty();
+    let card_padding = if token.kind == CardKind::FloatingInput {
+        6.0
     } else {
-        iced_row(vec![
-            text_column.into(),
-            iced_space().width(IcedLength::Fill).into(),
-            trailing.into(),
-        ])
-        .align_y(alignment::Vertical::Center)
-        .width(IcedLength::Fill)
-        .into()
+        visual.card_padding
     };
-
-    let mut layout = iced_column(vec![header.into()])
-        .padding(visual.card_padding)
+    let mut layout = iced_column(Vec::new())
+        .padding(card_padding)
         .spacing(12)
         .width(IcedLength::Fill);
+
+    if !is_headerless_floating_input {
+        let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
+        let mut text_column =
+            iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
+
+        if let Some(description) = &token.description {
+            text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
+        }
+
+        let mut trailing = iced_row(Vec::new()).spacing(8);
+        for child in &token.trailing {
+            trailing = trailing.push(compile_view_with_text_editors_and_visual(
+                child, provider, visual,
+            ));
+        }
+
+        let header: IcedElement<'a, Message> = if token.trailing.is_empty() {
+            text_column.into()
+        } else {
+            iced_row(vec![
+                text_column.into(),
+                iced_space().width(IcedLength::Fill).into(),
+                trailing.into(),
+            ])
+            .align_y(alignment::Vertical::Center)
+            .width(IcedLength::Fill)
+            .into()
+        };
+        layout = layout.push(header);
+    }
 
     if let Some(content) = &token.content {
         layout = layout.push(compile_view_with_text_editors_and_visual(
@@ -2262,7 +3190,14 @@ where
             .size(text_size(token.text_style, visual))
             .style({
                 let chrome = token.chrome;
-                move |_, status| text_editor_style(visual, status, chrome)
+                let state = token.state.clone();
+                move |_, status| {
+                    text_editor_style(
+                        visual,
+                        text_editor_status_with_state(&state, status),
+                        chrome,
+                    )
+                }
             });
 
         if let Some(id) = &token.id {
@@ -2310,7 +3245,10 @@ where
         .size(text_size(token.text_style, visual))
         .style({
             let chrome = token.chrome;
-            move |_, status| text_input_style(visual, status, chrome)
+            let state = token.state.clone();
+            move |_, status| {
+                text_input_style(visual, text_input_status_with_state(&state, status), chrome)
+            }
         });
 
     if let Some(id) = &token.id {
@@ -2340,24 +3278,12 @@ fn compile_combo_box<'a, Message>(
     label: Option<&str>,
     width: Length,
     action: &Action<Message>,
-    enabled: bool,
+    state: &'a ControlState,
     visual: IcedVisualTheme,
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
 {
-    if !enabled || !matches!(action.kind(), ActionKind::SelectionInput) {
-        return compile_text(
-            selected
-                .and_then(|id| items.iter().find(|item| item.id == id))
-                .map(|item| item.label.as_str())
-                .or(label)
-                .unwrap_or_default(),
-            TextStyle::Body,
-            visual,
-        );
-    }
-
     let choices = items
         .iter()
         .map(|item| ComboChoice {
@@ -2366,6 +3292,21 @@ where
         })
         .collect::<Vec<_>>();
     let selected = selected.and_then(|id| choices.iter().find(|item| item.id == id).cloned());
+
+    if !state.enabled || !matches!(action.kind(), ActionKind::SelectionInput) {
+        return compile_read_only_combo_box(
+            selected
+                .as_ref()
+                .map(|item| item.label.as_str())
+                .or(label)
+                .unwrap_or_default(),
+            label.unwrap_or("Select"),
+            width,
+            state,
+            visual,
+        );
+    }
+
     let action = action.clone();
 
     iced_pick_list(choices, selected, move |choice| {
@@ -2377,9 +3318,57 @@ where
     .width(iced_length(width))
     .padding([8, 12])
     .text_size(text_size(TextStyle::Body, visual))
-    .style(move |_, status| pick_list_style(visual, status))
+    .style({
+        let state = state.clone();
+        move |_, status| pick_list_style_with_state(visual, status, &state)
+    })
     .menu_style(move |_| menu_style(visual))
     .into()
+}
+
+fn compile_read_only_combo_box<'a, Message>(
+    value: &str,
+    placeholder: &str,
+    width: Length,
+    state: &'a ControlState,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let disabled = !state.enabled;
+    let text_color = if disabled {
+        visual.text_secondary.scale_alpha(visual.disabled_opacity)
+    } else if value.is_empty() {
+        visual.text_secondary
+    } else {
+        visual.text_primary
+    };
+    let label = if value.is_empty() { placeholder } else { value };
+    let content = iced_row(vec![
+        iced_text(label.to_string())
+            .size(text_size(TextStyle::Body, visual))
+            .color(text_color)
+            .width(IcedLength::Fill)
+            .into(),
+        iced_text("\u{E70D}")
+            .font(caption_icon_font())
+            .size(12.0)
+            .color(if disabled {
+                visual.text_secondary.scale_alpha(visual.disabled_opacity)
+            } else {
+                visual.text_secondary
+            })
+            .into(),
+    ])
+    .align_y(alignment::Vertical::Center)
+    .spacing(8);
+
+    iced_container(content)
+        .width(iced_length(width))
+        .padding([8, 12])
+        .style(move |_| read_only_combo_box_style(visual, state))
+        .into()
 }
 
 fn compile_expander<'a, Message, Provider>(
@@ -2476,12 +3465,10 @@ where
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
-    let mut text_column =
-        iced_column(vec![compile_text(&title, TextStyle::Subtitle, visual)]).spacing(6);
-
-    if let Some(description) = &token.description {
-        text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
-    }
+    let mut layout = iced_column(vec![compile_text(&title, TextStyle::Subtitle, visual)])
+        .padding(24)
+        .spacing(12)
+        .width(IcedLength::Fill);
 
     let mut trailing = iced_row(Vec::new()).spacing(8);
     for child in &token.trailing {
@@ -2490,31 +3477,18 @@ where
         ));
     }
 
-    let has_header_controls = !token.trailing.is_empty();
-    let header = if has_header_controls {
-        iced_row(vec![
-            text_column.width(IcedLength::Fill).into(),
-            trailing.into(),
-        ])
-        .spacing(12)
-        .width(IcedLength::Fill)
-        .align_y(alignment::Vertical::Center)
-    } else {
-        iced_row(vec![text_column.width(IcedLength::Fill).into()])
-            .spacing(12)
-            .width(IcedLength::Fill)
-            .align_y(alignment::Vertical::Center)
-    };
-
-    let mut layout = iced_column(vec![header.into()])
-        .padding(24)
-        .spacing(12)
-        .width(IcedLength::Fill);
-
     if let Some(content) = &token.content {
         layout = layout.push(compile_view_with_text_editors_and_visual(
             content, provider, visual,
         ));
+    }
+
+    if !token.trailing.is_empty() {
+        layout = layout.push(trailing.align_y(alignment::Vertical::Center));
+    }
+
+    if let Some(description) = &token.description {
+        layout = layout.push(compile_text(description, TextStyle::Caption, visual));
     }
 
     iced_container(layout)
@@ -2657,6 +3631,14 @@ where
                     .color(visual.error)
                     .into(),
             );
+            push_result_action(
+                &mut header_right_children,
+                &item.id,
+                "Retry",
+                win_fluent::IconToken::with_glyph("retry", '\u{E72C}'),
+                retry_action,
+                visual,
+            );
         }
         ResultStatus::Ready => {}
     }
@@ -2690,11 +3672,15 @@ where
     .width(IcedLength::Fill)
     .align_y(alignment::Vertical::Center);
 
+    let header_state = item.header_state.clone();
     let mut header = iced_button(header_content)
         .height(IcedLength::Fixed(visual.result_header_height))
         .padding([0, 8])
         .width(IcedLength::Fill)
-        .style(move |_, status| result_header_button_style(visual, status));
+        .style(move |_, status| {
+            let status = button_status_with_state(&header_state, status);
+            result_header_button_style(visual, status)
+        });
 
     if item.toggleable && matches!(toggle_action.kind(), ActionKind::SelectionInput) {
         if let Some(message) = toggle_action.input_text(item.id.clone()) {
@@ -2713,7 +3699,7 @@ where
     };
 
     if !body_text.trim().is_empty() {
-        let body = iced_container(
+        let body: IcedElement<'a, Message> = iced_container(
             iced_text(body_text.to_string())
                 .font(text_font(TextStyle::BodyLarge))
                 .size(text_size(TextStyle::BodyLarge, visual))
@@ -2724,8 +3710,35 @@ where
                 })
                 .width(IcedLength::Fill),
         )
-        .padding([8, 10])
-        .width(IcedLength::Fill);
+        .padding([2, 8])
+        .width(IcedLength::Fill)
+        .into();
+
+        let actions = result_action_buttons(
+            &item.id,
+            item.status,
+            copy_action,
+            speak_action,
+            replace_action,
+            visual,
+        );
+        let body = if actions.is_empty() {
+            body
+        } else {
+            let action_overlay: IcedElement<'a, Message> = iced_container(
+                iced_row(actions)
+                    .spacing(2)
+                    .align_y(alignment::Vertical::Center),
+            )
+            .height(IcedLength::Fixed(27.0))
+            .align_y(alignment::Vertical::Top)
+            .into();
+            Element::new(HoverRevealActions::new(
+                body,
+                action_overlay,
+                item.actions_visible,
+            ))
+        };
 
         content = content.push(animated_collapse(
             item.id.clone(),
@@ -2735,30 +3748,337 @@ where
         ));
     }
 
-    if item.expanded {
-        let actions = result_action_buttons(
-            &item.id,
-            item.status,
-            copy_action,
-            speak_action,
-            replace_action,
-            retry_action,
-            visual,
-        );
-        if !actions.is_empty() {
-            content = content.push(
-                iced_container(
-                    iced_row(actions)
-                        .spacing(4)
-                        .align_y(alignment::Vertical::Center),
-                )
-                .padding([8, 8])
-                .width(IcedLength::Fill),
-            );
+    content
+}
+
+struct HoverRevealActions<'a, Message> {
+    body: IcedElement<'a, Message>,
+    actions: IcedElement<'a, Message>,
+    forced_visible: bool,
+}
+
+const HOVER_REVEAL_TRANSITION_MS: u16 = 120;
+const HOVER_REVEAL_SLIDE_DIPS: f32 = 6.0;
+const HOVER_REVEAL_INTERACTIVE_PROGRESS: f32 = 0.85;
+
+impl<'a, Message> HoverRevealActions<'a, Message> {
+    fn new(
+        body: IcedElement<'a, Message>,
+        actions: IcedElement<'a, Message>,
+        forced_visible: bool,
+    ) -> Self {
+        Self {
+            body,
+            actions,
+            forced_visible,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct HoverRevealActionsState {
+    hovered: bool,
+    progress: f32,
+    from: f32,
+    target: f32,
+    started_at: Option<iced::time::Instant>,
+}
+
+impl HoverRevealActionsState {
+    fn new(visible: bool) -> Self {
+        let progress = if visible { 1.0 } else { 0.0 };
+        Self {
+            hovered: false,
+            progress,
+            from: progress,
+            target: progress,
+            started_at: None,
         }
     }
 
-    content
+    fn set_hovered(&mut self, hovered: bool) -> bool {
+        let changed = self.hovered != hovered;
+        self.hovered = hovered;
+        changed
+    }
+
+    fn set_target(&mut self, visible: bool, duration_ms: u16) {
+        let target = if visible { 1.0 } else { 0.0 };
+        if (self.target - target).abs() <= f32::EPSILON {
+            return;
+        }
+
+        self.from = self.progress;
+        self.target = target;
+        self.started_at = None;
+
+        if duration_ms == 0 {
+            self.progress = target;
+            self.from = target;
+        }
+    }
+
+    fn tick(&mut self, now: iced::time::Instant, duration_ms: u16) -> bool {
+        if (self.progress - self.target).abs() <= 0.001 {
+            self.progress = self.target;
+            self.from = self.target;
+            self.started_at = None;
+            return false;
+        }
+
+        if duration_ms == 0 {
+            self.progress = self.target;
+            self.from = self.target;
+            self.started_at = None;
+            return false;
+        }
+
+        let started_at = *self.started_at.get_or_insert(now);
+        let elapsed_ms = now.duration_since(started_at).as_secs_f32() * 1000.0;
+        self.progress = hover_reveal_progress(self.from, self.target, elapsed_ms, duration_ms);
+
+        if elapsed_ms >= f32::from(duration_ms) {
+            self.progress = self.target;
+            self.from = self.target;
+            self.started_at = None;
+            return false;
+        }
+
+        true
+    }
+
+    fn target_visible(&self, forced_visible: bool) -> bool {
+        forced_visible || self.hovered
+    }
+
+    fn drawn(&self, forced_visible: bool) -> bool {
+        self.target_visible(forced_visible) || self.progress > 0.001
+    }
+
+    fn interactive(&self, forced_visible: bool) -> bool {
+        self.target_visible(forced_visible) && self.progress >= HOVER_REVEAL_INTERACTIVE_PROGRESS
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for HoverRevealActions<'_, Message> {
+    fn tag(&self) -> widget::tree::Tag {
+        widget::tree::Tag::of::<HoverRevealActionsState>()
+    }
+
+    fn state(&self) -> widget::tree::State {
+        widget::tree::State::new(HoverRevealActionsState::new(self.forced_visible))
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.body), Tree::new(&self.actions)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        let state = tree.state.downcast_mut::<HoverRevealActionsState>();
+        let target_visible = state.target_visible(self.forced_visible);
+        state.set_target(target_visible, HOVER_REVEAL_TRANSITION_MS);
+
+        let children = [&self.body, &self.actions];
+        tree.diff_children(&children);
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        self.body.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let body = self
+            .body
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
+        let size = body.size();
+        let action_limits = layout::Limits::new(Size::ZERO, size);
+        let mut actions =
+            self.actions
+                .as_widget_mut()
+                .layout(&mut tree.children[1], renderer, &action_limits);
+        let action_size = actions.size();
+        actions.move_to_mut(Point::new((size.width - action_size.width).max(0.0), 0.0));
+
+        layout::Node::with_children(size, vec![body, actions])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let hovered = cursor.is_over(layout.bounds());
+        let state = tree.state.downcast_mut::<HoverRevealActionsState>();
+        if state.set_hovered(hovered) {
+            let target_visible = state.target_visible(self.forced_visible);
+            state.set_target(target_visible, HOVER_REVEAL_TRANSITION_MS);
+            shell.request_redraw();
+        }
+
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            if state.tick(*now, HOVER_REVEAL_TRANSITION_MS) {
+                shell.request_redraw();
+            }
+        }
+
+        if state.interactive(self.forced_visible) {
+            self.actions.as_widget_mut().update(
+                &mut tree.children[1],
+                event,
+                layout.child(1),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+
+            if shell.is_event_captured() {
+                return;
+            }
+        }
+
+        self.body.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.child(0),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            self.body.as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.child(0),
+                renderer,
+                operation,
+            );
+
+            if tree
+                .state
+                .downcast_ref::<HoverRevealActionsState>()
+                .interactive(self.forced_visible)
+            {
+                self.actions.as_widget_mut().operate(
+                    &mut tree.children[1],
+                    layout.child(1),
+                    renderer,
+                    operation,
+                );
+            }
+        });
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.body.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.child(0),
+            cursor,
+            viewport,
+        );
+
+        let state = tree.state.downcast_ref::<HoverRevealActionsState>();
+        if !state.drawn(self.forced_visible) {
+            return;
+        }
+        let slide_offset = hover_reveal_slide_offset(state.progress);
+
+        if let Some(viewport) = layout.bounds().intersection(viewport) {
+            renderer.with_layer(viewport, |renderer| {
+                renderer.with_translation(Vector::new(slide_offset, 0.0), |renderer| {
+                    self.actions.as_widget().draw(
+                        &tree.children[1],
+                        renderer,
+                        theme,
+                        style,
+                        layout.child(1),
+                        cursor,
+                        &viewport,
+                    );
+                });
+            });
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        if tree
+            .state
+            .downcast_ref::<HoverRevealActionsState>()
+            .interactive(self.forced_visible)
+        {
+            let action_interaction = self.actions.as_widget().mouse_interaction(
+                &tree.children[1],
+                layout.child(1),
+                cursor,
+                viewport,
+                renderer,
+            );
+            if action_interaction != mouse::Interaction::None {
+                return action_interaction;
+            }
+        }
+
+        self.body.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.child(0),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+}
+
+fn hover_reveal_progress(from: f32, target: f32, elapsed_ms: f32, duration_ms: u16) -> f32 {
+    win_fluent::motion::Transition::fluent_content(duration_ms)
+        .value_at(elapsed_ms, from, target)
+        .clamp(0.0, 1.0)
+}
+
+fn hover_reveal_slide_offset(progress: f32) -> f32 {
+    (1.0 - progress.clamp(0.0, 1.0)) * HOVER_REVEAL_SLIDE_DIPS
 }
 
 fn result_action_buttons<'a, Message>(
@@ -2767,13 +4087,15 @@ fn result_action_buttons<'a, Message>(
     copy_action: &Action<Message>,
     speak_action: &Action<Message>,
     replace_action: &Action<Message>,
-    retry_action: &Action<Message>,
     visual: IcedVisualTheme,
 ) -> Vec<IcedElement<'a, Message>>
 where
     Message: Clone + Send + 'static,
 {
     let mut actions = Vec::new();
+    if status != ResultStatus::Ready {
+        return actions;
+    }
 
     push_result_action(
         &mut actions,
@@ -2799,16 +4121,6 @@ where
         speak_action,
         visual,
     );
-    if status == ResultStatus::Error {
-        push_result_action(
-            &mut actions,
-            item_id,
-            "Retry",
-            win_fluent::IconToken::with_glyph("retry", '\u{E72C}'),
-            retry_action,
-            visual,
-        );
-    }
 
     actions
 }
@@ -3650,12 +4962,16 @@ struct IcedVisualTheme {
     surface: Color,
     surface_alt: Color,
     selected_surface: Color,
+    selected_foreground: Color,
+    selected_border: Color,
     input_surface: Color,
     result_surface: Color,
     result_header: Color,
     result_header_hover: Color,
     button_hover: Color,
     button_pressed: Color,
+    floating_input_surface: Color,
+    floating_input_border: Color,
     floating_action_surface: Color,
     floating_action_border: Color,
     text_primary: Color,
@@ -3713,12 +5029,16 @@ impl IcedVisualTheme {
             surface: iced_color(theme.surface),
             surface_alt: iced_color(theme.surface_alt),
             selected_surface: iced_color(theme.selected_surface),
+            selected_foreground: iced_color(theme.selected_foreground),
+            selected_border: iced_color(theme.selected_border),
             input_surface: iced_color(theme.input_surface),
             result_surface: iced_color(theme.result_surface),
             result_header: iced_color(theme.result_header),
             result_header_hover: iced_color(theme.result_header_hover),
             button_hover: iced_color(theme.button_hover),
             button_pressed: iced_color(theme.button_pressed),
+            floating_input_surface: iced_color(theme.floating_input_surface),
+            floating_input_border: iced_color(theme.floating_input_border),
             floating_action_surface: iced_color(theme.floating_action_surface),
             floating_action_border: iced_color(theme.floating_action_border),
             text_primary: iced_color(theme.text_primary),
@@ -3803,9 +5123,71 @@ fn status_badge_container_style(
 }
 
 fn busy_overlay_style(visual: IcedVisualTheme, opacity: f32) -> iced::widget::container::Style {
+    let _ = visual;
     iced::widget::container::Style::default()
-        .background(visual.surface_alt.scale_alpha(opacity.clamp(0.0, 1.0)))
+        .background(Color::BLACK.scale_alpha(opacity.clamp(0.0, 1.0)))
+        .color(Color::WHITE)
+}
+
+fn capture_overlay_frame_style(
+    visual: IcedVisualTheme,
+    border_color: Color,
+    fill_color: Color,
+    selected: bool,
+) -> iced::widget::container::Style {
+    let border_width = if selected {
+        2.0
+    } else {
+        visual.stroke_focus.max(1.5)
+    };
+    iced::widget::container::Style::default()
+        .background(fill_color)
+        .border(Border {
+            color: border_color,
+            width: border_width,
+            radius: 2.0.into(),
+        })
+}
+
+fn capture_overlay_handle_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(visual.surface)
+        .border(Border {
+            color: visual.accent,
+            width: 2.0,
+            radius: 2.0.into(),
+        })
+        .shadow(elevation_shadow(visual, 2.0))
+}
+
+fn capture_overlay_size_chip_style(
+    visual: IcedVisualTheme,
+    selected: bool,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(if selected {
+            visual.accent
+        } else {
+            visual.warning
+        })
+        .color(visual.text_on_accent)
+        .border(Border {
+            radius: 6.0.into(),
+            ..Border::default()
+        })
+        .shadow(elevation_shadow(visual, 2.0))
+}
+
+fn capture_overlay_magnifier_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(visual.surface.scale_alpha(0.96))
         .color(visual.text_primary)
+        .border(Border {
+            color: visual.accent,
+            width: 2.0,
+            radius: 8.0.into(),
+        })
+        .shadow(elevation_shadow(visual, visual.elevation_raised))
 }
 
 fn utility_container_style(
@@ -3884,6 +5266,125 @@ fn button_style(
     button_style_with_state(visual, kind, false, false, status)
 }
 
+fn button_status_with_state(
+    state: &ControlState,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Status {
+    if !state.enabled {
+        iced::widget::button::Status::Disabled
+    } else if state.pressed {
+        iced::widget::button::Status::Pressed
+    } else if state.hovered {
+        iced::widget::button::Status::Hovered
+    } else {
+        status
+    }
+}
+
+fn text_input_status_with_state(
+    state: &ControlState,
+    status: iced::widget::text_input::Status,
+) -> iced::widget::text_input::Status {
+    if !state.enabled {
+        iced::widget::text_input::Status::Disabled
+    } else if state.focused || state.pressed {
+        iced::widget::text_input::Status::Focused {
+            is_hovered: state.hovered || text_input_status_is_hovered(status),
+        }
+    } else if state.hovered {
+        match status {
+            iced::widget::text_input::Status::Focused { .. } => {
+                iced::widget::text_input::Status::Focused { is_hovered: true }
+            }
+            _ => iced::widget::text_input::Status::Hovered,
+        }
+    } else {
+        status
+    }
+}
+
+fn text_input_status_is_hovered(status: iced::widget::text_input::Status) -> bool {
+    matches!(
+        status,
+        iced::widget::text_input::Status::Hovered
+            | iced::widget::text_input::Status::Focused { is_hovered: true }
+    )
+}
+
+fn text_editor_status_with_state(
+    state: &ControlState,
+    status: iced::widget::text_editor::Status,
+) -> iced::widget::text_editor::Status {
+    if !state.enabled {
+        iced::widget::text_editor::Status::Disabled
+    } else if state.focused || state.pressed {
+        iced::widget::text_editor::Status::Focused {
+            is_hovered: state.hovered || text_editor_status_is_hovered(status),
+        }
+    } else if state.hovered {
+        match status {
+            iced::widget::text_editor::Status::Focused { .. } => {
+                iced::widget::text_editor::Status::Focused { is_hovered: true }
+            }
+            _ => iced::widget::text_editor::Status::Hovered,
+        }
+    } else {
+        status
+    }
+}
+
+fn text_editor_status_is_hovered(status: iced::widget::text_editor::Status) -> bool {
+    matches!(
+        status,
+        iced::widget::text_editor::Status::Hovered
+            | iced::widget::text_editor::Status::Focused { is_hovered: true }
+    )
+}
+
+fn slider_status_with_state(
+    state: &ControlState,
+    status: iced::widget::slider::Status,
+) -> iced::widget::slider::Status {
+    if state.pressed {
+        iced::widget::slider::Status::Dragged
+    } else if state.hovered {
+        iced::widget::slider::Status::Hovered
+    } else {
+        status
+    }
+}
+
+fn toggle_switch_status_with_state(
+    state: &ControlState,
+    checked: bool,
+    status: iced::widget::toggler::Status,
+) -> iced::widget::toggler::Status {
+    if !state.enabled {
+        iced::widget::toggler::Status::Disabled {
+            is_toggled: checked,
+        }
+    } else if state.hovered || state.pressed {
+        iced::widget::toggler::Status::Hovered {
+            is_toggled: checked,
+        }
+    } else {
+        status
+    }
+}
+
+fn pick_list_status_with_state(
+    state: &ControlState,
+    status: iced::widget::pick_list::Status,
+) -> iced::widget::pick_list::Status {
+    if !state.enabled {
+        status
+    } else if state.hovered || state.pressed {
+        iced::widget::pick_list::Status::Hovered
+    } else {
+        status
+    }
+}
+
 fn button_style_with_state(
     visual: IcedVisualTheme,
     kind: ButtonKind,
@@ -3893,9 +5394,16 @@ fn button_style_with_state(
 ) -> iced::widget::button::Style {
     let (background, text_color, border_color) = match kind {
         ButtonKind::Primary => match status {
-            iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => {
-                (Some(visual.accent), visual.text_on_accent, visual.accent)
-            }
+            iced::widget::button::Status::Hovered => (
+                Some(visual.accent_hover),
+                visual.text_on_accent,
+                visual.accent_hover,
+            ),
+            iced::widget::button::Status::Pressed => (
+                Some(visual.accent_pressed),
+                visual.text_on_accent,
+                visual.accent_pressed,
+            ),
             iced::widget::button::Status::Disabled => (
                 Some(visual.surface_alt),
                 visual.text_secondary.scale_alpha(visual.disabled_opacity),
@@ -3956,9 +5464,11 @@ fn button_style_with_state(
                 visual.text_secondary.scale_alpha(visual.disabled_opacity),
                 visual.border,
             ),
-            // Selected tab: themed selected surface (#EAF3FF / #243247) with an
-            // accent foreground and border, per the migration spec.
-            _ => (Some(visual.selected_surface), visual.accent, visual.accent),
+            _ => (
+                Some(visual.selected_surface),
+                visual.selected_foreground,
+                visual.selected_border,
+            ),
         },
         ButtonKind::Standard | ButtonKind::Chip | ButtonKind::Tile => match status {
             iced::widget::button::Status::Hovered => (
@@ -3981,7 +5491,14 @@ fn button_style_with_state(
             }
         },
     };
+    let focus_visible = focused && !matches!(status, iced::widget::button::Status::Disabled);
+    let border_color = if focus_visible {
+        visual.focus
+    } else {
+        border_color
+    };
     let border_width = match (kind, status) {
+        _ if focus_visible => visual.stroke_focus,
         (
             ButtonKind::Icon | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::ResultAction,
             iced::widget::button::Status::Active,
@@ -4177,9 +5694,107 @@ fn slider_style(
     }
 }
 
+fn slider_style_with_state(
+    visual: IcedVisualTheme,
+    status: iced::widget::slider::Status,
+    state: &ControlState,
+) -> iced::widget::slider::Style {
+    let mut style = slider_style(visual, slider_status_with_state(state, status));
+    if state.enabled && state.focused {
+        style.handle.border_color = visual.focus;
+        style.handle.border_width = visual.stroke_focus;
+    }
+
+    style
+}
+
+fn slider_read_only_rail_style(
+    visual: IcedVisualTheme,
+    state: &ControlState,
+    active: bool,
+) -> iced::widget::container::Style {
+    let color = if !state.enabled {
+        if active {
+            visual.text_secondary.scale_alpha(visual.disabled_opacity)
+        } else {
+            visual.surface_alt
+        }
+    } else if active {
+        if state.pressed {
+            visual.accent_pressed
+        } else if state.hovered {
+            visual.accent_hover
+        } else {
+            visual.accent
+        }
+    } else {
+        visual.button_pressed
+    };
+
+    iced::widget::container::Style::default()
+        .background(color)
+        .border(Border {
+            radius: 2.0.into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+        })
+}
+
+fn slider_read_only_thumb_style(
+    visual: IcedVisualTheme,
+    state: &ControlState,
+) -> iced::widget::container::Style {
+    let accent = if !state.enabled {
+        visual.text_secondary.scale_alpha(visual.disabled_opacity)
+    } else if state.pressed {
+        visual.accent_pressed
+    } else if state.hovered {
+        visual.accent_hover
+    } else if state.focused {
+        visual.focus
+    } else {
+        visual.accent
+    };
+
+    iced::widget::container::Style::default()
+        .background(visual.surface)
+        .border(Border {
+            radius: 8.0.into(),
+            width: visual.stroke_control,
+            color: accent,
+        })
+}
+
 fn toggle_switch_style(
     visual: IcedVisualTheme,
     status: iced::widget::toggler::Status,
+) -> iced::widget::toggler::Style {
+    toggle_switch_style_for_state(visual, status, false)
+}
+
+fn toggle_switch_style_with_state(
+    visual: IcedVisualTheme,
+    status: iced::widget::toggler::Status,
+    state: &ControlState,
+) -> iced::widget::toggler::Style {
+    let mut style = if state.pressed {
+        toggle_switch_style_for_state(visual, status, true)
+    } else {
+        toggle_switch_style(visual, status)
+    };
+
+    if state.enabled && state.focused {
+        style.background_border_color = visual.focus;
+        style.background_border_width = visual.stroke_focus;
+    }
+
+    style
+}
+
+fn toggle_switch_style_for_state(
+    visual: IcedVisualTheme,
+    status: iced::widget::toggler::Status,
+    is_pressed: bool,
 ) -> iced::widget::toggler::Style {
     let (is_toggled, is_hovered, is_disabled) = match status {
         iced::widget::toggler::Status::Active { is_toggled } => (is_toggled, false, false),
@@ -4195,12 +5810,16 @@ fn toggle_switch_style(
         )
     } else if is_toggled {
         (
-            if is_hovered {
+            if is_pressed {
+                visual.accent_pressed
+            } else if is_hovered {
                 visual.accent_hover
             } else {
                 visual.accent
             },
-            if is_hovered {
+            if is_pressed {
+                visual.accent_pressed
+            } else if is_hovered {
                 visual.accent_hover
             } else {
                 visual.accent
@@ -4209,7 +5828,9 @@ fn toggle_switch_style(
         )
     } else {
         (
-            if is_hovered {
+            if is_pressed {
+                visual.button_pressed
+            } else if is_hovered {
                 visual.button_hover
             } else {
                 visual.surface
@@ -4259,6 +5880,47 @@ fn pick_list_style(
     }
 }
 
+fn pick_list_style_with_state(
+    visual: IcedVisualTheme,
+    status: iced::widget::pick_list::Status,
+    state: &ControlState,
+) -> iced::widget::pick_list::Style {
+    let mut style = pick_list_style(visual, pick_list_status_with_state(state, status));
+    if !state.enabled {
+        style.background = Background::Color(visual.surface_alt);
+        style.text_color = visual.text_secondary.scale_alpha(visual.disabled_opacity);
+        style.placeholder_color = visual.text_secondary.scale_alpha(visual.disabled_opacity);
+        style.handle_color = visual.text_secondary.scale_alpha(visual.disabled_opacity);
+        style.border = control_border(visual, visual.border, visual.stroke_control);
+    } else if state.pressed {
+        style.background = Background::Color(visual.button_pressed);
+    } else if state.hovered {
+        style.background = Background::Color(visual.button_hover);
+    }
+    if state.enabled && state.focused {
+        style.border = control_border(visual, visual.focus, visual.stroke_focus);
+    }
+    style
+}
+
+fn read_only_combo_box_style(
+    visual: IcedVisualTheme,
+    state: &ControlState,
+) -> iced::widget::container::Style {
+    let mut pick_list_style =
+        pick_list_style_with_state(visual, iced::widget::pick_list::Status::Active, state);
+
+    if !state.enabled {
+        pick_list_style.background = Background::Color(visual.surface_alt);
+        pick_list_style.border = control_border(visual, visual.border, visual.stroke_control);
+    }
+
+    iced::widget::container::Style::default()
+        .background(pick_list_style.background)
+        .color(pick_list_style.text_color)
+        .border(pick_list_style.border)
+}
+
 fn flyout_pick_list_style(
     visual: IcedVisualTheme,
     status: iced::widget::pick_list::Status,
@@ -4300,12 +5962,31 @@ fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget
     let background = match kind {
         CardKind::Surface | CardKind::Expander => visual.surface,
         CardKind::Elevated => visual.surface_alt,
+        CardKind::FloatingInput => visual.floating_input_surface,
+    };
+    let border_color = match kind {
+        CardKind::FloatingInput => visual.floating_input_border,
+        _ => visual.border,
+    };
+    let border_radius = match kind {
+        CardKind::FloatingInput => {
+            if matches!(visual.mode, ThemeMode::Minimal | ThemeMode::HighContrast) {
+                visual.radius_control
+            } else {
+                18.0
+            }
+        }
+        _ => visual.radius_control,
     };
 
     let mut style = iced::widget::container::Style::default()
         .background(background)
         .color(visual.text_primary)
-        .border(control_border(visual, visual.border, visual.stroke_control));
+        .border(control_border_with_radius(
+            border_color,
+            visual.stroke_control,
+            border_radius,
+        ));
 
     if kind == CardKind::Elevated {
         style = style.shadow(elevation_shadow(visual, visual.elevation_raised));
@@ -4659,6 +6340,38 @@ mod tests {
         Run,
     }
 
+    struct TestApp;
+
+    impl FluentApplication for TestApp {
+        type Message = Msg;
+        type Flags = ();
+
+        fn new(_flags: Self::Flags) -> (Self, FluentTask<Self::Message>) {
+            (Self, FluentTask::none())
+        }
+
+        fn title(&self, _window: &WindowId) -> String {
+            "Original title".to_string()
+        }
+
+        fn view(&self, _window: &WindowId) -> View<Self::Message> {
+            page("Test").content(text("Ready")).into_view()
+        }
+
+        fn update(&mut self, _message: Self::Message) -> FluentTask<Self::Message> {
+            FluentTask::none()
+        }
+    }
+
+    fn empty_desktop_integration_plan<Message>() -> DesktopIntegrationPlan<Message> {
+        DesktopIntegrationPlan {
+            tray_menu: None,
+            named_events: Vec::new(),
+            shell_verbs: Vec::new(),
+            protocol_registrations: Vec::new(),
+        }
+    }
+
     #[test]
     fn compiles_basic_view_to_iced_element() {
         let view = page("Demo")
@@ -4679,6 +6392,75 @@ mod tests {
             .into_view();
 
         let _element: IcedElement<'_, Msg> = IcedAdapter::compile_view(&view);
+    }
+
+    #[test]
+    fn set_title_window_command_overrides_single_logical_window_title() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+
+        assert_eq!(
+            runtime.title(&WindowId::new("main")),
+            "Original title".to_string()
+        );
+
+        let _ = runtime.window_command(WindowCommand::SetTitle {
+            id: WindowId::new("main"),
+            title: "Updated title".to_string(),
+        });
+
+        assert_eq!(
+            runtime.title(&WindowId::new("main")),
+            "Updated title".to_string()
+        );
+
+        let _ = runtime.window_command(WindowCommand::SetTitle {
+            id: WindowId::new("settings"),
+            title: "Ignored title".to_string(),
+        });
+
+        assert_eq!(
+            runtime.title(&WindowId::new("main")),
+            "Updated title".to_string()
+        );
+    }
+
+    #[test]
+    fn compiles_disabled_and_read_only_combo_boxes_with_combo_chrome() {
+        let disabled_view = combo_box([
+            ComboBoxItem::new("en", "English"),
+            ComboBoxItem::new("zh", "Chinese"),
+        ])
+        .selected("en")
+        .state(ControlState::default().disabled())
+        .on_change(Msg::Pick)
+        .into_view();
+        let _disabled_element: IcedElement<'_, Msg> = IcedAdapter::compile_view(&disabled_view);
+
+        let read_only_view = combo_box([
+            ComboBoxItem::new("en", "English"),
+            ComboBoxItem::new("zh", "Chinese"),
+        ])
+        .selected("zh")
+        .into_view();
+        let _read_only_element: IcedElement<'_, Msg> = IcedAdapter::compile_view(&read_only_view);
+    }
+
+    #[test]
+    fn compiles_disabled_and_read_only_sliders_with_slider_chrome() {
+        let disabled_view = slider(1.2)
+            .range(0.5, 3.0)
+            .state(ControlState::default().disabled())
+            .on_change(|_| Msg::Run)
+            .into_view();
+        let _disabled_element: IcedElement<'_, Msg> = IcedAdapter::compile_view(&disabled_view);
+
+        let read_only_view = slider(0.7).range(0.0, 1.0).into_view();
+        let _read_only_element: IcedElement<'_, Msg> = IcedAdapter::compile_view(&read_only_view);
     }
 
     #[test]
@@ -4855,7 +6637,22 @@ mod tests {
         );
         assert_eq!(
             optional_background_color(primary_hover.background),
-            iced_color(theme.accent.base)
+            iced_color(theme.accent_hover)
+        );
+        assert_eq!(primary_hover.border.color, iced_color(theme.accent_hover));
+
+        let primary_pressed = button_style(
+            visual,
+            ButtonKind::Primary,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_eq!(
+            optional_background_color(primary_pressed.background),
+            iced_color(theme.accent_pressed)
+        );
+        assert_eq!(
+            primary_pressed.border.color,
+            iced_color(theme.accent_pressed)
         );
 
         let focused = text_input_style(
@@ -4958,6 +6755,353 @@ mod tests {
     }
 
     #[test]
+    fn maps_fluent_interaction_effects_to_state_styles() {
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+
+        let standard_hover = button_style(
+            visual,
+            ButtonKind::Standard,
+            iced::widget::button::Status::Hovered,
+        );
+        assert_eq!(
+            optional_background_color(standard_hover.background),
+            iced_color(theme.button_hover)
+        );
+        assert_eq!(standard_hover.border.color, iced_color(theme.border));
+
+        let standard_pressed = button_style(
+            visual,
+            ButtonKind::Standard,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_eq!(
+            optional_background_color(standard_pressed.background),
+            iced_color(theme.button_pressed)
+        );
+        assert_eq!(standard_pressed.border.color, iced_color(theme.border));
+
+        let result_header_hover =
+            result_header_button_style(visual, iced::widget::button::Status::Hovered);
+        assert_eq!(
+            optional_background_color(result_header_hover.background),
+            iced_color(theme.result_header_hover)
+        );
+
+        let result_header_pressed =
+            result_header_button_style(visual, iced::widget::button::Status::Pressed);
+        assert_eq!(
+            optional_background_color(result_header_pressed.background),
+            iced_color(theme.button_pressed)
+        );
+
+        let floating_action_hover = button_style(
+            visual,
+            ButtonKind::FloatingAction,
+            iced::widget::button::Status::Hovered,
+        );
+        assert_eq!(
+            optional_background_color(floating_action_hover.background),
+            iced_color(theme.floating_action_surface)
+                .scale_alpha(theme.effects.floating_action_hover_opacity)
+        );
+        assert_eq!(
+            floating_action_hover.border.color,
+            iced_color(theme.floating_action_border)
+                .scale_alpha(theme.effects.floating_action_hover_opacity)
+        );
+
+        let floating_action_pressed = button_style(
+            visual,
+            ButtonKind::FloatingAction,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_eq!(
+            optional_background_color(floating_action_pressed.background),
+            iced_color(theme.floating_action_surface)
+                .scale_alpha(theme.effects.floating_action_pressed_opacity)
+        );
+        assert_eq!(
+            floating_action_pressed.text_color,
+            iced_color(theme.accent.base)
+                .scale_alpha(theme.effects.floating_action_pressed_opacity)
+        );
+
+        let focused_standard = button_style_with_state(
+            visual,
+            ButtonKind::Standard,
+            true,
+            false,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(focused_standard.border.color, iced_color(theme.focus));
+        assert_eq!(focused_standard.border.width, theme.stroke.focus);
+
+        let focused_icon = button_style_with_state(
+            visual,
+            ButtonKind::Icon,
+            true,
+            false,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(focused_icon.border.color, iced_color(theme.focus));
+        assert_eq!(focused_icon.border.width, theme.stroke.focus);
+
+        let focused_disabled = button_style_with_state(
+            visual,
+            ButtonKind::Standard,
+            true,
+            false,
+            iced::widget::button::Status::Disabled,
+        );
+        assert_eq!(focused_disabled.border.color, iced_color(theme.border));
+        assert_eq!(focused_disabled.border.width, theme.stroke.control);
+
+        let toggle_on_hover = toggle_switch_style(
+            visual,
+            iced::widget::toggler::Status::Hovered { is_toggled: true },
+        );
+        assert_eq!(
+            background_color(toggle_on_hover.background),
+            iced_color(theme.accent_hover)
+        );
+
+        let toggle_off_hover = toggle_switch_style(
+            visual,
+            iced::widget::toggler::Status::Hovered { is_toggled: false },
+        );
+        assert_eq!(
+            background_color(toggle_off_hover.background),
+            iced_color(theme.button_hover)
+        );
+
+        let slider_hover = slider_style(visual, iced::widget::slider::Status::Hovered);
+        assert_eq!(
+            background_color(slider_hover.rail.backgrounds.0),
+            iced_color(theme.accent_hover)
+        );
+    }
+
+    #[test]
+    fn explicit_button_control_state_overrides_runtime_status_for_previews() {
+        let runtime_active = iced::widget::button::Status::Active;
+        let runtime_hovered = iced::widget::button::Status::Hovered;
+
+        let hovered = ControlState::default().hovered(true);
+        assert_eq!(
+            button_status_with_state(&hovered, runtime_active),
+            iced::widget::button::Status::Hovered
+        );
+
+        let pressed = ControlState::default().hovered(true).pressed(true);
+        assert_eq!(
+            button_status_with_state(&pressed, runtime_active),
+            iced::widget::button::Status::Pressed
+        );
+
+        let disabled = ControlState::default()
+            .hovered(true)
+            .pressed(true)
+            .disabled();
+        assert_eq!(
+            button_status_with_state(&disabled, runtime_hovered),
+            iced::widget::button::Status::Disabled
+        );
+
+        let inherited = ControlState::default();
+        assert_eq!(
+            button_status_with_state(&inherited, runtime_hovered),
+            runtime_hovered
+        );
+    }
+
+    #[test]
+    fn explicit_input_control_state_overrides_runtime_status_for_previews() {
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+
+        let focused = ControlState::default().focused(true);
+        let text_input = text_input_style(
+            visual,
+            text_input_status_with_state(&focused, iced::widget::text_input::Status::Active),
+            TextEditorChrome::Standard,
+        );
+        assert_eq!(text_input.border.color, iced_color(theme.focus));
+        assert_eq!(text_input.border.width, theme.stroke.focus);
+
+        let disabled = ControlState::default().hovered(true).disabled();
+        let editor = text_editor_style(
+            visual,
+            text_editor_status_with_state(&disabled, iced::widget::text_editor::Status::Hovered),
+            TextEditorChrome::Standard,
+        );
+        assert_eq!(editor.background, Background::Color(visual.surface_alt));
+        assert_eq!(editor.value, iced_color(theme.text_secondary));
+
+        let slider_pressed = ControlState::default().hovered(true).pressed(true);
+        let slider = slider_style(
+            visual,
+            slider_status_with_state(&slider_pressed, iced::widget::slider::Status::Active),
+        );
+        assert_eq!(
+            background_color(slider.rail.backgrounds.0),
+            iced_color(theme.accent_pressed)
+        );
+
+        let slider_focused = ControlState::default().focused(true);
+        assert_eq!(
+            slider_status_with_state(&slider_focused, iced::widget::slider::Status::Active),
+            iced::widget::slider::Status::Active
+        );
+        let slider = slider_style_with_state(
+            visual,
+            iced::widget::slider::Status::Active,
+            &slider_focused,
+        );
+        assert_eq!(background_color(slider.rail.backgrounds.0), visual.accent);
+        assert_eq!(slider.handle.border_color, visual.focus);
+        assert_eq!(slider.handle.border_width, visual.stroke_focus);
+
+        let slider_disabled = ControlState::default()
+            .hovered(true)
+            .pressed(true)
+            .disabled();
+        let slider_active_rail = slider_read_only_rail_style(visual, &slider_disabled, true);
+        assert_eq!(
+            background_color(slider_active_rail.background.unwrap()),
+            visual.text_secondary.scale_alpha(visual.disabled_opacity)
+        );
+        let slider_thumb = slider_read_only_thumb_style(visual, &slider_disabled);
+        assert_eq!(
+            slider_thumb.border.color,
+            visual.text_secondary.scale_alpha(visual.disabled_opacity)
+        );
+
+        let toggle_pressed = ControlState::default().hovered(true).pressed(true);
+        let toggle = toggle_switch_style_with_state(
+            visual,
+            toggle_switch_status_with_state(
+                &toggle_pressed,
+                true,
+                iced::widget::toggler::Status::Active { is_toggled: true },
+            ),
+            &toggle_pressed,
+        );
+        assert_eq!(
+            background_color(toggle.background),
+            iced_color(theme.accent_pressed)
+        );
+
+        let toggle_focused = ControlState::default().focused(true);
+        assert_eq!(
+            toggle_switch_status_with_state(
+                &toggle_focused,
+                true,
+                iced::widget::toggler::Status::Active { is_toggled: true },
+            ),
+            iced::widget::toggler::Status::Active { is_toggled: true }
+        );
+        let toggle = toggle_switch_style_with_state(
+            visual,
+            toggle_switch_status_with_state(
+                &toggle_focused,
+                true,
+                iced::widget::toggler::Status::Active { is_toggled: true },
+            ),
+            &toggle_focused,
+        );
+        assert_eq!(background_color(toggle.background), visual.accent);
+        assert_eq!(toggle.background_border_color, visual.focus);
+        assert_eq!(toggle.background_border_width, visual.stroke_focus);
+
+        let combo_hover = ControlState::default().hovered(true);
+        let combo = pick_list_style_with_state(
+            visual,
+            iced::widget::pick_list::Status::Active,
+            &combo_hover,
+        );
+        assert_eq!(
+            background_color(combo.background),
+            iced_color(theme.button_hover)
+        );
+
+        let combo_pressed = ControlState::default().hovered(true).pressed(true);
+        let combo = pick_list_style_with_state(
+            visual,
+            iced::widget::pick_list::Status::Active,
+            &combo_pressed,
+        );
+        assert_eq!(
+            background_color(combo.background),
+            iced_color(theme.button_pressed)
+        );
+
+        let combo_focused = ControlState::default().focused(true);
+        assert_eq!(
+            pick_list_status_with_state(&combo_focused, iced::widget::pick_list::Status::Active),
+            iced::widget::pick_list::Status::Active
+        );
+        let combo = pick_list_style_with_state(
+            visual,
+            iced::widget::pick_list::Status::Active,
+            &combo_focused,
+        );
+        assert_eq!(background_color(combo.background), visual.surface);
+        assert_eq!(combo.border.color, visual.focus);
+        assert_eq!(combo.border.width, visual.stroke_focus);
+
+        let combo_disabled = ControlState::default()
+            .hovered(true)
+            .pressed(true)
+            .disabled();
+        let combo = pick_list_style_with_state(
+            visual,
+            iced::widget::pick_list::Status::Hovered,
+            &combo_disabled,
+        );
+        assert_eq!(
+            background_color(combo.background),
+            iced_color(theme.surface_alt)
+        );
+        assert_eq!(
+            combo.text_color,
+            visual.text_secondary.scale_alpha(visual.disabled_opacity)
+        );
+        assert_eq!(
+            read_only_combo_box_style(visual, &combo_disabled)
+                .border
+                .color,
+            iced_color(theme.border)
+        );
+    }
+
+    #[test]
+    fn result_header_control_state_overrides_runtime_status_for_previews() {
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+
+        let hovered = ControlState::default().hovered(true);
+        let hover_style = result_header_button_style(
+            visual,
+            button_status_with_state(&hovered, iced::widget::button::Status::Active),
+        );
+        assert_eq!(
+            optional_background_color(hover_style.background),
+            iced_color(theme.result_header_hover)
+        );
+
+        let pressed = ControlState::default().pressed(true);
+        let pressed_style = result_header_button_style(
+            visual,
+            button_status_with_state(&pressed, iced::widget::button::Status::Active),
+        );
+        assert_eq!(
+            optional_background_color(pressed_style.background),
+            iced_color(theme.button_pressed)
+        );
+    }
+
+    #[test]
     fn high_contrast_style_uses_solid_focus_without_elevation() {
         let theme = ThemeTokens::high_contrast();
         let visual = IcedVisualTheme::from_tokens(&theme);
@@ -5010,6 +7154,94 @@ mod tests {
 
         #[cfg(windows)]
         assert!(settings.platform_specific.skip_taskbar);
+    }
+
+    #[test]
+    fn maps_pop_button_window_options_to_fixed_utility_window_settings() {
+        let options = WindowOptions::new("pop-button", "Selection")
+            .size(30.0, 30.0)
+            .min_size(30.0, 30.0)
+            .level(WindowLevel::ToolWindow)
+            .frame(WindowFrame::Borderless)
+            .resize_mode(WindowResizeMode::Fixed)
+            .skip_taskbar(true);
+
+        let settings = IcedAdapter::window_settings(&options);
+
+        assert_eq!(settings.size, Size::new(30.0, 30.0));
+        assert_eq!(settings.min_size, Some(Size::new(30.0, 30.0)));
+        assert!(!settings.resizable);
+        assert!(!settings.minimizable);
+        assert!(!settings.decorations);
+        assert_eq!(settings.level, iced::window::Level::AlwaysOnTop);
+
+        #[cfg(windows)]
+        assert!(settings.platform_specific.skip_taskbar);
+    }
+
+    #[test]
+    fn show_at_window_options_preserves_utility_flags_and_overrides_placement() {
+        let options = WindowOptions::new("pop-button", "Selection")
+            .size(30.0, 30.0)
+            .min_size(30.0, 30.0)
+            .level(WindowLevel::ToolWindow)
+            .frame(WindowFrame::Borderless)
+            .resize_mode(WindowResizeMode::Fixed)
+            .placement(WindowPlacement::CursorOffset { x: 8.0, y: 8.0 })
+            .skip_taskbar(true)
+            .no_activate(true);
+
+        let show_at_options = show_at_window_options(&options, 408.0, 208.0);
+
+        assert_eq!(show_at_options.id.as_str(), "pop-button");
+        assert_eq!(show_at_options.width, 30.0);
+        assert_eq!(show_at_options.height, 30.0);
+        assert_eq!(show_at_options.level, WindowLevel::ToolWindow);
+        assert!(show_at_options.skip_taskbar);
+        assert!(show_at_options.no_activate);
+        assert!(matches!(
+            show_at_options.placement,
+            WindowPlacement::Explicit { x: 408.0, y: 208.0 }
+        ));
+    }
+
+    #[test]
+    fn no_activate_utility_windows_apply_native_options_before_showing() {
+        let options = WindowOptions::new("pop-button", "Selection")
+            .size(30.0, 30.0)
+            .level(WindowLevel::ToolWindow)
+            .skip_taskbar(true)
+            .no_activate(true);
+
+        assert_eq!(
+            show_window_steps(&options),
+            vec![
+                ShowWindowStep::ApplyNativeOptions {
+                    delayed_check: false
+                },
+                ShowWindowStep::ResolvePlacement,
+                ShowWindowStep::ShowWindowed,
+                ShowWindowStep::ApplyNativeOptions {
+                    delayed_check: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn normal_windows_apply_native_options_after_showing() {
+        let options = WindowOptions::new("main", "Main").size(940.0, 1220.0);
+
+        assert_eq!(
+            show_window_steps(&options),
+            vec![
+                ShowWindowStep::ResolvePlacement,
+                ShowWindowStep::ShowWindowed,
+                ShowWindowStep::ApplyNativeOptions {
+                    delayed_check: true
+                },
+            ]
+        );
     }
 
     #[test]
@@ -5165,9 +7397,7 @@ mod tests {
     #[test]
     fn selected_tile_renders_theme_selected_surface() {
         // Style-level (not token-level) check: the selected tab tile actually
-        // paints the theme's selected surface with an accent foreground, while
-        // an unselected tile does not — closing the "selected=true but wrong
-        // color" gap that a schema test alone cannot catch.
+        // paints the selected trio instead of falling back to a generic accent.
         let theme = ThemeTokens::fluent_light();
         let visual = IcedVisualTheme::from_tokens(&theme);
 
@@ -5182,7 +7412,8 @@ mod tests {
             optional_background_color(selected.background),
             iced_color(theme.selected_surface)
         );
-        assert_eq!(selected.text_color, iced_color(theme.accent.base));
+        assert_eq!(selected.text_color, iced_color(theme.selected_foreground));
+        assert_eq!(selected.border.color, iced_color(theme.selected_border));
 
         let unselected = button_style_with_state(
             visual,
@@ -5209,6 +7440,157 @@ mod tests {
             "scrim alpha should match requested opacity, got {}",
             background.a
         );
+    }
+
+    #[test]
+    fn progress_ring_animation_advances_frames_over_time() {
+        let start = iced::time::Instant::now();
+
+        assert_eq!(progress_ring_frame_index(start, start), 0);
+        assert_eq!(
+            progress_ring_frame_index(start, start + Duration::from_millis(100)),
+            1
+        );
+        assert_eq!(
+            progress_ring_frame_index(start, start + Duration::from_millis(800)),
+            0
+        );
+        assert_ne!(
+            progress_ring_segment_alpha(0, 0),
+            progress_ring_segment_alpha(0, 1),
+            "the highlighted segment must move between frames"
+        );
+    }
+
+    #[test]
+    fn busy_overlay_fade_progress_moves_between_hidden_and_visible() {
+        let fade_in_mid = busy_overlay_fade_progress(0.0, 1.0, 90.0, 180);
+        let fade_out_mid = busy_overlay_fade_progress(1.0, 0.0, 90.0, 180);
+
+        assert!(fade_in_mid > 0.0 && fade_in_mid < 1.0);
+        assert!(fade_out_mid > 0.0 && fade_out_mid < 1.0);
+        assert!(fade_in_mid > busy_overlay_fade_progress(0.0, 1.0, 45.0, 180));
+        assert!(fade_out_mid < busy_overlay_fade_progress(1.0, 0.0, 45.0, 180));
+        assert_eq!(busy_overlay_fade_progress(0.0, 1.0, 180.0, 180), 1.0);
+        assert_eq!(busy_overlay_fade_progress(1.0, 0.0, 180.0, 180), 0.0);
+    }
+
+    #[test]
+    fn busy_overlay_state_animates_in_and_out_with_redraws() {
+        let start = iced::time::Instant::now();
+        let mut state = AnimatedBusyOverlayState::new(false);
+
+        assert_eq!(state.progress, 0.0);
+        assert!(!state.is_visible_or_targeting_visible());
+
+        state.set_target(true, 180);
+        assert!(state.is_visible_or_targeting_visible());
+        assert_eq!(state.tick(start, 180), (false, true));
+        let (changed, animating) = state.tick(start + Duration::from_millis(90), 180);
+        assert!(changed);
+        assert!(animating);
+        assert!(state.progress > 0.0 && state.progress < 1.0);
+        assert_eq!(
+            state.tick(start + Duration::from_millis(180), 180),
+            (true, false)
+        );
+        assert_eq!(state.progress, 1.0);
+
+        state.set_target(false, 180);
+        assert!(state.is_visible_or_targeting_visible());
+        assert_eq!(
+            state.tick(start + Duration::from_millis(270), 180),
+            (false, true)
+        );
+        assert_eq!(state.progress, 1.0);
+        assert_eq!(
+            state.tick(start + Duration::from_millis(360), 180),
+            (true, true)
+        );
+        assert!(state.progress > 0.0 && state.progress < 1.0);
+        assert_eq!(
+            state.tick(start + Duration::from_millis(450), 180),
+            (true, false)
+        );
+        assert_eq!(state.progress, 0.0);
+        assert!(!state.is_visible_or_targeting_visible());
+    }
+
+    #[test]
+    fn active_progress_ring_state_keeps_requesting_redraws() {
+        let start = iced::time::Instant::now();
+        let mut state = AnimatedProgressRingState::new();
+
+        assert_eq!(state.tick(true, start), (false, true));
+        assert_eq!(
+            state.tick(true, start + Duration::from_millis(100)),
+            (true, true)
+        );
+        assert_eq!(state.frame_index, 1);
+        assert_eq!(
+            state.tick(false, start + Duration::from_millis(200)),
+            (true, false)
+        );
+        assert_eq!(state.frame_index, 0);
+    }
+
+    #[test]
+    fn hover_reveal_actions_state_tracks_runtime_hover_and_preview_override() {
+        let start = iced::time::Instant::now();
+        let mut state = HoverRevealActionsState::new(false);
+
+        assert!(!state.drawn(false));
+        assert!(!state.interactive(false));
+        assert!(
+            HoverRevealActionsState::new(true).interactive(true),
+            "preview-forced actions start fully visible"
+        );
+        assert!(state.set_hovered(true));
+        let target_visible = state.target_visible(false);
+        state.set_target(target_visible, HOVER_REVEAL_TRANSITION_MS);
+        assert!(state.drawn(false));
+        assert!(!state.interactive(false));
+        assert!(state.tick(start, HOVER_REVEAL_TRANSITION_MS));
+        assert!(state.tick(
+            start + Duration::from_millis(u64::from(HOVER_REVEAL_TRANSITION_MS / 2)),
+            HOVER_REVEAL_TRANSITION_MS
+        ));
+        assert!(state.progress > 0.0 && state.progress < 1.0);
+        assert!(!state.tick(
+            start + Duration::from_millis(u64::from(HOVER_REVEAL_TRANSITION_MS)),
+            HOVER_REVEAL_TRANSITION_MS
+        ));
+        assert_eq!(state.progress, 1.0);
+        assert!(state.interactive(false));
+
+        assert!(!state.set_hovered(true));
+        assert!(state.set_hovered(false));
+        let target_visible = state.target_visible(false);
+        state.set_target(target_visible, HOVER_REVEAL_TRANSITION_MS);
+        assert!(
+            state.drawn(false),
+            "actions remain drawn while animating out"
+        );
+        assert!(!state.interactive(false));
+    }
+
+    #[test]
+    fn hover_reveal_motion_slides_actions_in_as_it_becomes_visible() {
+        let mid = hover_reveal_progress(0.0, 1.0, 60.0, HOVER_REVEAL_TRANSITION_MS);
+
+        assert!(mid > 0.0 && mid < 1.0);
+        assert_eq!(
+            hover_reveal_progress(
+                0.0,
+                1.0,
+                f32::from(HOVER_REVEAL_TRANSITION_MS),
+                HOVER_REVEAL_TRANSITION_MS
+            ),
+            1.0
+        );
+        assert_eq!(hover_reveal_slide_offset(0.0), HOVER_REVEAL_SLIDE_DIPS);
+        assert!(hover_reveal_slide_offset(mid) < HOVER_REVEAL_SLIDE_DIPS);
+        assert_eq!(hover_reveal_slide_offset(1.0), 0.0);
     }
 
     #[test]

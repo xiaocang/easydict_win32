@@ -109,6 +109,8 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("kind", format!("{:?}", token.kind))
             .property("icon", optional_icon(token.icon.as_ref()))
             .property("tooltip", optional_string(token.tooltip.as_deref()))
+            .property("width", optional_length(token.width))
+            .property("height", optional_length(token.height))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::FlyoutButton(token) => SchemaNode::new("FlyoutButton", token.id.clone())
@@ -130,6 +132,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::BusyOverlay(token) => SchemaNode::new("BusyOverlay", token.id.clone())
             .property("active", token.active.to_string())
             .property("opacity", format!("{:.2}", token.opacity))
+            .property("fade_transition_ms", token.fade_transition_ms.to_string())
             .property("blocks_input", token.blocks_input.to_string())
             .property("label", optional_string(token.label.as_deref()))
             .child(schema_node(&token.content)),
@@ -278,6 +281,12 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("kind", format!("{:?}", token.kind))
                 .property("trailing", token.trailing.len().to_string());
+            if let Some(id) = &token.title_id {
+                node = node.child(settings_row_text_node(id, &token.title, "Subtitle"));
+            }
+            if let (Some(id), Some(description)) = (&token.description_id, &token.description) {
+                node = node.child(settings_row_text_node(id, description, "Caption"));
+            }
             if let Some(content) = &token.content {
                 node = node.child(schema_node(content));
             }
@@ -303,6 +312,17 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("wheel", format!("{:?}", token.wheel_action.kind()))
             .property("escape", format!("{:?}", token.escape_action.kind()))
             .child(schema_node(&token.content)),
+        ViewToken::CaptureOverlay(token) => SchemaNode::new("CaptureOverlay", token.id.clone())
+            .property("phase", quoted(token.phase.as_str()))
+            .property("detection_depth", token.detection_depth.to_string())
+            .property("dragging", token.dragging.to_string())
+            .property("detected_rect", optional_capture_rect(token.detected_rect))
+            .property(
+                "selection_rect",
+                optional_capture_rect(token.selection_rect),
+            )
+            .property("handles_visible", token.handles_visible.to_string())
+            .property("magnifier_visible", token.magnifier_visible.to_string()),
         ViewToken::Custom(token) => SchemaNode::new("Custom", token.id.clone())
             .property("control", quoted(&token.control))
             .property("children", token.children.len().to_string())
@@ -369,12 +389,14 @@ fn result_list_schema<Message>(token: &ResultListToken<Message>) -> SchemaNode {
                 .property("toggleable", item.toggleable.to_string())
                 .property("dimmed", item.dimmed.to_string())
                 .property("status", format!("{:?}", item.status))
+                .property("header_state", item.header_state.to_string())
+                .property("actions_visible", item.actions_visible.to_string())
         }))
 }
 
 fn result_item_summary(item: &ResultItem) -> String {
     format!(
-        "id={},title={},status={:?},icon={},metadata={},pending_hint={},expanded={},toggleable={},dimmed={},body_len={}",
+        "id={},title={},status={:?},icon={},metadata={},pending_hint={},expanded={},toggleable={},dimmed={},header_state={},actions_visible={},body_len={}",
         item.id,
         quoted(&item.title),
         item.status,
@@ -384,6 +406,8 @@ fn result_item_summary(item: &ResultItem) -> String {
         item.expanded,
         item.toggleable,
         item.dimmed,
+        item.header_state,
+        item.actions_visible,
         item.body.chars().count()
     )
 }
@@ -501,8 +525,32 @@ fn optional_u16(value: Option<u16>) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn optional_length(value: Option<crate::view::Length>) -> String {
+    value
+        .map(|value| format!("{value:?}"))
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn optional_capture_rect(value: Option<crate::view::CaptureOverlayRect>) -> String {
+    value
+        .map(|rect| {
+            format!(
+                "({},{} {}x{})",
+                rect.left, rect.top, rect.width, rect.height
+            )
+        })
+        .unwrap_or_else(|| "none".to_string())
+}
+
 fn optional_string(value: Option<&str>) -> String {
     value.map(quoted).unwrap_or_else(|| "none".to_string())
+}
+
+fn settings_row_text_node(id: &str, value: &str, style: &str) -> SchemaNode {
+    SchemaNode::new("Text", Some(id.to_string()))
+        .property("value", quoted(value))
+        .property("style", style.to_string())
+        .property("selectable", false.to_string())
 }
 
 fn quoted(value: &str) -> String {
@@ -512,7 +560,7 @@ fn quoted(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::view::{button, column, page, text_editor, IntoView};
+    use crate::view::{button, column, page, settings_row, text_editor, IntoView};
 
     #[allow(dead_code)]
     #[derive(Clone)]
@@ -539,5 +587,26 @@ mod tests {
         assert!(snapshot.contains("TextEditor"));
         assert!(snapshot.contains("validation=Warning"));
         assert!(snapshot.contains("focused=true"));
+    }
+
+    #[test]
+    fn settings_row_title_and_description_ids_are_schema_text_nodes() {
+        let view = page::<Msg>("Settings")
+            .content(column((settings_row("TTS Reading Speed (0.5x - 3.0x)")
+                .id("settings.tts_speed")
+                .title_id("TtsSpeedLabelText")
+                .description("Adjust speech rate")
+                .description_id("TtsSpeedDescriptionText"),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("SettingsRow title=\"TTS Reading Speed (0.5x - 3.0x)\""));
+        assert!(snapshot.contains(
+            "Text value=\"TTS Reading Speed (0.5x - 3.0x)\" style=Subtitle selectable=false id=\"TtsSpeedLabelText\""
+        ));
+        assert!(snapshot.contains(
+            "Text value=\"Adjust speech rate\" style=Caption selectable=false id=\"TtsSpeedDescriptionText\""
+        ));
     }
 }

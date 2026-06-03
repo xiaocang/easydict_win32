@@ -119,6 +119,46 @@ pub struct ScreenCaptureResult {
     pub screen_rect: ScreenRect,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScreenWindow {
+    pub id: isize,
+    pub parent_id: Option<isize>,
+    pub rect: ScreenRect,
+    pub class_name: String,
+}
+
+impl ScreenWindow {
+    pub fn new(id: isize, parent_id: Option<isize>, rect: ScreenRect) -> Self {
+        Self {
+            id,
+            parent_id,
+            rect,
+            class_name: String::new(),
+        }
+    }
+
+    pub fn class_name(mut self, class_name: impl Into<String>) -> Self {
+        self.class_name = class_name.into();
+        self
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ScreenWindowSnapshotRequest {
+    pub excluded_titles: Vec<String>,
+}
+
+impl ScreenWindowSnapshotRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn exclude_title(mut self, title: impl Into<String>) -> Self {
+        self.excluded_titles.push(title.into());
+        self
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct NamedEventRegistration<Message> {
     pub name: String,
@@ -184,6 +224,26 @@ impl FileDialogOptions {
     pub fn filter(mut self, filter: FileDialogFilter) -> Self {
         self.filters.push(filter);
         self
+    }
+
+    pub fn initial_directory(mut self, directory: impl Into<String>) -> Self {
+        self.initial_directory = Some(directory.into());
+        self
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FolderDialogOptions {
+    pub title: String,
+    pub initial_directory: Option<String>,
+}
+
+impl FolderDialogOptions {
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            initial_directory: None,
+        }
     }
 
     pub fn initial_directory(mut self, directory: impl Into<String>) -> Self {

@@ -415,6 +415,19 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .push(resolve_accessibility_tree(&token.content));
             node
         }
+        ViewToken::CaptureOverlay(token) => {
+            let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some("OCR capture overlay".to_string()));
+            node.description = Some(format!(
+                "phase={}, depth={}, selection={:?}, detected={:?}",
+                token.phase, token.detection_depth, token.selection_rect, token.detected_rect
+            ));
+            node
+        }
         ViewToken::Custom(token) => {
             let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
             node.name = token

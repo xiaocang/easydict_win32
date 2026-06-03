@@ -128,6 +128,7 @@ pub enum ViewToken<Message> {
     ResultCard(ResultCardToken<Message>),
     ResultList(ResultListToken<Message>),
     PointerRegion(PointerRegionToken<Message>),
+    CaptureOverlay(CaptureOverlayToken),
     Custom(CustomToken<Message>),
 }
 
@@ -228,6 +229,7 @@ pub enum CardKind {
     Surface,
     Elevated,
     Expander,
+    FloatingInput,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -346,6 +348,8 @@ pub struct ButtonToken<Message> {
     pub kind: ButtonKind,
     pub icon: Option<IconToken>,
     pub tooltip: Option<String>,
+    pub width: Option<Length>,
+    pub height: Option<Length>,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -437,6 +441,7 @@ pub struct BusyOverlayToken<Message> {
     pub id: Option<String>,
     pub active: bool,
     pub opacity: f32,
+    pub fade_transition_ms: u16,
     pub blocks_input: bool,
     pub label: Option<String>,
     pub content: Box<View<Message>>,
@@ -727,7 +732,9 @@ pub struct ExpanderToken<Message> {
 pub struct SettingsRowToken<Message> {
     pub id: Option<String>,
     pub title: String,
+    pub title_id: Option<String>,
     pub description: Option<String>,
+    pub description_id: Option<String>,
     pub icon: Option<IconToken>,
     pub kind: SettingsRowKind,
     pub content: Option<Box<View<Message>>>,
@@ -747,6 +754,8 @@ pub struct ResultItem {
     pub toggleable: bool,
     pub dimmed: bool,
     pub status: ResultStatus,
+    pub header_state: ControlState,
+    pub actions_visible: bool,
 }
 
 impl ResultItem {
@@ -762,6 +771,8 @@ impl ResultItem {
             toggleable: true,
             dimmed: false,
             status: ResultStatus::Ready,
+            header_state: ControlState::default(),
+            actions_visible: false,
         }
     }
 
@@ -797,6 +808,26 @@ impl ResultItem {
 
     pub fn status(mut self, status: ResultStatus) -> Self {
         self.status = status;
+        self
+    }
+
+    pub fn header_state(mut self, state: ControlState) -> Self {
+        self.header_state = state;
+        self
+    }
+
+    pub fn actions_visible(mut self, visible: bool) -> Self {
+        self.actions_visible = visible;
+        self
+    }
+
+    pub fn header_hovered(mut self, hovered: bool) -> Self {
+        self.header_state.hovered = hovered;
+        self
+    }
+
+    pub fn header_pressed(mut self, pressed: bool) -> Self {
+        self.header_state.pressed = pressed;
         self
     }
 }
@@ -970,6 +1001,61 @@ pub type ServiceResultCardToken<Message> = ResultCardToken<Message>;
 
 #[deprecated(note = "use ResultListToken")]
 pub type ServiceResultListToken<Message> = ResultListToken<Message>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CaptureOverlayRect {
+    pub left: i32,
+    pub top: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+impl CaptureOverlayRect {
+    pub const fn new(left: i32, top: i32, width: i32, height: i32) -> Self {
+        Self {
+            left,
+            top,
+            width,
+            height,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureOverlayPhase {
+    Detecting,
+    Selecting,
+    Adjusting,
+}
+
+impl CaptureOverlayPhase {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Detecting => "Detecting",
+            Self::Selecting => "Selecting",
+            Self::Adjusting => "Adjusting",
+        }
+    }
+}
+
+impl fmt::Display for CaptureOverlayPhase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CaptureOverlayToken {
+    pub id: Option<String>,
+    pub phase: CaptureOverlayPhase,
+    pub detection_depth: usize,
+    pub dragging: bool,
+    pub detected_rect: Option<CaptureOverlayRect>,
+    pub selection_rect: Option<CaptureOverlayRect>,
+    pub handles_visible: bool,
+    pub magnifier_visible: bool,
+    pub a11y: A11yHint,
+}
 
 #[derive(Clone, Debug)]
 pub struct CustomToken<Message> {
@@ -1173,6 +1259,7 @@ where
         id: None,
         active: false,
         opacity: 0.72,
+        fade_transition_ms: 120,
         blocks_input: true,
         label: None,
         content: Box::new(content.into_view()),
@@ -1413,6 +1500,20 @@ where
     }
 }
 
+pub fn capture_overlay(phase: CaptureOverlayPhase) -> CaptureOverlayBuilder {
+    CaptureOverlayBuilder {
+        id: None,
+        phase,
+        detection_depth: 0,
+        dragging: false,
+        detected_rect: None,
+        selection_rect: None,
+        handles_visible: false,
+        magnifier_visible: false,
+        a11y: A11yHint::default(),
+    }
+}
+
 pub fn expander<Message>(title: impl Into<String>) -> ExpanderBuilder<Message> {
     ExpanderBuilder {
         id: None,
@@ -1431,7 +1532,9 @@ pub fn settings_row<Message>(title: impl Into<String>) -> SettingsRowBuilder<Mes
     SettingsRowBuilder {
         id: None,
         title: title.into(),
+        title_id: None,
         description: None,
+        description_id: None,
         icon: None,
         kind: SettingsRowKind::Normal,
         content: None,
@@ -1609,6 +1712,8 @@ pub struct ButtonBuilder<Message> {
     kind: ButtonKind,
     icon: Option<IconToken>,
     tooltip: Option<String>,
+    width: Option<Length>,
+    height: Option<Length>,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -1622,6 +1727,8 @@ impl<Message> ButtonBuilder<Message> {
             kind,
             icon: None,
             tooltip: None,
+            width: None,
+            height: None,
             state: ControlState::default(),
             action: Action::None,
             a11y: A11yHint::default(),
@@ -1640,6 +1747,16 @@ impl<Message> ButtonBuilder<Message> {
 
     pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
         self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = Some(height);
         self
     }
 
@@ -1734,6 +1851,8 @@ impl<Message> IntoView<Message> for ButtonBuilder<Message> {
             kind: self.kind,
             icon: self.icon,
             tooltip: self.tooltip,
+            width: self.width,
+            height: self.height,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -1792,6 +1911,26 @@ impl<Message> FlyoutButtonBuilder<Message> {
 
     pub fn state(mut self, state: ControlState) -> Self {
         self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
         self
     }
 
@@ -1918,6 +2057,7 @@ pub struct BusyOverlayBuilder<Message> {
     id: Option<String>,
     active: bool,
     opacity: f32,
+    fade_transition_ms: u16,
     blocks_input: bool,
     label: Option<String>,
     content: Box<View<Message>>,
@@ -1947,6 +2087,11 @@ impl<Message> BusyOverlayBuilder<Message> {
         self
     }
 
+    pub fn fade_transition_ms(mut self, duration_ms: u16) -> Self {
+        self.fade_transition_ms = duration_ms;
+        self
+    }
+
     pub fn blocks_input(mut self, blocks_input: bool) -> Self {
         self.blocks_input = blocks_input;
         self
@@ -1969,6 +2114,7 @@ impl<Message> IntoView<Message> for BusyOverlayBuilder<Message> {
             id: self.id,
             active: self.active,
             opacity: self.opacity,
+            fade_transition_ms: self.fade_transition_ms,
             blocks_input: self.blocks_input,
             label: self.label,
             content: self.content,
@@ -2325,6 +2471,26 @@ impl<Message> SliderBuilder<Message> {
 
     pub fn state(mut self, state: ControlState) -> Self {
         self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
         self
     }
 
@@ -3138,10 +3304,83 @@ impl<Message> IntoView<Message> for PointerRegionBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct CaptureOverlayBuilder {
+    id: Option<String>,
+    phase: CaptureOverlayPhase,
+    detection_depth: usize,
+    dragging: bool,
+    detected_rect: Option<CaptureOverlayRect>,
+    selection_rect: Option<CaptureOverlayRect>,
+    handles_visible: bool,
+    magnifier_visible: bool,
+    a11y: A11yHint,
+}
+
+impl CaptureOverlayBuilder {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn detection_depth(mut self, detection_depth: usize) -> Self {
+        self.detection_depth = detection_depth;
+        self
+    }
+
+    pub fn dragging(mut self, dragging: bool) -> Self {
+        self.dragging = dragging;
+        self
+    }
+
+    pub fn detected_rect(mut self, rect: CaptureOverlayRect) -> Self {
+        self.detected_rect = Some(rect);
+        self
+    }
+
+    pub fn selection_rect(mut self, rect: CaptureOverlayRect) -> Self {
+        self.selection_rect = Some(rect);
+        self
+    }
+
+    pub fn handles_visible(mut self, handles_visible: bool) -> Self {
+        self.handles_visible = handles_visible;
+        self
+    }
+
+    pub fn magnifier_visible(mut self, magnifier_visible: bool) -> Self {
+        self.magnifier_visible = magnifier_visible;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for CaptureOverlayBuilder {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::CaptureOverlay(CaptureOverlayToken {
+            id: self.id,
+            phase: self.phase,
+            detection_depth: self.detection_depth,
+            dragging: self.dragging,
+            detected_rect: self.detected_rect,
+            selection_rect: self.selection_rect,
+            handles_visible: self.handles_visible,
+            magnifier_visible: self.magnifier_visible,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct SettingsRowBuilder<Message> {
     id: Option<String>,
     title: String,
+    title_id: Option<String>,
     description: Option<String>,
+    description_id: Option<String>,
     icon: Option<IconToken>,
     kind: SettingsRowKind,
     content: Option<Box<View<Message>>>,
@@ -3231,6 +3470,16 @@ impl<Message> SettingsRowBuilder<Message> {
         self
     }
 
+    pub fn title_id(mut self, id: impl Into<String>) -> Self {
+        self.title_id = Some(id.into());
+        self
+    }
+
+    pub fn description_id(mut self, id: impl Into<String>) -> Self {
+        self.description_id = Some(id.into());
+        self
+    }
+
     pub fn icon(mut self, icon: IconToken) -> Self {
         self.icon = Some(icon);
         self
@@ -3257,7 +3506,9 @@ impl<Message> IntoView<Message> for SettingsRowBuilder<Message> {
         View::new(ViewToken::SettingsRow(SettingsRowToken {
             id: self.id,
             title: self.title,
+            title_id: self.title_id,
             description: self.description,
+            description_id: self.description_id,
             icon: self.icon,
             kind: self.kind,
             content: self.content,
@@ -3573,6 +3824,26 @@ mod tests {
         match view.token() {
             ViewToken::Layout(layout) => assert_eq!(layout.max_width, Some(256)),
             _ => panic!("expected column layout"),
+        }
+    }
+
+    #[test]
+    fn slider_builder_records_preview_interaction_state() {
+        let view = slider::<Msg>(1.0)
+            .id("preview.slider")
+            .hovered(true)
+            .pressed(true)
+            .focused(true)
+            .into_view();
+
+        match view.token() {
+            ViewToken::Slider(token) => {
+                assert_eq!(token.id.as_deref(), Some("preview.slider"));
+                assert!(token.state.hovered);
+                assert!(token.state.pressed);
+                assert!(token.state.focused);
+            }
+            _ => panic!("expected slider token"),
         }
     }
 

@@ -91,7 +91,7 @@ pub fn accessibility_audit_snapshot<Message>(view: &View<Message>) -> String {
 
 pub fn theme_snapshot(theme: &ThemeTokens) -> String {
     format!(
-        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
+        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} selected_surface=#{:02x}{:02x}{:02x} selected_foreground=#{:02x}{:02x}{:02x} selected_border=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_input_surface=#{:02x}{:02x}{:02x} floating_input_border=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
         theme.mode,
         theme.background.r,
         theme.background.g,
@@ -102,6 +102,15 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.surface_alt.r,
         theme.surface_alt.g,
         theme.surface_alt.b,
+        theme.selected_surface.r,
+        theme.selected_surface.g,
+        theme.selected_surface.b,
+        theme.selected_foreground.r,
+        theme.selected_foreground.g,
+        theme.selected_foreground.b,
+        theme.selected_border.r,
+        theme.selected_border.g,
+        theme.selected_border.b,
         theme.input_surface.r,
         theme.input_surface.g,
         theme.input_surface.b,
@@ -120,6 +129,12 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.button_pressed.r,
         theme.button_pressed.g,
         theme.button_pressed.b,
+        theme.floating_input_surface.r,
+        theme.floating_input_surface.g,
+        theme.floating_input_surface.b,
+        theme.floating_input_border.r,
+        theme.floating_input_border.g,
+        theme.floating_input_border.b,
         theme.floating_action_surface.r,
         theme.floating_action_surface.g,
         theme.floating_action_surface.b,
@@ -605,6 +620,20 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.escape_action.kind()
             );
             write_layout(output, &token.content, indent + 2);
+        }
+        ViewToken::CaptureOverlay(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}CaptureOverlay id={:?} phase=\"{}\" depth={} dragging={} detected={:?} selection={:?} handles={} magnifier={}",
+                token.id,
+                token.phase,
+                token.detection_depth,
+                token.dragging,
+                token.detected_rect,
+                token.selection_rect,
+                token.handles_visible,
+                token.magnifier_visible
+            );
         }
         ViewToken::Custom(token) => {
             let _ = writeln!(

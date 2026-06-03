@@ -63,6 +63,8 @@ pub enum WindowScreenConstraint {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WindowPlacement {
     Center,
+    Monitor,
+    WorkArea,
     CursorOffset { x: f32, y: f32 },
     TopRight { margin_x: f32, margin_y: f32 },
     Explicit { x: f32, y: f32 },
@@ -84,6 +86,7 @@ pub struct WindowOptions {
     pub screen_constraint: WindowScreenConstraint,
     pub visible_on_start: bool,
     pub skip_taskbar: bool,
+    pub no_activate: bool,
 }
 
 impl WindowOptions {
@@ -103,6 +106,7 @@ impl WindowOptions {
             screen_constraint: WindowScreenConstraint::SizeAndPosition,
             visible_on_start: true,
             skip_taskbar: false,
+            no_activate: false,
         }
     }
 
@@ -157,6 +161,11 @@ impl WindowOptions {
         self.skip_taskbar = skip_taskbar;
         self
     }
+
+    pub fn no_activate(mut self, no_activate: bool) -> Self {
+        self.no_activate = no_activate;
+        self
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -171,6 +180,11 @@ pub enum WindowCommand<Message> {
     },
     Close(WindowId),
     Show(WindowId),
+    ShowAt {
+        id: WindowId,
+        x: f32,
+        y: f32,
+    },
     Hide(WindowId),
     ToggleVisibility(WindowId),
     Focus(WindowId),

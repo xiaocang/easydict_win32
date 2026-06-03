@@ -1,6 +1,13 @@
-use crate::compat_protocol::{SettingsSnapshot, TranslationResultDto};
+use crate::compat_protocol::{
+    DefinitionDto, PhoneticDto, SettingsSnapshot, SynonymDto, TranslationResultDto, WordFormDto,
+    WordResultDto,
+};
 use crate::openai_compatible::{OpenAiExecutionError, OpenAiExecutionErrorCode};
+use crate::translation_cache::is_youdao_word_query;
 use crate::translation_language::TranslationLanguage;
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+use base64::{engine::general_purpose, Engine as _};
+use md5::{Digest as Md5Digest, Md5};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hmac};
 use serde_json::json;
@@ -11,10 +18,26 @@ pub const GOOGLE_TRANSLATE_ENDPOINT: &str = "https://translate.googleapis.com/tr
 pub const CAIYUN_TRANSLATE_ENDPOINT: &str = "https://api.interpreter.caiyunai.com/v1/translator";
 pub const DEEPL_FREE_API_ENDPOINT: &str = "https://api-free.deepl.com/v2/translate";
 pub const DEEPL_PRO_API_ENDPOINT: &str = "https://api.deepl.com/v2/translate";
+pub const DEEPL_WEB_ENDPOINT: &str = "https://www2.deepl.com/jsonrpc";
+pub const DEEPL_WEB_USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 pub const NIUTRANS_TRANSLATE_ENDPOINT: &str = "https://api.niutrans.com/NiuTransServer/translation";
 pub const NIUTRANS_MAX_TEXT_LENGTH_UTF16: usize = 5000;
 pub const VOLCANO_TRANSLATE_ENDPOINT: &str =
     "https://translate.volcengineapi.com/?Action=TranslateText&Version=2020-06-01";
+pub const YOUDAO_OPENAPI_ENDPOINT: &str = "https://openapi.youdao.com/api";
+pub const YOUDAO_WEB_DICT_ENDPOINT: &str = "https://dict.youdao.com/jsonapi_s";
+pub const YOUDAO_DICT_VOICE_ENDPOINT: &str = "https://dict.youdao.com/dictvoice";
+pub const YOUDAO_WEB_TRANSLATE_ENDPOINT: &str = "https://dict.youdao.com/webtranslate";
+pub const YOUDAO_WEB_TRANSLATE_KEY_ENDPOINT: &str = "https://dict.youdao.com/webtranslate/key";
+pub const YOUDAO_WEB_INITIAL_SIGN_KEY: &str = "asdjnjfenknafdfsdfsd";
+pub const YOUDAO_WEB_AES_KEY_SOURCE: &str =
+    "ydsecret://query/key/B*RGygVywfNBwpmBaZg*WT7SIOUP2T0C9WHMZN39j^DAdaZhAnxvGcCY6VYFwnHl";
+pub const YOUDAO_WEB_AES_IV_SOURCE: &str =
+    "ydsecret://query/iv/C@lZe2YzHtZ2CYgaXKSVfsb7Y4QWHjITPPZ0nQp87fBeJ!Iv6v^6fvi2WN@bYpJ4";
+pub const YOUDAO_WEB_USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+     (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 pub const VOLCANO_TRANSLATE_HOST: &str = "translate.volcengineapi.com";
 pub const VOLCANO_QUERY_STRING: &str = "Action=TranslateText&Version=2020-06-01";
 pub const VOLCANO_REGION: &str = "cn-north-1";
@@ -33,15 +56,305 @@ pub const BING_DEFAULT_IID: &str = "translator.5023.1";
 pub const BING_DEFAULT_EXPIRY_INTERVAL_MS: i64 = 3_600_000;
 pub const LINGUEE_TRANSLATE_ENDPOINT: &str = "https://linguee-api.fly.dev/api/v2/translations";
 
+const GOOGLE_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Hungarian,
+    TranslationLanguage::Greek,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Ukrainian,
+    TranslationLanguage::Bulgarian,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Malay,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Persian,
+    TranslationLanguage::Hindi,
+    TranslationLanguage::Telugu,
+    TranslationLanguage::Tamil,
+    TranslationLanguage::Urdu,
+    TranslationLanguage::Filipino,
+    TranslationLanguage::Bengali,
+    TranslationLanguage::Norwegian,
+    TranslationLanguage::Hebrew,
+];
+
+const DEEPL_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Bulgarian,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Estonian,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Greek,
+    TranslationLanguage::Hungarian,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Latvian,
+    TranslationLanguage::Lithuanian,
+    TranslationLanguage::Norwegian,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Slovak,
+    TranslationLanguage::Slovenian,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Ukrainian,
+];
+
+const CAIYUN_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::Auto,
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::French,
+    TranslationLanguage::Russian,
+    TranslationLanguage::German,
+    TranslationLanguage::Italian,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Hindi,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Malay,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Vietnamese,
+];
+
+const NIUTRANS_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::Auto,
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Italian,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Malay,
+    TranslationLanguage::Hindi,
+    TranslationLanguage::Greek,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Hungarian,
+    TranslationLanguage::Norwegian,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Slovak,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Bulgarian,
+    TranslationLanguage::Estonian,
+    TranslationLanguage::Latvian,
+    TranslationLanguage::Lithuanian,
+    TranslationLanguage::Slovenian,
+    TranslationLanguage::Ukrainian,
+    TranslationLanguage::Persian,
+    TranslationLanguage::Hebrew,
+    TranslationLanguage::Bengali,
+    TranslationLanguage::Tamil,
+    TranslationLanguage::Telugu,
+    TranslationLanguage::Urdu,
+    TranslationLanguage::Filipino,
+];
+
+const YOUDAO_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::Auto,
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Hindi,
+];
+
+const VOLCANO_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::Auto,
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::ClassicalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::German,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Hindi,
+    TranslationLanguage::Hebrew,
+    TranslationLanguage::Ukrainian,
+    TranslationLanguage::Urdu,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Tamil,
+    TranslationLanguage::Telugu,
+    TranslationLanguage::Slovenian,
+    TranslationLanguage::Slovak,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Norwegian,
+    TranslationLanguage::Bengali,
+    TranslationLanguage::Malay,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Lithuanian,
+    TranslationLanguage::Latvian,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Persian,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Bulgarian,
+    TranslationLanguage::Estonian,
+    TranslationLanguage::Hungarian,
+];
+
+const LINGUEE_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::English,
+    TranslationLanguage::German,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Italian,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Bulgarian,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Greek,
+    TranslationLanguage::Estonian,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Hungarian,
+    TranslationLanguage::Lithuanian,
+    TranslationLanguage::Latvian,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Slovak,
+    TranslationLanguage::Slovenian,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::Japanese,
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TraditionalHttpServiceKind {
     Google,
+    GoogleWeb,
     Caiyun,
     DeepLApi,
+    DeepLWeb,
     NiuTrans,
     Volcano,
     Bing,
     Linguee,
+    YoudaoOpenApi,
+    YoudaoWebDict,
+    YoudaoWebTranslateKey,
+    YoudaoWebTranslate,
+}
+
+pub fn traditional_http_supports_language_pair_for_kind(
+    service_kind: TraditionalHttpServiceKind,
+    from: TranslationLanguage,
+    to: TranslationLanguage,
+) -> bool {
+    let supported_languages = traditional_http_supported_languages_for_kind(service_kind);
+    if from == TranslationLanguage::Auto {
+        return supported_languages.contains(&to);
+    }
+
+    supported_languages.contains(&from) && supported_languages.contains(&to)
+}
+
+fn traditional_http_supported_languages_for_kind(
+    service_kind: TraditionalHttpServiceKind,
+) -> &'static [TranslationLanguage] {
+    match service_kind {
+        TraditionalHttpServiceKind::Google | TraditionalHttpServiceKind::GoogleWeb => {
+            GOOGLE_SUPPORTED_LANGUAGES
+        }
+        TraditionalHttpServiceKind::Caiyun => CAIYUN_SUPPORTED_LANGUAGES,
+        TraditionalHttpServiceKind::DeepLApi | TraditionalHttpServiceKind::DeepLWeb => {
+            DEEPL_SUPPORTED_LANGUAGES
+        }
+        TraditionalHttpServiceKind::NiuTrans => NIUTRANS_SUPPORTED_LANGUAGES,
+        TraditionalHttpServiceKind::Volcano => VOLCANO_SUPPORTED_LANGUAGES,
+        TraditionalHttpServiceKind::Bing => GOOGLE_SUPPORTED_LANGUAGES,
+        TraditionalHttpServiceKind::Linguee => LINGUEE_SUPPORTED_LANGUAGES,
+        TraditionalHttpServiceKind::YoudaoOpenApi
+        | TraditionalHttpServiceKind::YoudaoWebDict
+        | TraditionalHttpServiceKind::YoudaoWebTranslateKey
+        | TraditionalHttpServiceKind::YoudaoWebTranslate => YOUDAO_SUPPORTED_LANGUAGES,
+    }
+}
+
+fn validate_traditional_http_language_pair(
+    service_kind: TraditionalHttpServiceKind,
+    from: TranslationLanguage,
+    to: TranslationLanguage,
+) -> Result<(), OpenAiExecutionError> {
+    if !traditional_http_supports_language_pair_for_kind(service_kind, from, to) {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::UnsupportedLanguage,
+            format!("Language pair not supported: {from:?} -> {to:?}"),
+        ));
+    }
+
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,15 +366,21 @@ pub struct TraditionalHttpRequestPlan {
     pub service_kind: TraditionalHttpServiceKind,
 }
 
+type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum TraditionalHttpServiceConfig {
     Google,
+    GoogleWeb,
     Caiyun {
         api_key: String,
     },
     DeepLApi {
         api_key: String,
         use_quality_optimized: bool,
+    },
+    DeepLWeb {
+        fallback_api_key: Option<String>,
     },
     NiuTrans {
         api_key: String,
@@ -71,6 +390,12 @@ pub enum TraditionalHttpServiceConfig {
         secret_access_key: String,
     },
     Linguee,
+    YoudaoOpenApi {
+        app_key: String,
+        app_secret: String,
+    },
+    YoudaoWebDict,
+    YoudaoWebTranslate,
 }
 
 /// UTC timestamps used by the Volcano (火山) AWS SigV4-style signing process.
@@ -185,6 +510,9 @@ impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
                 TraditionalHttpServiceKind::DeepLApi => {
                     deepl_api_error_from_status(status_code, reason)
                 }
+                TraditionalHttpServiceKind::DeepLWeb => {
+                    deepl_web_error_from_status(status_code, reason)
+                }
                 _ => traditional_http_error_from_status(status_code, reason),
             };
             return Err(error);
@@ -200,14 +528,21 @@ pub fn traditional_http_config_for_service(
 ) -> Option<TraditionalHttpServiceConfig> {
     match service_id {
         "google" => Some(TraditionalHttpServiceConfig::Google),
+        "google_web" => Some(TraditionalHttpServiceConfig::GoogleWeb),
         "caiyun" => Some(TraditionalHttpServiceConfig::Caiyun {
             api_key: settings.caiyun_token.clone().unwrap_or_default(),
         }),
         "deepl" => {
-            deepl_uses_native_api(settings).then(|| TraditionalHttpServiceConfig::DeepLApi {
-                api_key: settings.deep_l_api_key.clone().unwrap_or_default(),
-                use_quality_optimized: settings.deep_l_use_quality_optimized.unwrap_or(false),
-            })
+            if deepl_uses_native_api(settings) {
+                Some(TraditionalHttpServiceConfig::DeepLApi {
+                    api_key: settings.deep_l_api_key.clone().unwrap_or_default(),
+                    use_quality_optimized: settings.deep_l_use_quality_optimized.unwrap_or(false),
+                })
+            } else {
+                Some(TraditionalHttpServiceConfig::DeepLWeb {
+                    fallback_api_key: normalized_optional(settings.deep_l_api_key.as_deref()),
+                })
+            }
         }
         "niutrans" => Some(TraditionalHttpServiceConfig::NiuTrans {
             api_key: settings.niu_trans_api_key.clone().unwrap_or_default(),
@@ -219,6 +554,16 @@ pub fn traditional_http_config_for_service(
                 .clone()
                 .unwrap_or_default(),
         }),
+        "youdao"
+            if settings.youdao_use_official_api.unwrap_or(false)
+                && normalized_optional(settings.youdao_app_key.as_deref()).is_some()
+                && normalized_optional(settings.youdao_app_secret.as_deref()).is_some() =>
+        {
+            Some(TraditionalHttpServiceConfig::YoudaoOpenApi {
+                app_key: settings.youdao_app_key.clone().unwrap_or_default(),
+                app_secret: settings.youdao_app_secret.clone().unwrap_or_default(),
+            })
+        }
         // Linguee is keyless but conditionally compiled, mirroring the legacy
         // ENABLE_LINGUEE_SERVICE registration: only route it natively when the
         // feature is enabled (the service is otherwise absent from the catalog).
@@ -226,6 +571,26 @@ pub fn traditional_http_config_for_service(
         "linguee" => Some(TraditionalHttpServiceConfig::Linguee),
         _ => None,
     }
+}
+
+pub fn traditional_http_config_for_request(
+    service_id: &str,
+    settings: &SettingsSnapshot,
+    text: &str,
+) -> Option<TraditionalHttpServiceConfig> {
+    if let Some(config) = traditional_http_config_for_service(service_id, settings) {
+        return Some(config);
+    }
+
+    if service_id == "youdao" {
+        return Some(if is_youdao_word_query(text) {
+            TraditionalHttpServiceConfig::YoudaoWebDict
+        } else {
+            TraditionalHttpServiceConfig::YoudaoWebTranslate
+        });
+    }
+
+    None
 }
 
 pub fn build_traditional_http_translation_request_plan(
@@ -237,6 +602,9 @@ pub fn build_traditional_http_translation_request_plan(
     match config {
         TraditionalHttpServiceConfig::Google => {
             build_google_translation_request_plan(text, from_language, to_language)
+        }
+        TraditionalHttpServiceConfig::GoogleWeb => {
+            build_google_web_translation_request_plan(text, from_language, to_language)
         }
         TraditionalHttpServiceConfig::Caiyun { api_key } => {
             build_caiyun_translation_request_plan(api_key, text, from_language, to_language)
@@ -251,6 +619,9 @@ pub fn build_traditional_http_translation_request_plan(
             from_language,
             to_language,
         ),
+        TraditionalHttpServiceConfig::DeepLWeb { .. } => {
+            build_deepl_web_translation_request_plan(text, from_language, to_language)
+        }
         TraditionalHttpServiceConfig::NiuTrans { api_key } => {
             build_niutrans_translation_request_plan(api_key, text, from_language, to_language)
         }
@@ -267,7 +638,64 @@ pub fn build_traditional_http_translation_request_plan(
         TraditionalHttpServiceConfig::Linguee => {
             build_linguee_translation_request_plan(text, from_language, to_language)
         }
+        TraditionalHttpServiceConfig::YoudaoOpenApi {
+            app_key,
+            app_secret,
+        } => build_youdao_openapi_translation_request_plan(
+            app_key,
+            app_secret,
+            text,
+            from_language,
+            to_language,
+        ),
+        TraditionalHttpServiceConfig::YoudaoWebDict => {
+            build_youdao_web_dict_translation_request_plan(text, from_language, to_language)
+        }
+        TraditionalHttpServiceConfig::YoudaoWebTranslate => Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            "Youdao webtranslate requires the two-step native executor",
+        )),
     }
+}
+
+pub fn build_google_web_translation_request_plan(
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::GoogleWeb,
+        from_language,
+        to_language,
+    )?;
+
+    let mut url = reqwest::Url::parse(GOOGLE_TRANSLATE_ENDPOINT).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Google WebApp endpoint: {error}"),
+        )
+    })?;
+    url.query_pairs_mut()
+        .append_pair("client", "gtx")
+        .append_pair("sl", google_language_code(from_language))
+        .append_pair("tl", google_language_code(to_language));
+
+    for dt in ["at", "bd", "ex", "ld", "md", "qca", "rw", "rm", "ss", "t"] {
+        url.query_pairs_mut().append_pair("dt", dt);
+    }
+
+    url.query_pairs_mut()
+        .append_pair("ie", "UTF-8")
+        .append_pair("oe", "UTF-8")
+        .append_pair("q", text);
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "GET",
+        endpoint: url.to_string(),
+        headers: Vec::new(),
+        body: None,
+        service_kind: TraditionalHttpServiceKind::GoogleWeb,
+    })
 }
 
 pub fn build_google_translation_request_plan(
@@ -275,6 +703,12 @@ pub fn build_google_translation_request_plan(
     from_language: TranslationLanguage,
     to_language: TranslationLanguage,
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::Google,
+        from_language,
+        to_language,
+    )?;
+
     let mut url = reqwest::Url::parse(GOOGLE_TRANSLATE_ENDPOINT).map_err(|error| {
         OpenAiExecutionError::new(
             OpenAiExecutionErrorCode::InvalidResponse,
@@ -312,6 +746,11 @@ pub fn build_caiyun_translation_request_plan(
     to_language: TranslationLanguage,
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
     validate_required("Caiyun API key", api_key)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::Caiyun,
+        from_language,
+        to_language,
+    )?;
 
     let from_code = caiyun_language_code(from_language)?;
     let to_code = caiyun_language_code(to_language)?;
@@ -346,6 +785,11 @@ pub fn build_deepl_api_translation_request_plan(
     to_language: TranslationLanguage,
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
     validate_required("DeepL API key", api_key)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::DeepLApi,
+        from_language,
+        to_language,
+    )?;
 
     let mut form_fields = vec![
         ("text", text.to_string()),
@@ -376,6 +820,80 @@ pub fn build_deepl_api_translation_request_plan(
     })
 }
 
+pub fn build_deepl_web_translation_request_plan(
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    let request_id = new_deepl_web_request_id()?;
+    let timestamp = deepl_aligned_timestamp(current_unix_time_millis()?, deepl_i_count(text));
+    build_deepl_web_translation_request_plan_with_values(
+        text,
+        from_language,
+        to_language,
+        request_id,
+        timestamp,
+    )
+}
+
+pub fn build_deepl_web_translation_request_plan_with_values(
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    request_id: i64,
+    timestamp: i64,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_required("DeepL query text", text)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::DeepLWeb,
+        from_language,
+        to_language,
+    )?;
+
+    let target_code = deepl_language_code(to_language, true).to_ascii_uppercase();
+    let source_code = if from_language == TranslationLanguage::Auto {
+        "auto".to_string()
+    } else {
+        deepl_language_code(from_language, true)
+    }
+    .to_ascii_uppercase();
+
+    let payload = json!({
+        "jsonrpc": "2.0",
+        "method": "LMT_handle_texts",
+        "id": request_id,
+        "params": {
+            "texts": [{ "text": text, "requestAlternatives": 3 }],
+            "splitting": "newlines",
+            "lang": {
+                "source_lang_user_selected": source_code,
+                "target_lang": target_code,
+            },
+            "timestamp": timestamp,
+            "commonJobParams": {
+                "wasSpoken": false,
+                "transcribe_as": "",
+            },
+        },
+    });
+    let body = apply_deepl_dynamic_spacing(&payload.to_string(), request_id);
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "POST",
+        endpoint: DEEPL_WEB_ENDPOINT.to_string(),
+        headers: vec![
+            ("Accept".to_string(), "*/*".to_string()),
+            ("Accept-Language".to_string(), "en-US,en;q=0.9".to_string()),
+            ("Origin".to_string(), "https://www.deepl.com".to_string()),
+            ("Referer".to_string(), "https://www.deepl.com/".to_string()),
+            ("User-Agent".to_string(), DEEPL_WEB_USER_AGENT.to_string()),
+            ("Content-Type".to_string(), "application/json".to_string()),
+        ],
+        body: Some(body),
+        service_kind: TraditionalHttpServiceKind::DeepLWeb,
+    })
+}
+
 pub fn build_niutrans_translation_request_plan(
     api_key: &str,
     text: &str,
@@ -383,6 +901,11 @@ pub fn build_niutrans_translation_request_plan(
     to_language: TranslationLanguage,
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
     validate_required("NiuTrans API key", api_key)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::NiuTrans,
+        from_language,
+        to_language,
+    )?;
 
     let text_len = text.encode_utf16().count();
     if text_len > NIUTRANS_MAX_TEXT_LENGTH_UTF16 {
@@ -409,6 +932,230 @@ pub fn build_niutrans_translation_request_plan(
     })
 }
 
+pub fn build_youdao_openapi_translation_request_plan(
+    app_key: &str,
+    app_secret: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    let salt = new_request_id()?;
+    let curtime = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::Unknown,
+                format!("Could not compute Youdao request timestamp: {error}"),
+            )
+        })?
+        .as_secs()
+        .to_string();
+
+    build_youdao_openapi_translation_request_plan_with_nonce(
+        app_key,
+        app_secret,
+        text,
+        from_language,
+        to_language,
+        &salt,
+        &curtime,
+    )
+}
+
+pub fn build_youdao_openapi_translation_request_plan_with_nonce(
+    app_key: &str,
+    app_secret: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    salt: &str,
+    curtime: &str,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_required("Youdao AppKey", app_key)?;
+    validate_required("Youdao AppSecret", app_secret)?;
+    validate_required("Youdao salt", salt)?;
+    validate_required("Youdao curtime", curtime)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::YoudaoOpenApi,
+        from_language,
+        to_language,
+    )?;
+
+    let signature_input = youdao_openapi_signature_input(text);
+    let sign = compute_youdao_openapi_sign(
+        app_key.trim(),
+        &signature_input,
+        salt,
+        curtime,
+        app_secret.trim(),
+    );
+    let fields = vec![
+        ("q", text.to_string()),
+        ("from", youdao_language_code(from_language).to_string()),
+        ("to", youdao_language_code(to_language).to_string()),
+        ("appKey", app_key.trim().to_string()),
+        ("salt", salt.to_string()),
+        ("sign", sign),
+        ("signType", "v3".to_string()),
+        ("curtime", curtime.to_string()),
+    ];
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "POST",
+        endpoint: YOUDAO_OPENAPI_ENDPOINT.to_string(),
+        headers: vec![(
+            "Content-Type".to_string(),
+            "application/x-www-form-urlencoded".to_string(),
+        )],
+        body: Some(form_urlencoded_body(&fields)?),
+        service_kind: TraditionalHttpServiceKind::YoudaoOpenApi,
+    })
+}
+
+pub fn build_youdao_web_dict_translation_request_plan(
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_required("Youdao query text", text)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::YoudaoWebDict,
+        from_language,
+        to_language,
+    )?;
+
+    let ww = format!("{text}webdict");
+    let time = youdao_web_dict_time(text);
+    let salt = md5_hex(&ww);
+    let sign = compute_youdao_web_dict_sign(text, time, &salt);
+    let fields = vec![
+        ("q", text.to_string()),
+        (
+            "le",
+            youdao_web_dict_language_code(from_language, to_language).to_string(),
+        ),
+        ("client", "web".to_string()),
+        ("t", time.to_string()),
+        ("sign", sign),
+        ("keyfrom", "webdict".to_string()),
+    ];
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "POST",
+        endpoint: format!("{YOUDAO_WEB_DICT_ENDPOINT}?doctype=json&jsonversion=4"),
+        headers: vec![
+            (
+                "Content-Type".to_string(),
+                "application/x-www-form-urlencoded".to_string(),
+            ),
+            (
+                "User-Agent".to_string(),
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string(),
+            ),
+            (
+                "Referer".to_string(),
+                "https://dict.youdao.com/".to_string(),
+            ),
+        ],
+        body: Some(form_urlencoded_body(&fields)?),
+        service_kind: TraditionalHttpServiceKind::YoudaoWebDict,
+    })
+}
+
+pub fn build_youdao_web_translate_key_request_plan(
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    build_youdao_web_translate_key_request_plan_with_time(&current_unix_time_millis_string()?)
+}
+
+pub fn build_youdao_web_translate_key_request_plan_with_time(
+    mystic_time: &str,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_required("Youdao mysticTime", mystic_time)?;
+
+    let sign = compute_youdao_web_translate_sign(YOUDAO_WEB_INITIAL_SIGN_KEY, mystic_time);
+    let mut url = reqwest::Url::parse(YOUDAO_WEB_TRANSLATE_KEY_ENDPOINT).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Youdao webtranslate key endpoint: {error}"),
+        )
+    })?;
+    url.query_pairs_mut()
+        .append_pair("keyid", "webfanyi-key-getter")
+        .append_pair("sign", &sign)
+        .append_pair("client", "fanyideskweb")
+        .append_pair("product", "webfanyi")
+        .append_pair("appVersion", "1.0.0")
+        .append_pair("vendor", "web")
+        .append_pair("pointParam", "client,mysticTime,product")
+        .append_pair("mysticTime", mystic_time)
+        .append_pair("keyfrom", "fanyi.web");
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "GET",
+        endpoint: url.to_string(),
+        headers: youdao_web_headers(false),
+        body: None,
+        service_kind: TraditionalHttpServiceKind::YoudaoWebTranslateKey,
+    })
+}
+
+pub fn build_youdao_web_translate_request_plan(
+    sign_key: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    build_youdao_web_translate_request_plan_with_time(
+        sign_key,
+        text,
+        from_language,
+        to_language,
+        &current_unix_time_millis_string()?,
+    )
+}
+
+pub fn build_youdao_web_translate_request_plan_with_time(
+    sign_key: &str,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    mystic_time: &str,
+) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_required("Youdao webtranslate sign key", sign_key)?;
+    validate_required("Youdao query text", text)?;
+    validate_required("Youdao mysticTime", mystic_time)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::YoudaoWebTranslate,
+        from_language,
+        to_language,
+    )?;
+
+    let sign = compute_youdao_web_translate_sign(sign_key, mystic_time);
+    let fields = vec![
+        ("i", text.to_string()),
+        ("from", youdao_language_code(from_language).to_string()),
+        ("to", youdao_language_code(to_language).to_string()),
+        ("dictResult", "true".to_string()),
+        ("keyid", "webfanyi".to_string()),
+        ("sign", sign),
+        ("client", "fanyideskweb".to_string()),
+        ("product", "webfanyi".to_string()),
+        ("appVersion", "1.0.0".to_string()),
+        ("vendor", "web".to_string()),
+        ("pointParam", "client,mysticTime,product".to_string()),
+        ("mysticTime", mystic_time.to_string()),
+        ("keyfrom", "fanyi.web".to_string()),
+    ];
+
+    Ok(TraditionalHttpRequestPlan {
+        method: "POST",
+        endpoint: YOUDAO_WEB_TRANSLATE_ENDPOINT.to_string(),
+        headers: youdao_web_headers(true),
+        body: Some(form_urlencoded_body(&fields)?),
+        service_kind: TraditionalHttpServiceKind::YoudaoWebTranslate,
+    })
+}
+
 pub fn build_volcano_translation_request_plan(
     access_key_id: &str,
     secret_access_key: &str,
@@ -418,6 +1165,11 @@ pub fn build_volcano_translation_request_plan(
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
     validate_required("Volcano AccessKeyID", access_key_id)?;
     validate_required("Volcano SecretAccessKey", secret_access_key)?;
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::Volcano,
+        from_language,
+        to_language,
+    )?;
 
     let text_len = text.encode_utf16().count();
     if text_len > VOLCANO_MAX_TEXT_LENGTH_UTF16 {
@@ -644,9 +1396,9 @@ pub fn volcano_language_code(
 // Bing is a two-phase, stateful provider: a GET to the translator page yields
 // session credentials (IG/IID/token/key/expiry) parsed from inline HTML, then a
 // POST to `ttranslatev3` performs the translation. These are the pure,
-// network-free building blocks for that flow; live two-phase execution and
-// credential caching are wired in a follow-up slice, so `bing` is intentionally
-// not yet in `traditional_http_config_for_service` (it stays on the .NET host).
+// network-free building blocks for that flow. `bing` stays outside
+// `traditional_http_config_for_service` because it needs the stateful two-phase
+// executor, but Quick Translate routes it through `NativeBingQuickTranslateBackend`.
 // ----------------------------------------------------------------------------
 
 /// Bing session credentials scraped from the translator page HTML.
@@ -714,6 +1466,12 @@ pub fn build_bing_translate_request_plan(
     to_language: TranslationLanguage,
     sfx: u64,
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::Bing,
+        from_language,
+        to_language,
+    )?;
+
     let text = truncate_to_utf16_units(text, BING_MAX_TEXT_LENGTH_UTF16);
     let from_code = bing_language_code(from_language);
     let to_code = bing_language_code(to_language);
@@ -956,6 +1714,12 @@ pub fn translate_bing_service<C: BingHttpClient>(
 ) -> Result<TranslationResultDto, OpenAiExecutionError> {
     let service_id = service_id.into();
     let service_name = service_name.into();
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::Bing,
+        from_language,
+        to_language,
+    )
+    .map_err(|error| attach_service_id(error, &service_id))?;
     const MAX_ATTEMPTS: u32 = 2;
 
     for attempt in 1..=MAX_ATTEMPTS {
@@ -1043,6 +1807,12 @@ pub fn build_linguee_translation_request_plan(
     from_language: TranslationLanguage,
     to_language: TranslationLanguage,
 ) -> Result<TraditionalHttpRequestPlan, OpenAiExecutionError> {
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::Linguee,
+        from_language,
+        to_language,
+    )?;
+
     let from_code = linguee_language_code(from_language)?;
     let to_code = linguee_language_code(to_language)?;
 
@@ -1153,6 +1923,42 @@ pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
 ) -> Result<TranslationResultDto, OpenAiExecutionError> {
     let service_id = service_id.into();
     let service_name = service_name.into();
+
+    match config {
+        TraditionalHttpServiceConfig::DeepLWeb { fallback_api_key } => {
+            return translate_deepl_web_service(
+                client,
+                fallback_api_key.as_deref(),
+                text,
+                from_language,
+                to_language,
+                service_id,
+                service_name,
+            );
+        }
+        TraditionalHttpServiceConfig::YoudaoWebDict => {
+            return translate_youdao_web_dict_service(
+                client,
+                text,
+                from_language,
+                to_language,
+                service_id,
+                service_name,
+            );
+        }
+        TraditionalHttpServiceConfig::YoudaoWebTranslate => {
+            return translate_youdao_web_translate_service(
+                client,
+                text,
+                from_language,
+                to_language,
+                service_id,
+                service_name,
+            );
+        }
+        _ => {}
+    }
+
     let plan =
         build_traditional_http_translation_request_plan(config, text, from_language, to_language)
             .map_err(|error| attach_service_id(error, &service_id))?;
@@ -1164,11 +1970,17 @@ pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
         TraditionalHttpServiceConfig::Google => {
             parse_google_translation_response(&body, service_id, service_name)
         }
+        TraditionalHttpServiceConfig::GoogleWeb => {
+            parse_google_web_translation_response(&body, service_id, service_name)
+        }
         TraditionalHttpServiceConfig::Caiyun { .. } => {
             parse_caiyun_translation_response(&body, text, service_id, service_name)
         }
         TraditionalHttpServiceConfig::DeepLApi { .. } => {
             parse_deepl_api_translation_response(&body, service_id, service_name)
+        }
+        TraditionalHttpServiceConfig::DeepLWeb { .. } => {
+            parse_deepl_web_translation_response(&body, service_id, service_name)
         }
         TraditionalHttpServiceConfig::NiuTrans { .. } => {
             parse_niutrans_translation_response(&body, text, service_id, service_name)
@@ -1179,7 +1991,149 @@ pub fn translate_traditional_http_service<C: TraditionalHttpClient>(
         TraditionalHttpServiceConfig::Linguee => {
             parse_linguee_translation_response(&body, text, service_id, service_name)
         }
+        TraditionalHttpServiceConfig::YoudaoOpenApi { .. } => {
+            parse_youdao_openapi_response(&body, text, from_language, service_id, service_name)
+        }
+        TraditionalHttpServiceConfig::YoudaoWebDict => {
+            parse_youdao_web_dict_response(&body, text, from_language, service_id, service_name)
+        }
+        TraditionalHttpServiceConfig::YoudaoWebTranslate => parse_youdao_web_translate_response(
+            &body,
+            text,
+            from_language,
+            service_id,
+            service_name,
+        ),
     }
+}
+
+pub fn translate_deepl_web_service<C: TraditionalHttpClient>(
+    client: &mut C,
+    fallback_api_key: Option<&str>,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let web_result = (|| {
+        let plan = build_deepl_web_translation_request_plan(text, from_language, to_language)
+            .map_err(|error| attach_service_id(error, &service_id))?;
+        let body = client
+            .execute(&plan)
+            .map_err(|error| attach_service_id(error, &service_id))?;
+        parse_deepl_web_translation_response(&body, service_id.clone(), service_name.clone())
+    })();
+
+    match web_result {
+        Ok(result) => Ok(result),
+        Err(web_error) => {
+            let Some(api_key) = normalized_optional(fallback_api_key) else {
+                return Err(web_error);
+            };
+            let api_config = TraditionalHttpServiceConfig::DeepLApi {
+                api_key,
+                use_quality_optimized: false,
+            };
+            let plan = build_traditional_http_translation_request_plan(
+                &api_config,
+                text,
+                from_language,
+                to_language,
+            )
+            .map_err(|error| attach_service_id(error, &service_id))?;
+            let body = client
+                .execute(&plan)
+                .map_err(|error| attach_service_id(error, &service_id))?;
+            parse_deepl_api_translation_response(&body, service_id, service_name)
+        }
+    }
+}
+
+pub fn translate_youdao_web_dict_service<C: TraditionalHttpClient>(
+    client: &mut C,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let plan = build_youdao_web_dict_translation_request_plan(text, from_language, to_language)
+        .map_err(|error| attach_service_id(error, &service_id))?;
+    let body = client
+        .execute(&plan)
+        .map_err(|error| attach_service_id(error, &service_id))?;
+    let result = parse_youdao_web_dict_response(
+        &body,
+        text,
+        from_language,
+        service_id.clone(),
+        service_name.clone(),
+    )?;
+
+    if youdao_web_dict_result_is_meaningful(&result, text) {
+        return Ok(result);
+    }
+
+    translate_youdao_web_translate_service(
+        client,
+        text,
+        from_language,
+        to_language,
+        service_id,
+        service_name,
+    )
+}
+
+pub fn translate_youdao_web_translate_service<C: TraditionalHttpClient>(
+    client: &mut C,
+    text: &str,
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    validate_traditional_http_language_pair(
+        TraditionalHttpServiceKind::YoudaoWebTranslate,
+        from_language,
+        to_language,
+    )
+    .map_err(|error| attach_service_id(error, &service_id))?;
+
+    let key_plan = build_youdao_web_translate_key_request_plan()
+        .map_err(|error| attach_service_id(error, &service_id))?;
+    let key_body = client
+        .execute(&key_plan)
+        .map_err(|error| attach_service_id(error, &service_id))?;
+    let sign_key = parse_youdao_web_translate_key_response(&key_body, &service_id)?;
+
+    let translate_plan =
+        build_youdao_web_translate_request_plan(&sign_key, text, from_language, to_language)
+            .map_err(|error| attach_service_id(error, &service_id))?;
+    let response_text = client
+        .execute(&translate_plan)
+        .map_err(|error| attach_service_id(error, &service_id))?;
+    let json = if response_text.trim_start().starts_with('{') {
+        response_text
+    } else {
+        decrypt_youdao_web_translate_response(&response_text)
+            .map_err(|error| attach_service_id(error, &service_id))?
+    };
+
+    parse_youdao_web_translate_response(&json, text, from_language, service_id, service_name)
+}
+
+fn youdao_web_dict_result_is_meaningful(
+    result: &TranslationResultDto,
+    original_text: &str,
+) -> bool {
+    let has_definitions = result
+        .word_result
+        .as_ref()
+        .and_then(|word| word.definitions.as_ref())
+        .is_some_and(|definitions| !definitions.is_empty());
+    let has_translation = result.translated_text != original_text;
+    has_definitions || has_translation
 }
 
 pub fn parse_google_translation_response(
@@ -1219,7 +2173,176 @@ pub fn parse_google_translation_response(
         info_message: None,
         timing_ms: None,
         alternatives: None,
+        word_result: None,
     })
+}
+
+pub fn parse_google_web_translation_response(
+    json: &str,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Google WebApp JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    if !root.is_array() {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            "Unexpected response format from Google WebApp API",
+        )
+        .with_service_id(service_id));
+    }
+
+    let translated_text = google_web_translated_text(&root);
+    let detected_language = google_web_detected_language(&root);
+    let phonetic = google_web_phonetic(&root);
+    let definitions = google_web_definitions(&root);
+    let examples = google_web_examples(&root);
+    let word_result =
+        (phonetic.is_some() || definitions.is_some() || examples.is_some()).then(|| {
+            WordResultDto {
+                phonetics: phonetic.map(|value| vec![value]),
+                definitions,
+                examples,
+                word_forms: None,
+                synonyms: None,
+            }
+        });
+
+    Ok(TranslationResultDto {
+        translated_text,
+        service_id: Some(service_id),
+        service_name: Some(service_name),
+        detected_language,
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result,
+    })
+}
+
+fn google_web_translated_text(root: &Value) -> String {
+    root.get(0)
+        .and_then(Value::as_array)
+        .map(|sentences| {
+            sentences
+                .iter()
+                .filter_map(|sentence| sentence.as_array())
+                .filter_map(|sentence| sentence.first())
+                .filter_map(Value::as_str)
+                .filter(|part| !part.is_empty())
+                .collect::<String>()
+        })
+        .unwrap_or_default()
+}
+
+fn google_web_detected_language(root: &Value) -> Option<String> {
+    root.get(8)
+        .and_then(Value::as_array)
+        .and_then(|items| items.last())
+        .and_then(Value::as_array)
+        .and_then(|item| item.first())
+        .and_then(Value::as_str)
+        .or_else(|| root.get(2).and_then(Value::as_str))
+        .map(|code| TranslationLanguage::from_code(code).to_code().to_string())
+}
+
+fn google_web_phonetic(root: &Value) -> Option<PhoneticDto> {
+    let text = root
+        .get(0)
+        .and_then(Value::as_array)
+        .and_then(|sentences| sentences.last())
+        .and_then(Value::as_array)
+        .and_then(|sentence| sentence.get(3))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())?;
+
+    Some(PhoneticDto {
+        text: Some(text.to_string()),
+        audio_url: None,
+        accent: Some("src".to_string()),
+    })
+}
+
+fn google_web_definitions(root: &Value) -> Option<Vec<DefinitionDto>> {
+    let definitions = root.get(1)?.as_array()?;
+    let values: Vec<DefinitionDto> = definitions
+        .iter()
+        .filter_map(|entry| {
+            let entry = entry.as_array()?;
+            let part_of_speech = entry
+                .first()
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let mut meanings: Vec<String> = entry
+                .get(1)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter(|meaning| !meaning.is_empty())
+                .map(str::to_string)
+                .collect();
+
+            if meanings.is_empty() {
+                meanings = entry
+                    .get(2)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_array)
+                    .filter_map(|simple_word| simple_word.first())
+                    .filter_map(Value::as_str)
+                    .filter(|meaning| !meaning.is_empty())
+                    .map(str::to_string)
+                    .collect();
+            }
+
+            (!meanings.is_empty()).then_some(DefinitionDto {
+                part_of_speech,
+                meanings: Some(meanings),
+            })
+        })
+        .collect();
+
+    (!values.is_empty()).then_some(values)
+}
+
+fn google_web_examples(root: &Value) -> Option<Vec<String>> {
+    let values: Vec<String> = root
+        .get(13)?
+        .get(0)?
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_array)
+        .filter_map(|example| example.first())
+        .filter_map(Value::as_str)
+        .map(strip_html_tags)
+        .filter(|example| !example.is_empty())
+        .collect();
+
+    (!values.is_empty()).then_some(values)
+}
+
+fn strip_html_tags(value: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    let mut in_tag = false;
+    for character in value.chars() {
+        match character {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(character),
+            _ => {}
+        }
+    }
+    result
 }
 
 pub fn parse_caiyun_translation_response(
@@ -1303,6 +2426,73 @@ pub fn parse_deepl_api_translation_response(
     ))
 }
 
+pub fn parse_deepl_web_translation_response(
+    json: &str,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Failed to parse DeepL web response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    if let Some(error) = root.get("error") {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("Unknown error");
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            format!("DeepL web error: {message}"),
+        )
+        .with_service_id(service_id));
+    }
+
+    let Some(result) = root.get("result") else {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            "Invalid response from DeepL web",
+        )
+        .with_service_id(service_id));
+    };
+    let Some(first_text) = result
+        .get("texts")
+        .and_then(Value::as_array)
+        .and_then(|texts| texts.first())
+    else {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            "No translation result from DeepL web",
+        )
+        .with_service_id(service_id));
+    };
+
+    let translated_text = first_text
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let detected_language = result
+        .get("lang")
+        .and_then(Value::as_str)
+        .map(|code| {
+            TranslationLanguage::from_iso639(code)
+                .to_iso639()
+                .to_string()
+        })
+        .filter(|code| code != "auto");
+
+    Ok(success_result(
+        translated_text,
+        service_id,
+        service_name,
+        detected_language,
+    ))
+}
+
 pub fn parse_niutrans_translation_response(
     json: &str,
     original_text: &str,
@@ -1342,6 +2532,526 @@ pub fn parse_niutrans_translation_response(
     ))
 }
 
+pub fn parse_youdao_openapi_response(
+    json: &str,
+    original_text: &str,
+    from_language: TranslationLanguage,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Youdao OpenAPI JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    if let Some(code) = root.get("errorCode").and_then(Value::as_str) {
+        if code != "0" {
+            return Err(youdao_openapi_error_from_code(code).with_service_id(service_id));
+        }
+    }
+
+    let translated_text = root
+        .get("translation")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| original_text.to_string());
+
+    let phonetics = root.get("basic").and_then(youdao_openapi_phonetics);
+    let definitions = root.get("basic").and_then(youdao_openapi_definitions);
+    let word_result = (phonetics.is_some() || definitions.is_some()).then(|| WordResultDto {
+        phonetics,
+        definitions,
+        examples: None,
+        word_forms: None,
+        synonyms: None,
+    });
+    let detected_language = if from_language == TranslationLanguage::Auto {
+        root.get("l")
+            .and_then(Value::as_str)
+            .and_then(|pair| pair.split_once('2').map(|(from, _)| from))
+            .map(youdao_language_from_code)
+            .map(|language| language.to_code().to_string())
+    } else {
+        Some(from_language.to_code().to_string())
+    };
+
+    Ok(TranslationResultDto {
+        translated_text,
+        service_id: Some(service_id),
+        service_name: Some(service_name),
+        detected_language,
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result,
+    })
+}
+
+fn youdao_openapi_phonetics(basic: &Value) -> Option<Vec<PhoneticDto>> {
+    let mut phonetics = Vec::new();
+    if let Some(text) = basic
+        .get("us-phonetic")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        phonetics.push(PhoneticDto {
+            text: Some(text.to_string()),
+            audio_url: basic
+                .get("us-speech")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+            accent: Some("US".to_string()),
+        });
+    }
+
+    if let Some(text) = basic
+        .get("uk-phonetic")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        phonetics.push(PhoneticDto {
+            text: Some(text.to_string()),
+            audio_url: basic
+                .get("uk-speech")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+            accent: Some("UK".to_string()),
+        });
+    }
+
+    (!phonetics.is_empty()).then_some(phonetics)
+}
+
+fn youdao_openapi_definitions(basic: &Value) -> Option<Vec<DefinitionDto>> {
+    let definitions: Vec<DefinitionDto> = basic
+        .get("explains")?
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_str)
+        .filter(|text| !text.is_empty())
+        .map(|text| {
+            let (part_of_speech, meaning) = text
+                .split_once(". ")
+                .filter(|(part, _)| part.len() <= 10)
+                .map_or((None, text), |(part, meaning)| {
+                    (Some(part.to_string()), meaning)
+                });
+
+            DefinitionDto {
+                part_of_speech,
+                meanings: Some(vec![meaning.to_string()]),
+            }
+        })
+        .collect();
+
+    (!definitions.is_empty()).then_some(definitions)
+}
+
+pub fn parse_youdao_web_dict_response(
+    json: &str,
+    original_text: &str,
+    from_language: TranslationLanguage,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Youdao web dictionary JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    let phonetics = youdao_web_dict_word(&root, "simple")
+        .and_then(youdao_web_dict_phonetics)
+        .or_else(|| youdao_web_dict_word(&root, "ec").and_then(youdao_web_dict_phonetics));
+    let definitions = youdao_web_dict_definitions(&root);
+    let word_forms = youdao_web_dict_word_forms(&root);
+    let synonyms = youdao_web_dict_synonyms(&root);
+    let translated_text = youdao_web_dict_translated_text(original_text, definitions.as_deref());
+    let detected_language = Some(
+        if from_language == TranslationLanguage::Auto {
+            TranslationLanguage::English
+        } else {
+            from_language
+        }
+        .to_code()
+        .to_string(),
+    );
+
+    let has_word_result = option_vec_has_items(&phonetics)
+        || option_vec_has_items(&definitions)
+        || option_vec_has_items(&word_forms)
+        || option_vec_has_items(&synonyms);
+    let word_result = has_word_result.then(|| WordResultDto {
+        phonetics,
+        definitions,
+        examples: None,
+        word_forms,
+        synonyms,
+    });
+
+    Ok(TranslationResultDto {
+        translated_text,
+        service_id: Some(service_id),
+        service_name: Some(service_name),
+        detected_language,
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result,
+    })
+}
+
+fn youdao_web_dict_word<'a>(root: &'a Value, section: &str) -> Option<&'a Value> {
+    let word = root.get(section)?.get("word")?;
+    first_json_value(word)
+}
+
+fn first_json_value(value: &Value) -> Option<&Value> {
+    value.as_array().map_or(Some(value), |items| items.first())
+}
+
+fn youdao_web_dict_phonetics(word: &Value) -> Option<Vec<PhoneticDto>> {
+    let mut phonetics = Vec::new();
+    if let Some(text) = non_empty_string_field(word, "usphone") {
+        phonetics.push(PhoneticDto {
+            text: Some(text),
+            audio_url: non_empty_string_field(word, "usspeech")
+                .and_then(|path| youdao_dict_voice_audio_url(&path)),
+            accent: Some("US".to_string()),
+        });
+    }
+
+    if let Some(text) = non_empty_string_field(word, "ukphone") {
+        phonetics.push(PhoneticDto {
+            text: Some(text),
+            audio_url: non_empty_string_field(word, "ukspeech")
+                .and_then(|path| youdao_dict_voice_audio_url(&path)),
+            accent: Some("UK".to_string()),
+        });
+    }
+
+    (!phonetics.is_empty()).then_some(phonetics)
+}
+
+fn youdao_web_dict_definitions(root: &Value) -> Option<Vec<DefinitionDto>> {
+    let definitions: Vec<DefinitionDto> = youdao_web_dict_word(root, "ec")?
+        .get("trs")?
+        .as_array()?
+        .iter()
+        .filter_map(|item| {
+            let meaning = non_empty_string_field(item, "tran")?;
+            Some(DefinitionDto {
+                part_of_speech: non_empty_string_field(item, "pos"),
+                meanings: Some(vec![meaning]),
+            })
+        })
+        .collect();
+
+    (!definitions.is_empty()).then_some(definitions)
+}
+
+fn youdao_web_dict_word_forms(root: &Value) -> Option<Vec<WordFormDto>> {
+    let mut word_forms = Vec::new();
+    let Some(wfs) = youdao_web_dict_word(root, "ec")
+        .and_then(|word| word.get("wfs"))
+        .and_then(Value::as_array)
+    else {
+        return None;
+    };
+
+    for item in wfs {
+        let Some(wf) = item.get("wf") else {
+            continue;
+        };
+        let name = non_empty_string_field(wf, "name");
+        let Some(value) = non_empty_string_field(wf, "value") else {
+            continue;
+        };
+
+        for form in value.split('\u{6216}') {
+            let form = form.trim();
+            if !form.is_empty() {
+                word_forms.push(WordFormDto {
+                    name: name.clone(),
+                    value: Some(form.to_string()),
+                });
+            }
+        }
+    }
+
+    (!word_forms.is_empty()).then_some(word_forms)
+}
+
+fn youdao_web_dict_synonyms(root: &Value) -> Option<Vec<SynonymDto>> {
+    let mut synonyms = Vec::new();
+    let Some(synos) = root
+        .get("syno")
+        .and_then(|syno| syno.get("synos"))
+        .and_then(Value::as_array)
+    else {
+        return None;
+    };
+
+    for item in synos {
+        let words = item
+            .get("ws")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(youdao_web_dict_synonym_word)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|words| !words.is_empty());
+
+        if let Some(words) = words {
+            synonyms.push(SynonymDto {
+                part_of_speech: non_empty_string_field(item, "pos"),
+                meaning: non_empty_string_field(item, "tran"),
+                words: Some(words),
+            });
+        }
+    }
+
+    (!synonyms.is_empty()).then_some(synonyms)
+}
+
+fn youdao_web_dict_synonym_word(value: &Value) -> Option<String> {
+    value
+        .as_str()
+        .filter(|word| !word.is_empty())
+        .map(str::to_string)
+        .or_else(|| non_empty_string_field(value, "w"))
+}
+
+fn youdao_web_dict_translated_text(
+    original_text: &str,
+    definitions: Option<&[DefinitionDto]>,
+) -> String {
+    let Some(definitions) = definitions.filter(|items| !items.is_empty()) else {
+        return original_text.to_string();
+    };
+
+    definitions
+        .iter()
+        .take(3)
+        .filter_map(|definition| {
+            let meanings = definition.meanings.as_ref()?;
+            let text = meanings.join("; ");
+            if text.is_empty() {
+                return None;
+            }
+
+            Some(match definition.part_of_speech.as_deref() {
+                Some(part) if !part.is_empty() => format!("{part} {text}"),
+                _ => text,
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn youdao_dict_voice_audio_url(audio_path: &str) -> Option<String> {
+    let mut url = reqwest::Url::parse(YOUDAO_DICT_VOICE_ENDPOINT).ok()?;
+    url.query_pairs_mut().append_pair("audio", audio_path);
+    Some(url.to_string())
+}
+
+fn non_empty_string_field(value: &Value, field: &str) -> Option<String> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+}
+
+fn option_vec_has_items<T>(value: &Option<Vec<T>>) -> bool {
+    value.as_ref().is_some_and(|items| !items.is_empty())
+}
+
+pub fn parse_youdao_web_translate_key_response(
+    json: &str,
+    service_id: &str,
+) -> Result<String, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Youdao webtranslate key JSON response: {error}"),
+        )
+        .with_service_id(service_id.to_string())
+    })?;
+
+    let code = json_code_as_i64(root.get("code")).unwrap_or(-1);
+    if code != 0 {
+        let message = root
+            .get("msg")
+            .and_then(Value::as_str)
+            .unwrap_or("Unknown error");
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            format!("Youdao key API error: {message}"),
+        )
+        .with_service_id(service_id.to_string()));
+    }
+
+    root.get("data")
+        .and_then(|data| data.get("secretKey"))
+        .and_then(Value::as_str)
+        .filter(|key| !key.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::ServiceUnavailable,
+                "Invalid Youdao key API response",
+            )
+            .with_service_id(service_id.to_string())
+        })
+}
+
+pub fn parse_youdao_web_translate_response(
+    json: &str,
+    _original_text: &str,
+    from_language: TranslationLanguage,
+    service_id: String,
+    service_name: String,
+) -> Result<TranslationResultDto, OpenAiExecutionError> {
+    let root: Value = serde_json::from_str(json).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Invalid Youdao webtranslate JSON response: {error}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    if let Some(code) = json_code_as_i64(root.get("code")) {
+        if code != 0 {
+            return Err(youdao_web_translate_error_from_code(code).with_service_id(service_id));
+        }
+    }
+
+    let translated_text = youdao_web_translate_text(&root).ok_or_else(|| {
+        let mut preview = json.to_string();
+        if preview.len() > 500 {
+            preview.truncate(500);
+            preview.push_str("...");
+        }
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            format!("Youdao web translate returned no result. Response: {preview}"),
+        )
+        .with_service_id(service_id.clone())
+    })?;
+
+    Ok(TranslationResultDto {
+        translated_text,
+        service_id: Some(service_id),
+        service_name: Some(service_name),
+        detected_language: Some(from_language.to_code().to_string()),
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result: None,
+    })
+}
+
+fn youdao_web_translate_text(root: &Value) -> Option<String> {
+    let mut translated_text = String::new();
+    for item in root.get("translateResult")?.as_array()? {
+        if let Some(segments) = item.as_array() {
+            for segment in segments {
+                if let Some(text) = non_empty_string_field(segment, "tgt") {
+                    translated_text.push_str(&text);
+                }
+            }
+        } else if item.is_object() {
+            if let Some(text) = non_empty_string_field(item, "tgt") {
+                translated_text.push_str(&text);
+            }
+        }
+    }
+
+    (!translated_text.is_empty()).then_some(translated_text)
+}
+
+fn json_code_as_i64(value: Option<&Value>) -> Option<i64> {
+    value.and_then(|value| {
+        value
+            .as_i64()
+            .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
+    })
+}
+
+pub fn decrypt_youdao_web_translate_response(
+    encrypted_text: &str,
+) -> Result<String, OpenAiExecutionError> {
+    let key = md5_bytes(YOUDAO_WEB_AES_KEY_SOURCE);
+    let iv = md5_bytes(YOUDAO_WEB_AES_IV_SOURCE);
+    let mut base64_text = encrypted_text.trim().replace('-', "+").replace('_', "/");
+    let padding = base64_text.len() % 4;
+    if padding > 0 {
+        base64_text.push_str(&"=".repeat(4 - padding));
+    }
+
+    let encrypted_bytes = general_purpose::STANDARD
+        .decode(base64_text.as_bytes())
+        .map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::ServiceUnavailable,
+                format!("Failed to decode Youdao encrypted response: {error}"),
+            )
+        })?;
+    let decrypted = Aes128CbcDec::new(&key.into(), &iv.into())
+        .decrypt_padded_vec_mut::<Pkcs7>(&encrypted_bytes)
+        .map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::ServiceUnavailable,
+                format!("Failed to decrypt Youdao response: {error}"),
+            )
+        })?;
+
+    String::from_utf8(decrypted).map_err(|error| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidResponse,
+            format!("Decrypted Youdao response is not UTF-8: {error}"),
+        )
+    })
+}
+
+pub fn youdao_web_translate_error_from_code(code: i64) -> OpenAiExecutionError {
+    let kind = match code {
+        50 => OpenAiExecutionErrorCode::RateLimited,
+        _ => OpenAiExecutionErrorCode::ServiceUnavailable,
+    };
+    OpenAiExecutionError::new(kind, format!("Youdao web translate error: {code}"))
+}
+
+pub fn youdao_openapi_error_from_code(code: &str) -> OpenAiExecutionError {
+    let kind = match code {
+        "401" | "108" => OpenAiExecutionErrorCode::InvalidApiKey,
+        "411" => OpenAiExecutionErrorCode::RateLimited,
+        _ => OpenAiExecutionErrorCode::ServiceUnavailable,
+    };
+    OpenAiExecutionError::new(kind, format!("Youdao API error: {code}"))
+}
+
 pub fn google_language_code(language: TranslationLanguage) -> &'static str {
     match language {
         TranslationLanguage::Auto => "auto",
@@ -1349,6 +3059,132 @@ pub fn google_language_code(language: TranslationLanguage) -> &'static str {
         TranslationLanguage::SimplifiedChinese => "zh-CN",
         TranslationLanguage::Filipino => "tl",
         language => language.to_code(),
+    }
+}
+
+pub fn youdao_language_code(language: TranslationLanguage) -> &'static str {
+    match language {
+        TranslationLanguage::Auto => "auto",
+        TranslationLanguage::SimplifiedChinese => "zh-CHS",
+        TranslationLanguage::TraditionalChinese => "zh-CHT",
+        TranslationLanguage::English => "en",
+        TranslationLanguage::Japanese => "ja",
+        TranslationLanguage::Korean => "ko",
+        TranslationLanguage::French => "fr",
+        TranslationLanguage::Spanish => "es",
+        TranslationLanguage::Portuguese => "pt",
+        TranslationLanguage::Italian => "it",
+        TranslationLanguage::German => "de",
+        TranslationLanguage::Russian => "ru",
+        TranslationLanguage::Arabic => "ar",
+        TranslationLanguage::Swedish => "sv",
+        TranslationLanguage::Thai => "th",
+        TranslationLanguage::Dutch => "nl",
+        TranslationLanguage::Indonesian => "id",
+        TranslationLanguage::Vietnamese => "vi",
+        TranslationLanguage::Hindi => "hi",
+        _ => "en",
+    }
+}
+
+pub fn youdao_web_dict_language_code(
+    from_language: TranslationLanguage,
+    to_language: TranslationLanguage,
+) -> &'static str {
+    let target_language = match from_language {
+        TranslationLanguage::SimplifiedChinese | TranslationLanguage::TraditionalChinese => {
+            to_language
+        }
+        _ => from_language,
+    };
+
+    match target_language {
+        TranslationLanguage::English => "en",
+        TranslationLanguage::Japanese => "ja",
+        TranslationLanguage::French => "fr",
+        TranslationLanguage::Korean => "ko",
+        _ => "en",
+    }
+}
+
+fn youdao_language_from_code(code: &str) -> TranslationLanguage {
+    match code {
+        "zh-CHS" => TranslationLanguage::SimplifiedChinese,
+        "zh-CHT" => TranslationLanguage::TraditionalChinese,
+        "en" => TranslationLanguage::English,
+        "ja" => TranslationLanguage::Japanese,
+        "ko" => TranslationLanguage::Korean,
+        "fr" => TranslationLanguage::French,
+        "es" => TranslationLanguage::Spanish,
+        "pt" => TranslationLanguage::Portuguese,
+        "it" => TranslationLanguage::Italian,
+        "de" => TranslationLanguage::German,
+        "ru" => TranslationLanguage::Russian,
+        "ar" => TranslationLanguage::Arabic,
+        "sv" => TranslationLanguage::Swedish,
+        "th" => TranslationLanguage::Thai,
+        "nl" => TranslationLanguage::Dutch,
+        "id" => TranslationLanguage::Indonesian,
+        "vi" => TranslationLanguage::Vietnamese,
+        "hi" => TranslationLanguage::Hindi,
+        _ => TranslationLanguage::Auto,
+    }
+}
+
+pub fn youdao_openapi_signature_input(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= 20 {
+        return text.to_string();
+    }
+
+    let prefix: String = chars.iter().take(10).collect();
+    let suffix: String = chars.iter().skip(chars.len() - 10).collect();
+    format!("{}{}{}", prefix, chars.len(), suffix)
+}
+
+pub fn compute_youdao_openapi_sign(
+    app_key: &str,
+    input: &str,
+    salt: &str,
+    curtime: &str,
+    app_secret: &str,
+) -> String {
+    sha256_hex(format!("{app_key}{input}{salt}{curtime}{app_secret}").as_bytes())
+}
+
+pub fn youdao_web_dict_time(text: &str) -> usize {
+    format!("{text}webdict").encode_utf16().count() % 10
+}
+
+pub fn compute_youdao_web_dict_sign(text: &str, time: usize, salt: &str) -> String {
+    const KEY: &str = "Mk6hqtUp33DGGtoS63tTJbMUYjRrG1Lu";
+    md5_hex(&format!("web{text}{time}{KEY}{salt}"))
+}
+
+pub fn compute_youdao_web_translate_sign(sign_key: &str, mystic_time: &str) -> String {
+    md5_hex(&format!(
+        "client=fanyideskweb&mysticTime={mystic_time}&product=webfanyi&key={sign_key}"
+    ))
+}
+
+pub fn deepl_i_count(text: &str) -> i64 {
+    text.chars().filter(|character| *character == 'i').count() as i64
+}
+
+pub fn deepl_aligned_timestamp(timestamp_millis: i64, i_count: i64) -> i64 {
+    if i_count <= 0 {
+        return timestamp_millis;
+    }
+
+    let count = i_count + 1;
+    timestamp_millis - (timestamp_millis % count) + count
+}
+
+pub fn apply_deepl_dynamic_spacing(json: &str, request_id: i64) -> String {
+    if (request_id + 5) % 29 == 0 || (request_id + 3) % 13 == 0 {
+        json.replace("\"method\":\"", "\"method\" : \"")
+    } else {
+        json.replace("\"method\":\"", "\"method\": \"")
     }
 }
 
@@ -1486,6 +3322,13 @@ pub fn deepl_api_error_from_status(status_code: u16, reason: &str) -> OpenAiExec
     OpenAiExecutionError::new(code, format!("DeepL API error ({status_code}): {reason}"))
 }
 
+pub fn deepl_web_error_from_status(status_code: u16, reason: &str) -> OpenAiExecutionError {
+    OpenAiExecutionError::new(
+        OpenAiExecutionErrorCode::ServiceUnavailable,
+        format!("DeepL web translation failed ({status_code}): {reason}"),
+    )
+}
+
 pub fn niutrans_error_from_code(error_code: &str, error_message: &str) -> OpenAiExecutionError {
     let code = match error_code {
         "13002" | "13003" => OpenAiExecutionErrorCode::InvalidApiKey,
@@ -1520,6 +3363,53 @@ fn validate_required(label: &str, value: &str) -> Result<(), OpenAiExecutionErro
         ));
     }
     Ok(())
+}
+
+fn current_unix_time_millis_string() -> Result<String, OpenAiExecutionError> {
+    Ok(current_unix_time_millis()?.to_string())
+}
+
+fn current_unix_time_millis() -> Result<i64, OpenAiExecutionError> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::Unknown,
+                format!("Could not compute request timestamp: {error}"),
+            )
+        })?
+        .as_millis();
+    i64::try_from(millis).map_err(|_| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::Unknown,
+            "Current request timestamp does not fit in i64",
+        )
+    })
+}
+
+fn youdao_web_headers(include_content_type: bool) -> Vec<(String, String)> {
+    let mut headers = Vec::new();
+    if include_content_type {
+        headers.push((
+            "Content-Type".to_string(),
+            "application/x-www-form-urlencoded".to_string(),
+        ));
+    }
+    headers.extend([
+        ("User-Agent".to_string(), YOUDAO_WEB_USER_AGENT.to_string()),
+        (
+            "Referer".to_string(),
+            "https://fanyi.youdao.com/".to_string(),
+        ),
+        ("Origin".to_string(), "https://fanyi.youdao.com".to_string()),
+    ]);
+    if include_content_type {
+        headers.push((
+            "Cookie".to_string(),
+            "OUTFOX_SEARCH_USER_ID=0@0.0.0.0".to_string(),
+        ));
+    }
+    headers
 }
 
 fn form_urlencoded_body(fields: &[(&str, String)]) -> Result<String, OpenAiExecutionError> {
@@ -1617,6 +3507,7 @@ fn success_result(
         info_message: None,
         timing_ms: None,
         alternatives: None,
+        word_result: None,
     }
 }
 
@@ -1640,6 +3531,20 @@ fn new_request_id() -> Result<String, OpenAiExecutionError> {
     Ok(id)
 }
 
+fn new_deepl_web_request_id() -> Result<i64, OpenAiExecutionError> {
+    let rng = SystemRandom::new();
+    let mut bytes = [0_u8; 4];
+    rng.fill(&mut bytes).map_err(|_| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::Unknown,
+            "Could not generate DeepL web request id",
+        )
+    })?;
+
+    let value = u32::from_le_bytes(bytes);
+    Ok((100_000 + (value % 89_999)) as i64 * 1_000)
+}
+
 fn push_hex_byte(buffer: &mut String, byte: u8) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     buffer.push(HEX[(byte >> 4) as usize] as char);
@@ -1656,6 +3561,17 @@ fn hex_encode_lower(bytes: &[u8]) -> String {
 
 fn sha256_hex(data: &[u8]) -> String {
     hex_encode_lower(digest::digest(&digest::SHA256, data).as_ref())
+}
+
+fn md5_hex(data: &str) -> String {
+    hex_encode_lower(&Md5::digest(data.as_bytes()))
+}
+
+fn md5_bytes(data: &str) -> [u8; 16] {
+    let digest = Md5::digest(data.as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&digest);
+    bytes
 }
 
 fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {

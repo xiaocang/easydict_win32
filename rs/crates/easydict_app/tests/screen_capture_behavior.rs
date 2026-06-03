@@ -1,7 +1,8 @@
 use easydict_app::{
-    CaptureInteraction, CaptureInteractionState, CapturePhase, CapturePoint, CaptureRect,
-    DetectedWindow, WindowDetector,
+    detected_windows_from_screen_windows, CaptureInteraction, CaptureInteractionState,
+    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, WindowDetector,
 };
+use win_fluent::prelude::{ScreenRect, ScreenWindow};
 
 #[test]
 fn capture_rect_contains_uses_exclusive_bottom_right_edges() {
@@ -86,7 +87,28 @@ fn capture_interaction_detects_windows_and_scrolls_depth() {
 }
 
 #[test]
-fn capture_interaction_drag_selects_and_confirms_normalized_region() {
+fn detected_windows_from_screen_windows_restores_parent_child_snapshot_tree() {
+    let windows = detected_windows_from_screen_windows([
+        ScreenWindow::new(1, None, ScreenRect::new(0, 0, 800, 600)).class_name("Main"),
+        ScreenWindow::new(2, Some(1), ScreenRect::new(50, 50, 200, 180)).class_name("Child"),
+        ScreenWindow::new(3, Some(2), ScreenRect::new(100, 100, 50, 30)).class_name("Grandchild"),
+        ScreenWindow::new(4, None, ScreenRect::new(900, 20, 120, 90)).class_name("Other"),
+    ]);
+
+    assert_eq!(
+        windows,
+        vec![
+            DetectedWindow::new(1, CaptureRect::new(0, 0, 800, 600)).with_children([
+                DetectedWindow::new(2, CaptureRect::new(50, 50, 250, 230))
+                    .with_children([DetectedWindow::new(3, CaptureRect::new(100, 100, 150, 130))])
+            ]),
+            DetectedWindow::new(4, CaptureRect::new(900, 20, 1020, 110)),
+        ]
+    );
+}
+
+#[test]
+fn capture_interaction_drag_selects_and_enters_adjusting_with_normalized_region() {
     let detector = WindowDetector::new();
     let mut state = CaptureInteractionState::new();
 
@@ -96,7 +118,7 @@ fn capture_interaction_drag_selects_and_confirms_normalized_region() {
     );
     assert_eq!(
         state.on_mouse_move(CapturePoint::new(104, 104), &detector),
-        CaptureInteraction::None
+        CaptureInteraction::Redraw
     );
     assert_eq!(state.phase, CapturePhase::Detecting);
 
@@ -109,8 +131,10 @@ fn capture_interaction_drag_selects_and_confirms_normalized_region() {
 
     assert_eq!(
         state.on_left_button_up(CapturePoint::new(80, 70)),
-        CaptureInteraction::Confirm(CaptureRect::new(80, 70, 100, 100))
+        CaptureInteraction::Redraw
     );
+    assert_eq!(state.phase, CapturePhase::Adjusting);
+    assert_eq!(state.selection, Some(CaptureRect::new(80, 70, 100, 100)));
 }
 
 #[test]
@@ -159,8 +183,10 @@ fn capture_interaction_double_click_blank_enters_track_mouse_selection() {
     );
     assert_eq!(
         state.on_left_button_down(CapturePoint::new(80, 60)),
-        CaptureInteraction::Confirm(CaptureRect::new(20, 20, 80, 60))
+        CaptureInteraction::Redraw
     );
+    assert_eq!(state.phase, CapturePhase::Adjusting);
+    assert_eq!(state.selection, Some(CaptureRect::new(20, 20, 80, 60)));
 }
 
 #[test]
@@ -183,6 +209,54 @@ fn capture_interaction_right_click_and_escape_match_legacy_phase_rules() {
     assert_eq!(state.detection_depth, 0);
 
     assert_eq!(state.on_escape(), CaptureInteraction::Cancel);
+}
+
+#[test]
+fn capture_interaction_adjusting_nudges_selection_by_pixel() {
+    let mut state = CaptureInteractionState::new();
+
+    assert_eq!(
+        state.set_adjusting_selection(CaptureRect::new(100, 80, 220, 160)),
+        CaptureInteraction::Redraw
+    );
+    assert_eq!(state.phase, CapturePhase::Adjusting);
+
+    assert_eq!(state.nudge_selection(1, 0), CaptureInteraction::Redraw);
+    assert_eq!(state.selection, Some(CaptureRect::new(101, 80, 221, 160)));
+
+    assert_eq!(state.nudge_selection(0, -1), CaptureInteraction::Redraw);
+    assert_eq!(state.selection, Some(CaptureRect::new(101, 79, 221, 159)));
+}
+
+#[test]
+fn capture_interaction_adjusting_cancel_returns_to_detecting() {
+    let mut state = CaptureInteractionState::new();
+    state.set_adjusting_selection(CaptureRect::new(100, 80, 220, 160));
+
+    assert_eq!(state.on_escape(), CaptureInteraction::Redraw);
+    assert_eq!(state.phase, CapturePhase::Detecting);
+    assert_eq!(state.selection, None);
+
+    state.set_adjusting_selection(CaptureRect::new(100, 80, 220, 160));
+    assert_eq!(state.on_right_button_down(), CaptureInteraction::Redraw);
+    assert_eq!(state.phase, CapturePhase::Detecting);
+    assert_eq!(state.selection, None);
+}
+
+#[test]
+fn capture_interaction_blank_mouse_moves_keep_redrawing_for_magnifier_parity() {
+    let detector = WindowDetector::new();
+    let mut state = CaptureInteractionState::new();
+
+    assert_eq!(
+        state.on_mouse_move(CapturePoint::new(10, 10), &detector),
+        CaptureInteraction::Redraw
+    );
+    assert_eq!(state.detected_region, None);
+    assert_eq!(
+        state.on_mouse_move(CapturePoint::new(11, 10), &detector),
+        CaptureInteraction::Redraw
+    );
 }
 
 fn back_window() -> DetectedWindow {

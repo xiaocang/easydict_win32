@@ -1,6 +1,6 @@
 use crate::compat_protocol::{GrammarCorrectParams, TranslateParams};
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CliOptions {
@@ -12,7 +12,7 @@ pub struct CliOptions {
     pub services: Vec<String>,
     pub json: bool,
     pub verbose: bool,
-    pub host: CompatHostTarget,
+    pub host: WorkerTarget,
 }
 
 impl CliOptions {
@@ -22,6 +22,7 @@ impl CliOptions {
             from: self.from.clone(),
             to: self.to.clone(),
             services: services_param(&self.services),
+            custom_prompt: None,
         }
     }
 
@@ -44,7 +45,7 @@ pub enum CliMode {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CompatHostTarget {
+pub enum WorkerTarget {
     Auto,
     AppDir(PathBuf),
     Program { program: PathBuf, args: Vec<String> },
@@ -97,15 +98,15 @@ Commands:
 Options:
   --text TEXT          Text to translate. Use '-' to read stdin.
   --from LANG          Source language, e.g. auto, en, zh-Hans.
-  --to LANG            Target language for translate/stream/batch. Defaults to CompatHost behavior.
+  --to LANG            Target language for translate/stream/batch.
   --language LANG      Grammar language; defaults to --from when omitted.
   --service ID         Service id. Can be repeated or comma-separated.
   --services IDS       Alias for --service with comma-separated ids.
   --json               Emit JSON for translate/grammar, JSON Lines for stream/batch.
   --verbose            Print service/timing metadata to stderr in plain mode.
-  --host PATH          Explicit Easydict.CompatHost.exe path.
-  --host-arg ARG       Extra argument for --host; can be repeated.
-  --app-dir PATH       Packaged app directory containing Easydict.CompatHost.exe.
+  --host PATH          Legacy compatibility option; retained LocalAI requires --app-dir.
+  --host-arg ARG       Legacy no-op argument kept for old command lines.
+  --app-dir PATH       Packaged app directory containing retained worker files.
   -h, --help           Show this help.
 
 Examples:
@@ -192,12 +193,12 @@ where
         .ok_or(CliParseError::MissingText)?;
 
     let host = match (host_program, app_dir) {
-        (Some(program), None) => CompatHostTarget::Program {
+        (Some(program), None) => WorkerTarget::Program {
             program,
             args: host_args,
         },
-        (None, Some(app_dir)) => CompatHostTarget::AppDir(app_dir),
-        (None, None) => CompatHostTarget::Auto,
+        (None, Some(app_dir)) => WorkerTarget::AppDir(app_dir),
+        (None, None) => WorkerTarget::Auto,
         (Some(_), Some(_)) => unreachable!("conflict checked above"),
     };
 
@@ -212,25 +213,6 @@ where
         verbose,
         host,
     })
-}
-
-pub fn common_dev_host_candidates(start: impl AsRef<Path>) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    for ancestor in start.as_ref().ancestors() {
-        for relative in [
-            "dotnet/src/Easydict.CompatHost/bin/Debug/net8.0-windows10.0.22621.0/Easydict.CompatHost.exe",
-            "dotnet/src/Easydict.CompatHost/bin/Debug/net8.0-windows/Easydict.CompatHost.exe",
-            "dotnet/src/Easydict.CompatHost/bin/Debug/net8.0/Easydict.CompatHost.exe",
-            "dotnet/src/Easydict.CompatHost/bin/Release/net8.0-windows10.0.22621.0/win-x64/Easydict.CompatHost.exe",
-            "dotnet/src/Easydict.CompatHost/bin/Release/net8.0-windows/win-x64/Easydict.CompatHost.exe",
-            "dotnet/src/Easydict.CompatHost/bin/Release/net8.0/win-x64/Easydict.CompatHost.exe",
-            "Easydict.CompatHost.exe",
-        ] {
-            candidates.push(ancestor.join(relative));
-        }
-    }
-
-    candidates
 }
 
 fn next_value<I>(args: &mut std::iter::Peekable<I>, option: &str) -> Result<String, CliParseError>
@@ -296,7 +278,7 @@ mod tests {
             "stream",
             "--json",
             "--host",
-            "C:/Tools/Easydict.CompatHost.exe",
+            "C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe",
             "--host-arg",
             "--trace",
             "--text",
@@ -309,8 +291,8 @@ mod tests {
         assert_eq!(options.text, "Hello");
         assert_eq!(
             options.host,
-            CompatHostTarget::Program {
-                program: PathBuf::from("C:/Tools/Easydict.CompatHost.exe"),
+            WorkerTarget::Program {
+                program: PathBuf::from("C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe"),
                 args: vec!["--trace".to_string()]
             }
         );
@@ -379,22 +361,5 @@ mod tests {
         assert_eq!(options.text, "Hello\nGood morning");
         assert_eq!(options.services, ["google"]);
         assert!(options.json);
-    }
-
-    #[test]
-    fn common_dev_host_candidates_prefer_current_compat_host_tfm() {
-        let start = Path::new(r"C:\repo\rs\crates\easydict_app");
-
-        let candidates = common_dev_host_candidates(start);
-
-        assert_eq!(
-            candidates.first().expect("candidate"),
-            &PathBuf::from(
-                r"C:\repo\rs\crates\easydict_app\dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows10.0.22621.0\Easydict.CompatHost.exe"
-            )
-        );
-        assert!(candidates.iter().any(|candidate| candidate.ends_with(
-            r"dotnet\src\Easydict.CompatHost\bin\Debug\net8.0-windows\Easydict.CompatHost.exe"
-        )));
     }
 }

@@ -42,12 +42,12 @@ pub fn fixed_window_options() -> WindowOptions {
 
 pub fn capture_overlay_window_options() -> WindowOptions {
     WindowOptions::new("capture-overlay", "Easydict Capture")
-        .size(360.0, 160.0)
-        .min_size(280.0, 120.0)
+        .size(1920.0, 1080.0)
+        .min_size(1.0, 1.0)
         .level(WindowLevel::TopMost)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::Fixed)
-        .placement(WindowPlacement::Center)
+        .placement(WindowPlacement::Monitor)
         .skip_taskbar(true)
 }
 
@@ -60,4 +60,5 @@ pub fn pop_button_window_options() -> WindowOptions {
         .resize_mode(WindowResizeMode::Fixed)
         .placement(WindowPlacement::CursorOffset { x: 8.0, y: 8.0 })
         .skip_taskbar(true)
+        .no_activate(true)
 }

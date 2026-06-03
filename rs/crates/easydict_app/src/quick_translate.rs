@@ -1,8 +1,9 @@
-use crate::compat_client::{CompatClientError, CompatHostFacade};
+use crate::compat_client::{DirectWorkerFacade, WorkerClientError};
 use crate::compat_protocol::{
-    compat_events, ConfigureParams, GrammarCorrectParams, GrammarCorrectResultDto, MdxLookupEntry,
-    MdxLookupParams, MdxLookupResult, SettingsSnapshot, TranslateChunkEventData, TranslateParams,
-    TranslationResultDto,
+    local_ai_provider_modes, ConfigureParams, DefinitionDto, GrammarCorrectParams,
+    GrammarCorrectResultDto, LocalAiTranslateParams, MdxLookupEntry, MdxLookupParams,
+    MdxLookupResult, PhoneticDto, SettingsSnapshot, SynonymDto, TranslateParams,
+    TranslateStreamResult, TranslationResultDto, WordFormDto, WordResultDto,
 };
 use crate::custom_streaming::{
     build_custom_streaming_translation_request_plan, cleanup_custom_streaming_translation_text,
@@ -10,21 +11,35 @@ use crate::custom_streaming::{
     execute_custom_streaming_request, translate_custom_streaming_service,
     CustomStreamingHttpClient, CustomStreamingServiceConfig, ReqwestCustomStreamingHttpClient,
 };
+use crate::grammar_correction::parse_grammar_correction;
+use crate::mdx_native::{
+    native_mdx_lookup_can_route, native_mdx_lookup_local_input_error,
+    native_mdx_lookup_needs_credentials, run_native_mdx_lookup_with_factory,
+    NativeMdxDictionaryReaderFactory, RsMdictReaderFactory,
+};
 use crate::openai_compatible::{
     build_openai_translation_request_plan, cleanup_openai_translation_text,
     correct_grammar_openai_compatible, execute_openai_stream_request,
-    openai_compatible_config_for_service, translate_openai_compatible, OpenAiCompatibleConfig,
-    OpenAiExecutionError, OpenAiHttpClient, OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
+    openai_compatible_service_can_route_natively, resolve_foundry_local_model_id_for_config,
+    resolve_openai_compatible_config_for_service, translate_openai_compatible,
+    validate_openai_translation_request_for_service, CommandFoundryLocalEndpointResolver,
+    FoundryLocalEndpointResolver, OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiHttpClient,
+    OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
 };
+use crate::retained_workers::RetainedWorkerPolicy;
+use crate::settings_status::{open_vino_cache_status_for_settings, OpenVinoCacheStatus};
 use crate::state::{
     settings_snapshot, stable_partition_demoted, ConnectionStatus, EasydictUiState,
     GrammarCorrectionPreview, Message, TranslationResultPreview,
 };
 use crate::traditional_http::{
-    traditional_http_config_for_service, translate_bing_service,
+    bing_host, traditional_http_config_for_request, translate_bing_service,
     translate_traditional_http_service, BingHttpClient, ReqwestBingHttpClient,
     ReqwestTraditionalHttpClient, TraditionalHttpClient, TraditionalHttpServiceConfig,
-    BING_GLOBAL_HOST,
+};
+use crate::translation_cache::{
+    Definition, Phonetic, Synonym, TranslationCacheRequest, TranslationMemoryCache,
+    TranslationResult as CachedTranslationResult, TranslationResultKind, WordForm, WordResult,
 };
 use crate::translation_language::TranslationLanguage;
 use crate::translation_services::find_translation_service_descriptor;
@@ -59,6 +74,7 @@ impl QuickTranslatePlan {
             from: self.from.clone(),
             to: self.to.clone(),
             services: Some(vec![service.id.clone()]),
+            custom_prompt: None,
         }
     }
 
@@ -227,8 +243,8 @@ impl fmt::Display for QuickTranslateBackendError {
     }
 }
 
-impl From<CompatClientError> for QuickTranslateBackendError {
-    fn from(error: CompatClientError) -> Self {
+impl From<WorkerClientError> for QuickTranslateBackendError {
+    fn from(error: WorkerClientError) -> Self {
         Self::new(error.to_string())
     }
 }
@@ -236,6 +252,292 @@ impl From<CompatClientError> for QuickTranslateBackendError {
 impl From<OpenAiExecutionError> for QuickTranslateBackendError {
     fn from(error: OpenAiExecutionError) -> Self {
         Self::new(error.to_string())
+    }
+}
+
+pub fn translation_cache_request_for_quick_translate(
+    request: &QuickTranslateServiceRequest,
+) -> Option<TranslationCacheRequest> {
+    if request.query_mode != QuickQueryMode::Translation
+        || request.execution_kind != QuickTranslateExecutionKind::Translate
+        || request.service.id.starts_with("mdx::")
+    {
+        return None;
+    }
+
+    if request
+        .params
+        .custom_prompt
+        .as_deref()
+        .is_some_and(|prompt| !prompt.trim().is_empty())
+    {
+        return None;
+    }
+
+    let from_language = request
+        .params
+        .from
+        .as_deref()
+        .map(TranslationLanguage::from_code)
+        .unwrap_or(TranslationLanguage::Auto);
+    let to_language_code = request.params.to.as_deref()?.trim();
+    if is_auto_language(to_language_code) {
+        return None;
+    }
+
+    let to_language = TranslationLanguage::from_code(to_language_code);
+    if to_language == TranslationLanguage::Auto {
+        return None;
+    }
+
+    Some(TranslationCacheRequest::new(
+        request.service.id.clone(),
+        from_language,
+        to_language,
+        request.params.text.clone(),
+    ))
+}
+
+pub fn quick_translate_service_update_from_cache(
+    request: &QuickTranslateServiceRequest,
+    result: CachedTranslationResult,
+) -> QuickTranslateServiceUpdate {
+    QuickTranslateServiceUpdate {
+        query_id: request.query_id,
+        outcome: QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Ok(cached_translation_result_to_dto(&request.service, &result)),
+        },
+    }
+}
+
+pub fn store_quick_translate_cache_result(
+    cache: &mut TranslationMemoryCache,
+    cache_request: &TranslationCacheRequest,
+    update: &QuickTranslateServiceUpdate,
+) -> bool {
+    if update.outcome.grammar_result.is_some() || !update.outcome.streamed_chunks.is_empty() {
+        return false;
+    }
+
+    let Ok(result) = &update.outcome.result else {
+        return false;
+    };
+
+    let Some(result) =
+        cached_translation_result_from_dto(cache_request, &update.outcome.service, result)
+    else {
+        return false;
+    };
+
+    let detected_language = result.detected_language;
+    cache.insert(cache_request, result.clone());
+
+    if cache_request.from_language == TranslationLanguage::Auto
+        && detected_language != TranslationLanguage::Auto
+    {
+        let mut detected_request = cache_request.clone();
+        detected_request.from_language = detected_language;
+        cache.insert(&detected_request, result);
+    }
+
+    true
+}
+
+fn cached_translation_result_from_dto(
+    cache_request: &TranslationCacheRequest,
+    service: &QuickTranslateService,
+    result: &TranslationResultDto,
+) -> Option<CachedTranslationResult> {
+    let result_kind = cached_result_kind_from_dto(result.result_kind.as_deref());
+    let detected_language = result
+        .detected_language
+        .as_deref()
+        .map(TranslationLanguage::from_code)
+        .filter(|language| *language != TranslationLanguage::Auto)
+        .unwrap_or(cache_request.from_language);
+
+    Some(CachedTranslationResult {
+        translated_text: result.translated_text.clone(),
+        original_text: cache_request.text.clone(),
+        detected_language,
+        target_language: cache_request.to_language,
+        service_name: result
+            .service_name
+            .clone()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(|| service.name.clone()),
+        result_kind,
+        info_message: result.info_message.clone(),
+        timing_ms: result.timing_ms.unwrap_or(0),
+        from_cache: false,
+        alternatives: result.alternatives.clone().unwrap_or_default(),
+        word_result: result.word_result.as_ref().map(cached_word_result_from_dto),
+        raw_html: None,
+    })
+}
+
+fn cached_translation_result_to_dto(
+    service: &QuickTranslateService,
+    result: &CachedTranslationResult,
+) -> TranslationResultDto {
+    TranslationResultDto {
+        translated_text: result.translated_text.clone(),
+        service_id: Some(service.id.clone()),
+        service_name: Some(if result.service_name.trim().is_empty() {
+            service.name.clone()
+        } else {
+            result.service_name.clone()
+        }),
+        detected_language: Some(result.detected_language.to_code().to_string()),
+        result_kind: Some(match result.result_kind {
+            TranslationResultKind::Success => "Success".to_string(),
+            TranslationResultKind::NoResult => "NoResult".to_string(),
+        }),
+        info_message: result.info_message.clone(),
+        timing_ms: Some(result.timing_ms),
+        alternatives: (!result.alternatives.is_empty()).then(|| result.alternatives.clone()),
+        word_result: result.word_result.as_ref().map(cached_word_result_to_dto),
+    }
+}
+
+fn cached_result_kind_from_dto(result_kind: Option<&str>) -> TranslationResultKind {
+    let normalized = result_kind
+        .unwrap_or("Success")
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+
+    if normalized == "noresult" {
+        TranslationResultKind::NoResult
+    } else {
+        TranslationResultKind::Success
+    }
+}
+
+fn cached_word_result_from_dto(result: &WordResultDto) -> WordResult {
+    WordResult {
+        phonetics: result
+            .phonetics
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(cached_phonetic_from_dto)
+            .collect(),
+        definitions: result
+            .definitions
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(cached_definition_from_dto)
+            .collect(),
+        examples: result.examples.clone().unwrap_or_default(),
+        word_forms: result
+            .word_forms
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(cached_word_form_from_dto)
+            .collect(),
+        synonyms: result
+            .synonyms
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(cached_synonym_from_dto)
+            .collect(),
+    }
+}
+
+fn cached_word_result_to_dto(result: &WordResult) -> WordResultDto {
+    WordResultDto {
+        phonetics: (!result.phonetics.is_empty()).then(|| {
+            result
+                .phonetics
+                .iter()
+                .map(cached_phonetic_to_dto)
+                .collect()
+        }),
+        definitions: (!result.definitions.is_empty()).then(|| {
+            result
+                .definitions
+                .iter()
+                .map(cached_definition_to_dto)
+                .collect()
+        }),
+        examples: (!result.examples.is_empty()).then(|| result.examples.clone()),
+        word_forms: (!result.word_forms.is_empty()).then(|| {
+            result
+                .word_forms
+                .iter()
+                .map(cached_word_form_to_dto)
+                .collect()
+        }),
+        synonyms: (!result.synonyms.is_empty())
+            .then(|| result.synonyms.iter().map(cached_synonym_to_dto).collect()),
+    }
+}
+
+fn cached_phonetic_from_dto(value: PhoneticDto) -> Phonetic {
+    Phonetic {
+        text: value.text,
+        audio_url: value.audio_url,
+        accent: value.accent,
+    }
+}
+
+fn cached_phonetic_to_dto(value: &Phonetic) -> PhoneticDto {
+    PhoneticDto {
+        text: value.text.clone(),
+        audio_url: value.audio_url.clone(),
+        accent: value.accent.clone(),
+    }
+}
+
+fn cached_definition_from_dto(value: DefinitionDto) -> Definition {
+    Definition {
+        part_of_speech: value.part_of_speech,
+        meanings: value.meanings.unwrap_or_default(),
+    }
+}
+
+fn cached_definition_to_dto(value: &Definition) -> DefinitionDto {
+    DefinitionDto {
+        part_of_speech: value.part_of_speech.clone(),
+        meanings: (!value.meanings.is_empty()).then(|| value.meanings.clone()),
+    }
+}
+
+fn cached_word_form_from_dto(value: WordFormDto) -> WordForm {
+    WordForm {
+        name: value.name,
+        value: value.value,
+    }
+}
+
+fn cached_word_form_to_dto(value: &WordForm) -> WordFormDto {
+    WordFormDto {
+        name: value.name.clone(),
+        value: value.value.clone(),
+    }
+}
+
+fn cached_synonym_from_dto(value: SynonymDto) -> Synonym {
+    Synonym {
+        part_of_speech: value.part_of_speech,
+        meaning: value.meaning,
+        words: value.words.unwrap_or_default(),
+    }
+}
+
+fn cached_synonym_to_dto(value: &Synonym) -> SynonymDto {
+    SynonymDto {
+        part_of_speech: value.part_of_speech.clone(),
+        meaning: value.meaning.clone(),
+        words: (!value.words.is_empty()).then(|| value.words.clone()),
     }
 }
 
@@ -271,16 +573,106 @@ pub trait QuickTranslateBackend {
     }
 }
 
-pub struct NativeOpenAiQuickTranslateBackend<C> {
-    http_client: C,
+pub struct NativeMdxQuickTranslateBackend<F = RsMdictReaderFactory> {
     settings: Option<SettingsSnapshot>,
+    reader_factory: F,
 }
 
-impl<C> NativeOpenAiQuickTranslateBackend<C> {
+impl Default for NativeMdxQuickTranslateBackend<RsMdictReaderFactory> {
+    fn default() -> Self {
+        Self::new(RsMdictReaderFactory)
+    }
+}
+
+impl<F> NativeMdxQuickTranslateBackend<F> {
+    pub fn new(reader_factory: F) -> Self {
+        Self {
+            settings: None,
+            reader_factory,
+        }
+    }
+
+    pub fn reader_factory(&self) -> &F {
+        &self.reader_factory
+    }
+}
+
+impl<F: NativeMdxDictionaryReaderFactory> QuickTranslateBackend
+    for NativeMdxQuickTranslateBackend<F>
+{
+    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
+        self.settings = Some(settings.clone());
+        Ok(())
+    }
+
+    fn translate(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        let _ = params;
+        Err(QuickTranslateBackendError::new(
+            "MDX native backend only supports dictionary lookup",
+        ))
+    }
+
+    fn translate_stream(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let _ = params;
+        Err(QuickTranslateBackendError::new(
+            "MDX native backend does not support streaming translation",
+        ))
+    }
+
+    fn correct_grammar(
+        &mut self,
+        params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        let _ = params;
+        Err(QuickTranslateBackendError::new(
+            "MDX native backend does not support grammar correction",
+        ))
+    }
+
+    fn mdx_lookup(
+        &mut self,
+        params: &MdxLookupParams,
+    ) -> Result<MdxLookupResult, QuickTranslateBackendError> {
+        let settings = self.settings.as_ref().ok_or_else(|| {
+            QuickTranslateBackendError::new("MDX native backend must be configured before use")
+        })?;
+
+        run_native_mdx_lookup_with_factory(&mut self.reader_factory, params, settings)
+            .map_err(|error| QuickTranslateBackendError::new(error.to_string()))
+    }
+}
+
+pub struct NativeOpenAiQuickTranslateBackend<C, R = CommandFoundryLocalEndpointResolver> {
+    http_client: C,
+    settings: Option<SettingsSnapshot>,
+    foundry_local_endpoint_resolver: R,
+}
+
+impl<C> NativeOpenAiQuickTranslateBackend<C, CommandFoundryLocalEndpointResolver> {
     pub fn new(http_client: C) -> Self {
         Self {
             http_client,
             settings: None,
+            foundry_local_endpoint_resolver: CommandFoundryLocalEndpointResolver::default(),
+        }
+    }
+}
+
+impl<C, R> NativeOpenAiQuickTranslateBackend<C, R> {
+    pub fn with_foundry_local_endpoint_resolver(
+        http_client: C,
+        foundry_local_endpoint_resolver: R,
+    ) -> Self {
+        Self {
+            http_client,
+            settings: None,
+            foundry_local_endpoint_resolver,
         }
     }
 
@@ -288,12 +680,18 @@ impl<C> NativeOpenAiQuickTranslateBackend<C> {
         &self.http_client
     }
 
+    pub fn foundry_local_endpoint_resolver(&self) -> &R {
+        &self.foundry_local_endpoint_resolver
+    }
+
     pub fn into_http_client(self) -> C {
         self.http_client
     }
 }
 
-impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBackend<C> {
+impl<C: OpenAiHttpClient, R: FoundryLocalEndpointResolver> QuickTranslateBackend
+    for NativeOpenAiQuickTranslateBackend<C, R>
+{
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
         self.settings = Some(settings.clone());
         Ok(())
@@ -305,6 +703,7 @@ impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBa
     ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
         let request = self.openai_translation_request(params)?;
         let (service_id, service_name, config) = self.service_context(params)?;
+        let config = self.resolve_foundry_local_model_if_needed(&service_id, config);
         translate_openai_compatible(
             &mut self.http_client,
             &config,
@@ -321,6 +720,10 @@ impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBa
     ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
         let request = self.openai_translation_request(params)?;
         let (service_id, service_name, config) = self.service_context(params)?;
+        let config = self.resolve_foundry_local_model_if_needed(&service_id, config);
+        validate_openai_translation_request_for_service(&service_id, &request)
+            .map_err(OpenAiExecutionError::from)
+            .map_err(QuickTranslateBackendError::from)?;
         let plan = build_openai_translation_request_plan(&config, &request)
             .map_err(OpenAiExecutionError::from)?;
         let chunks = execute_openai_stream_request(&mut self.http_client, &plan)?;
@@ -336,6 +739,7 @@ impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBa
                 info_message: None,
                 timing_ms: None,
                 alternatives: None,
+                word_result: None,
             },
             chunks,
         })
@@ -346,6 +750,7 @@ impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBa
         params: &GrammarCorrectParams,
     ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
         let (service_id, service_name, config) = self.service_context_for_ids(&params.services)?;
+        let config = self.resolve_foundry_local_model_if_needed(&service_id, config);
         let language = params
             .language
             .as_deref()
@@ -365,7 +770,7 @@ impl<C: OpenAiHttpClient> QuickTranslateBackend for NativeOpenAiQuickTranslateBa
     }
 }
 
-impl<C> NativeOpenAiQuickTranslateBackend<C> {
+impl<C, R: FoundryLocalEndpointResolver> NativeOpenAiQuickTranslateBackend<C, R> {
     fn openai_translation_request(
         &self,
         params: &TranslateParams,
@@ -382,19 +787,19 @@ impl<C> NativeOpenAiQuickTranslateBackend<C> {
                 .as_deref()
                 .map(TranslationLanguage::from_code)
                 .unwrap_or(TranslationLanguage::English),
-            custom_prompt: None,
+            custom_prompt: params.custom_prompt.clone(),
         })
     }
 
     fn service_context(
-        &self,
+        &mut self,
         params: &TranslateParams,
     ) -> Result<(String, String, OpenAiCompatibleConfig), QuickTranslateBackendError> {
         self.service_context_for_ids(&params.services)
     }
 
     fn service_context_for_ids(
-        &self,
+        &mut self,
         services: &Option<Vec<String>>,
     ) -> Result<(String, String, OpenAiCompatibleConfig), QuickTranslateBackendError> {
         let service_id = services
@@ -413,14 +818,33 @@ impl<C> NativeOpenAiQuickTranslateBackend<C> {
             )
         })?;
 
-        let config =
-            openai_compatible_config_for_service(&service_id, settings).ok_or_else(|| {
-                QuickTranslateBackendError::new(format!(
-                    "Service '{service_id}' is not handled by the native OpenAI-compatible backend"
-                ))
-            })?;
+        let config = resolve_openai_compatible_config_for_service(
+            &service_id,
+            settings,
+            &mut self.foundry_local_endpoint_resolver,
+        )
+        .map_err(QuickTranslateBackendError::from)?
+        .ok_or_else(|| {
+            QuickTranslateBackendError::new(format!(
+                "Service '{service_id}' is not handled by the native OpenAI-compatible backend"
+            ))
+        })?;
         let service_name = native_openai_service_name(&service_id);
         Ok((service_id, service_name, config))
+    }
+}
+
+impl<C: OpenAiHttpClient, R: FoundryLocalEndpointResolver> NativeOpenAiQuickTranslateBackend<C, R> {
+    fn resolve_foundry_local_model_if_needed(
+        &mut self,
+        service_id: &str,
+        config: OpenAiCompatibleConfig,
+    ) -> OpenAiCompatibleConfig {
+        if service_id == "windows-local-ai" {
+            resolve_foundry_local_model_id_for_config(&mut self.http_client, &config)
+        } else {
+            config
+        }
     }
 }
 
@@ -490,6 +914,7 @@ impl<C: CustomStreamingHttpClient> QuickTranslateBackend
                 info_message: None,
                 timing_ms: None,
                 alternatives: None,
+                word_result: None,
             },
             chunks,
         })
@@ -533,7 +958,7 @@ impl<C> NativeCustomStreamingQuickTranslateBackend<C> {
                 .as_deref()
                 .map(TranslationLanguage::from_code)
                 .unwrap_or(TranslationLanguage::English),
-            custom_prompt: None,
+            custom_prompt: params.custom_prompt.clone(),
         }
     }
 
@@ -675,8 +1100,8 @@ impl<C> NativeTraditionalHttpQuickTranslateBackend<C> {
             )
         })?;
 
-        let config =
-            traditional_http_config_for_service(&service_id, settings).ok_or_else(|| {
+        let config = traditional_http_config_for_request(&service_id, settings, &params.text)
+            .ok_or_else(|| {
                 QuickTranslateBackendError::new(format!(
                     "Service '{service_id}' is not handled by the native traditional HTTP backend"
                 ))
@@ -687,15 +1112,18 @@ impl<C> NativeTraditionalHttpQuickTranslateBackend<C> {
 }
 
 /// Native backend for Bing's stateful two-phase free web flow (fetch session
-/// credentials from the translator page, then translate). Uses the global host;
-/// the region-based China-host toggle is not a persisted setting yet.
+/// credentials from the translator page, then translate).
 pub struct NativeBingQuickTranslateBackend<C> {
     http_client: C,
+    settings: Option<SettingsSnapshot>,
 }
 
 impl<C> NativeBingQuickTranslateBackend<C> {
     pub fn new(http_client: C) -> Self {
-        Self { http_client }
+        Self {
+            http_client,
+            settings: None,
+        }
     }
 
     pub fn http_client(&self) -> &C {
@@ -704,10 +1132,8 @@ impl<C> NativeBingQuickTranslateBackend<C> {
 }
 
 impl<C: BingHttpClient> QuickTranslateBackend for NativeBingQuickTranslateBackend<C> {
-    fn configure(
-        &mut self,
-        _settings: &SettingsSnapshot,
-    ) -> Result<(), QuickTranslateBackendError> {
+    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
+        self.settings = Some(settings.clone());
         Ok(())
     }
 
@@ -715,9 +1141,16 @@ impl<C: BingHttpClient> QuickTranslateBackend for NativeBingQuickTranslateBacken
         &mut self,
         params: &TranslateParams,
     ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        let enable_international_services = self
+            .settings
+            .as_ref()
+            .and_then(|settings| settings.enable_international_services)
+            .unwrap_or(true);
+        let host = bing_host(!enable_international_services);
+
         translate_bing_service(
             &mut self.http_client,
-            BING_GLOBAL_HOST,
+            host,
             &params.text,
             params
                 .from
@@ -757,55 +1190,88 @@ impl<C: BingHttpClient> QuickTranslateBackend for NativeBingQuickTranslateBacken
     }
 }
 
-impl QuickTranslateBackend for CompatHostFacade {
+pub struct LocalAiWorkerQuickTranslateBackend {
+    facade: DirectWorkerFacade,
+    settings: Option<SettingsSnapshot>,
+}
+
+impl LocalAiWorkerQuickTranslateBackend {
+    pub fn new(facade: DirectWorkerFacade) -> Self {
+        Self {
+            facade,
+            settings: None,
+        }
+    }
+
+    pub fn into_facade(self) -> DirectWorkerFacade {
+        self.facade
+    }
+
+    fn settings(&self) -> Result<&SettingsSnapshot, QuickTranslateBackendError> {
+        self.settings.as_ref().ok_or_else(|| {
+            QuickTranslateBackendError::new("Local AI worker backend must be configured before use")
+        })
+    }
+}
+
+impl QuickTranslateBackend for LocalAiWorkerQuickTranslateBackend {
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
-        CompatHostFacade::configure(
-            self,
+        DirectWorkerFacade::configure(
+            &mut self.facade,
             &ConfigureParams {
                 settings: settings.clone(),
             },
         )
-        .map(|_| ())
-        .map_err(QuickTranslateBackendError::from)
+        .map_err(|error| {
+            QuickTranslateBackendError::new(error.process_message("Local AI worker"))
+        })?;
+        self.settings = Some(settings.clone());
+        Ok(())
     }
 
     fn translate(
         &mut self,
         params: &TranslateParams,
     ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
-        CompatHostFacade::translate(self, params).map_err(QuickTranslateBackendError::from)
-    }
-
-    fn correct_grammar(
-        &mut self,
-        params: &GrammarCorrectParams,
-    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
-        CompatHostFacade::grammar_correct(self, params).map_err(QuickTranslateBackendError::from)
+        self.translate_stream(params).map(|stream| stream.result)
     }
 
     fn translate_stream(
         &mut self,
         params: &TranslateParams,
     ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
-        let result = CompatHostFacade::translate_stream(self, params)
-            .map_err(QuickTranslateBackendError::from)?;
-        let chunks = self
-            .take_events()
-            .into_iter()
-            .filter(|event| event.event == compat_events::TRANSLATE_CHUNK)
-            .filter_map(|event| event.data)
-            .filter_map(|data| serde_json::from_value::<TranslateChunkEventData>(data).ok())
-            .map(|chunk| chunk.text)
-            .collect();
-
-        Ok(QuickTranslateStreamResult { result, chunks })
+        let local_params = local_ai_params_from_translate_params(params, self.settings()?, None);
+        let mut chunks = Vec::new();
+        let result = self
+            .facade
+            .local_ai_translate_stream_observing_chunks(&local_params, |chunk| {
+                chunks.push(chunk.text);
+            })
+            .map_err(|error| {
+                QuickTranslateBackendError::new(error.process_message("Local AI worker"))
+            })?;
+        Ok(local_ai_stream_result_to_quick_translate_result(
+            result, chunks,
+        ))
     }
 
-    fn mdx_lookup(
+    fn correct_grammar(
         &mut self,
-        params: &MdxLookupParams,
-    ) -> Result<MdxLookupResult, QuickTranslateBackendError> {
-        CompatHostFacade::mdx_lookup(self, params).map_err(QuickTranslateBackendError::from)
+        params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        let local_params = local_ai_params_from_grammar_params(params, self.settings()?);
+        let mut chunks = Vec::new();
+        let result = self
+            .facade
+            .local_ai_grammar_stream_observing_chunks(&local_params, |chunk| {
+                chunks.push(chunk.text);
+            })
+            .map_err(|error| {
+                QuickTranslateBackendError::new(error.process_message("Local AI worker"))
+            })?;
+        Ok(local_ai_grammar_stream_result_to_grammar_result(
+            params, result, chunks,
+        ))
     }
 }
 
@@ -1078,12 +1544,12 @@ pub fn run_quick_translate_service<B: QuickTranslateBackend>(
 
 pub fn run_quick_translate_with_current_app_dir(plan: QuickTranslatePlan) -> QuickTranslateOutcome {
     match current_app_dir() {
-        Ok(app_dir) => run_quick_translate_with_packaged_host(plan, app_dir),
+        Ok(app_dir) => run_quick_translate_with_packaged_app_dir(plan, app_dir),
         Err(message) => QuickTranslateOutcome::all_failed(&plan, message),
     }
 }
 
-pub fn run_quick_translate_with_packaged_host(
+pub fn run_quick_translate_with_packaged_app_dir(
     plan: QuickTranslatePlan,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateOutcome {
@@ -1094,7 +1560,7 @@ pub fn run_quick_translate_with_packaged_host(
             .service_requests()
             .into_iter()
             .map(|request| {
-                run_quick_translate_service_with_packaged_host(request, &app_dir).outcome
+                run_quick_translate_service_with_packaged_app_dir(request, &app_dir).outcome
             })
             .collect(),
     }
@@ -1104,35 +1570,48 @@ pub fn run_quick_translate_service_with_current_app_dir(
     request: QuickTranslateServiceRequest,
 ) -> QuickTranslateServiceUpdate {
     match current_app_dir() {
-        Ok(app_dir) => run_quick_translate_service_with_packaged_host(request, app_dir),
+        Ok(app_dir) => run_quick_translate_service_with_packaged_app_dir(request, app_dir),
         Err(message) => service_error_update(request, message),
     }
 }
 
-pub fn run_quick_translate_service_with_packaged_host(
+pub fn run_quick_translate_service_with_packaged_app_dir(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
-    if request_uses_native_openai(&request) {
-        return run_quick_translate_service_with_native_openai(request);
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+        request,
+        app_dir,
+        RetainedWorkerPolicy::from_environment(),
+    )
+}
+
+pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    worker_policy: RetainedWorkerPolicy,
+) -> QuickTranslateServiceUpdate {
+    if let Some(error) = local_ai_quick_translate_local_error(&request, worker_policy) {
+        return service_error_update(request, error);
     }
 
-    if request_uses_native_custom_streaming(&request) {
-        return run_quick_translate_service_with_native_custom_streaming(request);
+    if quick_translate_request_can_route_natively(&request) {
+        return run_quick_translate_service_with_native_route(request)
+            .expect("native route was checked before dispatch");
     }
 
-    if request_uses_native_traditional_http(&request) {
-        return run_quick_translate_service_with_native_traditional_http(request);
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    if let Some(native_request) =
+        auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
+    {
+        return run_quick_translate_service_with_native_openai(native_request);
     }
 
-    if request_uses_native_bing(&request) {
-        return run_quick_translate_service_with_native_bing(request);
+    if request_uses_local_ai_worker_bridge(&request) {
+        return run_quick_translate_service_with_local_ai_bridge(request, app_dir);
     }
 
-    match CompatHostFacade::spawn_packaged(app_dir) {
-        Ok(mut backend) => run_quick_translate_service(&mut backend, &request),
-        Err(error) => service_error_update(request, error.to_string()),
-    }
+    unsupported_rust_native_route_update(request)
 }
 
 pub fn run_quick_translate_streaming_service_with_current_app_dir(
@@ -1142,9 +1621,9 @@ pub fn run_quick_translate_streaming_service_with_current_app_dir(
 
     std::thread::spawn(move || {
         let update = match current_app_dir() {
-            Ok(app_dir) => {
-                run_quick_translate_streaming_service_with_packaged_host(request, app_dir, &sender)
-            }
+            Ok(app_dir) => run_quick_translate_streaming_service_with_packaged_app_dir(
+                request, app_dir, &sender,
+            ),
             Err(message) => service_error_update(request, message),
         };
 
@@ -1154,65 +1633,127 @@ pub fn run_quick_translate_streaming_service_with_current_app_dir(
     receiver
 }
 
-fn run_quick_translate_streaming_service_with_packaged_host(
+fn run_quick_translate_streaming_service_with_packaged_app_dir(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
+    if let Some(error) =
+        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::from_environment())
+    {
+        return service_error_update(request, error);
+    }
+
+    if quick_translate_request_can_route_natively(&request) {
+        return run_quick_translate_streaming_service_with_native_route(request, sender)
+            .expect("native route was checked before dispatch");
+    }
+
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    if let Some(native_request) =
+        auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
+    {
+        return run_quick_translate_streaming_service_with_native_openai(native_request, sender);
+    }
+
+    if request_uses_local_ai_worker_bridge(&request) {
+        return run_quick_translate_streaming_service_with_local_ai_bridge(
+            request, app_dir, sender,
+        );
+    }
+
+    unsupported_rust_native_route_update(request)
+}
+
+pub fn quick_translate_request_can_route_natively(request: &QuickTranslateServiceRequest) -> bool {
+    request_uses_native_openai(request)
+        || request_uses_native_custom_streaming(request)
+        || request_uses_native_traditional_http(request)
+        || request_uses_native_bing(request)
+        || request_uses_native_mdx(request)
+}
+
+pub fn auto_foundry_local_native_probe_request<R: FoundryLocalEndpointResolver>(
+    request: &QuickTranslateServiceRequest,
+    foundry_local_endpoint_resolver: &mut R,
+) -> Option<QuickTranslateServiceRequest> {
+    if !request_should_probe_auto_foundry_local(request) {
+        return None;
+    }
+
+    let endpoint = foundry_local_endpoint_resolver
+        .resolve_chat_completions_endpoint()
+        .ok()
+        .flatten()?;
+
+    let mut native_request = request.clone();
+    native_request.settings.foundry_local_endpoint = Some(endpoint);
+    Some(native_request)
+}
+
+pub fn run_quick_translate_service_with_native_route(
+    request: QuickTranslateServiceRequest,
+) -> Option<QuickTranslateServiceUpdate> {
     if request_uses_native_openai(&request) {
-        return run_quick_translate_streaming_service_with_native_openai(request, sender);
+        return Some(run_quick_translate_service_with_native_openai(request));
     }
 
     if request_uses_native_custom_streaming(&request) {
-        return run_quick_translate_streaming_service_with_native_custom_streaming(request, sender);
+        return Some(run_quick_translate_service_with_native_custom_streaming(
+            request,
+        ));
     }
 
     if request_uses_native_traditional_http(&request) {
-        return run_quick_translate_streaming_service_with_native_traditional_http(request, sender);
+        return Some(run_quick_translate_service_with_native_traditional_http(
+            request,
+        ));
     }
 
     if request_uses_native_bing(&request) {
-        return run_quick_translate_streaming_service_with_native_bing(request, sender);
+        return Some(run_quick_translate_service_with_native_bing(request));
     }
 
-    let mut backend = match CompatHostFacade::spawn_packaged(app_dir) {
-        Ok(backend) => backend,
-        Err(error) => return service_error_update(request, error.to_string()),
-    };
-
-    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
-        return service_error_update(request, error.to_string());
+    if request_uses_native_mdx(&request) {
+        return Some(run_quick_translate_service_with_native_mdx(request));
     }
 
-    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
-        return run_quick_translate_service(&mut backend, &request);
+    None
+}
+
+pub fn run_quick_translate_streaming_service_with_native_route(
+    request: QuickTranslateServiceRequest,
+    sender: &UnboundedSender<Message>,
+) -> Option<QuickTranslateServiceUpdate> {
+    if request_uses_native_openai(&request) {
+        return Some(run_quick_translate_streaming_service_with_native_openai(
+            request, sender,
+        ));
     }
 
-    let query_id = request.query_id;
-    let service = request.service.clone();
-    let mut streamed_chunks = Vec::new();
-    let result = backend
-        .translate_stream_observing_chunks(&request.params, |chunk| {
-            streamed_chunks.push(chunk.text.clone());
-            let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                QuickTranslateStreamChunk {
-                    query_id,
-                    service: service.clone(),
-                    text: chunk.text,
-                },
-            ));
-        })
-        .map_err(QuickTranslateBackendError::from);
-
-    QuickTranslateServiceUpdate {
-        query_id,
-        outcome: QuickTranslateServiceOutcome {
-            service: request.service,
-            grammar_result: None,
-            streamed_chunks,
-            result,
-        },
+    if request_uses_native_custom_streaming(&request) {
+        return Some(
+            run_quick_translate_streaming_service_with_native_custom_streaming(request, sender),
+        );
     }
+
+    if request_uses_native_traditional_http(&request) {
+        return Some(
+            run_quick_translate_streaming_service_with_native_traditional_http(request, sender),
+        );
+    }
+
+    if request_uses_native_bing(&request) {
+        return Some(run_quick_translate_streaming_service_with_native_bing(
+            request, sender,
+        ));
+    }
+
+    if request_uses_native_mdx(&request) {
+        return Some(run_quick_translate_service_with_native_mdx(request));
+    }
+
+    None
 }
 
 fn run_quick_translate_service_with_native_openai(
@@ -1394,6 +1935,74 @@ fn run_quick_translate_service_with_native_bing(
     run_quick_translate_service(&mut backend, &request)
 }
 
+fn run_quick_translate_service_with_native_mdx(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = NativeMdxQuickTranslateBackend::default();
+    run_quick_translate_service(&mut backend, &request)
+}
+
+fn run_quick_translate_service_with_local_ai_bridge(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+) -> QuickTranslateServiceUpdate {
+    match DirectWorkerFacade::spawn_packaged_local_ai(app_dir) {
+        Ok(facade) => {
+            let mut backend = LocalAiWorkerQuickTranslateBackend::new(facade);
+            run_quick_translate_service(&mut backend, &request)
+        }
+        Err(error) => service_error_update(request, error.process_message("Local AI worker")),
+    }
+}
+
+fn run_quick_translate_streaming_service_with_local_ai_bridge(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match DirectWorkerFacade::spawn_packaged_local_ai(app_dir) {
+        Ok(facade) => LocalAiWorkerQuickTranslateBackend::new(facade),
+        Err(error) => {
+            return service_error_update(request, error.process_message("Local AI worker"));
+        }
+    };
+
+    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
+        return service_error_update(request, error.to_string());
+    }
+
+    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
+        return run_quick_translate_service(&mut backend, &request);
+    }
+
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    match backend.translate_stream(&request.params) {
+        Ok(streamed) => {
+            for chunk in &streamed.chunks {
+                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                    QuickTranslateStreamChunk {
+                        query_id,
+                        service: service.clone(),
+                        text: chunk.clone(),
+                    },
+                ));
+            }
+
+            QuickTranslateServiceUpdate {
+                query_id,
+                outcome: QuickTranslateServiceOutcome {
+                    service: request.service,
+                    grammar_result: None,
+                    streamed_chunks: streamed.chunks,
+                    result: Ok(streamed.result),
+                },
+            }
+        }
+        Err(error) => service_error_update(request, error.to_string()),
+    }
+}
+
 fn run_quick_translate_streaming_service_with_native_bing(
     request: QuickTranslateServiceRequest,
     sender: &UnboundedSender<Message>,
@@ -1443,8 +2052,41 @@ fn request_uses_native_bing(request: &QuickTranslateServiceRequest) -> bool {
     request.service.id == "bing"
 }
 
+fn request_uses_native_mdx(request: &QuickTranslateServiceRequest) -> bool {
+    request.execution_kind == QuickTranslateExecutionKind::Translate
+        && request.service.id.starts_with("mdx::")
+        && native_mdx_lookup_can_route(
+            &MdxLookupParams {
+                dictionary_id: request.service.id.clone(),
+                query: request.params.text.clone(),
+                fuzzy: false,
+            },
+            &request.settings,
+        )
+}
+
 fn request_uses_native_openai(request: &QuickTranslateServiceRequest) -> bool {
-    openai_compatible_config_for_service(&request.service.id, &request.settings).is_some()
+    openai_compatible_service_can_route_natively(&request.service.id, &request.settings)
+}
+
+fn request_should_probe_auto_foundry_local(request: &QuickTranslateServiceRequest) -> bool {
+    if request.service.id != "windows-local-ai"
+        || local_ai_provider_mode(&request.settings) != local_ai_provider_modes::AUTO
+    {
+        return false;
+    }
+
+    match request.settings.foundry_local_endpoint.as_deref() {
+        Some(endpoint) if !endpoint.trim().is_empty() => return false,
+        _ => {}
+    }
+
+    matches!(
+        request.execution_kind,
+        QuickTranslateExecutionKind::Translate
+            | QuickTranslateExecutionKind::TranslateStream
+            | QuickTranslateExecutionKind::GrammarCorrection
+    )
 }
 
 fn request_uses_native_custom_streaming(request: &QuickTranslateServiceRequest) -> bool {
@@ -1452,13 +2094,433 @@ fn request_uses_native_custom_streaming(request: &QuickTranslateServiceRequest) 
 }
 
 fn request_uses_native_traditional_http(request: &QuickTranslateServiceRequest) -> bool {
-    traditional_http_config_for_service(&request.service.id, &request.settings).is_some()
+    traditional_http_config_for_request(
+        &request.service.id,
+        &request.settings,
+        &request.params.text,
+    )
+    .is_some()
+}
+
+fn request_uses_local_ai_worker_bridge(request: &QuickTranslateServiceRequest) -> bool {
+    request.service.id == "windows-local-ai" && !request_uses_native_openai(request)
+}
+
+pub fn local_ai_quick_translate_local_error(
+    request: &QuickTranslateServiceRequest,
+    worker_policy: RetainedWorkerPolicy,
+) -> Option<&'static str> {
+    if request.service.id != "windows-local-ai" {
+        return None;
+    }
+
+    if matches!(
+        request.execution_kind,
+        QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
+    ) {
+        let provider_mode = local_ai_provider_mode(&request.settings);
+        let to_language = dotnet_language_name_from_code(request.params.to.as_deref(), "English");
+        if dotnet_language_name_is_auto(&to_language) {
+            return Some("No local AI provider supports this language pair");
+        }
+
+        if provider_mode != local_ai_provider_modes::OPENVINO {
+            return request_uses_local_ai_worker_bridge(request)
+                .then(|| worker_policy.local_ai_worker_disabled_message())
+                .flatten();
+        }
+
+        let Some(from_language) =
+            strict_dotnet_language_name_from_code(request.params.from.as_deref(), "Auto")
+        else {
+            return Some("No local AI provider supports this language pair");
+        };
+        let Some(to_language) =
+            strict_dotnet_language_name_from_code(request.params.to.as_deref(), "English")
+        else {
+            return Some("No local AI provider supports this language pair");
+        };
+        if !openvino_supports_nllb_language_pair(&from_language, &to_language) {
+            return Some("No local AI provider supports this language pair");
+        }
+
+        if open_vino_cache_status_for_settings(&request.settings) != OpenVinoCacheStatus::Ready {
+            return Some(
+                "OpenVINO runtime or NLLB-200 model is not downloaded. Open Settings -> Services and click \"Download model\".",
+            );
+        }
+
+        return request_uses_local_ai_worker_bridge(request)
+            .then(|| worker_policy.local_ai_worker_disabled_message())
+            .flatten();
+    }
+
+    if request.execution_kind == QuickTranslateExecutionKind::GrammarCorrection
+        && request.grammar_params.is_some()
+        && local_ai_provider_mode(&request.settings) == local_ai_provider_modes::OPENVINO
+    {
+        return Some("No local AI provider supports grammar correction for this language");
+    }
+
+    request_uses_local_ai_worker_bridge(request)
+        .then(|| worker_policy.local_ai_worker_disabled_message())
+        .flatten()
+}
+
+fn openvino_supports_nllb_language_pair(from_language: &str, to_language: &str) -> bool {
+    if dotnet_language_name_is_auto(to_language) || !openvino_supports_nllb_language(to_language) {
+        return false;
+    }
+
+    dotnet_language_name_is_auto(from_language) || openvino_supports_nllb_language(from_language)
+}
+
+fn dotnet_language_name_is_auto(language: &str) -> bool {
+    language.trim().eq_ignore_ascii_case("Auto")
+}
+
+fn openvino_supports_nllb_language(language: &str) -> bool {
+    matches!(
+        language.trim().to_ascii_lowercase().as_str(),
+        "simplifiedchinese"
+            | "chinesesimplified"
+            | "traditionalchinese"
+            | "chinesetraditional"
+            | "classicalchinese"
+            | "chineseclassical"
+            | "japanese"
+            | "korean"
+            | "english"
+            | "german"
+            | "dutch"
+            | "swedish"
+            | "norwegian"
+            | "danish"
+            | "french"
+            | "spanish"
+            | "portuguese"
+            | "italian"
+            | "romanian"
+            | "russian"
+            | "polish"
+            | "czech"
+            | "ukrainian"
+            | "bulgarian"
+            | "slovak"
+            | "slovenian"
+            | "estonian"
+            | "latvian"
+            | "lithuanian"
+            | "greek"
+            | "hungarian"
+            | "finnish"
+            | "turkish"
+            | "arabic"
+            | "persian"
+            | "hebrew"
+            | "hindi"
+            | "bengali"
+            | "tamil"
+            | "telugu"
+            | "urdu"
+            | "vietnamese"
+            | "thai"
+            | "indonesian"
+            | "malay"
+            | "filipino"
+    )
+}
+
+fn unsupported_rust_native_route_update(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    if request.execution_kind == QuickTranslateExecutionKind::Translate
+        && request.service.id.starts_with("mdx::")
+    {
+        let params = MdxLookupParams {
+            dictionary_id: request.service.id.clone(),
+            query: request.params.text.clone(),
+            fuzzy: false,
+        };
+
+        if native_mdx_lookup_needs_credentials(&params, &request.settings) {
+            return service_error_update(
+                request,
+                "MDX dictionary credentials are required before lookup",
+            );
+        }
+
+        if let Some(error) = native_mdx_lookup_local_input_error(&params, &request.settings) {
+            return service_error_update(request, error.to_string());
+        }
+    }
+
+    let service_id = request.service.id.clone();
+    service_error_update(
+        request,
+        format!("Service '{service_id}' is not supported by the Rust-native quick translate route"),
+    )
 }
 
 fn native_openai_service_name(service_id: &str) -> String {
     find_translation_service_descriptor(service_id)
         .map(|descriptor| descriptor.display_name.to_string())
         .unwrap_or_else(|| service_id.to_string())
+}
+
+fn local_ai_params_from_translate_params(
+    params: &TranslateParams,
+    settings: &SettingsSnapshot,
+    include_explanations: Option<bool>,
+) -> LocalAiTranslateParams {
+    LocalAiTranslateParams {
+        text: params.text.clone(),
+        from_language: dotnet_language_name_from_code(params.from.as_deref(), "Auto"),
+        to_language: dotnet_language_name_from_code(params.to.as_deref(), "English"),
+        provider_mode: local_ai_provider_mode(settings),
+        custom_prompt: params.custom_prompt.clone(),
+        include_explanations,
+    }
+}
+
+fn local_ai_params_from_grammar_params(
+    params: &GrammarCorrectParams,
+    settings: &SettingsSnapshot,
+) -> LocalAiTranslateParams {
+    LocalAiTranslateParams {
+        text: params.text.clone(),
+        from_language: dotnet_language_name_from_code(params.language.as_deref(), "Auto"),
+        to_language: "English".to_string(),
+        provider_mode: local_ai_provider_mode(settings),
+        custom_prompt: None,
+        include_explanations: Some(params.include_explanations),
+    }
+}
+
+fn local_ai_stream_result_to_quick_translate_result(
+    result: TranslateStreamResult,
+    chunks: Vec<String>,
+) -> QuickTranslateStreamResult {
+    let translated_text = result.full_text.unwrap_or_else(|| chunks.concat());
+    QuickTranslateStreamResult {
+        result: TranslationResultDto {
+            translated_text,
+            service_id: Some("windows-local-ai".to_string()),
+            service_name: Some(native_openai_service_name("windows-local-ai")),
+            detected_language: None,
+            result_kind: Some("Success".to_string()),
+            info_message: None,
+            timing_ms: None,
+            alternatives: None,
+            word_result: None,
+        },
+        chunks,
+    }
+}
+
+fn local_ai_grammar_stream_result_to_grammar_result(
+    params: &GrammarCorrectParams,
+    result: TranslateStreamResult,
+    chunks: Vec<String>,
+) -> GrammarCorrectResultDto {
+    let raw_text = result.full_text.unwrap_or_else(|| chunks.concat());
+    let service_name = native_openai_service_name("windows-local-ai");
+    let parsed = parse_grammar_correction(&raw_text, &params.text, &service_name, 0);
+    let has_corrections = parsed.has_corrections();
+
+    GrammarCorrectResultDto {
+        original_text: parsed.original_text,
+        corrected_text: parsed.corrected_text,
+        explanation: parsed.explanation,
+        raw_text: Some(raw_text),
+        service_id: Some("windows-local-ai".to_string()),
+        service_name: Some(parsed.service_name),
+        language: params
+            .language
+            .as_deref()
+            .map(dotnet_language_code_from_name),
+        timing_ms: Some(parsed.timing_ms),
+        has_corrections,
+    }
+}
+
+fn local_ai_provider_mode(settings: &SettingsSnapshot) -> String {
+    match settings
+        .local_ai_provider
+        .as_deref()
+        .unwrap_or(local_ai_provider_modes::AUTO)
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "windowsai" | "windows-ai" | "phi-silica" | "phisilica" => {
+            local_ai_provider_modes::WINDOWS_AI.to_string()
+        }
+        "foundrylocal" | "foundry-local" => local_ai_provider_modes::FOUNDRY_LOCAL.to_string(),
+        "openvino" | "open-vino" => local_ai_provider_modes::OPENVINO.to_string(),
+        _ => local_ai_provider_modes::AUTO.to_string(),
+    }
+}
+
+fn dotnet_language_name_from_code(code: Option<&str>, default_name: &str) -> String {
+    strict_dotnet_language_name_from_code(code, default_name)
+        .unwrap_or_else(|| default_name.to_string())
+}
+
+fn strict_dotnet_language_name_from_code(code: Option<&str>, default_name: &str) -> Option<String> {
+    let Some(code) = code.map(str::trim).filter(|code| !code.is_empty()) else {
+        return Some(default_name.to_string());
+    };
+
+    let normalized = code.to_ascii_lowercase();
+    let primary_subtag = normalized
+        .split_once('-')
+        .map(|(primary, _)| primary)
+        .unwrap_or(normalized.as_str());
+    let language_name = match normalized.as_str() {
+        "auto" => "Auto",
+        "zh-cn" | "zh-hans" | "zh" | "simplifiedchinese" | "chinesesimplified" => {
+            "SimplifiedChinese"
+        }
+        "zh-tw" | "zh-hant" | "traditionalchinese" | "chinesetraditional" => "TraditionalChinese",
+        "zh-classical" | "classicalchinese" | "chineseclassical" => "ClassicalChinese",
+        "english" => "English",
+        "japanese" => "Japanese",
+        "korean" => "Korean",
+        "french" => "French",
+        "spanish" => "Spanish",
+        "portuguese" => "Portuguese",
+        "italian" => "Italian",
+        "german" => "German",
+        "russian" => "Russian",
+        "arabic" => "Arabic",
+        "swedish" => "Swedish",
+        "romanian" => "Romanian",
+        "thai" => "Thai",
+        "dutch" => "Dutch",
+        "hungarian" => "Hungarian",
+        "greek" => "Greek",
+        "danish" => "Danish",
+        "finnish" => "Finnish",
+        "polish" => "Polish",
+        "czech" => "Czech",
+        "turkish" => "Turkish",
+        "ukrainian" => "Ukrainian",
+        "bulgarian" => "Bulgarian",
+        "slovak" => "Slovak",
+        "slovenian" => "Slovenian",
+        "estonian" => "Estonian",
+        "latvian" => "Latvian",
+        "lithuanian" => "Lithuanian",
+        "indonesian" => "Indonesian",
+        "malay" => "Malay",
+        "vietnamese" => "Vietnamese",
+        "persian" => "Persian",
+        "hindi" => "Hindi",
+        "telugu" => "Telugu",
+        "tamil" => "Tamil",
+        "urdu" => "Urdu",
+        "filipino" => "Filipino",
+        "bengali" => "Bengali",
+        "norwegian" => "Norwegian",
+        "hebrew" => "Hebrew",
+        _ => match primary_subtag {
+            "en" => "English",
+            "ja" => "Japanese",
+            "ko" => "Korean",
+            "fr" => "French",
+            "es" => "Spanish",
+            "pt" => "Portuguese",
+            "it" => "Italian",
+            "de" => "German",
+            "ru" => "Russian",
+            "ar" => "Arabic",
+            "sv" => "Swedish",
+            "ro" => "Romanian",
+            "th" => "Thai",
+            "nl" => "Dutch",
+            "hu" => "Hungarian",
+            "el" => "Greek",
+            "da" => "Danish",
+            "fi" => "Finnish",
+            "pl" => "Polish",
+            "cs" => "Czech",
+            "tr" => "Turkish",
+            "uk" => "Ukrainian",
+            "bg" => "Bulgarian",
+            "sk" => "Slovak",
+            "sl" => "Slovenian",
+            "et" => "Estonian",
+            "lv" => "Latvian",
+            "lt" => "Lithuanian",
+            "id" => "Indonesian",
+            "ms" => "Malay",
+            "vi" => "Vietnamese",
+            "fa" => "Persian",
+            "hi" => "Hindi",
+            "te" => "Telugu",
+            "ta" => "Tamil",
+            "ur" => "Urdu",
+            "tl" | "fil" => "Filipino",
+            "bn" => "Bengali",
+            "no" | "nb" => "Norwegian",
+            "he" | "iw" => "Hebrew",
+            _ => return None,
+        },
+    };
+
+    Some(language_name.to_string())
+}
+
+fn dotnet_language_code_from_name(name: &str) -> String {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "auto" => "auto",
+        "simplifiedchinese" | "chinesesimplified" | "zh-cn" | "zh-hans" | "zh" => "zh-CN",
+        "traditionalchinese" | "chinesetraditional" | "zh-tw" | "zh-hant" => "zh-TW",
+        "classicalchinese" | "chineseclassical" | "zh-classical" => "zh-classical",
+        "english" | "en" => "en",
+        "japanese" | "ja" => "ja",
+        "korean" | "ko" => "ko",
+        "french" | "fr" => "fr",
+        "spanish" | "es" => "es",
+        "portuguese" | "pt" => "pt",
+        "italian" | "it" => "it",
+        "german" | "de" => "de",
+        "russian" | "ru" => "ru",
+        "arabic" | "ar" => "ar",
+        "swedish" | "sv" => "sv",
+        "romanian" | "ro" => "ro",
+        "thai" | "th" => "th",
+        "dutch" | "nl" => "nl",
+        "hungarian" | "hu" => "hu",
+        "greek" | "el" => "el",
+        "danish" | "da" => "da",
+        "finnish" | "fi" => "fi",
+        "polish" | "pl" => "pl",
+        "czech" | "cs" => "cs",
+        "turkish" | "tr" => "tr",
+        "ukrainian" | "uk" => "uk",
+        "bulgarian" | "bg" => "bg",
+        "slovak" | "sk" => "sk",
+        "slovenian" | "sl" => "sl",
+        "estonian" | "et" => "et",
+        "latvian" | "lv" => "lv",
+        "lithuanian" | "lt" => "lt",
+        "indonesian" | "id" => "id",
+        "malay" | "ms" => "ms",
+        "vietnamese" | "vi" => "vi",
+        "persian" | "fa" => "fa",
+        "hindi" | "hi" => "hi",
+        "telugu" | "te" => "te",
+        "tamil" | "ta" => "ta",
+        "urdu" | "ur" => "ur",
+        "filipino" | "tl" | "fil" => "tl",
+        "bengali" | "bn" => "bn",
+        "norwegian" | "no" | "nb" => "no",
+        "hebrew" | "he" | "iw" => "he",
+        other => other,
+    }
+    .to_string()
 }
 
 fn service_error_update(
@@ -1605,6 +2667,7 @@ pub fn apply_quick_translate_stream_chunk(
     item.streamed_chunks.push(chunk.text);
     item.grammar_result = None;
     item.alternatives = None;
+    item.word_result = None;
     item.no_result = false;
     item.service_name = chunk.service.name;
     item.status = ResultStatus::Streaming;
@@ -1647,6 +2710,7 @@ fn mark_quick_translate_started(
             result.body.clear();
             result.grammar_result = None;
             result.alternatives = None;
+            result.word_result = None;
             result.streamed_chunks.clear();
             result.no_result = false;
             result.status = ResultStatus::Loading;
@@ -1796,6 +2860,7 @@ fn mdx_lookup_result_to_translation_result(
             info_message: Some(format!("No result found in dictionary: {query}")),
             timing_ms: None,
             alternatives: None,
+            word_result: None,
         };
     }
 
@@ -1820,6 +2885,7 @@ fn mdx_lookup_result_to_translation_result(
         info_message: None,
         timing_ms: None,
         alternatives: None,
+        word_result: None,
     }
 }
 
@@ -1844,6 +2910,7 @@ fn grammar_result_to_translation_result(
         info_message: None,
         timing_ms: result.timing_ms,
         alternatives: None,
+        word_result: None,
     }
 }
 
@@ -1936,6 +3003,11 @@ fn apply_success(
     } else {
         result.alternatives.clone()
     };
+    item.word_result = if no_result {
+        None
+    } else {
+        result.word_result.clone()
+    };
     item.streamed_chunks = streamed_chunks;
     item.no_result = no_result;
     item.service_name = result
@@ -1961,6 +3033,7 @@ fn apply_error(
     item.body = error.message;
     item.grammar_result = None;
     item.alternatives = None;
+    item.word_result = None;
     item.streamed_chunks.clear();
     item.no_result = false;
     item.service_name = service.name.clone();

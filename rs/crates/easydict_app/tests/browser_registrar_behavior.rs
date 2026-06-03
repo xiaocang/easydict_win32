@@ -188,6 +188,101 @@ fn status_requires_registry_manifest_and_bridge_exe_to_exist() {
 }
 
 #[test]
+fn status_validates_manifest_name_type_and_current_bridge_path() {
+    let sandbox = TestSandbox::new("status_manifest_integrity");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &["custom-chrome-extension".to_string()],
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let manifest_path = PathBuf::from(
+        core.registry()
+            .value(&chrome_registry_path())
+            .expect("chrome registry value"),
+    );
+    let bridge_path = core.bridge_exe_path().display().to_string();
+
+    assert!(core.status().chrome.installed);
+
+    write_json(
+        &manifest_path,
+        json!({
+            "name": "not.easydict.bridge",
+            "description": "Easydict native messaging bridge",
+            "path": bridge_path.clone(),
+            "type": "stdio",
+            "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
+        }),
+    );
+    assert!(!core.status().chrome.installed);
+
+    write_json(
+        &manifest_path,
+        json!({
+            "name": "com.easydict.bridge",
+            "description": "Easydict native messaging bridge",
+            "path": bridge_path.clone(),
+            "type": "pipe",
+            "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
+        }),
+    );
+    assert!(!core.status().chrome.installed);
+
+    let other_bridge_path = sandbox.path("other-easydict-native-bridge.exe");
+    fs::write(&other_bridge_path, b"bridge").expect("write other bridge");
+    write_json(
+        &manifest_path,
+        json!({
+            "name": "com.easydict.bridge",
+            "description": "Easydict native messaging bridge",
+            "path": other_bridge_path.display().to_string(),
+            "type": "stdio",
+            "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
+        }),
+    );
+    assert!(!core.status().chrome.installed);
+
+    write_json(
+        &manifest_path,
+        json!({
+            "name": "com.easydict.bridge",
+            "description": "Easydict native messaging bridge",
+            "path": bridge_path,
+            "type": "stdio",
+            "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
+        }),
+    );
+    assert!(core.status().chrome.installed);
+}
+
+#[test]
+fn status_accepts_manifests_with_custom_extension_ids() {
+    let sandbox = TestSandbox::new("status_custom_extension_ids");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    core.install(
+        true,
+        true,
+        &source_bridge,
+        &["custom-chrome-extension".to_string()],
+        "custom-firefox@example.test",
+    );
+
+    let status = core.status();
+    assert!(status.chrome.installed);
+    assert!(status.firefox.installed);
+}
+
+#[test]
 fn uninstall_removes_selected_browser_and_cleans_directory_when_none_remain() {
     let sandbox = TestSandbox::new("uninstall");
     let source_bridge = sandbox.write_source_bridge();
@@ -257,6 +352,11 @@ fn default_bridge_directory_matches_the_legacy_local_app_data_location() {
 fn read_json(path: impl AsRef<Path>) -> Value {
     let json = fs::read_to_string(path).expect("manifest should be readable");
     serde_json::from_str(&json).expect("manifest should be valid json")
+}
+
+fn write_json(path: impl AsRef<Path>, value: Value) {
+    let json = serde_json::to_string(&value).expect("manifest should serialize");
+    fs::write(path, json).expect("write manifest");
 }
 
 struct TestSandbox {

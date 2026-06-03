@@ -1,0 +1,8 @@
+[package]
+name = "easydict_pdf_overlay"
+edition = "2021"
+license = "GPL-3.0-or-later"
+version = "0.1.0"
+
+[dependencies]
+harumi = { version = "0.5.1", features = ["draw"] }

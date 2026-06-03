@@ -1,27 +1,6 @@
 use easydict_app::compat_protocol::*;
 
 #[test]
-fn compat_host_method_names_match_migration_contract() {
-    assert_eq!(compat_methods::TRANSLATE, "translate");
-    assert_eq!(compat_methods::TRANSLATE_STREAM, "translate_stream");
-    assert_eq!(compat_methods::GRAMMAR_CORRECT, "grammar_correct");
-    assert_eq!(compat_methods::OCR_RECOGNIZE, "ocr_recognize");
-    assert_eq!(compat_methods::LONGDOC_TRANSLATE, "longdoc_translate");
-    assert_eq!(compat_methods::LOCAL_AI_PREPARE, "local_ai_prepare");
-    assert_eq!(compat_methods::LOCAL_AI_TRANSLATE, "local_ai_translate");
-    assert_eq!(compat_methods::MDX_LOOKUP, "mdx_lookup");
-    assert_eq!(compat_methods::SETTINGS_MIGRATE, "settings_migrate");
-}
-
-#[test]
-fn compat_host_stream_event_names_match_dotnet_contract() {
-    assert_eq!(compat_events::TRANSLATE_CHUNK, "translate_chunk");
-    assert_eq!(compat_events::TRANSLATE_DONE, "translate_done");
-    assert_eq!(compat_events::GRAMMAR_CHUNK, "grammar_chunk");
-    assert_eq!(compat_events::GRAMMAR_DONE, "grammar_done");
-}
-
-#[test]
 fn existing_worker_method_names_stay_compatible_with_dotnet_workers() {
     assert_eq!(worker_methods::CONFIGURE, "configure");
     assert_eq!(worker_methods::CANCEL, "cancel");
@@ -34,19 +13,14 @@ fn existing_worker_method_names_stay_compatible_with_dotnet_workers() {
         worker_methods::LOCAL_AI_TRANSLATE_STREAM,
         "translate_stream"
     );
-    assert_eq!(worker_methods::LOCAL_AI_PREPARE_MODEL, "prepare_model");
-    assert_eq!(worker_methods::OCR_RECOGNIZE, "recognize");
+    assert_eq!(worker_methods::LOCAL_AI_GRAMMAR_STREAM, "grammar_stream");
 
     assert_eq!(worker_events::READY, "ready");
     assert_eq!(worker_events::LONGDOC_BLOCK_TRANSLATED, "block_translated");
-    assert_eq!(
-        worker_events::LOCAL_AI_DOWNLOAD_PROGRESS,
-        "download_progress"
-    );
+    assert_eq!(worker_events::LOCAL_AI_CHUNK, "chunk");
 
     assert_eq!(worker_kinds::LONGDOC, "longdoc");
     assert_eq!(worker_kinds::LOCAL_AI, "localai");
-    assert_eq!(worker_kinds::OCR, "ocr");
     assert_eq!(WORKER_PROTOCOL_VERSION_CURRENT, 1);
 }
 
@@ -54,19 +28,20 @@ fn existing_worker_method_names_stay_compatible_with_dotnet_workers() {
 fn ipc_request_response_and_event_use_json_lines_shape() {
     let request = IpcRequest::new(
         "req-1",
-        worker_methods::LOCAL_AI_TRANSLATE,
+        worker_methods::LOCAL_AI_TRANSLATE_STREAM,
         LocalAiTranslateParams {
             text: "Hello".to_string(),
             from_language: "English".to_string(),
             to_language: "ChineseSimplified".to_string(),
             provider_mode: local_ai_provider_modes::AUTO.to_string(),
             custom_prompt: None,
+            include_explanations: None,
         },
     );
 
     let json = serialize_json_line(&request).expect("request serializes");
     assert!(!json.ends_with('\n'));
-    assert!(json.contains("\"method\":\"translate\""));
+    assert!(json.contains("\"method\":\"translate_stream\""));
     assert!(json.contains("\"fromLanguage\":\"English\""));
     assert!(!json.contains("customPrompt"));
 
@@ -80,16 +55,13 @@ fn ipc_request_response_and_event_use_json_lines_shape() {
 
     let response = IpcResponse::ok(
         "req-1",
-        LocalAiTranslateResult {
-            translated_text: "你好".to_string(),
-            service_id: "windows-local-ai".to_string(),
-            service_name: "Windows Local AI".to_string(),
-            detected_language: Some("English".to_string()),
-            timing_ms: 42,
+        TranslateStreamResult {
+            done: true,
+            full_text: Some("你好".to_string()),
         },
     );
     let response_json = serialize_json(&response).expect("response serializes");
-    assert!(response_json.contains("\"translatedText\":\"你好\""));
+    assert!(response_json.contains("\"fullText\":\"你好\""));
     assert!(response.is_success());
     assert!(!response.is_error());
 
@@ -108,51 +80,21 @@ fn ipc_request_response_and_event_use_json_lines_shape() {
 }
 
 #[test]
-fn translate_stream_events_roundtrip_with_chunk_and_done_payloads() {
-    let chunk = IpcEvent::for_request(
-        "req-stream",
-        compat_events::TRANSLATE_CHUNK,
-        TranslateChunkEventData {
-            text: "你".to_string(),
-        },
-    );
+fn worker_lifecycle_payloads_use_dotnet_json_shape() {
+    let cancel = CancelRequestParams {
+        target_request_id: "rust-worker-7".to_string(),
+    };
+    let cancel_json = serialize_json(&cancel).expect("cancel params serialize");
+    assert_eq!(cancel_json, "{\"targetRequestId\":\"rust-worker-7\"}");
 
-    let chunk_json = serialize_json_line(&chunk).expect("chunk event serializes");
-    assert!(chunk_json.contains("\"event\":\"translate_chunk\""));
-    assert!(chunk_json.contains("\"text\":\"你\""));
+    let cancel_result = CancelRequestResult { cancelled: true };
+    let cancel_result_json = serialize_json(&cancel_result).expect("cancel result serializes");
+    assert_eq!(cancel_result_json, "{\"cancelled\":true}");
 
-    let chunk_back: IpcEvent<TranslateChunkEventData> =
-        deserialize_json_line(&chunk_json).expect("chunk event deserializes");
-    assert_eq!(chunk_back.data.expect("chunk data").text, "你");
-
-    let done = IpcEvent::for_request(
-        "req-stream",
-        compat_events::TRANSLATE_DONE,
-        TranslationResultDto {
-            translated_text: "你好".to_string(),
-            service_id: Some("openai".to_string()),
-            service_name: Some("OpenAI".to_string()),
-            detected_language: None,
-            result_kind: Some("Success".to_string()),
-            info_message: None,
-            timing_ms: Some(99),
-            alternatives: None,
-        },
-    );
-
-    let done_json = serialize_json_line(&done).expect("done event serializes");
-    assert!(done_json.contains("\"event\":\"translate_done\""));
-    assert!(done_json.contains("\"translatedText\":\"你好\""));
-    assert!(done_json.contains("\"resultKind\":\"Success\""));
-    // Absent alternatives are omitted from the wire for back-compat.
-    assert!(!done_json.contains("alternatives"));
-
-    let done_back: IpcEvent<TranslationResultDto> =
-        deserialize_json_line(&done_json).expect("done event deserializes");
-    assert_eq!(
-        done_back.data.expect("done data").service_id.as_deref(),
-        Some("openai")
-    );
+    let shutdown_result = ShutdownResult { ok: true };
+    let shutdown_result_json =
+        serialize_json(&shutdown_result).expect("shutdown result serializes");
+    assert_eq!(shutdown_result_json, "{\"ok\":true}");
 }
 
 #[test]
@@ -166,6 +108,7 @@ fn translation_result_dto_roundtrips_alternatives_with_camel_case_field() {
         info_message: None,
         timing_ms: None,
         alternatives: Some(vec!["Servus".to_string(), "Hallöchen".to_string()]),
+        word_result: None,
     };
 
     let json = serialize_json_line(&dto).expect("dto serializes");
@@ -179,65 +122,101 @@ fn translation_result_dto_roundtrips_alternatives_with_camel_case_field() {
 }
 
 #[test]
-fn grammar_correct_params_result_and_events_roundtrip() {
-    let request = IpcRequest::new(
-        "req-grammar",
-        compat_methods::GRAMMAR_CORRECT,
-        GrammarCorrectParams {
-            text: "I has a apple.".to_string(),
-            language: Some("en".to_string()),
-            services: Some(vec!["openai".to_string()]),
-            include_explanations: true,
-        },
-    );
+fn translation_result_dto_roundtrips_word_result_with_camel_case_fields() {
+    let dto = TranslationResultDto {
+        translated_text: "hello".to_string(),
+        service_id: Some("youdao".to_string()),
+        service_name: Some("Youdao".to_string()),
+        detected_language: Some("en".to_string()),
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result: Some(WordResultDto {
+            phonetics: Some(vec![PhoneticDto {
+                text: Some("heh-loh".to_string()),
+                audio_url: Some("https://dict.youdao.com/dictvoice?audio=hello".to_string()),
+                accent: Some("US".to_string()),
+            }]),
+            definitions: Some(vec![DefinitionDto {
+                part_of_speech: Some("int.".to_string()),
+                meanings: Some(vec!["used as a greeting".to_string()]),
+            }]),
+            examples: Some(vec!["Hello, world.".to_string()]),
+            word_forms: Some(vec![WordFormDto {
+                name: Some("plural".to_string()),
+                value: Some("hellos".to_string()),
+            }]),
+            synonyms: Some(vec![SynonymDto {
+                part_of_speech: Some("n.".to_string()),
+                meaning: Some("greeting".to_string()),
+                words: Some(vec!["salutation".to_string(), "welcome".to_string()]),
+            }]),
+        }),
+    };
 
-    let request_json = serialize_json_line(&request).expect("request serializes");
-    assert!(request_json.contains("\"method\":\"grammar_correct\""));
-    assert!(request_json.contains("\"language\":\"en\""));
-    assert!(request_json.contains("\"includeExplanations\":true"));
+    let json = serialize_json_line(&dto).expect("dto serializes");
+    assert!(json.contains("\"wordResult\""));
+    assert!(json.contains("\"audioUrl\""));
+    assert!(json.contains("\"partOfSpeech\""));
+    assert!(json.contains("\"wordForms\""));
 
-    let parsed: IpcRequest<GrammarCorrectParams> =
-        deserialize_json_line(&request_json).expect("request deserializes");
+    let back: TranslationResultDto = deserialize_json_line(&json).expect("dto deserializes");
+    let word_result = back.word_result.expect("word result");
     assert_eq!(
-        parsed.params.expect("params").services.as_deref(),
+        word_result.phonetics.as_deref().unwrap()[0]
+            .accent
+            .as_deref(),
+        Some("US")
+    );
+    assert_eq!(
+        word_result.definitions.as_deref().unwrap()[0]
+            .meanings
+            .as_deref(),
+        Some(&["used as a greeting".to_string()][..])
+    );
+    assert_eq!(
+        word_result.synonyms.as_deref().unwrap()[0].words.as_deref(),
+        Some(&["salutation".to_string(), "welcome".to_string()][..])
+    );
+}
+
+#[test]
+fn grammar_correct_params_and_result_roundtrip() {
+    let params = GrammarCorrectParams {
+        text: "I has a apple.".to_string(),
+        language: Some("en".to_string()),
+        services: Some(vec!["openai".to_string()]),
+        include_explanations: true,
+    };
+
+    let params_json = serialize_json_line(&params).expect("params serializes");
+    assert!(params_json.contains("\"language\":\"en\""));
+    assert!(params_json.contains("\"includeExplanations\":true"));
+
+    let parsed: GrammarCorrectParams =
+        deserialize_json_line(&params_json).expect("params deserializes");
+    assert_eq!(
+        parsed.services.as_deref(),
         Some(&["openai".to_string()][..])
     );
 
-    let chunk = IpcEvent::for_request(
-        "req-grammar",
-        compat_events::GRAMMAR_CHUNK,
-        GrammarChunkEventData {
-            text: "[CORRECTED]".to_string(),
-        },
-    );
-    let chunk_json = serialize_json_line(&chunk).expect("chunk serializes");
-    assert!(chunk_json.contains("\"event\":\"grammar_chunk\""));
-    let chunk_back: IpcEvent<GrammarChunkEventData> =
-        deserialize_json_line(&chunk_json).expect("chunk deserializes");
-    assert_eq!(chunk_back.data.expect("chunk data").text, "[CORRECTED]");
+    let result = GrammarCorrectResultDto {
+        original_text: "I has a apple.".to_string(),
+        corrected_text: "I have an apple.".to_string(),
+        explanation: Some("Subject-verb agreement and article.".to_string()),
+        raw_text: Some("[CORRECTED]I have an apple.[/CORRECTED]".to_string()),
+        service_id: Some("openai".to_string()),
+        service_name: Some("OpenAI".to_string()),
+        language: Some("en".to_string()),
+        timing_ms: Some(42),
+        has_corrections: true,
+    };
+    let result_json = serialize_json_line(&result).expect("result serializes");
+    assert!(result_json.contains("\"correctedText\":\"I have an apple.\""));
 
-    let done = IpcEvent::for_request(
-        "req-grammar",
-        compat_events::GRAMMAR_DONE,
-        GrammarCorrectResultDto {
-            original_text: "I has a apple.".to_string(),
-            corrected_text: "I have an apple.".to_string(),
-            explanation: Some("Subject-verb agreement and article.".to_string()),
-            raw_text: Some("[CORRECTED]I have an apple.[/CORRECTED]".to_string()),
-            service_id: Some("openai".to_string()),
-            service_name: Some("OpenAI".to_string()),
-            language: Some("en".to_string()),
-            timing_ms: Some(42),
-            has_corrections: true,
-        },
-    );
-    let done_json = serialize_json_line(&done).expect("done serializes");
-    assert!(done_json.contains("\"event\":\"grammar_done\""));
-    assert!(done_json.contains("\"correctedText\":\"I have an apple.\""));
-
-    let done_back: IpcEvent<GrammarCorrectResultDto> =
-        deserialize_json_line(&done_json).expect("done deserializes");
-    let result = done_back.data.expect("done data");
+    let result: GrammarCorrectResultDto =
+        deserialize_json_line(&result_json).expect("result deserializes");
     assert_eq!(result.corrected_text, "I have an apple.");
     assert!(result.has_corrections);
 }
@@ -421,102 +400,14 @@ fn translate_document_params_and_result_roundtrip() {
 }
 
 #[test]
-fn ocr_params_and_result_roundtrip_with_bounding_rects() {
-    let params = OcrRecognizeParams {
-        pixel_data_path: r"C:\Temp\capture.bgra".to_string(),
-        pixel_width: 320,
-        pixel_height: 200,
-        preferred_language_tag: Some("en-US".to_string()),
+fn mdx_lookup_dtos_are_serializable_for_native_mdx_contract() {
+    let params = MdxLookupParams {
+        dictionary_id: "dict-1".to_string(),
+        query: "apple".to_string(),
+        fuzzy: false,
     };
-
-    let json = serialize_json(&params).expect("ocr params serialize");
-    assert!(json.contains("\"pixelDataPath\""));
-    assert!(json.contains("\"preferredLanguageTag\":\"en-US\""));
-
-    let result = OcrResultDto {
-        text: "hello".to_string(),
-        lines: vec![OcrLineDto {
-            text: "hello".to_string(),
-            bounding_rect: OcrRectDto {
-                x: 1.0,
-                y: 2.0,
-                width: 3.0,
-                height: 4.0,
-            },
-        }],
-        detected_language: Some(OcrLanguageDto {
-            tag: "en-US".to_string(),
-            display_name: "English".to_string(),
-        }),
-        text_angle: Some(1.5),
-    };
-
-    let result_json = serialize_json(&result).expect("ocr result serialize");
-    assert!(result_json.contains("\"boundingRect\""));
-    assert!(result_json.contains("\"textAngle\":1.5"));
-
-    let back: OcrResultDto = deserialize_json(&result_json).expect("ocr result deserialize");
-    assert_eq!(back.text, "hello");
-    assert_eq!(back.detected_language.expect("language").tag, "en-US");
-    assert_eq!(back.lines[0].bounding_rect.width, 3.0);
-}
-
-#[test]
-fn local_ai_model_and_progress_contracts_roundtrip() {
-    let prepare = PrepareModelParams {
-        provider: local_ai_provider_modes::FOUNDRY_LOCAL.to_string(),
-        endpoint: Some("http://127.0.0.1:5273".to_string()),
-        model: Some("qwen2.5".to_string()),
-    };
-    let prepare_json = serialize_json(&prepare).expect("prepare serializes");
-    assert!(prepare_json.contains("\"provider\":\"FoundryLocal\""));
-
-    let progress = IpcEvent::for_request(
-        "req-download",
-        worker_events::LOCAL_AI_DOWNLOAD_PROGRESS,
-        DownloadProgressEventData {
-            bytes_downloaded: 128,
-            total_bytes: 256,
-            current_file: Some("model.onnx".to_string()),
-        },
-    );
-    let progress_json = serialize_json(&progress).expect("progress serializes");
-    assert!(progress_json.contains("\"bytesDownloaded\":128"));
-    assert!(progress_json.contains("\"currentFile\":\"model.onnx\""));
-
-    let status = LocalModelStatusDto {
-        state: "Ready".to_string(),
-        status_key: Some("Ready".to_string()),
-        detail: None,
-    };
-    let status_json = serialize_json(&status).expect("status serializes");
-    assert!(!status_json.contains("detail"));
-
-    let availability = IsAvailableResult {
-        available: true,
-        state: "Ready".to_string(),
-        detail: None,
-    };
-    let availability_json = serialize_json(&availability).expect("availability serializes");
-    let back: IsAvailableResult =
-        deserialize_json(&availability_json).expect("availability deserializes");
-    assert!(back.available);
-}
-
-#[test]
-fn planned_mdx_and_settings_migration_contracts_are_serializable() {
-    let lookup = IpcRequest::new(
-        "req-mdx",
-        compat_methods::MDX_LOOKUP,
-        MdxLookupParams {
-            dictionary_id: "dict-1".to_string(),
-            query: "apple".to_string(),
-            fuzzy: false,
-        },
-    );
-    let lookup_json = serialize_json(&lookup).expect("lookup serializes");
-    assert!(lookup_json.contains("\"method\":\"mdx_lookup\""));
-    assert!(lookup_json.contains("\"dictionaryId\":\"dict-1\""));
+    let params_json = serialize_json(&params).expect("lookup params serialize");
+    assert!(params_json.contains("\"dictionaryId\":\"dict-1\""));
 
     let entries = MdxLookupResult {
         entries: vec![MdxLookupEntry {
@@ -527,26 +418,4 @@ fn planned_mdx_and_settings_migration_contracts_are_serializable() {
     };
     let entries_json = serialize_json(&entries).expect("entries serialize");
     assert!(entries_json.contains("\"dictionaryName\":\"Demo\""));
-
-    let migrate = IpcRequest::new(
-        "req-settings",
-        compat_methods::SETTINGS_MIGRATE,
-        SettingsMigrateParams {
-            legacy_settings_path: Some(r"C:\old\settings.json".to_string()),
-            target_settings_path: Some(r"C:\new\settings.json".to_string()),
-        },
-    );
-    let migrate_json = serialize_json(&migrate).expect("migrate serializes");
-    assert!(migrate_json.contains("\"method\":\"settings_migrate\""));
-    assert!(migrate_json.contains("\"legacySettingsPath\""));
-
-    let result = SettingsMigrateResult {
-        migrated: true,
-        warnings: vec!["missing optional provider".to_string()],
-    };
-    let result_json = serialize_json(&result).expect("migration result serializes");
-    let back: SettingsMigrateResult =
-        deserialize_json(&result_json).expect("migration result deserializes");
-    assert!(back.migrated);
-    assert_eq!(back.warnings, ["missing optional provider"]);
 }

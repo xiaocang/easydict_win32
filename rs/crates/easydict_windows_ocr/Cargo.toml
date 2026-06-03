@@ -1,0 +1,15 @@
+[package]
+name = "easydict_windows_ocr"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage_Streams",
+] }

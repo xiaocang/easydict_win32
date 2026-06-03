@@ -2,33 +2,72 @@
 
 pub mod activation;
 pub mod browser_registrar;
+pub mod character_paragraph;
 pub mod cli_translate;
 pub mod compat_client;
 pub mod compat_protocol;
+pub mod content_preservation;
 pub mod credential_protection;
 pub mod custom_streaming;
+pub mod document_layout;
+pub mod font_download;
+pub mod font_metrics;
+pub mod formula_protection;
+pub mod formula_text_reconstruction;
 pub mod grammar_correction;
 mod i18n;
+pub mod latex_formula;
+pub mod layout_model_download;
+pub mod lex_index;
 pub mod llm_streaming;
 pub mod local_dictionary;
+pub mod local_dictionary_index;
 pub mod long_document;
+pub mod long_document_cli;
+pub mod long_document_context;
+pub mod long_document_export;
+pub mod mdx_native;
 pub mod native_bridge;
 pub mod ocr;
 pub mod openai_compatible;
+pub mod pdf_content_stream;
+pub mod pdf_export_blocks;
+pub mod pdf_formula_adapter;
+pub mod pdf_native_export;
+pub mod pdf_source_extraction;
 pub mod quick_translate;
+pub mod resource_download;
+pub mod retained_workers;
 pub mod screen_capture;
 pub mod settings_migration;
 pub mod settings_status;
 pub mod settings_storage;
 pub mod state;
+pub mod table_structure;
+pub mod text_layout;
 pub mod theme;
 pub mod traditional_http;
 pub mod translation_cache;
 pub mod translation_language;
 pub mod translation_services;
 pub mod ui;
+pub mod vision_layout;
 pub mod window_options;
 
+pub use character_paragraph::{
+    build_char_paragraphs, build_char_paragraphs_with_classifier, build_character_level_protection,
+    get_bracket_delta, get_formula_confidence, is_formula_character, reconstruct_latex_from_chars,
+    strip_subset_prefix, CharInfo, CharParagraph, CharParagraphResult, CharTextInfo,
+    CharacterLevelProtection, FormulaConfidence, FormulaVariableGroup, TextMatrix,
+};
+pub use content_preservation::{
+    analyze_formula_preservation, is_character_based_formula, is_font_based_formula,
+    is_numeric_data_block, is_subscript_dense_formula, normalize_for_exact_span_comparison,
+    protect_formula_block, resolve_formula_fallback, restore_formula_block, BlockContext,
+    BlockFormulaCharacters, FormulaCharacterInfo, PreservationMode, ProtectedBlock, ProtectionPlan,
+    RestoreOutcome, RestoreStatus, SoftValidationStatus, SourceBlockType, EQUATION_SOFT_CLOSE_TAG,
+    EQUATION_SOFT_OPEN_TAG,
+};
 pub use custom_streaming::{
     build_custom_streaming_grammar_request_plan, build_custom_streaming_translation_request_plan,
     build_doubao_translation_request_plan, build_gemini_grammar_request_plan,
@@ -42,6 +81,61 @@ pub use custom_streaming::{
     DoubaoConfig, GeminiConfig, ReqwestCustomStreamingHttpClient, DOUBAO_DEFAULT_ENDPOINT,
     DOUBAO_DEFAULT_MODEL, GEMINI_API_BASE_URL, GEMINI_DEFAULT_MODEL,
 };
+pub use document_layout::{
+    build_final_erase_rects_top_left, expand_line_rects_for_cell, expand_line_widths,
+    handle_inline_script_lines_for_overlay, is_citation_like_inline_script,
+    looks_like_grid_line_positions, looks_like_inline_script_line, needs_math_font,
+    normalize_translation_for_inline_script_lines, parse_formula_fragments,
+    rects_belong_to_same_erase_band, resolve_available_height, segment_line_by_font,
+    should_apply_formula_hole, split_line_rects_for_inline_script_protection,
+    try_apply_inline_subscript_attachments, try_build_line_rects, try_convert_to_unicode_subscript,
+    BlockLinePosition, BlockTextStyle, FontSegment, FormulaFragment, FormulaFragmentKind,
+    InlineScriptLineSplit, InlineScriptOverlayResult, InlineSubscriptAttachment, PdfRect,
+};
+pub use font_download::{
+    cached_font_path, cached_font_path_for_directory, default_font_cache_dir,
+    delete_all_fonts_for_directory, ensure_font, ensure_font_for_directory,
+    ensure_font_with_settings, font_asset_for_language, font_assets, font_cache_dir,
+    has_any_cjk_font_for_directory, is_font_downloaded_for_directory, requires_cjk_font,
+    total_font_size_bytes_for_directory, FontAsset, FontDownloadError, FONTS_SUBDIR,
+};
+pub use font_metrics::{
+    glyph_advance_em, is_script_signal, load_font_metrics, parse_cmap_from_bytes,
+    parse_font_metrics_from_bytes, FontMetrics, FontMetricsError, GlyphAdvanceMeasurer,
+    CJK_PRIMARY_ASCII_ADVANCE_EM, DEFAULT_NON_CJK_ADVANCE_EM, DEFAULT_UNITS_PER_EM,
+    SPACE_ADVANCE_EM,
+};
+pub use formula_protection::{
+    classify_formula_token, detect_formula_matches, extend_formula_trailing_parens,
+    formula_requires_exact_soft_preservation,
+    formula_text_contains_exact_soft_preservation_candidate, formula_token_type_is_high_confidence,
+    protect_formula_spans, protect_formula_spans_two_tier, restore_formula_spans,
+    restore_formula_spans_with_diagnostics, FormulaMatch, FormulaProtectionResult,
+    FormulaRestoreResult, FormulaRestoreStatus, FormulaToken, FormulaTokenType, SoftProtectedSpan,
+    SoftProtectionWrapperKind,
+};
+pub use formula_text_reconstruction::{
+    is_reconstruction_quality_acceptable, looks_like_formula_continuation_text,
+    previous_line_likely_expects_formula_tail, reconstruct_formula_aware_text,
+    should_use_letter_based_block_text, LetterGeometry,
+};
+pub use latex_formula::{
+    is_script_signal as is_latex_script_signal, prepare_renderable_text_for_pdf,
+    simplify as simplify_latex_formula, simplify_math_content, simplify_math_content_with_options,
+    simplify_with_options as simplify_latex_with_options,
+};
+pub use layout_model_download::{
+    cleanup_invalid_layout_model_files_for_directory, default_model_cache_dir,
+    delete_all_layout_model_files_for_directory, ensure_layout_model_available,
+    ensure_layout_model_available_for_directory, ensure_tatr_model_available,
+    ensure_tatr_model_available_for_directory, is_layout_model_ready_for_directory,
+    layout_model_status_for_directory, model_cache_dir, LayoutModelDownloadConfig,
+    LayoutModelDownloadError, LayoutModelPaths, LayoutModelStatus, DOC_LAYOUT_MODEL_FILE_NAME,
+    DOC_LAYOUT_MODEL_URLS, MIN_DOC_LAYOUT_MODEL_FILE_SIZE, MIN_RUNTIME_FILE_SIZE,
+    MIN_TATR_MODEL_FILE_SIZE, MODELS_SUBDIR, ONNX_RUNTIME_FILE_NAME,
+    ONNX_RUNTIME_TEMP_ZIP_FILE_NAME, ONNX_RUNTIME_URLS, ONNX_RUNTIME_ZIP_ENTRY_PATH,
+    TATR_MODEL_FILE_NAME, TATR_MODEL_URLS,
+};
 pub use llm_streaming::{
     chat_completions_sse_chunks, extract_chat_completions_delta, extract_responses_delta,
     parse_chat_completions_sse_chunks, parse_openai_sse_chunks, parse_responses_sse_chunks,
@@ -53,74 +147,175 @@ pub use local_dictionary::{
     apply_local_dictionary_suggestion_update, begin_local_dictionary_suggestions,
     dismiss_local_dictionary_suggestions, exit_local_dictionary_suggestions,
     focus_local_dictionary_suggestions, local_dictionary_query_token,
-    move_local_dictionary_suggestion,
+    local_dictionary_suggestion_request_can_route_natively, move_local_dictionary_suggestion,
     run_delayed_local_dictionary_suggestion_request_with_current_app_dir,
     run_local_dictionary_suggestion_request,
-    run_local_dictionary_suggestion_request_with_current_app_dir, LocalDictionarySuggestionBackend,
+    run_local_dictionary_suggestion_request_with_current_app_dir,
+    run_local_dictionary_suggestion_request_with_lazy_bridge,
+    run_local_dictionary_suggestion_request_with_native_index,
+    run_local_dictionary_suggestion_request_with_native_index_root,
+    run_local_dictionary_suggestion_request_with_native_route,
+    run_local_dictionary_suggestion_request_with_packaged_app_dir,
+    run_local_dictionary_suggestion_request_with_routed_backends, LocalDictionarySuggestionBackend,
     LocalDictionarySuggestionError, LocalDictionarySuggestionRequest,
-    LocalDictionarySuggestionUpdate, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS,
+    LocalDictionarySuggestionUpdate, NativeMdxLocalDictionarySuggestionBackend,
+    LOCAL_DICTIONARY_SUGGESTION_DELAY_MS,
+};
+pub use local_dictionary_index::{
+    default_local_dictionary_index_root, escape_data_string, LocalDictionaryIndexDescriptor,
+    LocalDictionaryIndexError, LocalDictionaryIndexManifest, LocalDictionaryIndexService,
+    LocalDictionaryIndexSuggestionItem, CURRENT_INDEX_FORMAT_VERSION, DEFAULT_NORMALIZATION_ID,
+    INDEX_FILE_NAME, MANIFEST_FILE_NAME,
 };
 pub use long_document::{
     apply_long_document_outcome, apply_long_document_start_error, begin_long_document_translate,
-    build_long_document_request, run_long_document_request, LongDocumentBackend,
-    LongDocumentBackendError, LongDocumentEvent, LongDocumentInput, LongDocumentOutcome,
-    LongDocumentServiceRequest, LongDocumentStartError,
+    build_long_document_request, long_document_request_can_route_natively,
+    long_document_service_kind_is_supported, long_document_supported_service_descriptors,
+    run_long_document_request, run_long_document_request_with_native_route,
+    run_long_document_request_with_packaged_app_dir,
+    run_long_document_request_with_packaged_app_dir_and_worker_policy,
+    run_native_text_long_document_request, run_native_text_long_document_request_with_translator,
+    LongDocumentBackend, LongDocumentBackendError, LongDocumentEvent, LongDocumentInput,
+    LongDocumentOutcome, LongDocumentServiceRequest, LongDocumentStartError,
+    NativeLongDocumentTranslator, QuickTranslateNativeLongDocumentTranslator,
+};
+pub use long_document_context::{
+    apply_preservation_hints, merge_glossaries, merge_page_partials, merge_preservation_hints,
+    remove_control_characters, trim_leading_spaces_per_line, try_parse_page_partial,
+    DocumentBlockIr, DocumentContext, DocumentIr, PagePartial, MAX_PRESERVED_BLOCK_LENGTH,
+};
+pub use long_document_export::{
+    build_bilingual_output_path, compose_bilingual_markdown, compose_bilingual_text,
+    compose_monolingual_markdown, compose_monolingual_text, LongDocumentExportBlockType,
+    LongDocumentExportCheckpoint, LongDocumentExportChunkMetadata,
+};
+pub use mdx_native::{
+    detect_mdx_file_encryption_mode, mdx_decode_base64_regcode, mdx_decrypt_block,
+    mdx_decrypt_regcode_by_device_id, mdx_decrypt_regcode_by_email, mdx_fast_decrypt,
+    mdx_ripemd128, mdx_salsa20_8, mime_type_for_mdd_resource_key,
+    native_mdx_dictionary_can_route_natively, native_mdx_dictionary_needs_credentials,
+    native_mdx_dictionary_requires_credential_bridge, native_mdx_lookup_can_route,
+    native_mdx_lookup_local_input_error, native_mdx_lookup_needs_credentials,
+    native_mdx_lookup_requires_credential_bridge, native_mdx_service_can_route_natively,
+    normalize_mdd_resource_key, run_native_mdd_resource_lookup,
+    run_native_mdd_resource_lookup_with_factory, run_native_mdx_lookup,
+    run_native_mdx_lookup_with_factory, MdxEncryptionMode, NativeMddResource,
+    NativeMddResourceError, NativeMddResourceReader, NativeMddResourceReaderFactory,
+    NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
+    RsMdictMddReader, RsMdictMddReaderFactory, RsMdictReader, RsMdictReaderFactory,
 };
 pub use ocr::{
     apply_ocr_outcome, apply_ocr_start_error, begin_ocr_recognize, bgra_to_base64_bmp,
     bgra_to_base64_jpeg_data_url, build_custom_api_ocr_request, build_ollama_ocr_request,
     group_and_sort_ocr_lines, merge_ocr_lines, merge_ocr_words, merged_ocr_text,
     parse_ocr_http_response, run_ocr_recognize, run_ocr_recognize_with_current_app_dir,
-    run_ocr_recognize_with_native_provider, run_ocr_recognize_with_packaged_host, NativeOcrBackend,
-    OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig, OcrEngineKind, OcrHttpClient,
-    OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError, OcrMode, OcrOutcome,
-    OcrRecognizeRequest, OcrResultAction, OcrStartError,
+    run_ocr_recognize_with_native_provider, run_ocr_recognize_with_packaged_app_dir,
+    NativeOcrBackend, OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig,
+    OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError,
+    OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams, OcrRecognizeRequest,
+    OcrRectDto, OcrResultAction, OcrResultDto, OcrStartError, WindowsNativeOcrRecognizer,
 };
 pub use openai_compatible::{
+    build_built_in_ai_device_registration_request_plan, build_foundry_local_models_request_plan,
     build_openai_grammar_messages, build_openai_grammar_request_plan,
     build_openai_http_request_plan, build_openai_request_body, build_openai_translation_messages,
-    build_openai_translation_request_plan, built_in_ai_direct_endpoint_for_model,
-    built_in_ai_direct_service_config, built_in_ai_proxy_headers, clamp_openai_temperature,
+    build_openai_translation_request_plan, built_in_ai_device_registration_endpoint,
+    built_in_ai_direct_endpoint_for_model, built_in_ai_direct_service_config,
+    built_in_ai_embedded_device_registration_request_plan,
+    built_in_ai_embedded_proxy_service_config, built_in_ai_embedded_secret,
+    built_in_ai_proxy_headers, built_in_ai_proxy_model_or_default,
+    built_in_ai_proxy_service_config, check_foundry_local_runtime_status, clamp_openai_temperature,
     cleanup_openai_translation_text, correct_grammar_openai_compatible,
-    custom_openai_service_config, deepseek_service_config, detect_openai_api_format_from_url,
-    execute_openai_stream_request, github_models_service_config, groq_service_config,
-    ollama_model_refresh_fallback, ollama_service_config, ollama_tags_url_from_endpoint,
-    openai_api_format_from_setting, openai_compatible_config_for_service,
+    custom_openai_service_config, decrypt_built_in_ai_secret, deepseek_service_config,
+    detect_openai_api_format_from_url, execute_openai_stream_request,
+    extract_foundry_local_chat_completions_endpoint,
+    extract_foundry_local_chat_completions_endpoint_from_logs,
+    foundry_local_models_endpoint_from_chat_completions_endpoint, foundry_local_service_config,
+    github_models_service_config, groq_service_config,
+    normalize_foundry_local_chat_completions_endpoint, ollama_model_refresh_fallback,
+    ollama_service_config, ollama_tags_url_from_endpoint, openai_api_format_from_setting,
+    openai_compatible_config_for_service, openai_compatible_service_can_route_natively,
     openai_effective_temperature, openai_error_from_response, openai_responses_reasoning_effort,
-    openai_service_config, parse_ollama_model_names, resolve_ollama_model_refresh,
-    resolve_openai_api_format, translate_openai_compatible, validate_openai_config,
-    zhipu_service_config, OllamaModelRefreshOutcome, OpenAiApiFormat, OpenAiCompatibleConfig,
-    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpRequestPlan,
-    OpenAiPlanError, OpenAiTranslationRequest, ReqwestOpenAiHttpClient, BUILT_IN_AI_DEFAULT_MODEL,
-    CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL,
+    openai_service_config, parse_built_in_ai_device_registration_response,
+    parse_foundry_local_runtime_status, parse_ollama_model_names, prepare_foundry_local_service,
+    register_built_in_ai_device, resolve_foundry_local_model_id_for_config,
+    resolve_ollama_model_refresh, resolve_openai_api_format,
+    resolve_openai_compatible_config_for_service, translate_openai_compatible,
+    try_resolve_foundry_local_model_id, validate_openai_config, zhipu_service_config,
+    BuiltInAiDeviceRegistrationHttpClient, BuiltInAiDeviceRegistrationHttpResponse,
+    BuiltInAiDeviceRegistrationRequestPlan, BuiltInAiSecretError,
+    CommandFoundryLocalEndpointResolver, FoundryLocalEndpointResolver, FoundryLocalModelState,
+    FoundryLocalPrepareOutcome, FoundryLocalRuntimeController, FoundryLocalRuntimeState,
+    FoundryLocalRuntimeStatus, FoundryLocalStatusCheck, OllamaModelRefreshOutcome, OpenAiApiFormat,
+    OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
+    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, OpenAiPlanError,
+    OpenAiTranslationRequest, ReqwestOpenAiHttpClient, BUILT_IN_AI_ALLOWED_PROXY_MODELS,
+    BUILT_IN_AI_DEFAULT_MODEL, CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT,
+    DEEPSEEK_DEFAULT_MODEL, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_DEFAULT_MODEL,
     GITHUB_MODELS_DEFAULT_ENDPOINT, GITHUB_MODELS_DEFAULT_MODEL, GROQ_DEFAULT_ENDPOINT,
     GROQ_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT, OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_ENDPOINT,
     OPENAI_DEFAULT_MODEL, OPENAI_DEFAULT_TEMPERATURE, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
     OPENAI_TRANSLATION_SYSTEM_PROMPT, ZHIPU_DEFAULT_ENDPOINT, ZHIPU_DEFAULT_MODEL,
 };
+pub use pdf_content_stream::{
+    build_content_stream, cid_to_hex, escape_pdf_literal_string, extract_pdf_literal_strings,
+    find_text_operator_range, find_text_operator_range_bytes, generate_text_operator,
+    hide_text_operator_in_stream, normalize_pdf_text_for_match, parse_pdf_literal_string,
+    replace_text_operator_in_stream, replace_text_operator_in_stream_bytes,
+    try_patch_pdf_array_text_token, try_patch_pdf_literal_token, PdfLiteralString,
+    TextOperatorRange,
+};
+pub use pdf_export_blocks::{
+    build_pdf_overlay_blocks, build_translated_block_lookup, checkpoint_to_overlay_blocks,
+    should_erase_block_background, should_render_block_text, try_get_renderable_text,
+    PdfExportBlockTextStyle, PdfExportCheckpoint, PdfExportChunkMetadata, PdfExportSourceBlockType,
+    PdfOverlayBlock, PdfOverlayRect, PdfRenderableText, PdfTranslatedBlock,
+};
+pub use pdf_native_export::{
+    export_pdf_with_content_stream_replacement, NativePdfContentStreamExportError,
+    NativePdfContentStreamExportFailureKind, NativePdfContentStreamExportSummary,
+};
 pub use quick_translate::{
     apply_quick_translate_outcome, apply_quick_translate_service_update,
     apply_quick_translate_start_error, apply_quick_translate_start_error_for_surface,
-    apply_quick_translate_stream_chunk, begin_manual_quick_translate_service,
-    begin_manual_quick_translate_service_for_surface, begin_quick_translate,
-    begin_quick_translate_for_surface, begin_retry_quick_translate_service_for_surface,
-    build_quick_translate_plan, build_quick_translate_plan_for_surface,
+    apply_quick_translate_stream_chunk, auto_foundry_local_native_probe_request,
+    begin_manual_quick_translate_service, begin_manual_quick_translate_service_for_surface,
+    begin_quick_translate, begin_quick_translate_for_surface,
+    begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
+    build_quick_translate_plan_for_surface, local_ai_quick_translate_local_error,
+    quick_translate_request_can_route_natively, quick_translate_service_update_from_cache,
     resolve_auto_target_language, resolve_different_target_language, resolve_quick_query_language,
-    run_quick_translate, run_quick_translate_service, NativeBingQuickTranslateBackend,
-    NativeCustomStreamingQuickTranslateBackend, NativeOpenAiQuickTranslateBackend,
-    NativeTraditionalHttpQuickTranslateBackend, QuickQueryLanguageResolution, QuickQueryMode,
-    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
-    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
+    run_quick_translate, run_quick_translate_service,
+    run_quick_translate_service_with_native_route,
+    run_quick_translate_service_with_packaged_app_dir,
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy,
+    store_quick_translate_cache_result, translation_cache_request_for_quick_translate,
+    LocalAiWorkerQuickTranslateBackend, NativeBingQuickTranslateBackend,
+    NativeCustomStreamingQuickTranslateBackend, NativeMdxQuickTranslateBackend,
+    NativeOpenAiQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
+    QuickQueryLanguageResolution, QuickQueryMode, QuickTranslateBackend,
+    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateOutcome,
+    QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface,
 };
+pub use resource_download::{
+    download_with_retry, download_with_retry_and_policy, is_file_valid, ordered_urls_by_probe,
+    try_delete_file, ReqwestResourceDownloadClient, ResourceDownloadClient, ResourceDownloadError,
+    ResourceDownloadProgress, ResourceDownloadRetryPolicy, ResourceProbeResult,
+};
+pub use retained_workers::{
+    RetainedWorkerPolicy, DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
+    DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE, LOCAL_AI_WORKER_DISABLED_MESSAGE,
+    LONGDOC_WORKER_DISABLED_MESSAGE, RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+};
 pub use screen_capture::{
-    CaptureInteraction, CaptureInteractionState, CapturePhase, CapturePoint, CaptureRect,
-    DetectedWindow, WindowDetector,
+    detected_windows_from_screen_windows, CaptureInteraction, CaptureInteractionState,
+    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, WindowDetector,
 };
 pub use settings_migration::{
     migrate_settings_file, migrate_settings_json, migrate_settings_object, resolve_source_path,
-    SettingsMigrationError,
+    SettingsMigrateParams, SettingsMigrateResult, SettingsMigrationError,
 };
 pub use settings_storage::{
     default_settings_storage_path, load_settings_file, load_settings_json,
@@ -128,41 +323,84 @@ pub use settings_storage::{
     SettingsStorageError,
 };
 pub use state::{
-    resolve_result_action_intent, AppMode, ConnectionStatus, EasydictUiState, FloatingWindowState,
-    GrammarCorrectionPreview, HotkeySetting, ImportedMdxDictionary, LocalDictionarySuggestion,
-    LongDocumentState, Message, PreviewScenario, ResultActionIntent, ResultActionKind,
+    preview_control_state_from_id, resolve_result_action_intent, settings_snapshot, AppMode,
+    ConnectionStatus, EasydictUiState, FloatingWindowState, GrammarCorrectionPreview,
+    HotkeySetting, ImportedMdxDictionary, LocalDictionarySuggestion, LongDocumentState, Message,
+    PopButtonAnchor, PopButtonState, PreviewScenario, ResultActionIntent, ResultActionKind,
     ServiceProviderField, ServiceProviderSetting, SettingsLink, SettingsSection, SettingsState,
     TranslationResultPreview, TRANSLATION_LANGUAGE_IDS,
 };
+pub use table_structure::{
+    build_table_cell_grid, build_table_structure_from_detections, calculate_tatr_crop_resize,
+    compute_rect_iou, compute_table_iou, deduplicate_table_detections_by_iou,
+    parse_tatr_detr_output, preprocess_table_crop, table_element_class_from_index,
+    tatr_detections_to_page_space, TableCellBounds, TableCropResize, TableElementClass,
+    TablePreprocessResult, TableStructure, TableSubDetection, TATR_DEFAULT_CONFIDENCE_THRESHOLD,
+    TATR_DUPLICATE_IOU_THRESHOLD, TATR_IMAGE_MEAN, TATR_IMAGE_STD, TATR_LONGEST_EDGE,
+    TATR_MAX_CELLS_PER_TABLE, TATR_MIN_CELL_SIDE_PX, TATR_NO_OBJECT_CLASS_INDEX, TATR_NUM_CLASSES,
+    TATR_NUM_QUERIES, TATR_SHORTEST_EDGE,
+};
+pub use text_layout::{
+    classify_char, enumerate_graphemes, is_cjk, is_close_punctuation, is_left_sticky,
+    is_open_punctuation, is_prohibited_line_end, is_prohibited_line_start, layout_next_line,
+    layout_paragraph, layout_paragraph_with_lines, layout_paragraph_with_lines_and_widths,
+    layout_paragraph_with_widths, normalize_whitespace, prepare_paragraph,
+    prepare_paragraph_with_options, segment_text, segment_text_with_options, solve_font_fit,
+    walk_line_ranges, CharCategory, FontFitRequest, FontFitResult, KinsokuTable, LayoutCursor,
+    LayoutLine, LayoutLineRange, LayoutLinesResult, LayoutResult, PreparedParagraph, SegmentKind,
+    SegmentedText, TextMeasurer, TextPrepareOptions,
+};
 pub use theme::easydict_theme_tokens;
 pub use traditional_http::{
-    bing_credentials_expired, bing_host, bing_language_code, build_bing_translate_request_plan,
-    build_caiyun_translation_request_plan, build_deepl_api_translation_request_plan,
-    build_google_translation_request_plan, build_linguee_translation_request_plan,
+    apply_deepl_dynamic_spacing, bing_credentials_expired, bing_host, bing_language_code,
+    build_bing_translate_request_plan, build_caiyun_translation_request_plan,
+    build_deepl_api_translation_request_plan, build_deepl_web_translation_request_plan,
+    build_deepl_web_translation_request_plan_with_values, build_google_translation_request_plan,
+    build_google_web_translation_request_plan, build_linguee_translation_request_plan,
     build_niutrans_translation_request_plan, build_traditional_http_translation_request_plan,
-    build_volcano_translation_request_plan, caiyun_language_code, compute_volcano_authorization,
-    deepl_api_error_from_status, deepl_language_code, from_bing_language_code,
-    google_language_code, linguee_language_code, niutrans_error_from_code, niutrans_language_code,
+    build_volcano_translation_request_plan, build_youdao_openapi_translation_request_plan,
+    build_youdao_openapi_translation_request_plan_with_nonce,
+    build_youdao_web_dict_translation_request_plan, build_youdao_web_translate_key_request_plan,
+    build_youdao_web_translate_key_request_plan_with_time, build_youdao_web_translate_request_plan,
+    build_youdao_web_translate_request_plan_with_time, caiyun_language_code,
+    compute_volcano_authorization, compute_youdao_openapi_sign, compute_youdao_web_dict_sign,
+    compute_youdao_web_translate_sign, decrypt_youdao_web_translate_response,
+    deepl_aligned_timestamp, deepl_api_error_from_status, deepl_i_count, deepl_language_code,
+    deepl_web_error_from_status, from_bing_language_code, google_language_code,
+    linguee_language_code, niutrans_error_from_code, niutrans_language_code,
     parse_bing_credentials_from_html, parse_bing_translation_response,
     parse_caiyun_translation_response, parse_deepl_api_translation_response,
-    parse_google_translation_response, parse_linguee_translation_response,
+    parse_deepl_web_translation_response, parse_google_translation_response,
+    parse_google_web_translation_response, parse_linguee_translation_response,
     parse_niutrans_translation_response, parse_volcano_translation_response,
-    traditional_http_config_for_service, traditional_http_error_from_status,
-    translate_bing_service, translate_traditional_http_service, volcano_language_code,
-    volcano_timestamps_from_epoch_seconds, BingCredentials, BingHttpClient, BingHttpResponse,
-    BingTranslatorPage, ReqwestBingHttpClient, ReqwestTraditionalHttpClient, TraditionalHttpClient,
-    TraditionalHttpRequestPlan, TraditionalHttpServiceConfig, TraditionalHttpServiceKind,
-    VolcanoTimestamps, BING_CHINA_HOST, BING_GLOBAL_HOST, BING_MAX_TEXT_LENGTH_UTF16,
-    BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT, DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT,
+    parse_youdao_openapi_response, parse_youdao_web_dict_response,
+    parse_youdao_web_translate_key_response, parse_youdao_web_translate_response,
+    traditional_http_config_for_request, traditional_http_config_for_service,
+    traditional_http_error_from_status, traditional_http_supports_language_pair_for_kind,
+    translate_bing_service, translate_deepl_web_service, translate_traditional_http_service,
+    translate_youdao_web_dict_service, translate_youdao_web_translate_service,
+    volcano_language_code, volcano_timestamps_from_epoch_seconds, youdao_language_code,
+    youdao_openapi_error_from_code, youdao_openapi_signature_input, youdao_web_dict_language_code,
+    youdao_web_dict_time, youdao_web_translate_error_from_code, BingCredentials, BingHttpClient,
+    BingHttpResponse, BingTranslatorPage, ReqwestBingHttpClient, ReqwestTraditionalHttpClient,
+    TraditionalHttpClient, TraditionalHttpRequestPlan, TraditionalHttpServiceConfig,
+    TraditionalHttpServiceKind, VolcanoTimestamps, BING_CHINA_HOST, BING_GLOBAL_HOST,
+    BING_MAX_TEXT_LENGTH_UTF16, BING_USER_AGENT, CAIYUN_TRANSLATE_ENDPOINT,
+    DEEPL_FREE_API_ENDPOINT, DEEPL_PRO_API_ENDPOINT, DEEPL_WEB_ENDPOINT, DEEPL_WEB_USER_AGENT,
     GOOGLE_TRANSLATE_ENDPOINT, LINGUEE_TRANSLATE_ENDPOINT, NIUTRANS_MAX_TEXT_LENGTH_UTF16,
     NIUTRANS_TRANSLATE_ENDPOINT, VOLCANO_MAX_TEXT_LENGTH_UTF16, VOLCANO_QUERY_STRING,
-    VOLCANO_TRANSLATE_ENDPOINT, VOLCANO_TRANSLATE_HOST,
+    VOLCANO_TRANSLATE_ENDPOINT, VOLCANO_TRANSLATE_HOST, YOUDAO_DICT_VOICE_ENDPOINT,
+    YOUDAO_OPENAPI_ENDPOINT, YOUDAO_WEB_AES_IV_SOURCE, YOUDAO_WEB_AES_KEY_SOURCE,
+    YOUDAO_WEB_DICT_ENDPOINT, YOUDAO_WEB_INITIAL_SIGN_KEY, YOUDAO_WEB_TRANSLATE_ENDPOINT,
+    YOUDAO_WEB_TRANSLATE_KEY_ENDPOINT, YOUDAO_WEB_USER_AGENT,
 };
 pub use translation_cache::{
-    displayable_phonetics, format_phonetic_text, is_youdao_word_query, merge_phonetics_into_result,
+    displayable_phonetics, format_phonetic_text, is_youdao_word_query, long_document_source_hash,
+    long_document_translation_cache_path, merge_phonetics_into_result,
     phonetic_accent_display_label, phonetic_cache_entry_size_kb, phonetic_cache_key,
     plan_phonetic_enrichment, target_phonetics, translation_cache_entry_size_kb,
-    translation_cache_key, Definition, Phonetic, PhoneticEnrichmentDecision,
+    translation_cache_key, Definition, LongDocumentTranslationCache,
+    PersistentTranslationCacheError, Phonetic, PhoneticEnrichmentDecision,
     PhoneticEnrichmentSkipReason, PhoneticFlightRegistration, PhoneticFlightTracker,
     PhoneticMemoryCache, Synonym, TranslationCacheRequest, TranslationMemoryCache,
     TranslationResult, TranslationResultKind, WordForm, WordResult, PHONETIC_CACHE_LIMIT_KB,
@@ -177,8 +415,15 @@ pub use translation_services::{
     DEFAULT_SERVICE_ID,
 };
 pub use ui::{
-    capture_overlay_view, fixed_window_view, fixed_window_view_with_settings, main_window_view,
-    mini_window_view, mini_window_view_with_settings, pop_button_view, settings_view,
+    capture_overlay_view, capture_overlay_view_with_state, fixed_window_view,
+    fixed_window_view_with_settings, main_window_view, mini_window_view,
+    mini_window_view_with_settings, pop_button_view, pop_button_view_with_state, settings_view,
+};
+pub use vision_layout::{
+    build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
+    parse_vision_layout_detection_array, parse_vision_layout_response,
+    vision_layout_region_type_from_str, VisionLayoutDetection, VisionLayoutHttpRequestPlan,
+    VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
 };
 pub use window_options::{
     capture_overlay_window_options, fixed_window_options, main_window_options, mini_window_options,
@@ -214,9 +459,13 @@ impl Application for EasydictApp {
     type Flags = EasydictUiState;
 
     fn new(flags: Self::Flags) -> (Self, Task<Self::Message>) {
+        let built_in_ai_registration_task = built_in_ai_device_registration_task(&flags.settings);
         (
             Self { state: flags },
-            startup_activation_task_for_args(std::env::args().skip(1)),
+            Task::batch([
+                startup_activation_task_for_args(std::env::args().skip(1)),
+                built_in_ai_registration_task,
+            ]),
         )
     }
 
@@ -239,7 +488,10 @@ impl Application for EasydictApp {
             "settings" => settings_view(&self.state.settings),
             "mini" => mini_window_view_with_settings(&self.state.mini, &self.state.settings),
             "fixed" => fixed_window_view_with_settings(&self.state.fixed, &self.state.settings),
-            "capture-overlay" => capture_overlay_view(),
+            "capture-overlay" => capture_overlay_view_with_state(
+                &self.state.capture_interaction,
+                self.state.capture_selection,
+            ),
             "pop-button" => pop_button_view(),
             _ => main_window_view(&self.state),
         }
@@ -272,11 +524,7 @@ impl Application for EasydictApp {
             }
 
             return match quick_translate::begin_quick_translate(&mut self.state) {
-                Ok(plan) => Task::batch(
-                    plan.service_requests()
-                        .into_iter()
-                        .map(quick_translate_service_task),
-                ),
+                Ok(plan) => self.quick_translate_service_batch_task(plan.service_requests()),
                 Err(error) => {
                     quick_translate::apply_quick_translate_start_error(&mut self.state, error);
                     Task::none()
@@ -319,6 +567,53 @@ impl Application for EasydictApp {
             return self.finish_ocr_recognize(outcome);
         }
 
+        if let Message::BuiltInAiDeviceRegistrationFinished(result) = &message {
+            let should_persist = result
+                .as_ref()
+                .ok()
+                .and_then(|token| token.as_deref())
+                .is_some_and(|token| !token.trim().is_empty());
+            self.state.apply(message);
+            return if should_persist {
+                settings_save_task(self.state.saved_settings.clone())
+            } else {
+                Task::none()
+            };
+        }
+
+        let should_start_foundry_local_prepare = message == Message::StartFoundryLocal
+            || (message == Message::PrepareLocalAiModel
+                && self.state.settings.local_ai_provider
+                    == crate::compat_protocol::local_ai_provider_modes::FOUNDRY_LOCAL);
+        if should_start_foundry_local_prepare {
+            self.state.apply(message);
+            return foundry_local_prepare_task(crate::state::settings_snapshot(
+                &self.state.settings,
+            ));
+        }
+
+        if let Message::SelectionTextReady {
+            text,
+            anchor_x,
+            anchor_y,
+            generation,
+        } = message
+        {
+            return self.pop_button_selection_text_ready_task(text, anchor_x, anchor_y, generation);
+        }
+
+        if let Message::PopButtonAutoDismiss(generation) = message {
+            return self.pop_button_auto_dismiss_task(generation);
+        }
+
+        if message == Message::DismissPopButton {
+            return self.dismiss_pop_button_task();
+        }
+
+        if message == Message::PopButtonClicked {
+            return self.pop_button_clicked_task();
+        }
+
         if let Some(task) = self.capture_overlay_interaction_task(&message) {
             return task;
         }
@@ -331,6 +626,17 @@ impl Application for EasydictApp {
             return Task::open_file_dialog(
                 long_document_file_dialog_options(&self.state),
                 Message::LongDocumentFileSelected,
+            );
+        }
+
+        if message == Message::BrowseOutputFolder
+            && self.state.mode == AppMode::LongDocument
+            && !self.state.settings_open
+            && !self.state.long_document.is_translating
+        {
+            return Task::open_folder_dialog(
+                long_document_output_folder_dialog_options(&self.state),
+                Message::LongDocumentOutputFolderSelected,
             );
         }
 
@@ -356,11 +662,7 @@ impl Application for EasydictApp {
 
         if message == Message::QuickTranslate {
             return match quick_translate::begin_quick_translate(&mut self.state) {
-                Ok(plan) => Task::batch(
-                    plan.service_requests()
-                        .into_iter()
-                        .map(quick_translate_service_task),
-                ),
+                Ok(plan) => self.quick_translate_service_batch_task(plan.service_requests()),
                 Err(error) => {
                     quick_translate::apply_quick_translate_start_error(&mut self.state, error);
                     Task::none()
@@ -373,11 +675,7 @@ impl Application for EasydictApp {
                 &mut self.state,
                 *surface,
             ) {
-                Ok(plan) => Task::batch(
-                    plan.service_requests()
-                        .into_iter()
-                        .map(quick_translate_service_task),
-                ),
+                Ok(plan) => self.quick_translate_service_batch_task(plan.service_requests()),
                 Err(error) => {
                     quick_translate::apply_quick_translate_start_error_for_surface(
                         &mut self.state,
@@ -395,7 +693,7 @@ impl Application for EasydictApp {
                 *surface,
                 service_id,
             ) {
-                Ok(Some(request)) => return quick_translate_service_task(request),
+                Ok(Some(request)) => return self.quick_translate_service_task(request),
                 Err(error) => {
                     quick_translate::apply_quick_translate_start_error_for_surface(
                         &mut self.state,
@@ -414,7 +712,7 @@ impl Application for EasydictApp {
                 *surface,
                 service_id,
             ) {
-                Ok(Some(request)) => return quick_translate_service_task(request),
+                Ok(Some(request)) => return self.quick_translate_retry_service_task(request),
                 Err(error) => {
                     quick_translate::apply_quick_translate_start_error_for_surface(
                         &mut self.state,
@@ -439,7 +737,7 @@ impl Application for EasydictApp {
         if let Message::ToggleResultExpanded(service_id) = &message {
             match quick_translate::begin_manual_quick_translate_service(&mut self.state, service_id)
             {
-                Ok(Some(request)) => return quick_translate_service_task(request),
+                Ok(Some(request)) => return self.quick_translate_service_task(request),
                 Err(error) => {
                     quick_translate::apply_quick_translate_start_error(&mut self.state, error);
                     return Task::none();
@@ -448,11 +746,21 @@ impl Application for EasydictApp {
             }
         }
 
+        if let Message::QuickTranslateServiceFinished(update) = &message {
+            self.store_quick_translate_cache_result(update);
+        }
+
+        if message == Message::ClearTranslationCache {
+            self.clear_persistent_translation_cache();
+        }
+
         let task = match &message {
             // Opening settings kicks off a real async check of the on-disk
             // layout-model / CJK-font availability; the entry loading overlay is
             // shown until it resolves.
-            Message::OpenSettings => settings_runtime_status_task(),
+            Message::OpenSettings => {
+                settings_runtime_status_task(crate::state::settings_snapshot(&self.state.settings))
+            }
             // Switching settings tabs resets the shared scroll view to the top,
             // matching WinUI `MainScrollViewer.ChangeView(null, 0, null)`.
             Message::SettingsSectionChanged(_) => Task::scroll_to_top("MainScrollViewer"),
@@ -535,6 +843,85 @@ impl Application for EasydictApp {
 }
 
 impl EasydictApp {
+    fn pop_button_selection_text_ready_task(
+        &mut self,
+        text: String,
+        anchor_x: i32,
+        anchor_y: i32,
+        generation: u64,
+    ) -> Task<Message> {
+        if generation < self.state.pop_button.generation {
+            return Task::none();
+        }
+
+        self.state.pop_button.generation = generation;
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            self.state.pop_button.clear();
+            return Task::window(WindowCommand::Hide(WindowId::new("pop-button")));
+        }
+
+        let anchor = PopButtonAnchor::new(anchor_x, anchor_y);
+        let (window_x, window_y) = anchor.window_position_dips();
+        self.state.pop_button.pending_text = Some(text);
+        self.state.pop_button.anchor = Some(anchor);
+        self.state.pop_button.visible = true;
+
+        Task::batch([
+            Task::window(WindowCommand::ShowAt {
+                id: WindowId::new("pop-button"),
+                x: window_x,
+                y: window_y,
+            }),
+            pop_button_auto_dismiss_task(generation),
+        ])
+    }
+
+    fn pop_button_auto_dismiss_task(&mut self, generation: u64) -> Task<Message> {
+        if generation != self.state.pop_button.generation || !self.state.pop_button.visible {
+            return Task::none();
+        }
+
+        self.state.pop_button.clear();
+        Task::window(WindowCommand::Hide(WindowId::new("pop-button")))
+    }
+
+    fn dismiss_pop_button_task(&mut self) -> Task<Message> {
+        self.state.pop_button.clear();
+        Task::window(WindowCommand::Hide(WindowId::new("pop-button")))
+    }
+
+    fn pop_button_clicked_task(&mut self) -> Task<Message> {
+        let Some(text) = self.state.pop_button.pending_text.take() else {
+            self.state.pop_button.clear();
+            return Task::window(WindowCommand::Hide(WindowId::new("pop-button")));
+        };
+
+        self.state.pop_button.clear();
+        self.state.mini.text = text;
+        let translate_task = match quick_translate::begin_quick_translate_for_surface(
+            &mut self.state,
+            QuickTranslateSurface::Mini,
+        ) {
+            Ok(plan) => self.quick_translate_service_batch_task(plan.service_requests()),
+            Err(error) => {
+                quick_translate::apply_quick_translate_start_error_for_surface(
+                    &mut self.state,
+                    QuickTranslateSurface::Mini,
+                    error,
+                );
+                Task::none()
+            }
+        };
+
+        Task::batch([
+            Task::window(WindowCommand::Hide(WindowId::new("pop-button"))),
+            Task::capture_text_insertion_target(),
+            Task::window(WindowCommand::Show(WindowId::new("mini"))),
+            translate_task,
+        ])
+    }
+
     fn hotkey_task(&mut self, id: &str) -> Task<Message> {
         match id {
             HOTKEY_SHOW_MAIN => Task::window(WindowCommand::Show(WindowId::new("main"))),
@@ -547,14 +934,20 @@ impl EasydictApp {
                 self.state.capture_interaction = CaptureInteractionState::new();
                 self.state.capture_selection = None;
                 self.state.ocr_status_text = "Select a region for OCR Translate".to_string();
-                Task::window(WindowCommand::Show(WindowId::new("capture-overlay")))
+                Task::batch([
+                    capture_screen_window_snapshot_task(),
+                    Task::window(WindowCommand::Show(WindowId::new("capture-overlay"))),
+                ])
             }
             HOTKEY_SILENT_OCR => {
                 self.state.pending_ocr_mode = Some(ocr::OcrMode::SilentClipboard);
                 self.state.capture_interaction = CaptureInteractionState::new();
                 self.state.capture_selection = None;
                 self.state.ocr_status_text = "Select a region for Silent OCR".to_string();
-                Task::window(WindowCommand::Show(WindowId::new("capture-overlay")))
+                Task::batch([
+                    capture_screen_window_snapshot_task(),
+                    Task::window(WindowCommand::Show(WindowId::new("capture-overlay"))),
+                ])
             }
             HOTKEY_SHOW_MINI => Task::batch([
                 Task::capture_text_insertion_target(),
@@ -599,11 +992,7 @@ impl EasydictApp {
                     &mut self.state,
                     ocr::ocr_surface(),
                 ) {
-                    Ok(plan) => Task::batch(
-                        plan.service_requests()
-                            .into_iter()
-                            .map(quick_translate_service_task),
-                    ),
+                    Ok(plan) => self.quick_translate_service_batch_task(plan.service_requests()),
                     Err(error) => {
                         quick_translate::apply_quick_translate_start_error_for_surface(
                             &mut self.state,
@@ -628,11 +1017,22 @@ impl EasydictApp {
     }
 
     fn capture_overlay_action_task(&mut self, copy_requested: bool) -> Task<Message> {
+        let selection = self
+            .state
+            .capture_selection
+            .or(self.state.capture_interaction.selection)
+            .map(CaptureRect::normalized);
+        let Some(request) = screen_capture_request_from_selection(selection) else {
+            self.state.capture_selection = selection.filter(|selection| selection.is_confirmable());
+            self.state.ocr_status_text = "Select a region before OCR".to_string();
+            return Task::none();
+        };
+
         let mode =
             ocr::pending_mode_from_surface_action(self.state.pending_ocr_mode, copy_requested);
         self.state.pending_ocr_mode = Some(mode);
         self.state.ocr_status_text = format!("{} capture requested", mode.label());
-        let request = screen_capture_request_from_selection(self.state.capture_selection.take());
+        self.state.capture_selection = None;
         Task::capture_screen_region_with_request(request, move |capture| match capture {
             Some(capture) => {
                 let capture = ocr::OcrCaptureResult::from(capture);
@@ -668,6 +1068,10 @@ impl EasydictApp {
                 .state
                 .capture_interaction
                 .on_mouse_wheel(*delta, *point, &detector),
+            Message::CaptureNudgeSelection { delta_x, delta_y } => self
+                .state
+                .capture_interaction
+                .nudge_selection(*delta_x, *delta_y),
             Message::CaptureEscape => self.state.capture_interaction.on_escape(),
             _ => return None,
         };
@@ -692,6 +1096,97 @@ impl EasydictApp {
                 self.state.capture_selection = None;
                 Task::window(WindowCommand::Hide(WindowId::new("capture-overlay")))
             }
+        }
+    }
+
+    fn quick_translate_service_batch_task(
+        &mut self,
+        requests: Vec<quick_translate::QuickTranslateServiceRequest>,
+    ) -> Task<Message> {
+        Task::batch(
+            requests
+                .into_iter()
+                .map(|request| self.quick_translate_service_task(request)),
+        )
+    }
+
+    fn quick_translate_service_task(
+        &mut self,
+        request: quick_translate::QuickTranslateServiceRequest,
+    ) -> Task<Message> {
+        self.quick_translate_service_task_with_cache_policy(request, false)
+    }
+
+    fn quick_translate_retry_service_task(
+        &mut self,
+        request: quick_translate::QuickTranslateServiceRequest,
+    ) -> Task<Message> {
+        self.quick_translate_service_task_with_cache_policy(request, true)
+    }
+
+    fn quick_translate_service_task_with_cache_policy(
+        &mut self,
+        request: quick_translate::QuickTranslateServiceRequest,
+        bypass_cache_read: bool,
+    ) -> Task<Message> {
+        if self.state.settings.translation_cache_enabled {
+            if let Some(cache_request) =
+                quick_translate::translation_cache_request_for_quick_translate(&request)
+            {
+                if !bypass_cache_read {
+                    if let Some(result) = self.state.translation_cache.get(&cache_request) {
+                        return Task::message(Message::QuickTranslateServiceFinished(
+                            quick_translate::quick_translate_service_update_from_cache(
+                                &request, result,
+                            ),
+                        ));
+                    }
+                }
+
+                self.state.pending_quick_translate_cache_requests.insert(
+                    (request.query_id, request.service.id.clone()),
+                    cache_request,
+                );
+            }
+        }
+
+        quick_translate_backend_service_task(request)
+    }
+
+    fn store_quick_translate_cache_result(
+        &mut self,
+        update: &quick_translate::QuickTranslateServiceUpdate,
+    ) {
+        let key = (update.query_id, update.outcome.service.id.clone());
+        let Some(cache_request) = self
+            .state
+            .pending_quick_translate_cache_requests
+            .remove(&key)
+        else {
+            return;
+        };
+
+        if self.state.settings.translation_cache_enabled
+            && quick_translate::store_quick_translate_cache_result(
+                &mut self.state.translation_cache,
+                &cache_request,
+                update,
+            )
+        {
+            let entries = self.state.translation_cache.len();
+            self.state.settings.translation_cache_status = if entries == 1 {
+                "1 cached result".to_string()
+            } else {
+                format!("{entries} cached results")
+            };
+        }
+    }
+
+    fn clear_persistent_translation_cache(&self) {
+        if let Ok(mut cache) =
+            LongDocumentTranslationCache::open(long_document_translation_cache_path(None))
+        {
+            let _ = cache.clear();
         }
     }
 
@@ -725,11 +1220,7 @@ impl EasydictApp {
         self.state.source_text = text;
 
         match quick_translate::begin_quick_translate(&mut self.state) {
-            Ok(plan) => Task::batch(
-                plan.service_requests()
-                    .into_iter()
-                    .map(quick_translate_service_task),
-            ),
+            Ok(plan) => self.quick_translate_service_batch_task(plan.service_requests()),
             Err(error) => {
                 quick_translate::apply_quick_translate_start_error(&mut self.state, error);
                 Task::none()
@@ -738,13 +1229,13 @@ impl EasydictApp {
     }
 }
 
-fn screen_capture_request_from_selection(selection: Option<CaptureRect>) -> ScreenCaptureRequest {
-    let Some(selection) = selection else {
-        return ScreenCaptureRequest::virtual_desktop();
-    };
+fn screen_capture_request_from_selection(
+    selection: Option<CaptureRect>,
+) -> Option<ScreenCaptureRequest> {
+    let selection = selection?;
     let selection = selection.normalized();
     if !selection.is_confirmable() {
-        return ScreenCaptureRequest::virtual_desktop();
+        return None;
     }
 
     let Some(width) = selection
@@ -752,22 +1243,29 @@ fn screen_capture_request_from_selection(selection: Option<CaptureRect>) -> Scre
         .checked_sub(selection.left)
         .and_then(|width| u32::try_from(width).ok())
     else {
-        return ScreenCaptureRequest::virtual_desktop();
+        return None;
     };
     let Some(height) = selection
         .bottom
         .checked_sub(selection.top)
         .and_then(|height| u32::try_from(height).ok())
     else {
-        return ScreenCaptureRequest::virtual_desktop();
+        return None;
     };
 
-    ScreenCaptureRequest::region(ScreenRect::new(
+    Some(ScreenCaptureRequest::region(ScreenRect::new(
         selection.left,
         selection.top,
         width,
         height,
-    ))
+    )))
+}
+
+fn capture_screen_window_snapshot_task() -> Task<Message> {
+    Task::capture_screen_windows_with_request(
+        ScreenWindowSnapshotRequest::new().exclude_title("Easydict Capture"),
+        |windows| Message::CaptureWindowsChanged(detected_windows_from_screen_windows(windows)),
+    )
 }
 
 pub const HOTKEY_SHOW_MAIN: &str = "show-main";
@@ -922,13 +1420,87 @@ pub fn browser_registrar_task(command: &'static str) -> Task<Message> {
     Task::run_bundled_executable(BROWSER_REGISTRAR_EXE, [command])
 }
 
-/// Async task that checks on-disk availability of the layout model and CJK font
-/// under the conventional Easydict data directory, replacing the static
+/// Async task that checks on-disk availability of downloadable settings assets
+/// under the conventional Easydict data directory, replacing static
 /// placeholder statuses with real values once it resolves.
-fn settings_runtime_status_task() -> Task<Message> {
+fn settings_runtime_status_task(settings: compat_protocol::SettingsSnapshot) -> Task<Message> {
     Task::perform(
-        async { settings_status::load_runtime_status() },
+        async move { settings_status::load_runtime_status_for_settings(settings) },
         Message::SettingsRuntimeStatusLoaded,
+    )
+}
+
+fn settings_save_task(settings: SettingsState) -> Task<Message> {
+    Task::perform(
+        async move {
+            let path = settings_storage::default_settings_storage_path();
+            let _ = settings_storage::save_settings_file(path, &settings);
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn pop_button_auto_dismiss_task(generation: u64) -> Task<Message> {
+    Task::perform(
+        async move {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            generation
+        },
+        Message::PopButtonAutoDismiss,
+    )
+}
+
+fn built_in_ai_device_registration_task(settings: &SettingsState) -> Task<Message> {
+    let snapshot = crate::state::settings_snapshot(settings);
+    if snapshot
+        .built_in_ai_api_key
+        .as_deref()
+        .is_some_and(|api_key| !api_key.trim().is_empty())
+        || snapshot
+            .device_token
+            .as_deref()
+            .is_some_and(|token| !token.trim().is_empty())
+    {
+        return Task::none();
+    }
+
+    let Some(device_id) = snapshot
+        .device_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|device_id| !device_id.is_empty())
+        .map(str::to_string)
+    else {
+        return Task::none();
+    };
+
+    Task::perform(
+        async move {
+            let Some(request) =
+                openai_compatible::built_in_ai_embedded_device_registration_request_plan(
+                    &device_id,
+                )
+            else {
+                return Ok(None);
+            };
+
+            let mut client = openai_compatible::ReqwestOpenAiHttpClient::from_settings(&snapshot)
+                .map_err(|error| error.to_string())?;
+            openai_compatible::register_built_in_ai_device(&mut client, &request)
+                .map_err(|error| error.to_string())
+        },
+        Message::BuiltInAiDeviceRegistrationFinished,
+    )
+}
+
+fn foundry_local_prepare_task(settings: compat_protocol::SettingsSnapshot) -> Task<Message> {
+    Task::perform(
+        async move {
+            let mut controller = openai_compatible::CommandFoundryLocalEndpointResolver::default();
+            openai_compatible::prepare_foundry_local_service(&mut controller, &settings)
+                .map_err(|error| error.to_string())
+        },
+        Message::FoundryLocalPrepareFinished,
     )
 }
 
@@ -1026,7 +1598,7 @@ fn result_action_task(intent: ResultActionIntent) -> Task<Message> {
     }
 }
 
-fn quick_translate_service_task(
+fn quick_translate_backend_service_task(
     request: quick_translate::QuickTranslateServiceRequest,
 ) -> Task<Message> {
     if request.execution_kind == quick_translate::QuickTranslateExecutionKind::TranslateStream {
@@ -1081,6 +1653,16 @@ fn long_document_file_dialog_options(state: &EasydictUiState) -> FileDialogOptio
         ))
         .filter(FileDialogFilter::new("Text files", ["*.txt"]));
 
+    let output_folder = state.long_document.output_folder.trim();
+    if !output_folder.is_empty() && !output_folder.starts_with('(') {
+        options = options.initial_directory(output_folder);
+    }
+
+    options
+}
+
+fn long_document_output_folder_dialog_options(state: &EasydictUiState) -> FolderDialogOptions {
+    let mut options = FolderDialogOptions::new("Select output folder");
     let output_folder = state.long_document.output_folder.trim();
     if !output_folder.is_empty() && !output_folder.starts_with('(') {
         options = options.initial_directory(output_folder);

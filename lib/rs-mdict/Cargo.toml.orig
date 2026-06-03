@@ -1,0 +1,37 @@
+[package]
+name = "rs-mdict"
+version = "0.1.1"
+edition = "2021"
+description = "A Rust implementation of MDX/MDD dictionary parser"
+license = "MIT"
+authors = ["rust-mdict contributors"]
+keywords = ["mdict", "mdx", "mdd", "dictionary"]
+categories = ["parsing", "text-processing"]
+
+[dependencies]
+# Encoding support
+encoding_rs = "0.8"
+
+# Compression
+flate2 = "1.0"
+minilzo-rs = "0.6"
+
+# Regex for header parsing
+regex = "1.10"
+
+# Base64 encoding for MDD
+base64 = "0.22"
+
+# Error handling
+thiserror = "2.0.18"
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lib]
+name = "rust_mdict"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mdict-cli"
+path = "src/cli.rs"

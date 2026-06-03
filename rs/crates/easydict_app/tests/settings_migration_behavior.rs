@@ -1,6 +1,6 @@
-use easydict_app::compat_protocol::SettingsMigrateParams;
 use easydict_app::{
-    migrate_settings_file, migrate_settings_json, resolve_source_path, SettingsMigrationError,
+    migrate_settings_file, migrate_settings_json, resolve_source_path, SettingsMigrateParams,
+    SettingsMigrateResult, SettingsMigrationError,
 };
 use serde_json::Value;
 use std::fs;
@@ -149,6 +149,56 @@ fn settings_migration_removes_duplicate_openvino_service_when_windows_local_ai_e
 }
 
 #[test]
+fn settings_migration_maps_legacy_foundry_local_service_to_windows_local_ai_provider() {
+    let (json, changed) = migrate_settings_json(
+        r#"{
+  "MiniWindowEnabledServices": ["google", "foundry-local"],
+  "MainWindowEnabledServices": ["foundry-local"],
+  "MiniWindowServiceEnabledQuery": { "foundry-local": true }
+}"#,
+    )
+    .unwrap();
+
+    let root = serde_json::from_str::<Value>(&json).unwrap();
+    assert!(changed);
+    assert_eq!(root["LocalAIProvider"], "FoundryLocal");
+    assert_array_contains(&root["MiniWindowEnabledServices"], "windows-local-ai");
+    assert_array_not_contains(&root["MiniWindowEnabledServices"], "foundry-local");
+    assert_array_contains(&root["MainWindowEnabledServices"], "windows-local-ai");
+    assert_eq!(
+        root["MiniWindowServiceEnabledQuery"]["windows-local-ai"],
+        true
+    );
+    assert!(root["MiniWindowServiceEnabledQuery"]
+        .get("foundry-local")
+        .is_none());
+}
+
+#[test]
+fn settings_migration_removes_duplicate_foundry_local_service_when_windows_local_ai_exists() {
+    let (json, changed) = migrate_settings_json(
+        r#"{
+  "MainWindowEnabledServices": ["windows-local-ai", "foundry-local"],
+  "MainWindowServiceEnabledQuery": {
+    "windows-local-ai": false,
+    "foundry-local": true
+  }
+}"#,
+    )
+    .unwrap();
+
+    let root = serde_json::from_str::<Value>(&json).unwrap();
+    assert!(changed);
+    assert_array_contains(&root["MainWindowEnabledServices"], "windows-local-ai");
+    assert_array_not_contains(&root["MainWindowEnabledServices"], "foundry-local");
+    assert_eq!(
+        root["MainWindowServiceEnabledQuery"]["windows-local-ai"],
+        false
+    );
+    assert!(root.get("LocalAIProvider").is_none());
+}
+
+#[test]
 fn settings_migration_default_path_honors_settings_directory_env() {
     let temp = TempDir::new("settings-migrate-env");
     let settings_dir = temp.path().join("configured-settings");
@@ -161,6 +211,27 @@ fn settings_migration_default_path_honors_settings_directory_env() {
         resolve_source_path(None),
         settings_dir.join("settings.json")
     );
+}
+
+#[test]
+fn settings_migration_params_and_result_keep_camel_case_json_shape() {
+    let params = SettingsMigrateParams {
+        legacy_settings_path: Some(r"C:\old\settings.json".to_string()),
+        target_settings_path: Some(r"C:\new\settings.json".to_string()),
+    };
+    let params_json = serde_json::to_string(&params).expect("params serializes");
+    assert!(params_json.contains("\"legacySettingsPath\""));
+    assert!(params_json.contains("\"targetSettingsPath\""));
+
+    let result = SettingsMigrateResult {
+        migrated: true,
+        warnings: vec!["missing optional provider".to_string()],
+    };
+    let result_json = serde_json::to_string(&result).expect("result serializes");
+    let back: SettingsMigrateResult =
+        serde_json::from_str(&result_json).expect("result deserializes");
+    assert!(back.migrated);
+    assert_eq!(back.warnings, ["missing optional provider"]);
 }
 
 fn read_json(path: &Path) -> Value {

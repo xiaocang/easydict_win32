@@ -356,11 +356,17 @@ where
         let Ok(json) = fs::read_to_string(&manifest_path) else {
             return false;
         };
-        let Ok(manifest) = serde_json::from_str::<ManifestPathProbe>(&json) else {
+        let Ok(manifest) = serde_json::from_str::<ManifestIntegrityProbe>(&json) else {
             return false;
         };
 
-        !manifest.path.is_empty() && Path::new(&manifest.path).exists()
+        self.manifest_integrity_is_valid(&manifest)
+    }
+
+    fn manifest_integrity_is_valid(&self, manifest: &ManifestIntegrityProbe) -> bool {
+        manifest.name == NATIVE_HOST_NAME
+            && manifest.manifest_type == "stdio"
+            && path_points_to_bridge(Path::new(&manifest.path), &self.bridge_exe_path())
     }
 }
 
@@ -441,8 +447,11 @@ pub struct FirefoxManifest {
 }
 
 #[derive(Deserialize)]
-struct ManifestPathProbe {
+struct ManifestIntegrityProbe {
+    name: String,
     path: String,
+    #[serde(rename = "type")]
+    manifest_type: String,
 }
 
 pub fn parse_chrome_ext_ids(raw: &str) -> Vec<String> {
@@ -484,6 +493,17 @@ fn delete_file(path: impl AsRef<Path>) {
     if path.exists() {
         let _ = fs::remove_file(path);
     }
+}
+
+fn path_points_to_bridge(path: &Path, bridge_path: &Path) -> bool {
+    let Ok(path) = fs::canonicalize(path) else {
+        return false;
+    };
+    let Ok(bridge_path) = fs::canonicalize(bridge_path) else {
+        return false;
+    };
+
+    path == bridge_path
 }
 
 fn json_io_error(error: serde_json::Error) -> io::Error {

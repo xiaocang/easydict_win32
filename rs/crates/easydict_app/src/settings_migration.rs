@@ -1,10 +1,11 @@
-use crate::compat_protocol::{SettingsMigrateParams, SettingsMigrateResult};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const LEGACY_OPENVINO_SERVICE_ID: &str = "openvino-local-ai";
+const LEGACY_FOUNDRY_LOCAL_SERVICE_ID: &str = "foundry-local";
 const WINDOWS_LOCAL_AI_SERVICE_ID: &str = "windows-local-ai";
 const SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE: &str = "EASYDICT_SETTINGS_DIR";
 
@@ -14,6 +15,23 @@ pub enum SettingsMigrationError {
     RootNotObject,
     Io(std::io::Error),
     Serialize(serde_json::Error),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsMigrateParams {
+    #[serde(default)]
+    pub legacy_settings_path: Option<String>,
+    #[serde(default)]
+    pub target_settings_path: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsMigrateResult {
+    pub migrated: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 impl fmt::Display for SettingsMigrationError {
@@ -99,7 +117,7 @@ pub fn migrate_settings_object(root: &mut Map<String, Value>) -> bool {
     changed |= set_position_saved_from_coordinates(root, "MiniWindow");
     changed |= set_position_saved_from_coordinates(root, "FixedWindow");
     changed |= remove_runtime_only_worker_isolation_settings(root);
-    changed |= migrate_standalone_openvino_service(root);
+    changed |= migrate_legacy_local_ai_service_ids(root);
     changed
 }
 
@@ -159,7 +177,7 @@ fn remove_runtime_only_worker_isolation_settings(root: &mut Map<String, Value>) 
     changed
 }
 
-fn migrate_standalone_openvino_service(root: &mut Map<String, Value>) -> bool {
+fn migrate_legacy_local_ai_service_ids(root: &mut Map<String, Value>) -> bool {
     let mut changed = false;
     let list_keys = [
         "MiniWindowEnabledServices",
@@ -175,34 +193,58 @@ fn migrate_standalone_openvino_service(root: &mut Map<String, Value>) -> bool {
     let had_openvino = list_keys
         .iter()
         .any(|key| array_contains(root, key, LEGACY_OPENVINO_SERVICE_ID));
+    let had_foundry_local = list_keys
+        .iter()
+        .any(|key| array_contains(root, key, LEGACY_FOUNDRY_LOCAL_SERVICE_ID));
     let had_windows_local_ai = list_keys
         .iter()
         .any(|key| array_contains(root, key, WINDOWS_LOCAL_AI_SERVICE_ID));
 
-    if had_openvino && !had_windows_local_ai && !root.contains_key("LocalAIProvider") {
-        root.insert(
-            "LocalAIProvider".to_string(),
-            Value::String("OpenVINO".to_string()),
-        );
-        changed = true;
+    if !had_windows_local_ai && !root.contains_key("LocalAIProvider") {
+        let provider = match (had_openvino, had_foundry_local) {
+            (true, false) => Some("OpenVINO"),
+            (false, true) => Some("FoundryLocal"),
+            _ => None,
+        };
+        if let Some(provider) = provider {
+            root.insert(
+                "LocalAIProvider".to_string(),
+                Value::String(provider.to_string()),
+            );
+            changed = true;
+        }
     }
 
+    changed |= migrate_legacy_local_ai_service_id(
+        root,
+        &list_keys,
+        &dictionary_keys,
+        LEGACY_OPENVINO_SERVICE_ID,
+    );
+    changed |= migrate_legacy_local_ai_service_id(
+        root,
+        &list_keys,
+        &dictionary_keys,
+        LEGACY_FOUNDRY_LOCAL_SERVICE_ID,
+    );
+
+    changed
+}
+
+fn migrate_legacy_local_ai_service_id(
+    root: &mut Map<String, Value>,
+    list_keys: &[&str],
+    dictionary_keys: &[&str],
+    legacy_service_id: &str,
+) -> bool {
+    let mut changed = false;
     for key in list_keys {
-        changed |= replace_string_in_array(
-            root,
-            key,
-            LEGACY_OPENVINO_SERVICE_ID,
-            WINDOWS_LOCAL_AI_SERVICE_ID,
-        );
+        changed |=
+            replace_string_in_array(root, key, legacy_service_id, WINDOWS_LOCAL_AI_SERVICE_ID);
     }
 
     for key in dictionary_keys {
-        changed |= move_dictionary_key(
-            root,
-            key,
-            LEGACY_OPENVINO_SERVICE_ID,
-            WINDOWS_LOCAL_AI_SERVICE_ID,
-        );
+        changed |= move_dictionary_key(root, key, legacy_service_id, WINDOWS_LOCAL_AI_SERVICE_ID);
     }
 
     changed

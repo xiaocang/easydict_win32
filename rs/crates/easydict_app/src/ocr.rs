@@ -1,11 +1,9 @@
-use crate::compat_client::{CompatClientError, CompatHostFacade};
-use crate::compat_protocol::{
-    ConfigureParams, OcrLanguageDto, OcrLineDto, OcrRecognizeParams, OcrResultDto, SettingsSnapshot,
-};
+use crate::compat_protocol::SettingsSnapshot;
 use crate::quick_translate::QuickTranslateSurface;
 use crate::state::{settings_snapshot, EasydictUiState};
 use image::codecs::jpeg::JpegEncoder;
 use image::ColorType;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fmt;
 use std::fs;
@@ -162,6 +160,55 @@ impl From<ScreenCaptureResult> for OcrCaptureResult {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrRecognizeParams {
+    pub pixel_data_path: String,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_language_tag: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrResultDto {
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub lines: Vec<OcrLineDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detected_language: Option<OcrLanguageDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_angle: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrLineDto {
+    #[serde(default)]
+    pub text: String,
+    pub bounding_rect: OcrRectDto,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrRectDto {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrLanguageDto {
+    #[serde(default)]
+    pub tag: String,
+    #[serde(default)]
+    pub display_name: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct OcrRecognizeRequest {
     pub query_id: u64,
@@ -217,12 +264,6 @@ impl fmt::Display for OcrBackendError {
     }
 }
 
-impl From<CompatClientError> for OcrBackendError {
-    fn from(error: CompatClientError) -> Self {
-        Self::new(error.to_string())
-    }
-}
-
 impl From<OcrImageEncodeError> for OcrBackendError {
     fn from(error: OcrImageEncodeError) -> Self {
         Self::new(error.to_string())
@@ -240,6 +281,27 @@ pub trait OcrBackend {
 
 pub trait OcrHttpClient {
     fn post_json(&mut self, request: &OcrHttpRequestPlan) -> Result<String, OcrBackendError>;
+}
+
+pub trait WindowsNativeOcrRecognizer {
+    fn recognize(
+        &mut self,
+        params: &OcrRecognizeParams,
+        preferred_language_tag: Option<&str>,
+    ) -> Result<OcrResultDto, OcrBackendError>;
+}
+
+#[derive(Default)]
+pub struct SystemWindowsNativeOcrRecognizer;
+
+impl WindowsNativeOcrRecognizer for SystemWindowsNativeOcrRecognizer {
+    fn recognize(
+        &mut self,
+        params: &OcrRecognizeParams,
+        preferred_language_tag: Option<&str>,
+    ) -> Result<OcrResultDto, OcrBackendError> {
+        recognize_with_system_windows_ocr(params, preferred_language_tag)
+    }
 }
 
 pub struct ReqwestOcrHttpClient {
@@ -304,15 +366,27 @@ impl OcrHttpClient for ReqwestOcrHttpClient {
     }
 }
 
-pub struct NativeOcrBackend<C> {
+pub struct NativeOcrBackend<C, W = SystemWindowsNativeOcrRecognizer> {
     http_client: C,
+    windows_recognizer: W,
     config: Option<OcrEngineConfig>,
 }
 
-impl<C> NativeOcrBackend<C> {
+impl<C> NativeOcrBackend<C, SystemWindowsNativeOcrRecognizer> {
     pub fn new(http_client: C) -> Self {
         Self {
             http_client,
+            windows_recognizer: SystemWindowsNativeOcrRecognizer,
+            config: None,
+        }
+    }
+}
+
+impl<C, W> NativeOcrBackend<C, W> {
+    pub fn with_windows_recognizer(http_client: C, windows_recognizer: W) -> Self {
+        Self {
+            http_client,
+            windows_recognizer,
             config: None,
         }
     }
@@ -320,9 +394,13 @@ impl<C> NativeOcrBackend<C> {
     pub fn http_client(&self) -> &C {
         &self.http_client
     }
+
+    pub fn windows_recognizer(&self) -> &W {
+        &self.windows_recognizer
+    }
 }
 
-impl<C: OcrHttpClient> OcrBackend for NativeOcrBackend<C> {
+impl<C: OcrHttpClient, W: WindowsNativeOcrRecognizer> OcrBackend for NativeOcrBackend<C, W> {
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), OcrBackendError> {
         self.config = Some(OcrEngineConfig::from_settings(settings));
         Ok(())
@@ -335,7 +413,12 @@ impl<C: OcrHttpClient> OcrBackend for NativeOcrBackend<C> {
             ));
         };
 
-        recognize_with_native_provider(&mut self.http_client, config, params)
+        recognize_with_native_provider(
+            &mut self.http_client,
+            &mut self.windows_recognizer,
+            config,
+            params,
+        )
     }
 }
 
@@ -448,23 +531,6 @@ pub fn merged_ocr_text(result: &OcrResultDto) -> String {
     merge_ocr_lines(&sorted_lines)
 }
 
-impl OcrBackend for CompatHostFacade {
-    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), OcrBackendError> {
-        CompatHostFacade::configure(
-            self,
-            &ConfigureParams {
-                settings: settings.clone(),
-            },
-        )
-        .map(|_| ())
-        .map_err(OcrBackendError::from)
-    }
-
-    fn recognize(&mut self, params: &OcrRecognizeParams) -> Result<OcrResultDto, OcrBackendError> {
-        CompatHostFacade::ocr_recognize(self, params).map_err(OcrBackendError::from)
-    }
-}
-
 pub fn build_ollama_ocr_request(
     config: &OcrEngineConfig,
     base64_image: impl Into<String>,
@@ -561,15 +627,19 @@ pub fn bgra_to_base64_jpeg_data_url(
     Ok(format!("data:image/jpeg;base64,{}", base64_encode(&jpeg)))
 }
 
-fn recognize_with_native_provider<C: OcrHttpClient>(
+fn recognize_with_native_provider<C: OcrHttpClient, W: WindowsNativeOcrRecognizer>(
     http_client: &mut C,
+    windows_recognizer: &mut W,
     config: &OcrEngineConfig,
     params: &OcrRecognizeParams,
 ) -> Result<OcrResultDto, OcrBackendError> {
     if config.kind == OcrEngineKind::WindowsNative {
-        return Err(OcrBackendError::new(
-            "Windows Native OCR is handled by the compatibility OCR worker",
-        ));
+        let preferred_language_tag = params
+            .preferred_language_tag
+            .as_deref()
+            .and_then(non_auto_language)
+            .or(config.language.as_deref());
+        return windows_recognizer.recognize(params, preferred_language_tag);
     }
 
     let pixel_data = fs::read(&params.pixel_data_path).map_err(|error| {
@@ -594,6 +664,49 @@ fn recognize_with_native_provider<C: OcrHttpClient>(
 
     let json = http_client.post_json(&plan)?;
     Ok(parse_ocr_http_response(plan.response_parser, &json))
+}
+
+fn non_auto_language(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("auto")).then_some(trimmed)
+}
+
+fn recognize_with_system_windows_ocr(
+    params: &OcrRecognizeParams,
+    preferred_language_tag: Option<&str>,
+) -> Result<OcrResultDto, OcrBackendError> {
+    let result = easydict_windows_ocr::recognize_bgra_file(
+        &params.pixel_data_path,
+        params.pixel_width,
+        params.pixel_height,
+        preferred_language_tag,
+    )
+    .map_err(|error| OcrBackendError::new(error.to_string()))?;
+    let mut lines = result
+        .lines
+        .into_iter()
+        .map(|line| OcrLineDto {
+            text: merge_ocr_words(&line.words),
+            bounding_rect: OcrRectDto {
+                x: line.x,
+                y: line.y,
+                width: line.width,
+                height: line.height,
+            },
+        })
+        .collect::<Vec<_>>();
+    lines = group_and_sort_ocr_lines(&lines, 0.5);
+    let detected_language = result.detected_language.map(|language| OcrLanguageDto {
+        tag: language.tag,
+        display_name: language.display_name,
+    });
+
+    Ok(OcrResultDto {
+        text: merge_ocr_lines(&lines),
+        lines,
+        text_angle: result.text_angle,
+        detected_language,
+    })
 }
 
 fn ocr_engine_kind(value: Option<&str>) -> OcrEngineKind {
@@ -922,7 +1035,7 @@ pub fn run_ocr_recognize<B: OcrBackend>(
 
 pub fn run_ocr_recognize_with_current_app_dir(request: OcrRecognizeRequest) -> OcrOutcome {
     match current_app_dir() {
-        Ok(app_dir) => run_ocr_recognize_with_packaged_host(request, app_dir),
+        Ok(app_dir) => run_ocr_recognize_with_packaged_app_dir(request, app_dir),
         Err(message) => OcrOutcome {
             query_id: request.query_id,
             mode: request.mode,
@@ -931,22 +1044,12 @@ pub fn run_ocr_recognize_with_current_app_dir(request: OcrRecognizeRequest) -> O
     }
 }
 
-pub fn run_ocr_recognize_with_packaged_host(
+pub fn run_ocr_recognize_with_packaged_app_dir(
     request: OcrRecognizeRequest,
     app_dir: impl AsRef<Path>,
 ) -> OcrOutcome {
-    if OcrEngineConfig::from_settings(&request.settings).kind != OcrEngineKind::WindowsNative {
-        return run_ocr_recognize_with_native_provider(request);
-    }
-
-    match CompatHostFacade::spawn_packaged(app_dir) {
-        Ok(mut backend) => run_ocr_recognize(&mut backend, &request),
-        Err(error) => OcrOutcome {
-            query_id: request.query_id,
-            mode: request.mode,
-            result: Err(OcrBackendError::from(error)),
-        },
-    }
+    let _ = app_dir;
+    run_ocr_recognize_with_native_provider(request)
 }
 
 pub fn run_ocr_recognize_with_native_provider(request: OcrRecognizeRequest) -> OcrOutcome {

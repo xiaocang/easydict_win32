@@ -1,0 +1,8 @@
+[package]
+name = "easydict_pdf_to_images"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+easydict_pdf_render = { path = "../../../lib/easydict-pdf-render" }

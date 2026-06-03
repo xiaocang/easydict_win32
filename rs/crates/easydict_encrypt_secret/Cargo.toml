@@ -1,0 +1,11 @@
+[package]
+name = "easydict_encrypt_secret"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+aes = "0.8"
+base64 = "0.22"
+cbc = { version = "0.1", features = ["alloc", "block-padding"] }
+ring = "0.17"

@@ -1,6 +1,8 @@
 use crate::compat_protocol::local_ai_provider_modes;
 use crate::i18n::{tr, tr_count};
+use crate::mdx_native::native_mdx_dictionary_can_route_natively;
 use crate::quick_translate::QuickTranslateSurface;
+use crate::screen_capture::{CaptureInteractionState, CapturePhase, CaptureRect};
 use crate::state::{
     AppMode, EasydictUiState, FloatingWindowState, HotkeySetting, ImportedMdxDictionary,
     LongDocumentState, Message, ServiceProviderField, ServiceProviderSetting, SettingsLink,
@@ -8,7 +10,8 @@ use crate::state::{
     TRANSLATION_LANGUAGE_IDS,
 };
 use crate::{
-    HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
+    default_translation_service_descriptors, TranslationServiceKind, HOTKEY_OCR_TRANSLATE,
+    HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
     HOTKEY_TRANSLATE_CLIPBOARD,
 };
 use win_fluent::prelude::*;
@@ -39,6 +42,7 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
                     .id("ModeSwitchOverlay")
                     .active(state.mode_overlay_active)
                     .opacity(0.86)
+                    .fade_transition_ms(180)
                     .label("Switching")
                     .into_view(),
             ))
@@ -52,10 +56,10 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
     let mut content_children = vec![
         settings_header(),
         row((
-            settings_category_bar(state.selected_section),
+            settings_category_bar(state),
             progress_ring()
                 .id("SettingsTabSwitchRing")
-                .active(false)
+                .active(state.tab_switching)
                 .size(20),
         ))
         .id("settings.tabs_row")
@@ -293,53 +297,275 @@ pub fn fixed_window_view_with_settings(
 }
 
 pub fn capture_overlay_view() -> View<Message> {
+    capture_overlay_view_with_state(&CaptureInteractionState::new(), None)
+}
+
+pub fn capture_overlay_view_with_state(
+    state: &CaptureInteractionState,
+    selection_override: Option<CaptureRect>,
+) -> View<Message> {
+    let selection = selection_override
+        .or(state.selection)
+        .map(CaptureRect::normalized);
+    let detected = state.detected_region.map(CaptureRect::normalized);
+    let base = pointer_region(
+        column((
+            text("Capture region"),
+            text("Adjust the selected area before OCR or copy."),
+        ))
+        .id("capture.pointer.content")
+        .padding(12)
+        .spacing(8),
+    )
+    .id("capture.pointer")
+    .height(Length::Fill)
+    .on_move(|position| Message::CaptureMouseMoved(capture_point(position)))
+    .on_left_down(|position| Message::CaptureLeftButtonDown(capture_point(position)))
+    .on_left_up(|position| Message::CaptureLeftButtonUp(capture_point(position)))
+    .on_double_click(|position| Message::CaptureDoubleClick(capture_point(position)))
+    .on_right_down(Message::CaptureRightButtonDown)
+    .on_wheel(|wheel| Message::CaptureMouseWheel {
+        delta: wheel.delta,
+        point: capture_point(wheel.position),
+    })
+    .on_escape(Message::CaptureEscape);
+
+    let mut layers = overlay(base).id("capture.overlay.layers").layer(
+        OverlayLayer::new(capture_status_panel(state, detected, selection))
+            .align(Alignment::Start, Alignment::Start)
+            .scrim(0.62),
+    );
+
+    if let Some(rect) = detected {
+        layers = layers.layer(
+            OverlayLayer::new(capture_region_token("capture.detected_region", state, rect))
+                .align(Alignment::Center, Alignment::Center),
+        );
+    }
+
+    if let Some(rect) = selection {
+        layers = layers
+            .layer(
+                OverlayLayer::new(capture_selection_layer(rect, state))
+                    .align(Alignment::Center, Alignment::Center),
+            )
+            .layer(
+                OverlayLayer::new(capture_magnifier_layer(rect))
+                    .align(Alignment::End, Alignment::Start),
+            );
+    }
+
     page("Capture Overlay")
         .id("capture.overlay")
-        .content(
-            column((
-                pointer_region(
-                    column((
-                        text("Capture region"),
-                        text("Adjust the selected area before OCR or copy."),
-                    ))
-                    .id("capture.pointer.content")
-                    .padding(12)
-                    .spacing(8),
-                )
-                .id("capture.pointer")
-                .height(Length::Fill)
-                .on_move(|position| Message::CaptureMouseMoved(capture_point(position)))
-                .on_left_down(|position| Message::CaptureLeftButtonDown(capture_point(position)))
-                .on_left_up(|position| Message::CaptureLeftButtonUp(capture_point(position)))
-                .on_double_click(|position| Message::CaptureDoubleClick(capture_point(position)))
-                .on_right_down(Message::CaptureRightButtonDown)
-                .on_wheel(|wheel| Message::CaptureMouseWheel {
-                    delta: wheel.delta,
-                    point: capture_point(wheel.position),
-                })
-                .on_escape(Message::CaptureEscape),
-                command_bar((
-                    primary_button("Confirm")
-                        .id("capture.confirm")
-                        .icon(icon::translate())
-                        .on_press(Message::ConfirmCapture),
-                    button("Copy text")
-                        .id("capture.copy")
-                        .icon(icon::copy())
-                        .on_press(Message::CopyResult),
-                    button("Cancel")
-                        .id("capture.cancel")
-                        .icon(icon::clear())
-                        .on_press(Message::CancelCapture),
-                ))
-                .id("capture.commands")
-                .compact(true),
-            ))
-            .id("capture.panel")
-            .padding(12)
-            .spacing(8),
-        )
+        .content(layers)
         .into_view()
+}
+
+fn capture_status_panel(
+    state: &CaptureInteractionState,
+    detected: Option<CaptureRect>,
+    selection: Option<CaptureRect>,
+) -> View<Message> {
+    let can_confirm = state.phase == CapturePhase::Adjusting
+        && selection.is_some_and(CaptureRect::is_confirmable);
+    let phase = capture_phase_label(state);
+    let detected_label = detected
+        .map(|rect| format_capture_rect("detected", rect))
+        .unwrap_or_else(|| "detected=none".to_string());
+    let selection_label = selection
+        .map(|rect| format_capture_rect("selection", rect))
+        .unwrap_or_else(|| "selection=none".to_string());
+
+    column((
+        text("OCR Capture"),
+        text(format!(
+            "phase={phase}; depth={}; dragging={}; {detected_label}; {selection_label}",
+            state.detection_depth,
+            state.is_drag_selecting()
+        )),
+        command_bar((
+            primary_button("Confirm")
+                .id("capture.confirm")
+                .icon(icon::translate())
+                .enabled(can_confirm)
+                .on_press(Message::ConfirmCapture),
+            button("Copy text")
+                .id("capture.copy")
+                .icon(icon::copy())
+                .enabled(can_confirm)
+                .on_press(Message::CopyResult),
+            button("Cancel")
+                .id("capture.cancel")
+                .icon(icon::clear())
+                .on_press(Message::CancelCapture),
+        ))
+        .id("capture.commands")
+        .compact(true),
+        command_bar((
+            capture_nudge_button(
+                "capture.nudge.left",
+                "Nudge left",
+                "chevron-left",
+                '\u{E76B}',
+                -1,
+                0,
+                state.phase == CapturePhase::Adjusting,
+            ),
+            capture_nudge_button(
+                "capture.nudge.up",
+                "Nudge up",
+                "chevron-up",
+                '\u{E70E}',
+                0,
+                -1,
+                state.phase == CapturePhase::Adjusting,
+            ),
+            capture_nudge_button(
+                "capture.nudge.down",
+                "Nudge down",
+                "chevron-down",
+                '\u{E70D}',
+                0,
+                1,
+                state.phase == CapturePhase::Adjusting,
+            ),
+            capture_nudge_button(
+                "capture.nudge.right",
+                "Nudge right",
+                "chevron-right",
+                '\u{E76C}',
+                1,
+                0,
+                state.phase == CapturePhase::Adjusting,
+            ),
+        ))
+        .id("capture.nudge_commands")
+        .compact(true),
+    ))
+    .id("capture.status_panel")
+    .padding(10)
+    .spacing(6)
+    .width(Length::Fixed(460))
+    .margin(Edges {
+        top: 12,
+        right: 0,
+        bottom: 0,
+        left: 12,
+    })
+    .tw("surface-card border rounded-lg")
+    .into_view()
+}
+
+fn capture_nudge_button(
+    id: &'static str,
+    tooltip: &'static str,
+    icon_name: &'static str,
+    glyph: char,
+    delta_x: i32,
+    delta_y: i32,
+    enabled: bool,
+) -> View<Message> {
+    button("")
+        .id(id)
+        .icon(win_fluent::IconToken::with_glyph(icon_name, glyph))
+        .icon_only()
+        .tooltip(tooltip)
+        .enabled(enabled)
+        .on_press(Message::CaptureNudgeSelection { delta_x, delta_y })
+        .into_view()
+}
+
+fn capture_selection_layer(rect: CaptureRect, state: &CaptureInteractionState) -> View<Message> {
+    column((capture_overlay_token(
+        "capture.selection_rect",
+        state,
+        None,
+        Some(rect),
+        true,
+        true,
+    ),))
+    .id("capture.selection_layer")
+    .into_view()
+}
+
+fn capture_magnifier_layer(rect: CaptureRect) -> View<Message> {
+    column((
+        text("Magnifier"),
+        text(format!(
+            "{} x {}",
+            rect.width().max(0),
+            rect.height().max(0)
+        )),
+    ))
+    .id("capture.magnifier")
+    .padding(10)
+    .spacing(4)
+    .width(Length::Fixed(160))
+    .height(Length::Fixed(96))
+    .tw("surface-card border rounded-lg")
+    .into_view()
+}
+
+fn capture_region_token(
+    id: impl Into<String>,
+    state: &CaptureInteractionState,
+    rect: CaptureRect,
+) -> View<Message> {
+    capture_overlay_token(id, state, Some(rect), None, false, false)
+}
+
+fn capture_overlay_token(
+    id: impl Into<String>,
+    state: &CaptureInteractionState,
+    detected_rect: Option<CaptureRect>,
+    selection_rect: Option<CaptureRect>,
+    handles_visible: bool,
+    magnifier_visible: bool,
+) -> View<Message> {
+    let mut builder = capture_overlay(capture_overlay_phase(state))
+        .id(id)
+        .detection_depth(state.detection_depth)
+        .dragging(state.is_drag_selecting())
+        .handles_visible(handles_visible)
+        .magnifier_visible(magnifier_visible);
+
+    if let Some(rect) = detected_rect {
+        builder = builder.detected_rect(capture_overlay_rect(rect));
+    }
+
+    if let Some(rect) = selection_rect {
+        builder = builder.selection_rect(capture_overlay_rect(rect));
+    }
+
+    builder.into_view()
+}
+
+fn capture_phase_label(state: &CaptureInteractionState) -> &'static str {
+    capture_overlay_phase(state).as_str()
+}
+
+fn capture_overlay_phase(state: &CaptureInteractionState) -> CaptureOverlayPhase {
+    match state.phase {
+        CapturePhase::Detecting => CaptureOverlayPhase::Detecting,
+        CapturePhase::Selecting => CaptureOverlayPhase::Selecting,
+        CapturePhase::Adjusting => CaptureOverlayPhase::Adjusting,
+    }
+}
+
+fn capture_overlay_rect(rect: CaptureRect) -> CaptureOverlayRect {
+    let rect = rect.normalized();
+    CaptureOverlayRect::new(rect.left, rect.top, rect.width(), rect.height())
+}
+
+fn format_capture_rect(label: &str, rect: CaptureRect) -> String {
+    let rect = rect.normalized();
+    format!(
+        "{label}=({},{} {}x{})",
+        rect.left,
+        rect.top,
+        rect.width(),
+        rect.height()
+    )
 }
 
 fn capture_point(position: PointerPosition) -> crate::screen_capture::CapturePoint {
@@ -347,6 +573,10 @@ fn capture_point(position: PointerPosition) -> crate::screen_capture::CapturePoi
 }
 
 pub fn pop_button_view() -> View<Message> {
+    pop_button_view_with_state(ControlState::default())
+}
+
+pub fn pop_button_view_with_state(state: ControlState) -> View<Message> {
     page("Selection Translate")
         .id("pop-button.window")
         .content(
@@ -355,8 +585,11 @@ pub fn pop_button_view() -> View<Message> {
                 .icon(icon::translate())
                 .icon_only()
                 .floating_action()
+                .width(Length::Fixed(30))
+                .height(Length::Fixed(30))
                 .tooltip("Translate selection")
-                .on_press(Message::TranslateSelection),
+                .state(state)
+                .on_press(Message::PopButtonClicked),
         )
         .into_view()
 }
@@ -444,6 +677,7 @@ fn quick_translate_content(state: &EasydictUiState) -> View<Message> {
         main_translate_action_bar(state),
         card(tr("main.results", "Translation Results"))
             .id("QuickOutputCard")
+            .kind(CardKind::Elevated)
             .content(results_list(
                 "main.quick.results",
                 &state.results,
@@ -488,6 +722,10 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
     let suggestions_available = !state.local_dictionary_suggestions.is_empty();
     let suggestion_popup_visible =
         suggestions_available || state.local_dictionary_suggestion_error.is_some();
+    let source_text_state = state
+        .source_text_state
+        .clone()
+        .focused(state.source_text_focused || state.source_text_state.focused);
     let mut source_editor = text_editor(state.source_text.clone())
         .id("InputTextBox")
         .placeholder("Enter or paste text to translate...")
@@ -495,7 +733,7 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
         .max_height(260)
         .text_style(TextStyle::BodyLarge)
         .frameless()
-        .focused(state.source_text_focused)
+        .state(source_text_state)
         .on_key(
             TextEditorKey::Enter,
             TextEditorKeyModifiers::none(),
@@ -542,6 +780,7 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
 
     let mut source_card = card(tr("main.source_text", "Source Text"))
         .id("QuickInputCard")
+        .kind(CardKind::Elevated)
         .content(
             column(source_children)
                 .id("main.quick.source_content")
@@ -672,7 +911,6 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
             long_document_control_bar(state, settings),
             settings_row(semantic_header(theme, "⚡", "Translation Result"))
                 .id("main.long-doc.output_card")
-                .description(format!("Output folder: {}", state.output_folder))
                 .trailing((button("Retry Failed")
                     .id("main.long-doc.retry")
                     .enabled(state.last_error.is_some() && !state.is_translating)
@@ -698,6 +936,10 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
         .id("main.long-doc.content")
         .padding(4)
         .spacing(12)
+        .margin(Edges {
+            right: 8,
+            ..Edges::ZERO
+        })
         .width(Length::Fill),
     )
     .id("main.long-doc.scroll")
@@ -705,7 +947,40 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
 }
 
 fn long_document_output_content(state: &LongDocumentState, output_text: String) -> View<Message> {
-    let mut children = vec![text(output_text)];
+    let mut children = vec![
+        row((
+            column((
+                styled_text_id(
+                    "main.long-doc.output_folder_label",
+                    "Output Folder",
+                    TextStyle::Caption,
+                ),
+                styled_text_id(
+                    "main.long-doc.output_folder",
+                    state.output_folder.clone(),
+                    TextStyle::Body,
+                ),
+            ))
+            .id("main.long-doc.output_folder_text")
+            .spacing(2)
+            .width(Length::Fill)
+            .into_view(),
+            button("Browse...")
+                .id("main.long-doc.output_browse")
+                .enabled(!state.is_translating)
+                .on_press(Message::BrowseOutputFolder),
+        ))
+        .id("main.long-doc.output_folder_row")
+        .spacing(8)
+        .align(Alignment::Center)
+        .width(Length::Fill)
+        .into_view(),
+        styled_text_id(
+            "main.long-doc.output_naming_hint",
+            output_text,
+            TextStyle::Caption,
+        ),
+    ];
 
     if let Some(percentage) = state.progress_percentage {
         children.push(text(format!("Progress: {:.0}%", percentage)));
@@ -739,58 +1014,94 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
 
     column((
         row((
-            combo_box(selected_language_items(true, settings))
-                .id("main.long-doc.source_language")
-                .label("Source")
-                .selected(state.source_language.clone())
-                .enabled(can_edit)
-                .on_change(Message::LongDocumentSourceLanguageChanged),
-            combo_box(selected_language_items(false, settings))
-                .id("main.long-doc.target_language")
-                .label("Target")
-                .selected(state.target_language.clone())
-                .enabled(can_edit)
-                .on_change(Message::LongDocumentTargetLanguageChanged),
-            combo_box(service_items())
-                .id("main.long-doc.service")
-                .label("Service")
-                .selected(state.service.clone())
-                .enabled(can_edit)
-                .on_change(Message::LongDocumentServiceChanged),
+            long_document_control_cell(
+                "main.long-doc.source_language_cell",
+                "🌐 Source",
+                combo_box(selected_language_items(true, settings))
+                    .id("main.long-doc.source_language")
+                    .label("Source")
+                    .selected(state.source_language.clone())
+                    .width(Length::Fill)
+                    .enabled(can_edit)
+                    .on_change(Message::LongDocumentSourceLanguageChanged),
+            ),
+            long_document_control_cell(
+                "main.long-doc.target_language_cell",
+                "🎯 Target",
+                combo_box(selected_language_items(false, settings))
+                    .id("main.long-doc.target_language")
+                    .label("Target")
+                    .selected(state.target_language.clone())
+                    .width(Length::Fill)
+                    .enabled(can_edit)
+                    .on_change(Message::LongDocumentTargetLanguageChanged),
+            ),
+            long_document_control_cell(
+                "main.long-doc.service_cell",
+                "🤖 Service",
+                combo_box(service_items())
+                    .id("main.long-doc.service")
+                    .label("Service")
+                    .selected(state.service.clone())
+                    .state(state.service_combo_state.clone())
+                    .width(Length::Fill)
+                    .enabled(can_edit)
+                    .on_change(Message::LongDocumentServiceChanged),
+            ),
         ))
         .spacing(12)
         .width(Length::Fill),
         row((
-            combo_box([
-                ComboBoxItem::new("plaintext", "Text"),
-                ComboBoxItem::new("markdown", "Markdown"),
-                ComboBoxItem::new("pdf", "PDF"),
-            ])
-            .id("main.long-doc.input_mode")
-            .label("Input")
-            .selected(state.input_mode.clone())
-            .enabled(can_edit)
-            .on_change(Message::LongDocumentInputModeChanged),
-            combo_box([
-                ComboBoxItem::new("mono", "Mono"),
-                ComboBoxItem::new("bilingual", "Bilingual"),
-                ComboBoxItem::new("both", "Both"),
-            ])
-            .id("main.long-doc.output_mode")
-            .label("Output")
-            .selected(state.output_mode.clone())
-            .enabled(can_edit)
-            .on_change(Message::LongDocumentOutputModeChanged),
-            text_editor(state.concurrency.clone())
-                .id("main.long-doc.concurrency")
-                .placeholder("Threads")
+            long_document_control_cell(
+                "main.long-doc.input_mode_cell",
+                "📄 Input",
+                combo_box([
+                    ComboBoxItem::new("plaintext", "Text"),
+                    ComboBoxItem::new("markdown", "Markdown"),
+                    ComboBoxItem::new("pdf", "PDF"),
+                ])
+                .id("main.long-doc.input_mode")
+                .label("Input")
+                .selected(state.input_mode.clone())
+                .width(Length::Fill)
                 .enabled(can_edit)
-                .on_input(Message::LongDocumentConcurrencyChanged),
-            text_editor(state.page_range.clone())
-                .id("main.long-doc.page_range")
-                .placeholder("1-3,5,7-10")
+                .on_change(Message::LongDocumentInputModeChanged),
+            ),
+            long_document_control_cell(
+                "main.long-doc.output_mode_cell",
+                "📝 Output",
+                combo_box([
+                    ComboBoxItem::new("mono", "Mono"),
+                    ComboBoxItem::new("bilingual", "Bilingual"),
+                    ComboBoxItem::new("both", "Both"),
+                ])
+                .id("main.long-doc.output_mode")
+                .label("Output")
+                .selected(state.output_mode.clone())
+                .width(Length::Fill)
                 .enabled(can_edit)
-                .on_input(Message::LongDocumentPageRangeChanged),
+                .on_change(Message::LongDocumentOutputModeChanged),
+            ),
+            long_document_control_cell(
+                "main.long-doc.concurrency_cell",
+                "⚡ Threads",
+                text_editor(state.concurrency.clone())
+                    .id("main.long-doc.concurrency")
+                    .placeholder("Threads")
+                    .max_height(36)
+                    .enabled(can_edit)
+                    .on_input(Message::LongDocumentConcurrencyChanged),
+            ),
+            long_document_control_cell(
+                "main.long-doc.page_range_cell",
+                "📑 Pages",
+                text_editor(state.page_range.clone())
+                    .id("main.long-doc.page_range")
+                    .placeholder("1-3,5,7-10")
+                    .max_height(36)
+                    .enabled(can_edit)
+                    .on_input(Message::LongDocumentPageRangeChanged),
+            ),
         ))
         .spacing(12)
         .width(Length::Fill),
@@ -814,6 +1125,21 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
     .into_view()
 }
 
+fn long_document_control_cell(
+    id: &'static str,
+    label: &'static str,
+    control: impl IntoView<Message>,
+) -> View<Message> {
+    column((
+        styled_text_id(format!("{id}.label"), label, TextStyle::Caption),
+        control,
+    ))
+    .id(id)
+    .spacing(3)
+    .width(Length::Fill)
+    .into_view()
+}
+
 fn floating_translate_view(
     id_prefix: &'static str,
     surface: QuickTranslateSurface,
@@ -826,25 +1152,7 @@ fn floating_translate_view(
         .content(
             column((
                 floating_header(id_prefix, state, show_pin),
-                settings_row("Source Text")
-                    .id(format!("{id_prefix}.input_card"))
-                    .content(
-                        text_editor(state.text.clone())
-                            .id(format!("{id_prefix}.input"))
-                            .placeholder("Enter text...")
-                            .min_height(56)
-                            .max_height(120)
-                            .focused(id_prefix == "mini")
-                            .on_input(move |value| {
-                                Message::FloatingSurfaceTextChanged(surface, value)
-                            }),
-                    )
-                    .trailing((button("Play source")
-                        .id(format!("{id_prefix}.play_source"))
-                        .icon(icon::speaker())
-                        .icon_only()
-                        .tooltip("Play source text")
-                        .on_press(Message::SpeakResult),)),
+                floating_input_surface(id_prefix, surface, state, id_prefix == "mini"),
                 translate_language_bar(
                     id_prefix,
                     surface,
@@ -852,8 +1160,9 @@ fn floating_translate_view(
                     &state.target_language,
                     settings,
                     state.is_translating,
+                    state.translate_button_state.clone(),
                 ),
-                text(state.detected_language.clone().unwrap_or_default()),
+                floating_detected_language_label(id_prefix, state),
                 results_list(
                     &format!("{id_prefix}.results"),
                     &state.results,
@@ -866,11 +1175,81 @@ fn floating_translate_view(
                 text(state.status_text.clone()),
             ))
             .id(format!("{id_prefix}.content"))
-            .padding(16)
-            .spacing(8)
+            .padding(if id_prefix == "mini" { 8 } else { 12 })
+            .spacing(if id_prefix == "mini" { 4 } else { 6 })
             .width(Length::Fill)
             .height(Length::Fill),
         )
+        .into_view()
+}
+
+fn floating_detected_language_label(
+    id_prefix: &'static str,
+    state: &FloatingWindowState,
+) -> View<Message> {
+    match state
+        .detected_language
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => styled_text_id(
+            format!("{id_prefix}.detected_language"),
+            value.to_string(),
+            TextStyle::Caption,
+        ),
+        None => spacer()
+            .id(format!("{id_prefix}.detected_language_placeholder"))
+            .into_view(),
+    }
+}
+
+fn floating_input_surface(
+    id_prefix: &'static str,
+    surface: QuickTranslateSurface,
+    state: &FloatingWindowState,
+    show_source_play: bool,
+) -> View<Message> {
+    let input = if id_prefix == "mini" {
+        styled_text_id(
+            format!("{id_prefix}.input"),
+            state.text.clone(),
+            TextStyle::Body,
+        )
+    } else {
+        text_editor(state.text.clone())
+            .id(format!("{id_prefix}.input"))
+            .placeholder("Enter text...")
+            .min_height(40)
+            .max_height(120)
+            .frameless()
+            .on_input(move |value| Message::FloatingSurfaceTextChanged(surface, value))
+    };
+
+    let content = if show_source_play {
+        row((
+            input,
+            button("Play source")
+                .id(format!("{id_prefix}.play_source"))
+                .icon(icon::speaker())
+                .icon_only()
+                .width(Length::Fixed(28))
+                .height(Length::Fixed(28))
+                .tooltip("Play source text")
+                .on_press(Message::SpeakResult),
+        ))
+        .id(format!("{id_prefix}.input_content"))
+        .spacing(4)
+        .align(Alignment::Start)
+        .width(Length::Fill)
+        .into_view()
+    } else {
+        input
+    };
+
+    card("")
+        .id(format!("{id_prefix}.input_card"))
+        .kind(CardKind::FloatingInput)
+        .content(content)
         .into_view()
 }
 
@@ -894,6 +1273,8 @@ fn floating_header(
             .id(format!("{id_prefix}.close"))
             .icon(icon::clear())
             .icon_only()
+            .width(Length::Fixed(28))
+            .height(Length::Fixed(28))
             .tooltip("Close")
             .on_press(Message::CloseWindow),
     ))
@@ -941,6 +1322,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
     children.push(main_translate_button(
         "TranslateButton",
         state.is_translating,
+        state.main_translate_button_state.clone(),
     ));
 
     row(children)
@@ -979,7 +1361,11 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
         row(language_row_children)
             .id("ActionBarNarrow.LanguageRow")
             .tw("gap-1 w-full items-center"),
-        main_translate_button("TranslateButtonNarrow", state.is_translating),
+        main_translate_button(
+            "TranslateButtonNarrow",
+            state.is_translating,
+            state.main_translate_button_state.clone(),
+        ),
     ))
     .id("ActionBarNarrow")
     .spacing(4)
@@ -988,7 +1374,7 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
     .into_view()
 }
 
-fn main_translate_button(id: &'static str, is_loading: bool) -> View<Message> {
+fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState) -> View<Message> {
     if is_loading {
         progress_ring()
             .id(id)
@@ -1000,6 +1386,7 @@ fn main_translate_button(id: &'static str, is_loading: bool) -> View<Message> {
             .id(id)
             .icon(icon::translate())
             .tooltip(tr("main.translate", "Translate"))
+            .state(state)
             .a11y(A11yHint::named(tr("main.translate", "Translate")))
             .on_press(Message::QuickTranslate)
     }
@@ -1039,6 +1426,7 @@ fn translate_language_bar(
     target_language: &str,
     settings: &SettingsState,
     is_translating: bool,
+    translate_button_state: ControlState,
 ) -> View<Message> {
     let is_main = id_prefix.starts_with("main");
     let source_width = if is_main {
@@ -1052,8 +1440,14 @@ fn translate_language_bar(
         Length::Fixed(96)
     };
 
+    let language_items = if is_main {
+        selected_language_items(true, settings)
+    } else {
+        selected_floating_language_items(true, settings)
+    };
+
     row((
-        combo_box(selected_language_items(true, settings))
+        combo_box(language_items.clone())
             .id(format!("{id_prefix}.source_language"))
             .label("Source Language")
             .selected(source_language.to_string())
@@ -1063,16 +1457,22 @@ fn translate_language_bar(
             .id(format!("{id_prefix}.swap"))
             .icon(icon::swap())
             .icon_only()
+            .width(Length::Fixed(28))
+            .height(Length::Fixed(28))
             .tooltip("Swap languages")
             .on_press(Message::SwapFloatingLanguages(surface)),
-        combo_box(selected_language_items(true, settings))
+        combo_box(language_items)
             .id(format!("{id_prefix}.target_language"))
             .label("Target Language")
             .selected(target_language.to_string())
             .width(target_width)
             .on_change(move |value| Message::FloatingTargetLanguageChanged(surface, value)),
-        styled_text("?", TextStyle::Body),
-        floating_translate_button(format!("{id_prefix}.translate"), surface, is_translating),
+        floating_translate_button(
+            format!("{id_prefix}.translate"),
+            surface,
+            is_translating,
+            translate_button_state,
+        ),
     ))
     .id(format!("{id_prefix}.language_bar"))
     .tw("gap-2 w-full items-center")
@@ -1084,6 +1484,7 @@ fn floating_translate_button(
     id: String,
     surface: QuickTranslateSurface,
     is_loading: bool,
+    state: ControlState,
 ) -> View<Message> {
     if is_loading {
         progress_ring()
@@ -1095,7 +1496,9 @@ fn floating_translate_button(
         primary_button("")
             .id(id)
             .icon(icon::translate())
+            .floating_action()
             .tooltip(tr("main.translate", "Translate"))
+            .state(state)
             .a11y(A11yHint::named(tr("main.translate", "Translate")))
             .on_press(Message::QuickTranslateIn(surface))
     }
@@ -1154,14 +1557,14 @@ fn results_list(
         .into_view()
 }
 
-fn settings_category_bar(selected: SettingsSection) -> View<Message> {
+fn settings_category_bar(state: &SettingsState) -> View<Message> {
     // Wrap the tab tiles with a 7-column cap (WinUI `ItemsWrapGrid
     // MaximumRowsOrColumns=7`); the framework handles row wrapping instead of a
     // hand-rolled `[0..5]/[5..]` split.
     let buttons: Vec<View<Message>> = SettingsSection::ALL
         .iter()
         .copied()
-        .map(|section| settings_category_button(section, selected))
+        .map(|section| settings_category_button(section, state))
         .collect();
 
     wrap(buttons)
@@ -1171,13 +1574,17 @@ fn settings_category_bar(selected: SettingsSection) -> View<Message> {
         .into_view()
 }
 
-fn settings_category_button(section: SettingsSection, selected: SettingsSection) -> View<Message> {
+fn settings_category_button(section: SettingsSection, state: &SettingsState) -> View<Message> {
     button(section.label())
         .id(format!("SettingsTab_{}", section.label()))
         .icon(section.icon())
         .tile()
+        .width(Length::Fixed(128))
+        .height(Length::Fixed(112))
         .tooltip(section.label())
-        .selected(section == selected)
+        .hovered(state.hovered_section == Some(section))
+        .pressed(state.pressed_section == Some(section))
+        .selected(section == state.selected_section)
         .on_press(Message::SettingsSectionChanged(section.id().to_string()))
 }
 
@@ -1194,7 +1601,7 @@ fn settings_section_content(state: &SettingsState) -> View<Message> {
 }
 
 fn settings_general_content(state: &SettingsState) -> View<Message> {
-    let mut children: Vec<View<Message>> = vec![
+    let mut behavior_children: Vec<View<Message>> = vec![
         styled_text_id(
             "SettingsGeneralBehaviorHeader",
             "Behavior",
@@ -1203,6 +1610,7 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
         settings_row("App Theme")
             .id("settings.general.theme")
             .description("Choose how Easydict appears. Select System to follow Windows theme.")
+            .description_id("AppThemeDescriptionText")
             .trailing((combo_box([
                 ComboBoxItem::new("system", "System"),
                 ComboBoxItem::new("light", "Light"),
@@ -1216,22 +1624,25 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
         settings_row("Minimize to system tray")
             .id("settings.general.minimize_to_tray")
             .trailing((toggle_switch("On", state.minimize_to_tray)
+                .id("MinimizeToTrayToggle")
                 .on_toggle(Message::ToggleMinimizeToTray),))
             .into_view(),
         settings_row("Start minimized to tray")
             .id("settings.general.start_minimized")
-            .trailing((
-                toggle_switch("On", state.start_minimized).on_toggle(Message::ToggleStartMinimized),
-            ))
+            .trailing((toggle_switch("On", state.start_minimized)
+                .id("MinimizeToTrayOnStartupToggle")
+                .on_toggle(Message::ToggleStartMinimized),))
             .into_view(),
         settings_row("Monitor clipboard for text")
             .id("settings.general.monitor_clipboard")
             .trailing((toggle_switch("On", state.monitor_clipboard)
+                .id("ClipboardMonitorToggle")
                 .on_toggle(Message::ToggleMonitorClipboard),))
             .into_view(),
         settings_row("Always on top")
             .id("settings.general.always_on_top")
             .trailing((toggle_switch("On", state.fixed_always_on_top)
+                .id("AlwaysOnTopToggle")
                 .on_toggle(Message::ToggleFixedAlwaysOnTop),))
             .into_view(),
         settings_row("Launch at Windows startup")
@@ -1250,25 +1661,30 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
     ];
 
     if state.mouse_selection_translate {
-        children.push(mouse_selection_excluded_apps_panel(state));
+        behavior_children.push(mouse_selection_excluded_apps_panel(state));
     }
 
-    children.push(local_dictionary_suggestions_row(state));
+    behavior_children.push(local_dictionary_suggestions_row(state));
 
-    children.push(
+    behavior_children.push(
         settings_row("Hide dictionaries with no result")
             .id("settings.general.hide_empty_service_results")
             .description("Collapse dictionary rows when a service reports no result.")
             .trailing((toggle_switch("On", state.hide_empty_service_results)
+                .id("HideEmptyServiceResultsToggle")
                 .on_toggle(Message::ToggleHideEmptyServiceResults),))
             .into_view(),
     );
 
-    children.extend([
-        styled_text_id("SettingsGeneralTtsHeader", "TTS", TextStyle::Subtitle),
-        settings_row("TTS speed")
+    let tts_children: Vec<View<Message>> = vec![
+        styled_text_id(
+            "TtsSettingsHeaderText",
+            "TTS Output Settings",
+            TextStyle::Subtitle,
+        ),
+        settings_row("TTS Reading Speed (0.5x - 3.0x)")
             .id("settings.general.tts_speed")
-            .description("Adjust speech rate for source and translation playback.")
+            .title_id("TtsSpeedLabelText")
             .content(
                 row((
                     slider(tts_speed_value(&state.tts_speed))
@@ -1276,6 +1692,7 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
                         .range(0.5, 3.0)
                         .step(0.5)
                         .width(Length::Fixed(250))
+                        .state(state.tts_speed_slider_state.clone())
                         .a11y(A11yHint::named("TTS speed"))
                         .on_change(|value| Message::TtsSpeedChanged(format_tts_speed(value))),
                     styled_text_id(
@@ -1294,13 +1711,28 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
             .description("Play translated text after a translation finishes.")
             .trailing((toggle_switch("On", state.auto_play_translation)
                 .id("AutoPlayTranslationToggle")
+                .state(state.auto_play_translation_toggle_state.clone())
                 .on_toggle(Message::ToggleAutoPlayTranslation),))
             .into_view(),
-    ]);
+    ];
 
-    column(children)
+    let general_tab_content = column((
+        column(behavior_children)
+            .id("BehaviorSection")
+            .spacing(12)
+            .width(Length::Fill),
+        column(tts_children)
+            .id("TtsSettingsSection")
+            .spacing(12)
+            .width(Length::Fill),
+    ))
+    .id("GeneralTabContent")
+    .spacing(24)
+    .width(Length::Fill);
+
+    column((general_tab_content,))
         .id("settings.general")
-        .spacing(12)
+        .spacing(0)
         .width(Length::Fill)
         .into_view()
 }
@@ -1308,18 +1740,20 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
 fn local_dictionary_suggestions_row(state: &SettingsState) -> View<Message> {
     settings_row("Enable custom dictionary input suggestions")
         .id("settings.general.local_dictionary_suggestions")
+        .title_id("EnableLocalDictionarySuggestionsLabelText")
         .description(if state.imported_mdx_dictionaries.is_empty() {
             "Import an MDX dictionary to enable local input suggestions."
         } else {
             "Suggest local dictionary entries while typing."
         })
+        .description_id("EnableLocalDictionarySuggestionsHintText")
         .content(styled_text_id(
-            "LocalDictionarySuggestionsExperimentalText",
+            "ExperimentalLabelText",
             "Experimental",
             TextStyle::Caption,
         ))
         .trailing((toggle_switch("On", state.local_dictionary_suggestions)
-            .id("EnableCustomDictionaryInputSuggestionsToggle")
+            .id("EnableLocalDictionarySuggestionsToggle")
             .enabled(!state.imported_mdx_dictionaries.is_empty())
             .on_toggle(Message::ToggleLocalDictionarySuggestions),))
         .into_view()
@@ -1459,6 +1893,7 @@ fn imported_mdx_config_panel(state: &SettingsState) -> View<Message> {
 
 fn imported_mdx_dictionary_expander(dictionary: &ImportedMdxDictionary) -> View<Message> {
     let service_id = dictionary.service_id.clone();
+    let requires_credentials = imported_mdx_dictionary_requires_credentials(dictionary);
     let mut content = vec![
         styled_text_id(
             format!("MdxFilePathText.{service_id}"),
@@ -1472,7 +1907,7 @@ fn imported_mdx_dictionary_expander(dictionary: &ImportedMdxDictionary) -> View<
         ),
     ];
 
-    if dictionary.is_encrypted {
+    if requires_credentials {
         content.push(
             text_editor(dictionary.email.clone().unwrap_or_default())
                 .id(format!("MdxEmailBox.{service_id}"))
@@ -1496,7 +1931,7 @@ fn imported_mdx_dictionary_expander(dictionary: &ImportedMdxDictionary) -> View<
                 .into_view(),
         );
         content.push(styled_text(
-            "Encrypted dictionaries may require email and registration code.",
+            "Credential-encrypted dictionaries require email and registration code.",
             TextStyle::Caption,
         ));
     }
@@ -1521,7 +1956,7 @@ fn imported_mdx_dictionary_expander(dictionary: &ImportedMdxDictionary) -> View<
         .kind(SettingsRowKind::Expander)
         .description(dictionary.service_id.clone())
         .trailing((styled_text(
-            if dictionary.is_encrypted {
+            if requires_credentials {
                 "Encrypted"
             } else {
                 "Ready"
@@ -1534,6 +1969,10 @@ fn imported_mdx_dictionary_expander(dictionary: &ImportedMdxDictionary) -> View<
                 .spacing(8),
         )
         .into_view()
+}
+
+fn imported_mdx_dictionary_requires_credentials(dictionary: &ImportedMdxDictionary) -> bool {
+    dictionary.is_encrypted && !native_mdx_dictionary_can_route_natively(&dictionary.snapshot())
 }
 
 fn mdx_mdd_summary(dictionary: &ImportedMdxDictionary) -> String {
@@ -3282,6 +3721,26 @@ fn selected_language_items(include_auto: bool, settings: &SettingsState) -> Vec<
     items
 }
 
+fn selected_floating_language_items(
+    include_auto: bool,
+    settings: &SettingsState,
+) -> Vec<ComboBoxItem> {
+    selected_language_items(include_auto, settings)
+        .into_iter()
+        .map(compact_language_item)
+        .collect()
+}
+
+fn compact_language_item(item: ComboBoxItem) -> ComboBoxItem {
+    let label = match item.id.as_str() {
+        "auto" => "Auto",
+        "zh-Hans" => "Chinese",
+        "zh-Hant" => "Traditional",
+        _ => item.label.as_str(),
+    };
+    ComboBoxItem::new(item.id, label)
+}
+
 fn all_language_items(include_auto: bool) -> Vec<ComboBoxItem> {
     let mut items = Vec::new();
     if include_auto {
@@ -3375,14 +3834,17 @@ fn language_label(id: &str) -> String {
     }
 }
 
-fn service_items() -> [ComboBoxItem; 5] {
-    [
-        ComboBoxItem::new("openai", "OpenAI"),
-        ComboBoxItem::new("google", "Google Translate"),
-        ComboBoxItem::new("bing", "Bing Translate"),
-        ComboBoxItem::new("deepl", "DeepL"),
-        ComboBoxItem::new("local-ai", "Local AI"),
-    ]
+fn service_items() -> Vec<ComboBoxItem> {
+    default_translation_service_descriptors()
+        .into_iter()
+        .filter(|descriptor| {
+            !matches!(
+                descriptor.kind,
+                TranslationServiceKind::Dictionary | TranslationServiceKind::ImportedMdx
+            )
+        })
+        .map(|descriptor| ComboBoxItem::new(descriptor.service_id, descriptor.display_name))
+        .collect()
 }
 
 fn open_ai_api_format_items() -> [ComboBoxItem; 3] {

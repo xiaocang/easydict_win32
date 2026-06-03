@@ -245,6 +245,53 @@ fn custom_streaming_plan_validation_rejects_missing_credentials() {
 }
 
 #[test]
+fn custom_streaming_plan_validation_rejects_service_specific_unsupported_languages() {
+    let gemini = CustomStreamingServiceConfig::Gemini(gemini_service_config("gemini-key", None));
+    let gemini_error = build_custom_streaming_translation_request_plan(
+        &gemini,
+        &OpenAiTranslationRequest {
+            text: "Hello".to_string(),
+            from_language: TranslationLanguage::English,
+            to_language: TranslationLanguage::Malay,
+            custom_prompt: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        gemini_error.code,
+        OpenAiExecutionErrorCode::UnsupportedLanguage
+    );
+    assert_eq!(
+        gemini_error.message,
+        "Language pair not supported: English -> Malay"
+    );
+
+    let doubao = CustomStreamingServiceConfig::Doubao(doubao_service_config(
+        "doubao-key",
+        Some("https://ark.example.test/api/v3/responses"),
+        None,
+    ));
+    let doubao_error = build_custom_streaming_translation_request_plan(
+        &doubao,
+        &OpenAiTranslationRequest {
+            text: "Hello".to_string(),
+            from_language: TranslationLanguage::English,
+            to_language: TranslationLanguage::Bengali,
+            custom_prompt: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        doubao_error.code,
+        OpenAiExecutionErrorCode::UnsupportedLanguage
+    );
+    assert_eq!(
+        doubao_error.message,
+        "Language pair not supported: English -> Bengali"
+    );
+}
+
+#[test]
 fn execute_custom_streaming_request_posts_plan_and_parses_selected_format() {
     let mut client =
         RecordingCustomStreamingHttpClient::with_responses([Ok(doubao_sse(&["你", "好"]))]);

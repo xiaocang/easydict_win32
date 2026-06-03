@@ -60,12 +60,16 @@ fn easydict_light() -> ThemeTokens {
         surface: Color::rgb(255, 255, 255),
         surface_alt: Color::rgb(241, 244, 248),
         selected_surface: Color::rgb(234, 243, 255),
+        selected_foreground: Color::rgb(23, 78, 139),
+        selected_border: Color::rgb(92, 143, 199),
         input_surface: Color::rgb(241, 244, 248),
         result_surface: Color::rgb(255, 255, 255),
         result_header: Color::rgb(251, 252, 254),
         result_header_hover: Color::rgb(241, 244, 248),
         button_hover: Color::rgb(238, 243, 248),
         button_pressed: Color::rgb(229, 235, 243),
+        floating_input_surface: Color::rgb(241, 244, 248),
+        floating_input_border: Color::rgb(225, 231, 239),
         floating_action_surface: Color::rgb(247, 251, 255),
         floating_action_border: Color::rgb(122, 167, 217),
         accent_hover: Color::rgb(16, 110, 190),
@@ -135,12 +139,16 @@ fn easydict_dark() -> ThemeTokens {
         surface: Color::rgb(34, 39, 49),
         surface_alt: Color::rgb(42, 47, 57),
         selected_surface: Color::rgb(36, 50, 71),
+        selected_foreground: Color::rgb(216, 232, 255),
+        selected_border: Color::rgb(91, 127, 166),
         input_surface: Color::rgb(42, 47, 57),
         result_surface: Color::rgb(34, 39, 49),
         result_header: Color::rgb(40, 45, 55),
         result_header_hover: Color::rgb(50, 57, 70),
         button_hover: Color::rgb(50, 57, 70),
         button_pressed: Color::rgb(42, 47, 57),
+        floating_input_surface: Color::rgb(42, 47, 57),
+        floating_input_border: Color::rgb(58, 66, 80),
         floating_action_surface: Color::rgb(37, 42, 51),
         floating_action_border: Color::rgb(107, 117, 132),
         accent_hover: Color::rgb(58, 153, 230),
@@ -171,6 +179,8 @@ fn easydict_minimal() -> ThemeTokens {
     theme.result_header_hover = Color::rgb(224, 224, 224);
     theme.button_hover = Color::rgb(224, 224, 224);
     theme.button_pressed = Color::rgb(192, 192, 192);
+    theme.floating_input_surface = Color::rgb(255, 255, 255);
+    theme.floating_input_border = Color::rgb(153, 153, 153);
     theme.floating_action_surface = Color::rgb(255, 255, 255);
     theme.floating_action_border = Color::rgb(0, 0, 0);
     theme.effects.floating_action_rest_opacity = 1.0;

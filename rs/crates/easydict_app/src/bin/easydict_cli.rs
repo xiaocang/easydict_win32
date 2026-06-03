@@ -1,18 +1,28 @@
 use easydict_app::cli_translate::{
-    common_dev_host_candidates, parse_args, usage, CliMode, CliOptions, CliParseError,
-    CompatHostTarget,
+    parse_args, usage, CliMode, CliOptions, CliParseError, WorkerTarget,
 };
 use easydict_app::compat_client::{
-    default_compat_host_path, CompatClientError, CompatHostCommand, CompatHostFacade,
+    default_local_ai_worker_path, DirectWorkerFacade, WorkerClientError,
 };
 use easydict_app::compat_protocol::{
-    GrammarCorrectResultDto, TranslateChunkEventData, TranslationResultDto,
+    GrammarCorrectParams, GrammarCorrectResultDto, SettingsSnapshot, TranslateParams,
+    TranslationResultDto,
+};
+use easydict_app::quick_translate_request_can_route_natively;
+use easydict_app::{
+    auto_foundry_local_native_probe_request, default_settings_storage_path,
+    find_translation_service_descriptor, load_settings_file, local_ai_quick_translate_local_error,
+    run_quick_translate_service, run_quick_translate_service_with_native_route, settings_snapshot,
+    CommandFoundryLocalEndpointResolver, LocalAiWorkerQuickTranslateBackend, QuickQueryMode,
+    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateService,
+    QuickTranslateServiceRequest, QuickTranslateServiceUpdate, RetainedWorkerPolicy,
+    SettingsStorageError,
 };
 use serde_json::json;
 use std::env;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -34,7 +44,6 @@ fn main() -> ExitCode {
 fn run() -> Result<(), CliError> {
     let options = parse_args(env::args().skip(1)).map_err(CliError::Parse)?;
     let text = resolve_text(&options.text)?;
-    let mut facade = spawn_facade(&options.host)?;
     let stdout = io::stdout();
     let stderr = io::stderr();
     let mut stdout = stdout.lock();
@@ -42,22 +51,35 @@ fn run() -> Result<(), CliError> {
 
     match options.mode {
         CliMode::Translate => {
-            let result = facade.translate(&options.translate_params(text))?;
+            let result = match try_run_native_service_update(
+                &options,
+                text.clone(),
+                QuickTranslateExecutionKind::Translate,
+            )? {
+                Some(update) => translation_result_from_update(update)?,
+                None => return Err(unsupported_rust_route_error(&options)),
+            };
             write_translation_result(&mut stdout, &mut stderr, &options, &result)?;
         }
         CliMode::Stream => {
-            let result =
-                run_stream_translation(&mut facade, &options, text, &mut stdout, &mut stderr)?;
+            let result = run_stream_translation(&options, text, &mut stdout, &mut stderr)?;
             if options.verbose && !options.json {
                 write_translation_metadata(&mut stderr, &result)?;
             }
         }
         CliMode::Grammar => {
-            let result = facade.grammar_correct(&options.grammar_params(text))?;
+            let result = match try_run_native_service_update(
+                &options,
+                text.clone(),
+                QuickTranslateExecutionKind::GrammarCorrection,
+            )? {
+                Some(update) => grammar_result_from_update(&options, update)?,
+                None => return Err(unsupported_rust_route_error(&options)),
+            };
             write_grammar_result(&mut stdout, &mut stderr, &options, &result)?;
         }
         CliMode::Batch => {
-            run_batch_translation(&mut facade, &options, text, &mut stdout, &mut stderr)?;
+            run_batch_translation(&options, text, &mut stdout, &mut stderr)?;
         }
     }
 
@@ -65,14 +87,20 @@ fn run() -> Result<(), CliError> {
 }
 
 fn run_batch_translation(
-    facade: &mut CompatHostFacade,
     options: &CliOptions,
     text: String,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<(), CliError> {
     for (index, line) in batch_lines(&text).into_iter().enumerate() {
-        let result = facade.translate(&options.translate_params(line.clone()))?;
+        let result = match try_run_native_service_update(
+            options,
+            line.clone(),
+            QuickTranslateExecutionKind::Translate,
+        )? {
+            Some(update) => translation_result_from_update(update)?,
+            None => return Err(unsupported_rust_route_error(options)),
+        };
         write_batch_translation_result(stdout, stderr, options, index + 1, &line, &result)?;
     }
 
@@ -80,42 +108,221 @@ fn run_batch_translation(
 }
 
 fn run_stream_translation(
-    facade: &mut CompatHostFacade,
     options: &CliOptions,
     text: String,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<TranslationResultDto, CliError> {
-    let mut write_error = None;
-    let result = facade.translate_stream_observing_chunks(
-        &options.translate_params(text),
-        |chunk: TranslateChunkEventData| {
-            if write_error.is_some() {
-                return;
-            }
+    if let Some(update) = try_run_native_service_update(
+        options,
+        text.clone(),
+        QuickTranslateExecutionKind::TranslateStream,
+    )? {
+        return write_native_stream_update(update, stdout, stderr, options);
+    }
 
-            let write_result = if options.json {
-                writeln!(
-                    stdout,
-                    "{}",
-                    json!({
-                        "event": "chunk",
-                        "text": chunk.text,
-                    })
-                )
-            } else {
-                write!(stdout, "{}", chunk.text)
-            }
-            .and_then(|_| stdout.flush());
+    Err(unsupported_rust_route_error(options))
+}
 
-            if let Err(error) = write_result {
-                write_error = Some(error);
-            }
+fn try_run_native_service_update(
+    options: &CliOptions,
+    text: String,
+    execution_kind: QuickTranslateExecutionKind,
+) -> Result<Option<QuickTranslateServiceUpdate>, CliError> {
+    let Some(request) = native_service_request(options, text, execution_kind)? else {
+        return Ok(None);
+    };
+
+    if let Some(error) =
+        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::from_environment())
+    {
+        return Err(CliError::UnsupportedRustRoute(error.to_string()));
+    }
+
+    if quick_translate_request_can_route_natively(&request) {
+        return Ok(run_quick_translate_service_with_native_route(request));
+    }
+
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    if let Some(native_request) =
+        auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
+    {
+        return Ok(run_quick_translate_service_with_native_route(
+            native_request,
+        ));
+    }
+
+    if request.service.id == "windows-local-ai" {
+        let facade = spawn_local_ai_worker(&options.host)?;
+        let mut backend = LocalAiWorkerQuickTranslateBackend::new(facade);
+        return Ok(Some(run_quick_translate_service(&mut backend, &request)));
+    }
+
+    Ok(None)
+}
+
+fn unsupported_rust_route_error(options: &CliOptions) -> CliError {
+    let services = if options.services.is_empty() {
+        "google".to_string()
+    } else {
+        options.services.join(",")
+    };
+
+    CliError::UnsupportedRustRoute(format!(
+        "No Rust-native quick translate route is available for service(s): {services}"
+    ))
+}
+
+fn native_service_request(
+    options: &CliOptions,
+    text: String,
+    execution_kind: QuickTranslateExecutionKind,
+) -> Result<Option<QuickTranslateServiceRequest>, CliError> {
+    let Some(service_id) = native_cli_service_id(options, execution_kind) else {
+        return Ok(None);
+    };
+    let Some(descriptor) = find_translation_service_descriptor(service_id) else {
+        return Ok(None);
+    };
+
+    let service = QuickTranslateService {
+        id: descriptor.service_id.to_string(),
+        name: descriptor.display_name.to_string(),
+        enabled_query: true,
+        grammar_capable: descriptor.grammar_capable,
+        streaming_capable: descriptor.streaming_capable,
+    };
+    let settings = cli_settings_snapshot()?;
+    let params = TranslateParams {
+        text: text.clone(),
+        from: options.from.clone(),
+        to: options.to.clone(),
+        services: Some(vec![service.id.clone()]),
+        custom_prompt: None,
+    };
+    let selected_service_id = service.id.clone();
+
+    Ok(Some(QuickTranslateServiceRequest {
+        query_id: 0,
+        service,
+        query_mode: if execution_kind == QuickTranslateExecutionKind::GrammarCorrection {
+            QuickQueryMode::GrammarCorrection
+        } else {
+            QuickQueryMode::Translation
         },
-    )?;
+        execution_kind,
+        params,
+        grammar_params: (execution_kind == QuickTranslateExecutionKind::GrammarCorrection).then(
+            || GrammarCorrectParams {
+                text,
+                language: options.language.clone().or_else(|| options.from.clone()),
+                services: Some(vec![selected_service_id]),
+                include_explanations: true,
+            },
+        ),
+        settings,
+    }))
+}
 
-    if let Some(error) = write_error {
-        return Err(CliError::Io(error));
+fn native_cli_service_id(
+    options: &CliOptions,
+    execution_kind: QuickTranslateExecutionKind,
+) -> Option<&str> {
+    if execution_kind == QuickTranslateExecutionKind::GrammarCorrection {
+        return options
+            .services
+            .iter()
+            .map(String::as_str)
+            .find(|service_id| {
+                find_translation_service_descriptor(service_id)
+                    .is_some_and(|descriptor| descriptor.grammar_capable)
+            });
+    }
+
+    options
+        .services
+        .first()
+        .map(String::as_str)
+        .or(Some("google"))
+}
+
+fn cli_settings_snapshot() -> Result<SettingsSnapshot, CliError> {
+    let path = default_settings_storage_path();
+    match load_settings_file(&path) {
+        Ok(result) => Ok(settings_snapshot(&result.settings)),
+        Err(SettingsStorageError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
+            Ok(SettingsSnapshot::default())
+        }
+        Err(error) => Err(CliError::Settings(error)),
+    }
+}
+
+fn translation_result_from_update(
+    update: QuickTranslateServiceUpdate,
+) -> Result<TranslationResultDto, CliError> {
+    update.outcome.result.map_err(CliError::QuickTranslate)
+}
+
+fn grammar_result_from_update(
+    options: &CliOptions,
+    update: QuickTranslateServiceUpdate,
+) -> Result<GrammarCorrectResultDto, CliError> {
+    let service = update.outcome.service;
+    let result = update.outcome.result.map_err(CliError::QuickTranslate)?;
+    let preview = update.outcome.grammar_result;
+    let corrected_text = preview
+        .as_ref()
+        .map(|preview| preview.corrected_text.clone())
+        .unwrap_or_else(|| result.translated_text.clone());
+
+    Ok(GrammarCorrectResultDto {
+        original_text: preview
+            .as_ref()
+            .map(|preview| preview.original_text.clone())
+            .unwrap_or_else(|| options.text.clone()),
+        corrected_text,
+        explanation: preview
+            .as_ref()
+            .and_then(|preview| preview.explanation.clone()),
+        raw_text: Some(result.translated_text),
+        service_id: result.service_id.or(Some(service.id)),
+        service_name: result.service_name.or(Some(service.name)),
+        language: options.language.clone().or_else(|| options.from.clone()),
+        timing_ms: result.timing_ms,
+        has_corrections: preview
+            .as_ref()
+            .is_some_and(|preview| preview.has_corrections),
+    })
+}
+
+fn write_native_stream_update(
+    update: QuickTranslateServiceUpdate,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+    options: &CliOptions,
+) -> Result<TranslationResultDto, CliError> {
+    let streamed_chunks = update.outcome.streamed_chunks;
+    let result = update.outcome.result.map_err(CliError::QuickTranslate)?;
+    let chunks = if streamed_chunks.is_empty() && !result.translated_text.is_empty() {
+        vec![result.translated_text.clone()]
+    } else {
+        streamed_chunks
+    };
+
+    for chunk in chunks {
+        if options.json {
+            writeln!(
+                stdout,
+                "{}",
+                json!({
+                    "event": "chunk",
+                    "text": chunk,
+                })
+            )?;
+        } else {
+            write!(stdout, "{chunk}")?;
+        }
+        stdout.flush()?;
     }
 
     if options.json {
@@ -269,113 +476,76 @@ fn escape_line(text: &str) -> String {
     text.replace('\r', "\\r").replace('\n', "\\n")
 }
 
-fn spawn_facade(target: &CompatHostTarget) -> Result<CompatHostFacade, CliError> {
-    let command = resolve_host_command(target)?;
-    command
-        .spawn()
-        .map(CompatHostFacade::new)
-        .map_err(CliError::Compat)
+fn spawn_local_ai_worker(target: &WorkerTarget) -> Result<DirectWorkerFacade, CliError> {
+    let app_dir = resolve_local_ai_worker_app_dir(target)?;
+    DirectWorkerFacade::spawn_packaged_local_ai(app_dir).map_err(CliError::LocalAiWorker)
 }
 
-fn resolve_host_command(target: &CompatHostTarget) -> Result<CompatHostCommand, CliError> {
+fn resolve_local_ai_worker_app_dir(target: &WorkerTarget) -> Result<PathBuf, CliError> {
     match target {
-        CompatHostTarget::Program { program, args } => {
-            if !program.exists() {
-                return Err(CliError::HostNotFound(program.clone()));
+        WorkerTarget::AppDir(app_dir) => {
+            let worker = default_local_ai_worker_path(app_dir);
+            if !worker.exists() {
+                return Err(CliError::WorkerNotFound(worker));
             }
-
-            let mut command = CompatHostCommand::new(program.clone());
-            for arg in args {
-                command = command.arg(arg.clone());
-            }
-            Ok(command)
+            Ok(app_dir.clone())
         }
-        CompatHostTarget::AppDir(app_dir) => {
-            let host = default_compat_host_path(app_dir);
-            if !host.exists() {
-                return Err(CliError::HostNotFound(host));
-            }
-            Ok(CompatHostCommand::packaged(app_dir))
-        }
-        CompatHostTarget::Auto => auto_host_command(),
-    }
-}
-
-fn auto_host_command() -> Result<CompatHostCommand, CliError> {
-    if let Some(path) = env::var_os("EASYDICT_COMPAT_HOST").map(PathBuf::from) {
-        if path.exists() {
-            return Ok(CompatHostCommand::new(path));
-        }
-        return Err(CliError::HostNotFound(path));
-    }
-
-    let exe_dir = env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(Path::to_path_buf));
-    if let Some(exe_dir) = exe_dir {
-        let packaged = default_compat_host_path(&exe_dir);
-        if packaged.exists() {
-            return Ok(CompatHostCommand::packaged(exe_dir));
+        WorkerTarget::Auto | WorkerTarget::Program { .. } => {
+            Err(CliError::WorkerRequiresExplicitAppDir)
         }
     }
-
-    let mut roots = Vec::new();
-    if let Ok(cwd) = env::current_dir() {
-        roots.push(cwd);
-    }
-    if let Ok(exe) = env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            roots.push(exe_dir.to_path_buf());
-        }
-    }
-
-    for root in roots {
-        for candidate in common_dev_host_candidates(root) {
-            if candidate.exists() {
-                return Ok(CompatHostCommand::new(candidate));
-            }
-        }
-    }
-
-    Err(CliError::HostAutoNotFound)
 }
 
 #[derive(Debug)]
 enum CliError {
     Parse(CliParseError),
-    Compat(CompatClientError),
+    QuickTranslate(QuickTranslateBackendError),
+    Settings(SettingsStorageError),
     Io(io::Error),
     Json(serde_json::Error),
-    HostNotFound(PathBuf),
-    HostAutoNotFound,
+    WorkerNotFound(PathBuf),
+    WorkerRequiresExplicitAppDir,
+    LocalAiWorker(WorkerClientError),
+    UnsupportedRustRoute(String),
 }
 
 impl fmt::Display for CliError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Parse(error) => write!(formatter, "{error}"),
-            Self::Compat(error) => write!(formatter, "{error}"),
+            Self::QuickTranslate(error) => write!(formatter, "{error}"),
+            Self::Settings(error) => write!(formatter, "{error}"),
             Self::Io(error) => write!(formatter, "{error}"),
             Self::Json(error) => write!(formatter, "{error}"),
-            Self::HostNotFound(path) => {
+            Self::LocalAiWorker(error) => {
+                write!(formatter, "{}", error.process_message("Local AI worker"))
+            }
+            Self::WorkerNotFound(path) => {
                 write!(
                     formatter,
-                    "CompatHost executable not found: {}",
+                    "Local AI worker executable not found: {}",
                     path.display()
                 )
             }
-            Self::HostAutoNotFound => formatter.write_str(
-                "CompatHost executable not found; pass --host, --app-dir, or EASYDICT_COMPAT_HOST",
+            Self::WorkerRequiresExplicitAppDir => formatter.write_str(
+                "Retained Local AI worker fallback requires explicit --app-dir; automatic worker discovery and --host hints are disabled",
             ),
+            Self::UnsupportedRustRoute(message) => formatter.write_str(message),
         }
     }
 }
 
 impl std::error::Error for CliError {}
 
-impl From<CompatClientError> for CliError {
-    fn from(error: CompatClientError) -> Self {
-        Self::Compat(error)
+impl From<QuickTranslateBackendError> for CliError {
+    fn from(error: QuickTranslateBackendError) -> Self {
+        Self::QuickTranslate(error)
+    }
+}
+
+impl From<SettingsStorageError> for CliError {
+    fn from(error: SettingsStorageError) -> Self {
+        Self::Settings(error)
     }
 }
 

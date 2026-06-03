@@ -2,7 +2,15 @@
 resolver = "2"
 members = [
     "crates/easydict_app",
+    "crates/easydict_encrypt_secret",
+    "crates/easydict_msix_validate",
+    "crates/easydict_pdf_to_images",
     "crates/easydict_preview_iced",
+    "crates/easydict_ui_parity_analyzer",
+    "crates/easydict_icon_generator",
+    "crates/easydict_packager",
+    "crates/easydict_store_listings",
+    "crates/easydict_windows_ocr",
 ]
 
 [workspace.package]

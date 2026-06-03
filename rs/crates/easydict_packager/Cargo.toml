@@ -1,0 +1,10 @@
+[package]
+name = "easydict_packager"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+tempfile = "3.14"
+zip = "8.6"

@@ -1,6 +1,8 @@
 const DRAG_THRESHOLD: i32 = 5;
 const MIN_SELECTION_SIZE: i32 = 3;
 
+use win_fluent::platform::{ScreenRect, ScreenWindow};
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CapturePoint {
     pub x: i32,
@@ -135,10 +137,18 @@ impl WindowDetector {
     }
 }
 
+pub fn detected_windows_from_screen_windows(
+    windows: impl IntoIterator<Item = ScreenWindow>,
+) -> Vec<DetectedWindow> {
+    let windows: Vec<ScreenWindow> = windows.into_iter().collect();
+    build_detected_window_tree(None, &windows)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CapturePhase {
     Detecting,
     Selecting,
+    Adjusting,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -206,11 +216,11 @@ impl CaptureInteractionState {
                     return CaptureInteraction::Redraw;
                 }
 
+                let previous = self.detected_region;
                 let detected = detector.find_region_at_point(point, self.detection_depth);
-                let changed = self.detected_region != detected;
                 self.detected_region = detected;
 
-                if changed {
+                if previous != detected || detected.is_none() {
                     CaptureInteraction::Redraw
                 } else {
                     CaptureInteraction::None
@@ -223,6 +233,7 @@ impl CaptureInteractionState {
                 }
                 CaptureInteraction::Redraw
             }
+            CapturePhase::Adjusting => CaptureInteraction::None,
         }
     }
 
@@ -241,6 +252,7 @@ impl CaptureInteractionState {
                 self.confirm_or_reset()
             }
             CapturePhase::Selecting => CaptureInteraction::None,
+            CapturePhase::Adjusting => CaptureInteraction::None,
         }
     }
 
@@ -289,7 +301,10 @@ impl CaptureInteractionState {
     }
 
     pub fn on_right_button_down(&mut self) -> CaptureInteraction {
-        if self.phase == CapturePhase::Selecting {
+        if matches!(
+            self.phase,
+            CapturePhase::Selecting | CapturePhase::Adjusting
+        ) {
             self.reset_to_detecting(false);
             CaptureInteraction::Redraw
         } else {
@@ -298,7 +313,10 @@ impl CaptureInteractionState {
     }
 
     pub fn on_escape(&mut self) -> CaptureInteraction {
-        if self.phase == CapturePhase::Selecting {
+        if matches!(
+            self.phase,
+            CapturePhase::Selecting | CapturePhase::Adjusting
+        ) {
             self.reset_to_detecting(true);
             CaptureInteraction::Redraw
         } else {
@@ -327,6 +345,41 @@ impl CaptureInteractionState {
         self.on_mouse_move(point, detector)
     }
 
+    pub fn set_adjusting_selection(&mut self, selection: CaptureRect) -> CaptureInteraction {
+        let selection = selection.normalized();
+        if selection.is_confirmable() {
+            self.phase = CapturePhase::Adjusting;
+            self.detected_region = None;
+            self.selection = Some(selection);
+            self.is_mouse_down = false;
+            self.is_drag_selecting = false;
+            self.ignore_next_mouse_up = false;
+            CaptureInteraction::Redraw
+        } else {
+            self.reset_to_detecting(false);
+            CaptureInteraction::Redraw
+        }
+    }
+
+    pub fn nudge_selection(&mut self, delta_x: i32, delta_y: i32) -> CaptureInteraction {
+        if self.phase != CapturePhase::Adjusting {
+            return CaptureInteraction::None;
+        }
+
+        let Some(selection) = self.selection.map(CaptureRect::normalized) else {
+            self.reset_to_detecting(false);
+            return CaptureInteraction::Redraw;
+        };
+
+        self.selection = Some(CaptureRect::new(
+            selection.left.saturating_add(delta_x),
+            selection.top.saturating_add(delta_y),
+            selection.right.saturating_add(delta_x),
+            selection.bottom.saturating_add(delta_y),
+        ));
+        CaptureInteraction::Redraw
+    }
+
     fn confirm_or_reset(&mut self) -> CaptureInteraction {
         let Some(selection) = self.selection.map(CaptureRect::normalized) else {
             self.reset_to_detecting(false);
@@ -334,8 +387,7 @@ impl CaptureInteractionState {
         };
 
         if selection.is_confirmable() {
-            self.selection = Some(selection);
-            CaptureInteraction::Confirm(selection)
+            self.set_adjusting_selection(selection)
         } else {
             self.reset_to_detecting(false);
             CaptureInteraction::Redraw
@@ -364,6 +416,31 @@ fn build_child_chain<'a>(
         chain.push(child);
         build_child_chain(&child.children, point, chain);
     }
+}
+
+fn build_detected_window_tree(
+    parent_id: Option<isize>,
+    windows: &[ScreenWindow],
+) -> Vec<DetectedWindow> {
+    windows
+        .iter()
+        .filter(|window| window.parent_id == parent_id)
+        .map(|window| {
+            DetectedWindow::new(window.id, capture_rect_from_screen_rect(window.rect))
+                .with_children(build_detected_window_tree(Some(window.id), windows))
+        })
+        .collect()
+}
+
+fn capture_rect_from_screen_rect(rect: ScreenRect) -> CaptureRect {
+    let width = i32::try_from(rect.width).unwrap_or(i32::MAX);
+    let height = i32::try_from(rect.height).unwrap_or(i32::MAX);
+    CaptureRect::new(
+        rect.x,
+        rect.y,
+        rect.x.saturating_add(width),
+        rect.y.saturating_add(height),
+    )
 }
 
 const fn min_i32(left: i32, right: i32) -> i32 {

@@ -1,0 +1,11 @@
+[package]
+name = "easydict_msix_validate"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+quick-xml = "0.40"
+sha2 = "0.10"
+tempfile = "3.14"
+zip = "8.6"

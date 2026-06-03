@@ -1,11 +1,14 @@
 use easydict_app::{
-    displayable_phonetics, format_phonetic_text, is_youdao_word_query, merge_phonetics_into_result,
-    phonetic_accent_display_label, phonetic_cache_key, plan_phonetic_enrichment, target_phonetics,
-    translation_cache_entry_size_kb, translation_cache_key, Definition, Phonetic,
+    displayable_phonetics, format_phonetic_text, is_youdao_word_query, long_document_source_hash,
+    merge_phonetics_into_result, phonetic_accent_display_label, phonetic_cache_key,
+    plan_phonetic_enrichment, target_phonetics, translation_cache_entry_size_kb,
+    translation_cache_key, Definition, LongDocumentTranslationCache, Phonetic,
     PhoneticEnrichmentDecision, PhoneticEnrichmentSkipReason, PhoneticFlightRegistration,
     PhoneticFlightTracker, PhoneticMemoryCache, TranslationCacheRequest, TranslationLanguage,
     TranslationMemoryCache, TranslationResult, WordResult,
 };
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn translation_cache_key_matches_dotnet_sha256_hex() {
@@ -20,6 +23,61 @@ fn translation_cache_key_matches_dotnet_sha256_hex() {
         key,
         "7F08F49BED9E65905CC46F9C6DA22D2817B5F467597CBC0FFB066A102E827985"
     );
+}
+
+#[test]
+fn long_document_persistent_cache_matches_dotnet_hash_and_sqlite_contract() {
+    let temp_dir = unique_temp_dir("translation-cache-sqlite");
+    std::fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let db_path = temp_dir.join("translation_cache.db");
+    let mut cache = LongDocumentTranslationCache::open(&db_path).expect("cache should open");
+    let source_hash = long_document_source_hash("Hello");
+
+    assert_eq!(
+        source_hash,
+        "185F8DB32271FE25F561A6FC938B2E264306EC304EDA518007D1764826381969"
+    );
+    assert_eq!(cache.entry_count().expect("count should work"), 0);
+    assert_eq!(
+        cache
+            .try_get("google", "English", "SimplifiedChinese", &source_hash)
+            .expect("missing lookup should work"),
+        None
+    );
+
+    cache
+        .set(
+            "google",
+            "English",
+            "SimplifiedChinese",
+            &source_hash,
+            "Hello",
+            "\u{4F60}\u{597D}",
+        )
+        .expect("cache set should work");
+    cache
+        .set(
+            "google",
+            "English",
+            "SimplifiedChinese",
+            &source_hash,
+            "Hello",
+            "\u{4F60}\u{597D}!",
+        )
+        .expect("cache upsert should work");
+
+    assert_eq!(cache.entry_count().expect("count should work"), 1);
+    assert_eq!(
+        cache
+            .try_get("google", "English", "SimplifiedChinese", &source_hash)
+            .expect("lookup should work")
+            .as_deref(),
+        Some("\u{4F60}\u{597D}!")
+    );
+
+    cache.clear().expect("clear should work");
+    assert_eq!(cache.entry_count().expect("count should work"), 0);
+    std::fs::remove_dir_all(temp_dir).ok();
 }
 
 #[test]
@@ -302,6 +360,14 @@ fn phonetic_flight_tracker_deduplicates_same_cache_key_until_complete() {
 
     assert!(tracker.complete("HELLO"));
     assert_eq!(tracker.begin("hello"), PhoneticFlightRegistration::Started);
+}
+
+fn unique_temp_dir(prefix: &str) -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!("{prefix}-{}-{stamp}", std::process::id()))
 }
 
 fn result_with_phonetics(phonetics: Vec<Phonetic>) -> TranslationResult {

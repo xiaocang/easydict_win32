@@ -1,14 +1,13 @@
-use easydict_app::compat_protocol::{
-    OcrLanguageDto, OcrLineDto, OcrRecognizeParams, OcrRectDto, OcrResultDto, SettingsSnapshot,
-};
+use easydict_app::compat_protocol::SettingsSnapshot;
 use easydict_app::{
     apply_ocr_outcome, begin_ocr_recognize, bgra_to_base64_bmp, bgra_to_base64_jpeg_data_url,
     build_custom_api_ocr_request, build_ollama_ocr_request, group_and_sort_ocr_lines,
     merge_ocr_lines, merge_ocr_words, merged_ocr_text, parse_ocr_http_response, run_ocr_recognize,
-    run_ocr_recognize_with_packaged_host, CapturePoint, CaptureRect, DetectedWindow, EasydictApp,
-    EasydictUiState, Message, NativeOcrBackend, OcrBackend, OcrBackendError, OcrCaptureResult,
-    OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
-    OcrImageEncodeError, OcrMode, OcrOutcome,
+    run_ocr_recognize_with_packaged_app_dir, CapturePhase, CapturePoint, CaptureRect,
+    DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend, OcrBackend,
+    OcrBackendError, OcrCaptureResult, OcrEngineConfig, OcrEngineKind, OcrHttpClient,
+    OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError, OcrLanguageDto, OcrLineDto,
+    OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
 };
 use std::{
     collections::VecDeque,
@@ -20,8 +19,8 @@ use std::{
     time::Duration,
 };
 use win_fluent::prelude::{
-    Application, PlatformCommand, ScreenCaptureRequest, ScreenCaptureResult, ScreenRect, Task,
-    WindowCommand,
+    Application, PlatformCommand, ScreenCaptureRequest, ScreenCaptureResult, ScreenRect,
+    ScreenWindow, Task, WindowCommand,
 };
 
 #[test]
@@ -389,8 +388,14 @@ fn native_ocr_backend_runs_custom_api_provider_from_bgra_file() {
 }
 
 #[test]
-fn native_ocr_backend_rejects_windows_native_provider_without_worker() {
-    let mut backend = NativeOcrBackend::new(RecordingOcrHttpClient::with_responses([]));
+fn native_ocr_backend_runs_windows_native_provider_without_worker() {
+    let mut backend = NativeOcrBackend::with_windows_recognizer(
+        RecordingOcrHttpClient::with_responses([]),
+        RecordingWindowsNativeOcrRecognizer::with_responses([Ok(ocr_result(
+            "windows native text",
+            Some(("ja-JP", "Japanese")),
+        ))]),
+    );
     let request = easydict_app::OcrRecognizeRequest {
         query_id: 9,
         mode: OcrMode::Translate,
@@ -403,16 +408,19 @@ fn native_ocr_backend_rejects_windows_native_provider_without_worker() {
 
     let outcome = run_ocr_recognize(&mut backend, &request);
 
-    assert!(outcome
-        .result
-        .unwrap_err()
-        .message
-        .contains("compatibility OCR worker"));
+    assert_eq!(
+        outcome.result.expect("OCR result").text,
+        "windows native text"
+    );
     assert!(backend.http_client().requests.is_empty());
+    assert_eq!(
+        backend.windows_recognizer().calls,
+        vec![(request.params, Some("ja-JP".to_string()))]
+    );
 }
 
 #[test]
-fn packaged_host_runner_uses_native_provider_for_advanced_ocr_engine() {
+fn packaged_app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
     let (endpoint, server) =
         serve_one_http_response(r#"{ "response": " routed native provider " }"#);
     let path = write_temp_bgra("routed", &[0, 0, 255, 255]);
@@ -434,7 +442,7 @@ fn packaged_host_runner_uses_native_provider_for_advanced_ocr_engine() {
         },
     };
 
-    let outcome = run_ocr_recognize_with_packaged_host(request, r"C:\MissingCompatHost");
+    let outcome = run_ocr_recognize_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
     let http_request = server.join().expect("HTTP test server should finish");
 
     fs::remove_file(&path).ok();
@@ -445,6 +453,30 @@ fn packaged_host_runner_uses_native_provider_for_advanced_ocr_engine() {
     assert!(http_request.starts_with("POST /api/generate "));
     assert!(http_request.contains(r#""model":"glm-ocr""#));
     assert!(http_request.contains(r#""prompt":"Route natively.""#));
+}
+
+#[test]
+fn packaged_app_dir_runner_uses_native_windows_ocr_without_worker_spawn() {
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 11,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: r"C:\Missing\pixels.bgra".to_string(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("WindowsNative".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let error = outcome.result.unwrap_err().message;
+
+    assert!(error.contains("Could not read OCR pixel data"));
+    assert!(!error.contains("OCR worker"));
 }
 
 #[test]
@@ -626,7 +658,7 @@ fn app_ocr_capture_finished_starts_compat_ocr_task() {
 }
 
 #[test]
-fn capture_overlay_confirm_requests_platform_screen_capture() {
+fn capture_overlay_confirm_without_selection_waits_for_region() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -637,8 +669,78 @@ fn capture_overlay_confirm_requests_platform_screen_capture() {
     let task = app.update(Message::ConfirmCapture);
 
     assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::Translate));
-    assert_eq!(app.state.ocr_status_text, "OCR Translate capture requested");
-    assert!(contains_capture_screen_region_task(&task));
+    assert_eq!(app.state.ocr_status_text, "Select a region before OCR");
+    assert!(!contains_capture_screen_region_task(&task));
+}
+
+#[test]
+fn ocr_hotkey_captures_window_snapshot_for_double_click_detection() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let task = app.update(Message::HotkeyTriggered(
+        easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
+    ));
+
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Show(id) if id.as_str() == "capture-overlay"
+    )));
+
+    let message = map_capture_screen_windows_task(
+        &task,
+        vec![
+            ScreenWindow::new(1, None, ScreenRect::new(0, 0, 500, 400)).class_name("Top"),
+            ScreenWindow::new(2, Some(1), ScreenRect::new(40, 30, 160, 120)).class_name("Child"),
+        ],
+    )
+    .expect("hotkey should request a window snapshot");
+    app.update(message);
+
+    assert_eq!(
+        app.state
+            .capture_window_detector
+            .find_region_at_point(CapturePoint::new(60, 50), 0),
+        Some(CaptureRect::new(40, 30, 200, 150))
+    );
+    assert_eq!(
+        app.state
+            .capture_window_detector
+            .find_region_at_point(CapturePoint::new(60, 50), 1),
+        Some(CaptureRect::new(0, 0, 500, 400))
+    );
+}
+
+#[test]
+fn capture_window_snapshot_does_not_reset_active_drag_selection() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    let task = app.update(Message::HotkeyTriggered(
+        easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
+    ));
+
+    app.update(Message::CaptureLeftButtonDown(CapturePoint::new(10, 10)));
+    app.update(Message::CaptureMouseMoved(CapturePoint::new(40, 40)));
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Selecting);
+    assert_eq!(
+        app.state.capture_selection,
+        Some(CaptureRect::new(10, 10, 40, 40))
+    );
+
+    let message = map_capture_screen_windows_task(
+        &task,
+        vec![ScreenWindow::new(1, None, ScreenRect::new(0, 0, 500, 400))],
+    )
+    .expect("hotkey should request a window snapshot");
+    app.update(message);
+
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Selecting);
+    assert_eq!(
+        app.state.capture_selection,
+        Some(CaptureRect::new(10, 10, 40, 40))
+    );
 }
 
 #[test]
@@ -665,7 +767,7 @@ fn capture_overlay_confirm_uses_selected_screen_region() {
 }
 
 #[test]
-fn capture_overlay_drag_interaction_confirms_selected_screen_region() {
+fn capture_overlay_drag_interaction_enters_adjusting_then_confirms_selected_screen_region() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -683,6 +785,15 @@ fn capture_overlay_drag_interaction_confirms_selected_screen_region() {
     ));
 
     let task = app.update(Message::CaptureLeftButtonUp(CapturePoint::new(200, 160)));
+
+    assert!(!contains_capture_screen_region_task(&task));
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Adjusting);
+    assert_eq!(
+        app.state.capture_selection,
+        Some(CaptureRect::new(120, 90, 200, 160))
+    );
+
+    let task = app.update(Message::ConfirmCapture);
 
     assert_eq!(
         capture_screen_region_request(&task),
@@ -732,6 +843,9 @@ fn capture_overlay_copy_requests_silent_platform_screen_capture() {
     app.update(Message::HotkeyTriggered(
         easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
     ));
+    app.update(Message::CaptureSelectionChanged(Some(CaptureRect::new(
+        -10, 20, -7, 23,
+    ))));
 
     let task = app.update(Message::CopyResult);
 
@@ -757,6 +871,22 @@ fn capture_overlay_copy_requests_silent_platform_screen_capture() {
         message,
         Message::SilentOcrCaptureFinished(OcrCaptureResult::new(r"C:\Temp\screen.bgra", 3, 2))
     );
+}
+
+#[test]
+fn capture_overlay_copy_without_selection_waits_for_region() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.update(Message::HotkeyTriggered(
+        easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
+    ));
+
+    let task = app.update(Message::CopyResult);
+
+    assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::Translate));
+    assert_eq!(app.state.ocr_status_text, "Select a region before OCR");
+    assert!(!contains_capture_screen_region_task(&task));
 }
 
 #[test]
@@ -963,6 +1093,38 @@ impl OcrHttpClient for RecordingOcrHttpClient {
     }
 }
 
+struct RecordingWindowsNativeOcrRecognizer {
+    calls: Vec<(OcrRecognizeParams, Option<String>)>,
+    responses: VecDeque<Result<OcrResultDto, OcrBackendError>>,
+}
+
+impl RecordingWindowsNativeOcrRecognizer {
+    fn with_responses(
+        responses: impl IntoIterator<Item = Result<OcrResultDto, OcrBackendError>>,
+    ) -> Self {
+        Self {
+            calls: Vec::new(),
+            responses: responses.into_iter().collect(),
+        }
+    }
+}
+
+impl WindowsNativeOcrRecognizer for RecordingWindowsNativeOcrRecognizer {
+    fn recognize(
+        &mut self,
+        params: &OcrRecognizeParams,
+        preferred_language_tag: Option<&str>,
+    ) -> Result<OcrResultDto, OcrBackendError> {
+        self.calls.push((
+            params.clone(),
+            preferred_language_tag.map(ToOwned::to_owned),
+        ));
+        self.responses
+            .pop_front()
+            .expect("test Windows OCR response should be queued")
+    }
+}
+
 fn capture(path: &str, width: u32, height: u32) -> OcrCaptureResult {
     OcrCaptureResult::new(path, width, height).preferred_language_tag("ja-JP")
 }
@@ -1122,6 +1284,19 @@ fn map_capture_screen_region_task(
         Task::Batch(tasks) => tasks
             .iter()
             .find_map(|task| map_capture_screen_region_task(task, capture.clone())),
+        _ => None,
+    }
+}
+
+fn map_capture_screen_windows_task(
+    task: &Task<Message>,
+    windows: Vec<ScreenWindow>,
+) -> Option<Message> {
+    match task {
+        Task::CaptureScreenWindows { map, .. } => Some(map(windows)),
+        Task::Batch(tasks) => tasks
+            .iter()
+            .find_map(|task| map_capture_screen_windows_task(task, windows.clone())),
         _ => None,
     }
 }

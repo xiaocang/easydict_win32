@@ -23,6 +23,8 @@ fn settings_storage_saves_legacy_keys_and_protects_sensitive_values() {
     settings.monitor_clipboard = true;
     settings.launch_at_startup = true;
     settings.open_ai_api_key = "sk-openai".to_string();
+    settings.device_id = "device-id".to_string();
+    settings.device_token = "device-token".to_string();
     settings.deepl_api_key = "deepl-secret".to_string();
     settings.ocr_api_key = "ocr-secret".to_string();
     settings.ocr_engine = "CustomApi".to_string();
@@ -86,6 +88,8 @@ fn settings_storage_saves_legacy_keys_and_protects_sensitive_values() {
     assert_eq!(root["ClipboardMonitoring"], true);
     assert!(root.get("MonitorClipboard").is_none());
     assert_eq!(root["LaunchAtStartup"], true);
+    assert_eq!(root["DeviceId"], "device-id");
+    assert_eq!(root["DeviceToken"], "device-token");
     assert_eq!(root["VisionLayoutServiceId"], "openai");
     assert!(root.get("VisionLayoutService").is_none());
     assert_eq!(
@@ -125,6 +129,8 @@ fn settings_storage_loads_migrated_legacy_json_and_decrypts_old_credentials() {
   "SecondLanguage": "en",
   "SelectedLanguages": ["en", "ja", "zh-Hans"],
   "OpenAIApiKey": "plain-openai",
+  "DeviceId": "legacy-device-id",
+  "DeviceToken": "legacy-device-token",
   "DeepLApiKey": "{deep_l}",
   "CustomOpenAIApiKey": "{custom}",
   "CustomOpenAIEndpoint": "https://custom.example.test/v1/responses",
@@ -163,6 +169,8 @@ fn settings_storage_loads_migrated_legacy_json_and_decrypts_old_credentials() {
     assert_eq!(settings.first_language, "zh");
     assert_eq!(settings.second_language, "en");
     assert_eq!(settings.open_ai_api_key, "plain-openai");
+    assert_eq!(settings.device_id, "legacy-device-id");
+    assert_eq!(settings.device_token, "legacy-device-token");
     assert_eq!(settings.deepl_api_key, "deepl-legacy");
     let custom_provider = settings
         .service_provider_settings

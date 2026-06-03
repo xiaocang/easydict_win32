@@ -1,5 +1,5 @@
 use crate::compat_protocol::{
-    local_ai_provider_modes, ImportedMdxDictionarySnapshot, SettingsSnapshot,
+    local_ai_provider_modes, ImportedMdxDictionarySnapshot, SettingsSnapshot, WordResultDto,
 };
 use crate::local_dictionary::{
     apply_active_local_dictionary_suggestion, apply_local_dictionary_suggestion,
@@ -7,6 +7,7 @@ use crate::local_dictionary::{
     focus_local_dictionary_suggestions, move_local_dictionary_suggestion,
     LocalDictionarySuggestionUpdate,
 };
+use crate::mdx_native::detect_mdx_file_is_encrypted;
 use crate::quick_translate::{QuickQueryMode, QuickTranslateSurface};
 use crate::translation_services::{
     default_translation_service_descriptors, translation_service_capabilities,
@@ -16,6 +17,7 @@ use crate::{
     HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
     HOTKEY_TRANSLATE_CLIPBOARD,
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use win_fluent::prelude::*;
 use win_fluent::IconToken;
@@ -249,20 +251,36 @@ pub enum PreviewScenario {
     AfterTranslate,
     Error,
     ModeOverlay,
+    PrimaryHover,
+    PrimaryPressed,
+    SourceInputHover,
+    SourceInputFocused,
+    ResultHeaderHover,
+    ResultCollapsed,
     LocalDictionarySuggestions,
     LongDocument,
+    LongDocumentRunning,
+    LongDocumentError,
 }
 
 impl PreviewScenario {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 16] = [
         Self::Initial,
         Self::BeforeTranslate,
         Self::Loading,
         Self::AfterTranslate,
         Self::Error,
         Self::ModeOverlay,
+        Self::PrimaryHover,
+        Self::PrimaryPressed,
+        Self::SourceInputHover,
+        Self::SourceInputFocused,
+        Self::ResultHeaderHover,
+        Self::ResultCollapsed,
         Self::LocalDictionarySuggestions,
         Self::LongDocument,
+        Self::LongDocumentRunning,
+        Self::LongDocumentError,
     ];
 
     pub fn id(self) -> &'static str {
@@ -273,8 +291,16 @@ impl PreviewScenario {
             Self::AfterTranslate => "after_translate",
             Self::Error => "error",
             Self::ModeOverlay => "mode_overlay",
+            Self::PrimaryHover => "primary_hover",
+            Self::PrimaryPressed => "primary_pressed",
+            Self::SourceInputHover => "source_input_hover",
+            Self::SourceInputFocused => "source_input_focused",
+            Self::ResultHeaderHover => "result_header_hover",
+            Self::ResultCollapsed => "result_collapsed",
             Self::LocalDictionarySuggestions => "local_dictionary_suggestions",
             Self::LongDocument => "long_document",
+            Self::LongDocumentRunning => "long_document_running",
+            Self::LongDocumentError => "long_document_error",
         }
     }
 
@@ -318,6 +344,7 @@ pub struct TranslationResultPreview {
     pub body: String,
     pub grammar_result: Option<GrammarCorrectionPreview>,
     pub alternatives: Option<Vec<String>>,
+    pub word_result: Option<WordResultDto>,
     pub streamed_chunks: Vec<String>,
     pub no_result: bool,
     pub status: ResultStatus,
@@ -329,6 +356,7 @@ pub struct TranslationResultPreview {
     pub has_queried: bool,
     pub demoted: bool,
     pub expanded: bool,
+    pub header_state: ControlState,
 }
 
 impl TranslationResultPreview {
@@ -343,6 +371,7 @@ impl TranslationResultPreview {
             body: body.into(),
             grammar_result: None,
             alternatives: None,
+            word_result: None,
             streamed_chunks: Vec::new(),
             no_result: false,
             status: ResultStatus::Ready,
@@ -354,6 +383,7 @@ impl TranslationResultPreview {
             has_queried: true,
             demoted: false,
             expanded: true,
+            header_state: ControlState::default(),
         }
     }
 
@@ -407,7 +437,11 @@ impl TranslationResultPreview {
         .expanded(self.expanded)
         .toggleable(!self.demoted)
         .dimmed(self.demoted)
-        .status(self.status);
+        .status(self.status)
+        .header_state(self.header_state.clone())
+        .actions_visible(
+            self.header_state.hovered || self.header_state.pressed || self.header_state.focused,
+        );
 
         if let Some(metadata) = self.result_metadata() {
             item = item.metadata(metadata);
@@ -443,6 +477,9 @@ impl TranslationResultPreview {
                 body.push_str("Also: ");
                 body.push_str(&alternatives.join("; "));
             }
+        }
+        if let Some(word_result) = &self.word_result {
+            append_word_result_body(&mut body, word_result);
         }
         body
     }
@@ -491,6 +528,140 @@ fn grammar_body(grammar: &GrammarCorrectionPreview) -> String {
     body
 }
 
+fn append_word_result_body(body: &mut String, word_result: &WordResultDto) {
+    let mut sections = Vec::new();
+
+    if let Some(phonetics) = &word_result.phonetics {
+        let values: Vec<String> = phonetics
+            .iter()
+            .filter_map(|phonetic| {
+                let text = phonetic.text.as_deref()?.trim();
+                if text.is_empty() {
+                    return None;
+                }
+                let accent = phonetic.accent.as_deref().unwrap_or("").trim();
+                Some(if accent.is_empty() {
+                    format_phonetic_text(text)
+                } else {
+                    format!("{accent} {}", format_phonetic_text(text))
+                })
+            })
+            .collect();
+        if !values.is_empty() {
+            sections.push(format!("Phonetics: {}", values.join("; ")));
+        }
+    }
+
+    if let Some(definitions) = &word_result.definitions {
+        let values: Vec<String> = definitions
+            .iter()
+            .filter_map(|definition| {
+                let meanings: Vec<&str> = definition
+                    .meanings
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|meaning| !meaning.trim().is_empty())
+                    .collect();
+                if meanings.is_empty() {
+                    return None;
+                }
+                let part = definition.part_of_speech.as_deref().unwrap_or("").trim();
+                Some(if part.is_empty() {
+                    meanings.join("; ")
+                } else {
+                    format!("{part} {}", meanings.join("; "))
+                })
+            })
+            .collect();
+        if !values.is_empty() {
+            sections.push(format!("Definitions: {}", values.join(" | ")));
+        }
+    }
+
+    if let Some(examples) = &word_result.examples {
+        let values: Vec<&str> = examples
+            .iter()
+            .map(String::as_str)
+            .filter(|example| !example.trim().is_empty())
+            .collect();
+        if !values.is_empty() {
+            sections.push(format!("Examples: {}", values.join(" | ")));
+        }
+    }
+
+    if let Some(word_forms) = &word_result.word_forms {
+        let values: Vec<String> = word_forms
+            .iter()
+            .filter_map(|form| {
+                let value = form.value.as_deref()?.trim();
+                if value.is_empty() {
+                    return None;
+                }
+                let name = form.name.as_deref().unwrap_or("").trim();
+                Some(if name.is_empty() {
+                    value.to_string()
+                } else {
+                    format!("{name}: {value}")
+                })
+            })
+            .collect();
+        if !values.is_empty() {
+            sections.push(format!("Forms: {}", values.join("; ")));
+        }
+    }
+
+    if let Some(synonyms) = &word_result.synonyms {
+        let values: Vec<String> = synonyms
+            .iter()
+            .filter_map(|synonym| {
+                let words: Vec<&str> = synonym
+                    .words
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|word| !word.trim().is_empty())
+                    .collect();
+                if words.is_empty() {
+                    return None;
+                }
+                let part = synonym.part_of_speech.as_deref().unwrap_or("").trim();
+                let meaning = synonym.meaning.as_deref().unwrap_or("").trim();
+                let prefix = [part, meaning]
+                    .into_iter()
+                    .filter(|value| !value.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                Some(if prefix.is_empty() {
+                    words.join(", ")
+                } else {
+                    format!("{prefix}: {}", words.join(", "))
+                })
+            })
+            .collect();
+        if !values.is_empty() {
+            sections.push(format!("Synonyms: {}", values.join(" | ")));
+        }
+    }
+
+    if !sections.is_empty() {
+        if !body.is_empty() {
+            body.push('\n');
+        }
+        body.push_str(&sections.join("\n"));
+    }
+}
+
+fn format_phonetic_text(text: &str) -> String {
+    if text.starts_with('/') && text.ends_with('/') {
+        text.to_string()
+    } else {
+        format!("/{text}/")
+    }
+}
+
 fn service_icon(service_id: &str) -> IconToken {
     match service_id {
         "google" => icon::translate(),
@@ -516,6 +687,7 @@ pub struct LongDocumentState {
     pub source_language: String,
     pub target_language: String,
     pub service: String,
+    pub service_combo_state: ControlState,
     pub input_mode: String,
     pub output_mode: String,
     pub concurrency: String,
@@ -541,8 +713,9 @@ impl Default for LongDocumentState {
             source_language: "auto".to_string(),
             target_language: "zh-Hans".to_string(),
             service: "openai".to_string(),
+            service_combo_state: ControlState::default(),
             input_mode: "pdf".to_string(),
-            output_mode: "bilingual".to_string(),
+            output_mode: "mono".to_string(),
             concurrency: "4".to_string(),
             page_range: String::new(),
             two_pass_context: true,
@@ -581,7 +754,40 @@ pub struct FloatingWindowState {
     pub active_query_id: Option<u64>,
     pub active_query_service_count: usize,
     pub active_query_success_count: usize,
+    pub translate_button_state: ControlState,
     pub results: Vec<TranslationResultPreview>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PopButtonAnchor {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl PopButtonAnchor {
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    pub const fn window_position_dips(self) -> (f32, f32) {
+        ((self.x + 8) as f32, (self.y - 32) as f32)
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PopButtonState {
+    pub pending_text: Option<String>,
+    pub visible: bool,
+    pub anchor: Option<PopButtonAnchor>,
+    pub generation: u64,
+}
+
+impl PopButtonState {
+    pub fn clear(&mut self) {
+        self.pending_text = None;
+        self.visible = false;
+        self.anchor = None;
+    }
 }
 
 impl FloatingWindowState {
@@ -592,7 +798,7 @@ impl FloatingWindowState {
             source_language: "auto".to_string(),
             target_language: "zh-Hans".to_string(),
             target_language_manually_selected: false,
-            detected_language: Some("Detected: English".to_string()),
+            detected_language: None,
             pinned: false,
             status_text: String::new(),
             current_quick_query_mode: QuickQueryMode::Translation,
@@ -602,6 +808,7 @@ impl FloatingWindowState {
             active_query_id: None,
             active_query_service_count: 0,
             active_query_success_count: 0,
+            translate_button_state: ControlState::default(),
             results: vec![TranslationResultPreview::new(
                 "google",
                 "Google Translate",
@@ -618,7 +825,7 @@ impl FloatingWindowState {
             source_language: "auto".to_string(),
             target_language: "zh-Hans".to_string(),
             target_language_manually_selected: false,
-            detected_language: Some("Detected: English".to_string()),
+            detected_language: None,
             pinned: true,
             status_text: String::new(),
             current_quick_query_mode: QuickQueryMode::Translation,
@@ -628,6 +835,7 @@ impl FloatingWindowState {
             active_query_id: None,
             active_query_service_count: 0,
             active_query_success_count: 0,
+            translate_button_state: ControlState::default(),
             results: vec![TranslationResultPreview::new(
                 "google",
                 "Google Translate",
@@ -725,6 +933,9 @@ impl ServiceProviderSetting {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SettingsState {
     pub selected_section: SettingsSection,
+    pub hovered_section: Option<SettingsSection>,
+    pub pressed_section: Option<SettingsSection>,
+    pub tab_switching: bool,
     pub unsaved_changes: bool,
     pub show_unsaved_changes_dialog: bool,
     pub save_error_message: Option<String>,
@@ -734,6 +945,8 @@ pub struct SettingsState {
     pub second_language: String,
     pub selected_languages: Vec<String>,
     pub translation_languages_expanded: bool,
+    pub tts_speed_slider_state: ControlState,
+    pub auto_play_translation_toggle_state: ControlState,
     pub auto_select_target_language: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
@@ -777,6 +990,8 @@ pub struct SettingsState {
     pub open_ai_model: String,
     pub open_ai_api_format_override: String,
     pub open_ai_test_status: String,
+    pub device_id: String,
+    pub device_token: String,
     pub ollama_endpoint: String,
     pub ollama_model: String,
     pub ollama_status: String,
@@ -839,6 +1054,9 @@ impl Default for SettingsState {
     fn default() -> Self {
         Self {
             selected_section: SettingsSection::General,
+            hovered_section: None,
+            pressed_section: None,
+            tab_switching: false,
             unsaved_changes: false,
             show_unsaved_changes_dialog: false,
             save_error_message: None,
@@ -848,6 +1066,8 @@ impl Default for SettingsState {
             second_language: "en".to_string(),
             selected_languages: default_selected_languages(),
             translation_languages_expanded: false,
+            tts_speed_slider_state: ControlState::default(),
+            auto_play_translation_toggle_state: ControlState::default(),
             auto_select_target_language: true,
             minimize_to_tray: true,
             start_minimized: false,
@@ -888,6 +1108,8 @@ impl Default for SettingsState {
             open_ai_model: DEFAULT_OPENAI_MODEL.to_string(),
             open_ai_api_format_override: "Auto".to_string(),
             open_ai_test_status: "Not tested".to_string(),
+            device_id: String::new(),
+            device_token: String::new(),
             ollama_endpoint: DEFAULT_OLLAMA_ENDPOINT.to_string(),
             ollama_model: DEFAULT_OLLAMA_MODEL.to_string(),
             ollama_status: "Not refreshed".to_string(),
@@ -946,6 +1168,9 @@ pub struct EasydictUiState {
     pub capture_interaction: crate::screen_capture::CaptureInteractionState,
     pub capture_window_detector: crate::screen_capture::WindowDetector,
     pub capture_selection: Option<crate::screen_capture::CaptureRect>,
+    pub translation_cache: crate::translation_cache::TranslationMemoryCache,
+    pub pending_quick_translate_cache_requests:
+        HashMap<(u64, String), crate::translation_cache::TranslationCacheRequest>,
     pub active_query_service_count: usize,
     pub active_query_success_count: usize,
     pub connection_status: ConnectionStatus,
@@ -966,6 +1191,8 @@ pub struct EasydictUiState {
     pub last_result_action: Option<ResultActionIntent>,
     pub last_opened_settings_link: Option<SettingsLink>,
     pub source_text_focused: bool,
+    pub source_text_state: ControlState,
+    pub main_translate_button_state: ControlState,
     pub next_suggestion_query_id: u64,
     pub active_suggestion_query_id: Option<u64>,
     pub local_dictionary_suggestion_query: Option<String>,
@@ -976,6 +1203,7 @@ pub struct EasydictUiState {
     pub long_document: LongDocumentState,
     pub settings: SettingsState,
     pub saved_settings: SettingsState,
+    pub pop_button: PopButtonState,
     pub mini: FloatingWindowState,
     pub fixed: FloatingWindowState,
 }
@@ -994,6 +1222,8 @@ impl Default for EasydictUiState {
             capture_interaction: crate::screen_capture::CaptureInteractionState::new(),
             capture_window_detector: crate::screen_capture::WindowDetector::new(),
             capture_selection: None,
+            translation_cache: crate::translation_cache::TranslationMemoryCache::new(),
+            pending_quick_translate_cache_requests: HashMap::new(),
             active_query_service_count: 0,
             active_query_success_count: 0,
             connection_status: ConnectionStatus::Disconnected,
@@ -1014,6 +1244,8 @@ impl Default for EasydictUiState {
             last_result_action: None,
             last_opened_settings_link: None,
             source_text_focused: true,
+            source_text_state: ControlState::default().focused(true),
+            main_translate_button_state: ControlState::default(),
             next_suggestion_query_id: 1,
             active_suggestion_query_id: None,
             local_dictionary_suggestion_query: None,
@@ -1045,6 +1277,7 @@ impl Default for EasydictUiState {
             long_document: LongDocumentState::default(),
             settings: SettingsState::default(),
             saved_settings: SettingsState::default(),
+            pop_button: PopButtonState::default(),
             mini: FloatingWindowState::mini_demo(),
             fixed: FloatingWindowState::fixed_demo(),
         }
@@ -1124,6 +1357,33 @@ impl EasydictUiState {
                 state.is_translating = true;
                 state.status_text = "Switching mode".to_string();
             }
+            PreviewScenario::PrimaryHover => {
+                state.main_translate_button_state = ControlState::default().hovered(true);
+            }
+            PreviewScenario::PrimaryPressed => {
+                state.main_translate_button_state =
+                    ControlState::default().hovered(true).pressed(true);
+            }
+            PreviewScenario::SourceInputHover => {
+                state.source_text_focused = false;
+                state.source_text_state = ControlState::default().hovered(true);
+            }
+            PreviewScenario::SourceInputFocused => {
+                state.source_text_focused = true;
+                state.source_text_state = ControlState::default().focused(true);
+            }
+            PreviewScenario::ResultHeaderHover => {
+                if let Some(result) = state.results.first_mut() {
+                    result.header_state = ControlState::default().hovered(true);
+                }
+            }
+            PreviewScenario::ResultCollapsed => {
+                state.connection_status = ConnectionStatus::Connected;
+                state.status_text = "Connected".to_string();
+                if let Some(result) = state.results.first_mut() {
+                    result.expanded = false;
+                }
+            }
             PreviewScenario::LocalDictionarySuggestions => {
                 state.source_text = "please app".to_string();
                 state.detected_language = Some("Detected: English".to_string());
@@ -1145,6 +1405,52 @@ impl EasydictUiState {
                 state.connection_status = ConnectionStatus::Connected;
                 state.status_text = "Connected".to_string();
             }
+            PreviewScenario::LongDocumentRunning => {
+                state.mode = AppMode::LongDocument;
+                state.connection_status = ConnectionStatus::Connected;
+                state.status_text = "Translating document".to_string();
+                state.long_document.source_text =
+                    "Long document translation should expose running progress.".to_string();
+                state.long_document.selected_file = "research-paper.pdf".to_string();
+                state.long_document.input_mode = "pdf".to_string();
+                state.long_document.output_mode = "bilingual".to_string();
+                state.long_document.service = "openai".to_string();
+                state.long_document.page_range = "1-18".to_string();
+                state.long_document.status_text = "Translating document".to_string();
+                state.long_document.is_translating = true;
+                state.long_document.active_query_id = Some(42);
+                state.long_document.progress_percentage = Some(42.0);
+                state.long_document.progress_detail =
+                    Some("Translating page 8 of 18 with OpenAI".to_string());
+                state.long_document.last_translated_block =
+                    Some("Abstract and introduction completed".to_string());
+            }
+            PreviewScenario::LongDocumentError => {
+                state.mode = AppMode::LongDocument;
+                state.connection_status = ConnectionStatus::Error;
+                state.status_text = "Long document failed".to_string();
+                state.long_document.source_text =
+                    "Failed long document previews should keep retry visible.".to_string();
+                state.long_document.selected_file = "scanned-report.pdf".to_string();
+                state.long_document.input_mode = "pdf".to_string();
+                state.long_document.output_mode = "both".to_string();
+                state.long_document.service = "deepseek".to_string();
+                state.long_document.status_text =
+                    "Failed: page 12 layout detection timed out".to_string();
+                state.long_document.last_error =
+                    Some("page 12 layout detection timed out".to_string());
+                state.long_document.progress_percentage = Some(67.0);
+                state.long_document.progress_detail =
+                    Some("Retry failed blocks after checking OCR/Layout settings.".to_string());
+                state.long_document.last_translated_block =
+                    Some("Sections 1-3 were preserved in the draft output".to_string());
+                state.long_document.history = vec![TranslationResultPreview::new(
+                    "long-doc-error",
+                    "scanned-report.pdf",
+                    "page 12 layout detection timed out",
+                )
+                .status(ResultStatus::Error)];
+            }
         }
 
         state
@@ -1161,9 +1467,72 @@ impl EasydictUiState {
             .unwrap_or(ThemeMode::Light);
 
         let mut state = Self::preview(scenario, theme);
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_TRANSLATE_STATE") {
+            state.main_translate_button_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SOURCE_TEXT_STATE") {
+            state.source_text_state = preview_control_state_from_id(&value);
+            state.source_text_focused = state.source_text_state.focused;
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_STATE") {
+            let service_id = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_SERVICE_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "google".to_string());
+            if let Some(result) = state
+                .results
+                .iter_mut()
+                .find(|result| result.id == service_id)
+            {
+                result.header_state = preview_control_state_from_id(&value);
+            }
+        }
+        if let Ok(service_id) = std::env::var("EASYDICT_PREVIEW_RESULT_COLLAPSED_SERVICE_ID") {
+            let service_id = service_id.trim();
+            if !service_id.is_empty() {
+                for result in &mut state.results {
+                    if service_id.eq_ignore_ascii_case("all") || result.id == service_id {
+                        result.expanded = false;
+                    }
+                }
+            }
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_INPUT_MODE") {
+            state.long_document.input_mode = long_document_input_mode_from_preview(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_OUTPUT_MODE") {
+            state.long_document.output_mode = long_document_output_mode_from_preview(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE") {
+            state.long_document.service_combo_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE") {
+            state.settings.tts_speed_slider_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE") {
+            state.settings.auto_play_translation_toggle_state =
+                preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_CAPTURE_OVERLAY_STATE") {
+            apply_capture_overlay_preview(&mut state, &value);
+        }
         if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_SECTION") {
             state.settings.selected_section = SettingsSection::from_id(&section);
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
+        }
+        if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_HOVERED_SECTION") {
+            state.settings.hovered_section = Some(SettingsSection::from_id(&section));
+        }
+        if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_PRESSED_SECTION") {
+            let section = SettingsSection::from_id(&section);
+            state.settings.pressed_section = Some(section);
+            state.settings.hovered_section.get_or_insert(section);
+        }
+        if std::env::var("EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.settings.tab_switching = true;
         }
 
         if std::env::var("EASYDICT_PREVIEW_SETTINGS_OPEN")
@@ -1180,6 +1549,12 @@ impl EasydictUiState {
             state.settings.translation_languages_expanded = true;
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MINI_TRANSLATE_STATE") {
+            state.mini.translate_button_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE") {
+            state.fixed.translate_button_state = preview_control_state_from_id(&value);
+        }
 
         state
     }
@@ -1192,6 +1567,7 @@ impl EasydictUiState {
             Message::SourceTextChanged(value) => {
                 self.source_text = value;
                 self.source_text_focused = true;
+                self.source_text_state = ControlState::default().focused(true);
             }
             Message::SourceTextSubmitted => {
                 apply_active_local_dictionary_suggestion(self);
@@ -1289,6 +1665,11 @@ impl EasydictUiState {
                     apply_long_document_file_selection(self, path);
                 }
             }
+            Message::LongDocumentOutputFolderSelected(path) => {
+                if !self.long_document.is_translating {
+                    apply_long_document_output_folder_selection(self, path);
+                }
+            }
             Message::MdxDictionarySelected(path) => {
                 if apply_mdx_dictionary_selection(self, path) {
                     mark_settings_changed(&mut self.settings);
@@ -1346,7 +1727,23 @@ impl EasydictUiState {
             Message::SettingsRuntimeStatusLoaded(status) => {
                 self.settings.layout_model_status = status.layout_model.clone();
                 self.settings.cjk_font_status = status.cjk_font.clone();
+                if should_apply_foundry_runtime_status(&self.settings.foundry_local_status) {
+                    self.settings.foundry_local_status = status.foundry_local_status.clone();
+                }
+                if self.settings.open_vino_download_progress == "Idle" {
+                    self.settings.open_vino_status = status.open_vino_status.clone();
+                    self.settings.open_vino_download_progress =
+                        status.open_vino_download_progress.clone();
+                }
                 self.settings.settings_runtime.resolve(Ok(status));
+            }
+            Message::BuiltInAiDeviceRegistrationFinished(result) => {
+                if let Ok(Some(token)) = result {
+                    if !token.trim().is_empty() {
+                        self.settings.device_token = token.clone();
+                        self.saved_settings.device_token = token;
+                    }
+                }
             }
             Message::Back => {
                 if self.settings.unsaved_changes {
@@ -1510,7 +1907,9 @@ impl EasydictUiState {
                 }
             }
             Message::ClearTranslationCache => {
-                self.settings.translation_cache_status = "Clear requested".to_string();
+                self.translation_cache.clear();
+                self.pending_quick_translate_cache_requests.clear();
+                self.settings.translation_cache_status = "Cleared".to_string();
             }
             Message::CustomTranslationPromptChanged(value) => {
                 if self.settings.custom_translation_prompt != value {
@@ -1622,10 +2021,20 @@ impl EasydictUiState {
                 }
             }
             Message::PrepareLocalAiModel => {
-                self.settings.local_ai_status =
-                    "Prepare requested for Phi Silica model".to_string();
-                self.settings.local_ai_prepare_progress =
-                    "Requesting model download and preparation from Windows".to_string();
+                if self.settings.local_ai_provider == local_ai_provider_modes::FOUNDRY_LOCAL {
+                    self.settings.local_ai_status =
+                        local_ai_provider_status(local_ai_provider_modes::FOUNDRY_LOCAL)
+                            .to_string();
+                    self.settings.local_ai_prepare_progress =
+                        "Starting Foundry Local service...".to_string();
+                    self.settings.foundry_local_status =
+                        "Starting Foundry Local service...".to_string();
+                } else {
+                    self.settings.local_ai_status =
+                        "Prepare requested for Phi Silica model".to_string();
+                    self.settings.local_ai_prepare_progress =
+                        "Requesting model download and preparation from Windows".to_string();
+                }
             }
             Message::OpenWindowsAiUpdate => {
                 self.settings.local_ai_prepare_progress =
@@ -1644,14 +2053,32 @@ impl EasydictUiState {
                 }
             }
             Message::StartFoundryLocal => {
-                self.settings.foundry_local_status = format!(
-                    "Start requested for {}",
-                    setting_or_default(
-                        &self.settings.foundry_local_model,
-                        DEFAULT_FOUNDRY_LOCAL_MODEL
-                    )
-                );
+                self.settings.foundry_local_status =
+                    "Starting Foundry Local service...".to_string();
             }
+            Message::FoundryLocalPrepareFinished(result) => match result {
+                Ok(outcome) => {
+                    self.settings.foundry_local_status = outcome.status_message;
+                    if self.settings.foundry_local_endpoint.trim().is_empty() {
+                        if let Some(endpoint) = outcome.endpoint {
+                            if !endpoint.trim().is_empty() {
+                                self.settings.foundry_local_endpoint = endpoint;
+                                mark_settings_changed(&mut self.settings);
+                            }
+                        }
+                    }
+
+                    if self.settings.foundry_local_model.trim().is_empty()
+                        && !outcome.model.trim().is_empty()
+                    {
+                        self.settings.foundry_local_model = outcome.model;
+                        mark_settings_changed(&mut self.settings);
+                    }
+                }
+                Err(message) => {
+                    self.settings.foundry_local_status = message;
+                }
+            },
             Message::InstallFoundryLocal => {
                 self.settings.foundry_local_status =
                     "Install Foundry Local link requested".to_string();
@@ -1771,6 +2198,7 @@ impl EasydictUiState {
                     self.local_dictionary_suggestion_active_index = None;
                     self.local_dictionary_suggestion_error = None;
                     self.source_text_focused = true;
+                    self.source_text_state = ControlState::default().focused(true);
                 }
             }
             Message::UiLanguageChanged(value) => {
@@ -1920,8 +2348,6 @@ impl EasydictUiState {
             Message::CaptureWindowsChanged(windows) => {
                 self.capture_window_detector =
                     crate::screen_capture::WindowDetector::from_windows(windows);
-                self.capture_interaction = crate::screen_capture::CaptureInteractionState::new();
-                self.capture_selection = None;
             }
             Message::CopyResultIn(surface, id) => {
                 capture_result_action(self, ResultActionKind::Copy, surface, &id);
@@ -1950,6 +2376,7 @@ impl EasydictUiState {
             | Message::CaptureDoubleClick(_)
             | Message::CaptureRightButtonDown
             | Message::CaptureMouseWheel { .. }
+            | Message::CaptureNudgeSelection { .. }
             | Message::CaptureEscape
             | Message::CopyResult
             | Message::ReplaceResult
@@ -1960,11 +2387,16 @@ impl EasydictUiState {
             | Message::ToggleMaximizeWindow
             | Message::CloseWindow
             | Message::BrowseFile
+            | Message::BrowseOutputFolder
             | Message::ImportMdxDictionary
             | Message::RetryLongDocument
             | Message::ConfirmCapture
             | Message::CancelCapture
-            | Message::TranslateSelection => {}
+            | Message::TranslateSelection
+            | Message::SelectionTextReady { .. }
+            | Message::DismissPopButton
+            | Message::PopButtonAutoDismiss(_)
+            | Message::PopButtonClicked => {}
             Message::ClearHistory => {
                 self.long_document.history.clear();
             }
@@ -2050,6 +2482,8 @@ pub fn settings_snapshot(settings: &SettingsState) -> SettingsSnapshot {
                 .unwrap_or_default(),
             DEFAULT_BUILT_IN_AI_MODEL,
         )),
+        device_id: non_empty_setting(&settings.device_id),
+        device_token: non_empty_setting(&settings.device_token),
         doubao_api_key: doubao.and_then(|setting| non_empty_setting(&setting.api_key)),
         doubao_endpoint: Some(setting_or_default(
             doubao
@@ -2107,6 +2541,7 @@ pub fn settings_snapshot(settings: &SettingsState) -> SettingsSnapshot {
         proxy_enabled: Some(settings.proxy_enabled),
         proxy_uri: non_empty_setting(&settings.proxy_url),
         proxy_bypass_local: Some(settings.proxy_bypass_local),
+        enable_translation_cache: Some(settings.translation_cache_enabled),
         formula_font_pattern: non_empty_setting(&settings.formula_font_pattern),
         formula_char_pattern: non_empty_setting(&settings.formula_char_pattern),
         long_doc_custom_prompt: non_empty_setting(&settings.custom_translation_prompt),
@@ -2170,6 +2605,16 @@ fn local_ai_provider_status(provider: &str) -> &'static str {
     }
 }
 
+fn should_apply_foundry_runtime_status(current: &str) -> bool {
+    let current = current.trim();
+    current.is_empty()
+        || current == "Endpoint auto-detected at runtime"
+        || current.starts_with("Foundry Local is ready")
+        || current.starts_with("Foundry Local service")
+        || current.contains("Foundry Local CLI is not installed")
+        || current.contains("not available on PATH")
+}
+
 fn youdao_mode_status(use_official_api: bool) -> &'static str {
     if use_official_api {
         "Official API mode"
@@ -2218,6 +2663,19 @@ fn apply_long_document_file_selection(state: &mut EasydictUiState, path: Option<
     state.long_document.progress_percentage = None;
     state.long_document.progress_detail = None;
     state.long_document.last_translated_block = None;
+}
+
+fn apply_long_document_output_folder_selection(state: &mut EasydictUiState, path: Option<String>) {
+    let Some(path) = path
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+    else {
+        return;
+    };
+
+    state.long_document.output_folder = path;
+    state.long_document.status_text = "Output folder selected".to_string();
+    state.long_document.last_error = None;
 }
 
 fn mark_settings_changed(settings: &mut SettingsState) {
@@ -2808,7 +3266,7 @@ fn apply_mdx_dictionary_selection(state: &mut EasydictUiState, path: Option<Stri
         service_id: service_id.clone(),
         display_name: display_name.clone(),
         file_path: path.clone(),
-        is_encrypted: false,
+        is_encrypted: detect_mdx_file_is_encrypted(&path).unwrap_or(false),
         regcode: None,
         email: None,
         mdd_file_paths: discover_mdd_file_paths(&path),
@@ -3117,6 +3575,68 @@ fn long_document_input_mode_for_path(path: &str) -> Option<&'static str> {
     }
 }
 
+fn long_document_input_mode_from_preview(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "text" | "txt" | "plain" | "plaintext" => "plaintext",
+        "md" | "markdown" => "markdown",
+        "pdf" => "pdf",
+        _ => "pdf",
+    }
+    .to_string()
+}
+
+fn long_document_output_mode_from_preview(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "mono" | "monolingual" | "translated" => "mono",
+        "bilingual" | "bi" => "bilingual",
+        "both" => "both",
+        _ => "mono",
+    }
+    .to_string()
+}
+
+fn apply_capture_overlay_preview(state: &mut EasydictUiState, value: &str) {
+    use crate::screen_capture::{
+        CaptureInteractionState, CapturePhase, CapturePoint, CaptureRect, DetectedWindow,
+        WindowDetector,
+    };
+
+    let detector = WindowDetector::from_windows([
+        DetectedWindow::new(1, CaptureRect::new(40, 48, 820, 560))
+            .with_children([DetectedWindow::new(2, CaptureRect::new(96, 118, 720, 458))
+                .with_children([DetectedWindow::new(3, CaptureRect::new(126, 158, 680, 372))])]),
+        DetectedWindow::new(4, CaptureRect::new(860, 92, 1220, 360)),
+    ]);
+    let mut interaction = CaptureInteractionState::new();
+    let preview = value.trim().to_ascii_lowercase();
+
+    match preview.as_str() {
+        "detect" | "detecting" | "window" | "window-detect" | "window_detect" => {
+            interaction.on_mouse_move(CapturePoint::new(168, 188), &detector);
+        }
+        "depth" | "nested-window" | "nested_window" => {
+            interaction.on_mouse_move(CapturePoint::new(168, 188), &detector);
+            interaction.on_mouse_wheel(-120, CapturePoint::new(168, 188), &detector);
+        }
+        "drag" | "drag-selection" | "drag_selection" | "selecting" => {
+            interaction.on_left_button_down(CapturePoint::new(180, 164));
+            interaction.on_mouse_move(CapturePoint::new(604, 386), &detector);
+        }
+        "selected" | "handles" | "magnifier" => {
+            interaction.phase = CapturePhase::Selecting;
+            interaction.selection = Some(CaptureRect::new(180, 164, 604, 386));
+        }
+        "adjust" | "adjusting" => {
+            interaction.set_adjusting_selection(CaptureRect::new(180, 164, 604, 386));
+        }
+        _ => {}
+    }
+
+    state.capture_window_detector = detector;
+    state.capture_selection = interaction.selection;
+    state.capture_interaction = interaction;
+}
+
 fn parent_folder(path: &str) -> Option<String> {
     Path::new(path)
         .parent()
@@ -3261,6 +3781,22 @@ fn env_truthy(value: &str) -> bool {
     )
 }
 
+pub fn preview_control_state_from_id(value: &str) -> ControlState {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "hover" | "hovered" | "pointerover" | "pointer-over" => {
+            ControlState::default().hovered(true)
+        }
+        "press" | "pressed" | "pointerpressed" | "pointer-pressed" => {
+            ControlState::default().hovered(true).pressed(true)
+        }
+        "focus" | "focused" | "keyboardfocus" | "keyboard-focus" => {
+            ControlState::default().focused(true)
+        }
+        "disabled" => ControlState::default().disabled(),
+        _ => ControlState::default(),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResultActionKind {
     Copy,
@@ -3297,6 +3833,7 @@ pub enum Message {
     LongDocumentConcurrencyChanged(String),
     LongDocumentPageRangeChanged(String),
     LongDocumentFileSelected(Option<String>),
+    LongDocumentOutputFolderSelected(Option<String>),
     MdxDictionarySelected(Option<String>),
     SettingsSectionChanged(String),
     ThemeChanged(String),
@@ -3349,6 +3886,9 @@ pub enum Message {
     FoundryLocalEndpointChanged(String),
     FoundryLocalModelChanged(String),
     StartFoundryLocal,
+    FoundryLocalPrepareFinished(
+        Result<crate::openai_compatible::FoundryLocalPrepareOutcome, String>,
+    ),
     InstallFoundryLocal,
     OpenFoundryLocalDocs,
     OpenVinoDeviceChanged(String),
@@ -3417,6 +3957,10 @@ pub enum Message {
         delta: i32,
         point: crate::screen_capture::CapturePoint,
     },
+    CaptureNudgeSelection {
+        delta_x: i32,
+        delta_y: i32,
+    },
     CaptureEscape,
     HotkeyTriggered(String),
     TrayCommand(String),
@@ -3435,6 +3979,7 @@ pub enum Message {
     /// availability), used to settle the `settings_runtime` [`Loadable`] and
     /// populate the displayed statuses.
     SettingsRuntimeStatusLoaded(crate::settings_status::SettingsRuntimeStatus),
+    BuiltInAiDeviceRegistrationFinished(Result<Option<String>, String>),
     Back,
     SaveSettingsChanges,
     DiscardSettingsChanges,
@@ -3445,6 +3990,7 @@ pub enum Message {
     ToggleMaximizeWindow,
     CloseWindow,
     BrowseFile,
+    BrowseOutputFolder,
     ImportMdxDictionary,
     MdxDictionaryEmailChanged(String, String),
     MdxDictionaryRegcodeChanged(String, String),
@@ -3458,5 +4004,14 @@ pub enum Message {
     ConfirmCapture,
     CancelCapture,
     TranslateSelection,
+    SelectionTextReady {
+        text: String,
+        anchor_x: i32,
+        anchor_y: i32,
+        generation: u64,
+    },
+    DismissPopButton,
+    PopButtonAutoDismiss(u64),
+    PopButtonClicked,
     Noop,
 }

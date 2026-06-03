@@ -16,6 +16,64 @@ pub const GEMINI_DEFAULT_MODEL: &str = "gemini-2.5-flash";
 pub const DOUBAO_DEFAULT_ENDPOINT: &str = "https://ark.cn-beijing.volces.com/api/v3/responses";
 pub const DOUBAO_DEFAULT_MODEL: &str = "doubao-seed-translation-250915";
 
+const GEMINI_SUPPORTED_LANGUAGES: [TranslationLanguage; 32] = [
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Norwegian,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Greek,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Hungarian,
+    TranslationLanguage::Ukrainian,
+    TranslationLanguage::Hebrew,
+    TranslationLanguage::Hindi,
+    TranslationLanguage::Bengali,
+    TranslationLanguage::Tamil,
+    TranslationLanguage::Persian,
+];
+
+const DOUBAO_SUPPORTED_LANGUAGES: [TranslationLanguage; 20] = [
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Hindi,
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CustomStreamingFormat {
     Gemini,
@@ -205,6 +263,58 @@ pub fn build_custom_streaming_translation_request_plan(
     }
 }
 
+pub fn custom_streaming_supports_language_pair(
+    config: &CustomStreamingServiceConfig,
+    from: TranslationLanguage,
+    to: TranslationLanguage,
+) -> bool {
+    let supported_languages = custom_streaming_supported_languages(config);
+    if from == TranslationLanguage::Auto {
+        return supported_languages.contains(&to);
+    }
+
+    supported_languages.contains(&from) && supported_languages.contains(&to)
+}
+
+pub fn validate_custom_streaming_translation_request(
+    config: &CustomStreamingServiceConfig,
+    request: &OpenAiTranslationRequest,
+) -> Result<(), OpenAiExecutionError> {
+    validate_custom_streaming_language_pair(custom_streaming_supported_languages(config), request)
+}
+
+fn custom_streaming_supported_languages(
+    config: &CustomStreamingServiceConfig,
+) -> &'static [TranslationLanguage] {
+    match config {
+        CustomStreamingServiceConfig::Gemini(_) => &GEMINI_SUPPORTED_LANGUAGES,
+        CustomStreamingServiceConfig::Doubao(_) => &DOUBAO_SUPPORTED_LANGUAGES,
+    }
+}
+
+fn validate_custom_streaming_language_pair(
+    supported_languages: &'static [TranslationLanguage],
+    request: &OpenAiTranslationRequest,
+) -> Result<(), OpenAiExecutionError> {
+    let supports_language_pair = if request.from_language == TranslationLanguage::Auto {
+        supported_languages.contains(&request.to_language)
+    } else {
+        supported_languages.contains(&request.from_language)
+            && supported_languages.contains(&request.to_language)
+    };
+    if !supports_language_pair {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::UnsupportedLanguage,
+            format!(
+                "Language pair not supported: {:?} -> {:?}",
+                request.from_language, request.to_language
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn build_custom_streaming_grammar_request_plan(
     config: &CustomStreamingServiceConfig,
     language: TranslationLanguage,
@@ -228,6 +338,7 @@ pub fn build_gemini_translation_request_plan(
 ) -> Result<CustomStreamingHttpRequestPlan, OpenAiExecutionError> {
     validate_required("Gemini API key", &config.api_key)?;
     validate_required("Gemini model", &config.model)?;
+    validate_custom_streaming_language_pair(&GEMINI_SUPPORTED_LANGUAGES, request)?;
 
     let source_lang_name = if request.from_language == TranslationLanguage::Auto {
         "the detected language".to_string()
@@ -291,6 +402,7 @@ pub fn build_doubao_translation_request_plan(
     validate_required("Doubao endpoint", &config.endpoint)?;
     validate_required("Doubao API key", &config.api_key)?;
     validate_required("Doubao model", &config.model)?;
+    validate_custom_streaming_language_pair(&DOUBAO_SUPPORTED_LANGUAGES, request)?;
 
     Ok(CustomStreamingHttpRequestPlan {
         method: "POST",
@@ -350,6 +462,7 @@ pub fn translate_custom_streaming_service<C: CustomStreamingHttpClient>(
         info_message: None,
         timing_ms: None,
         alternatives: None,
+        word_result: None,
     })
 }
 

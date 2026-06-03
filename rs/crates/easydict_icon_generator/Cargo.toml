@@ -1,0 +1,13 @@
+[package]
+name = "easydict_icon_generator"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+ico = "0.5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+tempfile = "3"

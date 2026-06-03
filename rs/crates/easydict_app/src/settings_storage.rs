@@ -237,6 +237,12 @@ fn apply_scalar_settings(root: &Map<String, Value>, settings: &mut SettingsState
     if let Some(value) = string_value(root, "OpenAIApiFormatOverride") {
         settings.open_ai_api_format_override = value;
     }
+    if let Some(value) = string_value(root, "DeviceId") {
+        settings.device_id = value;
+    }
+    if let Some(value) = string_value(root, "DeviceToken") {
+        settings.device_token = value;
+    }
     if let Some(value) = string_value(root, "OllamaEndpoint") {
         settings.ollama_endpoint = value;
     }
@@ -465,6 +471,8 @@ fn write_scalar_settings(root: &mut Map<String, Value>, settings: &SettingsState
         "OpenAIApiFormatOverride",
         &settings.open_ai_api_format_override,
     );
+    insert_string(root, "DeviceId", &settings.device_id);
+    insert_string(root, "DeviceToken", &settings.device_token);
     insert_string(root, "OllamaEndpoint", &settings.ollama_endpoint);
     insert_string(root, "OllamaModel", &settings.ollama_model);
     insert_string(root, "LocalAIProvider", &settings.local_ai_provider);

@@ -1,32 +1,56 @@
 use easydict_app::compat_client::{
-    default_compat_host_path, CompatClientError, CompatHostClient, CompatHostCommand,
-    CompatHostFacade,
+    default_local_ai_worker_path, default_longdoc_worker_path, packaged_worker_command,
+    DirectWorkerFacade, WorkerClient, WorkerClientError, WorkerCommand,
 };
 use easydict_app::compat_protocol::{
-    compat_events, compat_methods, ipc_error_codes, BlockTranslatedEventData, ConfigureParams,
-    DownloadProgressEventData, GrammarChunkEventData, GrammarCorrectParams,
-    GrammarCorrectResultDto, LocalAiTranslateParams, LocalAiTranslateResult, LocalModelStatusDto,
-    MdxLookupParams, MdxLookupResult, OcrRecognizeParams, OcrResultDto, PrepareModelParams,
-    ProgressEventData, SettingsMigrateParams, SettingsMigrateResult, SettingsSnapshot,
-    StatusEventData, TranslateChunkEventData, TranslateDocumentParams, TranslateDocumentResult,
-    TranslateParams, TranslationResultDto,
+    ipc_error_codes, worker_kinds, worker_methods, ConfigureParams, LocalAiTranslateParams,
+    SettingsSnapshot, StatusEventData, TranslateDocumentParams, TranslateParams,
+    TranslationResultDto, WORKER_PROTOCOL_VERSION_CURRENT,
 };
 use serde_json::Value;
 use std::path::Path;
 
-fn mock_host() -> CompatHostClient {
-    CompatHostCommand::new("powershell.exe")
+fn mock_jsonl_client() -> WorkerClient {
+    WorkerCommand::new("powershell.exe")
         .arg("-NoProfile")
         .arg("-ExecutionPolicy")
         .arg("Bypass")
         .arg("-Command")
         .arg(MOCK_HOST_SCRIPT)
         .spawn()
-        .expect("mock host must spawn")
+        .expect("mock worker client must spawn")
+}
+
+fn mock_worker_command(worker_kind: &str, protocol_version: u32) -> WorkerCommand {
+    WorkerCommand::new("powershell.exe")
+        .arg("-NoProfile")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-Command")
+        .arg(MOCK_WORKER_SCRIPT)
+        .env("MOCK_WORKER_KIND", worker_kind)
+        .env("MOCK_WORKER_PROTOCOL_VERSION", protocol_version.to_string())
+}
+
+fn mock_worker_command_with_capabilities(
+    worker_kind: &str,
+    protocol_version: u32,
+    capabilities: &[&str],
+) -> WorkerCommand {
+    mock_worker_command(worker_kind, protocol_version)
+        .env("MOCK_WORKER_CAPABILITIES", capabilities.join(","))
+}
+
+fn mock_worker(worker_kind: &str) -> DirectWorkerFacade {
+    DirectWorkerFacade::spawn_worker(
+        mock_worker_command(worker_kind, WORKER_PROTOCOL_VERSION_CURRENT),
+        worker_kind,
+    )
+    .expect("mock direct worker must spawn and emit ready")
 }
 
 const MOCK_HOST_SCRIPT: &str = r#"
-# The real .NET CompatHost speaks UTF-8 JSON Lines. Force UTF-8 on both streams so
+# Packaged workers speak UTF-8 JSON Lines. Force UTF-8 on both streams so
 # the mock matches that contract on non-UTF-8 default locales (e.g. zh-CN GBK consoles),
 # otherwise non-ASCII payloads like translated text are emitted in the system codepage
 # and fail the Rust client's UTF-8 line reader.
@@ -72,7 +96,7 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
                 result = [ordered]@{
                     translatedText = "mock:$text"
                     serviceId = 'mock'
-                    serviceName = 'Mock Compat Host'
+                    serviceName = 'Mock Worker'
                     detectedLanguage = 'English'
                     timingMs = 7
                 }
@@ -96,7 +120,7 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
                 data = [ordered]@{
                     translatedText = "mock:$text"
                     serviceId = 'mock'
-                    serviceName = 'Mock Compat Host'
+                    serviceName = 'Mock Worker'
                     detectedLanguage = 'English'
                     timingMs = 8
                 }
@@ -106,7 +130,7 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
                 result = [ordered]@{
                     translatedText = "mock:$text"
                     serviceId = 'mock'
-                    serviceName = 'Mock Compat Host'
+                    serviceName = 'Mock Worker'
                     detectedLanguage = 'English'
                     timingMs = 8
                 }
@@ -134,7 +158,7 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
                     explanation = 'Use have with I and an before apple.'
                     rawText = '[CORRECTED]I have an apple.[/CORRECTED]'
                     serviceId = 'mock'
-                    serviceName = 'Mock Compat Host'
+                    serviceName = 'Mock Worker'
                     language = $language
                     timingMs = 9
                     hasCorrections = $true
@@ -148,141 +172,10 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
                     explanation = 'Use have with I and an before apple.'
                     rawText = '[CORRECTED]I have an apple.[/CORRECTED]'
                     serviceId = 'mock'
-                    serviceName = 'Mock Compat Host'
+                    serviceName = 'Mock Worker'
                     language = $language
                     timingMs = 9
                     hasCorrections = $true
-                }
-            })
-        }
-        'ocr_recognize' {
-            $lang = [string]$request.params.preferredLanguageTag
-            $width = [int]$request.params.pixelWidth
-            $height = [int]$request.params.pixelHeight
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    text = "mock OCR $lang ${width}x$height"
-                    lines = @(
-                        [ordered]@{
-                            text = 'mock OCR'
-                            boundingRect = [ordered]@{
-                                x = 0
-                                y = 0
-                                width = $width
-                                height = $height
-                            }
-                        }
-                    )
-                    detectedLanguage = [ordered]@{
-                        tag = $lang
-                        displayName = 'Mock Language'
-                    }
-                    textAngle = 0
-                }
-            })
-        }
-        'longdoc_translate' {
-            $outputPath = [string]$request.params.outputPath
-            Write-JsonLine ([ordered]@{
-                event = 'status'
-                id = $request.id
-                data = [ordered]@{ message = 'mock longdoc started' }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'progress'
-                id = $request.id
-                data = [ordered]@{
-                    stage = 'Translating'
-                    currentBlock = 1
-                    totalBlocks = 2
-                    currentPage = 1
-                    totalPages = 1
-                    percentage = 50
-                    currentBlockPreview = 'source'
-                }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'block_translated'
-                id = $request.id
-                data = [ordered]@{
-                    chunkIndex = 1
-                    pageNumber = 1
-                    sourceBlockId = 'block-1'
-                    translatedText = '长文档'
-                    retryCount = 0
-                }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    state = 'Completed'
-                    outputPath = $outputPath
-                    bilingualOutputPath = $outputPath
-                    totalChunks = 2
-                    succeededChunks = 2
-                    failedChunkIndexes = @()
-                    qualityReport = $null
-                }
-            })
-        }
-        'local_ai_prepare' {
-            $provider = [string]$request.params.provider
-            Write-JsonLine ([ordered]@{
-                event = 'download_progress'
-                id = $request.id
-                data = [ordered]@{
-                    bytesDownloaded = 128
-                    totalBytes = 256
-                    currentFile = 'model.onnx'
-                }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    state = 'Ready'
-                    statusKey = 'Prepared'
-                    detail = $provider
-                }
-            })
-        }
-        'local_ai_translate' {
-            $text = [string]$request.params.text
-            $provider = [string]$request.params.providerMode
-            $from = [string]$request.params.fromLanguage
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    translatedText = "mock local:${text}:${provider}"
-                    serviceId = 'windows-local-ai'
-                    serviceName = 'Windows Local AI'
-                    detectedLanguage = $from
-                    timingMs = 10
-                }
-            })
-        }
-        'mdx_lookup' {
-            $query = [string]$request.params.query
-            $dictionaryId = [string]$request.params.dictionaryId
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    entries = @(
-                        [ordered]@{
-                            key = $query
-                            html = "<div>mock definition for $query</div>"
-                            dictionaryName = $dictionaryId
-                        }
-                    )
-                }
-            })
-        }
-        'settings_migrate' {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    migrated = $true
-                    warnings = @("mock migrated")
                 }
             })
         }
@@ -299,7 +192,7 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
                 result = [ordered]@{
                     translatedText = "mock:$text"
                     serviceId = 'mock'
-                    serviceName = 'Mock Compat Host'
+                    serviceName = 'Mock Worker'
                     detectedLanguage = 'English'
                     timingMs = 7
                 }
@@ -330,220 +223,468 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
 }
 "#;
 
+const MOCK_WORKER_SCRIPT: &str = r#"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+
+function Write-JsonLine($value) {
+    $json = $value | ConvertTo-Json -Compress -Depth 16
+    [Console]::Out.WriteLine($json)
+    [Console]::Out.Flush()
+}
+
+$workerKind = if ([string]::IsNullOrWhiteSpace($env:MOCK_WORKER_KIND)) { 'longdoc' } else { $env:MOCK_WORKER_KIND }
+$protocolVersion = if ([string]::IsNullOrWhiteSpace($env:MOCK_WORKER_PROTOCOL_VERSION)) { 1 } else { [int]$env:MOCK_WORKER_PROTOCOL_VERSION }
+$capabilities = if (-not [string]::IsNullOrWhiteSpace($env:MOCK_WORKER_CAPABILITIES)) {
+    @($env:MOCK_WORKER_CAPABILITIES -split ',' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+else {
+    if ($workerKind -eq 'localai') {
+        @('configure', 'translate_stream', 'grammar_stream', 'cancel', 'shutdown')
+    }
+    else {
+        @('configure', 'translate_document', 'cancel', 'shutdown')
+    }
+}
+
+Write-JsonLine ([ordered]@{
+    event = 'ready'
+    data = [ordered]@{
+        workerKind = $workerKind
+        workerVersion = '9.9.9'
+        protocolVersion = $protocolVersion
+        capabilities = $capabilities
+    }
+})
+
+while (($line = [Console]::In.ReadLine()) -ne $null) {
+    if ([string]::IsNullOrWhiteSpace($line)) {
+        continue
+    }
+
+    $request = $line | ConvertFrom-Json
+    switch ($request.method) {
+        'configure' {
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                result = [ordered]@{ ok = $true }
+            })
+        }
+        'translate_document' {
+            $outputPath = [string]$request.params.outputPath
+            Write-JsonLine ([ordered]@{
+                event = 'status'
+                id = $request.id
+                data = [ordered]@{ message = 'direct worker longdoc started' }
+            })
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                result = [ordered]@{
+                    state = 'Completed'
+                    outputPath = $outputPath
+                    bilingualOutputPath = $null
+                    totalChunks = 1
+                    succeededChunks = 1
+                    failedChunkIndexes = @()
+                    qualityReport = $null
+                }
+            })
+        }
+        'translate_stream' {
+            $text = [string]$request.params.text
+            Write-JsonLine ([ordered]@{
+                event = 'chunk'
+                id = $request.id
+                data = [ordered]@{ text = 'direct ' }
+            })
+            Write-JsonLine ([ordered]@{
+                event = 'chunk'
+                id = $request.id
+                data = [ordered]@{ text = "worker $text" }
+            })
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                result = [ordered]@{
+                    done = $true
+                    fullText = "direct worker $text"
+                }
+            })
+        }
+        'grammar_stream' {
+            Write-JsonLine ([ordered]@{
+                event = 'chunk'
+                id = $request.id
+                data = [ordered]@{ text = '[CORRECTED]Direct worker.[/CORRECTED]' }
+            })
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                result = [ordered]@{
+                    done = $true
+                    fullText = '[CORRECTED]Direct worker.[/CORRECTED]'
+                }
+            })
+        }
+        'cancel' {
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                result = [ordered]@{ cancelled = $true }
+            })
+        }
+        'shutdown' {
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                result = [ordered]@{ ok = $true }
+            })
+            break
+        }
+        default {
+            Write-JsonLine ([ordered]@{
+                id = $request.id
+                error = [ordered]@{
+                    code = 'method_not_found'
+                    message = "unknown direct worker method: $($request.method)"
+                }
+            })
+        }
+    }
+}
+"#;
+
 #[test]
-fn default_compat_host_path_matches_packaging_contract() {
-    let path = default_compat_host_path(Path::new(r"C:\Program Files\Easydict"));
+fn default_worker_paths_match_packaging_contract() {
+    let app_dir = Path::new(r"C:\Program Files\Easydict");
+
     assert_eq!(
-        path,
-        Path::new(r"C:\Program Files\Easydict").join("Easydict.CompatHost.exe")
+        default_longdoc_worker_path(app_dir),
+        app_dir
+            .join("workers")
+            .join("longdoc")
+            .join("Easydict.Workers.LongDoc.exe")
+    );
+    assert_eq!(
+        default_local_ai_worker_path(app_dir),
+        app_dir
+            .join("workers")
+            .join("localai")
+            .join("Easydict.Workers.LocalAi.exe")
     );
 }
 
 #[test]
-fn packaged_command_uses_default_compat_host_path() {
-    let command = CompatHostCommand::packaged(Path::new(r"C:\Program Files\Easydict"));
+fn packaged_worker_command_sets_shared_worker_environment() {
+    let app_dir = Path::new(r"C:\Program Files\Easydict");
+    let command = packaged_worker_command(app_dir, "longdoc", "Easydict.Workers.LongDoc.exe");
 
+    assert_eq!(command.program(), default_longdoc_worker_path(app_dir));
     assert_eq!(
-        command.program(),
-        Path::new(r"C:\Program Files\Easydict").join("Easydict.CompatHost.exe")
+        command
+            .envs()
+            .iter()
+            .find(|(key, _)| key == "EASYDICT_WORKER_SHARED_DIR")
+            .map(|(_, value)| value.as_str()),
+        Some(r"C:\Program Files\Easydict\workers\shared")
     );
-    assert!(command.args().is_empty());
+    assert_eq!(
+        command
+            .envs()
+            .iter()
+            .find(|(key, _)| key == "DOTNET_CLI_TELEMETRY_OPTOUT")
+            .map(|(_, value)| value.as_str()),
+        Some("1")
+    );
 }
 
 #[test]
-fn send_request_roundtrips_typed_translate_result() {
-    let mut client = mock_host();
+fn direct_worker_rejects_protocol_mismatch_before_configure() {
+    let error = match DirectWorkerFacade::spawn_worker(
+        mock_worker_command(worker_kinds::LONGDOC, WORKER_PROTOCOL_VERSION_CURRENT + 1),
+        worker_kinds::LONGDOC,
+    ) {
+        Ok(_) => panic!("protocol mismatch should fail the ready handshake"),
+        Err(error) => error,
+    };
 
-    let result: TranslationResultDto = client
-        .send_request(
-            compat_methods::TRANSLATE,
-            &TranslateParams {
-                text: "Hello".to_string(),
-                from: Some("en".to_string()),
-                to: Some("zh-Hans".to_string()),
-                services: Some(vec!["mock".to_string()]),
-            },
-        )
-        .expect("translate should succeed");
-
-    assert_eq!(result.translated_text, "mock:Hello");
-    assert_eq!(result.service_id.as_deref(), Some("mock"));
-    assert_eq!(result.timing_ms, Some(7));
-    assert!(client.take_events().is_empty());
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains("protocol version"));
+        }
+        other => panic!("expected protocol error, got {other:?}"),
+    }
 }
 
 #[test]
-fn facade_translate_uses_locked_compat_method() {
-    let mut facade = CompatHostFacade::new(mock_host());
+fn direct_longdoc_worker_rejects_missing_required_capability_before_configure() {
+    let error = match DirectWorkerFacade::spawn_worker(
+        mock_worker_command_with_capabilities(
+            worker_kinds::LONGDOC,
+            WORKER_PROTOCOL_VERSION_CURRENT,
+            &[worker_methods::CONFIGURE, worker_methods::CANCEL],
+        ),
+        worker_kinds::LONGDOC,
+    ) {
+        Ok(_) => panic!("missing longdoc capability should fail the ready handshake"),
+        Err(error) => error,
+    };
 
-    let result = facade
-        .translate(&TranslateParams {
-            text: "Facade".to_string(),
-            from: Some("en".to_string()),
-            to: Some("zh-Hans".to_string()),
-            services: Some(vec!["mock".to_string()]),
-        })
-        .expect("facade translate should succeed");
-
-    assert_eq!(result.translated_text, "mock:Facade");
-    assert_eq!(result.service_id.as_deref(), Some("mock"));
-    assert!(facade.take_events().is_empty());
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains("missing required capability"));
+            assert!(message.contains(worker_methods::LONGDOC_TRANSLATE_DOCUMENT));
+        }
+        other => panic!("expected protocol error, got {other:?}"),
+    }
 }
 
 #[test]
-fn facade_configure_uses_worker_configure_method() {
-    let mut facade = CompatHostFacade::new(mock_host());
+fn direct_longdoc_worker_rejects_missing_lifecycle_capability_before_configure() {
+    let error = match DirectWorkerFacade::spawn_worker(
+        mock_worker_command_with_capabilities(
+            worker_kinds::LONGDOC,
+            WORKER_PROTOCOL_VERSION_CURRENT,
+            &[
+                worker_methods::CONFIGURE,
+                worker_methods::LONGDOC_TRANSLATE_DOCUMENT,
+                worker_methods::SHUTDOWN,
+            ],
+        ),
+        worker_kinds::LONGDOC,
+    ) {
+        Ok(_) => panic!("missing longdoc cancel capability should fail the ready handshake"),
+        Err(error) => error,
+    };
+
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains("missing required capability"));
+            assert!(message.contains(worker_methods::CANCEL));
+        }
+        other => panic!("expected protocol error, got {other:?}"),
+    }
+}
+
+#[test]
+fn direct_local_ai_worker_rejects_missing_translate_stream_capability_before_configure() {
+    let error = match DirectWorkerFacade::spawn_worker(
+        mock_worker_command_with_capabilities(
+            worker_kinds::LOCAL_AI,
+            WORKER_PROTOCOL_VERSION_CURRENT,
+            &[
+                worker_methods::CONFIGURE,
+                worker_methods::LOCAL_AI_GRAMMAR_STREAM,
+                worker_methods::CANCEL,
+                worker_methods::SHUTDOWN,
+            ],
+        ),
+        worker_kinds::LOCAL_AI,
+    ) {
+        Ok(_) => panic!("missing local AI translate capability should fail the ready handshake"),
+        Err(error) => error,
+    };
+
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains("missing required capability"));
+            assert!(message.contains(worker_methods::LOCAL_AI_TRANSLATE_STREAM));
+        }
+        other => panic!("expected protocol error, got {other:?}"),
+    }
+}
+
+#[test]
+fn direct_local_ai_worker_rejects_missing_grammar_stream_capability_before_configure() {
+    let error = match DirectWorkerFacade::spawn_worker(
+        mock_worker_command_with_capabilities(
+            worker_kinds::LOCAL_AI,
+            WORKER_PROTOCOL_VERSION_CURRENT,
+            &[
+                worker_methods::CONFIGURE,
+                worker_methods::LOCAL_AI_TRANSLATE_STREAM,
+            ],
+        ),
+        worker_kinds::LOCAL_AI,
+    ) {
+        Ok(_) => panic!("missing local AI grammar capability should fail the ready handshake"),
+        Err(error) => error,
+    };
+
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains("missing required capability"));
+            assert!(message.contains(worker_methods::LOCAL_AI_GRAMMAR_STREAM));
+        }
+        other => panic!("expected protocol error, got {other:?}"),
+    }
+}
+
+#[test]
+fn direct_local_ai_worker_rejects_missing_lifecycle_capability_before_configure() {
+    let error = match DirectWorkerFacade::spawn_worker(
+        mock_worker_command_with_capabilities(
+            worker_kinds::LOCAL_AI,
+            WORKER_PROTOCOL_VERSION_CURRENT,
+            &[
+                worker_methods::CONFIGURE,
+                worker_methods::LOCAL_AI_TRANSLATE_STREAM,
+                worker_methods::LOCAL_AI_GRAMMAR_STREAM,
+                worker_methods::CANCEL,
+            ],
+        ),
+        worker_kinds::LOCAL_AI,
+    ) {
+        Ok(_) => panic!("missing local AI shutdown capability should fail the ready handshake"),
+        Err(error) => error,
+    };
+
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains("missing required capability"));
+            assert!(message.contains(worker_methods::SHUTDOWN));
+        }
+        other => panic!("expected protocol error, got {other:?}"),
+    }
+}
+
+#[test]
+fn direct_worker_allows_extra_ready_capabilities() {
+    let mut facade = DirectWorkerFacade::spawn_worker(
+        mock_worker_command_with_capabilities(
+            worker_kinds::LONGDOC,
+            WORKER_PROTOCOL_VERSION_CURRENT,
+            &[
+                worker_methods::CONFIGURE,
+                worker_methods::LONGDOC_TRANSLATE_DOCUMENT,
+                worker_methods::CANCEL,
+                worker_methods::SHUTDOWN,
+                "diagnostics",
+            ],
+        ),
+        worker_kinds::LONGDOC,
+    )
+    .expect("extra worker capabilities should be accepted");
 
     let result = facade
         .configure(&ConfigureParams {
-            settings: SettingsSnapshot {
-                long_doc_max_concurrency: Some(8),
-                long_doc_enable_document_context_pass: Some(false),
-                ..SettingsSnapshot::default()
-            },
+            settings: SettingsSnapshot::default(),
         })
-        .expect("facade configure should succeed");
+        .expect("worker with extra capabilities should still configure");
+    assert!(result.ok);
+}
+
+#[test]
+fn direct_worker_facade_sends_cancel_request() {
+    let mut facade = mock_worker(worker_kinds::LONGDOC);
+
+    let result = facade
+        .cancel_request("rust-worker-99")
+        .expect("direct worker cancel should round-trip");
+
+    assert!(result.cancelled);
+}
+
+#[test]
+fn direct_worker_facade_sends_shutdown_without_params() {
+    let mut facade = mock_worker(worker_kinds::LOCAL_AI);
+
+    let result = facade
+        .shutdown()
+        .expect("direct worker shutdown should round-trip");
 
     assert!(result.ok);
 }
 
 #[test]
-fn facade_translate_stream_queues_chunk_and_done_events_before_result() {
-    let mut facade = CompatHostFacade::new(mock_host());
+fn worker_client_reports_request_id_for_plain_requests() {
+    let mut client = mock_worker_command(worker_kinds::LONGDOC, WORKER_PROTOCOL_VERSION_CURRENT)
+        .spawn()
+        .expect("mock worker client should spawn");
+    client
+        .wait_for_worker_ready(worker_kinds::LONGDOC)
+        .expect("mock worker should emit ready");
 
-    let result = facade
-        .translate_stream(&TranslateParams {
-            text: "Streaming".to_string(),
-            from: Some("en".to_string()),
-            to: Some("zh-Hans".to_string()),
-            services: Some(vec!["mock".to_string()]),
-        })
-        .expect("facade stream translate should succeed");
-
-    assert_eq!(result.translated_text, "mock:Streaming");
-    assert_eq!(result.timing_ms, Some(8));
-
-    let events = facade.take_events();
-    assert_eq!(events.len(), 3);
-    assert_eq!(events[0].event, compat_events::TRANSLATE_CHUNK);
-    assert_eq!(events[1].event, compat_events::TRANSLATE_CHUNK);
-    assert_eq!(events[2].event, compat_events::TRANSLATE_DONE);
-
-    let first_chunk: TranslateChunkEventData =
-        serde_json::from_value(events[0].data.clone().expect("first chunk data"))
-            .expect("first chunk data parses");
-    let second_chunk: TranslateChunkEventData =
-        serde_json::from_value(events[1].data.clone().expect("second chunk data"))
-            .expect("second chunk data parses");
-    let done: TranslationResultDto =
-        serde_json::from_value(events[2].data.clone().expect("done data"))
-            .expect("done data parses");
-
-    assert_eq!(first_chunk.text, "mock:");
-    assert_eq!(second_chunk.text, "Streaming");
-    assert_eq!(done.translated_text, "mock:Streaming");
-}
-
-#[test]
-fn facade_translate_stream_observes_chunks_and_clears_event_queue() {
-    let mut facade = CompatHostFacade::new(mock_host());
-    let mut chunks = Vec::new();
-
-    let result = facade
-        .translate_stream_observing_chunks(
-            &TranslateParams {
-                text: "Streaming".to_string(),
-                from: Some("en".to_string()),
-                to: Some("zh-Hans".to_string()),
-                services: Some(vec!["mock".to_string()]),
+    let mut observed_id = None;
+    let result = client
+        .send_request_with_request_id::<_, easydict_app::compat_protocol::ConfigureResult, _>(
+            worker_methods::CONFIGURE,
+            &ConfigureParams {
+                settings: SettingsSnapshot::default(),
             },
-            |chunk| chunks.push(chunk.text),
+            |id| observed_id = Some(id.to_string()),
         )
-        .expect("facade stream translate should succeed");
+        .expect("configure should round-trip");
 
-    assert_eq!(chunks, ["mock:", "Streaming"]);
-    assert_eq!(result.translated_text, "mock:Streaming");
-    assert!(facade.take_events().is_empty());
+    assert!(result.ok);
+    assert_eq!(observed_id.as_deref(), Some("rust-worker-1"));
 }
 
 #[test]
-fn facade_grammar_correct_queues_chunk_and_done_events_before_result() {
-    let mut facade = CompatHostFacade::new(mock_host());
+fn worker_client_reports_request_id_for_observed_event_requests() {
+    let mut client = mock_worker_command(worker_kinds::LOCAL_AI, WORKER_PROTOCOL_VERSION_CURRENT)
+        .spawn()
+        .expect("mock worker client should spawn");
+    client
+        .wait_for_worker_ready(worker_kinds::LOCAL_AI)
+        .expect("mock worker should emit ready");
 
-    let result = facade
-        .grammar_correct(&GrammarCorrectParams {
-            text: "I has a apple.".to_string(),
-            language: Some("en".to_string()),
-            services: Some(vec!["mock".to_string()]),
-            include_explanations: true,
-        })
-        .expect("facade grammar correct should succeed");
+    let mut observed_id = None;
+    let mut chunk_text = Vec::new();
+    let result = client
+        .send_request_observing_events_with_request_id::<_, easydict_app::compat_protocol::TranslateStreamResult, _, _>(
+            worker_methods::LOCAL_AI_TRANSLATE_STREAM,
+            &LocalAiTranslateParams {
+                text: "Hello".to_string(),
+                from_language: "English".to_string(),
+                to_language: "SimplifiedChinese".to_string(),
+                provider_mode: "OpenVINO".to_string(),
+                custom_prompt: None,
+                include_explanations: None,
+            },
+            |id| observed_id = Some(id.to_string()),
+            |event| {
+                if event.event != easydict_app::compat_protocol::worker_events::LOCAL_AI_CHUNK {
+                    return;
+                }
 
-    assert_eq!(result.original_text, "I has a apple.");
-    assert_eq!(result.corrected_text, "I have an apple.");
-    assert_eq!(result.language.as_deref(), Some("en"));
-    assert_eq!(result.timing_ms, Some(9));
-    assert!(result.has_corrections);
+                let Some(data) = event.data.clone() else {
+                    return;
+                };
+                if let Ok(chunk) = serde_json::from_value::<easydict_app::compat_protocol::ChunkEventData>(data) {
+                    chunk_text.push(chunk.text);
+                }
+            },
+        )
+        .expect("local AI stream should round-trip");
 
-    let events = facade.take_events();
-    assert_eq!(events.len(), 3);
-    assert_eq!(events[0].event, compat_events::GRAMMAR_CHUNK);
-    assert_eq!(events[1].event, compat_events::GRAMMAR_CHUNK);
-    assert_eq!(events[2].event, compat_events::GRAMMAR_DONE);
-
-    let first_chunk: GrammarChunkEventData =
-        serde_json::from_value(events[0].data.clone().expect("first chunk data"))
-            .expect("first chunk data parses");
-    let second_chunk: GrammarChunkEventData =
-        serde_json::from_value(events[1].data.clone().expect("second chunk data"))
-            .expect("second chunk data parses");
-    let done: GrammarCorrectResultDto =
-        serde_json::from_value(events[2].data.clone().expect("done data"))
-            .expect("done data parses");
-
-    assert_eq!(first_chunk.text, "[CORRECTED]");
-    assert_eq!(second_chunk.text, "I have an apple.");
-    assert_eq!(done.corrected_text, "I have an apple.");
-}
-
-#[test]
-fn facade_ocr_recognize_uses_locked_compat_method() {
-    let mut facade = CompatHostFacade::new(mock_host());
-
-    let result: OcrResultDto = facade
-        .ocr_recognize(&OcrRecognizeParams {
-            pixel_data_path: r"C:\Temp\capture.bgra".to_string(),
-            pixel_width: 4,
-            pixel_height: 3,
-            preferred_language_tag: Some("ja-JP".to_string()),
-        })
-        .expect("facade OCR should succeed");
-
-    assert_eq!(result.text, "mock OCR ja-JP 4x3");
-    assert_eq!(result.lines.len(), 1);
-    assert_eq!(result.lines[0].bounding_rect.height, 3.0);
+    assert!(result.done);
+    assert_eq!(observed_id.as_deref(), Some("rust-worker-1"));
     assert_eq!(
-        result
-            .detected_language
-            .as_ref()
-            .map(|language| language.tag.as_str()),
-        Some("ja-JP")
+        chunk_text,
+        vec!["direct ".to_string(), "worker Hello".to_string()]
     );
 }
 
 #[test]
-fn facade_longdoc_translate_uses_locked_compat_method_and_queues_worker_events() {
-    let mut facade = CompatHostFacade::new(mock_host());
+fn direct_longdoc_worker_facade_waits_ready_and_uses_worker_method() {
+    let mut facade = mock_worker(worker_kinds::LONGDOC);
 
-    let result: TranslateDocumentResult = facade
+    let configure = facade
+        .configure(&ConfigureParams {
+            settings: SettingsSnapshot {
+                long_doc_max_concurrency: Some(4),
+                ..SettingsSnapshot::default()
+            },
+        })
+        .expect("direct worker configure should succeed");
+    assert!(configure.ok);
+
+    let result = facade
         .longdoc_translate(&TranslateDocumentParams {
             input_path: r"C:\Temp\source.md".to_string(),
             output_path: Some(r"C:\Temp\translated.md".to_string()),
             input_mode: "Markdown".to_string(),
             from: "English".to_string(),
-            to: "ChineseSimplified".to_string(),
+            to: "SimplifiedChinese".to_string(),
             service_id: "openai".to_string(),
-            output_mode: "Bilingual".to_string(),
+            output_mode: "Monolingual".to_string(),
             pdf_export_mode: None,
             layout_detection: Some("Heuristic".to_string()),
             page_range: None,
@@ -552,127 +693,62 @@ fn facade_longdoc_translate_uses_locked_compat_method_and_queues_worker_events()
             vision_model: None,
             result_json_path: None,
         })
-        .expect("facade longdoc should succeed");
+        .expect("direct worker longdoc should succeed");
 
     assert_eq!(result.state, "Completed");
-    assert_eq!(result.total_chunks, 2);
+    assert_eq!(result.total_chunks, 1);
     assert_eq!(
         result.output_path.as_deref(),
         Some(r"C:\Temp\translated.md")
     );
 
     let events = facade.take_events();
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 1);
     assert_eq!(events[0].event, "status");
-    assert_eq!(events[1].event, "progress");
-    assert_eq!(events[2].event, "block_translated");
-
     let status: StatusEventData =
         serde_json::from_value(events[0].data.clone().expect("status data"))
             .expect("status data parses");
-    let progress: ProgressEventData =
-        serde_json::from_value(events[1].data.clone().expect("progress data"))
-            .expect("progress data parses");
-    let block: BlockTranslatedEventData =
-        serde_json::from_value(events[2].data.clone().expect("block data"))
-            .expect("block data parses");
-
-    assert_eq!(status.message, "mock longdoc started");
-    assert_eq!(progress.percentage, 50.0);
-    assert_eq!(block.translated_text, "长文档");
+    assert_eq!(status.message, "direct worker longdoc started");
 }
 
 #[test]
-fn facade_local_ai_prepare_queues_download_progress_before_status_result() {
-    let mut facade = CompatHostFacade::new(mock_host());
+fn direct_local_ai_worker_facade_observes_worker_chunks() {
+    let mut facade = mock_worker(worker_kinds::LOCAL_AI);
 
-    let result: LocalModelStatusDto = facade
-        .local_ai_prepare(&PrepareModelParams {
-            provider: "FoundryLocal".to_string(),
-            endpoint: None,
-            model: Some("phi".to_string()),
+    let configure = facade
+        .configure(&ConfigureParams {
+            settings: SettingsSnapshot::default(),
         })
-        .expect("facade local AI prepare should succeed");
+        .expect("direct local AI worker configure should succeed");
+    assert!(configure.ok);
 
-    assert_eq!(result.state, "Ready");
-    assert_eq!(result.status_key.as_deref(), Some("Prepared"));
-    assert_eq!(result.detail.as_deref(), Some("FoundryLocal"));
+    let mut chunks = Vec::new();
+    let result = facade
+        .local_ai_translate_stream_observing_chunks(
+            &LocalAiTranslateParams {
+                text: "Hello".to_string(),
+                from_language: "English".to_string(),
+                to_language: "SimplifiedChinese".to_string(),
+                provider_mode: "OpenVINO".to_string(),
+                custom_prompt: None,
+                include_explanations: None,
+            },
+            |chunk| chunks.push(chunk.text),
+        )
+        .expect("direct local AI stream should succeed");
 
-    let events = facade.take_events();
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0].event, "download_progress");
-
-    let progress: DownloadProgressEventData =
-        serde_json::from_value(events[0].data.clone().expect("download progress data"))
-            .expect("download progress data parses");
-    assert_eq!(progress.bytes_downloaded, 128);
-    assert_eq!(progress.total_bytes, 256);
-    assert_eq!(progress.current_file.as_deref(), Some("model.onnx"));
-}
-
-#[test]
-fn facade_local_ai_translate_uses_locked_compat_method() {
-    let mut facade = CompatHostFacade::new(mock_host());
-
-    let result: LocalAiTranslateResult = facade
-        .local_ai_translate(&LocalAiTranslateParams {
-            text: "Hello".to_string(),
-            from_language: "English".to_string(),
-            to_language: "ChineseSimplified".to_string(),
-            provider_mode: "FoundryLocal".to_string(),
-            custom_prompt: None,
-        })
-        .expect("facade local AI translate should succeed");
-
-    assert_eq!(result.translated_text, "mock local:Hello:FoundryLocal");
-    assert_eq!(result.service_id, "windows-local-ai");
-    assert_eq!(result.detected_language.as_deref(), Some("English"));
-    assert_eq!(result.timing_ms, 10);
+    assert!(result.done);
+    assert_eq!(result.full_text.as_deref(), Some("direct worker Hello"));
+    assert_eq!(
+        chunks,
+        vec!["direct ".to_string(), "worker Hello".to_string()]
+    );
     assert!(facade.take_events().is_empty());
 }
 
 #[test]
-fn facade_mdx_lookup_uses_locked_compat_method() {
-    let mut facade = CompatHostFacade::new(mock_host());
-
-    let result: MdxLookupResult = facade
-        .mdx_lookup(&MdxLookupParams {
-            dictionary_id: "mdx::demo".to_string(),
-            query: "apple".to_string(),
-            fuzzy: false,
-        })
-        .expect("facade MDX lookup should succeed");
-
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.entries[0].key, "apple");
-    assert_eq!(
-        result.entries[0].html,
-        "<div>mock definition for apple</div>"
-    );
-    assert_eq!(
-        result.entries[0].dictionary_name.as_deref(),
-        Some("mdx::demo")
-    );
-}
-
-#[test]
-fn facade_settings_migrate_uses_locked_compat_method() {
-    let mut facade = CompatHostFacade::new(mock_host());
-
-    let result: SettingsMigrateResult = facade
-        .settings_migrate(&SettingsMigrateParams {
-            legacy_settings_path: Some(r"C:\Old\settings.json".to_string()),
-            target_settings_path: Some(r"C:\New\settings.json".to_string()),
-        })
-        .expect("facade settings migration should succeed");
-
-    assert!(result.migrated);
-    assert_eq!(result.warnings, ["mock migrated"]);
-}
-
-#[test]
 fn events_before_response_are_queued_for_callers() {
-    let mut client = mock_host();
+    let mut client = mock_jsonl_client();
 
     let result: TranslationResultDto = client
         .send_request(
@@ -682,6 +758,7 @@ fn events_before_response_are_queued_for_callers() {
                 from: None,
                 to: Some("zh-Hans".to_string()),
                 services: None,
+                custom_prompt: None,
             },
         )
         .expect("translate should succeed after event");
@@ -694,7 +771,7 @@ fn events_before_response_are_queued_for_callers() {
     assert!(events[0]
         .id
         .as_deref()
-        .is_some_and(|id| id.starts_with("rust-compat-")));
+        .is_some_and(|id| id.starts_with("rust-worker-")));
     assert_eq!(
         events[0].data.as_ref().and_then(|data| data.get("text")),
         Some(&Value::String("mock:".to_string()))
@@ -704,7 +781,7 @@ fn events_before_response_are_queued_for_callers() {
 
 #[test]
 fn remote_errors_preserve_protocol_code_and_message() {
-    let mut client = mock_host();
+    let mut client = mock_jsonl_client();
 
     let error = client
         .send_request::<_, TranslationResultDto>(
@@ -714,12 +791,13 @@ fn remote_errors_preserve_protocol_code_and_message() {
                 from: None,
                 to: None,
                 services: None,
+                custom_prompt: None,
             },
         )
         .expect_err("remote failure should surface");
 
     match error {
-        CompatClientError::Remote(remote) => {
+        WorkerClientError::Remote(remote) => {
             assert_eq!(remote.code, ipc_error_codes::SERVICE_ERROR);
             assert_eq!(remote.message, "mock service failed");
         }
@@ -729,7 +807,7 @@ fn remote_errors_preserve_protocol_code_and_message() {
 
 #[test]
 fn process_exit_before_response_is_reported() {
-    let mut client = mock_host();
+    let mut client = mock_jsonl_client();
 
     let error = client
         .send_request::<_, TranslationResultDto>(
@@ -739,31 +817,18 @@ fn process_exit_before_response_is_reported() {
                 from: None,
                 to: None,
                 services: None,
+                custom_prompt: None,
             },
         )
         .expect_err("process exit should surface");
 
-    assert!(matches!(error, CompatClientError::ProcessExited));
+    assert!(matches!(error, WorkerClientError::ProcessExited));
 }
 
 #[test]
-fn missing_host_path_is_classified_for_fallback() {
-    let error =
-        match CompatHostCommand::new("__definitely_missing_easydict_compat_host__.exe").spawn() {
-            Ok(_) => panic!("missing host should fail"),
-            Err(error) => error,
-        };
-
-    assert!(error.is_not_found());
-}
-
-#[test]
-fn packaged_facade_missing_host_is_classified_for_fallback() {
-    let missing_app_dir =
-        std::env::temp_dir().join(format!("easydict-missing-app-dir-{}", std::process::id()));
-
-    let error = match CompatHostFacade::spawn_packaged(missing_app_dir) {
-        Ok(_) => panic!("missing packaged host should fail"),
+fn missing_worker_path_is_classified_for_fallback() {
+    let error = match WorkerCommand::new("__definitely_missing_easydict_worker__.exe").spawn() {
+        Ok(_) => panic!("missing worker should fail"),
         Err(error) => error,
     };
 

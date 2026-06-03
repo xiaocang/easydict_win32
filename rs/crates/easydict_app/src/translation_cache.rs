@@ -1,6 +1,11 @@
 use crate::translation_language::TranslationLanguage;
 use ring::digest::{digest, SHA256};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const TRANSLATION_CACHE_LIMIT_KB: usize = 8 * 1024;
 pub const PHONETIC_CACHE_LIMIT_KB: usize = 512;
@@ -136,14 +141,14 @@ impl TranslationCacheRequest {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct TranslationCacheEntry {
     result: TranslationResult,
     size_kb: usize,
     last_access: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranslationMemoryCache {
     entries: HashMap<String, TranslationCacheEntry>,
     size_limit_kb: usize,
@@ -259,6 +264,181 @@ impl TranslationMemoryCache {
             }
         }
     }
+}
+
+#[derive(Debug)]
+pub enum PersistentTranslationCacheError {
+    Io(std::io::Error),
+    Sqlite(rusqlite::Error),
+}
+
+impl fmt::Display for PersistentTranslationCacheError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "{error}"),
+            Self::Sqlite(error) => write!(formatter, "{error}"),
+        }
+    }
+}
+
+impl From<std::io::Error> for PersistentTranslationCacheError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<rusqlite::Error> for PersistentTranslationCacheError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Sqlite(error)
+    }
+}
+
+pub struct LongDocumentTranslationCache {
+    connection: Connection,
+}
+
+impl LongDocumentTranslationCache {
+    pub fn open(db_path: impl AsRef<Path>) -> Result<Self, PersistentTranslationCacheError> {
+        let db_path = db_path.as_ref();
+        if let Some(parent) = db_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            fs::create_dir_all(parent)?;
+        }
+
+        let connection = Connection::open(db_path)?;
+        let cache = Self { connection };
+        cache.initialize()?;
+        Ok(cache)
+    }
+
+    pub fn try_get(
+        &mut self,
+        service_id: &str,
+        from_language: &str,
+        to_language: &str,
+        source_hash: &str,
+    ) -> Result<Option<String>, PersistentTranslationCacheError> {
+        let translated_text = self
+            .connection
+            .query_row(
+                "SELECT translated_text FROM translation_cache \
+                 WHERE service_id = ?1 AND from_lang = ?2 AND to_lang = ?3 AND source_hash = ?4",
+                params![service_id, from_language, to_language, source_hash],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+
+        if translated_text.is_some() {
+            self.connection.execute(
+                "UPDATE translation_cache \
+                 SET hit_count = hit_count + 1, last_used_utc = ?5 \
+                 WHERE service_id = ?1 AND from_lang = ?2 AND to_lang = ?3 AND source_hash = ?4",
+                params![
+                    service_id,
+                    from_language,
+                    to_language,
+                    source_hash,
+                    persistent_cache_now(),
+                ],
+            )?;
+        }
+
+        Ok(translated_text)
+    }
+
+    pub fn set(
+        &mut self,
+        service_id: &str,
+        from_language: &str,
+        to_language: &str,
+        source_hash: &str,
+        source_text: &str,
+        translated_text: &str,
+    ) -> Result<(), PersistentTranslationCacheError> {
+        let now = persistent_cache_now();
+        self.connection.execute(
+            "INSERT INTO translation_cache \
+             (service_id, from_lang, to_lang, source_hash, source_text, translated_text, created_utc, last_used_utc, hit_count) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, 0) \
+             ON CONFLICT(service_id, from_lang, to_lang, source_hash) \
+             DO UPDATE SET translated_text = ?6, last_used_utc = ?7, hit_count = hit_count + 1",
+            params![
+                service_id,
+                from_language,
+                to_language,
+                source_hash,
+                source_text,
+                translated_text,
+                now,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn entry_count(&self) -> Result<i64, PersistentTranslationCacheError> {
+        Ok(self
+            .connection
+            .query_row("SELECT COUNT(*) FROM translation_cache", [], |row| {
+                row.get::<_, i64>(0)
+            })?)
+    }
+
+    pub fn clear(&mut self) -> Result<(), PersistentTranslationCacheError> {
+        self.connection
+            .execute("DELETE FROM translation_cache", [])?;
+        Ok(())
+    }
+
+    fn initialize(&self) -> Result<(), PersistentTranslationCacheError> {
+        self.connection.execute_batch(
+            "CREATE TABLE IF NOT EXISTS translation_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service_id TEXT NOT NULL,
+                from_lang TEXT NOT NULL,
+                to_lang TEXT NOT NULL,
+                source_hash TEXT NOT NULL,
+                source_text TEXT NOT NULL,
+                translated_text TEXT NOT NULL,
+                created_utc TEXT NOT NULL,
+                last_used_utc TEXT NOT NULL,
+                hit_count INTEGER DEFAULT 0,
+                UNIQUE(service_id, from_lang, to_lang, source_hash)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cache_lookup
+                ON translation_cache(service_id, from_lang, to_lang, source_hash);",
+        )?;
+        Ok(())
+    }
+}
+
+pub fn long_document_translation_cache_path(cache_dir: Option<&str>) -> PathBuf {
+    cache_dir
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(default_translation_cache_directory)
+        .join("translation_cache.db")
+}
+
+pub fn long_document_source_hash(text: &str) -> String {
+    uppercase_sha256_hex(text.as_bytes())
+}
+
+fn default_translation_cache_directory() -> PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Easydict")
+}
+
+fn persistent_cache_now() -> String {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    format!("unix-ms:{millis}")
 }
 
 #[derive(Clone, Debug)]

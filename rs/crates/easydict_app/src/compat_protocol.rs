@@ -4,37 +4,13 @@ use serde_json::Value;
 
 pub const WORKER_PROTOCOL_VERSION_CURRENT: u32 = 1;
 
-pub mod compat_methods {
-    pub const TRANSLATE: &str = "translate";
-    pub const TRANSLATE_STREAM: &str = "translate_stream";
-    pub const GRAMMAR_CORRECT: &str = "grammar_correct";
-    pub const OCR_RECOGNIZE: &str = "ocr_recognize";
-    pub const LONGDOC_TRANSLATE: &str = "longdoc_translate";
-    pub const LOCAL_AI_PREPARE: &str = "local_ai_prepare";
-    pub const LOCAL_AI_TRANSLATE: &str = "local_ai_translate";
-    pub const MDX_LOOKUP: &str = "mdx_lookup";
-    pub const SETTINGS_MIGRATE: &str = "settings_migrate";
-}
-
-pub mod compat_events {
-    pub const TRANSLATE_CHUNK: &str = "translate_chunk";
-    pub const TRANSLATE_DONE: &str = "translate_done";
-    pub const GRAMMAR_CHUNK: &str = "grammar_chunk";
-    pub const GRAMMAR_DONE: &str = "grammar_done";
-}
-
 pub mod worker_methods {
     pub const CONFIGURE: &str = "configure";
     pub const CANCEL: &str = "cancel";
     pub const SHUTDOWN: &str = "shutdown";
     pub const LONGDOC_TRANSLATE_DOCUMENT: &str = "translate_document";
-    pub const LOCAL_AI_TRANSLATE: &str = "translate";
     pub const LOCAL_AI_TRANSLATE_STREAM: &str = "translate_stream";
-    pub const LOCAL_AI_PREPARE_MODEL: &str = "prepare_model";
-    pub const LOCAL_AI_IS_AVAILABLE: &str = "is_available";
-    pub const LOCAL_AI_LIST_MODELS: &str = "list_models";
     pub const LOCAL_AI_GRAMMAR_STREAM: &str = "grammar_stream";
-    pub const OCR_RECOGNIZE: &str = "recognize";
 }
 
 pub mod worker_events {
@@ -43,13 +19,11 @@ pub mod worker_events {
     pub const LONGDOC_PROGRESS: &str = "progress";
     pub const LONGDOC_BLOCK_TRANSLATED: &str = "block_translated";
     pub const LOCAL_AI_CHUNK: &str = "chunk";
-    pub const LOCAL_AI_DOWNLOAD_PROGRESS: &str = "download_progress";
 }
 
 pub mod worker_kinds {
     pub const LONGDOC: &str = "longdoc";
     pub const LOCAL_AI: &str = "localai";
-    pub const OCR: &str = "ocr";
 }
 
 pub mod worker_error_codes {
@@ -222,6 +196,8 @@ pub struct TranslateParams {
     pub to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub services: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_prompt: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -244,12 +220,65 @@ pub struct TranslationResultDto {
     /// from the legacy `TranslationResult.Alternatives`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alternatives: Option<Vec<String>>,
+    /// Dictionary/word lookup payload for rich providers such as Google Dict
+    /// and Youdao. This is additive so older hosts that omit it still parse.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub word_result: Option<WordResultDto>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TranslateChunkEventData {
-    pub text: String,
+pub struct WordResultDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phonetics: Option<Vec<PhoneticDto>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub definitions: Option<Vec<DefinitionDto>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub examples: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub word_forms: Option<Vec<WordFormDto>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synonyms: Option<Vec<SynonymDto>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneticDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefinitionDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part_of_speech: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meanings: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WordFormDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SynonymDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part_of_speech: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meaning: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub words: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -287,12 +316,6 @@ pub struct GrammarCorrectResultDto {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GrammarChunkEventData {
-    pub text: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ReadyEventData {
     pub worker_kind: String,
     pub worker_version: String,
@@ -309,6 +332,12 @@ pub struct ConfigureParams {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureResult {
+    pub ok: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShutdownResult {
     pub ok: bool,
 }
 
@@ -447,6 +476,8 @@ pub struct SettingsSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub long_doc_enable_document_context_pass: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_translation_cache: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_tatr_table_structure: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub formula_font_pattern: Option<String>,
@@ -576,17 +607,8 @@ pub struct LocalAiTranslateParams {
     pub provider_mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_prompt: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalAiTranslateResult {
-    pub translated_text: String,
-    pub service_id: String,
-    pub service_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detected_language: Option<String>,
-    pub timing_ms: i64,
+    pub include_explanations: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -601,111 +623,6 @@ pub struct TranslateStreamResult {
     pub done: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub full_text: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PrepareModelParams {
-    pub provider: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub endpoint: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalModelStatusDto {
-    pub state: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DownloadProgressEventData {
-    pub bytes_downloaded: i64,
-    pub total_bytes: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_file: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IsAvailableParams {
-    pub provider: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IsAvailableResult {
-    pub available: bool,
-    pub state: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ListModelsParams {
-    pub provider: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ListModelsResult {
-    pub models: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrRecognizeParams {
-    pub pixel_data_path: String,
-    pub pixel_width: u32,
-    pub pixel_height: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preferred_language_tag: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrResultDto {
-    #[serde(default)]
-    pub text: String,
-    #[serde(default)]
-    pub lines: Vec<OcrLineDto>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detected_language: Option<OcrLanguageDto>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text_angle: Option<f64>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrLineDto {
-    #[serde(default)]
-    pub text: String,
-    pub bounding_rect: OcrRectDto,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrRectDto {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrLanguageDto {
-    #[serde(default)]
-    pub tag: String,
-    #[serde(default)]
-    pub display_name: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -730,23 +647,6 @@ pub struct MdxLookupEntry {
     pub html: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dictionary_name: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsMigrateParams {
-    #[serde(default)]
-    pub legacy_settings_path: Option<String>,
-    #[serde(default)]
-    pub target_settings_path: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsMigrateResult {
-    pub migrated: bool,
-    #[serde(default)]
-    pub warnings: Vec<String>,
 }
 
 fn default_true() -> bool {

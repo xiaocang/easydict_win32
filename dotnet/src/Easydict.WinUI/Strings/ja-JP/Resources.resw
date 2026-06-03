@@ -1290,4 +1290,6 @@
   <data name="LayoutDetection_VisionService" xml:space="preserve">
     <value>Vision Service</value>
   </data>
+  <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
+  <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
 </root>

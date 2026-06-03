@@ -1381,6 +1381,87 @@
                             </StackPanel>
                         </Expander>
 
+                        <!-- Volcano Engine (火山翻译) -->
+                        <Expander HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Tag="Volcano">
+                            <Expander.Header>
+                                <Grid>
+                                    <TextBlock Text="Volcano Engine (火山翻译)"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="VolcanoStatusText"
+                                            Text="✓"
+                                            FontWeight="SemiBold"
+                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,0,8,0"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Padding="0,8">
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="VolcanoAccessKeyIdHeaderText"
+                                               Text="Access Key ID"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="VolcanoAccessKeyIdBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Volcano Access Key ID"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="VolcanoAccessKeyIdRevealButton"
+                                                AutomationProperties.AutomationId="VolcanoAccessKeyIdRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=VolcanoAccessKeyIdBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Width="350"
+                                            HorizontalAlignment="Left"
+                                            Spacing="4">
+                                    <TextBlock x:Name="VolcanoSecretAccessKeyHeaderText"
+                                               Text="Secret Access Key"
+                                               FontSize="14"/>
+                                    <Grid>
+                                        <PasswordBox x:Name="VolcanoSecretAccessKeyBox"
+                                                     HorizontalAlignment="Stretch"
+                                                     Padding="12,5,40,5"
+                                                     PlaceholderText="Enter your Volcano Secret Access Key"
+                                                     PasswordRevealMode="Hidden"/>
+                                        <Button x:Name="VolcanoSecretAccessKeyRevealButton"
+                                                AutomationProperties.AutomationId="VolcanoSecretAccessKeyRevealButton"
+                                                Style="{StaticResource SettingsInlineIconButtonStyle}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                Tag="{Binding ElementName=VolcanoSecretAccessKeyBox}"
+                                                Click="OnPasswordRevealButtonClick">
+                                            <FontIcon Glyph="&#xE890;"
+                                                      FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <TextBlock Text="Volcano Engine machine translation. Get your Access Key ID and Secret Access Key from console.volcengine.com"
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                                <Button x:Name="TestVolcanoButton"
+                                        Content="Test"
+                                        Click="OnTestVolcano"
+                                        Padding="8,4"/>
+                            </StackPanel>
+                        </Expander>
+
                         <!-- Imported MDX Dictionaries (dynamically populated) -->
                         <StackPanel x:Name="ImportedMdxConfigPanel"
                                 Spacing="8"/>

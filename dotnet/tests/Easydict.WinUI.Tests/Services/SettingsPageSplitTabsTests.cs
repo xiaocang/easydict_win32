@@ -131,6 +131,7 @@ public class SettingsPageSplitTabsTests
         "Caiyun",
         "NiuTrans",
         "Youdao",
+        "Volcano",
         "Google",
         "Linguee"
     ];

@@ -873,4 +873,6 @@
   <data name="MddAssociatedFiles" xml:space="preserve">
     <value>Resource Files</value>
   </data>
+  <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
+  <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
 </root>

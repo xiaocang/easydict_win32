@@ -1368,6 +1368,8 @@ public sealed partial class SettingsPage : Page
         DoubaoModelBox.Header = loc.GetString("Model");
         CaiyunKeyHeaderText.Text = loc.GetString("ApiKey");
         NiuTransKeyHeaderText.Text = loc.GetString("ApiKey");
+        VolcanoAccessKeyIdHeaderText.Text = loc.GetString("VolcanoAccessKeyId");
+        VolcanoSecretAccessKeyHeaderText.Text = loc.GetString("VolcanoSecretAccessKey");
         YoudaoAppKeyHeaderText.Text = loc.GetString("AppKey");
         YoudaoAppSecretHeaderText.Text = loc.GetString("AppSecret");
         YoudaoUseOfficialApiToggle.Header = loc.GetString("UseOfficialApi");
@@ -1392,6 +1394,7 @@ public sealed partial class SettingsPage : Page
         TestDoubaoButton.Content = testButtonText;
         TestCaiyunButton.Content = testButtonText;
         TestNiuTransButton.Content = testButtonText;
+        TestVolcanoButton.Content = testButtonText;
 
         // Free Services section
         if (FreeServicesHeaderText != null)
@@ -1608,6 +1611,8 @@ public sealed partial class SettingsPage : Page
         yield return DoubaoKeyRevealButton;
         yield return CaiyunKeyRevealButton;
         yield return NiuTransKeyRevealButton;
+        yield return VolcanoAccessKeyIdRevealButton;
+        yield return VolcanoSecretAccessKeyRevealButton;
         yield return YoudaoAppKeyRevealButton;
         yield return YoudaoAppSecretRevealButton;
         yield return OcrApiKeyRevealButton;
@@ -1743,6 +1748,16 @@ public sealed partial class SettingsPage : Page
         if (ReferenceEquals(passwordBox, YoudaoAppSecretBox))
         {
             return "AppSecret";
+        }
+
+        if (ReferenceEquals(passwordBox, VolcanoAccessKeyIdBox))
+        {
+            return "VolcanoAccessKeyId";
+        }
+
+        if (ReferenceEquals(passwordBox, VolcanoSecretAccessKeyBox))
+        {
+            return "VolcanoSecretAccessKey";
         }
 
         if (ReferenceEquals(passwordBox, OcrApiKeyBox))
@@ -2208,6 +2223,8 @@ public sealed partial class SettingsPage : Page
         DoubaoModelBox.TextChanged += OnSettingChanged;
         CaiyunKeyBox.PasswordChanged += OnSettingChanged;
         NiuTransKeyBox.PasswordChanged += OnSettingChanged;
+        VolcanoAccessKeyIdBox.PasswordChanged += OnSettingChanged;
+        VolcanoSecretAccessKeyBox.PasswordChanged += OnSettingChanged;
         YoudaoAppKeyBox.PasswordChanged += OnSettingChanged;
         YoudaoAppSecretBox.PasswordChanged += OnSettingChanged;
         YoudaoUseOfficialApiToggle.Toggled += OnSettingChanged;
@@ -2303,6 +2320,8 @@ public sealed partial class SettingsPage : Page
         DoubaoModelBox.TextChanged -= OnSettingChanged;
         CaiyunKeyBox.PasswordChanged -= OnSettingChanged;
         NiuTransKeyBox.PasswordChanged -= OnSettingChanged;
+        VolcanoAccessKeyIdBox.PasswordChanged -= OnSettingChanged;
+        VolcanoSecretAccessKeyBox.PasswordChanged -= OnSettingChanged;
         YoudaoAppKeyBox.PasswordChanged -= OnSettingChanged;
         YoudaoAppSecretBox.PasswordChanged -= OnSettingChanged;
         YoudaoUseOfficialApiToggle.Toggled -= OnSettingChanged;
@@ -2641,6 +2660,8 @@ public sealed partial class SettingsPage : Page
             || !SameSetting(string.IsNullOrWhiteSpace(doubaoModel) ? "doubao-seed-translation-250915" : doubaoModel, _settings.DoubaoModel)
             || !SameSecret(CaiyunKeyBox.Password, _settings.CaiyunApiKey)
             || !SameSecret(NiuTransKeyBox.Password, _settings.NiuTransApiKey)
+            || !SameSecret(VolcanoAccessKeyIdBox.Password, _settings.VolcanoAccessKeyId)
+            || !SameSecret(VolcanoSecretAccessKeyBox.Password, _settings.VolcanoSecretAccessKey)
             || !SameSecret(YoudaoAppKeyBox.Password, _settings.YoudaoAppKey)
             || !SameSecret(YoudaoAppSecretBox.Password, _settings.YoudaoAppSecret)
             || YoudaoUseOfficialApiToggle.IsOn != _settings.YoudaoUseOfficialApi;
@@ -2873,6 +2894,10 @@ public sealed partial class SettingsPage : Page
             // NiuTrans settings
             NiuTransKeyBox.Password = _settings.NiuTransApiKey ?? string.Empty;
 
+            // Volcano settings
+            VolcanoAccessKeyIdBox.Password = _settings.VolcanoAccessKeyId ?? string.Empty;
+            VolcanoSecretAccessKeyBox.Password = _settings.VolcanoSecretAccessKey ?? string.Empty;
+
             // Youdao settings
             YoudaoAppKeyBox.Password = _settings.YoudaoAppKey ?? string.Empty;
             YoudaoAppSecretBox.Password = _settings.YoudaoAppSecret ?? string.Empty;
@@ -3031,7 +3056,8 @@ public sealed partial class SettingsPage : Page
             ["builtin"] = BuiltInStatusText,
             ["doubao"] = DoubaoStatusText,
             ["caiyun"] = CaiyunStatusText,
-            ["niutrans"] = NiuTransStatusText
+            ["niutrans"] = NiuTransStatusText,
+            ["volcano"] = VolcanoStatusText
         };
 
         foreach (var (serviceId, indicator) in statusMap)
@@ -4170,6 +4196,12 @@ public sealed partial class SettingsPage : Page
         var niutransKey = NiuTransKeyBox.Password;
         _settings.NiuTransApiKey = string.IsNullOrWhiteSpace(niutransKey) ? null : niutransKey;
 
+        // Save Volcano settings
+        var volcanoAccessKeyId = VolcanoAccessKeyIdBox.Password;
+        _settings.VolcanoAccessKeyId = string.IsNullOrWhiteSpace(volcanoAccessKeyId) ? null : volcanoAccessKeyId;
+        var volcanoSecretAccessKey = VolcanoSecretAccessKeyBox.Password;
+        _settings.VolcanoSecretAccessKey = string.IsNullOrWhiteSpace(volcanoSecretAccessKey) ? null : volcanoSecretAccessKey;
+
         // Save Youdao settings
         var youdaoAppKey = YoudaoAppKeyBox.Password;
         _settings.YoudaoAppKey = string.IsNullOrWhiteSpace(youdaoAppKey) ? null : youdaoAppKey;
@@ -4681,6 +4713,7 @@ public sealed partial class SettingsPage : Page
             "doubao" => new DoubaoService(httpClient),
             "caiyun" => new CaiyunService(httpClient),
             "niutrans" => new NiuTransService(httpClient),
+            "volcano" => new VolcanoService(httpClient),
             _ => null
         };
     }
@@ -5080,6 +5113,24 @@ public sealed partial class SettingsPage : Page
                 niutrans.Configure(string.IsNullOrWhiteSpace(apiKey) ? "" : apiKey);
             }
         }, TestNiuTransButton, NiuTransStatusText);
+    }
+
+    /// <summary>
+    /// Test Volcano Engine configuration.
+    /// </summary>
+    private async void OnTestVolcano(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("volcano", service =>
+        {
+            if (service is VolcanoService volcano)
+            {
+                var accessKeyId = VolcanoAccessKeyIdBox.Password;
+                var secretAccessKey = VolcanoSecretAccessKeyBox.Password;
+                volcano.Configure(
+                    string.IsNullOrWhiteSpace(accessKeyId) ? "" : accessKeyId,
+                    string.IsNullOrWhiteSpace(secretAccessKey) ? "" : secretAccessKey);
+            }
+        }, TestVolcanoButton, VolcanoStatusText);
     }
 
     #region Layout Detection

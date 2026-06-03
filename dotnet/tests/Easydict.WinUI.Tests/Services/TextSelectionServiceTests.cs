@@ -248,4 +248,41 @@ public class TextSelectionServiceTests
             .Should().BeFalse(
                 "terminal apps already skip the clipboard path; the suppression layer must not double-block them");
     }
+
+    // ---- Clipboard restore decision (issue #168) ----
+    // After a Ctrl+C selection capture we must restore the user's original
+    // clipboard but must NEVER clear it: clearing on every selection corrupted
+    // unrelated copy/paste flows (e.g. pasting in Excel).
+
+    [Fact]
+    public void ResolveClipboardRestore_RestoresOriginal_WhenItDiffersFromCopiedText()
+    {
+        TextSelectionService.ResolveClipboardRestore("user copied text", "selected cell text")
+            .Should().Be("user copied text");
+    }
+
+    [Fact]
+    public void ResolveClipboardRestore_ReturnsNull_WhenOriginalWasNonText()
+    {
+        // A null original means the clipboard held a non-text payload (e.g. an image).
+        // We must leave the clipboard alone rather than wiping it.
+        TextSelectionService.ResolveClipboardRestore(null, "selected cell text")
+            .Should().BeNull("a non-text original must never trigger a clear (issue #168)");
+    }
+
+    [Fact]
+    public void ResolveClipboardRestore_ReturnsNull_WhenCopiedTextMatchesOriginal()
+    {
+        // Nothing changed — no need to write the same value back.
+        TextSelectionService.ResolveClipboardRestore("same text", "same text")
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolveClipboardRestore_RestoresOriginal_WhenNothingWasCopied()
+    {
+        // Ctrl+C produced no text (e.g. empty cell) but the user still had a copy.
+        TextSelectionService.ResolveClipboardRestore("user copied text", null)
+            .Should().Be("user copied text");
+    }
 }

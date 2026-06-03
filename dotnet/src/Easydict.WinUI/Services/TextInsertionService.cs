@@ -193,20 +193,24 @@ public static class TextInsertionService
         // Ctrl down
         inputs[0].type = INPUT_KEYBOARD;
         inputs[0].U.ki.wVk = VK_CONTROL;
+        inputs[0].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         // V down
         inputs[1].type = INPUT_KEYBOARD;
         inputs[1].U.ki.wVk = VK_V;
+        inputs[1].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         // V up
         inputs[2].type = INPUT_KEYBOARD;
         inputs[2].U.ki.wVk = VK_V;
         inputs[2].U.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[2].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         // Ctrl up
         inputs[3].type = INPUT_KEYBOARD;
         inputs[3].U.ki.wVk = VK_CONTROL;
         inputs[3].U.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[3].U.ki.dwExtraInfo = MouseHookService.EASYDICT_SYNTHETIC_KEY;
 
         var inputSize = Marshal.SizeOf<INPUT>();
         uint result = SendInput(4, inputs, inputSize);

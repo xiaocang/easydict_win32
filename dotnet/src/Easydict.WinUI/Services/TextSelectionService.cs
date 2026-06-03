@@ -540,22 +540,30 @@ public static class TextSelectionService
                 return (null, ClipWaitResult.Timeout);
             }
 
-            // 1. Save current clipboard content (awaitable — guarantees completion)
+            // 1. Save current clipboard content (awaitable — guarantees completion).
+            // Capture both the text (if any) and whether the clipboard was *genuinely
+            // empty* (zero formats), so the restore step can tell an empty clipboard
+            // apart from a non-text payload (e.g. an image) — see issue #168.
             string? originalClipboard = null;
+            bool originalWasEmpty = false;
             try
             {
-                originalClipboard = await RunOnDispatcherAsync<string?>(dispatcherQueue, async () =>
+                var snapshot = await RunOnDispatcherAsync<ClipboardProbe?>(dispatcherQueue, async () =>
                 {
                     var dataPackage = Clipboard.GetContent();
+                    var formatCount = dataPackage.AvailableFormats?.Count ?? 0;
                     if (dataPackage.Contains(StandardDataFormats.Text))
                     {
                         var text = await dataPackage.GetTextAsync();
                         Debug.WriteLine($"[TextSelectionService] Original clipboard: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...'");
-                        return text;
+                        return new ClipboardProbe(true, text, formatCount);
                     }
-                    Debug.WriteLine("[TextSelectionService] Original clipboard has no text");
-                    return null;
+                    Debug.WriteLine($"[TextSelectionService] Original clipboard has no text (formats={formatCount})");
+                    return new ClipboardProbe(false, null, formatCount);
                 }, cancellationToken);
+
+                originalClipboard = snapshot?.Text;
+                originalWasEmpty = snapshot != null && snapshot.AvailableFormatCount == 0;
             }
             catch (Exception ex)
             {
@@ -647,19 +655,29 @@ public static class TextSelectionService
 
             Debug.WriteLine($"[TextSelectionService] Clipboard changed: {originalClipboard != selectedText}");
 
-            // 5. Restore original clipboard content (best-effort, but reliable).
-            // Only restore when we actually saved text that differs from what Ctrl+C
-            // produced. We deliberately NEVER clear the clipboard: a saved null means
-            // the original had no text format (e.g. an image), and clearing it would
-            // destroy the user's clipboard on every selection (issue #168). The restore
-            // is awaited and retried (and intentionally not cancellable) so a transient
-            // lock held by another app (Office frequently holds the clipboard open) no
-            // longer silently loses the user's copied text, and a late user action cannot
-            // leave the foreign (just-copied) text stranded on the clipboard.
-            var textToRestore = ResolveClipboardRestore(originalClipboard, selectedText);
-            if (textToRestore != null)
+            // 5. Restore the original clipboard state (best-effort, but reliable).
+            // We restore saved text, or clear back to empty ONLY when the clipboard was
+            // genuinely empty to begin with. We deliberately never clear a non-text
+            // payload (e.g. an image): clearing it on every selection is exactly the
+            // corruption reported in issue #168, and the payload can't be restored anyway.
+            // The write is awaited and retried (and intentionally not cancellable) so a
+            // transient lock held by another app (Office frequently holds the clipboard
+            // open) no longer silently loses the user's clipboard, and a late user action
+            // cannot leave the foreign (just-copied) text stranded on the clipboard.
+            var (restoreAction, textToRestore) = ResolveClipboardRestore(originalClipboard, originalWasEmpty, selectedText);
+            switch (restoreAction)
             {
-                await RestoreClipboardAsync(dispatcherQueue, textToRestore);
+                case ClipboardRestoreAction.RestoreText:
+                    await RunClipboardWriteWithRetryAsync(dispatcherQueue, () =>
+                    {
+                        var dataPackage = new DataPackage();
+                        dataPackage.SetText(textToRestore!);
+                        Clipboard.SetContent(dataPackage);
+                    }, "Clipboard restore");
+                    break;
+                case ClipboardRestoreAction.ClearToEmpty:
+                    await RunClipboardWriteWithRetryAsync(dispatcherQueue, Clipboard.Clear, "Clipboard clear-to-empty");
+                    break;
             }
 
             var outcome = string.IsNullOrWhiteSpace(selectedText) ? ClipWaitResult.Timeout : ClipWaitResult.Success;
@@ -679,22 +697,52 @@ public static class TextSelectionService
     }
 
     /// <summary>
-    /// Decides what (if anything) should be written back to the clipboard after a
-    /// Ctrl+C selection capture. Returns the original text to restore, or null to
-    /// leave the clipboard untouched. Crucially this never signals a clear: a null
-    /// <paramref name="originalClipboard"/> means the user's clipboard held a
-    /// non-text payload, and wiping it on every selection corrupted unrelated
-    /// copy/paste flows (issue #168).
+    /// How the clipboard should be restored after a Ctrl+C selection capture.
     /// </summary>
-    internal static string? ResolveClipboardRestore(string? originalClipboard, string? copiedText)
-        => originalClipboard != null && originalClipboard != copiedText ? originalClipboard : null;
+    internal enum ClipboardRestoreAction
+    {
+        /// <summary>Leave the clipboard as-is (e.g. a non-text payload we can't restore).</summary>
+        None,
+        /// <summary>Write the saved original text back to the clipboard.</summary>
+        RestoreText,
+        /// <summary>Clear the clipboard back to its original empty state.</summary>
+        ClearToEmpty,
+    }
 
     /// <summary>
-    /// Restores <paramref name="text"/> to the clipboard, retrying a few times to
-    /// ride out transient locks held by other apps (e.g. Office holding the clipboard
-    /// open). Best-effort: never throws and never clears the clipboard.
+    /// Decides how the clipboard should be restored after a Ctrl+C selection capture.
+    /// <list type="bullet">
+    /// <item>Original had text → restore it (when Ctrl+C actually changed the clipboard).</item>
+    /// <item>Original was genuinely empty (zero formats) → clear back to empty.</item>
+    /// <item>Original had a non-text payload (e.g. an image) → leave it alone: it can't
+    /// be restored, and clearing it on every selection is the corruption reported in
+    /// issue #168.</item>
+    /// </list>
     /// </summary>
-    private static async Task RestoreClipboardAsync(DispatcherQueue dispatcherQueue, string text)
+    internal static (ClipboardRestoreAction Action, string? Text) ResolveClipboardRestore(
+        string? originalText, bool originalWasEmpty, string? copiedText)
+    {
+        if (originalText != null)
+        {
+            return originalText != copiedText
+                ? (ClipboardRestoreAction.RestoreText, originalText)
+                : (ClipboardRestoreAction.None, null);
+        }
+
+        if (originalWasEmpty && copiedText != null)
+        {
+            return (ClipboardRestoreAction.ClearToEmpty, null);
+        }
+
+        return (ClipboardRestoreAction.None, null);
+    }
+
+    /// <summary>
+    /// Runs a clipboard write (set or clear) on the UI thread, retrying a few times to
+    /// ride out transient locks held by other apps (e.g. Office holding the clipboard
+    /// open). Best-effort: never throws.
+    /// </summary>
+    private static async Task RunClipboardWriteWithRetryAsync(DispatcherQueue dispatcherQueue, Action clipboardOp, string opName)
     {
         const int maxAttempts = 3;
         const int retryDelayMs = 50;
@@ -703,17 +751,12 @@ public static class TextSelectionService
         {
             try
             {
-                await RunOnDispatcherAsync(dispatcherQueue, () =>
-                {
-                    var dataPackage = new DataPackage();
-                    dataPackage.SetText(text);
-                    Clipboard.SetContent(dataPackage);
-                });
+                await RunOnDispatcherAsync(dispatcherQueue, clipboardOp);
                 return;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[TextSelectionService] Clipboard restore attempt {attempt}/{maxAttempts} failed: {ex.Message}");
+                Debug.WriteLine($"[TextSelectionService] {opName} attempt {attempt}/{maxAttempts} failed: {ex.Message}");
             }
 
             if (attempt < maxAttempts)
@@ -722,7 +765,7 @@ public static class TextSelectionService
             }
         }
 
-        Debug.WriteLine("[TextSelectionService] Clipboard restore gave up after retries");
+        Debug.WriteLine($"[TextSelectionService] {opName} gave up after retries");
     }
 
     /// <summary>

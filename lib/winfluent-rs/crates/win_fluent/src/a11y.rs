@@ -249,6 +249,16 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node.focusable = token.state.is_focusable();
             node
         }
+        ViewToken::CheckBox(token) => {
+            let mut node = A11yNode::new(A11yRole::CheckBox).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some(token.label.clone()));
+            node.focusable = token.state.is_focusable();
+            node
+        }
         ViewToken::Slider(token) => {
             let mut node = A11yNode::new(A11yRole::Slider).with_hint(&token.a11y);
             node.name = token.a11y.name.clone().or_else(|| token.id.clone());

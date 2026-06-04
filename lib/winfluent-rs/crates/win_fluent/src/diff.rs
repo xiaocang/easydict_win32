@@ -164,6 +164,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         | ViewToken::ProgressRing(_)
         | ViewToken::Spacer(_)
         | ViewToken::TextEditor(_)
+        | ViewToken::CheckBox(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
@@ -185,6 +186,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::Card(_) => "Card",
         ViewToken::Spacer(_) => "Spacer",
         ViewToken::TextEditor(_) => "TextEditor",
+        ViewToken::CheckBox(_) => "CheckBox",
         ViewToken::ToggleSwitch(_) => "ToggleSwitch",
         ViewToken::Slider(_) => "Slider",
         ViewToken::ComboBox(_) => "ComboBox",
@@ -223,6 +225,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::Card(token) => token.id.as_deref(),
         ViewToken::Spacer(token) => token.id.as_deref(),
         ViewToken::TextEditor(token) => token.id.as_deref(),
+        ViewToken::CheckBox(token) => token.id.as_deref(),
         ViewToken::ToggleSwitch(token) => token.id.as_deref(),
         ViewToken::Slider(token) => token.id.as_deref(),
         ViewToken::ComboBox(token) => token.id.as_deref(),
@@ -322,6 +325,13 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.key_bindings.len()
         ),
         ViewToken::ToggleSwitch(token) => format!(
+            "{:?}|{}|{}|{:?}",
+            token.label,
+            token.checked,
+            token.state,
+            token.action.kind()
+        ),
+        ViewToken::CheckBox(token) => format!(
             "{:?}|{}|{}|{:?}",
             token.label,
             token.checked,

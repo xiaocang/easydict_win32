@@ -111,6 +111,7 @@ pub enum ViewToken<Message> {
     Card(CardToken<Message>),
     Spacer(SpacerToken),
     TextEditor(TextEditorToken<Message>),
+    CheckBox(CheckBoxToken<Message>),
     ToggleSwitch(ToggleSwitchToken<Message>),
     Slider(SliderToken<Message>),
     ComboBox(ComboBoxToken<Message>),
@@ -485,6 +486,16 @@ pub struct TextEditorToken<Message> {
 
 #[derive(Clone, Debug)]
 pub struct ToggleSwitchToken<Message> {
+    pub id: Option<String>,
+    pub label: String,
+    pub checked: bool,
+    pub state: ControlState,
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug)]
+pub struct CheckBoxToken<Message> {
     pub id: Option<String>,
     pub label: String,
     pub checked: bool,
@@ -1311,6 +1322,17 @@ pub fn toggle_switch<Message>(
     checked: bool,
 ) -> ToggleSwitchBuilder<Message> {
     ToggleSwitchBuilder {
+        id: None,
+        label: label.into(),
+        checked,
+        state: ControlState::default(),
+        action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBuilder<Message> {
+    CheckBoxBuilder {
         id: None,
         label: label.into(),
         checked,
@@ -2419,6 +2441,79 @@ impl<Message> ToggleSwitchBuilder<Message> {
 impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
     fn into_view(self) -> View<Message> {
         View::new(ViewToken::ToggleSwitch(ToggleSwitchToken {
+            id: self.id,
+            label: self.label,
+            checked: self.checked,
+            state: self.state,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CheckBoxBuilder<Message> {
+    id: Option<String>,
+    label: String,
+    checked: bool,
+    state: ControlState,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> CheckBoxBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.state.hovered = hovered;
+        self
+    }
+
+    pub fn pressed(mut self, pressed: bool) -> Self {
+        self.state.pressed = pressed;
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.state.focused = focused;
+        self
+    }
+
+    pub fn validation(mut self, validation: ValidationState) -> Self {
+        self.state.validation = validation;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    pub fn on_toggle(
+        mut self,
+        map: impl Fn(bool) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::bool_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for CheckBoxBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::CheckBox(CheckBoxToken {
             id: self.id,
             label: self.label,
             checked: self.checked,

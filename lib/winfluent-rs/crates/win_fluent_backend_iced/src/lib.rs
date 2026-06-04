@@ -11,22 +11,22 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use iced::advanced::{
     clipboard::Clipboard,
-    layout, mouse, overlay, renderer,
+    layout, mouse, overlay, renderer, text as iced_text_core,
     widget::{self, Operation, Tree},
     Layout, Renderer as _, Shell, Widget,
 };
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
-    button as iced_button, column as iced_column, container as iced_container,
-    opaque as iced_opaque, pick_list as iced_pick_list, responsive as iced_responsive,
-    row as iced_row, scrollable as iced_scrollable, slider as iced_slider, space as iced_space,
-    stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
-    text_input as iced_text_input, toggler as iced_toggler,
+    button as iced_button, checkbox as iced_checkbox, column as iced_column,
+    container as iced_container, opaque as iced_opaque, pick_list as iced_pick_list,
+    responsive as iced_responsive, row as iced_row, scrollable as iced_scrollable,
+    slider as iced_slider, space as iced_space, stack as iced_stack, text as iced_text,
+    text_editor as iced_text_editor, text_input as iced_text_input, toggler as iced_toggler,
 };
 use iced::{
     alignment, font, keyboard, window, Background, Border, Color, Element, Event, Font,
-    Length as IcedLength, Padding as IcedPadding, Point, Rectangle, Shadow, Size, Subscription,
-    Vector,
+    Length as IcedLength, Padding as IcedPadding, Pixels, Point, Rectangle, Shadow, Size,
+    Subscription, Vector,
 };
 use win_fluent::action::{Action, ActionKind};
 use win_fluent::command::CommandToken;
@@ -46,10 +46,10 @@ use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
     AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind, CardToken,
-    CollapseTransition, ComboBoxItem, ExpanderToken, FlyoutButtonToken, LayoutDistribution,
-    LayoutKind, LayoutToken, Length, OverlayToken, PointerPosition, PointerRegionAction,
-    PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken, ResultItem,
-    ResultListToken, ResultStatus, SettingsRowToken, SliderToken, StatusBadgeToken,
+    CheckBoxToken, CollapseTransition, ComboBoxItem, ExpanderToken, FlyoutButtonToken,
+    LayoutDistribution, LayoutKind, LayoutToken, Length, OverlayToken, PointerPosition,
+    PointerRegionAction, PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken,
+    ResultItem, ResultListToken, ResultStatus, SettingsRowToken, SliderToken, StatusBadgeToken,
     TextEditorChrome, TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken,
     TextStyle, TitleBarToken, View, ViewToken, WrapToken,
 };
@@ -1206,6 +1206,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         | ViewToken::StatusBadge(_)
         | ViewToken::ProgressRing(_)
         | ViewToken::Spacer(_)
+        | ViewToken::CheckBox(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
@@ -1330,6 +1331,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         | ViewToken::ProgressRing(_)
         | ViewToken::Spacer(_)
         | ViewToken::Text(_)
+        | ViewToken::CheckBox(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
@@ -1373,6 +1375,7 @@ where
                 kind,
                 token.icon.as_ref(),
                 visual,
+                state.selected,
             ))
             .style(move |_, status| {
                 let status = button_status_with_state(&state, status);
@@ -1434,6 +1437,7 @@ where
             .height(iced_length(token.height))
             .into(),
         ViewToken::TextEditor(token) => compile_text_editor(token, provider, visual),
+        ViewToken::CheckBox(token) => compile_check_box(token, visual),
         ViewToken::ToggleSwitch(token) => {
             let mut control = iced_toggler(token.checked)
                 .label(toggle_switch_label(&token.label, token.checked))
@@ -2319,6 +2323,7 @@ where
         kind,
         token.icon.as_ref(),
         visual,
+        false,
     ))
     .padding([4, 8])
     .style(move |_, status| button_style(visual, kind, status))
@@ -3111,8 +3116,7 @@ where
     Message: Clone + Send + 'static,
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
-    let is_headerless_floating_input = token.kind == CardKind::FloatingInput
-        && token.title.trim().is_empty()
+    let is_headerless_card = token.title.trim().is_empty()
         && token.description.is_none()
         && token.icon.is_none()
         && token.trailing.is_empty();
@@ -3126,7 +3130,7 @@ where
         .spacing(12)
         .width(IcedLength::Fill);
 
-    if !is_headerless_floating_input {
+    if !is_headerless_card {
         let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
         let mut text_column =
             iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
@@ -3318,6 +3322,15 @@ where
     .width(iced_length(width))
     .padding([8, 12])
     .text_size(text_size(TextStyle::Body, visual))
+    .handle(iced::widget::pick_list::Handle::Static(
+        iced::widget::pick_list::Icon {
+            font: caption_icon_font(),
+            code_point: '\u{E70D}',
+            size: Some(Pixels(12.0)),
+            line_height: iced_text_core::LineHeight::default(),
+            shaping: iced_text_core::Shaping::Basic,
+        },
+    ))
     .style({
         let state = state.clone();
         move |_, status| pick_list_style_with_state(visual, status, &state)
@@ -3382,7 +3395,7 @@ where
 {
     let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
     let mut text_column =
-        iced_column(vec![compile_text(&title, TextStyle::Subtitle, visual)]).spacing(6);
+        iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
 
     if let Some(description) = &token.description {
         text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
@@ -3406,16 +3419,22 @@ where
         );
         let action = token.action.clone();
         let next_expanded = !token.expanded;
-        let expand_button = iced_button(button_content("", ButtonKind::Icon, Some(&icon), visual))
-            .width(IcedLength::Fixed(32.0))
-            .height(IcedLength::Fixed(32.0))
-            .padding(0)
-            .style(move |_, status| button_style(visual, ButtonKind::Icon, status))
-            .on_press(
-                action
-                    .input_bool(next_expanded)
-                    .expect("expander action must produce a message"),
-            );
+        let expand_button = iced_button(button_content(
+            "",
+            ButtonKind::Icon,
+            Some(&icon),
+            visual,
+            false,
+        ))
+        .width(IcedLength::Fixed(32.0))
+        .height(IcedLength::Fixed(32.0))
+        .padding(0)
+        .style(move |_, status| button_style(visual, ButtonKind::Icon, status))
+        .on_press(
+            action
+                .input_bool(next_expanded)
+                .expect("expander action must produce a message"),
+        );
         trailing = trailing.push(expand_button);
     }
 
@@ -3437,8 +3456,8 @@ where
     };
 
     let mut layout = iced_column(vec![header.into()])
-        .padding(24)
-        .spacing(12)
+        .padding([7, 16])
+        .spacing(8)
         .width(IcedLength::Fill);
 
     if token.expanded {
@@ -4146,6 +4165,7 @@ fn push_result_action<'a, Message>(
         ButtonKind::ResultAction,
         Some(&icon),
         visual,
+        false,
     ))
     .width(IcedLength::Fixed(visual.result_action_button_size))
     .height(IcedLength::Fixed(visual.result_action_button_size))
@@ -4649,6 +4669,7 @@ where
         ButtonKind::Standard,
         command.icon.as_ref(),
         visual,
+        false,
     ))
     .style(move |_, status| button_style(visual, ButtonKind::Standard, status));
     if command.enabled {
@@ -4679,15 +4700,12 @@ fn button_content<'a, Message>(
     kind: ButtonKind,
     icon: Option<&win_fluent::IconToken>,
     visual: IcedVisualTheme,
+    selected: bool,
 ) -> IcedElement<'a, Message>
 where
     Message: Clone + Send + 'static,
 {
-    let icon_color = match kind {
-        ButtonKind::Primary => visual.text_on_accent,
-        ButtonKind::FloatingAction | ButtonKind::Link => visual.accent,
-        _ => visual.text_primary,
-    };
+    let icon_color = button_foreground_color(kind, visual, selected);
 
     match (kind, icon, label.trim().is_empty()) {
         (ButtonKind::Tile, Some(icon), false) => {
@@ -4731,6 +4749,15 @@ where
             .size(button_text_size(kind, visual))
             .color(icon_color)
             .into(),
+    }
+}
+
+fn button_foreground_color(kind: ButtonKind, visual: IcedVisualTheme, selected: bool) -> Color {
+    match kind {
+        ButtonKind::Primary => visual.text_on_accent,
+        ButtonKind::Tile if selected => visual.selected_foreground,
+        ButtonKind::FloatingAction | ButtonKind::Link => visual.accent,
+        _ => visual.text_primary,
     }
 }
 
@@ -4871,7 +4898,7 @@ fn text_font(style: TextStyle) -> Font {
     };
 
     Font {
-        family: font::Family::Name("Segoe UI Variable Text"),
+        family: font::Family::Name("Segoe UI Variable"),
         weight,
         ..Font::DEFAULT
     }
@@ -5655,10 +5682,98 @@ fn text_editor_style(
 }
 
 fn toggle_switch_label(label: &str, checked: bool) -> String {
-    if label == "On" && !checked {
-        "Off".to_string()
+    if checked {
+        return label.to_string();
+    }
+
+    match label {
+        "On" => "Off",
+        "Auto" => "Manual",
+        "\u{5f00}" => "\u{5173}",
+        "\u{81ea}\u{52a8}" => "\u{624b}\u{52a8}",
+        _ => label,
+    }
+    .to_string()
+}
+
+fn compile_check_box<'a, Message>(
+    token: &'a CheckBoxToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let mut control = iced_checkbox(token.checked)
+        .label(token.label.clone())
+        .size(18)
+        .spacing(8)
+        .text_size(visual.body_size)
+        .style({
+            let state = token.state.clone();
+            move |_, status| checkbox_style_with_state(visual, status, &state)
+        });
+
+    if token.state.enabled && token.action.kind() == ActionKind::BoolInput {
+        let action = token.action.clone();
+        control = control.on_toggle(move |value| {
+            action
+                .input_bool(value)
+                .expect("checkbox action must produce a message")
+        });
+    }
+
+    control.into()
+}
+
+fn checkbox_style_with_state(
+    visual: IcedVisualTheme,
+    status: iced::widget::checkbox::Status,
+    state: &ControlState,
+) -> iced::widget::checkbox::Style {
+    let is_checked = match status {
+        iced::widget::checkbox::Status::Active { is_checked }
+        | iced::widget::checkbox::Status::Hovered { is_checked }
+        | iced::widget::checkbox::Status::Disabled { is_checked } => is_checked,
+    };
+    let enabled =
+        state.enabled && !matches!(status, iced::widget::checkbox::Status::Disabled { .. });
+    let hovered = state.hovered || matches!(status, iced::widget::checkbox::Status::Hovered { .. });
+
+    let background = if is_checked {
+        if !enabled {
+            visual.text_secondary.scale_alpha(0.45)
+        } else if hovered {
+            visual.accent_hover
+        } else {
+            visual.accent
+        }
     } else {
-        label.to_string()
+        visual.surface
+    };
+
+    let border_color = if is_checked {
+        background
+    } else if !enabled {
+        visual.text_secondary.scale_alpha(0.45)
+    } else if hovered {
+        visual.text_primary
+    } else {
+        visual.text_secondary
+    };
+
+    iced::widget::checkbox::Style {
+        background: Background::Color(background),
+        icon_color: if is_checked {
+            visual.text_on_accent
+        } else {
+            Color::TRANSPARENT
+        },
+        border: control_border_with_radius(border_color, 1.0, 9.0),
+        text_color: Some(if enabled {
+            visual.text_primary
+        } else {
+            visual.text_secondary.scale_alpha(0.45)
+        }),
     }
 }
 
@@ -6697,6 +6812,13 @@ mod tests {
         assert_eq!(toggle_on.background_border_width, theme.stroke.control);
         assert_eq!(toggle_switch_label("On", true), "On");
         assert_eq!(toggle_switch_label("On", false), "Off");
+        assert_eq!(toggle_switch_label("Auto", true), "Auto");
+        assert_eq!(toggle_switch_label("Auto", false), "Manual");
+        assert_eq!(toggle_switch_label("\u{5f00}", false), "\u{5173}");
+        assert_eq!(
+            toggle_switch_label("\u{81ea}\u{52a8}", false),
+            "\u{624b}\u{52a8}"
+        );
 
         let toggle_off = toggle_switch_style(
             visual,
@@ -7414,6 +7536,11 @@ mod tests {
         );
         assert_eq!(selected.text_color, iced_color(theme.selected_foreground));
         assert_eq!(selected.border.color, iced_color(theme.selected_border));
+        assert_eq!(
+            button_foreground_color(ButtonKind::Tile, visual, true),
+            iced_color(theme.selected_foreground),
+            "selected tile content should use the same foreground as the selected style"
+        );
 
         let unselected = button_style_with_state(
             visual,

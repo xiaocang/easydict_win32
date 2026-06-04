@@ -171,6 +171,11 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("checked", token.checked.to_string())
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::CheckBox(token) => SchemaNode::new("CheckBox", token.id.clone())
+            .property("label", quoted(&token.label))
+            .property("checked", token.checked.to_string())
+            .property("state", token.state.to_string())
+            .property("action", format!("{:?}", token.action.kind())),
         ViewToken::Slider(token) => SchemaNode::new("Slider", token.id.clone())
             .property("value", format!("{:.2}", token.value))
             .property("min", format!("{:.2}", token.min))

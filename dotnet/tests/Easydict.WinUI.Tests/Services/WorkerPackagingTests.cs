@@ -283,6 +283,105 @@ public sealed class WorkerPackagingTests
     }
 
     [Fact]
+    public void BrowserExtensionPackaging_UsesRustPackagerInsteadOfPowershellJsonAndZip()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(ProjectRoot, ".."));
+        var workspaceManifest = File.ReadAllText(Path.Combine(repoRoot, "rs", "Cargo.toml"));
+        var script = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "browser-extension",
+            "scripts",
+            "Package-Extension.ps1"));
+        var packager = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_packager",
+            "src",
+            "lib.rs"));
+        var packagerCli = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_packager",
+            "src",
+            "main.rs"));
+
+        workspaceManifest.Should().Contain("crates/easydict_packager");
+        script.Should().Contain("easydict_packager");
+        script.Should().Contain("package-browser-extension");
+        script.Should().Contain("--extension-dir");
+        script.Should().Contain("--target");
+        script.Should().NotContain("ConvertFrom-Json");
+        script.Should().NotContain("ConvertTo-Json");
+        script.Should().NotContain("System.IO.Compression.ZipFile");
+        script.Should().NotContain("Add-Type");
+        script.Should().NotContain("Copy-Item");
+        script.Should().NotContain("Remove-Item");
+        packager.Should().Contain("package_browser_extension");
+        packager.Should().Contain("BROWSER_EXTENSION_COMMON_FILES");
+        packager.Should().Contain("serde_json::to_vec_pretty");
+        packager.Should().Contain("manifest_object.remove(\"key\")");
+        packager.Should().Contain("manifest.v2.json");
+        packager.Should().Contain("easydict-ocr-chrome-v{version}.zip");
+        packager.Should().Contain("easydict-ocr-firefox-v{version}.xpi");
+        packagerCli.Should().Contain("package-browser-extension");
+        packagerCli.Should().Contain("--extension-dir");
+    }
+
+    [Fact]
+    public void MsixPackageInputPreparation_UsesRustToolInsteadOfPowershellXmlDom()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(ProjectRoot, ".."));
+        var packageScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "Package-Msix.ps1"));
+        var packageAndInstallScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "package-and-install.ps1"));
+        var makefile = File.ReadAllText(Path.Combine(ProjectRoot, "Makefile"));
+        var msixValidator = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_msix_validate",
+            "src",
+            "lib.rs"));
+        var msixValidatorCli = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_msix_validate",
+            "src",
+            "main.rs"));
+
+        packageScript.Should().Contain("prepare-package-inputs");
+        packageScript.Should().Contain("easydict_msix_validate");
+        packageScript.Should().Contain("--output-manifest");
+        packageScript.Should().Contain("winapp package");
+        packageScript.Should().Contain("Fix-MsixMinVersion.ps1");
+        packageScript.Should().NotContain("[xml]");
+        packageScript.Should().NotContain("System.Xml");
+        packageScript.Should().NotContain("XmlWriterSettings");
+        packageScript.Should().NotContain("Get-ChildItem (Join-Path $PublishDir \"Assets\")");
+        packageScript.Should().NotContain("Copy-Item -Path $sourcePri");
+        packageAndInstallScript.Should().Contain("Package-Msix.ps1");
+        packageAndInstallScript.Should().Contain("-VerifyTargetsizeIcons");
+        packageAndInstallScript.Should().NotContain("[xml]");
+        packageAndInstallScript.Should().NotContain("GetTempFileName");
+        packageAndInstallScript.Should().NotContain("ProcessorArchitecture=\"[^\"]*\"");
+        packageAndInstallScript.Should().NotContain("Copy-Item $assemblyPri");
+        makefile.Should().Contain("Package-Msix.ps1 -Platform x64");
+        makefile.Should().Contain("Package-Msix.ps1 -Platform x86");
+        makefile.Should().Contain("Package-Msix.ps1 -Platform arm64");
+        makefile.Should().NotContain("sed -i");
+        makefile.Should().NotContain("TMP_MANIFEST");
+        msixValidator.Should().Contain("prepare_package_inputs");
+        msixValidator.Should().Contain("REQUIRED_MSIX_ASSETS");
+        msixValidator.Should().Contain("rewrite_identity_for_package");
+        msixValidator.Should().Contain("ProcessorArchitecture");
+        msixValidator.Should().Contain("MIN_TARGETSIZE_ICON_COUNT");
+        msixValidatorCli.Should().Contain("prepare-package-inputs");
+        msixValidatorCli.Should().Contain("--verify-targetsize-icons");
+    }
+
+    [Fact]
     public void UiParityAnalysis_UsesRustAnalyzerInsteadOfDotnetTool()
     {
         var repoRoot = Path.GetFullPath(Path.Combine(ProjectRoot, ".."));
@@ -468,8 +567,9 @@ public sealed class WorkerPackagingTests
         makefile.Should().NotContain("./publish-msix/arm64/workers/ocr");
         makefile.Should().Contain("./publish-msix/x64 -p:BuildWorkerOutputs=false");
         makefile.Should().Contain("./publish-msix/arm64 -p:BuildWorkerOutputs=false");
-        makefile.Should().Contain("winapp package ./publish-msix/x64");
-        makefile.Should().Contain("<Identity[^>]* Version=");
+        makefile.Should().Contain("Package-Msix.ps1 -Platform x64");
+        makefile.Should().NotContain("winapp package ./publish-msix/x64");
+        makefile.Should().NotContain("<Identity[^>]* Version=");
         makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
         makefile.Should().Contain("Worker settings default");
         makefile.Should().NotContain("UseLocalAiWorker default false");
@@ -573,20 +673,40 @@ public sealed class WorkerPackagingTests
             "easydict_app",
             "src",
             "lib.rs"));
+        var packager = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_packager",
+            "src",
+            "lib.rs"));
+        var packagerCli = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "rs",
+            "crates",
+            "easydict_packager",
+            "src",
+            "main.rs"));
 
         buildScript.Should().Contain("cargo");
-        buildScript.Should().Contain("--bin\", \"easydict-native-bridge");
-        buildScript.Should().Contain("--bin\", \"easydict_browser_registrar");
-        buildScript.Should().Contain("--bin\", \"easydict_cli");
-        buildScript.Should().Contain("--bin\", \"easydict_long_doc");
-        buildScript.Should().Contain("x86_64-pc-windows-msvc");
-        buildScript.Should().Contain("i686-pc-windows-msvc");
-        buildScript.Should().Contain("aarch64-pc-windows-msvc");
-        buildScript.Should().Contain("easydict-native-bridge.exe");
-        buildScript.Should().Contain("easydict_browser_registrar.exe");
-        buildScript.Should().Contain("BrowserHostRegistrar.exe");
-        buildScript.Should().Contain("easydict_cli.exe");
-        buildScript.Should().Contain("easydict_long_doc.exe");
+        buildScript.Should().Contain("easydict_packager");
+        buildScript.Should().Contain("build-rust-helpers");
+        buildScript.Should().Contain("--workspace");
+        buildScript.Should().Contain("--output-dir");
+        buildScript.Should().NotContain("--bin");
+        buildScript.Should().NotContain("Copy-Item");
+        buildScript.Should().NotContain("System.IO.Path");
+        packager.Should().Contain("build_rust_helpers");
+        packager.Should().Contain("RUST_HELPER_EXECUTABLES");
+        packager.Should().Contain("easydict-native-bridge.exe");
+        packager.Should().Contain("easydict_browser_registrar.exe");
+        packager.Should().Contain("BrowserHostRegistrar.exe");
+        packager.Should().Contain("easydict_cli.exe");
+        packager.Should().Contain("easydict_long_doc.exe");
+        packager.Should().Contain("x86_64-pc-windows-msvc");
+        packager.Should().Contain("i686-pc-windows-msvc");
+        packager.Should().Contain("aarch64-pc-windows-msvc");
+        packagerCli.Should().Contain("build-rust-helpers");
 
         makefile.Should().Contain("Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64");
         makefile.Should().Contain("Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86");

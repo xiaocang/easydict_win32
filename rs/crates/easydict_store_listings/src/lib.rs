@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 const TITLE_MAX_LENGTH: usize = 256;
@@ -14,6 +14,11 @@ const FEATURE_MAX_COUNT: usize = 20;
 const KEYWORD_MAX_LENGTH: usize = 40;
 const KEYWORD_MAX_COUNT: usize = 7;
 const RELEASE_NOTES_MAX_LENGTH: usize = 1_500;
+pub const SUPPORTED_STORE_LANGUAGES: &[&str] = &["en-us", "zh-cn", "zh-tw", "ja-jp", "ko-kr"];
+pub const FORBIDDEN_KEYWORD_NAMES: &[&str] = &[
+    "DeepL", "OpenAI", "ChatGPT", "Gemini", "DeepSeek", "Google", "Bing", "Groq", "Zhipu",
+    "Ollama", "Volcano",
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoreListingOptions {
@@ -138,7 +143,11 @@ impl fmt::Display for StoreListingError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ConfigNotFound(path) => {
-                write!(formatter, "store configuration not found: {}", path.display())
+                write!(
+                    formatter,
+                    "store configuration not found: {}",
+                    path.display()
+                )
             }
             Self::Io { path, message } => write!(formatter, "{}: {message}", path.display()),
             Self::ConfigJson { path, message } => {
@@ -148,7 +157,11 @@ impl fmt::Display for StoreListingError {
                 write!(formatter, "failed to parse {}: {message}", path.display())
             }
             Self::MissingAppId(path) => {
-                write!(formatter, "store configuration is missing app.id: {}", path.display())
+                write!(
+                    formatter,
+                    "store configuration is missing app.id: {}",
+                    path.display()
+                )
             }
             Self::MissingConfiguredLanguages(path) => write!(
                 formatter,
@@ -214,6 +227,13 @@ pub fn load_store_listing_report(
 
     for language in &target_languages {
         let listing_path = listings_path.join(format!("{language}.yaml"));
+        if !SUPPORTED_STORE_LANGUAGES.contains(&language.as_str()) {
+            all_errors.push(format!(
+                "[{language}] Unsupported store listing language; supported languages: {}",
+                SUPPORTED_STORE_LANGUAGES.join(", ")
+            ));
+        }
+
         if !listing_path.exists() {
             let warning = format!("[{language}] Listing file not found");
             all_warnings.push(warning);
@@ -224,9 +244,9 @@ pub fn load_store_listing_report(
             continue;
         }
 
-        let listing_text = read_text(&listing_path)?;
+        let listing_bytes = read_bytes(&listing_path)?;
         let listing =
-            serde_norway::from_str::<StoreListing>(&listing_text).map_err(|error| {
+            serde_saphyr::from_slice::<StoreListing>(&listing_bytes).map_err(|error| {
                 StoreListingError::ListingYaml {
                     path: listing_path.clone(),
                     message: error.to_string(),
@@ -261,9 +281,7 @@ pub fn validate_listing(listing: &StoreListing, language: &str) -> ListingValida
         errors.push(format!("[{language}] Missing required field: title"));
     }
     if listing.description.trim().is_empty() {
-        errors.push(format!(
-            "[{language}] Missing required field: description"
-        ));
+        errors.push(format!("[{language}] Missing required field: description"));
     }
     if listing.short_description.trim().is_empty() {
         warnings.push(format!(
@@ -321,6 +339,11 @@ pub fn validate_listing(listing: &StoreListing, language: &str) -> ListingValida
                 text_len(keyword)
             ));
         }
+        if let Some(forbidden_name) = forbidden_keyword_name(keyword) {
+            errors.push(format!(
+                "[{language}] Keyword contains third-party product name '{forbidden_name}': {keyword}"
+            ));
+        }
     }
 
     if !listing.release_notes.is_empty()
@@ -360,10 +383,7 @@ pub fn render_report(report: &StoreListingReport, mode: StoreListingRenderMode) 
                         if validation.errors.is_empty() {
                             output.push_str("  OK: Listing is valid\n");
                             output.push_str(&format!("    Title: {}\n", listing.title));
-                            output.push_str(&format!(
-                                "    Short: {}\n",
-                                listing.short_description
-                            ));
+                            output.push_str(&format!("    Short: {}\n", listing.short_description));
                             output.push_str(&format!(
                                 "    Description: {} chars\n",
                                 text_len(&listing.description)
@@ -390,10 +410,7 @@ pub fn render_report(report: &StoreListingReport, mode: StoreListingRenderMode) 
                         for feature in &listing.features {
                             output.push_str(&format!("    - {feature}\n"));
                         }
-                        output.push_str(&format!(
-                            "  Keywords: {}\n",
-                            listing.keywords.join(", ")
-                        ));
+                        output.push_str(&format!("  Keywords: {}\n", listing.keywords.join(", ")));
                     }
                 }
                 output.push('\n');
@@ -463,14 +480,12 @@ pub fn build_msstore_payload(
     base_listing.insert("features".to_string(), json!(listing.features));
     base_listing.insert(
         "keywords".to_string(),
-        json!(
-            listing
-                .keywords
-                .iter()
-                .take(KEYWORD_MAX_COUNT)
-                .cloned()
-                .collect::<Vec<_>>()
-        ),
+        json!(listing
+            .keywords
+            .iter()
+            .take(KEYWORD_MAX_COUNT)
+            .cloned()
+            .collect::<Vec<_>>()),
     );
     insert_non_empty(
         &mut base_listing,
@@ -492,6 +507,13 @@ pub fn build_msstore_payload(
 
 fn read_text(path: &Path) -> Result<String, StoreListingError> {
     fs::read_to_string(path).map_err(|error| StoreListingError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })
+}
+
+fn read_bytes(path: &Path) -> Result<Vec<u8>, StoreListingError> {
+    fs::read(path).map_err(|error| StoreListingError::Io {
         path: path.to_path_buf(),
         message: error.to_string(),
     })
@@ -524,7 +546,10 @@ fn push_validation_messages(output: &mut String, validation: &ListingValidation)
 
 fn push_summary(output: &mut String, report: &StoreListingReport) {
     output.push_str("=== Summary ===\n");
-    output.push_str(&format!("Processed: {} language(s)\n", report.processed_count()));
+    output.push_str(&format!(
+        "Processed: {} language(s)\n",
+        report.processed_count()
+    ));
     output.push_str(&format!("Errors: {}\n", report.errors.len()));
     output.push_str(&format!("Warnings: {}\n", report.warnings.len()));
 
@@ -561,6 +586,22 @@ fn text_len(value: &str) -> usize {
 
 fn markdown_cell(value: &str) -> String {
     value.replace('|', "\\|").replace('\n', " ")
+}
+
+fn forbidden_keyword_name(keyword: &str) -> Option<&'static str> {
+    let normalized_keyword = normalize_keyword(keyword);
+    FORBIDDEN_KEYWORD_NAMES
+        .iter()
+        .copied()
+        .find(|name| normalized_keyword.contains(&normalize_keyword(name)))
+}
+
+fn normalize_keyword(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -600,9 +641,6 @@ impl Default for StoreListingConfig {
 fn default_listing_base_path() -> String {
     "listings".to_string()
 }
-
-#[derive(Serialize)]
-struct _SerdeCompileGuard;
 
 #[cfg(test)]
 mod tests {
@@ -675,7 +713,10 @@ keywords:
         let json = build_msstore_payload("en-us", &listing).expect("payload");
         let value = serde_json::from_str::<Value>(&json).expect("payload json");
 
-        assert_eq!(value["listings"]["en-us"]["baseListing"]["title"], "Easydict");
+        assert_eq!(
+            value["listings"]["en-us"]["baseListing"]["title"],
+            "Easydict"
+        );
         assert_eq!(
             value["listings"]["en-us"]["baseListing"]["keywords"]
                 .as_array()
@@ -709,6 +750,40 @@ description: Good description
         assert!(summary.contains("## Store Listings - preview"));
         assert!(summary.contains("| en-us | `en-us.yaml` | Easydict for Windows |"));
         assert!(summary.contains("- **Languages Filter**: en-us"));
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn validation_rejects_unsupported_languages_and_product_keywords() {
+        let temp = temp_winstore("policy");
+        write_config(&temp, &["en-us", "fr-fr"]);
+        write_file(
+            &temp.join("listings").join("en-us.yaml"),
+            r#"
+title: Easydict
+shortDescription: Translate quickly
+description: Good description
+keywords:
+- OpenAI
+"#,
+        );
+        write_file(
+            &temp.join("listings").join("fr-fr.yaml"),
+            r#"
+title: Easydict
+shortDescription: Translate quickly
+description: Good description
+"#,
+        );
+
+        let report = load_store_listing_report(&StoreListingOptions::new(temp.clone(), Vec::new()))
+            .expect("load report");
+
+        assert!(report.errors.iter().any(|error| error.contains(
+            "[fr-fr] Unsupported store listing language; supported languages: en-us, zh-cn, zh-tw, ja-jp, ko-kr"
+        )));
+        assert!(report.errors.iter().any(|error| error
+            .contains("[en-us] Keyword contains third-party product name 'OpenAI': OpenAI")));
         let _ = fs::remove_dir_all(temp);
     }
 

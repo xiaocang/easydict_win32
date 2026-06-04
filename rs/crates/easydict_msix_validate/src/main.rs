@@ -2,10 +2,9 @@ use std::path::PathBuf;
 
 use easydict_msix_validate::{
     dedupe_worker_shared_files, fix_msix_min_version, prepare_package_inputs, validate_msix,
-    verify_bundle_min_version, BundleMinVersionOptions, FixMinVersionOptions,
-    FixMinVersionOutcome, MsixValidationOptions, PackageRuntimeProfile,
-    PreparePackageInputsOptions, WorkerSharedDedupeStatus, DEFAULT_EXPECTED_NAME,
-    DEFAULT_MIN_VERSION,
+    verify_bundle_min_version, BundleMinVersionOptions, FixMinVersionOptions, FixMinVersionOutcome,
+    MsixValidationOptions, PackageRuntimeProfile, PreparePackageInputsOptions,
+    WorkerSharedDedupeStatus, DEFAULT_EXPECTED_NAME, DEFAULT_MIN_VERSION,
 };
 
 fn main() {

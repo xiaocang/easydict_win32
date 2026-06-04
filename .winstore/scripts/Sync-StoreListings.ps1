@@ -30,7 +30,7 @@ $arguments = @(
     "-p", "easydict_store_listings",
     "--",
     $Mode,
-    "--winstore-path", $winStorePath
+    "--winstore-root", $winStorePath
 )
 
 if (-not [string]::IsNullOrWhiteSpace($Languages)) {

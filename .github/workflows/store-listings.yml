@@ -85,7 +85,7 @@ jobs:
             "easydict_store_listings",
             "--",
             "summary",
-            "--winstore-root",
+            "--winstore-path",
             ".winstore",
             "--action",
             $env:INPUT_ACTION,

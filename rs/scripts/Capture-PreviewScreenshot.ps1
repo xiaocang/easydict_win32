@@ -311,40 +311,47 @@ $swpNoSize = 0x0001
 $swpShowWindow = 0x0040
 $hwndTopMost = [IntPtr](-1)
 $hwndNotTopMost = [IntPtr](-2)
+$restorePreviewZOrder = $false
 
 $null = [Win32DpiCapture]::ShowWindow($hwnd, $swRestore)
 $null = [Win32DpiCapture]::SetWindowPos($hwnd, $hwndTopMost, 0, 0, 0, 0, $swpNoMove -bor $swpNoSize -bor $swpShowWindow)
-$null = [Win32DpiCapture]::SetWindowPos($hwnd, $hwndNotTopMost, 0, 0, 0, 0, $swpNoMove -bor $swpNoSize -bor $swpShowWindow)
+$restorePreviewZOrder = $true
 $null = [Win32DpiCapture]::SetForegroundWindow($hwnd)
 Start-Sleep -Milliseconds 350
 
-$rect = Get-WindowRectPhysical $hwnd
-$windowWidth = $rect.Right - $rect.Left
-$windowHeight = $rect.Bottom - $rect.Top
+try {
+    $rect = Get-WindowRectPhysical $hwnd
+    $windowWidth = $rect.Right - $rect.Left
+    $windowHeight = $rect.Bottom - $rect.Top
 
-$monitor = [Win32DpiCapture]::MonitorFromWindow($hwnd, 2)
-$monitorInfo = New-Object Win32DpiCapture+MONITORINFO
-$monitorInfo.cbSize = [Runtime.InteropServices.Marshal]::SizeOf([type][Win32DpiCapture+MONITORINFO])
-$null = [Win32DpiCapture]::GetMonitorInfo($monitor, [ref]$monitorInfo)
+    $monitor = [Win32DpiCapture]::MonitorFromWindow($hwnd, 2)
+    $monitorInfo = New-Object Win32DpiCapture+MONITORINFO
+    $monitorInfo.cbSize = [Runtime.InteropServices.Marshal]::SizeOf([type][Win32DpiCapture+MONITORINFO])
+    $null = [Win32DpiCapture]::GetMonitorInfo($monitor, [ref]$monitorInfo)
 
-$dpiX = [uint32]96
-$dpiY = [uint32]96
-$dpiResult = [Win32DpiCapture]::GetDpiForMonitor($monitor, 0, [ref]$dpiX, [ref]$dpiY)
-if ($dpiResult -lt 0 -or $dpiX -eq 0) {
-    $dpiX = [Win32DpiCapture]::GetDpiForWindow($hwnd)
-    $dpiY = $dpiX
+    $dpiX = [uint32]96
+    $dpiY = [uint32]96
+    $dpiResult = [Win32DpiCapture]::GetDpiForMonitor($monitor, 0, [ref]$dpiX, [ref]$dpiY)
+    if ($dpiResult -lt 0 -or $dpiX -eq 0) {
+        $dpiX = [Win32DpiCapture]::GetDpiForWindow($hwnd)
+        $dpiY = $dpiX
+    }
+
+    $scale = [double]$dpiX / 96.0
+    $virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $base = "main-window-preview-dpi-$timestamp"
+    $windowPath = Join-Path $OutputDir "$base.window.png"
+    $desktopPath = Join-Path $OutputDir "$base.desktop.png"
+    $metadataPath = Join-Path $OutputDir "$base.metadata.json"
+
+    Save-ScreenRegionPng $windowPath $rect.Left $rect.Top $windowWidth $windowHeight
+    Save-ScreenRegionPng $desktopPath $virtual.Left $virtual.Top $virtual.Width $virtual.Height
+} finally {
+    if ($restorePreviewZOrder) {
+        $null = [Win32DpiCapture]::SetWindowPos($hwnd, $hwndNotTopMost, 0, 0, 0, 0, $swpNoMove -bor $swpNoSize -bor $swpShowWindow)
+    }
 }
-
-$scale = [double]$dpiX / 96.0
-$virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$base = "main-window-preview-dpi-$timestamp"
-$windowPath = Join-Path $OutputDir "$base.window.png"
-$desktopPath = Join-Path $OutputDir "$base.desktop.png"
-$metadataPath = Join-Path $OutputDir "$base.metadata.json"
-
-Save-ScreenRegionPng $windowPath $rect.Left $rect.Top $windowWidth $windowHeight
-Save-ScreenRegionPng $desktopPath $virtual.Left $virtual.Top $virtual.Width $virtual.Height
 
 $metadata = [ordered]@{
     capturedAt = (Get-Date).ToUniversalTime().ToString("o")

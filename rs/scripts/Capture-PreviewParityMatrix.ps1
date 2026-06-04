@@ -4,13 +4,23 @@ param(
     [string[]]$Scenario = @(),
     [ValidateSet("all", "main", "effects", "settings", "floating", "popbutton", "ocr", "long-doc")]
     [string[]]$Matrix = @("effects"),
+    [switch]$ListScenarios,
+    [ValidateSet("system", "light", "dark", "minimal")]
+    [string]$Theme = "system",
+    [string]$UiLanguage = "zh-CN",
     [string]$ReferenceRoot,
     [string]$CaptureScript,
     [string]$Executable,
     [switch]$Build,
     [switch]$SkipBuild,
     [switch]$RunAnalyzer,
+    [string]$AnalyzerOutputDir,
     [switch]$UseDefaultScoreGates,
+    [string[]]$ScoreGate = @(),
+    [double]$MinCoveragePercent = -1,
+    [double]$MinCriticalCoveragePercent = -1,
+    [switch]$FailOnCriticalCoverageMissing,
+    [switch]$RequireManifest,
     [switch]$FailOnThreshold,
     [switch]$SkipAnalyzerSelfTest
 )
@@ -22,7 +32,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rsRoot = Resolve-Path (Join-Path $scriptRoot "..")
 $repoRoot = Resolve-Path (Join-Path $rsRoot "..")
 
-if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+if ([string]::IsNullOrWhiteSpace($OutputRoot) -and -not $ListScenarios) {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $OutputRoot = Join-Path $repoRoot "artifacts\ui-screenshots\rust-preview-parity-$timestamp"
 }
@@ -35,8 +45,10 @@ if ([string]::IsNullOrWhiteSpace($Executable)) {
     $Executable = Join-Path $rsRoot "target\debug\easydict_preview_iced.exe"
 }
 
-New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
-$OutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
+if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
+    New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
+    $OutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
+}
 
 function New-MatrixScenario {
     param(
@@ -106,7 +118,8 @@ function Invoke-WithPreviewEnvironment {
 function Find-ReferenceScreenshot {
     param(
         [string]$Root,
-        [string]$ScenarioId
+        [string]$ScenarioId,
+        [string]$ExcludeRoot
     )
 
     if ([string]::IsNullOrWhiteSpace($Root) -or -not (Test-Path -LiteralPath $Root)) {
@@ -114,7 +127,29 @@ function Find-ReferenceScreenshot {
     }
 
     $name = "$ScenarioId-dotnet-winui-reference.png"
-    return Get-ChildItem -LiteralPath $Root -Recurse -Filter $name -File |
+    $excludePrefix = if ([string]::IsNullOrWhiteSpace($ExcludeRoot)) {
+        $null
+    } else {
+        ((Resolve-Path -LiteralPath $ExcludeRoot).Path.TrimEnd('\') + '\')
+    }
+    $candidates = @(Get-ChildItem -LiteralPath $Root -Recurse -Filter $name -File |
+        Where-Object {
+            $null -eq $excludePrefix -or
+                -not $_.FullName.StartsWith($excludePrefix, [System.StringComparison]::OrdinalIgnoreCase)
+        })
+
+    $preferred = @($candidates |
+        Where-Object { $_.FullName -match '\\dotnet-rust-parity[^\\]*\\' } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($preferred.Count -gt 0) {
+        return $preferred[0]
+    }
+
+    return $candidates |
+        Where-Object {
+            $_.FullName -notmatch '\\rust-preview-[^\\]*\\' -and
+                $_.FullName -notmatch '\\settings-general-schema-[^\\]*\\'
+        } |
         Sort-Object LastWriteTimeUtc -Descending |
         Select-Object -First 1
 }
@@ -165,6 +200,27 @@ function Write-JsonFile {
     $json = $Value | ConvertTo-Json -Depth $Depth
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
+}
+
+function Get-DotnetWinUiVersion {
+    $projectPath = Join-Path $repoRoot "dotnet\src\Easydict.WinUI\Easydict.WinUI.csproj"
+    if (-not (Test-Path -LiteralPath $projectPath)) {
+        return $null
+    }
+
+    try {
+        [xml]$project = Get-Content -LiteralPath $projectPath -Raw
+        foreach ($propertyGroup in @($project.Project.PropertyGroup)) {
+            $version = [string]$propertyGroup.Version
+            if (-not [string]::IsNullOrWhiteSpace($version)) {
+                return $version.Trim()
+            }
+        }
+    } catch {
+        Write-Warning "Could not read .NET WinUI version from ${projectPath}: $($_.Exception.Message)"
+    }
+
+    return $null
 }
 
 function New-Bounds {
@@ -300,7 +356,8 @@ function New-RustSchemaUiSummary {
 
         $kindEnd = $trimmed.IndexOf(" ")
         $kind = if ($kindEnd -lt 0) { $trimmed } else { $trimmed.Substring(0, $kindEnd) }
-        Add-SchemaControlCount -Counts $counts -Kind $kind
+        $summaryKind = if ($kind -eq "Button" -and $trimmed -match '\bkind=Link\b') { "Hyperlink" } else { $kind }
+        Add-SchemaControlCount -Counts $counts -Kind $summaryKind
 
         $match = [regex]::Match($trimmed, ' id="([^"]+)"')
         if ($match.Success -and $match.Groups[1].Value -ne "none") {
@@ -355,7 +412,18 @@ $miniTitle = "Easydict Mini"
 $fixedTitle = "Easydict Fixed"
 $captureTitle = "Easydict Capture"
 $popTitle = "Easydict Selection"
-$lightMain = @{ EASYDICT_PREVIEW_THEME = "light" }
+$lightMain = @{
+    EASYDICT_PREVIEW_THEME = $Theme
+    EASYDICT_PREVIEW_UI_LANGUAGE = $UiLanguage
+}
+$dotnetWinUiVersion = Get-DotnetWinUiVersion
+if (-not [string]::IsNullOrWhiteSpace($dotnetWinUiVersion)) {
+    $lightMain["EASYDICT_PREVIEW_APP_VERSION"] = $dotnetWinUiVersion
+}
+$settingsGeneralReference = Join-Environment $lightMain @{
+    EASYDICT_PREVIEW_SETTINGS_MOUSE_SELECTION_TRANSLATE = "1"
+    EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP = "0"
+}
 
 $scenarioDefinitions = @(
     New-MatrixScenario -Id "main.initial" -Group "main" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
@@ -392,17 +460,34 @@ $scenarioDefinitions = @(
     New-MatrixScenario -Id "effects.overlay-fade" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_SCENARIO = "mode_overlay"
     })
+    New-MatrixScenario -Id "effects.collapse-expand-animation" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_SCENARIO = "result_collapsed"
+    })
+    New-MatrixScenario -Id "effects.settings-slider-focus" -Group "effects" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_WINDOW = "settings"
+        EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
+        EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE = "focused"
+    })
+    New-MatrixScenario -Id "effects.settings-toggle-focus" -Group "effects" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_WINDOW = "settings"
+        EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
+        EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE = "focused"
+    })
+    New-MatrixScenario -Id "effects.floating-action-pressed" -Group "effects" -WindowTitle $miniTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_WINDOW = "mini"
+        EASYDICT_PREVIEW_MINI_TRANSLATE_STATE = "pressed"
+    })
 
-    New-MatrixScenario -Id "parity-settings-general-behavior-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+    New-MatrixScenario -Id "parity-settings-general-behavior-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $settingsGeneralReference @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
     })
-    New-MatrixScenario -Id "parity-settings-tabs-services-hover" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+    New-MatrixScenario -Id "parity-settings-tabs-services-hover" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $settingsGeneralReference @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
         EASYDICT_PREVIEW_SETTINGS_HOVERED_SECTION = "services"
     })
-    New-MatrixScenario -Id "parity-settings-tabs-views-pressed" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+    New-MatrixScenario -Id "parity-settings-tabs-views-pressed" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $settingsGeneralReference @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
         EASYDICT_PREVIEW_SETTINGS_PRESSED_SECTION = "views"
@@ -414,6 +499,7 @@ $scenarioDefinitions = @(
     New-MatrixScenario -Id "parity-settings-views-window-results-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "views"
+        EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE = "dotnet-reference"
     })
     New-MatrixScenario -Id "parity-settings-hotkeys-shortcut-inputs-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
@@ -501,6 +587,47 @@ $scenarioDefinitions = @(
         EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE = "hovered"
     })
 )
+
+if ($ListScenarios) {
+    $scenarioCatalog = @($scenarioDefinitions | ForEach-Object {
+        [pscustomobject]@{
+            ScenarioId = $_.Id
+            Group = $_.Group
+            WindowTitle = $_.WindowTitle
+            Theme = $Theme
+            UiLanguage = $UiLanguage
+            Environment = $_.Environment
+        }
+    })
+
+    $scenarioCatalog |
+        Sort-Object Group, ScenarioId |
+        Format-Table Group, ScenarioId, WindowTitle -AutoSize |
+        Out-String |
+        Write-Host
+
+    $groupSummary = @($scenarioCatalog | Group-Object Group | Sort-Object Name | ForEach-Object {
+        [pscustomobject]@{
+            Group = $_.Name
+            Count = $_.Count
+        }
+    })
+    Write-Host "Scenario groups: $(($groupSummary | ForEach-Object { "$($_.Group)=$($_.Count)" }) -join ', ')"
+
+    if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
+        $catalogPath = Join-Path $OutputRoot "rust-preview-parity-scenarios.json"
+        Write-JsonFile -Path $catalogPath -Value ([pscustomobject]@{
+            schemaVersion = "easydict.rust-preview-parity-scenarios.v1"
+            generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+            theme = $Theme
+            uiLanguage = $UiLanguage
+            scenarios = $scenarioCatalog
+        }) -Depth 8
+        Write-Host "Rust preview parity scenario catalog: $catalogPath"
+    }
+
+    return
+}
 
 $selectedScenarios = @()
 if ($Scenario.Count -gt 0) {
@@ -595,7 +722,7 @@ foreach ($definition in $selectedScenarios) {
 
     $referenceCopied = $false
     $referencePath = $null
-    $reference = Find-ReferenceScreenshot -Root $ReferenceRoot -ScenarioId $definition.Id
+    $reference = Find-ReferenceScreenshot -Root $ReferenceRoot -ScenarioId $definition.Id -ExcludeRoot $OutputRoot
     if ($null -ne $reference) {
         $referencePath = Join-Path $OutputRoot "$safeId-dotnet-winui-reference.png"
         Copy-Item -LiteralPath $reference.FullName -Destination $referencePath -Force
@@ -603,12 +730,10 @@ foreach ($definition in $selectedScenarios) {
 
         $referenceEntry = Find-ReferenceManifestEntry -ReferenceFile $reference -ScenarioId $definition.Id
         $referenceWindow = if ($null -ne $referenceEntry) { $referenceEntry.ReferenceWindow } else { $null }
-        $regions = if ($null -ne $referenceEntry -and $null -ne $referenceEntry.Regions) { @($referenceEntry.Regions) } else { @() }
-        $requiredSemanticTags = if ($null -ne $referenceEntry -and $null -ne $referenceEntry.RequiredSemanticTags) {
-            @($referenceEntry.RequiredSemanticTags)
-        } else {
-            @()
-        }
+        $regions = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.Regions) { $referenceEntry.Regions })
+        $requiredSemanticTags = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.RequiredSemanticTags) {
+            $referenceEntry.RequiredSemanticTags
+        })
         $referenceUiSummary = if ($null -ne $referenceEntry) { $referenceEntry.ReferenceUiSummary } else { $null }
         $candidateUiSummary = if ($null -ne $referenceUiSummary -or $requiredSemanticTags.Count -gt 0) {
             New-RustSchemaUiSummary -SchemaPath $schemaPath
@@ -621,7 +746,7 @@ foreach ($definition in $selectedScenarios) {
             WindowKind = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.WindowKind)) { $referenceEntry.WindowKind } else { Get-WindowKind -ScenarioId $definition.Id -Group $definition.Group }
             SectionId = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionId)) { $referenceEntry.SectionId } else { $definition.Group }
             SectionLabel = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionLabel)) { $referenceEntry.SectionLabel } else { $definition.Id }
-            Theme = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.Theme)) { $referenceEntry.Theme } else { "light" }
+            Theme = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.Theme)) { $referenceEntry.Theme } else { $Theme }
             ScrollPercent = if ($null -ne $referenceEntry) { [double]$referenceEntry.ScrollPercent } else { 0.0 }
             ExpandAvailableLanguages = if ($null -ne $referenceEntry) { [bool]$referenceEntry.ExpandAvailableLanguages } else { ($environment.ContainsKey("EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED")) }
             ReferenceScreenshot = (Split-Path -Leaf $referencePath)
@@ -654,6 +779,11 @@ $matrixSummary = [pscustomobject]@{
     schemaVersion = "easydict.rust-preview-parity-matrix.v1"
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     outputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
+    theme = $Theme
+    uiLanguage = $UiLanguage
+    matrixGroups = $Matrix
+    requestedScenarios = $Scenario
+    referenceRoot = $ReferenceRoot
     scenarios = $results.ToArray()
 }
 Write-JsonFile -Path $matrixPath -Value $matrixSummary -Depth 8
@@ -666,6 +796,10 @@ if ($manifestEntries.Count -gt 0) {
     $manifest = [pscustomobject]@{
         SchemaVersion = "easydict.ui-parity.manifest.v1"
         GeneratedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+        CandidateFlavor = "rust-win-fluent-iced"
+        ReferenceFlavor = "dotnet-winui"
+        Theme = $Theme
+        UiLanguage = $UiLanguage
         Scenarios = $manifestEntries.ToArray()
     }
     Write-JsonFile -Path $manifestPath -Value $manifest -Depth 12
@@ -680,8 +814,26 @@ if ($RunAnalyzer) {
         ScreenshotRoot = $OutputRoot
         CargoManifestPath = (Join-Path $rsRoot "Cargo.toml")
     }
+    if (-not [string]::IsNullOrWhiteSpace($AnalyzerOutputDir)) {
+        $analysisParams["OutputDir"] = $AnalyzerOutputDir
+    }
     if ($UseDefaultScoreGates) {
         $analysisParams["UseDefaultScoreGates"] = $true
+    }
+    if ($ScoreGate.Count -gt 0) {
+        $analysisParams["ScoreGate"] = $ScoreGate
+    }
+    if ($MinCoveragePercent -ge 0) {
+        $analysisParams["MinCoveragePercent"] = $MinCoveragePercent
+    }
+    if ($MinCriticalCoveragePercent -ge 0) {
+        $analysisParams["MinCriticalCoveragePercent"] = $MinCriticalCoveragePercent
+    }
+    if ($FailOnCriticalCoverageMissing) {
+        $analysisParams["FailOnCriticalCoverageMissing"] = $true
+    }
+    if ($RequireManifest) {
+        $analysisParams["RequireManifest"] = $true
     }
     if ($FailOnThreshold) {
         $analysisParams["FailOnThreshold"] = $true

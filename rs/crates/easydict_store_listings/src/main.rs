@@ -232,8 +232,9 @@ fn parse_options(args: &[String], kind: CommandKind) -> Option<CliOptions> {
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
-            "--winstore-path" => {
-                let value = read_value(args, &mut index, "--winstore-path")?;
+            "--winstore-path" | "--winstore-root" => {
+                let option = args[index].clone();
+                let value = read_value(args, &mut index, &option)?;
                 options.winstore_path = PathBuf::from(value);
             }
             "--languages" => {
@@ -296,12 +297,8 @@ fn temp_payload_path(language: &str) -> PathBuf {
 }
 
 fn print_usage() {
-    println!(
-        "Usage: easydict_store_listings validate [--winstore-path <dir>] [--languages <csv>]"
-    );
-    println!(
-        "       easydict_store_listings preview [--winstore-path <dir>] [--languages <csv>]"
-    );
+    println!("Usage: easydict_store_listings validate [--winstore-path <dir>] [--languages <csv>]");
+    println!("       easydict_store_listings preview [--winstore-path <dir>] [--languages <csv>]");
     println!(
         "       easydict_store_listings submit [--winstore-path <dir>] [--languages <csv>] [--msstore <path>]"
     );

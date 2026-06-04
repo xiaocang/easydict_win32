@@ -32,9 +32,8 @@ Uses `manifest.json` (Manifest V3).
 4. Select the `manifest.json` file
 
 For permanent install, package as `.xpi`:
-```bash
-cd browser-extension
-zip -r easydict-ocr.xpi manifest.json background.js icons/
+```powershell
+.\scripts\Package-Extension.ps1 -Target Firefox
 ```
 
 ## Prerequisites

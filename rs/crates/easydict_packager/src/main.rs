@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use easydict_packager::{
-    download_and_extract_dotnet_runtime, zip_directory, ExtractDotnetRuntimeOptions,
+    build_rust_helpers, download_and_extract_dotnet_runtime, zip_directory,
+    BuildRustHelpersOptions, ExtractDotnetRuntimeOptions, PackageBrowserExtensionOptions,
     ZipDirectoryOptions,
 };
 
@@ -18,10 +19,168 @@ fn run(args: Vec<String>) -> i32 {
     match args[0].as_str() {
         "zip-directory" => run_zip_directory(&args[1..]),
         "extract-dotnet-runtime" => run_extract_dotnet_runtime(&args[1..]),
+        "build-rust-helpers" => run_build_rust_helpers(&args[1..]),
+        "package-browser-extension" => run_package_browser_extension(&args[1..]),
         unknown => {
             eprintln!("error: unknown command: {unknown}");
             print_usage();
             2
+        }
+    }
+}
+
+fn run_package_browser_extension(args: &[String]) -> i32 {
+    let mut extension_dir = None;
+    let mut output_dir = None;
+    let mut target = "All".to_string();
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--extension-dir" => {
+                let Some(value) = read_value(args, &mut index, "--extension-dir") else {
+                    return 2;
+                };
+                extension_dir = Some(PathBuf::from(value));
+            }
+            "--output-dir" => {
+                let Some(value) = read_value(args, &mut index, "--output-dir") else {
+                    return 2;
+                };
+                output_dir = Some(PathBuf::from(value));
+            }
+            "--target" => {
+                let Some(value) = read_value(args, &mut index, "--target") else {
+                    return 2;
+                };
+                target = value;
+            }
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(extension_dir) = extension_dir else {
+        eprintln!("error: package-browser-extension requires --extension-dir");
+        print_usage();
+        return 2;
+    };
+
+    match easydict_packager::package_browser_extension(&PackageBrowserExtensionOptions {
+        extension_dir,
+        output_dir: output_dir.clone(),
+        target,
+    }) {
+        Ok(outcome) => {
+            println!(
+                "Packaging Easydict OCR Browser Extension v{}",
+                outcome.version
+            );
+            for package in outcome.packages {
+                println!(
+                    "  OK  {} -> {} ({:.1} KB)",
+                    package.label,
+                    package
+                        .path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("<package>"),
+                    bytes_to_kb(package.bytes)
+                );
+            }
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
+        }
+    }
+}
+
+fn run_build_rust_helpers(args: &[String]) -> i32 {
+    let mut workspace = None;
+    let mut platform = "x64".to_string();
+    let mut configuration = "Release".to_string();
+    let mut output_dir = None;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--workspace" => {
+                let Some(value) = read_value(args, &mut index, "--workspace") else {
+                    return 2;
+                };
+                workspace = Some(PathBuf::from(value));
+            }
+            "--platform" => {
+                let Some(value) = read_value(args, &mut index, "--platform") else {
+                    return 2;
+                };
+                platform = value;
+            }
+            "--configuration" => {
+                let Some(value) = read_value(args, &mut index, "--configuration") else {
+                    return 2;
+                };
+                configuration = value;
+            }
+            "--output-dir" => {
+                let Some(value) = read_value(args, &mut index, "--output-dir") else {
+                    return 2;
+                };
+                output_dir = Some(PathBuf::from(value));
+            }
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(workspace) = workspace else {
+        eprintln!("error: build-rust-helpers requires --workspace");
+        print_usage();
+        return 2;
+    };
+    let Some(output_dir) = output_dir else {
+        eprintln!("error: build-rust-helpers requires --output-dir");
+        print_usage();
+        return 2;
+    };
+
+    match build_rust_helpers(&BuildRustHelpersOptions {
+        rust_workspace: workspace,
+        platform,
+        configuration,
+        output_dir: output_dir.clone(),
+    }) {
+        Ok(outcome) => {
+            println!(
+                "Built Rust helpers for {} ({})",
+                outcome.cargo_target, outcome.profile_dir
+            );
+            for file_name in outcome.copied_files {
+                println!("Copied {file_name} to {}", output_dir.display());
+            }
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
         }
     }
 }
@@ -203,8 +362,18 @@ fn print_usage() {
     println!(
         "       easydict_packager extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>]"
     );
+    println!(
+        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>"
+    );
+    println!(
+        "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]"
+    );
 }
 
 fn bytes_to_mb(bytes: u64) -> f64 {
     bytes as f64 / 1024.0 / 1024.0
+}
+
+fn bytes_to_kb(bytes: u64) -> f64 {
+    bytes as f64 / 1024.0
 }

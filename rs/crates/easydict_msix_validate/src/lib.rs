@@ -379,9 +379,15 @@ impl fmt::Display for PreparePackageInputsError {
             Self::PublishDirMissing(path) => {
                 write!(formatter, "PublishDir not found: {}", path.display())
             }
-            Self::ManifestMissing(path) => write!(formatter, "Manifest not found: {}", path.display()),
+            Self::ManifestMissing(path) => {
+                write!(formatter, "Manifest not found: {}", path.display())
+            }
             Self::MissingRequiredAssets(assets) => {
-                write!(formatter, "missing required MSIX assets: {}", assets.join(", "))
+                write!(
+                    formatter,
+                    "missing required MSIX assets: {}",
+                    assets.join(", ")
+                )
             }
             Self::NotEnoughTargetsizeIcons { found, required } => write!(
                 formatter,
@@ -757,12 +763,14 @@ pub fn prepare_package_inputs(
     } else {
         None
     };
-    let (copied_pri, resources_pri_already_present) = normalize_resources_pri(&options.publish_dir)?;
-    let manifest_xml =
-        fs::read_to_string(&options.manifest_path).map_err(|error| PreparePackageInputsError::Io {
+    let (copied_pri, resources_pri_already_present) =
+        normalize_resources_pri(&options.publish_dir)?;
+    let manifest_xml = fs::read_to_string(&options.manifest_path).map_err(|error| {
+        PreparePackageInputsError::Io {
             path: options.manifest_path.clone(),
             message: error.to_string(),
-        })?;
+        }
+    })?;
     let rewritten = rewrite_identity_for_package(
         &manifest_xml,
         &options.platform,
@@ -922,20 +930,14 @@ fn rewrite_identity_element<'a>(
             attributes.push((key, platform.to_string()));
         } else if attribute.key == QName(b"Version") {
             saw_version = true;
-            attributes.push((
-                key,
-                msix_version.map(str::to_string).unwrap_or(value),
-            ));
+            attributes.push((key, msix_version.map(str::to_string).unwrap_or(value)));
         } else {
             attributes.push((key, value));
         }
     }
 
     if !saw_architecture {
-        attributes.push((
-            String::from("ProcessorArchitecture"),
-            platform.to_string(),
-        ));
+        attributes.push((String::from("ProcessorArchitecture"), platform.to_string()));
     }
     if !saw_version {
         if let Some(version) = msix_version {
@@ -2245,6 +2247,104 @@ mod tests {
     }
 
     #[test]
+    fn prepare_package_inputs_rewrites_identity_and_preserves_minversion() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        for index in 0..MIN_TARGETSIZE_ICON_COUNT {
+            write_test_file(
+                temp.path(),
+                &format!("Assets/AppIcon.targetsize-{index}.png"),
+                b"icon",
+            );
+        }
+        write_test_file(temp.path(), "Easydict.WinUI.pri", b"pri");
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("Package.x64.appxmanifest");
+
+        let outcome = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "arm64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: Some("2.3.4.5".to_string()),
+            verify_targetsize_icons: true,
+        })
+        .expect("prepare package inputs");
+
+        assert_eq!(outcome.output_manifest, output_manifest);
+        assert!(outcome.copied_pri);
+        assert!(!outcome.resources_pri_already_present);
+        assert_eq!(
+            outcome.targetsize_icon_count,
+            Some(MIN_TARGETSIZE_ICON_COUNT)
+        );
+        assert_eq!(
+            fs::read(temp.path().join("resources.pri")).expect("read copied pri"),
+            b"pri"
+        );
+        let xml = fs::read_to_string(&outcome.output_manifest).expect("read prepared manifest");
+        assert!(xml.contains(r#"ProcessorArchitecture="arm64""#));
+        assert!(xml.contains(r#"Version="2.3.4.5""#));
+        assert!(xml.contains(r#"MinVersion="10.0.19041.0""#));
+        assert!(xml.contains(r#"MaxVersionTested="10.0.22621.0""#));
+    }
+
+    #[test]
+    fn prepare_package_inputs_reports_missing_assets_and_targetsize_icons() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-missing-")
+            .tempdir()
+            .expect("temp publish dir");
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+
+        let missing_assets = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest.clone(),
+            output_manifest: temp.path().join("out.appxmanifest"),
+            msix_version: None,
+            verify_targetsize_icons: false,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            missing_assets,
+            PreparePackageInputsError::MissingRequiredAssets(
+                REQUIRED_MSIX_ASSETS
+                    .iter()
+                    .map(|asset| (*asset).to_string())
+                    .collect()
+            )
+        );
+
+        create_required_msix_assets(temp.path());
+        let not_enough_icons = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: temp.path().join("out.appxmanifest"),
+            msix_version: None,
+            verify_targetsize_icons: true,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            not_enough_icons,
+            PreparePackageInputsError::NotEnoughTargetsizeIcons {
+                found: 0,
+                required: MIN_TARGETSIZE_ICON_COUNT
+            }
+        );
+    }
+
+    #[test]
     fn verify_bundle_minversion_accepts_nested_appx_and_msix_payloads() {
         let path = temp_msix_path("bundle-ok").with_extension("msixbundle");
         let x64_package = package_bytes(manifest(
@@ -2511,6 +2611,12 @@ mod tests {
             fs::create_dir_all(parent).expect("create test parent");
         }
         fs::write(path, contents).expect("write test file");
+    }
+
+    fn create_required_msix_assets(root: &Path) {
+        for asset in REQUIRED_MSIX_ASSETS {
+            write_test_file(root, asset, b"asset");
+        }
     }
 
     fn write_msix_without_manifest(path: &Path) {

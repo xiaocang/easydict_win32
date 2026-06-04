@@ -968,18 +968,44 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         palette_score,
     );
     let runtime_score_cap = calculate_window_runtime_score_cap(pair);
-    let final_score = visual_score.min(runtime_score_cap);
+    let absolute_image_size_delta_percent = max_axis_delta_percent(
+        reference.width() as f64,
+        reference.height() as f64,
+        candidate_original.width() as f64,
+        candidate_original.height() as f64,
+    );
+    let absolute_window_size_delta_percent = pair.metadata.as_ref().and_then(|metadata| {
+        absolute_window_delta_percent(
+            metadata.reference_window.as_ref(),
+            metadata.candidate_window.as_ref(),
+        )
+    });
+    let absolute_size_score_cap = calculate_absolute_size_score_cap(
+        reference.width(),
+        reference.height(),
+        candidate_original.width(),
+        candidate_original.height(),
+        pair,
+    );
+    let final_score = visual_score
+        .min(runtime_score_cap)
+        .min(absolute_size_score_cap);
     let gate = resolve_score_gate(pair, &regions, runtime_score_cap, options);
     let status = ScoreStatus::from_score(final_score, gate.pass_score, gate.warn_score);
 
     let findings = build_findings(
         pair,
+        reference.width(),
+        reference.height(),
+        candidate_original.width(),
+        candidate_original.height(),
         &scoring_profile,
         &gate,
         status,
         final_score,
         visual_score,
         runtime_score_cap,
+        absolute_size_score_cap,
         &full_pixel,
         full_ssim,
         hash_score,
@@ -1035,6 +1061,10 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
             visual_score: round2(visual_score),
             window_runtime_score_cap: (runtime_score_cap < 100.0)
                 .then_some(round2(runtime_score_cap)),
+            absolute_image_size_delta_percent: round2(absolute_image_size_delta_percent),
+            absolute_window_size_delta_percent: absolute_window_size_delta_percent.map(round2),
+            absolute_size_score_cap: (absolute_size_score_cap < 100.0)
+                .then_some(round2(absolute_size_score_cap)),
         },
         regions,
         findings,
@@ -1687,6 +1717,83 @@ fn calculate_window_runtime_score_cap(pair: &ScreenshotPair) -> f64 {
     cap
 }
 
+fn calculate_absolute_size_score_cap(
+    reference_width: u32,
+    reference_height: u32,
+    candidate_width: u32,
+    candidate_height: u32,
+    pair: &ScreenshotPair,
+) -> f64 {
+    let image_delta_percent = max_axis_delta_percent(
+        reference_width as f64,
+        reference_height as f64,
+        candidate_width as f64,
+        candidate_height as f64,
+    );
+    let window_delta_percent = pair
+        .metadata
+        .as_ref()
+        .and_then(|metadata| {
+            absolute_window_delta_percent(
+                metadata.reference_window.as_ref(),
+                metadata.candidate_window.as_ref(),
+            )
+        })
+        .unwrap_or(0.0);
+    let delta_percent = image_delta_percent.max(window_delta_percent);
+
+    if delta_percent >= 35.0 {
+        45.0
+    } else if delta_percent >= 20.0 {
+        60.0
+    } else if delta_percent >= 10.0 {
+        75.0
+    } else if delta_percent >= 5.0 {
+        88.0
+    } else {
+        100.0
+    }
+}
+
+fn absolute_window_delta_percent(
+    reference_window: Option<&ManifestWindow>,
+    candidate_window: Option<&ManifestWindow>,
+) -> Option<f64> {
+    let (reference_width, reference_height) = manifest_window_dip_size(reference_window?)?;
+    let (candidate_width, candidate_height) = manifest_window_dip_size(candidate_window?)?;
+    Some(max_axis_delta_percent(
+        reference_width,
+        reference_height,
+        candidate_width,
+        candidate_height,
+    ))
+}
+
+fn manifest_window_dip_size(window: &ManifestWindow) -> Option<(f64, f64)> {
+    let bounds = window.bounds.as_ref()?;
+    if bounds.width <= 0 || bounds.height <= 0 {
+        return None;
+    }
+    let scale = if window.dpi_scale > 0.0 {
+        window.dpi_scale
+    } else {
+        1.0
+    };
+    Some((bounds.width as f64 / scale, bounds.height as f64 / scale))
+}
+
+fn max_axis_delta_percent(
+    reference_width: f64,
+    reference_height: f64,
+    candidate_width: f64,
+    candidate_height: f64,
+) -> f64 {
+    let width_delta = (candidate_width - reference_width).abs() * 100.0 / reference_width.max(1.0);
+    let height_delta =
+        (candidate_height - reference_height).abs() * 100.0 / reference_height.max(1.0);
+    width_delta.max(height_delta)
+}
+
 fn is_window_clipped(window: &ManifestWindow) -> bool {
     window.is_clipped_by_virtual_screen == Some(true)
 }
@@ -1743,12 +1850,17 @@ fn overlay_coverage_percent(
 
 fn build_findings(
     pair: &ScreenshotPair,
+    reference_width: u32,
+    reference_height: u32,
+    candidate_width: u32,
+    candidate_height: u32,
     scoring_profile: &ScenarioScoringProfile,
     gate: &ScenarioScoreGate,
     status: ScoreStatus,
     score: f64,
     visual_score: f64,
     runtime_score_cap: f64,
+    absolute_size_score_cap: f64,
     pixel: &PixelComparison,
     ssim: f64,
     hash_score: f64,
@@ -1761,12 +1873,21 @@ fn build_findings(
     match status {
         ScoreStatus::Fail => findings.push(Finding {
             severity: "error".to_string(),
-            layer_hint: if runtime_score_cap < visual_score {
+            layer_hint: if runtime_score_cap < visual_score
+                || absolute_size_score_cap < visual_score
+            {
                 "window_runtime".to_string()
             } else {
                 "final_effect".to_string()
             },
-            message: if runtime_score_cap < visual_score {
+            message: if absolute_size_score_cap < visual_score
+                && absolute_size_score_cap <= runtime_score_cap
+            {
+                format!(
+                    "Absolute size evidence capped scenario score {:.2} below fail gate threshold {:.2}.",
+                    score, gate.warn_score
+                )
+            } else if runtime_score_cap < visual_score {
                 format!(
                     "Window runtime evidence capped scenario score {:.2} below fail gate threshold {:.2}.",
                     score, gate.warn_score
@@ -1782,7 +1903,11 @@ fn build_findings(
         }),
         ScoreStatus::Warn => findings.push(Finding {
             severity: "warning".to_string(),
-            layer_hint: "final_effect".to_string(),
+            layer_hint: if absolute_size_score_cap < visual_score {
+                "window_runtime".to_string()
+            } else {
+                "final_effect".to_string()
+            },
             message: format!(
                 "Scenario score {:.2} is below pass gate threshold {:.2} and needs visual review.",
                 score, gate.pass_score
@@ -1800,6 +1925,29 @@ fn build_findings(
             metric: "score".to_string(),
             value: round2(score),
         }),
+    }
+    if absolute_size_score_cap < 100.0 {
+        findings.push(Finding {
+            severity: if absolute_size_score_cap < 70.0 {
+                "error"
+            } else {
+                "warning"
+            }
+            .to_string(),
+            layer_hint: "window_runtime".to_string(),
+            message: format!(
+                "Absolute screenshot/window dimensions differ beyond tolerance: image {}; window {}.",
+                image_size_pair_summary(
+                    reference_width,
+                    reference_height,
+                    candidate_width,
+                    candidate_height
+                ),
+                absolute_window_size_summary(pair.metadata.as_ref())
+            ),
+            metric: "absoluteSizeScoreCap".to_string(),
+            value: round2(absolute_size_score_cap),
+        });
     }
     if pixel.pixel_error_percent > 5.0 {
         findings.push(Finding {
@@ -1833,7 +1981,15 @@ fn build_findings(
         findings.push(Finding {
             severity: "warning".to_string(),
             layer_hint: "iced_backend".to_string(),
-            message: "Candidate image dimensions differ from the reference.".to_string(),
+            message: format!(
+                "Candidate image dimensions differ from the reference: reference {}x{} px, candidate {}x{} px, delta {:+}x{:+} px.",
+                reference_width,
+                reference_height,
+                candidate_width,
+                candidate_height,
+                candidate_width as i64 - reference_width as i64,
+                candidate_height as i64 - reference_height as i64
+            ),
             metric: "sizeScore".to_string(),
             value: round2(size_score),
         });
@@ -2222,9 +2378,9 @@ fn markdown_report(report: &ParityReport) -> String {
         return out;
     }
     out.push_str("## Scenarios\n\n");
-    out.push_str("| Status | Score | Scenario | Gate | Pass | Warn | Profile | Pixel error | SSIM | Hash score | Runtime cap | Worst region | Diff |\n");
+    out.push_str("| Status | Score | Scenario | Gate | Pass | Warn | Profile | Size | Size delta | Pixel error | SSIM | Hash score | Runtime cap | Size cap | Worst region | Diff |\n");
     out.push_str(
-        "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |\n",
+        "| --- | ---: | --- | --- | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |\n",
     );
     for scenario in &report.scenarios {
         let worst = scenario.regions.iter().min_by(|a, b| {
@@ -2245,8 +2401,13 @@ fn markdown_report(report: &ParityReport) -> String {
             .window_runtime_score_cap
             .map(|value| format!("{value:.2}"))
             .unwrap_or_else(|| "n/a".to_string());
+        let size_cap = scenario
+            .metrics
+            .absolute_size_score_cap
+            .map(|value| format!("{value:.2}"))
+            .unwrap_or_else(|| "n/a".to_string());
         out.push_str(&format!(
-            "| {:?} | {:.2} | `{}` | {} `{}/{}` | {:.2} | {:.2} | {} | {:.2}% | {:.3} | {:.2} | {} | {} | [heatmap]({}) |\n",
+            "| {:?} | {:.2} | `{}` | {} `{}/{}` | {:.2} | {:.2} | {} | {} | {:.2}% | {:.2}% | {:.3} | {:.2} | {} | {} | {} | [heatmap]({}) |\n",
             scenario.status,
             scenario.score,
             scenario.scenario_id,
@@ -2256,10 +2417,13 @@ fn markdown_report(report: &ParityReport) -> String {
             scenario.gate.pass_score,
             scenario.gate.warn_score,
             scenario.metrics.scoring_profile,
+            image_size_delta_summary(scenario),
+            scenario.metrics.absolute_image_size_delta_percent,
             scenario.metrics.pixel_error_percent,
             scenario.metrics.ssim,
             scenario.metrics.hash_score,
             runtime_cap,
+            size_cap,
             worst_text,
             scenario.diff_heatmap_path
         ));
@@ -2285,6 +2449,14 @@ fn markdown_report(report: &ParityReport) -> String {
             scenario.gate.pass_score,
             scenario.gate.warn_score
         ));
+        out.push_str(&format!(
+            "- Absolute image size: {}\n",
+            absolute_image_size_summary(scenario)
+        ));
+        out.push_str(&format!(
+            "- Absolute window size: {}\n",
+            absolute_window_size_summary(scenario.metadata.as_ref())
+        ));
         for finding in &scenario.findings {
             out.push_str(&format!(
                 "- `{}` `{}` `{}={:.2}` {}\n",
@@ -2298,6 +2470,158 @@ fn markdown_report(report: &ParityReport) -> String {
         out.push('\n');
     }
     out
+}
+
+fn image_size_delta_summary(scenario: &ScenarioResult) -> String {
+    image_size_pair_summary(
+        scenario.reference_size.width,
+        scenario.reference_size.height,
+        scenario.candidate_size.width,
+        scenario.candidate_size.height,
+    )
+}
+
+fn image_size_pair_summary(
+    reference_width: u32,
+    reference_height: u32,
+    candidate_width: u32,
+    candidate_height: u32,
+) -> String {
+    format!(
+        "{}x{} -> {}x{} ({:+}x{:+} px)",
+        reference_width,
+        reference_height,
+        candidate_width,
+        candidate_height,
+        candidate_width as i64 - reference_width as i64,
+        candidate_height as i64 - reference_height as i64
+    )
+}
+
+fn absolute_image_size_summary(scenario: &ScenarioResult) -> String {
+    let width_delta = scenario.candidate_size.width as i64 - scenario.reference_size.width as i64;
+    let height_delta =
+        scenario.candidate_size.height as i64 - scenario.reference_size.height as i64;
+    let width_percent = percent_delta(scenario.reference_size.width, scenario.candidate_size.width);
+    let height_percent = percent_delta(
+        scenario.reference_size.height,
+        scenario.candidate_size.height,
+    );
+    format!(
+        "reference {}x{} px, candidate {}x{} px, delta {:+}x{:+} px ({:+.2}% width, {:+.2}% height)",
+        scenario.reference_size.width,
+        scenario.reference_size.height,
+        scenario.candidate_size.width,
+        scenario.candidate_size.height,
+        width_delta,
+        height_delta,
+        width_percent,
+        height_percent
+    )
+}
+
+fn absolute_window_size_summary(metadata: Option<&ManifestScenario>) -> String {
+    let Some(metadata) = metadata else {
+        return "manifest window metadata unavailable".to_string();
+    };
+    let reference = manifest_window_size_summary(metadata.reference_window.as_ref());
+    let candidate = manifest_window_size_summary(metadata.candidate_window.as_ref());
+    match (reference, candidate) {
+        (Some(reference), Some(candidate)) => {
+            let delta_px = size_delta_text(
+                reference.physical_width,
+                reference.physical_height,
+                candidate.physical_width,
+                candidate.physical_height,
+            );
+            let delta_dip = match (
+                reference.dip_width,
+                reference.dip_height,
+                candidate.dip_width,
+                candidate.dip_height,
+            ) {
+                (
+                    Some(reference_width),
+                    Some(reference_height),
+                    Some(candidate_width),
+                    Some(candidate_height),
+                ) => format!(
+                    ", DIP delta {:+.2}x{:+.2}",
+                    candidate_width - reference_width,
+                    candidate_height - reference_height
+                ),
+                _ => String::new(),
+            };
+            format!(
+                "reference {}, candidate {}, physical delta {}{}",
+                reference.display, candidate.display, delta_px, delta_dip
+            )
+        }
+        (None, Some(candidate)) => {
+            format!("reference unavailable, candidate {}", candidate.display)
+        }
+        (Some(reference), None) => {
+            format!("reference {}, candidate unavailable", reference.display)
+        }
+        (None, None) => "manifest window metadata unavailable".to_string(),
+    }
+}
+
+#[derive(Clone, Debug)]
+struct WindowSizeSummary {
+    physical_width: i32,
+    physical_height: i32,
+    dip_width: Option<f64>,
+    dip_height: Option<f64>,
+    display: String,
+}
+
+fn manifest_window_size_summary(window: Option<&ManifestWindow>) -> Option<WindowSizeSummary> {
+    let window = window?;
+    let bounds = window.bounds.as_ref()?;
+    let scale = if window.dpi_scale > 0.0 {
+        window.dpi_scale
+    } else {
+        1.0
+    };
+    let dip_width = Some(bounds.width as f64 / scale);
+    let dip_height = Some(bounds.height as f64 / scale);
+    let display = format!(
+        "{}x{} px @ {:.3}x ({:.2}x{:.2} DIP)",
+        bounds.width,
+        bounds.height,
+        scale,
+        dip_width.unwrap_or_default(),
+        dip_height.unwrap_or_default()
+    );
+    Some(WindowSizeSummary {
+        physical_width: bounds.width,
+        physical_height: bounds.height,
+        dip_width,
+        dip_height,
+        display,
+    })
+}
+
+fn size_delta_text(
+    reference_width: i32,
+    reference_height: i32,
+    candidate_width: i32,
+    candidate_height: i32,
+) -> String {
+    format!(
+        "{:+}x{:+} px",
+        candidate_width - reference_width,
+        candidate_height - reference_height
+    )
+}
+
+fn percent_delta(reference: u32, candidate: u32) -> f64 {
+    if reference == 0 {
+        0.0
+    } else {
+        ((candidate as f64 - reference as f64) / reference as f64) * 100.0
+    }
 }
 
 fn coverage_markdown_report(report: &ParityCoverageReport) -> String {
@@ -2385,6 +2709,16 @@ fn llm_review_requests(report: &ParityReport) -> Vec<LlmReviewRequest> {
             candidate_image: scenario.normalized_candidate_path.clone(),
             diff_heatmap: scenario.diff_heatmap_path.clone(),
             contact_sheet: scenario.contact_sheet_path.clone(),
+            reference_size: scenario.reference_size.clone(),
+            candidate_size: scenario.candidate_size.clone(),
+            reference_window: scenario
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.reference_window.clone()),
+            candidate_window: scenario
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.candidate_window.clone()),
             metrics: scenario.metrics.clone(),
             findings: scenario.findings.clone(),
             regions: scenario.regions.clone(),
@@ -2413,18 +2747,34 @@ fn llm_review_prompts(requests: &[LlmReviewRequest]) -> String {
         ));
         out.push_str("Task: compare the .NET WinUI reference and Rust/Iced candidate. Classify the drift as layout, typography, color/theme, interaction state, window/runtime semantics, screenshot/crop issue, or acceptable variance. Return concise remediation advice; deterministic scores remain authoritative.\n\n");
         out.push_str(&format!(
-            "Metrics: pixel error `{:.4}%`, SSIM `{:.5}`, hash score `{:.2}`, size score `{:.2}`, palette score `{:.2}`, visual score `{:.2}`, runtime cap `{}`.\n\n",
+            "Metrics: pixel error `{:.4}%`, SSIM `{:.5}`, hash score `{:.2}`, size score `{:.2}`, palette score `{:.2}`, visual score `{:.2}`, image size delta `{:.2}%`, window size delta `{}`, runtime cap `{}`, absolute size cap `{}`.\n\n",
             request.metrics.pixel_error_percent,
             request.metrics.ssim,
             request.metrics.hash_score,
             request.metrics.size_score,
             request.metrics.palette_score,
             request.metrics.visual_score,
+            request.metrics.absolute_image_size_delta_percent,
+            request
+                .metrics
+                .absolute_window_size_delta_percent
+                .map(|value| format!("{value:.2}%"))
+                .unwrap_or_else(|| "n/a".to_string()),
             request
                 .metrics
                 .window_runtime_score_cap
                 .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "n/a".to_string()),
+            request
+                .metrics
+                .absolute_size_score_cap
+                .map(|value| format!("{value:.2}"))
                 .unwrap_or_else(|| "n/a".to_string())
+        ));
+        out.push_str(&format!(
+            "Absolute sizes: image {}; window {}.\n\n",
+            llm_image_size_summary(request),
+            llm_window_size_summary(request)
         ));
         if !request.findings.is_empty() {
             out.push_str("Findings:\n");
@@ -2465,6 +2815,45 @@ fn llm_review_prompts(requests: &[LlmReviewRequest]) -> String {
         }
     }
     out
+}
+
+fn llm_image_size_summary(request: &LlmReviewRequest) -> String {
+    let width_delta = request.candidate_size.width as i64 - request.reference_size.width as i64;
+    let height_delta = request.candidate_size.height as i64 - request.reference_size.height as i64;
+    let width_percent = percent_delta(request.reference_size.width, request.candidate_size.width);
+    let height_percent =
+        percent_delta(request.reference_size.height, request.candidate_size.height);
+    format!(
+        "reference {}x{} px, candidate {}x{} px, delta {:+}x{:+} px ({:+.2}% width, {:+.2}% height)",
+        request.reference_size.width,
+        request.reference_size.height,
+        request.candidate_size.width,
+        request.candidate_size.height,
+        width_delta,
+        height_delta,
+        width_percent,
+        height_percent
+    )
+}
+
+fn llm_window_size_summary(request: &LlmReviewRequest) -> String {
+    let reference = manifest_window_size_summary(request.reference_window.as_ref());
+    let candidate = manifest_window_size_summary(request.candidate_window.as_ref());
+    match (reference, candidate) {
+        (Some(reference), Some(candidate)) => {
+            format!(
+                "reference {}, candidate {}",
+                reference.display, candidate.display
+            )
+        }
+        (None, Some(candidate)) => {
+            format!("reference unavailable, candidate {}", candidate.display)
+        }
+        (Some(reference), None) => {
+            format!("reference {}, candidate unavailable", reference.display)
+        }
+        (None, None) => "manifest window metadata unavailable".to_string(),
+    }
 }
 
 fn coverage_gate_failure(report: &ParityCoverageReport, options: &CliOptions) -> Option<String> {
@@ -2519,6 +2908,8 @@ fn run_self_test() -> Result<bool, String> {
     let service_candidate_path = root.join(format!("long-doc.service-dropdown{RUST_SUFFIX}"));
     let pop_reference_path = root.join(format!("popbutton.hover{DOTNET_SUFFIX}"));
     let pop_candidate_path = root.join(format!("popbutton.hover{RUST_SUFFIX}"));
+    let mini_pressed_reference_path = root.join(format!("mini.translate-pressed{DOTNET_SUFFIX}"));
+    let mini_pressed_candidate_path = root.join(format!("mini.translate-pressed{RUST_SUFFIX}"));
     let ocr_reference_path = root.join(format!("ocr.window-detect{DOTNET_SUFFIX}"));
     let ocr_candidate_path = root.join(format!("ocr.window-detect{RUST_SUFFIX}"));
 
@@ -2551,6 +2942,12 @@ fn run_self_test() -> Result<bool, String> {
         .map_err(|e| e.to_string())?;
     create_synthetic_frame(true)
         .save(&pop_candidate_path)
+        .map_err(|e| e.to_string())?;
+    create_synthetic_frame(false)
+        .save(&mini_pressed_reference_path)
+        .map_err(|e| e.to_string())?;
+    create_synthetic_frame(true)
+        .save(&mini_pressed_candidate_path)
         .map_err(|e| e.to_string())?;
     create_synthetic_frame(false)
         .save(&ocr_reference_path)
@@ -2677,8 +3074,13 @@ fn run_self_test() -> Result<bool, String> {
             item.evidence_status == CoverageEvidenceStatus::CoveredFailing.id()
                 && item.layer_hint == "iced_backend"
         })
-        && coverage_item("effects.floating-action-pressed")
-            .is_some_and(|item| item.evidence_status == CoverageEvidenceStatus::Missing.id());
+        && coverage_item("effects.floating-action-pressed").is_some_and(|item| {
+            item.evidence_status == CoverageEvidenceStatus::CoveredFailing.id()
+                && item
+                    .matching_scenario_ids
+                    .iter()
+                    .any(|id| id == "mini.translate-pressed")
+        });
 
     println!(
         "Self-test identical score: {:.2}",
@@ -3089,6 +3491,9 @@ struct ScenarioMetrics {
     region_score: f64,
     visual_score: f64,
     window_runtime_score_cap: Option<f64>,
+    absolute_image_size_delta_percent: f64,
+    absolute_window_size_delta_percent: Option<f64>,
+    absolute_size_score_cap: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -3575,8 +3980,8 @@ impl CoverageCatalog {
             item("interaction-effects", "effects.settings-tab-hover", "Settings tab hover", CoveragePriority::Critical, &["settings", "tabs", "hover"], &["settings"]),
             item("interaction-effects", "effects.settings-slider-focus", "Settings TTS speed slider focus", CoveragePriority::Normal, &["tts", "speed", "slider", "focus"], &["settings"]).with_next("Add side-by-side screenshot evidence for the Settings TTS speed slider keyboard focus ring."),
             item("interaction-effects", "effects.settings-toggle-focus", "Settings auto-play toggle focus", CoveragePriority::Normal, &["auto", "play", "toggle", "focus"], &["settings"]).with_next("Add side-by-side screenshot evidence for the Settings auto-play toggle keyboard focus ring."),
-            item("interaction-effects", "effects.floating-action-hover", "Floating action hover", CoveragePriority::Critical, &["floating", "action", "hover"], &[]),
-            item("interaction-effects", "effects.floating-action-pressed", "Floating action pressed", CoveragePriority::Normal, &["floating", "action", "pressed"], &[]),
+            item("interaction-effects", "effects.floating-action-hover", "Floating action hover", CoveragePriority::Critical, &["translate", "hover"], &["mini", "fixed"]),
+            item("interaction-effects", "effects.floating-action-pressed", "Floating action pressed", CoveragePriority::Normal, &["translate", "pressed"], &["mini", "fixed"]),
             item("interaction-effects", "effects.collapse-expand-animation", "Result collapse/expand animation", CoveragePriority::Critical, &["collapse", "expand"], &[]),
             item("floating", "mini.initial", "Mini window initial", CoveragePriority::Critical, &["mini", "initial"], &["mini"]),
             item("floating", "mini.after-translate", "Mini window after translate", CoveragePriority::Critical, &["mini", "after", "translate"], &["mini"]),
@@ -3851,6 +4256,10 @@ struct LlmReviewRequest {
     candidate_image: String,
     diff_heatmap: String,
     contact_sheet: String,
+    reference_size: ImageSize,
+    candidate_size: ImageSize,
+    reference_window: Option<ManifestWindow>,
+    candidate_window: Option<ManifestWindow>,
     metrics: ScenarioMetrics,
     findings: Vec<Finding>,
     regions: Vec<RegionResult>,
@@ -4171,8 +4580,87 @@ mod tests {
         assert!(requests.contains("\"Regions\""));
         assert!(prompts.contains("Task: compare the .NET WinUI reference"));
         assert!(prompts.contains("Metrics: pixel error"));
+        assert!(prompts.contains("image size delta"));
+        assert!(prompts.contains("Absolute sizes:"));
         assert!(prompts.contains("Findings:"));
         assert!(prompts.contains("Lowest scoring regions:"));
+    }
+
+    #[test]
+    fn absolute_size_mismatch_caps_visual_score_even_after_normalization() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("settings.general{DOTNET_SUFFIX}"));
+        let candidate = dir.path().join(format!("settings.general{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        imageops::resize(
+            &create_synthetic_frame(false),
+            160,
+            100,
+            FilterType::Lanczos3,
+        )
+        .save(&candidate)
+        .expect("save candidate");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenario = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    item.get("ScenarioId").and_then(Value::as_str) == Some("settings.general")
+                })
+            })
+            .expect("settings.general scenario");
+
+        assert_eq!(scenario.get("Status").and_then(Value::as_str), Some("fail"));
+        assert!(
+            scenario
+                .get("Score")
+                .and_then(Value::as_f64)
+                .unwrap_or(100.0)
+                <= 45.0
+        );
+        assert_eq!(
+            scenario
+                .get("Metrics")
+                .and_then(|metrics| metrics.get("AbsoluteImageSizeDeltaPercent"))
+                .and_then(Value::as_f64),
+            Some(44.44)
+        );
+        assert_eq!(
+            scenario
+                .get("Metrics")
+                .and_then(|metrics| metrics.get("AbsoluteSizeScoreCap"))
+                .and_then(Value::as_f64),
+            Some(45.0)
+        );
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str) == Some("absoluteSizeScoreCap")
+            })));
+
+        let markdown =
+            fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
+        assert!(markdown.contains("Size delta"));
+        assert!(markdown.contains("Size cap"));
+        assert!(markdown.contains("absoluteSizeScoreCap"));
     }
 
     #[test]

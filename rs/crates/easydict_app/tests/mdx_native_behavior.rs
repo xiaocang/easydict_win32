@@ -9,9 +9,9 @@ use easydict_app::{
     native_mdx_lookup_local_input_error, native_mdx_lookup_needs_credentials,
     native_mdx_lookup_requires_credential_bridge, normalize_mdd_resource_key,
     run_native_mdd_resource_lookup_with_factory, run_native_mdx_lookup,
-    run_native_mdx_lookup_with_factory, MdxEncryptionMode, NativeMddResourceError,
-    NativeMddResourceReader, NativeMddResourceReaderFactory, NativeMdxDictionaryReader,
-    NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
+    run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factory, MdxEncryptionMode,
+    NativeMddResourceError, NativeMddResourceReader, NativeMddResourceReaderFactory,
+    NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fs;
@@ -562,6 +562,65 @@ fn native_mdd_resource_lookup_returns_none_without_mdd_paths_or_hits() {
 
     assert_eq!(resource, None);
     assert!(factory.opened.is_empty());
+}
+
+#[test]
+fn native_mdx_lookup_inlines_mdd_resources_into_webview_ready_html() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd", r"C:\Dicts\demo.1.mdd"]);
+    let settings = mdx_settings_with_dictionary(dictionary);
+    let mut mdx_factory = RecordingMdxReaderFactory::with_readers([RecordingMdxReader::new(
+        [(
+            "apple",
+            (
+                "apple",
+                r#"<div>
+                    <img src="images/logo.png">
+                    <link href='styles/dict.css'>
+                    <audio src="https://dictassets/audio/pron.mp3"></audio>
+                    <span style="background-image:url(images/bg.webp)"></span>
+                    <a href="https://example.com/keep">external</a>
+                    <img src="data:image/png;base64,OLD">
+                    <a href="javascript:alert(1)">script</a>
+                </div>"#,
+            ),
+        )],
+        [],
+    )]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([
+        Ok(RecordingMddReader::new([])),
+        Ok(RecordingMddReader::new([
+            (r"\images\logo.png", b"\x89PNG".as_slice()),
+            (r"\styles\dict.css", b"body{}".as_slice()),
+            (r"\audio\pron.mp3", b"ID3".as_slice()),
+            (r"\images\bg.webp", b"RIFF".as_slice()),
+        ])),
+    ]);
+
+    let result = run_native_mdx_lookup_with_factories(
+        &mut mdx_factory,
+        &mut mdd_factory,
+        &MdxLookupParams {
+            dictionary_id: "mdx::demo".to_string(),
+            query: "apple".to_string(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("MDX lookup should inline MDD resources");
+
+    assert_eq!(
+        mdd_factory.opened,
+        [r"C:\Dicts\demo.mdd", r"C:\Dicts\demo.1.mdd"]
+    );
+    let html = &result.entries[0].html;
+    assert!(html.contains(r#"src="data:image/png;base64,iVBORw==""#));
+    assert!(html.contains("href='data:text/css;base64,Ym9keXt9'"));
+    assert!(html.contains(r#"src="data:audio/mpeg;base64,SUQz""#));
+    assert!(html.contains("url('data:image/webp;base64,UklGRg==')"));
+    assert!(html.contains(r#"href="https://example.com/keep""#));
+    assert!(html.contains(r#"src="data:image/png;base64,OLD""#));
+    assert!(html.contains(r#"href="javascript:alert(1)""#));
+    assert!(!html.contains("https://dictassets/audio/pron.mp3"));
 }
 
 #[test]

@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::error::Result;
 use crate::mdict_base::MdictBase;
 use crate::types::*;
-use crate::utils::{decode_string, levenshtein_distance, strip_key};
+use crate::utils::{decode_string, levenshtein_distance};
 
 /// MDX dictionary parser
 pub struct Mdx {
@@ -123,8 +123,7 @@ impl Mdx {
             return Vec::new();
         }
 
-        let is_mdd = self.base.meta.ext == FileExt::Mdd;
-        let stripped_word = strip_key(word, is_mdd);
+        let stripped_word = self.base.strip(word);
 
         // Get associated keywords
         let keywords = self.base.get_associated_keywords(word);
@@ -132,7 +131,7 @@ impl Mdx {
         let mut suggestions: Vec<(String, usize)> = keywords
             .into_iter()
             .filter_map(|item| {
-                let stripped_key = strip_key(&item.key_text, is_mdd);
+                let stripped_key = self.base.strip(&item.key_text);
                 let distance = levenshtein_distance(&stripped_key, &stripped_word);
                 if distance <= max_distance {
                     Some((item.key_text.clone(), distance))
@@ -155,8 +154,7 @@ impl Mdx {
         max_results: usize,
         max_distance: usize,
     ) -> Vec<FuzzyWord> {
-        let is_mdd = self.base.meta.ext == FileExt::Mdd;
-        let stripped_word = strip_key(word, is_mdd);
+        let stripped_word = self.base.strip(word);
 
         // Get associated keywords
         let keywords = self.base.get_associated_keywords(word);
@@ -164,7 +162,7 @@ impl Mdx {
         let mut fuzzy_words: Vec<FuzzyWord> = keywords
             .into_iter()
             .filter_map(|item| {
-                let stripped_key = strip_key(&item.key_text, is_mdd);
+                let stripped_key = self.base.strip(&item.key_text);
                 let distance = levenshtein_distance(&stripped_key, &stripped_word);
                 if distance <= max_distance {
                     Some(FuzzyWord {

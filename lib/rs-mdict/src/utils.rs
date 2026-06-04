@@ -3,7 +3,8 @@
 use crate::error::{MdictError, Result};
 use crate::types::Encoding;
 use encoding_rs::{BIG5, GB18030, UTF_16LE};
-use regex::Regex;
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::{Reader, XmlVersion};
 use std::collections::HashMap;
 
 /// Read big-endian u8 from bytes
@@ -96,35 +97,44 @@ pub fn decode_utf16le(bytes: &[u8]) -> Result<String> {
     }
 }
 
-/// Unescape HTML entities
-pub fn unescape_entities(text: &str) -> String {
-    text.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-}
-
 /// Parse header XML text to attributes
 pub fn parse_header(header_text: &str) -> Result<HashMap<String, String>> {
-    let mut header_attr: HashMap<String, String> = HashMap::new();
+    let mut reader = Reader::from_str(header_text);
+    reader.config_mut().trim_text(true);
 
-    // Match all attributes in format: key="value"
-    let re = Regex::new(r#"(\w+)="((?:[^"\\]|\\.)*)""#)
-        .map_err(|e| MdictError::HeaderParseError(e.to_string()))?;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) | Ok(Event::Empty(element)) => {
+                return parse_header_attributes(&reader, &element);
+            }
+            Ok(Event::Eof) => {
+                return Err(MdictError::HeaderParseError(
+                    "MDict header XML did not contain a root element".to_string(),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => return Err(MdictError::HeaderParseError(error.to_string())),
+        }
+    }
+}
 
-    for cap in re.captures_iter(header_text) {
-        let key = cap
-            .get(1)
-            .map(|m| m.as_str().to_string())
-            .unwrap_or_default();
-        let value = cap
-            .get(2)
-            .map(|m| unescape_entities(m.as_str()))
-            .unwrap_or_default();
+fn parse_header_attributes(
+    reader: &Reader<&[u8]>,
+    element: &BytesStart<'_>,
+) -> Result<HashMap<String, String>> {
+    let mut header_attr = HashMap::new();
+    for attribute in element.attributes() {
+        let attribute =
+            attribute.map_err(|error| MdictError::HeaderParseError(error.to_string()))?;
+        let key = std::str::from_utf8(attribute.key.as_ref())
+            .map_err(|error| MdictError::HeaderParseError(error.to_string()))?
+            .to_string();
+        let value = attribute
+            .decoded_and_normalized_value(XmlVersion::Implicit1_0, reader.decoder())
+            .map_err(|error| MdictError::HeaderParseError(error.to_string()))?
+            .into_owned();
         header_attr.insert(key, value);
     }
-
     Ok(header_attr)
 }
 
@@ -168,8 +178,8 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 }
 
 /// Strip punctuation and normalize key for comparison
-pub fn strip_key(key: &str, is_mdd: bool) -> String {
-    let mut result = key.to_lowercase();
+pub fn strip_key_preserving_case(key: &str, is_mdd: bool) -> String {
+    let mut result = key.to_string();
 
     if is_mdd {
         // For MDD: remove extension and special characters
@@ -325,5 +335,44 @@ mod tests {
         assert_eq!(levenshtein_distance("hello", "world"), 4);
         assert_eq!(levenshtein_distance("", "abc"), 3);
         assert_eq!(levenshtein_distance("abc", ""), 3);
+    }
+
+    #[test]
+    fn parse_header_supports_xml_attribute_syntax_and_entities() {
+        let header = r#"<Dictionary GeneratedByEngineVersion='2.0' RequiredEngineVersion="2.0" Encoding='UTF-8' Encrypted='yes' RegisterBy="EMail" Title='A &amp; B &quot;Dictionary&quot;' Description="Less &lt; More" />"#;
+
+        let attributes = parse_header(header).expect("parse MDX header");
+
+        assert_eq!(
+            attributes
+                .get("GeneratedByEngineVersion")
+                .map(String::as_str),
+            Some("2.0")
+        );
+        assert_eq!(
+            attributes.get("Encoding").map(String::as_str),
+            Some("UTF-8")
+        );
+        assert_eq!(attributes.get("Encrypted").map(String::as_str), Some("yes"));
+        assert_eq!(
+            attributes.get("RegisterBy").map(String::as_str),
+            Some("EMail")
+        );
+        assert_eq!(
+            attributes.get("Title").map(String::as_str),
+            Some("A & B \"Dictionary\"")
+        );
+        assert_eq!(
+            attributes.get("Description").map(String::as_str),
+            Some("Less < More")
+        );
+    }
+
+    #[test]
+    fn parse_header_reports_missing_xml_element() {
+        let error = parse_header("").unwrap_err();
+
+        assert!(matches!(error, MdictError::HeaderParseError(_)));
+        assert!(error.to_string().contains("root element"));
     }
 }

@@ -34,6 +34,9 @@ pub enum MdictError {
 
     #[error("Encrypted file requires passcode")]
     EncryptedFileRequiresPasscode,
+
+    #[error("Unsupported encryption type: {0}")]
+    UnsupportedEncryptionType(String),
 }
 
 /// Result type alias for mdict operations

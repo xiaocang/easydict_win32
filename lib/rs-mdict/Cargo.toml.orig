@@ -16,8 +16,8 @@ encoding_rs = "0.8"
 flate2 = "1.0"
 minilzo-rs = "0.6"
 
-# Regex for header parsing
-regex = "1.10"
+# XML header parsing
+quick-xml = "0.40"
 
 # Base64 encoding for MDD
 base64 = "0.22"

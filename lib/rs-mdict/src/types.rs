@@ -36,17 +36,6 @@ pub enum EncryptType {
     KeyInfoBlock = 2,
 }
 
-impl From<u8> for EncryptType {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => EncryptType::None,
-            1 => EncryptType::RecordBlock,
-            2 => EncryptType::KeyInfoBlock,
-            _ => EncryptType::None,
-        }
-    }
-}
-
 /// Compression type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionType {

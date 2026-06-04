@@ -62,8 +62,8 @@ version = "1.0"
 [dependencies.minilzo-rs]
 version = "0.6"
 
-[dependencies.regex]
-version = "1.10"
+[dependencies.quick-xml]
+version = "0.40"
 
 [dependencies.thiserror]
 version = "2.0.18"

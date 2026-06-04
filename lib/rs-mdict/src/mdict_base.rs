@@ -10,7 +10,7 @@ use std::path::Path;
 use crate::error::{MdictError, Result};
 use crate::lzo;
 use crate::types::*;
-use crate::utils::{self, bytes_to_number, decode_string, decode_utf16le, parse_header, strip_key};
+use crate::utils::{self, bytes_to_number, decode_string, decode_utf16le, parse_header};
 
 type KeyHeaderTransform = Box<dyn FnOnce(&[u8], &DictHeader) -> Result<Vec<u8>>>;
 
@@ -137,13 +137,7 @@ impl MdictBase {
         // Step 6: Read record block info
         self.read_record_infos()?;
 
-        // Sort keyword list - capture needed values before closure
-        let is_mdd = self.meta.ext == FileExt::Mdd;
-        self.keyword_list.sort_by(|a, b| {
-            let key_a = strip_key(&a.key_text, is_mdd);
-            let key_b = strip_key(&b.key_text, is_mdd);
-            key_a.cmp(&key_b)
-        });
+        self.sort_keywords_for_lookup();
 
         Ok(())
     }
@@ -186,16 +180,7 @@ impl MdictBase {
         }
 
         // Determine encryption type
-        let encrypted = self
-            .header
-            .get("Encrypted")
-            .map(|s| s.as_str())
-            .unwrap_or("");
-        self.meta.encrypt = match encrypted {
-            "" | "No" => EncryptType::None,
-            "Yes" => EncryptType::RecordBlock,
-            s => EncryptType::from(s.parse::<u8>().unwrap_or(0)),
-        };
+        self.meta.encrypt = parse_encrypt_type(self.header.get("Encrypted").map(String::as_str))?;
 
         // Determine version and number format
         let version_str = self
@@ -639,39 +624,12 @@ impl MdictBase {
 
     /// Strip key for comparison
     pub fn strip(&self, key: &str) -> String {
-        let is_mdd = self.meta.ext == FileExt::Mdd;
-        let mut result = key.to_string();
-
-        // Check StripKey setting
-        let strip_key = self
-            .header
-            .get("StripKey")
-            .map(|s| s.as_str())
-            .unwrap_or("Yes");
-
-        if strip_key == "Yes" {
-            result = utils::strip_key(&result, is_mdd);
-        }
-
-        // Check KeyCaseSensitive setting
-        let case_sensitive = self
-            .header
-            .get("KeyCaseSensitive")
-            .map(|s| s.as_str())
-            .unwrap_or("No");
-
-        if case_sensitive == "No" {
-            result = result.to_lowercase();
-        }
-
-        result.trim().to_string()
+        self.key_normalization().normalize(key)
     }
 
     /// Compare two keys
     pub fn compare_keys(&self, a: &str, b: &str) -> std::cmp::Ordering {
-        let stripped_a = self.strip(a);
-        let stripped_b = self.strip(b);
-        stripped_a.cmp(&stripped_b)
+        self.key_normalization().compare(a, b)
     }
 
     /// Binary search for keyword by word
@@ -681,39 +639,14 @@ impl MdictBase {
             return None;
         }
 
-        let mut left = 0;
-        let mut right = list.len() - 1;
-        let mut mid = 0;
-
-        while left <= right {
-            mid = left + (right - left) / 2;
-
-            let cmp_result = self.compare_keys(word, &list[mid].key_text);
-
-            match cmp_result {
-                std::cmp::Ordering::Greater => {
-                    left = mid + 1;
-                }
-                std::cmp::Ordering::Equal => {
-                    break;
-                }
-                std::cmp::Ordering::Less => {
-                    if mid == 0 {
-                        break;
-                    }
-                    right = mid - 1;
-                }
+        match list.binary_search_by(|item| self.compare_keys(&item.key_text, word)) {
+            Ok(index) => Some(&list[index]),
+            Err(index) if is_associate => {
+                let nearest = index.min(list.len().saturating_sub(1));
+                Some(&list[nearest])
             }
+            Err(_) => None,
         }
-
-        // Check if we found an exact match
-        if self.compare_keys(word, &list[mid].key_text) != std::cmp::Ordering::Equal
-            && !is_associate
-        {
-            return None;
-        }
-
-        Some(&list[mid])
     }
 
     /// Find record block index by record start offset
@@ -804,12 +737,14 @@ impl MdictBase {
 
     /// Get keywords that start with the given prefix
     pub fn get_prefix_keywords(&self, prefix: &str) -> Vec<&KeyWordItem> {
+        let normalization = self.key_normalization();
+        let normalized_prefix = normalization.normalize(prefix);
         self.keyword_list
             .iter()
             .filter(|item| {
-                item.key_text
-                    .to_lowercase()
-                    .starts_with(&prefix.to_lowercase())
+                normalization
+                    .normalize(&item.key_text)
+                    .starts_with(&normalized_prefix)
             })
             .collect()
     }
@@ -825,5 +760,236 @@ impl MdictBase {
         } else {
             Vec::new()
         }
+    }
+
+    fn sort_keywords_for_lookup(&mut self) {
+        let normalization = self.key_normalization();
+        self.keyword_list
+            .sort_by(|a, b| normalization.compare(&a.key_text, &b.key_text));
+    }
+
+    fn key_normalization(&self) -> KeyNormalization {
+        KeyNormalization {
+            ext: self.meta.ext,
+            strip_key: header_yes_no(&self.header, "StripKey", true),
+            case_sensitive: header_yes_no(&self.header, "KeyCaseSensitive", false),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct KeyNormalization {
+    ext: FileExt,
+    strip_key: bool,
+    case_sensitive: bool,
+}
+
+impl KeyNormalization {
+    fn normalize(self, key: &str) -> String {
+        let is_mdd = self.ext == FileExt::Mdd;
+        let mut result = if self.strip_key {
+            utils::strip_key_preserving_case(key, is_mdd)
+        } else {
+            key.to_string()
+        };
+
+        if !self.case_sensitive {
+            result = result.to_lowercase();
+        }
+
+        result.trim().to_string()
+    }
+
+    fn compare(self, a: &str, b: &str) -> std::cmp::Ordering {
+        self.normalize(a).cmp(&self.normalize(b))
+    }
+}
+
+fn header_yes_no(header: &DictHeader, key: &str, default: bool) -> bool {
+    match header.get(key).map(|value| value.trim()) {
+        Some(value) if value.eq_ignore_ascii_case("Yes") => true,
+        Some(value) if value.eq_ignore_ascii_case("No") => false,
+        _ => default,
+    }
+}
+
+fn parse_encrypt_type(value: Option<&str>) -> Result<EncryptType> {
+    let value = value.map(str::trim).unwrap_or_default();
+    if value.is_empty() || value.eq_ignore_ascii_case("No") {
+        return Ok(EncryptType::None);
+    }
+    if value.eq_ignore_ascii_case("Yes") {
+        return Ok(EncryptType::RecordBlock);
+    }
+
+    match value {
+        "0" => Ok(EncryptType::None),
+        "1" => Ok(EncryptType::RecordBlock),
+        "2" => Ok(EncryptType::KeyInfoBlock),
+        _ => Err(MdictError::UnsupportedEncryptionType(value.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keyword_sort_and_lookup_respect_strip_key_no_case_sensitive_header() {
+        let mut base = test_base_with_header(
+            &[("StripKey", "No"), ("KeyCaseSensitive", "Yes")],
+            &["apple", "Apple"],
+            FileExt::Mdx,
+        );
+
+        base.sort_keywords_for_lookup();
+
+        assert_eq!(
+            base.compare_keys("Apple", "apple"),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(test_keyword_texts(&base), ["Apple", "apple"]);
+        assert_eq!(
+            base.lookup_keyword_by_word("Apple", false)
+                .expect("exact uppercase key")
+                .key_text,
+            "Apple"
+        );
+        assert_eq!(
+            base.lookup_keyword_by_word("apple", false)
+                .expect("exact lowercase key")
+                .key_text,
+            "apple"
+        );
+        assert!(base.lookup_keyword_by_word("APPLE", false).is_none());
+    }
+
+    #[test]
+    fn strip_key_yes_can_still_be_case_sensitive() {
+        let mut base = test_base_with_header(
+            &[("StripKey", "Yes"), ("KeyCaseSensitive", "Yes")],
+            &["Co-Operate"],
+            FileExt::Mdx,
+        );
+
+        base.sort_keywords_for_lookup();
+
+        assert_eq!(base.strip("Co-Operate"), "CoOperate");
+        assert_eq!(
+            base.lookup_keyword_by_word("CoOperate", false)
+                .expect("stripped exact key")
+                .key_text,
+            "Co-Operate"
+        );
+        assert!(base.lookup_keyword_by_word("cooperate", false).is_none());
+    }
+
+    #[test]
+    fn prefix_uses_same_strip_rules_as_exact_lookup() {
+        let mut base = test_base_with_header(&[], &["co-operate"], FileExt::Mdx);
+        base.sort_keywords_for_lookup();
+
+        assert_eq!(
+            base.get_prefix_keywords("coo")
+                .into_iter()
+                .map(|item| item.key_text.as_str())
+                .collect::<Vec<_>>(),
+            ["co-operate"]
+        );
+
+        let mut no_strip =
+            test_base_with_header(&[("StripKey", "No")], &["co-operate"], FileExt::Mdx);
+        no_strip.sort_keywords_for_lookup();
+
+        assert!(no_strip.get_prefix_keywords("coo").is_empty());
+        assert_eq!(
+            no_strip
+                .get_prefix_keywords("co-")
+                .into_iter()
+                .map(|item| item.key_text.as_str())
+                .collect::<Vec<_>>(),
+            ["co-operate"]
+        );
+    }
+
+    #[test]
+    fn encrypted_header_values_are_case_insensitive_and_explicitly_unsupported() {
+        assert_eq!(parse_encrypt_type(None).unwrap(), EncryptType::None);
+        assert_eq!(parse_encrypt_type(Some("")).unwrap(), EncryptType::None);
+        assert_eq!(parse_encrypt_type(Some("no")).unwrap(), EncryptType::None);
+        assert_eq!(
+            parse_encrypt_type(Some("YES")).unwrap(),
+            EncryptType::RecordBlock
+        );
+        assert_eq!(
+            parse_encrypt_type(Some("1")).unwrap(),
+            EncryptType::RecordBlock
+        );
+        assert_eq!(
+            parse_encrypt_type(Some("2")).unwrap(),
+            EncryptType::KeyInfoBlock
+        );
+
+        assert!(matches!(
+            parse_encrypt_type(Some("3")).unwrap_err(),
+            MdictError::UnsupportedEncryptionType(_)
+        ));
+        assert!(matches!(
+            parse_encrypt_type(Some("surprise")).unwrap_err(),
+            MdictError::UnsupportedEncryptionType(_)
+        ));
+    }
+
+    fn test_base_with_header(
+        header_entries: &[(&str, &str)],
+        keywords: &[&str],
+        ext: FileExt,
+    ) -> MdictBase {
+        let mut header = DictHeader::new();
+        for (key, value) in header_entries {
+            header.insert((*key).to_string(), (*value).to_string());
+        }
+
+        MdictBase {
+            file: tempfile::tempfile().expect("tempfile"),
+            filepath: String::new(),
+            meta: DictMeta {
+                ext,
+                ..Default::default()
+            },
+            header,
+            key_header: KeyHeader::default(),
+            key_info_list: Vec::new(),
+            keyword_list: keywords
+                .iter()
+                .enumerate()
+                .map(|(index, key_text)| KeyWordItem {
+                    record_start_offset: index as u64,
+                    record_end_offset: index as u64 + 1,
+                    key_text: (*key_text).to_string(),
+                    key_block_idx: 0,
+                })
+                .collect(),
+            record_header: RecordHeader::default(),
+            record_info_list: Vec::new(),
+            header_end_offset: 0,
+            key_header_start_offset: 0,
+            key_header_end_offset: 0,
+            key_block_info_start_offset: 0,
+            key_block_info_end_offset: 0,
+            record_header_start_offset: 0,
+            record_header_end_offset: 0,
+            record_info_start_offset: 0,
+            record_info_end_offset: 0,
+            record_block_start_offset: 0,
+            key_header_transform: None,
+        }
+    }
+
+    fn test_keyword_texts(base: &MdictBase) -> Vec<&str> {
+        base.keyword_list
+            .iter()
+            .map(|item| item.key_text.as_str())
+            .collect()
     }
 }

@@ -2,8 +2,11 @@ use crate::compat_protocol::{
     ImportedMdxDictionarySnapshot, MdxLookupEntry, MdxLookupParams, MdxLookupResult,
     SettingsSnapshot,
 };
+use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use regex::{Captures, Regex};
 use ripemd::{Digest, Ripemd128};
+use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -554,7 +557,8 @@ pub fn run_native_mdx_lookup(
     settings: &SettingsSnapshot,
 ) -> Result<MdxLookupResult, NativeMdxLookupError> {
     let mut factory = RsMdictReaderFactory;
-    run_native_mdx_lookup_with_factory(&mut factory, params, settings)
+    let mut mdd_factory = RsMdictMddReaderFactory;
+    run_native_mdx_lookup_with_factories(&mut factory, &mut mdd_factory, params, settings)
 }
 
 pub fn detect_mdx_file_is_encrypted(path: impl AsRef<Path>) -> Result<bool, NativeMdxLookupError> {
@@ -565,14 +569,15 @@ pub fn detect_mdx_file_encryption_mode(
     path: impl AsRef<Path>,
 ) -> Result<MdxEncryptionMode, NativeMdxLookupError> {
     let header_text = read_mdx_header_text(path)?;
-    Ok(mdx_header_encryption_mode(&header_text))
+    mdx_header_encryption_mode(&header_text)
 }
 
 fn mdx_dictionary_register_by(
     dictionary: &ImportedMdxDictionarySnapshot,
 ) -> Result<Option<String>, NativeMdxLookupError> {
     let header_text = read_mdx_header_text(dictionary.file_path.trim())?;
-    Ok(mdx_header_attribute(&header_text, "RegisterBy"))
+    let attributes = mdx_header_attributes(&header_text)?;
+    Ok(mdx_header_attribute(&attributes, "RegisterBy"))
 }
 
 fn read_mdx_header_text(path: impl AsRef<Path>) -> Result<String, NativeMdxLookupError> {
@@ -638,6 +643,19 @@ pub fn run_native_mdx_lookup_with_factory<F: NativeMdxDictionaryReaderFactory>(
     params: &MdxLookupParams,
     settings: &SettingsSnapshot,
 ) -> Result<MdxLookupResult, NativeMdxLookupError> {
+    let mut mdd_factory = RsMdictMddReaderFactory;
+    run_native_mdx_lookup_with_factories(factory, &mut mdd_factory, params, settings)
+}
+
+pub fn run_native_mdx_lookup_with_factories<
+    F: NativeMdxDictionaryReaderFactory,
+    M: NativeMddResourceReaderFactory,
+>(
+    factory: &mut F,
+    mdd_factory: &mut M,
+    params: &MdxLookupParams,
+    settings: &SettingsSnapshot,
+) -> Result<MdxLookupResult, NativeMdxLookupError> {
     let Some(dictionary) = find_dictionary(settings, &params.dictionary_id) else {
         return Ok(MdxLookupResult {
             entries: Vec::new(),
@@ -668,13 +686,41 @@ pub fn run_native_mdx_lookup_with_factory<F: NativeMdxDictionaryReaderFactory>(
     }
 
     let mut reader = factory.open(dictionary)?;
-    let entries = if params.fuzzy {
+    let mut entries = if params.fuzzy {
         lookup_fuzzy(&mut reader, query, &dictionary.display_name)?
     } else {
         lookup_exact(&mut reader, query, &dictionary.display_name)?
     };
 
+    inline_mdd_resources_for_entries(mdd_factory, dictionary, &mut entries)
+        .map_err(|error| NativeMdxLookupError::new(error.to_string()))?;
+
     Ok(MdxLookupResult { entries })
+}
+
+pub fn inline_mdd_resources_in_html(
+    dictionary: &ImportedMdxDictionarySnapshot,
+    html: &str,
+) -> Result<String, NativeMddResourceError> {
+    let mut factory = RsMdictMddReaderFactory;
+    inline_mdd_resources_in_html_with_factory(&mut factory, dictionary, html)
+}
+
+pub fn inline_mdd_resources_in_html_with_factory<F: NativeMddResourceReaderFactory>(
+    factory: &mut F,
+    dictionary: &ImportedMdxDictionarySnapshot,
+    html: &str,
+) -> Result<String, NativeMddResourceError> {
+    if dictionary.mdd_file_paths.is_empty() || html.trim().is_empty() {
+        return Ok(html.to_string());
+    }
+
+    let mut readers = open_mdd_readers(factory, dictionary);
+    if readers.is_empty() {
+        return Ok(html.to_string());
+    }
+
+    inline_mdd_resources_in_html_with_readers(&mut readers, html)
 }
 
 pub fn normalize_mdd_resource_key(resource_key: &str) -> Result<String, NativeMddResourceError> {
@@ -721,6 +767,229 @@ pub fn mime_type_for_mdd_resource_key(resource_key: &str) -> String {
         _ => "application/octet-stream",
     }
     .to_string()
+}
+
+fn inline_mdd_resources_for_entries<F: NativeMddResourceReaderFactory>(
+    factory: &mut F,
+    dictionary: &ImportedMdxDictionarySnapshot,
+    entries: &mut [MdxLookupEntry],
+) -> Result<(), NativeMddResourceError> {
+    if dictionary.mdd_file_paths.is_empty() {
+        return Ok(());
+    }
+
+    let mut readers = open_mdd_readers(factory, dictionary);
+    if readers.is_empty() {
+        return Ok(());
+    }
+
+    for entry in entries {
+        entry.html = inline_mdd_resources_in_html_with_readers(&mut readers, &entry.html)?;
+    }
+
+    Ok(())
+}
+
+fn open_mdd_readers<F: NativeMddResourceReaderFactory>(
+    factory: &mut F,
+    dictionary: &ImportedMdxDictionarySnapshot,
+) -> Vec<F::Reader> {
+    dictionary
+        .mdd_file_paths
+        .iter()
+        .filter_map(|path| factory.open_mdd(path).ok())
+        .collect()
+}
+
+fn inline_mdd_resources_in_html_with_readers<R: NativeMddResourceReader>(
+    readers: &mut [R],
+    html: &str,
+) -> Result<String, NativeMddResourceError> {
+    rewrite_html_resource_references(html, |reference| {
+        lookup_mdd_resource_in_readers(readers, reference)
+    })
+}
+
+fn rewrite_html_resource_references<F>(
+    html: &str,
+    mut lookup: F,
+) -> Result<String, NativeMddResourceError>
+where
+    F: FnMut(&str) -> Result<Option<NativeMddResource>, NativeMddResourceError>,
+{
+    let attr_regex = Regex::new(r#"(?i)\b(src|href)\s*=\s*(['"])([^'"]+)(['"])"#)
+        .map_err(|error| NativeMddResourceError::new(error.to_string()))?;
+    let rewritten = attr_regex
+        .replace_all(html, |captures: &Captures<'_>| {
+            let full = captures.get(0).map(|match_| match_.as_str()).unwrap_or("");
+            let Some(name) = captures.get(1).map(|match_| match_.as_str()) else {
+                return full.to_string();
+            };
+            let Some(open_quote) = captures.get(2).map(|match_| match_.as_str()) else {
+                return full.to_string();
+            };
+            let Some(value) = captures.get(3).map(|match_| match_.as_str()) else {
+                return full.to_string();
+            };
+            let Some(close_quote) = captures.get(4).map(|match_| match_.as_str()) else {
+                return full.to_string();
+            };
+
+            match lookup(value) {
+                Ok(Some(resource)) => format!(
+                    "{name}={open_quote}{}{close_quote}",
+                    mdd_resource_data_url(resource)
+                ),
+                _ => full.to_string(),
+            }
+        })
+        .into_owned();
+
+    let css_url_regex = Regex::new(r#"(?i)url\(\s*(['"]?)([^'")]+)(['"]?)\s*\)"#)
+        .map_err(|error| NativeMddResourceError::new(error.to_string()))?;
+    Ok(css_url_regex
+        .replace_all(&rewritten, |captures: &Captures<'_>| {
+            let full = captures.get(0).map(|match_| match_.as_str()).unwrap_or("");
+            let Some(value) = captures.get(2).map(|match_| match_.as_str()) else {
+                return full.to_string();
+            };
+
+            match lookup(value) {
+                Ok(Some(resource)) => format!("url('{}')", mdd_resource_data_url(resource)),
+                _ => full.to_string(),
+            }
+        })
+        .into_owned())
+}
+
+fn lookup_mdd_resource_in_readers<R: NativeMddResourceReader>(
+    readers: &mut [R],
+    resource_reference: &str,
+) -> Result<Option<NativeMddResource>, NativeMddResourceError> {
+    let Some(resource_key) = mdd_resource_reference_to_key(resource_reference)? else {
+        return Ok(None);
+    };
+
+    for reader in readers {
+        let Some((resolved_key, data)) = reader.locate_raw(&resource_key)? else {
+            continue;
+        };
+
+        return Ok(Some(NativeMddResource {
+            mime_type: mime_type_for_mdd_resource_key(&resolved_key),
+            key: resolved_key,
+            data,
+        }));
+    }
+
+    Ok(None)
+}
+
+fn mdd_resource_reference_to_key(
+    resource_reference: &str,
+) -> Result<Option<String>, NativeMddResourceError> {
+    let reference = resource_reference.trim();
+    if reference.is_empty() || should_skip_mdd_resource_reference(reference) {
+        return Ok(None);
+    }
+
+    let path = dictassets_resource_path(reference).unwrap_or(reference);
+    let path = strip_query_and_fragment(path);
+    if path.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let path = percent_decode_ascii(path);
+    let path = path.trim_start_matches('/');
+    if path.trim().is_empty() {
+        return Ok(None);
+    }
+
+    normalize_mdd_resource_key(path).map(Some)
+}
+
+fn should_skip_mdd_resource_reference(reference: &str) -> bool {
+    let lower = reference.to_ascii_lowercase();
+    if lower.starts_with('#')
+        || lower.starts_with("data:")
+        || lower.starts_with("javascript:")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+    {
+        return true;
+    }
+
+    if lower.starts_with("http://dictassets/") || lower.starts_with("https://dictassets/") {
+        return false;
+    }
+
+    looks_like_absolute_uri(reference)
+}
+
+fn dictassets_resource_path(reference: &str) -> Option<&str> {
+    let lower = reference.to_ascii_lowercase();
+    for prefix in ["https://dictassets/", "http://dictassets/"] {
+        if lower.starts_with(prefix) {
+            return Some(&reference[prefix.len()..]);
+        }
+    }
+
+    None
+}
+
+fn looks_like_absolute_uri(reference: &str) -> bool {
+    let Some(colon_index) = reference.find(':') else {
+        return false;
+    };
+
+    let first_path_separator = reference.find(['/', '\\']).unwrap_or(reference.len());
+    colon_index < first_path_separator
+}
+
+fn strip_query_and_fragment(reference: &str) -> &str {
+    reference
+        .find(['?', '#'])
+        .map(|index| &reference[..index])
+        .unwrap_or(reference)
+}
+
+fn percent_decode_ascii(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+            {
+                output.push((high << 4) | low);
+                index += 3;
+                continue;
+            }
+        }
+
+        output.push(bytes[index]);
+        index += 1;
+    }
+
+    String::from_utf8_lossy(&output).to_string()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn mdd_resource_data_url(resource: NativeMddResource) -> String {
+    format!(
+        "data:{};base64,{}",
+        resource.mime_type,
+        BASE64.encode(resource.data)
+    )
 }
 
 fn find_dictionary<'a>(
@@ -832,55 +1101,36 @@ fn decode_mdx_header_text(header_bytes: &[u8]) -> String {
     }
 }
 
-fn mdx_header_encryption_mode(header_text: &str) -> MdxEncryptionMode {
-    let Some(value) = mdx_header_attribute(header_text, "Encrypted") else {
-        return MdxEncryptionMode::None;
+fn mdx_header_encryption_mode(
+    header_text: &str,
+) -> Result<MdxEncryptionMode, NativeMdxLookupError> {
+    let attributes = mdx_header_attributes(header_text)?;
+    let Some(value) = mdx_header_attribute(&attributes, "Encrypted") else {
+        return Ok(MdxEncryptionMode::None);
     };
 
     let normalized = value.trim().to_ascii_lowercase();
-    match normalized.as_str() {
+    Ok(match normalized.as_str() {
         "" | "0" | "no" | "false" => MdxEncryptionMode::None,
         "yes" | "1" => MdxEncryptionMode::RecordBlock,
         "2" => MdxEncryptionMode::KeyInfoBlock,
         "3" => MdxEncryptionMode::RecordAndKeyInfoBlock,
         _ => MdxEncryptionMode::Unknown,
-    }
+    })
 }
 
-fn mdx_header_attribute(header_text: &str, attribute: &str) -> Option<String> {
-    let haystack = header_text.to_ascii_lowercase();
-    let needle = attribute.to_ascii_lowercase();
-    let mut offset = 0;
+fn mdx_header_attributes(
+    header_text: &str,
+) -> Result<HashMap<String, String>, NativeMdxLookupError> {
+    rust_mdict::parse_header(header_text)
+        .map_err(|error| NativeMdxLookupError::new(error.to_string()))
+}
 
-    while let Some(relative) = haystack[offset..].find(&needle) {
-        let start = offset + relative;
-        let end = start + needle.len();
-        let before = header_text.as_bytes().get(start.wrapping_sub(1)).copied();
-        if start > 0 && !before.is_some_and(|byte| byte.is_ascii_whitespace() || byte == b'<') {
-            offset = end;
-            continue;
-        }
-
-        let after = header_text[end..].trim_start();
-        let Some(after) = after.strip_prefix('=') else {
-            offset = end;
-            continue;
-        };
-        let after = after.trim_start();
-        let Some(quote) = after
-            .chars()
-            .next()
-            .filter(|quote| *quote == '"' || *quote == '\'')
-        else {
-            offset = end;
-            continue;
-        };
-        let value_start = quote.len_utf8();
-        let value_end = after[value_start..].find(quote)?;
-        return Some(after[value_start..value_start + value_end].to_string());
-    }
-
-    None
+fn mdx_header_attribute(attributes: &HashMap<String, String>, attribute: &str) -> Option<String> {
+    attributes
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(attribute))
+        .map(|(_, value)| value.clone())
 }
 
 fn mdx_salsa20_8_block(

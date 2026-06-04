@@ -32,3 +32,4 @@ pub use error::{MdictError, Result};
 pub use mdd::Mdd;
 pub use mdx::Mdx;
 pub use types::*;
+pub use utils::parse_header;

@@ -2,9 +2,10 @@ use easydict_app::{
     capture_overlay_view, capture_overlay_view_with_state, capture_overlay_window_options,
     easydict_theme_tokens, fixed_window_options, fixed_window_view, main_window_options,
     main_window_view, mini_window_options, mini_window_view, pop_button_view,
-    pop_button_view_with_state, pop_button_window_options, settings_view, CaptureInteractionState,
-    CapturePhase, CaptureRect, EasydictUiState, GrammarCorrectionPreview, PreviewScenario,
-    QuickTranslateSurface, SettingsLink, TranslationResultPreview, HOTKEY_SHOW_MAIN,
+    pop_button_view_with_state, pop_button_window_options, settings_view, settings_window_options,
+    CaptureInteractionState, CapturePhase, CaptureRect, EasydictUiState, GrammarCorrectionPreview,
+    PreviewScenario, QuickTranslateSurface, SettingsLink, TranslationResultPreview,
+    HOTKEY_SHOW_MAIN,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -227,12 +228,12 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
         assert_control_contains(
             &snapshot,
             &format!("SettingsTab_{section}"),
-            "width=Fixed(128)",
+            "width=Fixed(86)",
         );
         assert_control_contains(
             &snapshot,
             &format!("SettingsTab_{section}"),
-            "height=Fixed(112)",
+            "height=Fixed(76)",
         );
     }
 
@@ -246,6 +247,8 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
     assert_control_contains(&snapshot, "GeneralTabContent", "spacing=24");
     assert!(snapshot.contains("id=\"BehaviorSection\""));
     assert!(snapshot.contains("id=\"TtsSettingsSection\""));
+    assert_control_contains(&snapshot, "SettingsGeneralBehaviorHeader", "style=Subtitle");
+    assert_control_contains(&snapshot, "TtsSettingsHeaderText", "style=Subtitle");
 
     let mut hover_state = state.clone();
     hover_state.settings.hovered_section = Some(easydict_app::SettingsSection::Services);
@@ -271,29 +274,32 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
     assert_control_contains(&switching_snapshot, "SettingsTabSwitchRing", "active=true");
     assert_control_contains(&switching_snapshot, "SettingsTabSwitchRing", "size=20");
 
-    assert!(snapshot.contains("title=\"App Theme\""));
+    assert!(snapshot.contains("label=\"App Theme\""));
+    assert!(snapshot.contains("id=\"AppThemeLabelText\""));
     assert!(snapshot.contains("id=\"AppThemeCombo\""));
     assert!(snapshot.contains("id=\"AppThemeDescriptionText\""));
     assert!(!snapshot.contains("High Contrast"));
-    assert!(snapshot.contains("title=\"Minimize to system tray\""));
+    assert!(snapshot.contains("id=\"BehaviorSectionCard\""));
+    assert!(snapshot.contains("value=\"Minimize to system tray\""));
     assert!(snapshot.contains("id=\"MinimizeToTrayToggle\""));
-    assert!(snapshot.contains("title=\"Start minimized to tray\""));
+    assert!(snapshot.contains("value=\"Start minimized to tray\""));
     assert!(snapshot.contains("id=\"MinimizeToTrayOnStartupToggle\""));
-    assert!(snapshot.contains("title=\"Monitor clipboard for text\""));
+    assert!(snapshot.contains("value=\"Monitor clipboard for text\""));
     assert!(snapshot.contains("id=\"ClipboardMonitorToggle\""));
-    assert!(snapshot.contains("title=\"Always on top\""));
+    assert!(snapshot.contains("value=\"Always on top\""));
     assert!(snapshot.contains("id=\"AlwaysOnTopToggle\""));
-    assert!(snapshot.contains("title=\"Launch at Windows startup\""));
+    assert!(snapshot.contains("value=\"Launch at Windows startup\""));
     assert!(snapshot.contains("id=\"LaunchAtStartupToggle\""));
-    assert!(snapshot.contains("title=\"Mouse selection translate\""));
+    assert!(snapshot.contains("value=\"Mouse selection translate\""));
     assert!(snapshot.contains("id=\"SettingsGeneralBehaviorHeader\""));
     assert!(snapshot.contains("id=\"MouseSelectionTranslateToggle\""));
-    assert!(snapshot.contains("title=\"Enable custom dictionary input suggestions\""));
+    assert!(snapshot.contains("value=\"Enable custom dictionary input suggestions\""));
+    assert!(snapshot.contains("id=\"EnableLocalDictionarySuggestionsHeader\""));
     assert!(snapshot.contains("id=\"EnableLocalDictionarySuggestionsLabelText\""));
     assert!(snapshot.contains("id=\"ExperimentalLabelText\""));
     assert!(snapshot.contains("id=\"EnableLocalDictionarySuggestionsHintText\""));
     assert_control_enabled(&snapshot, "EnableLocalDictionarySuggestionsToggle", false);
-    assert!(snapshot.contains("title=\"Hide dictionaries with no result\""));
+    assert!(snapshot.contains("value=\"Hide dictionaries with no result\""));
     assert!(snapshot.contains("id=\"HideEmptyServiceResultsToggle\""));
     assert!(snapshot.contains("id=\"TtsSettingsHeaderText\""));
     assert!(snapshot.contains("id=\"TtsSpeedLabelText\""));
@@ -368,6 +374,7 @@ fn general_settings_mouse_selection_excluded_apps_panel_tracks_toggle() {
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert_control_contains(&snapshot, "MouseSelectionTranslateToggle", "checked=true");
     assert!(snapshot.contains("id=\"MouseSelectionExcludedAppsPanel\""));
+    assert!(snapshot.contains("id=\"MouseSelectionExcludedAppsHeaderText\""));
     assert!(snapshot.contains("id=\"MouseSelectionExcludedAppsBox\""));
     assert_control_contains(&snapshot, "MouseSelectionExcludedAppsBox", "text_len=4");
     assert_control_contains(
@@ -376,7 +383,7 @@ fn general_settings_mouse_selection_excluded_apps_panel_tracks_toggle() {
         "action=text_input",
     );
     assert!(snapshot.contains("id=\"MouseSelectionExcludedAppsDescriptionText\""));
-    assert!(snapshot.contains("Process names to exclude, separated by commas."));
+    assert!(snapshot.contains("Process names to exclude from mouse selection translate"));
 
     state.apply(easydict_app::Message::MouseSelectionExcludedAppsChanged(
         "code, slack".to_string(),
@@ -1234,9 +1241,11 @@ fn views_settings_reorder_mode_exposes_window_specific_controls() {
     assert!(snapshot.contains("id=\"main.service_list\""));
     assert!(snapshot.contains("id=\"main.service.google\""));
     assert!(snapshot.contains("id=\"main.google.enabled\""));
+    assert!(snapshot.contains("CheckBox label=\"Google Translate\" checked=true"));
     assert!(snapshot.contains("id=\"main.google.enabled_query\""));
     assert!(snapshot.contains("id=\"main.service.openai\""));
-    assert!(snapshot.contains("ToggleSwitch label=\"EnabledQuery\" checked=true"));
+    assert!(snapshot.contains("ToggleSwitch label=\"Auto\" checked=true"));
+    assert_control_contains(&snapshot, "main.service_list", "width=Fill");
     assert_control_contains(
         &snapshot,
         "MainWindowReorderModeButton",
@@ -1262,6 +1271,7 @@ fn views_settings_reorder_mode_exposes_window_specific_controls() {
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert_control_contains(&snapshot, "main.google.enabled_query", "checked=false");
     assert_control_contains(&snapshot, "main.bing.enabled", "checked=false");
+    assert!(snapshot.contains("CheckBox label=\"Bing Translate\" checked=false"));
     assert!(!snapshot.contains("id=\"main.bing.enabled_query\""));
 
     state.settings.unsaved_changes = false;
@@ -1298,6 +1308,20 @@ fn views_settings_reorder_mode_exposes_window_specific_controls() {
 }
 
 #[test]
+fn views_settings_uses_zh_cn_window_result_labels() {
+    let mut state = EasydictUiState::default();
+    state.settings.selected_section = easydict_app::SettingsSection::Views;
+    state.settings.ui_language = "zh-CN".to_string();
+
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+
+    assert!(snapshot.contains("Text value=\"窗口结果显示\""));
+    assert!(snapshot.contains("Text value=\"主窗口\""));
+    assert_control_contains(&snapshot, "MainWindowReorderModeButton", "label=\"排序\"");
+    assert!(snapshot.contains("ToggleSwitch label=\"自动\" checked=true"));
+}
+
+#[test]
 fn about_settings_renders_required_links_with_automation_ids() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::About;
@@ -1305,7 +1329,18 @@ fn about_settings_renders_required_links_with_automation_ids() {
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
     assert!(snapshot.contains("id=\"AboutHeaderText\""));
+    assert!(snapshot.contains("id=\"settings.about.card\""));
     assert!(snapshot.contains("id=\"AboutAppNameText\""));
+    assert_control_contains(
+        &snapshot,
+        "AboutAppNameText",
+        "value=\"Easydict for Windows ᵇᵉᵗᵃ\"",
+    );
+    assert!(snapshot.contains("id=\"VersionText\""));
+    assert_control_contains(&snapshot, "VersionText", "value=\"Version ");
+    assert!(snapshot.contains("id=\"AboutInspiredByText\""));
+    assert!(snapshot.contains("id=\"LicenseText\""));
+    assert_control_contains(&snapshot, "LicenseText", "value=\"License: GPL-3.0\"");
     for (id, label, url) in [
         (
             "GitHubRepositoryLink",
@@ -1315,7 +1350,7 @@ fn about_settings_renders_required_links_with_automation_ids() {
         (
             "IssueFeedbackLink",
             "Issue Feedback",
-            "https://github.com/xiaocang/easydict_win32/issues",
+            "https://github.com/xiaocang/easydict_win32/issues/new/choose",
         ),
         (
             "InspiredByLink",
@@ -1341,30 +1376,53 @@ fn about_settings_renders_required_links_with_automation_ids() {
 }
 
 #[test]
+fn zh_cn_about_settings_matches_winui_static_text_mix() {
+    let mut state = EasydictUiState::preview(PreviewScenario::Initial, ThemeMode::Light);
+    state.settings.selected_section = easydict_app::SettingsSection::About;
+    state.settings.ui_language = "zh-CN".to_string();
+
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+
+    assert_control_contains(&snapshot, "AboutHeaderText", "value=\"关于\"");
+    assert_control_contains(
+        &snapshot,
+        "GitHubRepositoryLink",
+        "label=\"GitHub Repository\"",
+    );
+    assert_control_contains(&snapshot, "IssueFeedbackLink", "label=\"问题反馈\"");
+    assert_control_contains(&snapshot, "LicenseText", "value=\"License: GPL-3.0\"");
+}
+
+#[test]
 fn hotkey_settings_render_configurable_shortcuts() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::Hotkeys;
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
+    assert!(snapshot.contains("id=\"HotkeysHeaderText\""));
+    assert!(snapshot.contains("Text value=\"Hotkeys\""));
+    assert!(snapshot.contains("id=\"HotkeysHelpIcon\""));
+    assert!(snapshot.contains("icon=help"));
+    assert!(snapshot.contains("id=\"settings.hotkeys.card\""));
+    assert!(snapshot.contains("id=\"settings.hotkeys.card.content\""));
     assert!(snapshot.contains("id=\"settings.hotkeys.show_window\""));
-    assert!(snapshot.contains("title=\"Show Window\""));
-    assert!(snapshot.contains("description=\"Ctrl+Alt+T - applied after saving settings.\""));
+    assert!(snapshot.contains("id=\"ShowHotkeyBox.header\""));
+    assert!(snapshot.contains("Text value=\"Show Window\""));
     assert!(snapshot.contains("id=\"ShowHotkeyBox\""));
     assert!(snapshot.contains("id=\"ShowHotkeyEnabledToggle\""));
     assert_control_contains(&snapshot, "ShowHotkeyBox", "text_len=10");
     assert_control_contains(&snapshot, "ShowHotkeyBox", "action=text_input");
     assert_control_contains(&snapshot, "ShowHotkeyEnabledToggle", "checked=true");
     assert_control_contains(&snapshot, "ShowHotkeyEnabledToggle", "action=bool_input");
-    assert!(snapshot.contains("id=\"TranslateClipboardHotkeyBox\""));
+    assert!(snapshot.contains("id=\"TranslateHotkeyBox\""));
+    assert!(!snapshot.contains("id=\"TranslateClipboardHotkeyBox\""));
     assert!(snapshot.contains("id=\"ShowMiniHotkeyBox\""));
-    assert!(snapshot
-        .contains("description=\"Ctrl+Alt+M - toggle hotkey adds Shift after saving settings.\""));
     assert!(snapshot.contains("id=\"ShowFixedHotkeyBox\""));
-    assert!(snapshot
-        .contains("description=\"Ctrl+Alt+F - toggle hotkey adds Shift after saving settings.\""));
     assert!(snapshot.contains("id=\"OcrTranslateHotkeyBox\""));
     assert!(snapshot.contains("id=\"SilentOcrHotkeyBox\""));
+    assert!(snapshot.contains("id=\"HotkeysDescriptionText\""));
+    assert!(snapshot.contains("Restart app to apply hotkey changes"));
     assert!(!snapshot.contains("Button label=\"Record\""));
 
     state.apply(easydict_app::Message::ToggleHotkey(
@@ -1578,6 +1636,8 @@ fn language_settings_render_selected_language_toggles() {
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
+    assert!(snapshot.contains("id=\"settings.language.preferences.card\""));
+    assert!(snapshot.contains("Language Preferences"));
     assert!(snapshot.contains("id=\"settings.language.first\""));
     assert!(snapshot.contains("id=\"FirstLanguageCombo\""));
     assert!(snapshot.contains("selected=\"zh-Hans\""));
@@ -1585,7 +1645,7 @@ fn language_settings_render_selected_language_toggles() {
     assert!(snapshot.contains("id=\"SecondLanguageCombo\""));
     assert!(snapshot.contains("id=\"settings.language.auto_select_target\""));
     assert!(snapshot.contains("id=\"AutoSelectTargetToggle\""));
-    assert!(snapshot.contains("ToggleSwitch label=\"Auto-select target language\" checked=true"));
+    assert!(snapshot.contains("ToggleSwitch label=\"On\" checked=true"));
     assert!(snapshot.contains("id=\"UILanguageCombo\""));
     assert!(snapshot.contains("selected=\"en-US\""));
     assert!(snapshot.contains("Restart required for full effect"));
@@ -2177,6 +2237,18 @@ fn main_window_keeps_saved_default_size_contract() {
     assert_eq!(options.min_width, Some(640.0));
     assert_eq!(options.min_height, Some(720.0));
     assert_eq!(options.frame, WindowFrame::Borderless);
+}
+
+#[test]
+fn settings_window_matches_winui_reference_size_contract() {
+    let options = settings_window_options();
+    assert_eq!(options.id.as_str(), "settings");
+    assert_eq!(options.width, 846.0);
+    assert_eq!(options.height, 913.0);
+    assert_eq!(options.min_width, Some(760.0));
+    assert_eq!(options.min_height, Some(620.0));
+    assert_eq!(options.frame, WindowFrame::Borderless);
+    assert_eq!(options.resize_mode, WindowResizeMode::CanResize);
 }
 
 fn window_service<'a>(

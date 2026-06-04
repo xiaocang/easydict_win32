@@ -11,9 +11,9 @@ pub fn main_window_options() -> WindowOptions {
 
 pub fn settings_window_options() -> WindowOptions {
     WindowOptions::new("settings", "Easydict Settings")
-        .size(960.0, 760.0)
-        .min_size(640.0, 520.0)
-        .frame(WindowFrame::Standard)
+        .size(846.0, 913.0)
+        .min_size(760.0, 620.0)
+        .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Center)
 }

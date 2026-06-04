@@ -1,5 +1,5 @@
 use crate::compat_protocol::local_ai_provider_modes;
-use crate::i18n::{tr, tr_count};
+use crate::i18n::{tr, tr_count, tr_locale};
 use crate::mdx_native::native_mdx_dictionary_can_route_natively;
 use crate::quick_translate::QuickTranslateSurface;
 use crate::screen_capture::{CaptureInteractionState, CapturePhase, CaptureRect};
@@ -54,7 +54,7 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
 
 pub fn settings_view(state: &SettingsState) -> View<Message> {
     let mut content_children = vec![
-        settings_header(),
+        settings_header(&state.ui_language),
         row((
             settings_category_bar(state),
             progress_ring()
@@ -66,6 +66,10 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
         .spacing(12)
         .align(Alignment::Start)
         .width(Length::Fill)
+        .margin(Edges {
+            bottom: 10,
+            ..Edges::ZERO
+        })
         .into_view(),
         settings_section_content(state),
     ];
@@ -100,15 +104,22 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
     // rather than being stacked as scroll siblings.
     let mut surface = overlay(scroll).id("settings.root");
     if state.unsaved_changes {
-        surface = surface
-            .layer(OverlayLayer::new(settings_save_bar()).align(Alignment::End, Alignment::End));
+        surface = surface.layer(
+            OverlayLayer::new(settings_save_bar(&state.ui_language))
+                .align(Alignment::End, Alignment::End),
+        );
     }
     if let Some(message) = state.save_error_message.as_deref() {
-        surface = surface.layer(OverlayLayer::modal(settings_save_error_dialog(message)));
+        surface = surface.layer(OverlayLayer::modal(settings_save_error_dialog(
+            &state.ui_language,
+            message,
+        )));
     } else if state.pending_mdx_delete_service_id.is_some() {
         surface = surface.layer(OverlayLayer::modal(settings_mdx_delete_dialog(state)));
     } else if state.show_unsaved_changes_dialog {
-        surface = surface.layer(OverlayLayer::modal(settings_unsaved_changes_dialog()));
+        surface = surface.layer(OverlayLayer::modal(settings_unsaved_changes_dialog(
+            &state.ui_language,
+        )));
     }
     if state.settings_runtime.is_loading() {
         // Entry loading overlay (centered 32px ring) shown while the async
@@ -141,18 +152,23 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
         .into_view()
 }
 
-fn settings_header() -> View<Message> {
+fn settings_header(locale: &str) -> View<Message> {
+    let back_label = tr_locale(locale, "settings.back", "Back");
     row((
         primary_button("")
             .id("BackButton")
             .icon(win_fluent::IconToken::with_glyph("back", '\u{E72B}'))
-            .tooltip("Back")
-            .a11y(A11yHint::named("Back"))
+            .tooltip(back_label.clone())
+            .a11y(A11yHint::named(back_label))
             .on_press(Message::Back),
-        styled_text_id("SettingsHeaderText", "Settings", TextStyle::Title),
+        styled_text_id(
+            "SettingsHeaderText",
+            tr_locale(locale, "settings.title", "Settings"),
+            TextStyle::Title,
+        ),
     ))
     .id("settings.header")
-    .spacing(16)
+    .spacing(12)
     .align(Alignment::Center)
     .into_view()
 }
@@ -175,26 +191,28 @@ fn settings_loading_indicator() -> View<Message> {
     .into_view()
 }
 
-fn settings_save_bar() -> View<Message> {
+fn settings_save_bar(locale: &str) -> View<Message> {
     // Shrink-wrapped around the button and inset from the window edges; the
     // overlay layer positions it bottom-right.
-    row((primary_button("Save Settings")
-        .id("SaveButton")
-        .icon(icon::check())
-        .on_press(Message::SaveSettingsChanges),))
+    row((
+        primary_button(tr_locale(locale, "settings.save", "Save Settings"))
+            .id("SaveButton")
+            .icon(icon::check())
+            .on_press(Message::SaveSettingsChanges),
+    ))
     .id("settings.save_floating_bar")
     .tw("shadow-lg m-6")
     .into_view()
 }
 
-fn settings_save_error_dialog(message: &str) -> View<Message> {
-    dialog("Settings Error")
+fn settings_save_error_dialog(locale: &str, message: &str) -> View<Message> {
+    dialog(tr_locale(locale, "settings.error.title", "Settings Error"))
         .id("settings.error_dialog")
         .kind(DialogKind::Error)
         .content(
             column((
                 text(message),
-                row((primary_button("OK")
+                row((primary_button(tr_locale(locale, "settings.ok", "OK"))
                     .id("settings.error.ok")
                     .on_press(Message::DismissSettingsError),))
                 .id("settings.error.actions")
@@ -241,31 +259,39 @@ fn settings_mdx_delete_dialog(state: &SettingsState) -> View<Message> {
         .into_view()
 }
 
-fn settings_unsaved_changes_dialog() -> View<Message> {
-    dialog("Unsaved Settings")
-        .id("settings.unsaved_dialog")
-        .kind(DialogKind::Confirmation)
-        .content(
-            column((
-                text("Save your settings changes before leaving?"),
-                row((
-                    primary_button("Save")
-                        .id("settings.unsaved.save")
-                        .on_press(Message::SaveSettingsChanges),
-                    button("Don't Save")
-                        .id("settings.unsaved.discard")
-                        .on_press(Message::DiscardSettingsChanges),
-                    button("Cancel")
-                        .id("settings.unsaved.cancel")
-                        .on_press(Message::CancelSettingsChangesDialog),
-                ))
-                .id("settings.unsaved.actions")
-                .spacing(8)
-                .align(Alignment::Center),
+fn settings_unsaved_changes_dialog(locale: &str) -> View<Message> {
+    dialog(tr_locale(
+        locale,
+        "settings.unsaved.title",
+        "Unsaved Settings",
+    ))
+    .id("settings.unsaved_dialog")
+    .kind(DialogKind::Confirmation)
+    .content(
+        column((
+            text(tr_locale(
+                locale,
+                "settings.unsaved.message",
+                "Save your settings changes before leaving?",
+            )),
+            row((
+                primary_button(tr_locale(locale, "settings.unsaved.save", "Save"))
+                    .id("settings.unsaved.save")
+                    .on_press(Message::SaveSettingsChanges),
+                button(tr_locale(locale, "settings.unsaved.discard", "Don't Save"))
+                    .id("settings.unsaved.discard")
+                    .on_press(Message::DiscardSettingsChanges),
+                button(tr_locale(locale, "settings.unsaved.cancel", "Cancel"))
+                    .id("settings.unsaved.cancel")
+                    .on_press(Message::CancelSettingsChangesDialog),
             ))
-            .spacing(12),
-        )
-        .into_view()
+            .id("settings.unsaved.actions")
+            .spacing(8)
+            .align(Alignment::Center),
+        ))
+        .spacing(12),
+    )
+    .into_view()
 }
 
 pub fn mini_window_view(state: &FloatingWindowState) -> View<Message> {
@@ -470,6 +496,7 @@ fn capture_nudge_button(
         .icon(win_fluent::IconToken::with_glyph(icon_name, glyph))
         .icon_only()
         .tooltip(tooltip)
+        .a11y(A11yHint::named(tooltip))
         .enabled(enabled)
         .on_press(Message::CaptureNudgeSelection { delta_x, delta_y })
         .into_view()
@@ -1564,7 +1591,7 @@ fn settings_category_bar(state: &SettingsState) -> View<Message> {
     let buttons: Vec<View<Message>> = SettingsSection::ALL
         .iter()
         .copied()
-        .map(|section| settings_category_button(section, state))
+        .map(|section| settings_category_button(section, state, &state.ui_language))
         .collect();
 
     wrap(buttons)
@@ -1574,153 +1601,234 @@ fn settings_category_bar(state: &SettingsState) -> View<Message> {
         .into_view()
 }
 
-fn settings_category_button(section: SettingsSection, state: &SettingsState) -> View<Message> {
-    button(section.label())
+fn settings_category_button(
+    section: SettingsSection,
+    state: &SettingsState,
+    locale: &str,
+) -> View<Message> {
+    let label = settings_section_label(section, locale);
+    button(label.clone())
         .id(format!("SettingsTab_{}", section.label()))
         .icon(section.icon())
         .tile()
-        .width(Length::Fixed(128))
-        .height(Length::Fixed(112))
-        .tooltip(section.label())
+        .width(Length::Fixed(86))
+        .height(Length::Fixed(76))
+        .tooltip(label)
         .hovered(state.hovered_section == Some(section))
         .pressed(state.pressed_section == Some(section))
         .selected(section == state.selected_section)
         .on_press(Message::SettingsSectionChanged(section.id().to_string()))
 }
 
-fn settings_section_content(state: &SettingsState) -> View<Message> {
-    match state.selected_section {
-        SettingsSection::General => settings_general_content(state),
-        SettingsSection::Services => settings_services_content(state),
-        SettingsSection::Views => settings_views_content(state),
-        SettingsSection::Hotkeys => settings_hotkeys_content(state),
-        SettingsSection::Advanced => settings_advanced_content(state),
-        SettingsSection::Language => settings_language_content(state),
-        SettingsSection::About => settings_about_content(),
+fn settings_section_label(section: SettingsSection, locale: &str) -> String {
+    match section {
+        SettingsSection::General => tr_locale(locale, "settings.tab.general", "General"),
+        SettingsSection::Services => tr_locale(locale, "settings.tab.services", "Services"),
+        SettingsSection::Views => tr_locale(locale, "settings.tab.views", "Views"),
+        SettingsSection::Hotkeys => tr_locale(locale, "settings.tab.hotkeys", "Hotkeys"),
+        SettingsSection::Advanced => tr_locale(locale, "settings.tab.advanced", "Advanced"),
+        SettingsSection::Language => tr_locale(locale, "settings.tab.language", "Language"),
+        SettingsSection::About => tr_locale(locale, "settings.tab.about", "About"),
     }
 }
 
-fn settings_general_content(state: &SettingsState) -> View<Message> {
-    let mut behavior_children: Vec<View<Message>> = vec![
-        styled_text_id(
-            "SettingsGeneralBehaviorHeader",
-            "Behavior",
-            TextStyle::Subtitle,
+fn settings_section_content(state: &SettingsState) -> View<Message> {
+    match state.selected_section {
+        SettingsSection::General => settings_general_content(state, &state.ui_language),
+        SettingsSection::Services => settings_services_content(state),
+        SettingsSection::Views => settings_views_content(state, &state.ui_language),
+        SettingsSection::Hotkeys => settings_hotkeys_content(state, &state.ui_language),
+        SettingsSection::Advanced => settings_advanced_content(state),
+        SettingsSection::Language => settings_language_content(state, &state.ui_language),
+        SettingsSection::About => settings_about_content(&state.ui_language),
+    }
+}
+
+fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message> {
+    let mut behavior_controls: Vec<View<Message>> = vec![
+        column((
+            styled_text_id(
+                "AppThemeLabelText",
+                tr_locale(locale, "settings.general.app_theme", "App Theme"),
+                TextStyle::Body,
+            ),
+            combo_box(theme_combo_items(locale))
+                .id("AppThemeCombo")
+                .width(Length::Fixed(250))
+                .label(tr_locale(locale, "settings.general.app_theme", "App Theme"))
+                .selected(theme_id(state.theme))
+                .on_change(Message::ThemeChanged),
+            styled_text_id(
+                "AppThemeDescriptionText",
+                tr_locale(
+                    locale,
+                    "settings.general.app_theme.description",
+                    "Choose how Easydict appears. Select System to follow Windows theme.",
+                ),
+                TextStyle::Caption,
+            ),
+        ))
+        .id("settings.general.theme")
+        .spacing(8)
+        .align(Alignment::Start)
+        .width(Length::Fill)
+        .into_view(),
+        settings_behavior_toggle(
+            "settings.general.minimize_to_tray",
+            tr_locale(
+                locale,
+                "settings.general.minimize_to_tray",
+                "Minimize to system tray",
+            ),
+            "MinimizeToTrayToggle",
+            state.minimize_to_tray,
+            Message::ToggleMinimizeToTray,
         ),
-        settings_row("App Theme")
-            .id("settings.general.theme")
-            .description("Choose how Easydict appears. Select System to follow Windows theme.")
-            .description_id("AppThemeDescriptionText")
-            .trailing((combo_box([
-                ComboBoxItem::new("system", "System"),
-                ComboBoxItem::new("light", "Light"),
-                ComboBoxItem::new("dark", "Dark"),
-                ComboBoxItem::new("minimal", "Minimal"),
-            ])
-            .id("AppThemeCombo")
-            .selected(theme_id(state.theme))
-            .on_change(Message::ThemeChanged),))
-            .into_view(),
-        settings_row("Minimize to system tray")
-            .id("settings.general.minimize_to_tray")
-            .trailing((toggle_switch("On", state.minimize_to_tray)
-                .id("MinimizeToTrayToggle")
-                .on_toggle(Message::ToggleMinimizeToTray),))
-            .into_view(),
-        settings_row("Start minimized to tray")
-            .id("settings.general.start_minimized")
-            .trailing((toggle_switch("On", state.start_minimized)
-                .id("MinimizeToTrayOnStartupToggle")
-                .on_toggle(Message::ToggleStartMinimized),))
-            .into_view(),
-        settings_row("Monitor clipboard for text")
-            .id("settings.general.monitor_clipboard")
-            .trailing((toggle_switch("On", state.monitor_clipboard)
-                .id("ClipboardMonitorToggle")
-                .on_toggle(Message::ToggleMonitorClipboard),))
-            .into_view(),
-        settings_row("Always on top")
-            .id("settings.general.always_on_top")
-            .trailing((toggle_switch("On", state.fixed_always_on_top)
-                .id("AlwaysOnTopToggle")
-                .on_toggle(Message::ToggleFixedAlwaysOnTop),))
-            .into_view(),
-        settings_row("Launch at Windows startup")
-            .id("settings.general.launch_at_startup")
-            .trailing((toggle_switch("On", state.launch_at_startup)
-                .id("LaunchAtStartupToggle")
-                .on_toggle(Message::ToggleLaunchAtStartup),))
-            .into_view(),
-        settings_row("Mouse selection translate")
-            .id("settings.general.mouse_selection")
-            .description("Show the selection button after selecting text in another app.")
-            .trailing((toggle_switch("On", state.mouse_selection_translate)
-                .id("MouseSelectionTranslateToggle")
-                .on_toggle(Message::ToggleMouseSelectionTranslate),))
-            .into_view(),
+        settings_behavior_toggle(
+            "settings.general.start_minimized",
+            tr_locale(
+                locale,
+                "settings.general.start_minimized",
+                "Start minimized to tray",
+            ),
+            "MinimizeToTrayOnStartupToggle",
+            state.start_minimized,
+            Message::ToggleStartMinimized,
+        ),
+        settings_behavior_toggle(
+            "settings.general.monitor_clipboard",
+            tr_locale(
+                locale,
+                "settings.general.monitor_clipboard",
+                "Monitor clipboard for text",
+            ),
+            "ClipboardMonitorToggle",
+            state.monitor_clipboard,
+            Message::ToggleMonitorClipboard,
+        ),
+        settings_behavior_toggle(
+            "settings.general.mouse_selection",
+            tr_locale(
+                locale,
+                "settings.general.mouse_selection",
+                "Mouse selection translate",
+            ),
+            "MouseSelectionTranslateToggle",
+            state.mouse_selection_translate,
+            Message::ToggleMouseSelectionTranslate,
+        ),
     ];
 
     if state.mouse_selection_translate {
-        behavior_children.push(mouse_selection_excluded_apps_panel(state));
+        behavior_controls.push(mouse_selection_excluded_apps_panel(state, locale));
     }
 
-    behavior_children.push(local_dictionary_suggestions_row(state));
+    behavior_controls.push(settings_behavior_toggle(
+        "settings.general.always_on_top",
+        tr_locale(locale, "settings.general.always_on_top", "Always on top"),
+        "AlwaysOnTopToggle",
+        state.fixed_always_on_top,
+        Message::ToggleFixedAlwaysOnTop,
+    ));
+    behavior_controls.push(settings_behavior_toggle(
+        "settings.general.launch_at_startup",
+        tr_locale(
+            locale,
+            "settings.general.launch_at_startup",
+            "Launch at Windows startup",
+        ),
+        "LaunchAtStartupToggle",
+        state.launch_at_startup,
+        Message::ToggleLaunchAtStartup,
+    ));
+    behavior_controls.push(settings_behavior_toggle(
+        "settings.general.hide_empty_service_results",
+        tr_locale(
+            locale,
+            "settings.general.hide_empty_service_results",
+            "Hide dictionaries with no result",
+        ),
+        "HideEmptyServiceResultsToggle",
+        state.hide_empty_service_results,
+        Message::ToggleHideEmptyServiceResults,
+    ));
+    behavior_controls.push(local_dictionary_suggestions_row(state, locale));
 
-    behavior_children.push(
-        settings_row("Hide dictionaries with no result")
-            .id("settings.general.hide_empty_service_results")
-            .description("Collapse dictionary rows when a service reports no result.")
-            .trailing((toggle_switch("On", state.hide_empty_service_results)
-                .id("HideEmptyServiceResultsToggle")
-                .on_toggle(Message::ToggleHideEmptyServiceResults),))
-            .into_view(),
-    );
+    let behavior_section = column((
+        styled_text_id(
+            "SettingsGeneralBehaviorHeader",
+            tr_locale(locale, "settings.general.behavior", "Behavior"),
+            TextStyle::Subtitle,
+        ),
+        column(behavior_controls)
+            .id("BehaviorSectionCard")
+            .padding(16)
+            .spacing(12)
+            .width(Length::Fill)
+            .tw("surface-card rounded-lg border w-full"),
+    ))
+    .id("BehaviorSection")
+    .spacing(12)
+    .width(Length::Fill);
 
     let tts_children: Vec<View<Message>> = vec![
         styled_text_id(
             "TtsSettingsHeaderText",
-            "TTS Output Settings",
+            tr_locale(locale, "settings.general.tts.header", "TTS Output Settings"),
             TextStyle::Subtitle,
         ),
-        settings_row("TTS Reading Speed (0.5x - 3.0x)")
-            .id("settings.general.tts_speed")
-            .title_id("TtsSpeedLabelText")
-            .content(
-                row((
-                    slider(tts_speed_value(&state.tts_speed))
-                        .id("TtsSpeedSlider")
-                        .range(0.5, 3.0)
-                        .step(0.5)
-                        .width(Length::Fixed(250))
-                        .state(state.tts_speed_slider_state.clone())
-                        .a11y(A11yHint::named("TTS speed"))
-                        .on_change(|value| Message::TtsSpeedChanged(format_tts_speed(value))),
-                    styled_text_id(
-                        "TtsSpeedValueText",
-                        format!("{}x", format_tts_speed(tts_speed_value(&state.tts_speed))),
-                        TextStyle::Body,
-                    ),
-                ))
-                .id("settings.general.tts_speed.control")
-                .spacing(12)
-                .align(Alignment::Center),
-            )
-            .into_view(),
-        settings_row("Auto play translation")
-            .id("settings.general.auto_play_translation")
-            .description("Play translated text after a translation finishes.")
-            .trailing((toggle_switch("On", state.auto_play_translation)
-                .id("AutoPlayTranslationToggle")
-                .state(state.auto_play_translation_toggle_state.clone())
-                .on_toggle(Message::ToggleAutoPlayTranslation),))
-            .into_view(),
+        settings_row(tr_locale(
+            locale,
+            "settings.general.tts.speed",
+            "TTS Reading Speed (0.5x - 3.0x)",
+        ))
+        .id("settings.general.tts_speed")
+        .title_id("TtsSpeedLabelText")
+        .content(
+            row((
+                slider(tts_speed_value(&state.tts_speed))
+                    .id("TtsSpeedSlider")
+                    .range(0.5, 3.0)
+                    .step(0.5)
+                    .width(Length::Fixed(250))
+                    .state(state.tts_speed_slider_state.clone())
+                    .a11y(A11yHint::named(tr_locale(
+                        locale,
+                        "settings.general.tts.speed.a11y",
+                        "TTS speed",
+                    )))
+                    .on_change(|value| Message::TtsSpeedChanged(format_tts_speed(value))),
+                styled_text_id(
+                    "TtsSpeedValueText",
+                    format!("{}x", format_tts_speed(tts_speed_value(&state.tts_speed))),
+                    TextStyle::Body,
+                ),
+            ))
+            .id("settings.general.tts_speed.control")
+            .spacing(12)
+            .align(Alignment::Center),
+        )
+        .into_view(),
+        settings_row(tr_locale(
+            locale,
+            "settings.general.auto_play_translation",
+            "Auto play translation",
+        ))
+        .id("settings.general.auto_play_translation")
+        .description(tr_locale(
+            locale,
+            "settings.general.auto_play_translation.description",
+            "Play translated text after a translation finishes.",
+        ))
+        .trailing((toggle_switch("On", state.auto_play_translation)
+            .id("AutoPlayTranslationToggle")
+            .state(state.auto_play_translation_toggle_state.clone())
+            .on_toggle(Message::ToggleAutoPlayTranslation),))
+        .into_view(),
     ];
 
     let general_tab_content = column((
-        column(behavior_children)
-            .id("BehaviorSection")
-            .spacing(12)
-            .width(Length::Fill),
+        behavior_section,
         column(tts_children)
             .id("TtsSettingsSection")
             .spacing(12)
@@ -1737,26 +1845,97 @@ fn settings_general_content(state: &SettingsState) -> View<Message> {
         .into_view()
 }
 
-fn local_dictionary_suggestions_row(state: &SettingsState) -> View<Message> {
-    settings_row("Enable custom dictionary input suggestions")
-        .id("settings.general.local_dictionary_suggestions")
-        .title_id("EnableLocalDictionarySuggestionsLabelText")
-        .description(if state.imported_mdx_dictionaries.is_empty() {
-            "Import an MDX dictionary to enable local input suggestions."
-        } else {
-            "Suggest local dictionary entries while typing."
-        })
-        .description_id("EnableLocalDictionarySuggestionsHintText")
-        .content(styled_text_id(
-            "ExperimentalLabelText",
-            "Experimental",
-            TextStyle::Caption,
+fn settings_behavior_toggle(
+    id: &'static str,
+    title: impl Into<String>,
+    toggle_id: &'static str,
+    checked: bool,
+    on_toggle: impl Fn(bool) -> Message + Send + Sync + 'static,
+) -> View<Message> {
+    column((
+        styled_text(title.into(), TextStyle::Body),
+        toggle_switch("On", checked)
+            .id(toggle_id)
+            .on_toggle(on_toggle),
+    ))
+    .id(id)
+    .spacing(6)
+    .align(Alignment::Start)
+    .width(Length::Fill)
+    .into_view()
+}
+
+fn theme_combo_items(locale: &str) -> [ComboBoxItem; 4] {
+    [
+        ComboBoxItem::new(
+            "system",
+            tr_locale(locale, "settings.general.theme.system", "System"),
+        ),
+        ComboBoxItem::new(
+            "light",
+            tr_locale(locale, "settings.general.theme.light", "Light"),
+        ),
+        ComboBoxItem::new(
+            "dark",
+            tr_locale(locale, "settings.general.theme.dark", "Dark"),
+        ),
+        ComboBoxItem::new(
+            "minimal",
+            tr_locale(locale, "settings.general.theme.minimal", "Minimal"),
+        ),
+    ]
+}
+
+fn local_dictionary_suggestions_row(state: &SettingsState, locale: &str) -> View<Message> {
+    let description = if state.imported_mdx_dictionaries.is_empty() {
+        tr_locale(
+            locale,
+            "settings.general.local_dictionary_suggestions.empty",
+            "Import an MDX dictionary to enable local input suggestions.",
+        )
+    } else {
+        tr_locale(
+            locale,
+            "settings.general.local_dictionary_suggestions.ready",
+            "Suggest local dictionary entries while typing.",
+        )
+    };
+
+    column((
+        row((
+            styled_text_id(
+                "EnableLocalDictionarySuggestionsLabelText",
+                tr_locale(
+                    locale,
+                    "settings.general.local_dictionary_suggestions",
+                    "Enable custom dictionary input suggestions",
+                ),
+                TextStyle::Body,
+            ),
+            styled_text_id(
+                "ExperimentalLabelText",
+                tr_locale(locale, "settings.general.experimental", "Experimental"),
+                TextStyle::Caption,
+            ),
         ))
-        .trailing((toggle_switch("On", state.local_dictionary_suggestions)
+        .id("EnableLocalDictionarySuggestionsHeader")
+        .spacing(6)
+        .align(Alignment::Center),
+        toggle_switch("On", state.local_dictionary_suggestions)
             .id("EnableLocalDictionarySuggestionsToggle")
             .enabled(!state.imported_mdx_dictionaries.is_empty())
-            .on_toggle(Message::ToggleLocalDictionarySuggestions),))
-        .into_view()
+            .on_toggle(Message::ToggleLocalDictionarySuggestions),
+        styled_text_id(
+            "EnableLocalDictionarySuggestionsHintText",
+            description,
+            TextStyle::Caption,
+        ),
+    ))
+    .id("settings.general.local_dictionary_suggestions")
+    .spacing(6)
+    .align(Alignment::Start)
+    .width(Length::Fill)
+    .into_view()
 }
 
 fn tts_speed_value(value: &str) -> f32 {
@@ -1775,8 +1954,13 @@ fn snap_tts_speed(value: f32) -> f32 {
     ((value.clamp(0.5, 3.0) * 2.0).round() / 2.0).clamp(0.5, 3.0)
 }
 
-fn mouse_selection_excluded_apps_panel(state: &SettingsState) -> View<Message> {
+fn mouse_selection_excluded_apps_panel(state: &SettingsState, locale: &str) -> View<Message> {
     column((
+        styled_text_id(
+            "MouseSelectionExcludedAppsHeaderText",
+            tr_locale(locale, "settings.general.excluded_apps", "Excluded apps"),
+            TextStyle::Body,
+        ),
         text_editor(state.mouse_selection_excluded_apps.clone())
             .id("MouseSelectionExcludedAppsBox")
             .placeholder("code, slack, discord")
@@ -1784,14 +1968,21 @@ fn mouse_selection_excluded_apps_panel(state: &SettingsState) -> View<Message> {
             .on_input(Message::MouseSelectionExcludedAppsChanged),
         styled_text_id(
             "MouseSelectionExcludedAppsDescriptionText",
-            "Process names to exclude, separated by commas.",
+            tr_locale(
+                locale,
+                "settings.general.excluded_apps.description",
+                "Process names to exclude from mouse selection translate, separated by commas. Example: \"code\" for VS Code.",
+            ),
             TextStyle::Caption,
         ),
     ))
     .id("MouseSelectionExcludedAppsPanel")
-    .padding(8)
     .spacing(4)
-    .width(Length::Fill)
+    .width(Length::Fixed(350))
+    .margin(Edges {
+        left: 44,
+        ..Edges::ZERO
+    })
     .into_view()
 }
 
@@ -2858,60 +3049,76 @@ fn mdx_dictionary_summary(state: &SettingsState) -> String {
     }
 }
 
-fn settings_views_content(state: &SettingsState) -> View<Message> {
+fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> {
     column((
-        styled_text_id("WindowResultsHeaderText", "Window Results", TextStyle::Subtitle),
+        styled_text_id(
+            "WindowResultsHeaderText",
+            tr_locale(locale, "settings.views.title", "Window Results"),
+            TextStyle::Subtitle,
+        ),
         styled_text_id(
             "WindowResultsDescriptionText",
-            "Choose which results appear in each window, and whether each result is queried automatically.",
+            tr_locale(
+                locale,
+                "settings.views.description",
+                "Choose which results appear in each window and whether each result queries automatically.",
+            ),
             TextStyle::Caption,
         ),
-        settings_panel(
+        settings_compact_panel(
             "WindowResultsSection",
             vec![
                 settings_view_window_results_section(
-                    "Main Window",
+                    tr_locale(locale, "settings.views.main_window", "Main Window"),
                     "settings.views.main",
-                    "Choose services and ordering for the main result list.",
                     "MainWindowReorderModeButton",
                     "main",
                     QuickTranslateSurface::Main,
                     state.main_window_reorder_mode,
                     &state.main_window_services,
+                    locale,
                 ),
                 settings_view_window_results_section(
-                    "Mini Window",
+                    tr_locale(locale, "settings.views.mini_window", "Mini Window"),
                     "settings.views.mini",
-                    "Choose services and ordering for the compact floating result list.",
                     "MiniWindowReorderModeButton",
                     "mini",
                     QuickTranslateSurface::Mini,
                     state.mini_window_reorder_mode,
                     &state.mini_window_services,
+                    locale,
                 ),
                 settings_view_behavior_row(
                     "settings.views.mini.behavior",
-                    "Mini Window behavior",
-                    "Close the Mini window automatically after focus moves away.",
-                    "Auto close",
+                    tr_locale(locale, "settings.views.mini_behavior", "Mini Window behavior"),
+                    tr_locale(
+                        locale,
+                        "settings.views.mini_behavior.description",
+                        "Close the Mini window automatically after focus moves away.",
+                    ),
+                    tr_locale(locale, "settings.views.auto_close", "Auto close"),
                     state.mini_auto_close,
                     Message::ToggleMiniAutoClose,
                 ),
                 settings_view_window_results_section(
-                    "Fixed Window",
+                    tr_locale(locale, "settings.views.fixed_window", "Fixed Window"),
                     "settings.views.fixed",
-                    "Choose services and ordering for the persistent result list.",
                     "FixedWindowReorderModeButton",
                     "fixed",
                     QuickTranslateSurface::Fixed,
                     state.fixed_window_reorder_mode,
                     &state.fixed_window_services,
+                    locale,
                 ),
                 settings_view_behavior_row(
                     "settings.views.fixed.behavior",
-                    "Fixed Window behavior",
-                    "Keep the Fixed window above other windows.",
-                    "Always on top",
+                    tr_locale(locale, "settings.views.fixed_behavior", "Fixed Window behavior"),
+                    tr_locale(
+                        locale,
+                        "settings.views.fixed_behavior.description",
+                        "Keep the Fixed window above other windows.",
+                    ),
+                    tr_locale(locale, "settings.general.always_on_top", "Always on top"),
                     state.fixed_always_on_top,
                     Message::ToggleFixedAlwaysOnTop,
                 ),
@@ -2925,45 +3132,45 @@ fn settings_views_content(state: &SettingsState) -> View<Message> {
 }
 
 fn settings_view_window_results_section(
-    title: &'static str,
+    title: String,
     section_id: &'static str,
-    description: &'static str,
     reorder_button_id: &'static str,
     control_prefix: &'static str,
     surface: QuickTranslateSurface,
     reorder_mode: bool,
     services: &[WindowServiceSetting],
+    locale: &str,
 ) -> View<Message> {
     column((
         row((
-            column((
-                styled_text(title, TextStyle::Subtitle),
-                styled_text(description, TextStyle::Caption),
-            ))
-            .id(format!("{section_id}.header_text"))
-            .spacing(4)
-            .width(Length::Fill),
-            button(if reorder_mode { "Done" } else { "Reorder" })
-                .id(reorder_button_id)
-                .on_press(Message::ToggleWindowReorderMode(surface)),
+            column((styled_text(title, TextStyle::BodyStrong),))
+                .id(format!("{section_id}.header_text"))
+                .width(Length::Fill),
+            button(if reorder_mode {
+                tr_locale(locale, "settings.views.done", "Done")
+            } else {
+                tr_locale(locale, "settings.views.reorder", "Reorder")
+            })
+            .id(reorder_button_id)
+            .on_press(Message::ToggleWindowReorderMode(surface)),
         ))
         .id(format!("{section_id}.header"))
         .spacing(12)
         .align(Alignment::Center)
         .width(Length::Fill),
-        window_service_rows(control_prefix, surface, services, reorder_mode),
+        window_service_rows(control_prefix, surface, services, reorder_mode, locale),
     ))
     .id(section_id)
-    .spacing(10)
+    .spacing(6)
     .width(Length::Fill)
     .into_view()
 }
 
 fn settings_view_behavior_row(
     row_id: &'static str,
-    title: &'static str,
-    description: &'static str,
-    toggle_label: &'static str,
+    title: String,
+    description: String,
+    toggle_label: String,
     checked: bool,
     message: impl Fn(bool) -> Message + Send + Sync + 'static,
 ) -> View<Message> {
@@ -2989,6 +3196,7 @@ fn window_service_rows(
     surface: QuickTranslateSurface,
     services: &[WindowServiceSetting],
     reorder_mode: bool,
+    locale: &str,
 ) -> View<Message> {
     let rows = services
         .iter()
@@ -3001,6 +3209,7 @@ fn window_service_rows(
                 index,
                 services.len(),
                 reorder_mode,
+                locale,
             )
         })
         .collect::<Vec<_>>();
@@ -3008,6 +3217,7 @@ fn window_service_rows(
     column(rows)
         .id(format!("{control_prefix}.service_list"))
         .spacing(6)
+        .width(Length::Fill)
         .into_view()
 }
 
@@ -3018,26 +3228,33 @@ fn window_service_row(
     index: usize,
     service_count: usize,
     reorder_mode: bool,
+    locale: &str,
 ) -> View<Message> {
     let control_id = service_control_id(&service.service_id);
     let mut trailing: Vec<View<Message>> = Vec::new();
     let service_id = service.service_id.clone();
-    trailing.push(
-        toggle_switch("Enabled", service.enabled)
-            .id(format!("{control_prefix}.{control_id}.enabled"))
-            .on_toggle(move |enabled| {
-                Message::ToggleWindowService(surface, service_id.clone(), enabled)
-            }),
-    );
+    let enabled_checkbox = checkbox(service.display_name.clone(), service.enabled)
+        .id(format!("{control_prefix}.{control_id}.enabled"))
+        .a11y(A11yHint::named(format!(
+            "{} {}",
+            service.display_name,
+            tr_locale(locale, "settings.views.enabled", "enabled")
+        )))
+        .on_toggle(move |enabled| {
+            Message::ToggleWindowService(surface, service_id.clone(), enabled)
+        });
 
     if service.enabled {
         let service_id = service.service_id.clone();
         trailing.push(
-            toggle_switch("EnabledQuery", service.enabled_query)
-                .id(format!("{control_prefix}.{control_id}.enabled_query"))
-                .on_toggle(move |enabled_query| {
-                    Message::ToggleWindowServiceQuery(surface, service_id.clone(), enabled_query)
-                }),
+            toggle_switch(
+                tr_locale(locale, "settings.views.auto", "Auto"),
+                service.enabled_query,
+            )
+            .id(format!("{control_prefix}.{control_id}.enabled_query"))
+            .on_toggle(move |enabled_query| {
+                Message::ToggleWindowServiceQuery(surface, service_id.clone(), enabled_query)
+            }),
         );
     }
 
@@ -3071,20 +3288,9 @@ fn window_service_row(
     }
 
     row((
-        column((
-            styled_text(service.display_name.clone(), TextStyle::BodyStrong),
-            styled_text(
-                if service.configured {
-                    "Configured service"
-                } else {
-                    "Not configured"
-                },
-                TextStyle::Caption,
-            ),
-        ))
-        .id(format!("{control_prefix}.service.{control_id}.text"))
-        .spacing(2)
-        .width(Length::Fill),
+        column((enabled_checkbox,))
+            .id(format!("{control_prefix}.service.{control_id}.text"))
+            .width(Length::Fill),
         row(trailing)
             .id(format!("{control_prefix}.service.{control_id}.controls"))
             .spacing(8)
@@ -3094,6 +3300,7 @@ fn window_service_row(
     .spacing(12)
     .align(Alignment::Center)
     .width(Length::Fill)
+    .height(Length::Fixed(28))
     .into_view()
 }
 
@@ -3110,68 +3317,120 @@ fn service_control_id(service_id: &str) -> String {
         .collect()
 }
 
-fn settings_hotkeys_content(state: &SettingsState) -> View<Message> {
+fn settings_hotkeys_content(state: &SettingsState, locale: &str) -> View<Message> {
     column((
-        text("Hotkeys"),
-        hotkey_row(
-            "Show Window",
-            "settings.hotkeys.show_window",
-            "ShowHotkeyBox",
-            "ShowHotkeyEnabledToggle",
-            "Ctrl+Alt+T",
-            HOTKEY_SHOW_MAIN,
-            &state.show_main_hotkey,
-            false,
-        ),
-        hotkey_row(
-            "Translate Clipboard",
-            "settings.hotkeys.translate_clipboard",
-            "TranslateClipboardHotkeyBox",
-            "TranslateClipboardHotkeyEnabledToggle",
-            "Ctrl+Alt+D",
-            HOTKEY_TRANSLATE_CLIPBOARD,
-            &state.translate_clipboard_hotkey,
-            false,
-        ),
-        hotkey_row(
-            "Show Mini Window",
-            "settings.hotkeys.show_mini",
-            "ShowMiniHotkeyBox",
-            "ShowMiniHotkeyEnabledToggle",
-            "Ctrl+Alt+M",
-            HOTKEY_SHOW_MINI,
-            &state.show_mini_hotkey,
-            true,
-        ),
-        hotkey_row(
-            "Show Fixed Window",
-            "settings.hotkeys.show_fixed",
-            "ShowFixedHotkeyBox",
-            "ShowFixedHotkeyEnabledToggle",
-            "Ctrl+Alt+F",
-            HOTKEY_SHOW_FIXED,
-            &state.show_fixed_hotkey,
-            true,
-        ),
-        hotkey_row(
-            "OCR Screenshot Translate",
-            "settings.hotkeys.ocr_translate",
-            "OcrTranslateHotkeyBox",
-            "OcrTranslateHotkeyEnabledToggle",
-            "Ctrl+Alt+S",
-            HOTKEY_OCR_TRANSLATE,
-            &state.ocr_translate_hotkey,
-            false,
-        ),
-        hotkey_row(
-            "Silent OCR",
-            "settings.hotkeys.silent_ocr",
-            "SilentOcrHotkeyBox",
-            "SilentOcrHotkeyEnabledToggle",
-            "Ctrl+Alt+Shift+S",
-            HOTKEY_SILENT_OCR,
-            &state.silent_ocr_hotkey,
-            false,
+        row((
+            styled_text_id(
+                "HotkeysHeaderText",
+                tr_locale(locale, "settings.hotkeys.title", "Hotkeys"),
+                TextStyle::Subtitle,
+            ),
+            button("")
+                .id("HotkeysHelpIcon")
+                .icon(icon::help())
+                .icon_only()
+                .width(Length::Fixed(20))
+                .height(Length::Fixed(20))
+                .tooltip(tr_locale(
+                    locale,
+                    "settings.hotkeys.help",
+                    "Hotkey changes apply after restart",
+                ))
+                .a11y(A11yHint::named(tr_locale(
+                    locale,
+                    "settings.hotkeys.help",
+                    "Hotkey changes apply after restart",
+                ))),
+        ))
+        .id("settings.hotkeys.header")
+        .spacing(8)
+        .align(Alignment::Center),
+        card("").id("settings.hotkeys.card").content(
+            column((
+                hotkey_row(
+                    locale,
+                    "settings.hotkeys.show_window.label",
+                    "Show Window",
+                    "settings.hotkeys.show_window",
+                    "ShowHotkeyBox",
+                    "ShowHotkeyEnabledToggle",
+                    "Ctrl+Alt+T",
+                    HOTKEY_SHOW_MAIN,
+                    &state.show_main_hotkey,
+                ),
+                hotkey_row(
+                    locale,
+                    "settings.hotkeys.translate_selection.label",
+                    "Translate Selection",
+                    "settings.hotkeys.translate_clipboard",
+                    "TranslateHotkeyBox",
+                    "TranslateHotkeyEnabledToggle",
+                    "Ctrl+Alt+D",
+                    HOTKEY_TRANSLATE_CLIPBOARD,
+                    &state.translate_clipboard_hotkey,
+                ),
+                hotkey_row(
+                    locale,
+                    "settings.hotkeys.show_mini.label",
+                    "Show Mini Window",
+                    "settings.hotkeys.show_mini",
+                    "ShowMiniHotkeyBox",
+                    "ShowMiniHotkeyEnabledToggle",
+                    "Ctrl+Alt+M",
+                    HOTKEY_SHOW_MINI,
+                    &state.show_mini_hotkey,
+                ),
+                hotkey_row(
+                    locale,
+                    "settings.hotkeys.show_fixed.label",
+                    "Show Fixed Window",
+                    "settings.hotkeys.show_fixed",
+                    "ShowFixedHotkeyBox",
+                    "ShowFixedHotkeyEnabledToggle",
+                    "Ctrl+Alt+F",
+                    HOTKEY_SHOW_FIXED,
+                    &state.show_fixed_hotkey,
+                ),
+                hotkey_row(
+                    locale,
+                    "settings.hotkeys.ocr_translate.label",
+                    "OCR Screenshot Translate",
+                    "settings.hotkeys.ocr_translate",
+                    "OcrTranslateHotkeyBox",
+                    "OcrTranslateHotkeyEnabledToggle",
+                    "Ctrl+Alt+S",
+                    HOTKEY_OCR_TRANSLATE,
+                    &state.ocr_translate_hotkey,
+                ),
+                hotkey_row(
+                    locale,
+                    "settings.hotkeys.silent_ocr.label",
+                    "Silent OCR",
+                    "settings.hotkeys.silent_ocr",
+                    "SilentOcrHotkeyBox",
+                    "SilentOcrHotkeyEnabledToggle",
+                    "Ctrl+Alt+Shift+S",
+                    HOTKEY_SILENT_OCR,
+                    &state.silent_ocr_hotkey,
+                ),
+                styled_text_id(
+                    "HotkeysDescriptionText",
+                    tr_locale(
+                        locale,
+                        "settings.hotkeys.note",
+                        "Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).",
+                    ),
+                    TextStyle::Caption,
+                ),
+            ))
+            .id("settings.hotkeys.card.content")
+            .spacing(24)
+            .margin(Edges {
+                top: 4,
+                right: 4,
+                bottom: 4,
+                left: 4,
+            }),
         ),
     ))
     .id("settings.hotkeys")
@@ -3181,25 +3440,23 @@ fn settings_hotkeys_content(state: &SettingsState) -> View<Message> {
 }
 
 fn hotkey_row(
-    title: &'static str,
+    locale: &str,
+    title_key: &'static str,
+    fallback_title: &'static str,
     row_id: &'static str,
     box_id: &'static str,
     toggle_id: &'static str,
     placeholder: &'static str,
     hotkey_id: &'static str,
     setting: &HotkeySetting,
-    derived_shift_toggle: bool,
 ) -> View<Message> {
     let toggle_hotkey_id = hotkey_id.to_string();
     let editor_hotkey_id = hotkey_id.to_string();
+    let label = tr_locale(locale, title_key, fallback_title);
 
-    settings_row(title)
-        .id(row_id)
-        .description(hotkey_row_description(setting, derived_shift_toggle))
-        .trailing((
-            toggle_switch("Enabled", setting.enabled)
-                .id(toggle_id)
-                .on_toggle(move |value| Message::ToggleHotkey(toggle_hotkey_id.clone(), value)),
+    row((
+        column((
+            styled_text_id(format!("{box_id}.header"), label, TextStyle::Body),
             row((text_editor(setting.shortcut.clone())
                 .id(box_id)
                 .placeholder(placeholder)
@@ -3208,29 +3465,32 @@ fn hotkey_row(
                     Message::HotkeyShortcutChanged(editor_hotkey_id.clone(), value)
                 }),))
             .id(format!("{box_id}.field"))
-            .width(Length::Fixed(580)),
+            .width(Length::Fixed(200)),
         ))
-        .into_view()
-}
-
-fn hotkey_row_description(setting: &HotkeySetting, derived_shift_toggle: bool) -> String {
-    let shortcut = if setting.shortcut.trim().is_empty() {
-        "Not set"
-    } else {
-        setting.shortcut.trim()
-    };
-
-    if derived_shift_toggle {
-        format!("{shortcut} - toggle hotkey adds Shift after saving settings.")
-    } else {
-        format!("{shortcut} - applied after saving settings.")
-    }
+        .id(format!("{box_id}.group"))
+        .spacing(4)
+        .width(Length::Fixed(200)),
+        toggle_switch("", setting.enabled)
+            .id(toggle_id)
+            .on_toggle(move |value| Message::ToggleHotkey(toggle_hotkey_id.clone(), value)),
+    ))
+    .id(row_id)
+    .spacing(12)
+    .align(Alignment::End)
+    .into_view()
 }
 
 fn settings_panel(id: impl Into<String>, children: Vec<View<Message>>) -> View<Message> {
     column(children)
         .id(id)
         .tw("surface-card rounded-lg border p-6 gap-4 w-full")
+        .into_view()
+}
+
+fn settings_compact_panel(id: impl Into<String>, children: Vec<View<Message>>) -> View<Message> {
+    column(children)
+        .id(id)
+        .tw("surface-card rounded-lg border p-3 gap-3 w-full")
         .into_view()
 }
 
@@ -3569,7 +3829,7 @@ fn vision_layout_service_items() -> [ComboBoxItem; 3] {
     ]
 }
 
-fn settings_language_content(state: &SettingsState) -> View<Message> {
+fn settings_language_content(state: &SettingsState, locale: &str) -> View<Message> {
     let selected_count = state.selected_languages.len();
     let language_rows = TRANSLATION_LANGUAGE_IDS
         .into_iter()
@@ -3578,10 +3838,14 @@ fn settings_language_content(state: &SettingsState) -> View<Message> {
                 .selected_languages
                 .iter()
                 .any(|language| language == id);
-            row((toggle_switch(language_label(id), selected)
-                .id(format!("settings.language.selected.{id}.toggle"))
-                .enabled(!selected || selected_count > 2)
-                .on_toggle(move |value| Message::ToggleSelectedLanguage(id.to_string(), value)),))
+            row(
+                (toggle_switch(settings_language_label(locale, id), selected)
+                    .id(format!("settings.language.selected.{id}.toggle"))
+                    .enabled(!selected || selected_count > 2)
+                    .on_toggle(move |value| {
+                        Message::ToggleSelectedLanguage(id.to_string(), value)
+                    }),),
+            )
             .id(format!("settings.language.selected.{id}"))
             .width(Length::Fixed(220))
             .into_view()
@@ -3589,68 +3853,128 @@ fn settings_language_content(state: &SettingsState) -> View<Message> {
         .collect::<Vec<_>>();
 
     column((
-        text("Language"),
-        settings_row("First Language")
-            .id("settings.language.first")
-            .description(
-                "Preferred target language when detected source is not the first language.",
-            )
-            .trailing((combo_box(all_language_items(false))
-                .id("FirstLanguageCombo")
-                .selected(settings_language_selected(&state.first_language))
-                .on_change(Message::FirstLanguageChanged),)),
-        settings_row("Second Language")
-            .id("settings.language.second")
-            .description(
-                "Fallback target language when detected source matches the first language.",
-            )
-            .trailing((combo_box(all_language_items(false))
-                .id("SecondLanguageCombo")
-                .selected(settings_language_selected(&state.second_language))
-                .on_change(Message::SecondLanguageChanged),)),
-        settings_row("Auto-select target language")
-            .id("settings.language.auto_select_target")
-            .description(
-                "Use the first/second language rule until a target language is chosen manually.",
-            )
-            .trailing((toggle_switch(
-                "Auto-select target language",
-                state.auto_select_target_language,
-            )
-            .id("AutoSelectTargetToggle")
-            .on_toggle(Message::ToggleAutoSelectTargetLanguage),)),
-        settings_row("Display language")
-            .id("settings.language.display")
-            .description(
-                "Choose the language used by the app UI. Restart required for full effect.",
-            )
-            .trailing((combo_box(ui_language_items())
-                .id("UILanguageCombo")
-                .selected(state.ui_language.clone())
-                .on_change(Message::UiLanguageChanged),)),
-        expander("Translation languages")
-            .id("settings.language.translation_languages")
-            .expanded(state.translation_languages_expanded)
-            .on_toggle(Message::ToggleTranslationLanguagesExpanded)
-            .description(
-                "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers.",
-            )
-            .content(
+        styled_text_id(
+            "LanguagePreferencesHeaderText",
+            tr_locale(
+                locale,
+                "settings.language.preferences",
+                "Language Preferences",
+            ),
+            TextStyle::Subtitle,
+        ),
+        card("").id("settings.language.preferences.card").content(
+            column((
+                language_combo_field(
+                    "settings.language.first",
+                    "FirstLanguageLabelText",
+                    tr_locale(locale, "settings.language.first", "First Language"),
+                    combo_box(settings_language_items(locale, false))
+                        .id("FirstLanguageCombo")
+                        .selected(settings_language_selected(&state.first_language))
+                        .width(Length::Fixed(250))
+                        .on_change(Message::FirstLanguageChanged),
+                ),
+                language_combo_field(
+                    "settings.language.second",
+                    "SecondLanguageLabelText",
+                    tr_locale(
+                        locale,
+                        "settings.language.second",
+                        "Second Language",
+                    ),
+                    combo_box(settings_language_items(locale, false))
+                        .id("SecondLanguageCombo")
+                        .selected(settings_language_selected(&state.second_language))
+                        .width(Length::Fixed(250))
+                        .on_change(Message::SecondLanguageChanged),
+                ),
+                styled_text_id(
+                    "LanguagePreferenceRuleDescriptionText",
+                    tr_locale(
+                        locale,
+                        "settings.language.preference_rule.description",
+                        "When the detected language matches your first language, the target becomes your second language, and vice versa.",
+                    ),
+                    TextStyle::Caption,
+                ),
                 column((
                     styled_text_id(
-                        "AvailableLanguagesDescText",
-                        "Select languages available in source/target pickers. At least 2 required.",
-                        TextStyle::Caption,
+                        "AutoSelectTargetLabelText",
+                        tr_locale(
+                            locale,
+                            "settings.language.auto_select_target.compact",
+                            "Auto-select target language based on detected source language",
+                        ),
+                        TextStyle::Body,
                     ),
-                    wrap(language_rows)
-                        .id("settings.language.selected_languages")
-                        .max_columns(4)
-                        .spacing(8)
-                        .run_spacing(6),
+                    toggle_switch(
+                        tr_locale(locale, "settings.toggle.on", "On"),
+                        state.auto_select_target_language,
+                    )
+                    .id("AutoSelectTargetToggle")
+                    .on_toggle(Message::ToggleAutoSelectTargetLanguage),
                 ))
-                .id("settings.language.selected_languages.content")
-                .spacing(8),
-            ),
+                .id("settings.language.auto_select_target")
+                .spacing(8)
+                .align(Alignment::Start)
+                .width(Length::Fill),
+                language_combo_field(
+                    "settings.language.display",
+                    "UiLanguageLabelText",
+                    tr_locale(locale, "settings.language.display", "Display language"),
+                    combo_box(ui_language_items(locale))
+                        .id("UILanguageCombo")
+                        .selected(state.ui_language.clone())
+                        .width(Length::Fixed(250))
+                        .on_change(Message::UiLanguageChanged),
+                ),
+                styled_text_id(
+                    "DisplayLanguageDescriptionText",
+                    tr_locale(
+                        locale,
+                        "settings.language.display.description",
+                        "Choose the language used by the app UI. Restart required for full effect.",
+                    ),
+                    TextStyle::Caption,
+                ),
+            ))
+            .id("settings.language.preferences.card.content")
+            .spacing(20)
+            .margin(Edges {
+                top: 4,
+                right: 4,
+                bottom: 4,
+                left: 4,
+            }),
+        ),
+        expander(tr_locale(
+            locale,
+            "settings.language.translation_languages",
+            "Available Languages",
+        ))
+        .id("settings.language.translation_languages")
+        .expanded(state.translation_languages_expanded)
+        .on_toggle(Message::ToggleTranslationLanguagesExpanded)
+        .content(
+            column((
+                styled_text_id(
+                    "AvailableLanguagesDescText",
+                    tr_locale(
+                        locale,
+                        "settings.language.available.description",
+                        "Select languages available in source/target pickers. At least 2 required.",
+                    ),
+                    TextStyle::Caption,
+                ),
+                wrap(language_rows)
+                    .id("settings.language.selected_languages")
+                    .max_columns(4)
+                    .spacing(8)
+                    .run_spacing(6),
+            ))
+            .id("settings.language.selected_languages.content")
+            .spacing(8),
+        ),
     ))
     .id("settings.language")
     .spacing(12)
@@ -3658,32 +3982,74 @@ fn settings_language_content(state: &SettingsState) -> View<Message> {
     .into_view()
 }
 
-fn settings_about_content() -> View<Message> {
+fn language_combo_field(
+    id: &'static str,
+    label_id: &'static str,
+    label: impl Into<String>,
+    combo: impl IntoView<Message>,
+) -> View<Message> {
     column((
-        styled_text_id("AboutHeaderText", "About", TextStyle::Subtitle),
-        settings_row("Easydict")
-            .id("settings.about.app")
-            .description("Free and open-source Windows translation app. GPL-3.0-or-later.")
-            .content(styled_text_id(
-                "AboutAppNameText",
-                "Easydict",
-                TextStyle::BodyStrong,
-            )),
-        settings_row("Version")
-            .id("settings.about.version")
-            .description(env!("CARGO_PKG_VERSION")),
-        settings_row("Links")
-            .id("settings.about.links")
-            .description("Project resources and feedback links.")
-            .content(
-                column((
-                    settings_link_button(SettingsLink::GitHubRepository),
-                    settings_link_button(SettingsLink::IssueFeedback),
-                    settings_link_button(SettingsLink::EasydictForMacOS),
+        styled_text_id(label_id, label, TextStyle::Body),
+        combo.into_view(),
+    ))
+    .id(id)
+    .spacing(8)
+    .align(Alignment::Start)
+    .width(Length::Fill)
+    .into_view()
+}
+
+fn settings_about_content(locale: &str) -> View<Message> {
+    column((
+        styled_text_id(
+            "AboutHeaderText",
+            tr_locale(locale, "settings.about.title", "About"),
+            TextStyle::Subtitle,
+        ),
+        card("").id("settings.about.card").content(
+            column((
+                styled_text_id(
+                    "AboutAppNameText",
+                    tr_locale(
+                        locale,
+                        "settings.about.app_name",
+                        "Easydict for Windows ᵇᵉᵗᵃ",
+                    ),
+                    TextStyle::BodyStrong,
+                ),
+                styled_text_id(
+                    "VersionText",
+                    settings_version_text(locale),
+                    TextStyle::Caption,
+                ),
+                settings_link_button(SettingsLink::GitHubRepository, locale),
+                settings_link_button(SettingsLink::IssueFeedback, locale),
+                row((
+                    styled_text_id(
+                        "AboutInspiredByText",
+                        tr_locale(locale, "settings.about.inspired_by", "Inspired by"),
+                        TextStyle::Caption,
+                    ),
+                    settings_link_button(SettingsLink::EasydictForMacOS, locale),
                 ))
-                .id("settings.about.links.list")
-                .spacing(6),
-            ),
+                .id("settings.about.inspired_by")
+                .spacing(4)
+                .align(Alignment::Center),
+                styled_text_id(
+                    "LicenseText",
+                    tr_locale(locale, "settings.about.license", "License: GPL-3.0"),
+                    TextStyle::Caption,
+                ),
+            ))
+            .id("settings.about.card.content")
+            .spacing(8)
+            .margin(Edges {
+                top: 4,
+                right: 4,
+                bottom: 4,
+                left: 4,
+            }),
+        ),
     ))
     .id("settings.about")
     .spacing(12)
@@ -3691,12 +4057,49 @@ fn settings_about_content() -> View<Message> {
     .into_view()
 }
 
-fn settings_link_button(link: SettingsLink) -> View<Message> {
-    button(link.label())
+fn settings_version_text(locale: &str) -> String {
+    tr_locale(locale, "settings.about.version", "Version {version}")
+        .replace("{version}", &app_display_version())
+}
+
+fn app_display_version() -> String {
+    ["EASYDICT_PREVIEW_APP_VERSION", "EASYDICT_APP_VERSION"]
+        .into_iter()
+        .find_map(|key| {
+            std::env::var(key)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
+}
+
+fn settings_link_button(link: SettingsLink, locale: &str) -> View<Message> {
+    button(settings_link_label(link, locale))
         .id(link.id())
         .link()
         .tooltip(link.url())
         .on_press(Message::OpenSettingsLink(link))
+}
+
+fn settings_link_label(link: SettingsLink, locale: &str) -> String {
+    match link {
+        SettingsLink::GitHubRepository => tr_locale(
+            locale,
+            "settings.about.github",
+            SettingsLink::GitHubRepository.label(),
+        ),
+        SettingsLink::IssueFeedback => tr_locale(
+            locale,
+            "settings.about.issue_feedback",
+            SettingsLink::IssueFeedback.label(),
+        ),
+        SettingsLink::EasydictForMacOS => tr_locale(
+            locale,
+            "settings.about.mac",
+            SettingsLink::EasydictForMacOS.label(),
+        ),
+    }
 }
 
 fn selected_language_items(include_auto: bool, settings: &SettingsState) -> Vec<ComboBoxItem> {
@@ -3753,6 +4156,22 @@ fn all_language_items(include_auto: bool) -> Vec<ComboBoxItem> {
     items
 }
 
+fn settings_language_items(locale: &str, include_auto: bool) -> Vec<ComboBoxItem> {
+    let mut items = Vec::new();
+    if include_auto {
+        items.push(ComboBoxItem::new(
+            "auto",
+            tr_locale(locale, "main.auto_detect", "Auto Detect"),
+        ));
+    }
+    items.extend(
+        TRANSLATION_LANGUAGE_IDS
+            .into_iter()
+            .map(|id| ComboBoxItem::new(id, settings_language_label(locale, id))),
+    );
+    items
+}
+
 fn settings_language_selected(language_id: &str) -> String {
     match language_id.trim().to_ascii_lowercase().as_str() {
         "zh" | "zh-cn" => "zh-Hans".to_string(),
@@ -3761,28 +4180,111 @@ fn settings_language_selected(language_id: &str) -> String {
     }
 }
 
-fn ui_language_items() -> [ComboBoxItem; 15] {
-    [
-        ComboBoxItem::new("en-US", "English"),
-        ComboBoxItem::new("zh-CN", "Chinese (Simplified)"),
-        ComboBoxItem::new("zh-TW", "Chinese (Traditional)"),
-        ComboBoxItem::new("ja-JP", "Japanese"),
-        ComboBoxItem::new("ko-KR", "Korean"),
-        ComboBoxItem::new("fr-FR", "French"),
-        ComboBoxItem::new("de-DE", "German"),
-        ComboBoxItem::new("vi-VN", "Vietnamese"),
-        ComboBoxItem::new("th-TH", "Thai"),
-        ComboBoxItem::new("ar-SA", "Arabic"),
-        ComboBoxItem::new("id-ID", "Indonesian"),
-        ComboBoxItem::new("it-IT", "Italian"),
-        ComboBoxItem::new("ms-MY", "Malay"),
-        ComboBoxItem::new("hi-IN", "Hindi"),
-        ComboBoxItem::new("da-DK", "Danish"),
-    ]
+fn ui_language_items(locale: &str) -> Vec<ComboBoxItem> {
+    let labels = if locale_is_zh(locale) {
+        [
+            ("en-US", "English"),
+            ("zh-CN", "简体中文"),
+            ("zh-TW", "繁体中文"),
+            ("ja-JP", "日语"),
+            ("ko-KR", "韩语"),
+            ("fr-FR", "法语"),
+            ("de-DE", "德语"),
+            ("vi-VN", "越南语"),
+            ("th-TH", "泰语"),
+            ("ar-SA", "阿拉伯语"),
+            ("id-ID", "印尼语"),
+            ("it-IT", "意大利语"),
+            ("ms-MY", "马来语"),
+            ("hi-IN", "印地语"),
+            ("da-DK", "丹麦语"),
+        ]
+    } else {
+        [
+            ("en-US", "English"),
+            ("zh-CN", "Chinese (Simplified)"),
+            ("zh-TW", "Chinese (Traditional)"),
+            ("ja-JP", "Japanese"),
+            ("ko-KR", "Korean"),
+            ("fr-FR", "French"),
+            ("de-DE", "German"),
+            ("vi-VN", "Vietnamese"),
+            ("th-TH", "Thai"),
+            ("ar-SA", "Arabic"),
+            ("id-ID", "Indonesian"),
+            ("it-IT", "Italian"),
+            ("ms-MY", "Malay"),
+            ("hi-IN", "Hindi"),
+            ("da-DK", "Danish"),
+        ]
+    };
+
+    labels
+        .into_iter()
+        .map(|(id, label)| ComboBoxItem::new(id, label))
+        .collect()
 }
 
 fn language_item(id: &'static str) -> ComboBoxItem {
     ComboBoxItem::new(id, language_label(id))
+}
+
+fn settings_language_label(locale: &str, id: &str) -> String {
+    if !locale_is_zh(locale) {
+        return language_label(id);
+    }
+
+    match id {
+        "ar" => "阿拉伯语",
+        "bg" => "保加利亚语",
+        "bn" => "孟加拉语",
+        "cs" => "捷克语",
+        "da" => "丹麦语",
+        "de" => "德语",
+        "el" => "希腊语",
+        "en" => "US 英语",
+        "es" => "西班牙语",
+        "et" => "爱沙尼亚语",
+        "fa" => "波斯语",
+        "fi" => "芬兰语",
+        "fr" => "法语",
+        "he" => "希伯来语",
+        "hi" => "印地语",
+        "hu" => "匈牙利语",
+        "id" => "印尼语",
+        "it" => "意大利语",
+        "ja" => "日语",
+        "ko" => "韩语",
+        "lt" => "立陶宛语",
+        "lv" => "拉脱维亚语",
+        "ms" => "马来语",
+        "nl" => "荷兰语",
+        "no" => "挪威语",
+        "pl" => "波兰语",
+        "pt" => "葡萄牙语",
+        "ro" => "罗马尼亚语",
+        "ru" => "俄语",
+        "sk" => "斯洛伐克语",
+        "sl" => "斯洛文尼亚语",
+        "sv" => "瑞典语",
+        "ta" => "泰米尔语",
+        "th" => "泰语",
+        "tr" => "土耳其语",
+        "uk" => "乌克兰语",
+        "ur" => "乌尔都语",
+        "vi" => "越南语",
+        "zh-Hans" => "CN 简体中文",
+        "zh-Hant" => "TW 繁体中文",
+        "zh-classical" => "文言文",
+        _ => return language_label(id),
+    }
+    .to_string()
+}
+
+fn locale_is_zh(locale: &str) -> bool {
+    locale
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("zh"))
 }
 
 fn language_label(id: &str) -> String {

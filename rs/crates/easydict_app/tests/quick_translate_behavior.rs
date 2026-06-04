@@ -24,6 +24,7 @@ use easydict_app::{
     run_local_dictionary_suggestion_request_with_routed_backends, run_quick_translate,
     run_quick_translate_service, run_quick_translate_service_with_packaged_app_dir,
     run_quick_translate_service_with_packaged_app_dir_and_worker_policy,
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
     startup_activation_task_for_args, translation_cache_request_for_quick_translate,
     BingHttpClient, BingHttpResponse, BingTranslatorPage, CustomStreamingHttpClient,
     CustomStreamingHttpRequestPlan, EasydictApp, EasydictUiState, FoundryLocalEndpointResolver,
@@ -32,11 +33,11 @@ use easydict_app::{
     LocalDictionarySuggestionUpdate, Message, NativeBingQuickTranslateBackend,
     NativeCustomStreamingQuickTranslateBackend, NativeMdxDictionaryReader,
     NativeMdxDictionaryReaderFactory, NativeMdxLookupError, NativeOpenAiQuickTranslateBackend,
-    NativeTraditionalHttpQuickTranslateBackend, OpenAiApiFormat, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan,
-    OpenAiHttpTextResponse, PopButtonAnchor, QuickQueryMode, QuickTranslateBackend,
-    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateOutcome,
-    QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
+    NativeOpenVinoQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
+    OpenAiApiFormat, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
+    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, PopButtonAnchor,
+    QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
+    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
     RetainedWorkerPolicy, SettingsLink, StartupActivation, StartupActivationDisposition,
@@ -47,6 +48,10 @@ use easydict_app::{
     LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT,
     SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL, TRAY_EXIT,
     TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
+};
+use easydict_nllb::{
+    NllbError, NllbInferenceEngine, NllbModelPaths, NllbTokenizer, NllbTranslator,
+    MODEL_COMPLETION_SENTINEL, NLLB_MODEL_FILES, OPENVINO_RUNTIME_FILES,
 };
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -1864,6 +1869,50 @@ fn local_ai_worker_backend_stream_maps_extended_nllb_languages() {
     assert_eq!(
         update.outcome.streamed_chunks,
         vec!["Slovak>Lithuanian>OpenVINO".to_string()]
+    );
+}
+
+#[test]
+fn native_openvino_backend_translates_with_nllb_translator() {
+    let tokenizer = RecordingNllbTokenizer;
+    let engine = RecordingNllbEngine {
+        generated: vec![200, 201, 202],
+        ..RecordingNllbEngine::default()
+    };
+    let translator = NllbTranslator::new(tokenizer, engine).with_max_new_tokens(3);
+    let mut backend = NativeOpenVinoQuickTranslateBackend::new(translator);
+    backend
+        .configure(&SettingsSnapshot::default())
+        .expect("OpenVINO backend configure should be a no-op");
+    let params = TranslateParams {
+        text: "Hello".to_string(),
+        from: Some("en".to_string()),
+        to: Some("zh-Hans".to_string()),
+        services: Some(vec!["windows-local-ai".to_string()]),
+        custom_prompt: None,
+    };
+
+    let stream = backend
+        .translate_stream(&params)
+        .expect("fake NLLB translator should translate");
+
+    assert_eq!(stream.chunks, vec!["你", "好"]);
+    assert_eq!(stream.result.translated_text, "你好");
+    assert_eq!(
+        stream.result.service_id.as_deref(),
+        Some("windows-local-ai")
+    );
+    assert_eq!(
+        stream.result.service_name.as_deref(),
+        Some("OpenVINO (local NLLB)")
+    );
+    assert_eq!(
+        backend.translator().engine().last_call.as_ref().unwrap(),
+        &RecordingNllbEngineCall {
+            input_ids: vec![101, 42, 2],
+            forced_bos: 256001,
+            max_new_tokens: 3,
+        }
     );
 }
 
@@ -3858,12 +3907,15 @@ fn selected_mdx_dictionary_auto_discovers_companion_mdd_files() {
     let mdd_path = temp_dir.join("Oxford.mdd");
     let first_numbered = temp_dir.join("Oxford.1.mdd");
     let second_numbered = temp_dir.join("Oxford.2.mdd");
-    let skipped_after_gap = temp_dir.join("Oxford.4.mdd");
+    let discovered_after_gap = temp_dir.join("oxford.4.MDD");
+    let ignored_non_numeric = temp_dir.join("Oxford.assets.mdd");
     fs::write(&mdx_path, b"mdx").expect("MDX file should be created");
     fs::write(&mdd_path, b"mdd").expect("MDD file should be created");
     fs::write(&first_numbered, b"mdd1").expect("numbered MDD file should be created");
     fs::write(&second_numbered, b"mdd2").expect("numbered MDD file should be created");
-    fs::write(&skipped_after_gap, b"mdd4").expect("gap MDD file should be created");
+    fs::write(&discovered_after_gap, b"mdd4").expect("gap MDD file should be created");
+    fs::write(&ignored_non_numeric, b"mdd-assets")
+        .expect("non-numeric same-stem MDD file should be created");
 
     let mut state = EasydictUiState::default();
     state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
@@ -3875,6 +3927,7 @@ fn selected_mdx_dictionary_auto_discovers_companion_mdd_files() {
             path_string(&mdd_path),
             path_string(&first_numbered),
             path_string(&second_numbered),
+            path_string(&discovered_after_gap),
         ]
     );
     let imported = build_quick_translate_plan(&state, 42)
@@ -4039,7 +4092,11 @@ fn non_native_non_bridge_service_is_rejected_without_compat_host_spawn() {
         settings: SettingsSnapshot::default(),
     };
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+        request,
+        &temp_dir,
+        RetainedWorkerPolicy::all_enabled(),
+    );
     let error = update
         .outcome
         .result
@@ -4077,7 +4134,11 @@ fn auto_foundry_local_endpoint_routes_natively_without_local_ai_compat_host_spaw
     };
 
     assert!(quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+        request,
+        &temp_dir,
+        RetainedWorkerPolicy::all_enabled(),
+    );
     let error = update
         .outcome
         .result
@@ -4109,18 +4170,79 @@ fn auto_local_ai_without_foundry_endpoint_stays_on_local_ai_worker_route() {
         settings: SettingsSnapshot {
             local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
             foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
             ..SettingsSnapshot::default()
         },
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+    let update =
+        run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver(
+            request,
+            &temp_dir,
+            RetainedWorkerPolicy::all_enabled(),
+            &mut foundry_resolver,
+        );
     let error = update
         .outcome
         .result
         .expect_err("Auto without a configured Foundry endpoint should preserve worker order");
 
     assert!(error.message.contains("Local AI worker"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+#[test]
+fn auto_local_ai_without_foundry_endpoint_uses_cache_ready_native_openvino_before_worker() {
+    let temp_dir = unique_temp_dir("easydict-auto-local-ai-cache-ready-native-openvino");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    install_open_vino_cache(&temp_dir);
+    let request = QuickTranslateServiceRequest {
+        query_id: 101,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert!(!quick_translate_request_can_route_natively(&request));
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+    let update =
+        run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver(
+            request,
+            &temp_dir,
+            RetainedWorkerPolicy::all_enabled(),
+            &mut foundry_resolver,
+        );
+    let error = update
+        .outcome
+        .result
+        .expect_err("fake Auto OpenVINO cache should fail inside the native ORT route");
+
+    assert!(
+        error.message.contains("tokenizer.json") || error.message.contains("onnxruntime.dll"),
+        "unexpected Auto OpenVINO native route error: {}",
+        error.message
+    );
+    assert!(!error.message.contains("Local AI worker"));
+    assert!(!error.message.contains(".NET"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
@@ -4146,16 +4268,20 @@ fn auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_r
         settings: SettingsSnapshot {
             local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
             foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
             ..SettingsSnapshot::default()
         },
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
-        request,
-        &temp_dir,
-        RetainedWorkerPolicy::all_enabled().without_local_ai_worker(),
-    );
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+    let update =
+        run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver(
+            request,
+            &temp_dir,
+            RetainedWorkerPolicy::all_enabled().without_local_ai_worker(),
+            &mut foundry_resolver,
+        );
     let error = update
         .outcome
         .result
@@ -4165,6 +4291,44 @@ fn auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_r
     assert!(error.message.contains(".NET Local AI workers"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
     assert!(!error.message.contains("executable"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn packaged_local_ai_windows_ai_route_fails_locally_without_worker_probe() {
+    let temp_dir = unique_temp_dir("easydict-packaged-local-ai-windows-ai-no-worker");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 102,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert!(!quick_translate_request_can_route_natively(&request));
+    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let error = update
+        .outcome
+        .result
+        .expect_err("WindowsAI should require a Rust-native route before worker probing");
+
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(error.message.contains(".NET Local AI workers"));
+    assert!(!error.message.contains("Local AI worker executable"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -4198,7 +4362,11 @@ fn openvino_local_ai_grammar_fails_locally_without_local_ai_compat_host_spawn() 
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+        request,
+        &temp_dir,
+        RetainedWorkerPolicy::all_enabled(),
+    );
     let error = update
         .outcome
         .result
@@ -4460,8 +4628,8 @@ fn openvino_local_ai_supported_translation_without_cached_model_fails_locally_wi
 
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 #[test]
-fn openvino_local_ai_supported_translation_with_cached_model_stays_on_local_ai_worker_route() {
-    let temp_dir = unique_temp_dir("easydict-openvino-supported-cache-ready-still-bridge");
+fn openvino_local_ai_supported_translation_with_cached_model_routes_to_native_ort_without_worker() {
+    let temp_dir = unique_temp_dir("easydict-openvino-supported-cache-ready-native-ort");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     install_open_vino_cache(&temp_dir);
     let request = QuickTranslateServiceRequest {
@@ -4484,14 +4652,24 @@ fn openvino_local_ai_supported_translation_with_cached_model_stays_on_local_ai_w
         },
     };
 
-    assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    assert!(quick_translate_request_can_route_natively(&request));
+    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+        request,
+        &temp_dir,
+        RetainedWorkerPolicy::all_enabled(),
+    );
     let error = update
         .outcome
         .result
-        .expect_err("ready explicit OpenVINO translation should still need the worker bridge");
+        .expect_err("fake OpenVINO cache should fail inside the Rust-native ORT route");
 
-    assert!(error.message.contains("Local AI worker"));
+    assert!(
+        error.message.contains("tokenizer.json") || error.message.contains("onnxruntime.dll"),
+        "unexpected OpenVINO native route error: {}",
+        error.message
+    );
+    assert!(!error.message.contains("Local AI worker"));
+    assert!(!error.message.contains(".NET"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
@@ -6226,6 +6404,60 @@ struct RecordingFoundryLocalEndpointResolver {
     responses: VecDeque<Result<Option<String>, OpenAiExecutionError>>,
 }
 
+#[derive(Default)]
+struct RecordingNllbTokenizer;
+
+impl NllbTokenizer for RecordingNllbTokenizer {
+    fn encode_source(&self, text: &str, source_flores_code: &str) -> Result<Vec<i32>, NllbError> {
+        assert_eq!(text, "Hello");
+        assert_eq!(source_flores_code, "eng_Latn");
+        Ok(vec![101, 42, 2])
+    }
+
+    fn decode(&self, token_ids: &[i32]) -> Result<String, NllbError> {
+        match token_ids {
+            [200] => Ok("你".to_string()),
+            [200, 201] => Ok("你".to_string()),
+            [200, 201, 202] => Ok("你好".to_string()),
+            _ => Err(NllbError::new("unexpected NLLB token ids")),
+        }
+    }
+
+    fn language_token_id(&self, flores_code: &str) -> Result<i32, NllbError> {
+        assert_eq!(flores_code, "zho_Hans");
+        Ok(256001)
+    }
+}
+
+#[derive(Default)]
+struct RecordingNllbEngine {
+    generated: Vec<i32>,
+    last_call: Option<RecordingNllbEngineCall>,
+}
+
+impl NllbInferenceEngine for RecordingNllbEngine {
+    fn generate(
+        &mut self,
+        encoder_input_ids: &[i32],
+        forced_bos_token_id: i32,
+        max_new_tokens: usize,
+    ) -> Result<Vec<i32>, NllbError> {
+        self.last_call = Some(RecordingNllbEngineCall {
+            input_ids: encoder_input_ids.to_vec(),
+            forced_bos: forced_bos_token_id,
+            max_new_tokens,
+        });
+        Ok(self.generated.clone())
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct RecordingNllbEngineCall {
+    input_ids: Vec<i32>,
+    forced_bos: i32,
+    max_new_tokens: usize,
+}
+
 impl RecordingFoundryLocalEndpointResolver {
     fn new(
         responses: impl IntoIterator<Item = Result<Option<String>, OpenAiExecutionError>>,
@@ -6346,55 +6578,9 @@ fn path_string(path: &Path) -> String {
 }
 
 fn install_open_vino_cache(base: &Path) {
-    const MODEL_FILES: &[&str] = &[
-        "encoder_model_quantized.onnx",
-        "decoder_model_quantized.onnx",
-        "sentencepiece.bpe.model",
-        "tokenizer.json",
-        "config.json",
-    ];
-    const RUNTIME_FILES: &[&str] = &[
-        "onnxruntime.dll",
-        "onnxruntime.lib",
-        "onnxruntime_providers_openvino.dll",
-        "onnxruntime_providers_shared.dll",
-        "openvino.dll",
-        "openvino_auto_batch_plugin.dll",
-        "openvino_auto_plugin.dll",
-        "openvino_c.dll",
-        "openvino_hetero_plugin.dll",
-        "openvino_intel_cpu_plugin.dll",
-        "openvino_intel_gpu_plugin.dll",
-        "openvino_intel_npu_plugin.dll",
-        "openvino_ir_frontend.dll",
-        "openvino_onnx_frontend.dll",
-        "openvino_paddle_frontend.dll",
-        "openvino_pytorch_frontend.dll",
-        "openvino_tensorflow_frontend.dll",
-        "openvino_tensorflow_lite_frontend.dll",
-        "tbb12.dll",
-        "tbb12_debug.dll",
-        "tbbbind_2_5.dll",
-        "tbbbind_2_5_debug.dll",
-        "tbbmalloc.dll",
-        "tbbmalloc_debug.dll",
-        "tbbmalloc_proxy.dll",
-        "tbbmalloc_proxy_debug.dll",
-    ];
-
-    install_complete_open_vino_file_set(
-        &base.join("models").join("nllb-200-distilled-600M"),
-        MODEL_FILES,
-    );
-    install_complete_open_vino_file_set(
-        &base
-            .join("runtimes")
-            .join("openvino")
-            .join("1.21.0")
-            .join("win-x64")
-            .join("native"),
-        RUNTIME_FILES,
-    );
+    let paths = NllbModelPaths::from_cache_base(base);
+    install_complete_open_vino_file_set(&paths.model_dir, NLLB_MODEL_FILES);
+    install_complete_open_vino_file_set(&paths.runtime_dir, OPENVINO_RUNTIME_FILES);
 }
 
 fn install_complete_open_vino_file_set(dir: &Path, files: &[&str]) {
@@ -6402,7 +6588,8 @@ fn install_complete_open_vino_file_set(dir: &Path, files: &[&str]) {
     for file in files {
         fs::write(dir.join(file), b"x").expect("OpenVINO cache file should be written");
     }
-    fs::write(dir.join(".complete"), b"x").expect("OpenVINO sentinel should be written");
+    fs::write(dir.join(MODEL_COMPLETION_SENTINEL), b"x")
+        .expect("OpenVINO sentinel should be written");
 }
 
 fn valid_mdx_regcode() -> String {

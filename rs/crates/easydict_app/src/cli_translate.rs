@@ -104,9 +104,9 @@ Options:
   --services IDS       Alias for --service with comma-separated ids.
   --json               Emit JSON for translate/grammar, JSON Lines for stream/batch.
   --verbose            Print service/timing metadata to stderr in plain mode.
-  --host PATH          Legacy compatibility option; retained LocalAI requires --app-dir.
+  --host PATH          Legacy no-op compatibility option.
   --host-arg ARG       Legacy no-op argument kept for old command lines.
-  --app-dir PATH       Packaged app directory containing retained worker files.
+  --app-dir PATH       Legacy no-op; retained .NET worker fallback is retired.
   -h, --help           Show this help.
 
 Examples:

@@ -32,9 +32,10 @@ use crate::pdf_source_extraction::{
     pdf_source_block_id, pdf_source_document_from_text_summary, PdfSourceBlock,
 };
 use crate::quick_translate::{
-    auto_foundry_local_native_probe_request, quick_translate_request_can_route_natively,
-    run_quick_translate_service_with_native_route, QuickQueryMode, QuickTranslateExecutionKind,
-    QuickTranslateService, QuickTranslateServiceRequest,
+    auto_foundry_local_native_probe_request, auto_openvino_native_fallback_request,
+    quick_translate_request_can_route_natively, run_quick_translate_service_with_native_route,
+    QuickQueryMode, QuickTranslateExecutionKind, QuickTranslateService,
+    QuickTranslateServiceRequest,
 };
 use crate::retained_workers::RetainedWorkerPolicy;
 use crate::state::{EasydictUiState, TranslationResultPreview};
@@ -288,6 +289,16 @@ pub fn build_long_document_request(
 pub fn run_long_document_request_with_current_app_dir(
     request: LongDocumentServiceRequest,
 ) -> LongDocumentOutcome {
+    run_long_document_request_with_current_app_dir_and_worker_policy(
+        request,
+        RetainedWorkerPolicy::all_disabled(),
+    )
+}
+
+fn run_long_document_request_with_current_app_dir_and_worker_policy(
+    request: LongDocumentServiceRequest,
+    worker_policy: RetainedWorkerPolicy,
+) -> LongDocumentOutcome {
     if let Some(error) = local_long_document_route_preflight_error(&request) {
         return long_document_backend_error_outcome(request, error);
     }
@@ -297,7 +308,15 @@ pub fn run_long_document_request_with_current_app_dir(
         NativeLongDocumentDispatch::NeedsWorker(request) => request,
     };
 
-    let worker_policy = RetainedWorkerPolicy::from_environment();
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let request = match try_run_native_text_long_document_request_with_auto_foundry_probe(
+        request,
+        &mut foundry_resolver,
+    ) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
+
     if let Some(error) = local_long_document_worker_preflight_error(&request, worker_policy) {
         return long_document_backend_error_outcome(request, error);
     }
@@ -342,7 +361,7 @@ pub fn run_long_document_request_with_packaged_app_dir(
     run_long_document_request_with_packaged_app_dir_and_worker_policy(
         request,
         app_dir,
-        RetainedWorkerPolicy::from_environment(),
+        RetainedWorkerPolicy::all_disabled(),
     )
 }
 
@@ -406,6 +425,7 @@ where
 
     let Some(native_probe_request) =
         auto_foundry_local_native_probe_request(&probe_request, foundry_resolver)
+            .or_else(|| auto_openvino_native_fallback_request(&probe_request))
     else {
         return NativeLongDocumentDispatch::NeedsWorker(request);
     };

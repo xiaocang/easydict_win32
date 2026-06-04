@@ -39,7 +39,26 @@ impl RetainedWorkerPolicy {
     }
 
     pub fn from_environment() -> Self {
-        if runtime_profile_is_rust_only() {
+        match runtime_profile_from_environment() {
+            RuntimeProfile::RustOnly | RuntimeProfile::Unset => return Self::all_disabled(),
+            RuntimeProfile::Hybrid => {}
+        }
+
+        Self {
+            local_ai_worker_enabled: !environment_flag_is_enabled(
+                DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
+            ),
+            longdoc_worker_enabled: !environment_flag_is_enabled(
+                DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE,
+            ),
+        }
+    }
+
+    pub fn hybrid_from_environment() -> Self {
+        if matches!(
+            runtime_profile_from_environment(),
+            RuntimeProfile::RustOnly | RuntimeProfile::Unset
+        ) {
             return Self::all_disabled();
         }
 
@@ -68,10 +87,31 @@ impl Default for RetainedWorkerPolicy {
     }
 }
 
-fn runtime_profile_is_rust_only() -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeProfile {
+    Unset,
+    RustOnly,
+    Hybrid,
+}
+
+fn runtime_profile_from_environment() -> RuntimeProfile {
     std::env::var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE)
         .ok()
-        .is_some_and(|value| matches_rust_only_profile(&value))
+        .map(|value| runtime_profile_from_value(&value))
+        .unwrap_or(RuntimeProfile::Unset)
+}
+
+fn runtime_profile_from_value(value: &str) -> RuntimeProfile {
+    let normalized = value.trim().to_ascii_lowercase();
+    if matches!(normalized.as_str(), "hybrid" | "dotnet" | "dotnet-hybrid") {
+        return RuntimeProfile::Hybrid;
+    }
+
+    if matches_rust_only_profile(&normalized) {
+        return RuntimeProfile::RustOnly;
+    }
+
+    RuntimeProfile::RustOnly
 }
 
 fn environment_flag_is_enabled(name: &str) -> bool {
@@ -101,6 +141,26 @@ mod tests {
     use super::*;
 
     static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn unset_runtime_profile_defaults_to_rust_only_for_rs_packages() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+
+        let policy = RetainedWorkerPolicy::from_environment();
+
+        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(
+            policy.local_ai_worker_disabled_message(),
+            Some(LOCAL_AI_WORKER_DISABLED_MESSAGE)
+        );
+        assert_eq!(
+            policy.longdoc_worker_disabled_message(),
+            Some(LONGDOC_WORKER_DISABLED_MESSAGE)
+        );
+        snapshot.restore();
+    }
 
     #[test]
     fn rust_only_runtime_profile_disables_all_retained_workers() {

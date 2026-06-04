@@ -30,6 +30,7 @@ pub mod mdx_native;
 pub mod native_bridge;
 pub mod ocr;
 pub mod openai_compatible;
+pub mod openvino_download;
 pub mod pdf_content_stream;
 pub mod pdf_export_blocks;
 pub mod pdf_formula_adapter;
@@ -190,7 +191,8 @@ pub use long_document_export::{
     LongDocumentExportCheckpoint, LongDocumentExportChunkMetadata,
 };
 pub use mdx_native::{
-    detect_mdx_file_encryption_mode, mdx_decode_base64_regcode, mdx_decrypt_block,
+    detect_mdx_file_encryption_mode, inline_mdd_resources_in_html,
+    inline_mdd_resources_in_html_with_factory, mdx_decode_base64_regcode, mdx_decrypt_block,
     mdx_decrypt_regcode_by_device_id, mdx_decrypt_regcode_by_email, mdx_fast_decrypt,
     mdx_ripemd128, mdx_salsa20_8, mime_type_for_mdd_resource_key,
     native_mdx_dictionary_can_route_natively, native_mdx_dictionary_needs_credentials,
@@ -199,10 +201,11 @@ pub use mdx_native::{
     native_mdx_lookup_requires_credential_bridge, native_mdx_service_can_route_natively,
     normalize_mdd_resource_key, run_native_mdd_resource_lookup,
     run_native_mdd_resource_lookup_with_factory, run_native_mdx_lookup,
-    run_native_mdx_lookup_with_factory, MdxEncryptionMode, NativeMddResource,
-    NativeMddResourceError, NativeMddResourceReader, NativeMddResourceReaderFactory,
-    NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
-    RsMdictMddReader, RsMdictMddReaderFactory, RsMdictReader, RsMdictReaderFactory,
+    run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factory, MdxEncryptionMode,
+    NativeMddResource, NativeMddResourceError, NativeMddResourceReader,
+    NativeMddResourceReaderFactory, NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory,
+    NativeMdxLookupError, RsMdictMddReader, RsMdictMddReaderFactory, RsMdictReader,
+    RsMdictReaderFactory,
 };
 pub use ocr::{
     apply_ocr_outcome, apply_ocr_start_error, begin_ocr_recognize, bgra_to_base64_bmp,
@@ -257,6 +260,15 @@ pub use openai_compatible::{
     OPENAI_DEFAULT_MODEL, OPENAI_DEFAULT_TEMPERATURE, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
     OPENAI_TRANSLATION_SYSTEM_PROMPT, ZHIPU_DEFAULT_ENDPOINT, ZHIPU_DEFAULT_MODEL,
 };
+pub use openvino_download::{
+    default_nllb_model_approximate_bytes, default_openvino_data_directory,
+    ensure_openvino_assets_available, ensure_openvino_assets_available_for_directory,
+    ensure_openvino_model_available_for_directory, ensure_openvino_runtime_available_for_directory,
+    ensure_openvino_runtime_directory_on_path, is_openvino_runtime_supported_current_architecture,
+    openvino_download_status_for_directory, openvino_ep_path_injection_enabled,
+    openvino_runtime_path_with_directory, OpenVinoDownloadConfig, OpenVinoDownloadError,
+    OpenVinoDownloadStatus, OpenVinoModelDownloadFile,
+};
 pub use pdf_content_stream::{
     build_content_stream, cid_to_hex, escape_pdf_literal_string, extract_pdf_literal_strings,
     find_text_operator_range, find_text_operator_range_bytes, generate_text_operator,
@@ -279,23 +291,25 @@ pub use quick_translate::{
     apply_quick_translate_outcome, apply_quick_translate_service_update,
     apply_quick_translate_start_error, apply_quick_translate_start_error_for_surface,
     apply_quick_translate_stream_chunk, auto_foundry_local_native_probe_request,
-    begin_manual_quick_translate_service, begin_manual_quick_translate_service_for_surface,
-    begin_quick_translate, begin_quick_translate_for_surface,
-    begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
-    build_quick_translate_plan_for_surface, local_ai_quick_translate_local_error,
+    auto_openvino_native_fallback_request, begin_manual_quick_translate_service,
+    begin_manual_quick_translate_service_for_surface, begin_quick_translate,
+    begin_quick_translate_for_surface, begin_retry_quick_translate_service_for_surface,
+    build_quick_translate_plan, build_quick_translate_plan_for_surface,
+    local_ai_quick_translate_local_error, local_ai_quick_translate_native_preflight_error,
     quick_translate_request_can_route_natively, quick_translate_service_update_from_cache,
     resolve_auto_target_language, resolve_different_target_language, resolve_quick_query_language,
     run_quick_translate, run_quick_translate_service,
     run_quick_translate_service_with_native_route,
     run_quick_translate_service_with_packaged_app_dir,
     run_quick_translate_service_with_packaged_app_dir_and_worker_policy,
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
     store_quick_translate_cache_result, translation_cache_request_for_quick_translate,
     LocalAiWorkerQuickTranslateBackend, NativeBingQuickTranslateBackend,
     NativeCustomStreamingQuickTranslateBackend, NativeMdxQuickTranslateBackend,
-    NativeOpenAiQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
-    QuickQueryLanguageResolution, QuickQueryMode, QuickTranslateBackend,
-    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateOutcome,
-    QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
+    NativeOpenAiQuickTranslateBackend, NativeOpenVinoQuickTranslateBackend,
+    NativeTraditionalHttpQuickTranslateBackend, QuickQueryLanguageResolution, QuickQueryMode,
+    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
+    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface,
 };
@@ -776,6 +790,9 @@ impl Application for EasydictApp {
             Message::InstallBrowserSupport => browser_registrar_task("install"),
             Message::UninstallBrowserSupport => browser_registrar_task("uninstall"),
             Message::OpenSettingsLink(link) => Task::open_url(link.url()),
+            Message::DownloadOpenVinoModel => {
+                openvino_download_task(crate::state::settings_snapshot(&self.state.settings))
+            }
             Message::ConfirmCapture => self.capture_overlay_action_task(false),
             Message::CopyResult => self.capture_overlay_action_task(true),
             Message::CancelCapture => {
@@ -1501,6 +1518,17 @@ fn foundry_local_prepare_task(settings: compat_protocol::SettingsSnapshot) -> Ta
                 .map_err(|error| error.to_string())
         },
         Message::FoundryLocalPrepareFinished,
+    )
+}
+
+fn openvino_download_task(settings: compat_protocol::SettingsSnapshot) -> Task<Message> {
+    Task::perform(
+        async move {
+            let mut progress = |_progress: resource_download::ResourceDownloadProgress| {};
+            openvino_download::ensure_openvino_assets_available(&settings, &mut progress)
+                .map_err(|error| error.to_string())
+        },
+        Message::OpenVinoDownloadFinished,
     )
 }
 

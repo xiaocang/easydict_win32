@@ -18,6 +18,7 @@ use crate::{
     HOTKEY_TRANSLATE_CLIPBOARD,
 };
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use win_fluent::prelude::*;
 use win_fluent::IconToken;
@@ -212,7 +213,7 @@ impl SettingsLink {
     pub fn url(self) -> &'static str {
         match self {
             Self::GitHubRepository => "https://github.com/xiaocang/easydict_win32",
-            Self::IssueFeedback => "https://github.com/xiaocang/easydict_win32/issues",
+            Self::IssueFeedback => "https://github.com/xiaocang/easydict_win32/issues/new/choose",
             Self::EasydictForMacOS => "https://github.com/tisfeng/Easydict",
         }
     }
@@ -1060,7 +1061,7 @@ impl Default for SettingsState {
             unsaved_changes: false,
             show_unsaved_changes_dialog: false,
             save_error_message: None,
-            theme: ThemeMode::Light,
+            theme: ThemeMode::System,
             ui_language: "en-US".to_string(),
             first_language: "zh".to_string(),
             second_language: "en".to_string(),
@@ -1464,9 +1465,28 @@ impl EasydictUiState {
         let theme = std::env::var("EASYDICT_PREVIEW_THEME")
             .ok()
             .map(|value| theme_from_id(&value))
-            .unwrap_or(ThemeMode::Light);
+            .unwrap_or(ThemeMode::System);
 
         let mut state = Self::preview(scenario, theme);
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_UI_LANGUAGE") {
+            let value = value.trim();
+            if !value.is_empty() {
+                state.settings.ui_language = value.to_string();
+                state.saved_settings = sanitized_settings_snapshot(&state.settings);
+            }
+        }
+        let mut settings_seed_changed = false;
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_MOUSE_SELECTION_TRANSLATE") {
+            state.settings.mouse_selection_translate = env_truthy(&value);
+            settings_seed_changed = true;
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP") {
+            state.settings.fixed_always_on_top = env_truthy(&value);
+            settings_seed_changed = true;
+        }
+        if settings_seed_changed {
+            state.saved_settings = sanitized_settings_snapshot(&state.settings);
+        }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_TRANSLATE_STATE") {
             state.main_translate_button_state = preview_control_state_from_id(&value);
         }
@@ -1518,6 +1538,10 @@ impl EasydictUiState {
         }
         if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_SECTION") {
             state.settings.selected_section = SettingsSection::from_id(&section);
+            state.saved_settings = sanitized_settings_snapshot(&state.settings);
+        }
+        if let Ok(profile) = std::env::var("EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE") {
+            apply_settings_view_service_preview_profile(&mut state.settings, &profile);
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
         if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_HOVERED_SECTION") {
@@ -2099,6 +2123,20 @@ impl EasydictUiState {
                     "Download queued for NLLB-200 model (~360 MB)".to_string();
                 self.settings.open_vino_download_progress = "Queued".to_string();
             }
+            Message::OpenVinoDownloadFinished(result) => match result {
+                Ok(status) if status.is_ready() => {
+                    self.settings.open_vino_status = "NLLB-200 model ready".to_string();
+                    self.settings.open_vino_download_progress = "Idle".to_string();
+                }
+                Ok(_) => {
+                    self.settings.open_vino_status = "Model not downloaded".to_string();
+                    self.settings.open_vino_download_progress = "Idle".to_string();
+                }
+                Err(error) => {
+                    self.settings.open_vino_status = format!("Download failed: {error}");
+                    self.settings.open_vino_download_progress = "Failed".to_string();
+                }
+            },
             Message::ServiceProviderSettingChanged(service_id, field, value) => {
                 if let Some(setting) = service_provider_setting_mut(&mut self.settings, &service_id)
                 {
@@ -2769,6 +2807,90 @@ fn default_window_services(enabled_ids: &[&str]) -> Vec<WindowServiceSetting> {
             setting
         })
         .collect()
+}
+
+fn apply_settings_view_service_preview_profile(settings: &mut SettingsState, profile: &str) {
+    if !profile.eq_ignore_ascii_case("dotnet-reference") {
+        return;
+    }
+
+    let services = dotnet_reference_window_services();
+    settings.main_window_services = services.clone();
+    settings.mini_window_services = services.clone();
+    settings.fixed_window_services = services;
+    settings.imported_mdx_dictionaries = vec![ImportedMdxDictionary {
+        service_id: PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID.to_string(),
+        display_name: PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME.to_string(),
+        file_path: "C:\\Dictionaries\\Collins COBUILD English Usage.mdx".to_string(),
+        is_encrypted: false,
+        regcode: None,
+        email: None,
+        mdd_file_paths: Vec::new(),
+    }];
+}
+
+const PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID: &str = "mdx::collins-cobuild-english-usage";
+const PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME: &str = "Collins COBUILD English Usage";
+
+fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
+    let mut remaining = default_window_services(&[]);
+    let mut mdx = WindowServiceSetting::new(
+        PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
+        PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
+    );
+    mdx.configured = true;
+    remaining.push(mdx);
+
+    let preferred_order = [
+        "bing",
+        "windows-local-ai",
+        PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
+        "google",
+        "google_web",
+        "deepl",
+        "ollama",
+        "openai",
+        "builtin",
+        "deepseek",
+        "zhipu",
+        "groq",
+        "gemini",
+        "github",
+        "custom-openai",
+        "doubao",
+        "caiyun",
+        "niutrans",
+        "youdao",
+        "volcano",
+        "linguee",
+    ];
+
+    let mut ordered = Vec::with_capacity(remaining.len());
+    for service_id in preferred_order {
+        if let Some(index) = remaining
+            .iter()
+            .position(|service| service.service_id.eq_ignore_ascii_case(service_id))
+        {
+            let mut setting = remaining.remove(index);
+            apply_dotnet_reference_window_service_state(&mut setting);
+            ordered.push(setting);
+        }
+    }
+
+    for mut setting in remaining {
+        apply_dotnet_reference_window_service_state(&mut setting);
+        ordered.push(setting);
+    }
+
+    ordered
+}
+
+fn apply_dotnet_reference_window_service_state(setting: &mut WindowServiceSetting) {
+    setting.enabled = matches!(
+        setting.service_id.as_str(),
+        "bing" | "windows-local-ai" | PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID | "google"
+    );
+    setting.enabled_query = !matches!(setting.service_id.as_str(), "bing" | "windows-local-ai");
 }
 
 fn default_service_provider_settings() -> Vec<ServiceProviderSetting> {
@@ -3476,22 +3598,52 @@ fn discover_mdd_file_paths(mdx_file_path: &str) -> Vec<String> {
         return Vec::new();
     };
 
-    let mut result = Vec::new();
-    let unnumbered = directory.join(format!("{base_name}.mdd"));
-    if unnumbered.is_file() {
-        result.push(path_to_string(unnumbered));
+    let mut discovered = fs::read_dir(directory)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(|entry| entry.ok()))
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file()
+                || path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .map(|extension| !extension.eq_ignore_ascii_case("mdd"))
+                    .unwrap_or(true)
+            {
+                return None;
+            }
+
+            let stem = path.file_stem()?.to_str()?;
+            let order = mdd_companion_order(base_name, stem)?;
+            Some((order, path))
+        })
+        .collect::<Vec<_>>();
+    discovered.sort_by(|(left_order, left_path), (right_order, right_path)| {
+        left_order.cmp(right_order).then_with(|| {
+            path_to_string(left_path.clone()).cmp(&path_to_string(right_path.clone()))
+        })
+    });
+
+    discovered
+        .into_iter()
+        .map(|(_, path)| path_to_string(path))
+        .collect()
+}
+
+fn mdd_companion_order(base_name: &str, stem: &str) -> Option<(u8, u32)> {
+    if stem.eq_ignore_ascii_case(base_name) {
+        return Some((0, 0));
     }
 
-    for suffix in 1..=99 {
-        let numbered = directory.join(format!("{base_name}.{suffix}.mdd"));
-        if numbered.is_file() {
-            result.push(path_to_string(numbered));
-        } else {
-            break;
-        }
+    let stem_prefix = stem.get(..base_name.len())?;
+    if !stem_prefix.eq_ignore_ascii_case(base_name) {
+        return None;
     }
-
-    result
+    let suffix = stem.get(base_name.len()..)?;
+    let suffix = suffix.strip_prefix('.')?;
+    let number = suffix.parse::<u32>().ok()?;
+    (number > 0).then_some((1, number))
 }
 
 fn path_to_string(path: PathBuf) -> String {
@@ -3893,6 +4045,7 @@ pub enum Message {
     OpenFoundryLocalDocs,
     OpenVinoDeviceChanged(String),
     DownloadOpenVinoModel,
+    OpenVinoDownloadFinished(Result<crate::openvino_download::OpenVinoDownloadStatus, String>),
     ServiceProviderSettingChanged(String, ServiceProviderField, String),
     TestServiceProvider(String),
     CaiyunApiKeyChanged(String),

@@ -28,6 +28,7 @@ unicode-normalization = "0.1"
 unicode-segmentation = "1"
 easydict_pdf_render = { path = "../../../lib/easydict-pdf-render" }
 easydict_pdf_overlay = { path = "../../../lib/easydict-pdf-overlay" }
+easydict_nllb = { path = "../../../lib/easydict-nllb", features = ["ort-openvino"] }
 easydict_windows_ocr = { path = "../easydict_windows_ocr" }
 win_fluent = { path = "../../../lib/winfluent-rs/crates/win_fluent" }
 win_fluent_platform_win = { path = "../../../lib/winfluent-rs/crates/win_fluent_platform_win" }

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -8,9 +9,9 @@ use easydict_app::{
     cached_font_path_for_directory, delete_all_fonts_for_directory, download_with_retry_and_policy,
     ensure_font_for_directory, font_asset_for_language, font_cache_dir,
     has_any_cjk_font_for_directory, is_file_valid, ordered_urls_by_probe, requires_cjk_font,
-    total_font_size_bytes_for_directory, FontDownloadError, ResourceDownloadClient,
-    ResourceDownloadError, ResourceDownloadProgress, ResourceDownloadRetryPolicy,
-    ResourceProbeResult, TranslationLanguage,
+    total_font_size_bytes_for_directory, FontDownloadError, ReqwestResourceDownloadClient,
+    ResourceDownloadClient, ResourceDownloadError, ResourceDownloadProgress,
+    ResourceDownloadRetryPolicy, ResourceProbeResult, TranslationLanguage,
 };
 
 #[derive(Default)]
@@ -199,6 +200,48 @@ fn resource_download_falls_back_to_next_source_after_failure() {
         vec!["https://bad.example/asset", "https://good.example/asset"]
     );
     assert_eq!(fs::read(&output).expect("read fallback output"), b"ok");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn resource_download_rejects_truncated_content_length_without_publishing_output() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind local test server");
+    let url = format!("http://{}/asset.bin", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept test request");
+        let mut request = [0_u8; 1024];
+        let _ = stream.read(&mut request);
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nabc")
+            .expect("write truncated test response");
+    });
+
+    let dir = temp_dir("truncated");
+    let output = dir.join("asset.bin");
+    let mut client = ReqwestResourceDownloadClient::new().expect("create reqwest client");
+
+    let error = download_with_retry_and_policy(
+        &mut client,
+        &[url],
+        &output,
+        "asset",
+        &mut |_| {},
+        &ResourceDownloadRetryPolicy {
+            max_retries: 0,
+            retry_delays: vec![],
+        },
+    )
+    .expect_err("truncated response should fail");
+    server.join().expect("test server should finish");
+
+    assert!(
+        matches!(error, ResourceDownloadError::Truncated { .. })
+            || matches!(error, ResourceDownloadError::AllSourcesFailed { .. })
+            || matches!(error, ResourceDownloadError::Network(_))
+    );
+    assert!(!output.exists());
+    assert!(!PathBuf::from(format!("{}.tmp", output.display())).exists());
 
     let _ = fs::remove_dir_all(&dir);
 }

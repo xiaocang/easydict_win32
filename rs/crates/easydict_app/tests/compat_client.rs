@@ -1,13 +1,16 @@
 use easydict_app::compat_client::{
     default_local_ai_worker_path, default_longdoc_worker_path, packaged_worker_command,
-    DirectWorkerFacade, WorkerClient, WorkerClientError, WorkerCommand,
+    packaged_worker_command_with_openvino_cache_base, DirectWorkerFacade, WorkerClient,
+    WorkerClientError, WorkerCommand,
 };
 use easydict_app::compat_protocol::{
     ipc_error_codes, worker_kinds, worker_methods, ConfigureParams, LocalAiTranslateParams,
     SettingsSnapshot, StatusEventData, TranslateDocumentParams, TranslateParams,
     TranslationResultDto, WORKER_PROTOCOL_VERSION_CURRENT,
 };
+use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
 use serde_json::Value;
+use std::ffi::OsString;
 use std::path::Path;
 
 fn mock_jsonl_client() -> WorkerClient {
@@ -47,6 +50,29 @@ fn mock_worker(worker_kind: &str) -> DirectWorkerFacade {
         worker_kind,
     )
     .expect("mock direct worker must spawn and emit ready")
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
 }
 
 const MOCK_HOST_SCRIPT: &str = r#"
@@ -391,6 +417,46 @@ fn packaged_worker_command_sets_shared_worker_environment() {
             .find(|(key, _)| key == "DOTNET_CLI_TELEMETRY_OPTOUT")
             .map(|(_, value)| value.as_str()),
         Some("1")
+    );
+}
+
+#[test]
+fn packaged_local_ai_worker_command_uses_custom_openvino_cache_base() {
+    let _openvino_ep_guard = EnvVarGuard::set(OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE, "1");
+    let app_dir = Path::new(r"C:\Program Files\Easydict");
+    let cache_base = Path::new(r"D:\EasydictCache");
+    let command = packaged_worker_command_with_openvino_cache_base(
+        app_dir,
+        "localai",
+        "Easydict.Workers.LocalAi.exe",
+        Some(cache_base),
+    );
+    let runtime_dir = NllbModelPaths::from_cache_base(cache_base)
+        .runtime_dir
+        .to_string_lossy()
+        .to_string();
+
+    assert_eq!(command.program(), default_local_ai_worker_path(app_dir));
+    assert_eq!(
+        command
+            .envs()
+            .iter()
+            .find(|(key, _)| key == "EASYDICT_OPENVINO_RUNTIME_DIR")
+            .map(|(_, value)| value.as_str()),
+        Some(runtime_dir.as_str())
+    );
+    assert!(
+        command
+            .envs()
+            .iter()
+            .find(|(key, _)| key == "PATH")
+            .map(|(_, value)| {
+                value
+                    .to_ascii_lowercase()
+                    .starts_with(&runtime_dir.to_ascii_lowercase())
+            })
+            .unwrap_or(false),
+        "LocalAI worker PATH should begin with the configured OpenVINO runtime directory"
     );
 }
 

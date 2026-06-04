@@ -1,0 +1,15 @@
+[package]
+name = "easydict_nllb"
+edition = "2021"
+license = "GPL-3.0-or-later"
+version = "0.1.0"
+
+[features]
+default = []
+ort-openvino = ["dep:ort"]
+
+[dependencies]
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["api-21", "load-dynamic", "ndarray", "std"], optional = true }
+serde_json = "1"
+tokenizers = { version = "0.23.1", default-features = false, features = ["fancy-regex"] }
+unicode-normalization = "0.1"

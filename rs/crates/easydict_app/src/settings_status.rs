@@ -13,6 +13,10 @@ use crate::openai_compatible::{
     self, CommandFoundryLocalEndpointResolver, FoundryLocalModelState,
     FoundryLocalRuntimeController,
 };
+use easydict_nllb::NllbModelPaths;
+
+#[cfg(test)]
+use easydict_nllb::{MODEL_COMPLETION_SENTINEL, NLLB_MODEL_FILES, OPENVINO_RUNTIME_FILES};
 
 /// Resolved availability of the optional downloadable assets.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,46 +34,6 @@ pub enum OpenVinoCacheStatus {
     NotDownloaded,
     NotCompatible,
 }
-
-const OPEN_VINO_MODEL_DIRECTORY: &str = "nllb-200-distilled-600M";
-const OPEN_VINO_COMPLETION_SENTINEL: &str = ".complete";
-const OPEN_VINO_RUNTIME_VERSION: &str = "1.21.0";
-const OPEN_VINO_RUNTIME_IDENTIFIER: &str = "win-x64";
-const OPEN_VINO_MODEL_FILES: &[&str] = &[
-    "encoder_model_quantized.onnx",
-    "decoder_model_quantized.onnx",
-    "sentencepiece.bpe.model",
-    "tokenizer.json",
-    "config.json",
-];
-const OPEN_VINO_RUNTIME_FILES: &[&str] = &[
-    "onnxruntime.dll",
-    "onnxruntime.lib",
-    "onnxruntime_providers_openvino.dll",
-    "onnxruntime_providers_shared.dll",
-    "openvino.dll",
-    "openvino_auto_batch_plugin.dll",
-    "openvino_auto_plugin.dll",
-    "openvino_c.dll",
-    "openvino_hetero_plugin.dll",
-    "openvino_intel_cpu_plugin.dll",
-    "openvino_intel_gpu_plugin.dll",
-    "openvino_intel_npu_plugin.dll",
-    "openvino_ir_frontend.dll",
-    "openvino_onnx_frontend.dll",
-    "openvino_paddle_frontend.dll",
-    "openvino_pytorch_frontend.dll",
-    "openvino_tensorflow_frontend.dll",
-    "openvino_tensorflow_lite_frontend.dll",
-    "tbb12.dll",
-    "tbb12_debug.dll",
-    "tbbbind_2_5.dll",
-    "tbbbind_2_5_debug.dll",
-    "tbbmalloc.dll",
-    "tbbmalloc_debug.dll",
-    "tbbmalloc_proxy.dll",
-    "tbbmalloc_proxy_debug.dll",
-];
 
 /// Conventional Easydict per-user data directory (`%LOCALAPPDATA%/Easydict`).
 fn data_directory() -> PathBuf {
@@ -94,14 +58,6 @@ fn directory_has_file_with_extension(dir: &Path, extensions: &[&str]) -> bool {
         }
     }
     false
-}
-
-fn directory_has_complete_file_set(dir: &Path, files: &[&str]) -> bool {
-    if !dir.join(OPEN_VINO_COMPLETION_SENTINEL).is_file() {
-        return false;
-    }
-
-    files.iter().all(|file| dir.join(file).is_file())
 }
 
 fn is_open_vino_supported_current_architecture() -> bool {
@@ -132,19 +88,7 @@ fn open_vino_cache_status_for_directory_with_arch(
         return OpenVinoCacheStatus::NotCompatible;
     }
 
-    let open_vino_model_dir = base.join("models").join(OPEN_VINO_MODEL_DIRECTORY);
-    let open_vino_runtime_dir = base
-        .join("runtimes")
-        .join("openvino")
-        .join(OPEN_VINO_RUNTIME_VERSION)
-        .join(OPEN_VINO_RUNTIME_IDENTIFIER)
-        .join("native");
-    let open_vino_model_installed =
-        directory_has_complete_file_set(&open_vino_model_dir, OPEN_VINO_MODEL_FILES);
-    let open_vino_runtime_installed =
-        directory_has_complete_file_set(&open_vino_runtime_dir, OPEN_VINO_RUNTIME_FILES);
-
-    if open_vino_model_installed && open_vino_runtime_installed {
+    if NllbModelPaths::from_cache_base(base).is_cache_complete() {
         OpenVinoCacheStatus::Ready
     } else {
         OpenVinoCacheStatus::NotDownloaded
@@ -298,27 +242,17 @@ mod tests {
         for file in files {
             fs::write(dir.join(file), b"x").expect("write complete file set member");
         }
-        fs::write(dir.join(OPEN_VINO_COMPLETION_SENTINEL), b"x")
-            .expect("write completion sentinel");
+        fs::write(dir.join(MODEL_COMPLETION_SENTINEL), b"x").expect("write completion sentinel");
     }
 
     fn install_open_vino_model(base: &Path) {
-        install_complete_file_set(
-            &base.join("models").join(OPEN_VINO_MODEL_DIRECTORY),
-            OPEN_VINO_MODEL_FILES,
-        );
+        let paths = NllbModelPaths::from_cache_base(base);
+        install_complete_file_set(&paths.model_dir, NLLB_MODEL_FILES);
     }
 
     fn install_open_vino_runtime(base: &Path) {
-        install_complete_file_set(
-            &base
-                .join("runtimes")
-                .join("openvino")
-                .join(OPEN_VINO_RUNTIME_VERSION)
-                .join(OPEN_VINO_RUNTIME_IDENTIFIER)
-                .join("native"),
-            OPEN_VINO_RUNTIME_FILES,
-        );
+        let paths = NllbModelPaths::from_cache_base(base);
+        install_complete_file_set(&paths.runtime_dir, OPENVINO_RUNTIME_FILES);
     }
 
     struct FakeFoundryRuntimeController {
@@ -456,9 +390,9 @@ mod tests {
     #[test]
     fn reports_open_vino_model_missing_when_sentinel_or_manifest_files_are_absent() {
         let dir = temp_status_dir("openvino-model-missing");
-        let model_dir = dir.join("models").join(OPEN_VINO_MODEL_DIRECTORY);
+        let model_dir = NllbModelPaths::from_cache_base(&dir).model_dir;
         fs::create_dir_all(&model_dir).expect("create model dir");
-        fs::write(model_dir.join(OPEN_VINO_COMPLETION_SENTINEL), b"x").expect("write sentinel");
+        fs::write(model_dir.join(MODEL_COMPLETION_SENTINEL), b"x").expect("write sentinel");
         install_open_vino_runtime(&dir);
 
         let status = status_for_directory_with_open_vino_support(&dir, true);

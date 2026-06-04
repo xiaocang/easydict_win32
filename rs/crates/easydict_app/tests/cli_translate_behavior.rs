@@ -2,6 +2,7 @@
 
 use easydict_app::{
     DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+    RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -133,7 +134,7 @@ fn native_grammar_selects_first_grammar_capable_service_without_worker() {
 }
 
 #[test]
-fn local_ai_cli_fallback_uses_direct_packaged_worker() {
+fn local_ai_cli_app_dir_no_longer_enables_retained_worker_fallback() {
     let app_dir = unique_temp_dir("easydict-cli-local-ai-app");
     let settings_dir = unique_temp_dir("easydict-cli-local-ai-settings");
     fs::create_dir_all(&app_dir).expect("app directory should be created");
@@ -154,6 +155,7 @@ fn local_ai_cli_fallback_uses_direct_packaged_worker() {
         ])
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
         .env(
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
@@ -164,12 +166,20 @@ fn local_ai_cli_fallback_uses_direct_packaged_worker() {
     assert!(!output.status.success());
     let stderr = stderr(&output);
     assert!(
-        stderr.contains("Local AI worker executable not found"),
-        "stderr should report direct LocalAI worker lookup:\n{stderr}"
+        stderr.contains("requires a Rust-native route"),
+        "stderr should require a Rust-native LocalAI route:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("retained .NET Local AI worker fallback is no longer available"),
+        "stderr should report the retired CLI worker fallback:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "--app-dir should not probe retained worker paths:\n{stderr}"
     );
     assert!(
         !stderr.to_ascii_lowercase().contains("compat host"),
-        "LocalAI CLI fallback should not describe a compat host route:\n{stderr}"
+        "LocalAI CLI should not describe a compat host route:\n{stderr}"
     );
 
     let _ = fs::remove_dir_all(app_dir);
@@ -177,7 +187,56 @@ fn local_ai_cli_fallback_uses_direct_packaged_worker() {
 }
 
 #[test]
-fn local_ai_cli_fallback_requires_explicit_app_dir() {
+fn local_ai_cli_default_rs_profile_disables_packaged_worker_fallback() {
+    let app_dir = unique_temp_dir("easydict-cli-local-ai-default-rust-only-app");
+    let settings_dir = unique_temp_dir("easydict-cli-local-ai-default-rust-only-settings");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env_remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE)
+        .env(
+            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+            "__missing_foundry_cli__.cmd",
+        )
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("requires a Rust-native route"),
+        "stderr should report the default Rust-only worker policy:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(".NET Local AI workers"),
+        "stderr should name the disabled retained runtime:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "default rs profile should not probe retained worker paths:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(app_dir);
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn local_ai_cli_without_app_dir_fails_native_only_without_worker_lookup() {
     let settings_dir = unique_temp_dir("easydict-cli-local-ai-explicit-appdir-settings");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
 
@@ -194,6 +253,7 @@ fn local_ai_cli_fallback_requires_explicit_app_dir() {
             "Hello",
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
         .env(
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
@@ -204,12 +264,16 @@ fn local_ai_cli_fallback_requires_explicit_app_dir() {
     assert!(!output.status.success());
     let stderr = stderr(&output);
     assert!(
-        stderr.contains("requires explicit --app-dir"),
-        "stderr should require explicit retained worker opt-in:\n{stderr}"
+        stderr.contains("requires a Rust-native route"),
+        "stderr should require a Rust-native LocalAI route:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("retained .NET Local AI worker fallback is no longer available"),
+        "stderr should report the retired CLI worker fallback:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
-        "auto discovery should not probe retained worker paths:\n{stderr}"
+        "CLI should not probe retained worker paths:\n{stderr}"
     );
     assert!(!stderr.to_ascii_lowercase().contains("compat host"));
 
@@ -236,6 +300,7 @@ fn local_ai_cli_host_hint_no_longer_enables_retained_worker_fallback() {
             "C:/Tools/Easydict.Workers.LocalAi.exe",
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
         .env(
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
@@ -246,11 +311,11 @@ fn local_ai_cli_host_hint_no_longer_enables_retained_worker_fallback() {
     assert!(!output.status.success());
     let stderr = stderr(&output);
     assert!(
-        stderr.contains("requires explicit --app-dir"),
-        "stderr should reject legacy --host as a retained LocalAI hint:\n{stderr}"
+        stderr.contains("requires a Rust-native route"),
+        "stderr should require a Rust-native LocalAI route:\n{stderr}"
     );
     assert!(
-        stderr.contains("--host hints are disabled"),
+        stderr.contains("retained .NET Local AI worker fallback is no longer available"),
         "stderr should explain that --host no longer opts into LocalAI worker fallback:\n{stderr}"
     );
     assert!(
@@ -284,7 +349,12 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
         ])
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
         .env(DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE, "1")
+        .env(
+            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+            "__missing_foundry_cli__.cmd",
+        )
         .output()
         .expect("CLI should run");
 
@@ -312,7 +382,7 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
 }
 
 #[test]
-fn auto_local_ai_cli_probes_foundry_before_explicit_app_dir_worker_fallback() {
+fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
     let app_dir = unique_temp_dir("easydict-cli-auto-foundry-app");
     let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-settings");
     let fake_foundry_dir = unique_temp_dir("easydict-cli-fake-foundry");
@@ -355,11 +425,11 @@ fn auto_local_ai_cli_probes_foundry_before_explicit_app_dir_worker_fallback() {
         fs::read_to_string(&marker_path)
             .expect("fake Foundry CLI should be called")
             .contains("service status"),
-        "CLI should probe Foundry status before falling back:\n{stderr}"
+        "CLI should probe Foundry status before local failure:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
-        "Foundry probe should win before packaged LocalAI worker lookup:\n{stderr}"
+        "Foundry probe should happen without packaged LocalAI worker lookup:\n{stderr}"
     );
     assert!(
         !stderr.to_ascii_lowercase().contains("compat host"),

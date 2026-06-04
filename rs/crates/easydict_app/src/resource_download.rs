@@ -14,7 +14,7 @@ const DEFAULT_RETRY_DELAYS: [Duration; 3] = [
 ];
 const SOURCE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
-const USER_AGENT: &str = "Easydict-Win32/1.0";
+const USER_AGENT: &str = "Easydict-Windows/1.0";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResourceDownloadProgress {
@@ -53,6 +53,11 @@ pub enum ResourceDownloadError {
         message: String,
     },
     Network(String),
+    Truncated {
+        url: String,
+        expected_bytes: u64,
+        actual_bytes: u64,
+    },
     Io(String),
     AllSourcesFailed {
         stage: String,
@@ -82,6 +87,14 @@ impl fmt::Display for ResourceDownloadError {
                 )
             }
             Self::Network(message) => write!(formatter, "Resource download failed: {message}"),
+            Self::Truncated {
+                url,
+                expected_bytes,
+                actual_bytes,
+            } => write!(
+                formatter,
+                "Resource download from {url} was truncated: expected {expected_bytes} bytes, got {actual_bytes}"
+            ),
             Self::Io(message) => write!(formatter, "Resource download file error: {message}"),
             Self::AllSourcesFailed {
                 stage,
@@ -235,6 +248,14 @@ impl ResourceDownloadClient for ReqwestResourceDownloadClient {
                 bytes_downloaded,
                 total_bytes,
                 percentage,
+            });
+        }
+
+        if total_bytes >= 0 && bytes_downloaded != total_bytes as u64 {
+            return Err(ResourceDownloadError::Truncated {
+                url: url.to_string(),
+                expected_bytes: total_bytes as u64,
+                actual_bytes: bytes_downloaded,
             });
         }
 

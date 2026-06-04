@@ -1,28 +1,22 @@
-use easydict_app::cli_translate::{
-    parse_args, usage, CliMode, CliOptions, CliParseError, WorkerTarget,
-};
-use easydict_app::compat_client::{
-    default_local_ai_worker_path, DirectWorkerFacade, WorkerClientError,
-};
+use easydict_app::cli_translate::{parse_args, usage, CliMode, CliOptions, CliParseError};
 use easydict_app::compat_protocol::{
     GrammarCorrectParams, GrammarCorrectResultDto, SettingsSnapshot, TranslateParams,
     TranslationResultDto,
 };
 use easydict_app::quick_translate_request_can_route_natively;
 use easydict_app::{
-    auto_foundry_local_native_probe_request, default_settings_storage_path,
-    find_translation_service_descriptor, load_settings_file, local_ai_quick_translate_local_error,
-    run_quick_translate_service, run_quick_translate_service_with_native_route, settings_snapshot,
-    CommandFoundryLocalEndpointResolver, LocalAiWorkerQuickTranslateBackend, QuickQueryMode,
-    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateService,
-    QuickTranslateServiceRequest, QuickTranslateServiceUpdate, RetainedWorkerPolicy,
-    SettingsStorageError,
+    auto_foundry_local_native_probe_request, auto_openvino_native_fallback_request,
+    default_settings_storage_path, find_translation_service_descriptor, load_settings_file,
+    local_ai_quick_translate_local_error, local_ai_quick_translate_native_preflight_error,
+    run_quick_translate_service_with_native_route, settings_snapshot,
+    CommandFoundryLocalEndpointResolver, QuickQueryMode, QuickTranslateBackendError,
+    QuickTranslateExecutionKind, QuickTranslateService, QuickTranslateServiceRequest,
+    QuickTranslateServiceUpdate, RetainedWorkerPolicy, SettingsStorageError,
 };
 use serde_json::json;
 use std::env;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -133,9 +127,7 @@ fn try_run_native_service_update(
         return Ok(None);
     };
 
-    if let Some(error) =
-        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::from_environment())
-    {
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
         return Err(CliError::UnsupportedRustRoute(error.to_string()));
     }
 
@@ -152,10 +144,22 @@ fn try_run_native_service_update(
         ));
     }
 
+    if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
+        return Ok(run_quick_translate_service_with_native_route(
+            native_request,
+        ));
+    }
+
+    if let Some(error) =
+        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::from_environment())
+    {
+        return Err(CliError::UnsupportedRustRoute(error.to_string()));
+    }
+
     if request.service.id == "windows-local-ai" {
-        let facade = spawn_local_ai_worker(&options.host)?;
-        let mut backend = LocalAiWorkerQuickTranslateBackend::new(facade);
-        return Ok(Some(run_quick_translate_service(&mut backend, &request)));
+        return Err(CliError::UnsupportedRustRoute(
+            "Windows Local AI requires a Rust-native route; retained .NET Local AI worker fallback is no longer available in the Rust CLI.".to_string(),
+        ));
     }
 
     Ok(None)
@@ -476,26 +480,6 @@ fn escape_line(text: &str) -> String {
     text.replace('\r', "\\r").replace('\n', "\\n")
 }
 
-fn spawn_local_ai_worker(target: &WorkerTarget) -> Result<DirectWorkerFacade, CliError> {
-    let app_dir = resolve_local_ai_worker_app_dir(target)?;
-    DirectWorkerFacade::spawn_packaged_local_ai(app_dir).map_err(CliError::LocalAiWorker)
-}
-
-fn resolve_local_ai_worker_app_dir(target: &WorkerTarget) -> Result<PathBuf, CliError> {
-    match target {
-        WorkerTarget::AppDir(app_dir) => {
-            let worker = default_local_ai_worker_path(app_dir);
-            if !worker.exists() {
-                return Err(CliError::WorkerNotFound(worker));
-            }
-            Ok(app_dir.clone())
-        }
-        WorkerTarget::Auto | WorkerTarget::Program { .. } => {
-            Err(CliError::WorkerRequiresExplicitAppDir)
-        }
-    }
-}
-
 #[derive(Debug)]
 enum CliError {
     Parse(CliParseError),
@@ -503,9 +487,6 @@ enum CliError {
     Settings(SettingsStorageError),
     Io(io::Error),
     Json(serde_json::Error),
-    WorkerNotFound(PathBuf),
-    WorkerRequiresExplicitAppDir,
-    LocalAiWorker(WorkerClientError),
     UnsupportedRustRoute(String),
 }
 
@@ -517,19 +498,6 @@ impl fmt::Display for CliError {
             Self::Settings(error) => write!(formatter, "{error}"),
             Self::Io(error) => write!(formatter, "{error}"),
             Self::Json(error) => write!(formatter, "{error}"),
-            Self::LocalAiWorker(error) => {
-                write!(formatter, "{}", error.process_message("Local AI worker"))
-            }
-            Self::WorkerNotFound(path) => {
-                write!(
-                    formatter,
-                    "Local AI worker executable not found: {}",
-                    path.display()
-                )
-            }
-            Self::WorkerRequiresExplicitAppDir => formatter.write_str(
-                "Retained Local AI worker fallback requires explicit --app-dir; automatic worker discovery and --host hints are disabled",
-            ),
             Self::UnsupportedRustRoute(message) => formatter.write_str(message),
         }
     }

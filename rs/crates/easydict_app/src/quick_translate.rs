@@ -26,6 +26,9 @@ use crate::openai_compatible::{
     FoundryLocalEndpointResolver, OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiHttpClient,
     OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
 };
+use crate::openvino_download::{
+    default_openvino_data_directory, ensure_openvino_runtime_directory_on_path,
+};
 use crate::retained_workers::RetainedWorkerPolicy;
 use crate::settings_status::{open_vino_cache_status_for_settings, OpenVinoCacheStatus};
 use crate::state::{
@@ -43,6 +46,11 @@ use crate::translation_cache::{
 };
 use crate::translation_language::TranslationLanguage;
 use crate::translation_services::find_translation_service_descriptor;
+use easydict_nllb::{
+    nllb_language_name_from_code, source_flores_code_for_dotnet_language_name,
+    target_flores_code_for_dotnet_language_name, HuggingFaceNllbTokenizer, NllbInferenceEngine,
+    NllbModelPaths, NllbTokenizer, NllbTranslator, OpenVinoDevice, OrtNllbInferenceEngine,
+};
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use std::collections::HashSet;
 use std::fmt;
@@ -1195,6 +1203,80 @@ pub struct LocalAiWorkerQuickTranslateBackend {
     settings: Option<SettingsSnapshot>,
 }
 
+pub struct NativeOpenVinoQuickTranslateBackend<T, E> {
+    translator: NllbTranslator<T, E>,
+}
+
+impl<T, E> NativeOpenVinoQuickTranslateBackend<T, E> {
+    pub fn new(translator: NllbTranslator<T, E>) -> Self {
+        Self { translator }
+    }
+
+    pub fn translator(&self) -> &NllbTranslator<T, E> {
+        &self.translator
+    }
+}
+
+impl<T: NllbTokenizer, E: NllbInferenceEngine> QuickTranslateBackend
+    for NativeOpenVinoQuickTranslateBackend<T, E>
+{
+    fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
+        let _ = settings;
+        Ok(())
+    }
+
+    fn translate(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<TranslationResultDto, QuickTranslateBackendError> {
+        self.translate_stream(params).map(|stream| stream.result)
+    }
+
+    fn translate_stream(
+        &mut self,
+        params: &TranslateParams,
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let from_language = nllb_language_name_from_code(params.from.as_deref(), "Auto")
+            .ok_or_else(|| {
+                QuickTranslateBackendError::new("No local AI provider supports this language pair")
+            })?;
+        let to_language = nllb_language_name_from_code(params.to.as_deref(), "English")
+            .ok_or_else(|| {
+                QuickTranslateBackendError::new("No local AI provider supports this language pair")
+            })?;
+
+        let translation = self
+            .translator
+            .translate_stream_chunks(&params.text, &from_language, &to_language)
+            .map_err(|error| QuickTranslateBackendError::new(error.to_string()))?;
+
+        Ok(QuickTranslateStreamResult {
+            result: TranslationResultDto {
+                translated_text: translation.text,
+                service_id: Some("windows-local-ai".to_string()),
+                service_name: Some("OpenVINO (local NLLB)".to_string()),
+                detected_language: params.from.clone(),
+                result_kind: Some("Success".to_string()),
+                info_message: None,
+                timing_ms: None,
+                alternatives: None,
+                word_result: None,
+            },
+            chunks: translation.chunks,
+        })
+    }
+
+    fn correct_grammar(
+        &mut self,
+        params: &GrammarCorrectParams,
+    ) -> Result<GrammarCorrectResultDto, QuickTranslateBackendError> {
+        let _ = params;
+        Err(QuickTranslateBackendError::new(
+            "No local AI provider supports grammar correction for this language",
+        ))
+    }
+}
+
 impl LocalAiWorkerQuickTranslateBackend {
     pub fn new(facade: DirectWorkerFacade) -> Self {
         Self {
@@ -1582,7 +1664,7 @@ pub fn run_quick_translate_service_with_packaged_app_dir(
     run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
         request,
         app_dir,
-        RetainedWorkerPolicy::from_environment(),
+        RetainedWorkerPolicy::all_disabled(),
     )
 }
 
@@ -1591,7 +1673,24 @@ pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
     app_dir: impl AsRef<Path>,
     worker_policy: RetainedWorkerPolicy,
 ) -> QuickTranslateServiceUpdate {
-    if let Some(error) = local_ai_quick_translate_local_error(&request, worker_policy) {
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver(
+        request,
+        app_dir,
+        worker_policy,
+        &mut foundry_resolver,
+    )
+}
+
+pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver<
+    R: FoundryLocalEndpointResolver,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    worker_policy: RetainedWorkerPolicy,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
         return service_error_update(request, error);
     }
 
@@ -1600,11 +1699,18 @@ pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
             .expect("native route was checked before dispatch");
     }
 
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
     if let Some(native_request) =
-        auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
+        auto_foundry_local_native_probe_request(&request, foundry_resolver)
     {
         return run_quick_translate_service_with_native_openai(native_request);
+    }
+
+    if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
+        return run_quick_translate_service_with_native_openvino(native_request);
+    }
+
+    if let Some(error) = local_ai_quick_translate_local_error(&request, worker_policy) {
+        return service_error_update(request, error);
     }
 
     if request_uses_local_ai_worker_bridge(&request) {
@@ -1638,9 +1744,7 @@ fn run_quick_translate_streaming_service_with_packaged_app_dir(
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
-    if let Some(error) =
-        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::from_environment())
-    {
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
         return service_error_update(request, error);
     }
 
@@ -1656,6 +1760,16 @@ fn run_quick_translate_streaming_service_with_packaged_app_dir(
         return run_quick_translate_streaming_service_with_native_openai(native_request, sender);
     }
 
+    if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
+        return run_quick_translate_streaming_service_with_native_openvino(native_request, sender);
+    }
+
+    if let Some(error) =
+        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::all_disabled())
+    {
+        return service_error_update(request, error);
+    }
+
     if request_uses_local_ai_worker_bridge(&request) {
         return run_quick_translate_streaming_service_with_local_ai_bridge(
             request, app_dir, sender,
@@ -1667,6 +1781,7 @@ fn run_quick_translate_streaming_service_with_packaged_app_dir(
 
 pub fn quick_translate_request_can_route_natively(request: &QuickTranslateServiceRequest) -> bool {
     request_uses_native_openai(request)
+        || request_uses_native_openvino(request)
         || request_uses_native_custom_streaming(request)
         || request_uses_native_traditional_http(request)
         || request_uses_native_bing(request)
@@ -1691,11 +1806,32 @@ pub fn auto_foundry_local_native_probe_request<R: FoundryLocalEndpointResolver>(
     Some(native_request)
 }
 
+pub fn auto_openvino_native_fallback_request(
+    request: &QuickTranslateServiceRequest,
+) -> Option<QuickTranslateServiceRequest> {
+    if !request_should_probe_auto_foundry_local(request)
+        || !matches!(
+            request.execution_kind,
+            QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
+        )
+    {
+        return None;
+    }
+
+    let mut native_request = request.clone();
+    native_request.settings.local_ai_provider = Some(local_ai_provider_modes::OPENVINO.to_string());
+    request_uses_native_openvino(&native_request).then_some(native_request)
+}
+
 pub fn run_quick_translate_service_with_native_route(
     request: QuickTranslateServiceRequest,
 ) -> Option<QuickTranslateServiceUpdate> {
     if request_uses_native_openai(&request) {
         return Some(run_quick_translate_service_with_native_openai(request));
+    }
+
+    if request_uses_native_openvino(&request) {
+        return Some(run_quick_translate_service_with_native_openvino(request));
     }
 
     if request_uses_native_custom_streaming(&request) {
@@ -1727,6 +1863,12 @@ pub fn run_quick_translate_streaming_service_with_native_route(
 ) -> Option<QuickTranslateServiceUpdate> {
     if request_uses_native_openai(&request) {
         return Some(run_quick_translate_streaming_service_with_native_openai(
+            request, sender,
+        ));
+    }
+
+    if request_uses_native_openvino(&request) {
+        return Some(run_quick_translate_streaming_service_with_native_openvino(
             request, sender,
         ));
     }
@@ -1810,6 +1952,91 @@ fn run_quick_translate_streaming_service_with_native_openai(
         }
         Err(error) => service_error_update(request, error.to_string()),
     }
+}
+
+fn run_quick_translate_service_with_native_openvino(
+    request: QuickTranslateServiceRequest,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match native_openvino_backend_from_settings(&request.settings) {
+        Ok(backend) => backend,
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    run_quick_translate_service(&mut backend, &request)
+}
+
+fn run_quick_translate_streaming_service_with_native_openvino(
+    request: QuickTranslateServiceRequest,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut backend = match native_openvino_backend_from_settings(&request.settings) {
+        Ok(backend) => backend,
+        Err(error) => return service_error_update(request, error.to_string()),
+    };
+
+    if let Err(error) = QuickTranslateBackend::configure(&mut backend, &request.settings) {
+        return service_error_update(request, error.to_string());
+    }
+
+    if request.execution_kind != QuickTranslateExecutionKind::TranslateStream {
+        return run_quick_translate_service(&mut backend, &request);
+    }
+
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    match backend.translate_stream(&request.params) {
+        Ok(streamed) => {
+            for chunk in &streamed.chunks {
+                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                    QuickTranslateStreamChunk {
+                        query_id,
+                        service: service.clone(),
+                        text: chunk.clone(),
+                    },
+                ));
+            }
+
+            QuickTranslateServiceUpdate {
+                query_id,
+                outcome: QuickTranslateServiceOutcome {
+                    service: request.service,
+                    grammar_result: None,
+                    streamed_chunks: streamed.chunks,
+                    result: Ok(streamed.result),
+                },
+            }
+        }
+        Err(error) => service_error_update(request, error.to_string()),
+    }
+}
+
+fn native_openvino_backend_from_settings(
+    settings: &SettingsSnapshot,
+) -> Result<
+    NativeOpenVinoQuickTranslateBackend<HuggingFaceNllbTokenizer, OrtNllbInferenceEngine>,
+    QuickTranslateBackendError,
+> {
+    let cache_base = settings
+        .cache_dir
+        .as_deref()
+        .map(PathBuf::from)
+        .unwrap_or_else(default_openvino_data_directory);
+    let paths = NllbModelPaths::from_cache_base(cache_base);
+
+    ensure_openvino_runtime_directory_on_path(&paths.runtime_dir);
+
+    let tokenizer = HuggingFaceNllbTokenizer::from_model_paths(&paths)
+        .map_err(|error| QuickTranslateBackendError::new(error.to_string()))?;
+    let engine = OrtNllbInferenceEngine::from_model_paths(
+        &paths,
+        OpenVinoDevice::from_setting(settings.open_vino_device.as_deref()),
+        None,
+    )
+    .map_err(|error| QuickTranslateBackendError::new(error.to_string()))?;
+
+    Ok(NativeOpenVinoQuickTranslateBackend::new(
+        NllbTranslator::new(tokenizer, engine),
+    ))
 }
 
 fn run_quick_translate_service_with_native_custom_streaming(
@@ -1946,7 +2173,9 @@ fn run_quick_translate_service_with_local_ai_bridge(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
-    match DirectWorkerFacade::spawn_packaged_local_ai(app_dir) {
+    let openvino_cache_base = request.settings.cache_dir.as_deref().map(Path::new);
+    match DirectWorkerFacade::spawn_packaged_local_ai_with_cache_base(app_dir, openvino_cache_base)
+    {
         Ok(facade) => {
             let mut backend = LocalAiWorkerQuickTranslateBackend::new(facade);
             run_quick_translate_service(&mut backend, &request)
@@ -1960,7 +2189,11 @@ fn run_quick_translate_streaming_service_with_local_ai_bridge(
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match DirectWorkerFacade::spawn_packaged_local_ai(app_dir) {
+    let openvino_cache_base = request.settings.cache_dir.as_deref().map(Path::new);
+    let mut backend = match DirectWorkerFacade::spawn_packaged_local_ai_with_cache_base(
+        app_dir,
+        openvino_cache_base,
+    ) {
         Ok(facade) => LocalAiWorkerQuickTranslateBackend::new(facade),
         Err(error) => {
             return service_error_update(request, error.process_message("Local AI worker"));
@@ -2069,6 +2302,17 @@ fn request_uses_native_openai(request: &QuickTranslateServiceRequest) -> bool {
     openai_compatible_service_can_route_natively(&request.service.id, &request.settings)
 }
 
+fn request_uses_native_openvino(request: &QuickTranslateServiceRequest) -> bool {
+    request.service.id == "windows-local-ai"
+        && !request_uses_native_openai(request)
+        && local_ai_provider_mode(&request.settings) == local_ai_provider_modes::OPENVINO
+        && matches!(
+            request.execution_kind,
+            QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
+        )
+        && local_ai_quick_translate_native_preflight_error(request).is_none()
+}
+
 fn request_should_probe_auto_foundry_local(request: &QuickTranslateServiceRequest) -> bool {
     if request.service.id != "windows-local-ai"
         || local_ai_provider_mode(&request.settings) != local_ai_provider_modes::AUTO
@@ -2103,12 +2347,30 @@ fn request_uses_native_traditional_http(request: &QuickTranslateServiceRequest) 
 }
 
 fn request_uses_local_ai_worker_bridge(request: &QuickTranslateServiceRequest) -> bool {
-    request.service.id == "windows-local-ai" && !request_uses_native_openai(request)
+    request.service.id == "windows-local-ai"
+        && !request_uses_native_openai(request)
+        && !request_uses_native_openvino(request)
 }
 
 pub fn local_ai_quick_translate_local_error(
     request: &QuickTranslateServiceRequest,
     worker_policy: RetainedWorkerPolicy,
+) -> Option<&'static str> {
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(request) {
+        return Some(error);
+    }
+
+    if request.service.id != "windows-local-ai" {
+        return None;
+    }
+
+    request_uses_local_ai_worker_bridge(request)
+        .then(|| worker_policy.local_ai_worker_disabled_message())
+        .flatten()
+}
+
+pub fn local_ai_quick_translate_native_preflight_error(
+    request: &QuickTranslateServiceRequest,
 ) -> Option<&'static str> {
     if request.service.id != "windows-local-ai" {
         return None;
@@ -2125,18 +2387,16 @@ pub fn local_ai_quick_translate_local_error(
         }
 
         if provider_mode != local_ai_provider_modes::OPENVINO {
-            return request_uses_local_ai_worker_bridge(request)
-                .then(|| worker_policy.local_ai_worker_disabled_message())
-                .flatten();
+            return None;
         }
 
         let Some(from_language) =
-            strict_dotnet_language_name_from_code(request.params.from.as_deref(), "Auto")
+            nllb_language_name_from_code(request.params.from.as_deref(), "Auto")
         else {
             return Some("No local AI provider supports this language pair");
         };
         let Some(to_language) =
-            strict_dotnet_language_name_from_code(request.params.to.as_deref(), "English")
+            nllb_language_name_from_code(request.params.to.as_deref(), "English")
         else {
             return Some("No local AI provider supports this language pair");
         };
@@ -2150,9 +2410,7 @@ pub fn local_ai_quick_translate_local_error(
             );
         }
 
-        return request_uses_local_ai_worker_bridge(request)
-            .then(|| worker_policy.local_ai_worker_disabled_message())
-            .flatten();
+        return None;
     }
 
     if request.execution_kind == QuickTranslateExecutionKind::GrammarCorrection
@@ -2162,73 +2420,16 @@ pub fn local_ai_quick_translate_local_error(
         return Some("No local AI provider supports grammar correction for this language");
     }
 
-    request_uses_local_ai_worker_bridge(request)
-        .then(|| worker_policy.local_ai_worker_disabled_message())
-        .flatten()
+    None
 }
 
 fn openvino_supports_nllb_language_pair(from_language: &str, to_language: &str) -> bool {
-    if dotnet_language_name_is_auto(to_language) || !openvino_supports_nllb_language(to_language) {
-        return false;
-    }
-
-    dotnet_language_name_is_auto(from_language) || openvino_supports_nllb_language(from_language)
+    source_flores_code_for_dotnet_language_name(from_language).is_ok()
+        && target_flores_code_for_dotnet_language_name(to_language).is_ok()
 }
 
 fn dotnet_language_name_is_auto(language: &str) -> bool {
     language.trim().eq_ignore_ascii_case("Auto")
-}
-
-fn openvino_supports_nllb_language(language: &str) -> bool {
-    matches!(
-        language.trim().to_ascii_lowercase().as_str(),
-        "simplifiedchinese"
-            | "chinesesimplified"
-            | "traditionalchinese"
-            | "chinesetraditional"
-            | "classicalchinese"
-            | "chineseclassical"
-            | "japanese"
-            | "korean"
-            | "english"
-            | "german"
-            | "dutch"
-            | "swedish"
-            | "norwegian"
-            | "danish"
-            | "french"
-            | "spanish"
-            | "portuguese"
-            | "italian"
-            | "romanian"
-            | "russian"
-            | "polish"
-            | "czech"
-            | "ukrainian"
-            | "bulgarian"
-            | "slovak"
-            | "slovenian"
-            | "estonian"
-            | "latvian"
-            | "lithuanian"
-            | "greek"
-            | "hungarian"
-            | "finnish"
-            | "turkish"
-            | "arabic"
-            | "persian"
-            | "hebrew"
-            | "hindi"
-            | "bengali"
-            | "tamil"
-            | "telugu"
-            | "urdu"
-            | "vietnamese"
-            | "thai"
-            | "indonesian"
-            | "malay"
-            | "filipino"
-    )
 }
 
 fn unsupported_rust_native_route_update(

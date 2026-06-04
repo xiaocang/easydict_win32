@@ -5,6 +5,10 @@ use crate::compat_protocol::{
     LocalAiTranslateParams, ReadyEventData, ShutdownResult, TranslateDocumentParams,
     TranslateDocumentResult, TranslateStreamResult, WORKER_PROTOCOL_VERSION_CURRENT,
 };
+use crate::openvino_download::{
+    openvino_ep_path_injection_enabled, openvino_runtime_path_with_directory,
+};
+use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -67,15 +71,24 @@ impl DirectWorkerFacade {
             worker_kinds::LONGDOC,
             "longdoc",
             "Easydict.Workers.LongDoc.exe",
+            None,
         )
     }
 
     pub fn spawn_packaged_local_ai(app_dir: impl AsRef<Path>) -> Result<Self, WorkerClientError> {
+        Self::spawn_packaged_local_ai_with_cache_base(app_dir, None)
+    }
+
+    pub fn spawn_packaged_local_ai_with_cache_base(
+        app_dir: impl AsRef<Path>,
+        openvino_cache_base: Option<&Path>,
+    ) -> Result<Self, WorkerClientError> {
         Self::spawn_packaged_worker(
             app_dir,
             worker_kinds::LOCAL_AI,
             "localai",
             "Easydict.Workers.LocalAi.exe",
+            openvino_cache_base,
         )
     }
 
@@ -161,9 +174,15 @@ impl DirectWorkerFacade {
         expected_worker_kind: &str,
         worker_subdir: &str,
         worker_exe_name: &str,
+        openvino_cache_base: Option<&Path>,
     ) -> Result<Self, WorkerClientError> {
         Self::spawn_worker(
-            packaged_worker_command(app_dir, worker_subdir, worker_exe_name),
+            packaged_worker_command_with_openvino_cache_base(
+                app_dir,
+                worker_subdir,
+                worker_exe_name,
+                openvino_cache_base,
+            ),
             expected_worker_kind,
         )
     }
@@ -579,6 +598,15 @@ pub fn packaged_worker_command(
     worker_subdir: &str,
     worker_exe_name: &str,
 ) -> WorkerCommand {
+    packaged_worker_command_with_openvino_cache_base(app_dir, worker_subdir, worker_exe_name, None)
+}
+
+pub fn packaged_worker_command_with_openvino_cache_base(
+    app_dir: impl AsRef<Path>,
+    worker_subdir: &str,
+    worker_exe_name: &str,
+    openvino_cache_base: Option<&Path>,
+) -> WorkerCommand {
     let app_dir = app_dir.as_ref();
     let mut command =
         WorkerCommand::new(default_worker_path(app_dir, worker_subdir, worker_exe_name))
@@ -602,29 +630,23 @@ pub fn packaged_worker_command(
     }
 
     if worker_subdir.eq_ignore_ascii_case("localai") {
+        let openvino_ep_value =
+            std::env::var(OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE).unwrap_or_default();
         command = command.env(
-            ENABLE_OPENVINO_EP_ENVIRONMENT_VARIABLE,
-            std::env::var(ENABLE_OPENVINO_EP_ENVIRONMENT_VARIABLE).unwrap_or_default(),
+            OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE,
+            openvino_ep_value.clone(),
         );
 
-        if openvino_ep_path_injection_enabled() {
-            if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-                let openvino_runtime_dir = PathBuf::from(local_app_data)
-                    .join("Easydict")
-                    .join("runtimes")
-                    .join("openvino")
-                    .join(OPENVINO_RUNTIME_PACKAGE_VERSION)
-                    .join("win-x64")
-                    .join("native");
-                let openvino_runtime_dir = openvino_runtime_dir.to_string_lossy().to_string();
+        if openvino_ep_path_injection_enabled(Some(&openvino_ep_value)) {
+            if let Some(openvino_runtime_dir) = openvino_runtime_dir_for_worker(openvino_cache_base)
+            {
+                let openvino_runtime_dir_text = openvino_runtime_dir.to_string_lossy().to_string();
                 let existing_path = std::env::var("PATH").unwrap_or_default();
-                let path = if existing_path.trim().is_empty() {
-                    openvino_runtime_dir.clone()
-                } else {
-                    format!("{openvino_runtime_dir};{existing_path}")
-                };
+                let path =
+                    openvino_runtime_path_with_directory(&existing_path, &openvino_runtime_dir)
+                        .unwrap_or(existing_path);
                 command = command
-                    .env("EASYDICT_OPENVINO_RUNTIME_DIR", openvino_runtime_dir)
+                    .env("EASYDICT_OPENVINO_RUNTIME_DIR", openvino_runtime_dir_text)
                     .env("PATH", path);
             }
         }
@@ -641,10 +663,12 @@ fn has_bundled_dotnet_runtime(dotnet_root: &Path) -> bool {
             .is_dir()
 }
 
-const ENABLE_OPENVINO_EP_ENVIRONMENT_VARIABLE: &str = "EASYDICT_ENABLE_OPENVINO_EP";
-const OPENVINO_RUNTIME_PACKAGE_VERSION: &str = "1.21.0";
+fn openvino_runtime_dir_for_worker(openvino_cache_base: Option<&Path>) -> Option<PathBuf> {
+    if let Some(cache_base) = openvino_cache_base {
+        return Some(NllbModelPaths::from_cache_base(cache_base).runtime_dir);
+    }
 
-fn openvino_ep_path_injection_enabled() -> bool {
-    std::env::var(ENABLE_OPENVINO_EP_ENVIRONMENT_VARIABLE)
-        .is_ok_and(|value| value.eq_ignore_ascii_case("1") || value.eq_ignore_ascii_case("true"))
+    std::env::var_os("LOCALAPPDATA").map(|local_app_data| {
+        NllbModelPaths::from_cache_base(PathBuf::from(local_app_data).join("Easydict")).runtime_dir
+    })
 }

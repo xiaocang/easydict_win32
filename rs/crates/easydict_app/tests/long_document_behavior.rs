@@ -2086,6 +2086,61 @@ fn failed_native_pdf_text_extraction_does_not_probe_packaged_longdoc_worker() {
 }
 
 #[test]
+fn packaged_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_enable_hybrid() {
+    let temp_dir = unique_temp_dir("longdoc-packaged-runner-default-rust-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A long document that still needs the retained worker.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "google".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        54,
+    )
+    .expect("longdoc request should be built");
+    request.params.input_mode = "Docx".to_string();
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let default_outcome =
+        run_long_document_request_with_packaged_app_dir(request.clone(), &temp_dir);
+    let default_error = default_outcome
+        .result
+        .expect_err("default rs runner should keep retained LongDoc disabled");
+
+    assert!(default_error
+        .message
+        .contains("requires a Rust-native route"));
+    assert!(default_error.message.contains(".NET Long Document workers"));
+    assert!(!default_error
+        .message
+        .contains("Long Document worker executable"));
+
+    let hybrid_outcome = run_long_document_request_with_packaged_app_dir_and_worker_policy(
+        request,
+        &temp_dir,
+        RetainedWorkerPolicy::all_enabled(),
+    );
+    let hybrid_error = hybrid_outcome
+        .result
+        .expect_err("explicit hybrid policy should still expose retained worker compatibility");
+
+    assert!(hybrid_error.message.contains("Long Document worker"));
+    assert!(hybrid_error.message.contains("I/O error"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn missing_native_pdf_file_does_not_fall_back_to_long_document_backend() {
     let temp_dir = unique_temp_dir("longdoc-native-pdf-missing-input");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -2344,7 +2399,7 @@ fn missing_worker_file_long_document_packaged_app_dir_runner_does_not_spawn_work
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("missing.txt");
 
-    let request = build_long_document_request(
+    let mut request = build_long_document_request(
         &EasydictUiState {
             long_document: easydict_app::LongDocumentState {
                 selected_file: input_path.to_string_lossy().to_string(),
@@ -2358,6 +2413,7 @@ fn missing_worker_file_long_document_packaged_app_dir_runner_does_not_spawn_work
         31,
     )
     .expect("worker-routed missing file request");
+    request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
 
     assert!(!long_document_request_can_route_natively(&request));
 
@@ -2366,7 +2422,12 @@ fn missing_worker_file_long_document_packaged_app_dir_runner_does_not_spawn_work
         .result
         .expect_err("missing input should fail locally before worker startup");
 
-    assert!(error.message.contains("Could not read long document input"));
+    assert!(
+        error.message.contains("Could not read long document input")
+            || error.message.contains("Could not read text document"),
+        "missing input should fail locally before worker startup: {}",
+        error.message
+    );
     assert!(!error.message.contains("Long Document worker"));
 
     fs::remove_dir_all(&temp_dir).ok();

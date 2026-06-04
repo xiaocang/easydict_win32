@@ -34,12 +34,29 @@ logical `main`, `settings`, `mini`, `fixed`, `capture-overlay`, or `pop-button`
 surface. `rs/scripts/Capture-PreviewScreenshot.ps1` reads the same variable so
 small preview windows such as PopButton and capture overlay are not filtered out.
 
+Rust preview parity matrix:
+
+```powershell
+.\scripts\Capture-PreviewParityMatrix.ps1 -ListScenarios
+.\scripts\Capture-PreviewParityMatrix.ps1 -Matrix settings -ReferenceRoot ..\artifacts\ui-screenshots -RunAnalyzer -SkipBuild -SkipAnalyzerSelfTest
+.\scripts\Capture-PreviewParityMatrix.ps1 -Scenario parity-settings-general-behavior-top -ReferenceRoot ..\artifacts\ui-screenshots -RunAnalyzer -UseDefaultScoreGates -FailOnThreshold -RequireManifest
+```
+
+`Capture-PreviewParityMatrix.ps1` launches a fresh Rust preview instance per
+scenario, captures analyzer-compatible `*-rust-win-fluent-iced.png` files,
+writes view schema and Win32/DPI capture metadata, optionally copies matching
+`*-dotnet-winui-reference.png` screenshots, and emits `ui-parity-manifest.json`
+for `dotnet/scripts/ci/Invoke-UiParityAnalysis.ps1`. Use `-UiLanguage zh-CN`
+for the primary .NET parity baseline and keep `en-US` as a smoke variant.
+
 Rust portable package checks:
 
 ```powershell
 cargo test -p easydict_packager -- --nocapture
 cargo run -p easydict_packager -- zip-directory --source path\to\publish-dir --destination $env:TEMP\easydict-portable.zip --exclude-extension .pdb
+cargo run -p easydict_packager -- package-browser-extension --extension-dir ..\browser-extension --target All --output-dir $env:TEMP\easydict-browser-extension
 cargo run -p easydict_packager -- extract-dotnet-runtime --rid win-x64 --output-dir path\to\publish-msix\dotnet
+cargo run -p easydict_packager -- build-rust-helpers --workspace . --platform x64 --configuration Release --output-dir path\to\publish-dir
 .\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release -NoZip
 .\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release -PackageVersion v0.0.0-local
 ```
@@ -51,11 +68,21 @@ does not produce MSIX, an installer, retained .NET workers, or a bundled .NET
 runtime. ZIP creation is owned by `easydict_packager` so portable packaging does
 not depend on PowerShell `Compress-Archive`.
 
+Browser extension packages are also created by `easydict_packager` through
+`package-browser-extension`. The retained
+`browser-extension/scripts/Package-Extension.ps1` entry point is only a shim;
+Rust owns manifest JSON parsing, package file whitelisting, `key` stripping for
+store submission, and Chrome `.zip` / Firefox `.xpi` archive writing.
+
 `easydict_packager` also owns retained worker shared `.NET` runtime bundling for
 the hybrid MSIX profile. `dotnet/scripts/Extract-DotnetRuntime.ps1` is only a
 shim to `extract-dotnet-runtime`, which downloads the official runtime ZIP,
 extracts the standard `DOTNET_ROOT` layout, strips duplicate license/notice
 files, and verifies `host/fxr` plus `shared/Microsoft.NETCore.App`.
+
+`dotnet/scripts/Build-RustHelpers.ps1` is likewise only a shim to
+`build-rust-helpers`. The Rust packager owns target triple mapping, helper bin
+selection, copy validation, and the legacy `BrowserHostRegistrar.exe` alias.
 
 UI parity analyzer smoke checks:
 
@@ -96,6 +123,7 @@ cargo run -p easydict_msix_validate -- path\to\package.msix --allow-unsigned
 cargo run -p easydict_msix_validate -- fix-minversion path\to\package.msix
 cargo run -p easydict_msix_validate -- verify-bundle-minversion path\to\bundle.msixbundle
 cargo run -p easydict_msix_validate -- dedupe-worker-shared path\to\publish-dir
+cargo run -p easydict_msix_validate -- prepare-package-inputs --platform x64 --publish-dir path\to\publish-msix --manifest ..\dotnet\src\Easydict.WinUI\Package.appxmanifest --output-manifest $env:TEMP\Package.x64.appxmanifest --msix-version 1.2.3.4 --verify-targetsize-icons
 ```
 
 `easydict_msix_validate` owns package identity/min-version/signature checks,
@@ -104,7 +132,10 @@ fixer, release bundle MinVersion validation, and retained worker shared-file
 dedupe. Bundle validation reads the outer `.msixbundle` and each nested
 `.appx`/`.msix` directly through the Rust ZIP/XML path instead of PowerShell
 archive extraction; dedupe uses Rust SHA-256 hashing instead of PowerShell
-`Get-FileHash`/`Remove-Item` logic.
+`Get-FileHash`/`Remove-Item` logic. Package input preparation verifies required
+MSIX assets, normalizes `resources.pri`, and rewrites only the manifest
+`Identity` architecture/version through `quick-xml`, leaving `winapp package` as
+the external packager.
 
 Store listing smoke checks:
 
@@ -122,6 +153,25 @@ point is only a Cargo shim. Submit still calls the external `msstore` CLI, but
 validate/preview/summary no longer need `powershell-yaml` or PowerShell JSON/YAML
 conversion.
 
+NLLB/OpenVINO core checks:
+
+```powershell
+cargo test --manifest-path ..\lib\easydict-nllb\Cargo.toml -- --nocapture
+cargo test --manifest-path ..\lib\easydict-nllb\Cargo.toml --features ort-openvino ort_engine -- --nocapture
+```
+
+`lib/easydict-nllb` owns the HuggingFace tokenizer, NLLB/FLORES language
+mapping, OpenVINO cache manifest, and the feature-gated `ort-openvino` ONNX
+session engine. The library feature is off by default; `easydict_app` enables it
+for cache-ready explicit OpenVINO Quick Translate so the Rust route can construct
+`HuggingFaceNllbTokenizer + OrtNllbInferenceEngine` directly. The `ort`
+dependency uses dynamic loading, so Rust builds do not download or bundle ONNX
+Runtime binaries.
+
+```powershell
+cargo test -p easydict_app --test quick_translate_behavior openvino -- --nocapture
+```
+
 Command-line translation smoke checks:
 
 ```powershell
@@ -134,11 +184,14 @@ echo Hello | cargo run -p easydict_app --bin easydict_cli -- translate --service
 "Hello`nGood morning" | cargo run -p easydict_app --bin easydict_cli -- batch --service google --from en --to zh-Hans --text - --json
 ```
 
-`easydict_cli` runs supported services through Rust-native routes. LocalAI still
-needs the retained direct worker payload; use `--app-dir` to point at a packaged
-app directory when intentionally exercising the retained `workers/localai`
-fallback. Automatic worker discovery and `--host` directory hints are disabled
-for LocalAI so CLI requests prefer Rust-native routes first. The
+`easydict_cli` runs supported services through Rust-native routes. The rs app
+and CLI no longer start the retained `workers/localai` payload from default
+packaged Quick Translate routes; `--host` and `--app-dir` remain accepted only
+as legacy no-op compatibility options.
+Auto LocalAI still probes a running Foundry Local endpoint first, but requests
+can now fall back to the Rust-native OpenVINO NLLB route when the model/runtime
+cache is complete. Requests that still need the retained `.NET` worker fail
+locally with a Rust-native-route requirement. The
 `batch` command treats each non-empty input line as a separate translation
 request and emits one JSON Line per result when `--json` is set.
 

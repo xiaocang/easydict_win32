@@ -32,12 +32,23 @@ public sealed class HotkeyService : IDisposable
     private const uint MOD_ALT = 0x0001;
     private const uint MOD_CONTROL = 0x0002;
     private const uint MOD_SHIFT = 0x0004;
+    private const uint MOD_WIN = 0x0008;
     private const uint MOD_NOREPEAT = 0x4000;
+
+    private const uint VK_SPACE = 0x20;
 
     private readonly Window _window;
     private readonly nint _hwnd;
     private volatile bool _isDisposed;
     private volatile bool _isInitialized;
+
+    // Low-level keyboard hook used only to capture Win+Space, which RegisterHotKey
+    // cannot claim because Windows reserves it for the input-language switcher.
+    // Lazily created when a hotkey is configured as Win+Space.
+    private WinSpaceHotkeyHook? _winSpaceHook;
+
+    // True once a hotkey slot has claimed Win+Space during the current registration pass.
+    private bool _winSpaceBound;
 
     // Window subclass delegate - must keep reference to prevent GC
     private delegate nint SubclassProc(nint hWnd, uint uMsg, nint wParam, nint lParam, nuint uIdSubclass, nuint dwRefData);
@@ -152,6 +163,11 @@ public sealed class HotkeyService : IDisposable
         var settings = SettingsService.Instance;
         var failures = new List<HotkeyRegistrationFailure>();
 
+        // Reset Win+Space hook binding for this pass; TryRegister re-binds it if a
+        // slot is still configured as Win+Space.
+        _winSpaceBound = false;
+        _winSpaceHook?.SetHandler(null);
+
         // Register Show Window hotkey (default: Ctrl+Alt+T)
         if (settings.EnableShowWindowHotkey)
         {
@@ -240,6 +256,13 @@ public sealed class HotkeyService : IDisposable
             App.LogToFile("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
         }
 
+        // No slot uses Win+Space anymore — tear down the keyboard hook so we don't
+        // keep a global hook running needlessly (restores normal Win+Space behavior).
+        if (!_winSpaceBound)
+        {
+            _winSpaceHook?.Uninstall();
+        }
+
         return failures;
     }
 
@@ -266,6 +289,35 @@ public sealed class HotkeyService : IDisposable
     /// </summary>
     private void TryRegister(int hotkeyId, uint modifiers, uint virtualKey, string debugName, string nameKey, string hotkeyString, List<HotkeyRegistrationFailure> failures)
     {
+        // Win+Space cannot be claimed via RegisterHotKey (Windows reserves it for the
+        // input-language switcher); route it through the low-level keyboard hook.
+        if (modifiers == MOD_WIN && virtualKey == VK_SPACE)
+        {
+            if (_winSpaceBound)
+            {
+                // Another slot already owns Win+Space; only one owner is allowed.
+                App.LogToFile($"[Hotkey] Win+Space already bound; {debugName} ({hotkeyString}) ignored");
+                failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, 0));
+                return;
+            }
+
+            _winSpaceHook ??= new WinSpaceHotkeyHook();
+            _winSpaceHook.SetHandler(() =>
+            {
+                // Mirror the WM_HOTKEY path so the target window can come to the foreground.
+                ForegroundWindowHelper.AllowCurrentProcessToSetForeground("WinSpaceHook");
+                ProcessHotkeyMessage(hotkeyId);
+            });
+            var installed = _winSpaceHook.Install();
+            _winSpaceBound = installed;
+            App.LogToFile($"[Hotkey] {debugName} ({hotkeyString}) bound via low-level keyboard hook: installed={installed}");
+            if (!installed)
+            {
+                failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, Marshal.GetLastWin32Error()));
+            }
+            return;
+        }
+
         var result = RegisterHotKey(_hwnd, hotkeyId, modifiers | MOD_NOREPEAT, virtualKey);
         var error = Marshal.GetLastWin32Error();
         App.LogToFile($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {error}");
@@ -349,6 +401,10 @@ public sealed class HotkeyService : IDisposable
             RemoveWindowSubclass(_hwnd, _subclassProc, 1);
             _subclassProc = null;
         }
+
+        // Tear down the Win+Space keyboard hook, if any.
+        _winSpaceHook?.Dispose();
+        _winSpaceHook = null;
 
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service disposed.");
     }

@@ -9,7 +9,8 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 /// <param name="NameKey">Localization key for the hotkey's friendly name.</param>
 /// <param name="HotkeyString">The hotkey combination as configured, e.g. "Win+Space".</param>
-/// <param name="ErrorCode">The Win32 error code returned by RegisterHotKey.</param>
+/// <param name="ErrorCode">The Win32 error code from RegisterHotKey, or 0 when no
+/// Win32 call was involved (e.g. a second slot requesting an already-bound Win+Space).</param>
 public sealed record HotkeyRegistrationFailure(string NameKey, string HotkeyString, int ErrorCode);
 
 /// <summary>

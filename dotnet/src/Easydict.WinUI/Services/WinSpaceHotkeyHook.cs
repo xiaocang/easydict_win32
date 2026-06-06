@@ -65,18 +65,45 @@ public sealed partial class WinSpaceHotkeyHook : IDisposable
         public IntPtr dwExtraInfo;
     }
 
-    // INPUT struct must be 40 bytes on 64-bit Windows; the union sits at offset 8.
-    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    // Architecture-neutral INPUT layout: sizes/offsets are computed by the runtime
+    // for both x86 (INPUT=28) and x64/ARM64 (INPUT=40). The union must include its
+    // largest native member (MOUSEINPUT) so Marshal.SizeOf<INPUT>() matches what the
+    // OS expects on every target; SendInput is called with that computed size.
+    // CS0649: the mouse/hardware union members exist only to size the union; they
+    // are intentionally never assigned in managed code.
+#pragma warning disable CS0649
+    [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
     {
-        [FieldOffset(0)] public uint type;
-        [FieldOffset(8)] public InputUnion U;
+        public uint type;
+        public InputUnion U;
     }
 
-    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    [StructLayout(LayoutKind.Explicit)]
     private struct InputUnion
     {
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -88,6 +115,7 @@ public sealed partial class WinSpaceHotkeyHook : IDisposable
         public uint time;
         public IntPtr dwExtraInfo;
     }
+#pragma warning restore CS0649
 
     private IntPtr _hookId = IntPtr.Zero;
     private LowLevelKeyboardProc? _hookProc; // prevent GC collection of delegate

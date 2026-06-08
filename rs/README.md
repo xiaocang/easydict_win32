@@ -53,10 +53,9 @@ Rust portable package checks:
 
 ```powershell
 cargo test -p easydict_packager -- --nocapture
-cargo run -p easydict_packager -- zip-directory --source path\to\publish-dir --destination $env:TEMP\easydict-portable.zip --exclude-extension .pdb
-cargo run -p easydict_packager -- package-browser-extension --extension-dir ..\browser-extension --target All --output-dir $env:TEMP\easydict-browser-extension
-cargo run -p easydict_packager -- extract-dotnet-runtime --rid win-x64 --output-dir path\to\publish-msix\dotnet
-cargo run -p easydict_packager -- build-rust-helpers --workspace . --platform x64 --configuration Release --output-dir path\to\publish-dir
+cargo run -p easydict_packager -- pack-rs-portable --workspace . --platform x64 --configuration Release --package-version v0.0.0-local
+cargo run -p easydict_packager -- validate-rs-portable --package path\to\easydict-rs-portable
+cargo run -p easydict_packager -- validate-rs-portable --package path\to\easydict-rs-portable.zip
 .\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release -NoZip
 .\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release -PackageVersion v0.0.0-local
 ```
@@ -65,8 +64,44 @@ The first Rust release package is portable-only. It writes
 `dist\easydict-rs-portable-...` and uses `Easydict.Rust.exe` as the GUI entry
 point so it can sit beside the existing .NET `Easydict.WinUI.exe` package. It
 does not produce MSIX, an installer, retained .NET workers, or a bundled .NET
-runtime. ZIP creation is owned by `easydict_packager` so portable packaging does
-not depend on PowerShell `Compress-Archive`.
+runtime. Staging, Rust builds, helper copying, ZIP creation, and retained
+`.NET` payload validation are owned by `easydict_packager`; `Package-Portable.ps1`
+is only a compatibility shim to `pack-rs-portable`. The packager validates both
+the staged directory and final ZIP, rejecting accidental `.NET` runtime or
+retained-worker entries such as `dotnet/`, `workers/`, `hostfxr.dll`,
+`coreclr.dll`, `hostpolicy.dll`, `clrjit.dll`, `System.Private.CoreLib.dll`,
+`*.runtimeconfig.json`, `*.deps.json`, or `Easydict.Workers.*`. After those
+diagnostics, the validator applies the first-release allowlist: only
+`Easydict.Rust.exe`, the Rust helper executables, `BrowserHostRegistrar.exe`,
+and `README-portable.txt` may be present at the package root.
+
+The retained `.NET` LongDoc/LocalAI worker bridge is compiled only with the
+explicit `retained-dotnet-workers` feature. Default rs builds and portable
+packages do not compile `compat_client` or the retained worker backends; requests
+that still need them fail locally with a Rust-native-route requirement.
+The retained worker IPC envelope, lifecycle payloads, and LocalAI stream DTOs are
+also feature-only. Default protocol tests exercise only the core
+translation/settings/MDX/LongDoc DTO contract used by the Rust-native package.
+
+```powershell
+cargo check -p easydict_app --all-targets
+cargo check -p easydict_app --all-targets --features retained-dotnet-workers
+cargo test -p easydict_app --test protocol_behavior -- --nocapture
+cargo test -p easydict_app --features retained-dotnet-workers --test protocol_behavior -- --nocapture
+cargo test -p easydict_app --features retained-dotnet-workers --test compat_client -- --nocapture
+```
+
+Standalone packaging helper diagnostics:
+
+```powershell
+cargo run -p easydict_packager -- package-browser-extension --extension-dir ..\browser-extension --target All --output-dir $env:TEMP\easydict-browser-extension
+cargo run -p easydict_packager -- build-rust-helpers --workspace . --platform x64 --configuration Release --output-dir $env:TEMP\easydict-rust-helpers
+cargo run -p easydict_packager -- zip-directory --source path\to\already-staged-dir --destination $env:TEMP\easydict-diagnostic.zip --exclude-extension .pdb
+```
+
+These helper commands are not the first rs portable assembly path. Use
+`pack-rs-portable` or `Package-Portable.ps1` for rs portable packages so helper
+builds, staging, ZIP creation, and `validate-rs-portable` stay coupled.
 
 Browser extension packages are also created by `easydict_packager` through
 `package-browser-extension`. The retained
@@ -74,11 +109,22 @@ Browser extension packages are also created by `easydict_packager` through
 Rust owns manifest JSON parsing, package file whitelisting, `key` stripping for
 store submission, and Chrome `.zip` / Firefox `.xpi` archive writing.
 
+Hybrid-only retained runtime checks:
+
+```powershell
+cargo run -p easydict_packager -- extract-dotnet-runtime --rid win-x64 --output-dir path\to\publish-msix\dotnet --runtime-profile hybrid
+```
+
 `easydict_packager` also owns retained worker shared `.NET` runtime bundling for
-the hybrid MSIX profile. `dotnet/scripts/Extract-DotnetRuntime.ps1` is only a
-shim to `extract-dotnet-runtime`, which downloads the official runtime ZIP,
-extracts the standard `DOTNET_ROOT` layout, strips duplicate license/notice
-files, and verifies `host/fxr` plus `shared/Microsoft.NETCore.App`.
+the hybrid MSIX/coexistence profile only. It is never part of the rs portable package
+flow. `dotnet/scripts/Extract-DotnetRuntime.ps1` is only a shim to
+`extract-dotnet-runtime`, which requires explicit `--runtime-profile hybrid`
+before downloading the official runtime ZIP. Missing profile or any Rust-only
+profile environment fails before download so rs portable packages do not
+accidentally gain a bundled `.NET` runtime. The public Rust library API requires
+the same explicit hybrid profile, so direct callers cannot bypass the CLI guard.
+The extractor then writes the standard `DOTNET_ROOT` layout, strips duplicate
+license/notice files, and verifies `host/fxr` plus `shared/Microsoft.NETCore.App`.
 
 `dotnet/scripts/Build-RustHelpers.ps1` is likewise only a shim to
 `build-rust-helpers`. The Rust packager owns target triple mapping, helper bin
@@ -119,7 +165,7 @@ MSIX validator smoke checks:
 
 ```powershell
 cargo test -p easydict_msix_validate -- --nocapture
-cargo run -p easydict_msix_validate -- path\to\package.msix --allow-unsigned
+cargo run -p easydict_msix_validate -- path\to\package.msix --runtime-profile hybrid --allow-unsigned
 cargo run -p easydict_msix_validate -- fix-minversion path\to\package.msix
 cargo run -p easydict_msix_validate -- verify-bundle-minversion path\to\bundle.msixbundle
 cargo run -p easydict_msix_validate -- dedupe-worker-shared path\to\publish-dir
@@ -152,6 +198,27 @@ payload creation. The retained `.winstore/scripts/Sync-StoreListings.ps1` entry
 point is only a Cargo shim. Submit still calls the external `msstore` CLI, but
 validate/preview/summary no longer need `powershell-yaml` or PowerShell JSON/YAML
 conversion.
+
+MDX/MDD native checks:
+
+```powershell
+cargo test --manifest-path ..\lib\rs-mdict\Cargo.toml --lib -- --nocapture
+cargo test -p easydict_app --test mdx_native_behavior -- --nocapture
+cargo test -p easydict_app --test quick_translate_behavior mdx_service -- --nocapture
+cargo test -p easydict_app --test protocol_behavior translation_result_dto -- --nocapture
+```
+
+`lib/rs-mdict` owns the Rust MDX/MDD reader fork. MDD resource lookup preserves
+final file extensions for exact resource matching, can read raw payloads that
+span record blocks, and exposes resolved resource keys to the app. The app-level
+native MDX route uses those keys for MIME inference and skips bad companion MDD
+files before trying later attachments. Rich HTML resource rewriting covers
+relative `src`/`href`, `poster`, common lazy-load attributes, `srcset`
+candidates, `https://dictassets/...`, CSS `url(...)`, and common MDict
+`sound://...` audio references while preserving external/navigation links.
+Quick Translate MDX results keep `translatedText` as readable plain text and
+carry rich dictionary HTML through optional `rawHtml` only when MDD resources
+are attached.
 
 NLLB/OpenVINO core checks:
 
@@ -207,12 +274,16 @@ cargo run -p easydict_app --bin easydict_long_doc -- --list-services
 `..\scripts\translate-long-doc.ps1` defaults to the Rust long document helper
 `easydict_long_doc.exe`. In a source checkout without a built helper, it falls
 back to development mode via `cargo run -p easydict_app --bin easydict_long_doc`.
-Use `-RustHelperPath` or `-AppDir` to pin a packaged helper, and use `-UseCargo`
-when intentionally exercising the development binary. The Rust helper accepts
+Use `-RustHelperPath` or `-AppDir` to locate a packaged helper, and use
+`-UseCargo` when intentionally exercising the development binary. The Rust
+helper accepts
 `--list-services`, `--input`, `--target-language`, `--from`, `--output`,
 `--service`, `--output-mode`, `--layout`, `--pdf-export-mode`, `--page`,
 `--page-range`, `--max-concurrency`, `--env-file`, `--vision-endpoint`,
-`--vision-api-key`, `--vision-model`, and `--app-dir`.
+`--vision-api-key`, `--vision-model`, and the legacy no-op `--app-dir`.
+Passing `--app-dir` no longer enables retained LongDoc worker lookup; requests
+that still need the retained `.NET` worker fail locally with a Rust-native-route
+requirement.
 
 The old WinUI debug entry point is legacy-only now. Pass `-UseDotnetLegacy`
 explicitly only when you need to compare against the previous .NET debug CLI.

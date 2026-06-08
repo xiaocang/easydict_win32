@@ -167,18 +167,24 @@ Download from the [Releases](https://github.com/xiaocang/easydict_win32/releases
 
 #### Portable Version (Recommended)
 
-**File:** `easydict_win32-vX.Y.Z-x64.zip`
+**File:** `easydict-rs-portable-vX.Y.Z-win-x64.zip`
 
 - No installation required - extract and run
 - No administrator privileges needed
-- Self-contained (.NET runtime included)
+- Rust-native portable package; does not include the .NET runtime
 - First run may trigger Windows SmartScreen warning - click "More info" → "Run anyway"
 
 ```powershell
 # Extract and run
-Expand-Archive easydict_win32-v1.0.0-x64.zip -DestinationPath Easydict
-.\Easydict\Easydict.WinUI.exe
+Expand-Archive easydict-rs-portable-v1.0.0-win-x64.zip -DestinationPath Easydict
+.\Easydict\Easydict.Rust.exe
 ```
+
+#### Legacy/Hybrid .NET Package
+
+The older `easydict_win32-vX.Y.Z-x64.zip` package and `Easydict.WinUI.exe`
+entry point are retained only for legacy .NET / hybrid coexistence builds. They
+are not the default rs portable package.
 
 #### Verify Download (Optional)
 
@@ -189,8 +195,8 @@ Each release includes SHA256 checksums for verification.
 sha256sum -c checksums-x64.sha256 --ignore-missing
 
 # PowerShell
-$expected = (Get-Content checksums-x64.sha256 | Select-String "easydict_win32").ToString().Split()[0]
-$actual = (Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash.ToLower()
+$expected = (Get-Content checksums-x64.sha256 | Select-String "easydict-rs-portable").ToString().Split()[0]
+$actual = (Get-FileHash easydict-rs-portable-v1.0.0-win-x64.zip -Algorithm SHA256).Hash.ToLower()
 if ($expected -eq $actual) { "OK" } else { "FAILED" }
 ```
 

@@ -167,18 +167,23 @@ winget install xiaocang.EasydictforWindows
 
 #### 便携版（推荐）
 
-**文件：** `easydict_win32-vX.Y.Z-x64.zip`
+**文件：** `easydict-rs-portable-vX.Y.Z-win-x64.zip`
 
 - 无需安装 - 解压即用
 - 无需管理员权限
-- 自包含（内含 .NET 运行时）
+- Rust 原生便携包；不包含 .NET 运行时
 - 首次运行可能触发 Windows SmartScreen 警告 - 点击「更多信息」→「仍要运行」
 
 ```powershell
 # 解压并运行
-Expand-Archive easydict_win32-v1.0.0-x64.zip -DestinationPath Easydict
-.\Easydict\Easydict.WinUI.exe
+Expand-Archive easydict-rs-portable-v1.0.0-win-x64.zip -DestinationPath Easydict
+.\Easydict\Easydict.Rust.exe
 ```
+
+#### Legacy/Hybrid .NET 包
+
+旧的 `easydict_win32-vX.Y.Z-x64.zip` 包和 `Easydict.WinUI.exe` 入口只保留给
+legacy .NET / hybrid 共存构建使用，不是默认 rs 便携包。
 
 #### 验证下载（可选）
 
@@ -189,8 +194,8 @@ Expand-Archive easydict_win32-v1.0.0-x64.zip -DestinationPath Easydict
 sha256sum -c checksums-x64.sha256 --ignore-missing
 
 # PowerShell
-$expected = (Get-Content checksums-x64.sha256 | Select-String "easydict_win32").ToString().Split()[0]
-$actual = (Get-FileHash easydict_win32-v1.0.0-x64.zip -Algorithm SHA256).Hash.ToLower()
+$expected = (Get-Content checksums-x64.sha256 | Select-String "easydict-rs-portable").ToString().Split()[0]
+$actual = (Get-FileHash easydict-rs-portable-v1.0.0-win-x64.zip -Algorithm SHA256).Hash.ToLower()
 if ($expected -eq $actual) { "OK" } else { "FAILED" }
 ```
 

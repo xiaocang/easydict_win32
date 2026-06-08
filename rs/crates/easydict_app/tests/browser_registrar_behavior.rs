@@ -1,8 +1,9 @@
 use easydict_app::browser_registrar::{
-    chrome_registry_path, default_bridge_directory, firefox_registry_path,
-    parse_browser_registrar_args, parse_chrome_ext_ids, serialize_cli_json,
-    BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError,
-    MemoryBrowserRegistry, DEFAULT_CHROME_EXT_IDS, DEFAULT_FIREFOX_EXT_ID,
+    chrome_registry_path, default_bridge_directory, firefox_registry_path, legacy_bridge_directory,
+    parse_browser_registrar_args, parse_chrome_ext_ids, rust_bridge_directory, serialize_cli_json,
+    BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError, BrowserRegistry,
+    MemoryBrowserRegistry, DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS,
+    DEFAULT_FIREFOX_EXT_ID, LEGACY_BRIDGE_ROOT_NAME, RUST_BRIDGE_ROOT_NAME,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -21,18 +22,24 @@ fn parser_defaults_install_and_uninstall_to_both_browsers() {
         parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS)
     );
     assert_eq!(install.firefox_ext_id, DEFAULT_FIREFOX_EXT_ID);
+    assert_eq!(install.bridge_root_name, DEFAULT_BRIDGE_ROOT_NAME);
+    assert_eq!(install.bridge_root_name, RUST_BRIDGE_ROOT_NAME);
 
     let uninstall = parse_browser_registrar_args(["uninstall"]).expect("uninstall args parse");
     assert_eq!(uninstall.command, BrowserRegistrarCommand::Uninstall);
     assert!(uninstall.chrome);
     assert!(uninstall.firefox);
+    assert_eq!(uninstall.bridge_root_name, DEFAULT_BRIDGE_ROOT_NAME);
+    assert_eq!(uninstall.bridge_root_name, RUST_BRIDGE_ROOT_NAME);
 }
 
 #[test]
-fn parser_accepts_browser_flags_and_custom_extension_ids() {
+fn parser_accepts_browser_flags_custom_bridge_root_and_extension_ids() {
     let options = parse_browser_registrar_args([
         "install",
         "--chrome",
+        "--bridge-root-name",
+        "EasydictRs",
         "--bridge-path",
         "C:/tools/easydict-native-bridge.exe",
         "--chrome-ext-id",
@@ -48,6 +55,7 @@ fn parser_accepts_browser_flags_and_custom_extension_ids() {
         options.bridge_path.as_deref(),
         Some(Path::new("C:/tools/easydict-native-bridge.exe"))
     );
+    assert_eq!(options.bridge_root_name, RUST_BRIDGE_ROOT_NAME);
     assert_eq!(options.chrome_ext_ids, ["alpha", "beta"]);
     assert_eq!(options.firefox_ext_id, "easydict-test@example.test");
 
@@ -55,6 +63,19 @@ fn parser_accepts_browser_flags_and_custom_extension_ids() {
     assert_eq!(status.command, BrowserRegistrarCommand::Status);
     assert!(!status.chrome);
     assert!(!status.firefox);
+}
+
+#[test]
+fn parser_rejects_bridge_root_names_that_escape_the_local_app_data_child() {
+    assert!(matches!(
+        parse_browser_registrar_args(["install", "--bridge-root-name", r"..\Easydict"])
+            .expect_err("invalid root"),
+        BrowserRegistrarParseError::InvalidValue { .. }
+    ));
+    assert!(matches!(
+        parse_browser_registrar_args(["install", "--bridge-root-name="]).expect_err("empty root"),
+        BrowserRegistrarParseError::InvalidValue { .. }
+    ));
 }
 
 #[test]
@@ -310,6 +331,49 @@ fn uninstall_removes_selected_browser_and_cleans_directory_when_none_remain() {
 }
 
 #[test]
+fn uninstall_preserves_foreign_native_messaging_registration() {
+    let sandbox = TestSandbox::new("foreign_uninstall");
+    let bridge_dir = sandbox.path("browser-bridge");
+    fs::create_dir_all(&bridge_dir).expect("create bridge dir");
+    fs::write(bridge_dir.join("stale.txt"), b"stale").expect("write local stale file");
+
+    let foreign_dir = sandbox.path("dotnet-browser-bridge");
+    fs::create_dir_all(&foreign_dir).expect("create foreign dir");
+    let foreign_bridge_path = foreign_dir.join("easydict-native-bridge.exe");
+    fs::write(&foreign_bridge_path, b"dotnet bridge").expect("write foreign bridge");
+    let foreign_manifest_path = foreign_dir.join("chrome-manifest.json");
+    write_json(
+        &foreign_manifest_path,
+        json!({
+            "name": "com.easydict.bridge",
+            "description": "Easydict native messaging bridge",
+            "path": foreign_bridge_path.display().to_string(),
+            "type": "stdio",
+            "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
+        }),
+    );
+
+    let mut registry = MemoryBrowserRegistry::default();
+    registry
+        .write_default_value(
+            &chrome_registry_path(),
+            &foreign_manifest_path.display().to_string(),
+        )
+        .expect("write foreign registry value");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, registry);
+
+    let output = core.uninstall(true, false);
+
+    assert!(output.uninstalled.is_empty());
+    assert_eq!(
+        core.registry().value(&chrome_registry_path()),
+        Some(foreign_manifest_path.display().to_string().as_str())
+    );
+    assert!(!bridge_dir.exists());
+    assert!(foreign_manifest_path.exists());
+}
+
+#[test]
 fn missing_bridge_source_returns_json_shaped_error_without_creating_bridge_dir() {
     let sandbox = TestSandbox::new("missing_source");
     let bridge_dir = sandbox.path("browser-bridge");
@@ -340,11 +404,86 @@ fn missing_bridge_source_returns_json_shaped_error_without_creating_bridge_dir()
 }
 
 #[test]
-fn default_bridge_directory_matches_the_legacy_local_app_data_location() {
+fn install_rejects_dotnet_and_compat_host_sources_even_when_they_exist() {
+    let sandbox = TestSandbox::new("reject_dotnet_sources");
+
+    for forbidden_name in [
+        "Easydict.CompatHost.exe",
+        "Easydict.WinUI.exe",
+        "Easydict.Workers.LocalAi.exe",
+    ] {
+        let source = sandbox.path(forbidden_name);
+        fs::write(&source, b"dotnet").expect("write forbidden source");
+        let bridge_dir = sandbox.path(&format!("browser-bridge-{forbidden_name}"));
+        let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+        let output = core.install(
+            true,
+            true,
+            &source,
+            &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+            DEFAULT_FIREFOX_EXT_ID,
+        );
+
+        assert!(!output.success, "{forbidden_name} should be rejected");
+        let error = output.error.as_deref().expect("error text");
+        assert!(error.contains("easydict-native-bridge.exe"));
+        assert!(error.contains("non-Rust native bridge"));
+        assert!(
+            !bridge_dir.exists(),
+            "{forbidden_name} should not be staged"
+        );
+    }
+}
+
+#[test]
+fn install_fails_when_existing_bridge_path_cannot_be_replaced() {
+    let sandbox = TestSandbox::new("copy_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    fs::create_dir_all(bridge_dir.join("easydict-native-bridge.exe"))
+        .expect("create conflicting bridge directory");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    let output = core.install(
+        true,
+        true,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    assert!(!output.success);
+    assert!(core.registry().value(&chrome_registry_path()).is_none());
+    assert!(core.registry().value(&firefox_registry_path()).is_none());
+}
+
+#[test]
+fn default_bridge_directory_matches_the_rs_portable_local_app_data_location() {
     assert_eq!(
         default_bridge_directory("C:/Users/Test/AppData/Local"),
         PathBuf::from("C:/Users/Test/AppData/Local")
-            .join("Easydict")
+            .join(RUST_BRIDGE_ROOT_NAME)
+            .join("browser-bridge")
+    );
+}
+
+#[test]
+fn legacy_bridge_directory_matches_the_dotnet_local_app_data_location() {
+    assert_eq!(
+        legacy_bridge_directory("C:/Users/Test/AppData/Local"),
+        PathBuf::from("C:/Users/Test/AppData/Local")
+            .join(LEGACY_BRIDGE_ROOT_NAME)
+            .join("browser-bridge")
+    );
+}
+
+#[test]
+fn rust_bridge_directory_uses_a_portable_specific_local_app_data_location() {
+    assert_eq!(
+        rust_bridge_directory("C:/Users/Test/AppData/Local"),
+        PathBuf::from("C:/Users/Test/AppData/Local")
+            .join(RUST_BRIDGE_ROOT_NAME)
             .join("browser-bridge")
     );
 }
@@ -383,7 +522,7 @@ impl TestSandbox {
     }
 
     fn write_source_bridge(&self) -> PathBuf {
-        let path = self.path("source-easydict-native-bridge.exe");
+        let path = self.path("easydict-native-bridge.exe");
         fs::write(&path, b"bridge").expect("write source bridge");
         path
     }

@@ -65,10 +65,8 @@ public static class BrowserSupportService
     // ───────────────────── Status Detection ─────────────────────
 
     /// <summary>
-    /// Checks whether Chrome Native Messaging support is fully installed:
-    ///   1. Registry key exists and points to a valid manifest
-    ///   2. Manifest file exists
-    ///   3. Bridge exe referenced in manifest exists
+    /// Checks whether Chrome Native Messaging support is fully installed and owned by
+    /// this legacy bridge directory.
     /// </summary>
     public static bool IsChromeSupportInstalled => IsInstalled(ChromeRegistryPath);
 
@@ -85,23 +83,62 @@ public static class BrowserSupportService
             if (key?.GetValue(null) is not string manifestPath)
                 return false;
 
-            if (!File.Exists(manifestPath))
-                return false;
-
-            // Verify bridge exe referenced in manifest exists
-            var json = File.ReadAllText(manifestPath);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("path", out var pathProp))
-            {
-                var bridgePath = pathProp.GetString();
-                return !string.IsNullOrEmpty(bridgePath) && File.Exists(bridgePath);
-            }
+            return ManifestReferencesExpectedBridge(manifestPath, BridgeExePath);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[BrowserSupport] IsInstalled check failed for {registryPath}: {ex.Message}");
         }
         return false;
+    }
+
+    internal static bool ManifestReferencesExpectedBridge(string manifestPath, string expectedBridgePath)
+    {
+        try
+        {
+            if (!File.Exists(manifestPath))
+                return false;
+
+            var json = File.ReadAllText(manifestPath);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("name", out var nameProp) ||
+                nameProp.GetString() != NativeHostName)
+                return false;
+
+            if (!root.TryGetProperty("type", out var typeProp) ||
+                typeProp.GetString() != "stdio")
+                return false;
+
+            if (!root.TryGetProperty("path", out var pathProp))
+                return false;
+
+            var bridgePath = pathProp.GetString();
+            return !string.IsNullOrEmpty(bridgePath) &&
+                   File.Exists(bridgePath) &&
+                   PathsReferToSameFile(bridgePath, expectedBridgePath);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[BrowserSupport] Manifest ownership check failed for {manifestPath}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool PathsReferToSameFile(string path, string expectedPath)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(path),
+                Path.GetFullPath(expectedPath),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // ───────────────────── Registrar Install (MSIX-safe) ─────────────────────

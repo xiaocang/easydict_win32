@@ -10,6 +10,9 @@ pub const NATIVE_HOST_NAME: &str = "com.easydict.bridge";
 pub const BRIDGE_EXE_NAME: &str = "easydict-native-bridge.exe";
 pub const CHROME_MANIFEST_FILE: &str = "chrome-manifest.json";
 pub const FIREFOX_MANIFEST_FILE: &str = "firefox-manifest.json";
+pub const LEGACY_BRIDGE_ROOT_NAME: &str = "Easydict";
+pub const RUST_BRIDGE_ROOT_NAME: &str = "EasydictRs";
+pub const DEFAULT_BRIDGE_ROOT_NAME: &str = RUST_BRIDGE_ROOT_NAME;
 pub const DEFAULT_CHROME_EXT_IDS: &str =
     "dmokdfinnomehfpmhoeekomncpobgagf,cbhpnmadpnoedfgonddpmlhaclbicllg";
 pub const DEFAULT_FIREFOX_EXT_ID: &str = "easydict-ocr@easydict.app";
@@ -27,6 +30,7 @@ pub struct BrowserRegistrarOptions {
     pub chrome: bool,
     pub firefox: bool,
     pub bridge_path: Option<PathBuf>,
+    pub bridge_root_name: String,
     pub chrome_ext_ids: Vec<String>,
     pub firefox_ext_id: String,
 }
@@ -37,6 +41,7 @@ pub enum BrowserRegistrarParseError {
     MissingCommand,
     UnknownCommand(String),
     MissingValue(String),
+    InvalidValue { option: String, value: String },
 }
 
 impl fmt::Display for BrowserRegistrarParseError {
@@ -46,6 +51,9 @@ impl fmt::Display for BrowserRegistrarParseError {
             Self::MissingCommand => formatter.write_str("missing command"),
             Self::UnknownCommand(command) => write!(formatter, "unknown command: {command}"),
             Self::MissingValue(option) => write!(formatter, "missing value for {option}"),
+            Self::InvalidValue { option, value } => {
+                write!(formatter, "invalid value for {option}: {value}")
+            }
         }
     }
 }
@@ -64,6 +72,7 @@ Options:
   --chrome              Target Chrome/Edge (default: both)
   --firefox             Target Firefox (default: both)
   --bridge-path PATH    Path to easydict-native-bridge.exe
+  --bridge-root-name N  LOCALAPPDATA child directory for manifests (default: EasydictRs)
   --chrome-ext-id IDS   Chrome extension ID(s), comma-separated (default: built-in)
   --firefox-ext-id ID   Firefox extension ID (default: built-in)"
 }
@@ -90,6 +99,7 @@ where
     let mut chrome = false;
     let mut firefox = false;
     let mut bridge_path = None;
+    let mut bridge_root_name = DEFAULT_BRIDGE_ROOT_NAME.to_string();
     let mut chrome_ext_ids = default_chrome_ext_ids();
     let mut firefox_ext_id = DEFAULT_FIREFOX_EXT_ID.to_string();
     let mut rest = args.peekable();
@@ -98,6 +108,9 @@ where
         if let Some((name, value)) = split_long_option(&arg) {
             match name {
                 "--bridge-path" => bridge_path = Some(PathBuf::from(value)),
+                "--bridge-root-name" => {
+                    bridge_root_name = parse_bridge_root_name("--bridge-root-name", value)?
+                }
                 "--chrome-ext-id" => chrome_ext_ids = parse_chrome_ext_ids(value),
                 "--firefox-ext-id" => firefox_ext_id = value.to_string(),
                 _ => {}
@@ -111,6 +124,12 @@ where
             "--firefox" => firefox = true,
             "--bridge-path" => {
                 bridge_path = Some(PathBuf::from(next_value(&mut rest, "--bridge-path")?));
+            }
+            "--bridge-root-name" => {
+                bridge_root_name = parse_bridge_root_name(
+                    "--bridge-root-name",
+                    &next_value(&mut rest, "--bridge-root-name")?,
+                )?;
             }
             "--chrome-ext-id" => {
                 chrome_ext_ids = parse_chrome_ext_ids(&next_value(&mut rest, "--chrome-ext-id")?);
@@ -132,6 +151,7 @@ where
         chrome,
         firefox,
         bridge_path,
+        bridge_root_name,
         chrome_ext_ids,
         firefox_ext_id,
     })
@@ -142,9 +162,24 @@ pub fn default_chrome_ext_ids() -> Vec<String> {
 }
 
 pub fn default_bridge_directory(local_app_data: impl AsRef<Path>) -> PathBuf {
+    bridge_directory_for_root(local_app_data, DEFAULT_BRIDGE_ROOT_NAME)
+}
+
+pub fn legacy_bridge_directory(local_app_data: impl AsRef<Path>) -> PathBuf {
+    bridge_directory_for_root(local_app_data, LEGACY_BRIDGE_ROOT_NAME)
+}
+
+pub fn rust_bridge_directory(local_app_data: impl AsRef<Path>) -> PathBuf {
+    bridge_directory_for_root(local_app_data, RUST_BRIDGE_ROOT_NAME)
+}
+
+pub fn bridge_directory_for_root(
+    local_app_data: impl AsRef<Path>,
+    bridge_root_name: impl AsRef<str>,
+) -> PathBuf {
     local_app_data
         .as_ref()
-        .join("Easydict")
+        .join(bridge_root_name.as_ref())
         .join("browser-bridge")
 }
 
@@ -232,6 +267,13 @@ where
             ));
         }
 
+        if !source_bridge_path_is_rust_native_bridge(source_bridge_path) {
+            return InstallOutput::error(format!(
+                "Bridge source must be {BRIDGE_EXE_NAME}; refusing to register non-Rust native bridge: {}",
+                source_bridge_path.display()
+            ));
+        }
+
         if let Err(error) = fs::create_dir_all(&self.bridge_directory) {
             return InstallOutput::error(error.to_string());
         }
@@ -239,9 +281,6 @@ where
         let bridge_path = self.bridge_exe_path();
         match fs::copy(source_bridge_path, &bridge_path) {
             Ok(_) => {}
-            Err(error) if bridge_path.exists() => {
-                let _ = error;
-            }
             Err(error) => return InstallOutput::error(error.to_string()),
         }
 
@@ -284,15 +323,21 @@ where
         let mut uninstalled = Vec::new();
 
         if chrome {
-            let _ = self.registry.delete_key(&chrome_registry_path());
-            delete_file(self.bridge_directory.join(CHROME_MANIFEST_FILE));
-            uninstalled.push("chrome".to_string());
+            self.uninstall_browser_if_owned(
+                &chrome_registry_path(),
+                CHROME_MANIFEST_FILE,
+                "chrome",
+                &mut uninstalled,
+            );
         }
 
         if firefox {
-            let _ = self.registry.delete_key(&firefox_registry_path());
-            delete_file(self.bridge_directory.join(FIREFOX_MANIFEST_FILE));
-            uninstalled.push("firefox".to_string());
+            self.uninstall_browser_if_owned(
+                &firefox_registry_path(),
+                FIREFOX_MANIFEST_FILE,
+                "firefox",
+                &mut uninstalled,
+            );
         }
 
         if !self.is_registered(&chrome_registry_path())
@@ -367,6 +412,33 @@ where
         manifest.name == NATIVE_HOST_NAME
             && manifest.manifest_type == "stdio"
             && path_points_to_bridge(Path::new(&manifest.path), &self.bridge_exe_path())
+    }
+
+    fn uninstall_browser_if_owned(
+        &mut self,
+        registry_path: &str,
+        manifest_file: &str,
+        browser_name: &str,
+        uninstalled: &mut Vec<String>,
+    ) {
+        if !self.registry_points_to_owned_manifest(registry_path, manifest_file) {
+            return;
+        }
+
+        let _ = self.registry.delete_key(registry_path);
+        delete_file(self.bridge_directory.join(manifest_file));
+        uninstalled.push(browser_name.to_string());
+    }
+
+    fn registry_points_to_owned_manifest(&self, registry_path: &str, manifest_file: &str) -> bool {
+        let Ok(Some(manifest_path)) = self.registry.read_default_value(registry_path) else {
+            return false;
+        };
+
+        path_matches(
+            Path::new(&manifest_path),
+            &self.bridge_directory.join(manifest_file),
+        )
     }
 }
 
@@ -483,6 +555,23 @@ where
         .ok_or_else(|| BrowserRegistrarParseError::MissingValue(option.to_string()))
 }
 
+fn parse_bridge_root_name(option: &str, value: &str) -> Result<String, BrowserRegistrarParseError> {
+    let value = value.trim();
+    let forbidden_chars = ['\\', '/', '<', '>', ':', '"', '|', '?', '*'];
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || value.chars().any(|ch| forbidden_chars.contains(&ch))
+    {
+        return Err(BrowserRegistrarParseError::InvalidValue {
+            option: option.to_string(),
+            value: value.to_string(),
+        });
+    }
+
+    Ok(value.to_string())
+}
+
 fn write_manifest_file<T: Serialize>(path: &Path, manifest: &T) -> io::Result<()> {
     let json = serde_json::to_string_pretty(manifest).map_err(json_io_error)?;
     fs::write(path, json)
@@ -495,6 +584,13 @@ fn delete_file(path: impl AsRef<Path>) {
     }
 }
 
+fn source_bridge_path_is_rust_native_bridge(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.eq_ignore_ascii_case(BRIDGE_EXE_NAME))
+        .unwrap_or(false)
+}
+
 fn path_points_to_bridge(path: &Path, bridge_path: &Path) -> bool {
     let Ok(path) = fs::canonicalize(path) else {
         return false;
@@ -504,6 +600,13 @@ fn path_points_to_bridge(path: &Path, bridge_path: &Path) -> bool {
     };
 
     path == bridge_path
+}
+
+fn path_matches(path: &Path, expected_path: &Path) -> bool {
+    match (fs::canonicalize(path), fs::canonicalize(expected_path)) {
+        (Ok(path), Ok(expected_path)) => path == expected_path,
+        _ => path == expected_path,
+    }
 }
 
 fn json_io_error(error: serde_json::Error) -> io::Error {

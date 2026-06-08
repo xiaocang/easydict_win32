@@ -1,5 +1,5 @@
 use easydict_app::browser_registrar::{
-    default_bridge_directory, parse_browser_registrar_args, serialize_cli_json, usage,
+    bridge_directory_for_root, parse_browser_registrar_args, serialize_cli_json, usage,
     BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError, BrowserRegistry,
     ErrorOutput, BRIDGE_EXE_NAME,
 };
@@ -37,7 +37,7 @@ fn main() -> ExitCode {
 fn run() -> Result<ExitCode, BrowserRegistrarCliError> {
     let options = parse_browser_registrar_args(env::args().skip(1))
         .map_err(BrowserRegistrarCliError::Parse)?;
-    let bridge_directory = default_bridge_directory(local_app_data()?);
+    let bridge_directory = bridge_directory_for_root(local_app_data()?, &options.bridge_root_name);
     let mut core = BrowserRegistrarCore::new(bridge_directory, SystemBrowserRegistry);
 
     match options.command {

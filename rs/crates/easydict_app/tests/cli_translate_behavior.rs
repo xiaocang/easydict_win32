@@ -559,7 +559,7 @@ fn local_ai_cli_env_overrides_provider_and_openvino_cache_dir_before_worker_look
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .remove_local_ai_env_overrides()
-        .env("EASYDICT_LOCAL_AI_PROVIDER", "openvino")
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "open_vino")
         .env("EASYDICT_OPENVINO_CACHE_DIR", &cache_dir)
         .env("EASYDICT_OPENVINO_DEVICE", "GPU")
         .output()

@@ -322,7 +322,7 @@ fn env_overrides_local_ai_provider_and_openvino_cache_dir_for_native_preflight()
             "windows-local-ai",
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env("EASYDICT_LOCAL_AI_PROVIDER", "openvino")
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "open_vino")
         .env("EASYDICT_OPENVINO_CACHE_DIR", &cache_dir)
         .env("EASYDICT_OPENVINO_DEVICE", "GPU")
         .output()

@@ -2263,9 +2263,27 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Added a default-feature Quick Translate regression proving the native persistent MDX suggestion index stops after the first dictionary fills the 20-item suggestion list. The runner does not open or build indexes for later dictionaries once the result cap is reached, matching the "do not probe later unmigrated dictionaries after native results are full" migration rule.
   - Extended `default_api_boundary_behavior` to scan `settings_migration.rs` and `settings_storage.rs` for retained runtime/worker markers, so the default app/settings path cannot quietly grow a `settings_migrate` CompatHost or worker fallback.
   - A read-only subagent ranked the next slices: rs portable/validator consistency remains the highest release risk, with settings migration and LocalDictionary default-native evidence as low-risk parallel hardening paths.
+- 2026-06-08: Locked LocalAI provider aliases and hybrid-only release orchestration.
+  - A read-only subagent identified duplicated LocalAI provider alias tables across Quick Translate, LongDoc, state/settings, CLI env overrides, and OpenAI-compatible Foundry config. No new dependency was needed; this is pure protocol/state normalization.
+  - Added `protocol_core::normalize_local_ai_provider_mode(...)` and routed Quick Translate, LongDoc, state snapshots, `easydict_cli`, `easydict_long_doc`, and Foundry config checks through it. The shared table now accepts `windows_ai` / `windows-ai` / `phi_silica`, `foundry_local` / `foundry-local` / `local-ai`, and `open_vino` / `open-vino` aliases while keeping unknown values as `Auto`.
+  - Added protocol/Quick/LongDoc/CLI regressions proving `open_vino` uses the OpenVINO native preflight path instead of falling back through Auto Foundry or retained worker wording.
+  - A separate read-only subagent found release orchestration still used `!= rust-only` gates. Updated release workflows, arm64 smoke, dotnet Makefile, and legacy PowerShell publish/MSIX scripts so retained workers/runtime are published only after an explicit normalized `hybrid` profile; scripts no longer default `RuntimeProfile` to `Hybrid`.
+  - Added `easydict_packager` release contract coverage for rs portable rust-only envs, positive retained-worker workflow gates, explicit hybrid PowerShell scripts, and Makefile hybrid-only retained worker/runtime branches.
 
 ## Current Verification
 
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test protocol_behavior local_ai_provider_mode_aliases -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_provider_alias -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior local_ai_provider_alias -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_env_overrides_provider_and_openvino_cache_dir_before_worker_lookup -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior env_overrides_local_ai_provider_and_openvino_cache_dir_for_native_preflight -- --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable -- --nocapture`
+- `cd rs; cargo test -p easydict_packager extract_dotnet_runtime -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate runtime_profile -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate rust_only -- --nocapture`
+- PowerShell parser check for `dotnet/scripts/publish.ps1`, `dotnet/scripts/package-and-install.ps1`, `dotnet/scripts/Package-Msix.ps1`, `dotnet/scripts/Extract-DotnetRuntime.ps1`, and `rs/scripts/Package-Portable.ps1`
+- `cd dotnet; dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~WorkerPackagingTests --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false`
 - `cd rs; cargo test -p easydict_app --features retained-dotnet-workers --test compat_client packaged_worker -- --nocapture`
 - `cargo test --manifest-path lib/rs-mdict/Cargo.toml mdd -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test mdx_native_behavior mdd -- --nocapture`

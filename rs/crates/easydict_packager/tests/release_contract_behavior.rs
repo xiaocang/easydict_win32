@@ -76,6 +76,29 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
 #[test]
 fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
     let root = repo_root();
+    let makefile = read_text(&root.join("dotnet/Makefile"));
+    assert_contains(
+        &makefile,
+        "if [ \"$$runtime_profile\" = \"hybrid\" ]; then",
+        "Makefile retained worker/runtime branches should require explicit hybrid",
+    );
+    assert_contains(
+        &makefile,
+        "only hybrid is supported for legacy .NET packaging",
+        "Makefile publish targets should reject unknown runtime profiles before worker publish",
+    );
+    assert_contains(
+        &makefile,
+        "only hybrid is supported for legacy .NET/MSIX packaging",
+        "Makefile MSIX targets should reject unknown runtime profiles before runtime extraction",
+    );
+    assert!(
+        !makefile.contains(
+            "if [ \"$$runtime_profile\" != \"rust-only\" ] && [ \"$$runtime_profile\" != \"rustonly\" ]"
+        ),
+        "Makefile should not use negative rust-only checks for retained worker/runtime branches"
+    );
+
     for relative_path in [
         ".github/workflows/release-publish.yml",
         ".github/workflows/arm64-msix-smoke.yml",

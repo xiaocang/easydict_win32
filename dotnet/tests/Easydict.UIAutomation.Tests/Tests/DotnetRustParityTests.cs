@@ -86,7 +86,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 $"{step.Key}-dotnet-winui-reference");
             rustWindow.SetForeground();
             Thread.Sleep(150);
-            var rustPath = ScreenshotHelper.CaptureWindow(
+            var rustPath = CaptureWindowPreferHwnd(
                 rustWindow,
                 $"{step.Key}-rust-win-fluent-iced");
             var sideBySidePath = SaveSideBySideComparison(

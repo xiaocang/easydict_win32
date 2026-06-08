@@ -1,5 +1,6 @@
-# Easydict WinUI Publish Script
-# Creates a self-contained deployment that includes .NET runtime
+# Easydict WinUI legacy .NET/hybrid publish script
+# Creates a self-contained deployment that includes the .NET runtime.
+# The first rs release uses ..\rs\scripts\Package-Portable.ps1 instead.
 
 param(
     [ValidateSet("x64", "x86", "arm64")]
@@ -8,7 +9,6 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
 
-    [ValidateSet("Hybrid", "RustOnly")]
     [string]$RuntimeProfile = "Hybrid",
     
     [switch]$CreateZip
@@ -21,10 +21,28 @@ $RepoRoot = Split-Path -Parent $SolutionDir
 $CargoManifest = Join-Path $RepoRoot "rs\Cargo.toml"
 $ProjectPath = Join-Path $SolutionDir "src\Easydict.WinUI\Easydict.WinUI.csproj"
 $PublishDir = Join-Path $SolutionDir "src\Easydict.WinUI\bin\publish\win-$Platform"
-$IsRustOnlyRuntime = $RuntimeProfile -eq "RustOnly"
+
+function Test-RustOnlyRuntimeProfile {
+    param([string]$Value)
+    $normalized = $Value.Trim().ToLowerInvariant().Replace("_", "-")
+    return $normalized -eq "rust-only" -or $normalized -eq "rustonly"
+}
+
+function Test-HybridRuntimeProfile {
+    param([string]$Value)
+    return $Value.Trim().ToLowerInvariant() -eq "hybrid"
+}
+
+$IsRustOnlyRuntime = Test-RustOnlyRuntimeProfile $RuntimeProfile
+if ($IsRustOnlyRuntime) {
+    throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/publish.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+}
+if (-not (Test-HybridRuntimeProfile $RuntimeProfile)) {
+    throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/publish.ps1. Only Hybrid is supported for legacy .NET/hybrid publishing."
+}
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Easydict WinUI Publisher" -ForegroundColor Cyan
+Write-Host "Easydict WinUI Legacy .NET/Hybrid Publisher" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Platform:      $Platform"
@@ -55,9 +73,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-if ($IsRustOnlyRuntime) {
-    Write-Host "Skipping retained .NET workers for RustOnly runtime profile." -ForegroundColor Yellow
-} elseif ($Platform -ne "x86") {
+if ($Platform -ne "x86") {
     Write-Host "Publishing remaining .NET workers..." -ForegroundColor Green
     dotnet publish (Join-Path $SolutionDir "src\Easydict.Workers.LongDoc\Easydict.Workers.LongDoc.csproj") `
         -c $Configuration `

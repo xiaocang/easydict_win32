@@ -1,5 +1,10 @@
 # WinApp CLI Configuration for Easydict Win32
 # Documentation: https://github.com/microsoft/winappCli
+#
+# NOTE: This file is for the legacy dotnet/MSIX packaging path only.
+# Do not use it for the first rs release. Rust packages are portable-only and
+# must be built through ../rs/scripts/Package-Portable.ps1, which forces the
+# Rust-only runtime profile and validates that no .NET runtime payload is staged.
 
 # Application metadata
 app:

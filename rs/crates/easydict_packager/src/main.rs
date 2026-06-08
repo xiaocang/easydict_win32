@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use easydict_packager::{
-    build_rust_helpers, download_and_extract_dotnet_runtime, zip_directory,
-    BuildRustHelpersOptions, ExtractDotnetRuntimeOptions, PackageBrowserExtensionOptions,
-    ZipDirectoryOptions,
+    build_rust_helpers, download_and_extract_dotnet_runtime, pack_rs_portable,
+    validate_rs_portable_payload, zip_directory, BuildRustHelpersOptions,
+    ExtractDotnetRuntimeOptions, PackRustPortableOptions, PackageBrowserExtensionOptions,
+    PackageRuntimeProfile, ValidateRustPortableOptions, ZipDirectoryOptions,
 };
 
 fn main() {
@@ -21,10 +22,161 @@ fn run(args: Vec<String>) -> i32 {
         "extract-dotnet-runtime" => run_extract_dotnet_runtime(&args[1..]),
         "build-rust-helpers" => run_build_rust_helpers(&args[1..]),
         "package-browser-extension" => run_package_browser_extension(&args[1..]),
+        "validate-rs-portable" => run_validate_rs_portable(&args[1..]),
+        "pack-rs-portable" => run_pack_rs_portable(&args[1..]),
         unknown => {
             eprintln!("error: unknown command: {unknown}");
             print_usage();
             2
+        }
+    }
+}
+
+fn run_pack_rs_portable(args: &[String]) -> i32 {
+    let mut workspace = None;
+    let mut platform = "x64".to_string();
+    let mut configuration = "Release".to_string();
+    let mut output_root = None;
+    let mut package_version = None;
+    let mut create_zip = true;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--workspace" => {
+                let Some(value) = read_value(args, &mut index, "--workspace") else {
+                    return 2;
+                };
+                workspace = Some(PathBuf::from(value));
+            }
+            "--platform" => {
+                let Some(value) = read_value(args, &mut index, "--platform") else {
+                    return 2;
+                };
+                platform = value;
+            }
+            "--configuration" => {
+                let Some(value) = read_value(args, &mut index, "--configuration") else {
+                    return 2;
+                };
+                configuration = value;
+            }
+            "--output-root" => {
+                let Some(value) = read_value(args, &mut index, "--output-root") else {
+                    return 2;
+                };
+                output_root = Some(PathBuf::from(value));
+            }
+            "--package-version" => {
+                let Some(value) = read_value(args, &mut index, "--package-version") else {
+                    return 2;
+                };
+                package_version = Some(value);
+            }
+            "--no-zip" => create_zip = false,
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(workspace) = workspace else {
+        eprintln!("error: pack-rs-portable requires --workspace");
+        print_usage();
+        return 2;
+    };
+    let output_root = output_root.unwrap_or_else(|| workspace.join("dist"));
+
+    match pack_rs_portable(&PackRustPortableOptions {
+        rust_workspace: workspace,
+        platform,
+        configuration,
+        output_root,
+        package_version,
+        create_zip,
+    }) {
+        Ok(outcome) => {
+            println!(
+                "Rust portable payload OK: {} ({} entries checked)",
+                outcome.package_dir.display(),
+                outcome.directory_validation_entries
+            );
+            if let (Some(zip_path), Some(entries)) =
+                (outcome.zip_path.as_ref(), outcome.zip_validation_entries)
+            {
+                println!(
+                    "Rust portable ZIP OK: {} ({} entries checked)",
+                    zip_path.display(),
+                    entries
+                );
+            }
+            println!("Rust portable package: {}", outcome.package_dir.display());
+            if let Some(zip_path) = outcome.zip_path.as_ref() {
+                println!("Created Rust portable ZIP: {}", zip_path.display());
+            }
+            println!("Files: {}", outcome.file_count);
+            println!("Size:  {:.2} MB", bytes_to_mb(outcome.total_bytes));
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
+        }
+    }
+}
+
+fn run_validate_rs_portable(args: &[String]) -> i32 {
+    let mut package_path = None;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--package" => {
+                let Some(value) = read_value(args, &mut index, "--package") else {
+                    return 2;
+                };
+                package_path = Some(PathBuf::from(value));
+            }
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(package_path) = package_path else {
+        eprintln!("error: validate-rs-portable requires --package");
+        print_usage();
+        return 2;
+    };
+
+    match validate_rs_portable_payload(&ValidateRustPortableOptions {
+        package_path: package_path.clone(),
+    }) {
+        Ok(outcome) => {
+            println!(
+                "Rust portable payload OK: {} ({} entries checked)",
+                package_path.display(),
+                outcome.checked_entries
+            );
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
         }
     }
 }
@@ -189,6 +341,7 @@ fn run_extract_dotnet_runtime(args: &[String]) -> i32 {
     let mut rid = None;
     let mut output_dir = None;
     let mut version = "8.0.11".to_string();
+    let mut runtime_profile = None;
 
     let mut index = 0;
     while index < args.len() {
@@ -210,6 +363,16 @@ fn run_extract_dotnet_runtime(args: &[String]) -> i32 {
                     return 2;
                 };
                 version = value;
+            }
+            "--runtime-profile" => {
+                let Some(value) = read_value(args, &mut index, "--runtime-profile") else {
+                    return 2;
+                };
+                let Some(profile) = PackageRuntimeProfile::parse_explicit(&value) else {
+                    eprintln!("error: unsupported runtime profile: {value}");
+                    return 2;
+                };
+                runtime_profile = Some(profile);
             }
             "-h" | "--help" => {
                 print_usage();
@@ -238,19 +401,24 @@ fn run_extract_dotnet_runtime(args: &[String]) -> i32 {
         eprintln!("error: unsupported .NET runtime RID: {rid}");
         return 1;
     }
+    let Some(runtime_profile) = runtime_profile else {
+        eprintln!(
+            "error: extract-dotnet-runtime requires explicit --runtime-profile hybrid; rs portable packages must not bundle .NET runtime"
+        );
+        return 1;
+    };
+    if runtime_profile != PackageRuntimeProfile::Hybrid {
+        eprintln!(
+            "error: extract-dotnet-runtime requires explicit --runtime-profile hybrid; rs portable packages must not bundle .NET runtime"
+        );
+        return 1;
+    }
 
-    println!(
-        "[ExtractDotnetRuntime] Downloading {}",
-        easydict_packager::dotnet_runtime_url(&version, &rid)
-    );
-    println!(
-        "[ExtractDotnetRuntime] Extracting to {}",
-        output_dir.display()
-    );
     match download_and_extract_dotnet_runtime(&ExtractDotnetRuntimeOptions {
         rid,
         output_dir: output_dir.clone(),
         version,
+        runtime_profile,
     }) {
         Ok(outcome) => {
             println!(
@@ -356,18 +524,20 @@ fn read_value(args: &[String], index: &mut usize, option: &str) -> Option<String
 }
 
 fn print_usage() {
-    println!(
-        "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]"
-    );
-    println!(
-        "       easydict_packager extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>]"
-    );
-    println!(
-        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>"
-    );
-    println!(
-        "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]"
-    );
+    for line in packager_usage_lines() {
+        println!("{line}");
+    }
+}
+
+fn packager_usage_lines() -> &'static [&'static str] {
+    &[
+        "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
+        "       easydict_packager extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>] --runtime-profile hybrid    # hybrid/coexistence packaging only; never used by rs portable",
+        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>",
+        "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
+        "       easydict_packager validate-rs-portable --package <dir-or-zip>",
+        "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
+    ]
 }
 
 fn bytes_to_mb(bytes: u64) -> f64 {
@@ -376,4 +546,259 @@ fn bytes_to_mb(bytes: u64) -> f64 {
 
 fn bytes_to_kb(bytes: u64) -> f64 {
     bytes as f64 / 1024.0
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+    use std::sync::Mutex;
+
+    use super::*;
+
+    static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn extract_dotnet_runtime_rejects_missing_runtime_profile_before_download() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_runtime_profile_environment();
+
+        let code = run_extract_dotnet_runtime(&[
+            "--rid".to_string(),
+            "win-x64".to_string(),
+            "--output-dir".to_string(),
+            "unused".to_string(),
+        ]);
+
+        assert_eq!(code, 1);
+        snapshot.restore();
+    }
+
+    #[test]
+    fn extract_dotnet_runtime_rejects_explicit_rust_only_profile_before_download() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_runtime_profile_environment();
+
+        let code = run_extract_dotnet_runtime(&[
+            "--rid".to_string(),
+            "win-x64".to_string(),
+            "--output-dir".to_string(),
+            "unused".to_string(),
+            "--runtime-profile".to_string(),
+            "rust-only".to_string(),
+        ]);
+
+        assert_eq!(code, 1);
+        snapshot.restore();
+    }
+
+    #[test]
+    fn extract_dotnet_runtime_rejects_rust_only_environment_even_with_explicit_hybrid() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_runtime_profile_environment();
+        std::env::set_var("RUNTIME_PROFILE", "rust-only");
+
+        let code = run_extract_dotnet_runtime(&[
+            "--rid".to_string(),
+            "win-arm64".to_string(),
+            "--output-dir".to_string(),
+            "unused".to_string(),
+            "--runtime-profile".to_string(),
+            "hybrid".to_string(),
+        ]);
+
+        assert_eq!(code, 1);
+        snapshot.restore();
+    }
+
+    #[test]
+    fn usage_marks_dotnet_runtime_extraction_as_hybrid_only_not_rs_portable() {
+        let usage = packager_usage_lines().join("\n");
+
+        assert!(
+            usage.contains(
+                "extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>] --runtime-profile hybrid"
+            ),
+            "usage should require explicit hybrid profile for runtime extraction:\n{usage}"
+        );
+        assert!(
+            usage.contains("hybrid/coexistence packaging only"),
+            "usage should label runtime extraction as hybrid-only:\n{usage}"
+        );
+        assert!(
+            usage.contains("never used by rs portable"),
+            "usage should steer rs portable callers away from .NET runtime extraction:\n{usage}"
+        );
+        assert!(
+            !usage.contains("[--runtime-profile hybrid|rust-only]"),
+            "usage must not suggest rust-only can extract .NET runtime:\n{usage}"
+        );
+        assert!(
+            usage.contains("zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable"),
+            "usage should steer rs portable callers toward pack-rs-portable instead of generic zip-directory:\n{usage}"
+        );
+    }
+
+    #[test]
+    fn readme_keeps_runtime_and_generic_zip_helpers_out_of_rs_portable_checks() {
+        let readme = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("README.md"),
+        )
+        .expect("rs README should be readable");
+        let portable_section = readme
+            .split("Rust portable package checks:")
+            .nth(1)
+            .and_then(|rest| {
+                rest.split("Standalone packaging helper diagnostics:")
+                    .next()
+            })
+            .expect("README should contain portable and standalone helper sections");
+
+        assert!(
+            !portable_section.contains("extract-dotnet-runtime"),
+            "rs portable checks must not list .NET runtime extraction:\n{portable_section}"
+        );
+        assert!(
+            !portable_section.contains("zip-directory --source"),
+            "rs portable checks must use pack-rs-portable, not the generic zip helper:\n{portable_section}"
+        );
+        assert!(
+            !portable_section.contains("build-rust-helpers --workspace"),
+            "rs portable checks must not split helper builds from pack-rs-portable:\n{portable_section}"
+        );
+        assert!(
+            portable_section.contains("pack-rs-portable --workspace"),
+            "rs portable checks should point at the Rust-owned portable packager:\n{portable_section}"
+        );
+        assert!(
+            readme.contains("Hybrid-only retained runtime checks:"),
+            "README should keep .NET runtime extraction in a separate hybrid-only section"
+        );
+        assert!(
+            readme.contains("Standalone packaging helper diagnostics:"),
+            "README should keep generic helper diagnostics outside the rs portable section"
+        );
+        let normalized_readme = readme.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            normalized_readme.contains("never part of the rs portable package flow"),
+            "README should explicitly state .NET runtime extraction is not for rs portable"
+        );
+        assert!(
+            normalized_readme.contains("not the first rs portable assembly path"),
+            "README should explicitly state generic helper commands are not the rs portable path"
+        );
+    }
+
+    #[test]
+    fn root_readmes_recommend_rs_portable_without_dotnet_runtime() {
+        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..");
+        let readme = fs::read_to_string(repository_root.join("README.md"))
+            .expect("root README should be readable");
+        let readme_zh = fs::read_to_string(repository_root.join("README_ZH.md"))
+            .expect("root Chinese README should be readable");
+
+        let portable_section = readme
+            .split("#### Portable Version (Recommended)")
+            .nth(1)
+            .and_then(|rest| rest.split("#### Legacy/Hybrid .NET Package").next())
+            .expect("root README should contain portable and legacy package sections");
+        assert!(
+            portable_section.contains("easydict-rs-portable-vX.Y.Z-win-x64.zip"),
+            "recommended portable section should point at the rs portable ZIP:\n{portable_section}"
+        );
+        assert!(
+            portable_section.contains("Easydict.Rust.exe"),
+            "recommended portable section should run the Rust GUI entrypoint:\n{portable_section}"
+        );
+        assert!(
+            portable_section.contains("does not include the .NET runtime"),
+            "recommended portable section should state there is no bundled .NET runtime:\n{portable_section}"
+        );
+        assert!(
+            !portable_section.contains("Easydict.WinUI.exe")
+                && !portable_section.contains(".NET runtime included"),
+            "recommended portable section must not describe the legacy .NET package:\n{portable_section}"
+        );
+
+        let portable_section_zh = readme_zh
+            .split("#### 便携版（推荐）")
+            .nth(1)
+            .and_then(|rest| rest.split("#### Legacy/Hybrid .NET 包").next())
+            .expect("root Chinese README should contain portable and legacy package sections");
+        assert!(
+            portable_section_zh.contains("easydict-rs-portable-vX.Y.Z-win-x64.zip"),
+            "Chinese portable section should point at the rs portable ZIP:\n{portable_section_zh}"
+        );
+        assert!(
+            portable_section_zh.contains("Easydict.Rust.exe"),
+            "Chinese portable section should run the Rust GUI entrypoint:\n{portable_section_zh}"
+        );
+        assert!(
+            portable_section_zh.contains("不包含 .NET 运行时"),
+            "Chinese portable section should state there is no bundled .NET runtime:\n{portable_section_zh}"
+        );
+        assert!(
+            !portable_section_zh.contains("Easydict.WinUI.exe")
+                && !portable_section_zh.contains("内含 .NET 运行时"),
+            "Chinese portable section must not describe the legacy .NET package:\n{portable_section_zh}"
+        );
+    }
+
+    #[test]
+    fn explicit_runtime_profile_parser_accepts_hybrid_and_rust_only_aliases() {
+        assert_eq!(
+            PackageRuntimeProfile::parse_explicit("hybrid"),
+            Some(PackageRuntimeProfile::Hybrid)
+        );
+        assert_eq!(
+            PackageRuntimeProfile::parse_explicit("RustOnly"),
+            Some(PackageRuntimeProfile::RustOnly)
+        );
+        assert_eq!(
+            PackageRuntimeProfile::parse_explicit("rust_only"),
+            Some(PackageRuntimeProfile::RustOnly)
+        );
+        assert_eq!(PackageRuntimeProfile::parse_explicit("dotnet"), None);
+    }
+
+    struct EnvironmentSnapshot {
+        easydict_runtime_profile: Option<String>,
+        runtime_profile: Option<String>,
+    }
+
+    impl EnvironmentSnapshot {
+        fn capture() -> Self {
+            Self {
+                easydict_runtime_profile: std::env::var("EASYDICT_RUNTIME_PROFILE").ok(),
+                runtime_profile: std::env::var("RUNTIME_PROFILE").ok(),
+            }
+        }
+
+        fn restore(self) {
+            restore_environment_value("EASYDICT_RUNTIME_PROFILE", self.easydict_runtime_profile);
+            restore_environment_value("RUNTIME_PROFILE", self.runtime_profile);
+        }
+    }
+
+    fn clear_runtime_profile_environment() {
+        std::env::remove_var("EASYDICT_RUNTIME_PROFILE");
+        std::env::remove_var("RUNTIME_PROFILE");
+    }
+
+    fn restore_environment_value(name: &str, value: Option<String>) {
+        if let Some(value) = value {
+            std::env::set_var(name, value);
+        } else {
+            std::env::remove_var(name);
+        }
+    }
 }

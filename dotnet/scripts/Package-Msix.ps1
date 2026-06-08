@@ -26,10 +26,23 @@ param(
 
     [string]$MsixVersion = "",
 
+    [string]$RuntimeProfile = "Hybrid",
+
     [switch]$VerifyTargetsizeIcons
 )
 
 $ErrorActionPreference = "Stop"
+
+function Test-RustOnlyRuntimeProfile {
+    param([string]$Value)
+    $normalized = $Value.Trim().ToLowerInvariant().Replace("_", "-")
+    return $normalized -eq "rust-only" -or $normalized -eq "rustonly"
+}
+
+function Test-HybridRuntimeProfile {
+    param([string]$Value)
+    return $Value.Trim().ToLowerInvariant() -eq "hybrid"
+}
 
 if (-not (Test-Path $PublishDir)) {
     throw "PublishDir not found: $PublishDir"
@@ -37,9 +50,16 @@ if (-not (Test-Path $PublishDir)) {
 if (-not (Test-Path $ManifestPath)) {
     throw "Manifest not found: $ManifestPath"
 }
+if (Test-RustOnlyRuntimeProfile $RuntimeProfile) {
+    throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/Package-Msix.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+}
+if (-not (Test-HybridRuntimeProfile $RuntimeProfile)) {
+    throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/Package-Msix.ps1. Only Hybrid is supported for legacy .NET/hybrid MSIX packaging."
+}
 
 Write-Host "[MSIX] PublishDir: $PublishDir"
 Write-Host "[MSIX] Platform: $Platform"
+Write-Host "[MSIX] RuntimeProfile: $RuntimeProfile"
 Write-Host "[MSIX] Output: $OutputMsixPath"
 
 $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } elseif ($env:TEMP) { $env:TEMP } else { "." }

@@ -108,9 +108,9 @@ Root: HKCU; Subkey: "Software\Classes\easydict"; ValueType: string; ValueName: "
 Root: HKCU; Subkey: "Software\Classes\easydict"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\easydict\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""
 ; Native Messaging for Chrome
-Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge"; ValueType: string; ValueName: ""; ValueData: "{localappdata}\Easydict\browser-bridge\chrome-manifest.json"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge"; ValueType: string; ValueName: ""; ValueData: "{localappdata}\Easydict\browser-bridge\chrome-manifest.json"
 ; Native Messaging for Firefox
-Root: HKCU; Subkey: "Software\Mozilla\NativeMessagingHosts\com.easydict.bridge"; ValueType: string; ValueName: ""; ValueData: "{localappdata}\Easydict\browser-bridge\firefox-manifest.json"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Mozilla\NativeMessagingHosts\com.easydict.bridge"; ValueType: string; ValueName: ""; ValueData: "{localappdata}\Easydict\browser-bridge\firefox-manifest.json"
 
 [Run]
 ; Launch after install
@@ -120,6 +120,8 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(
 const
   ChromeExtensionId = 'dmokdfinnomehfpmhoeekomncpobgagf';
   FirefoxExtensionId = 'easydict-ocr@easydict.app';
+  ChromeNativeMessagingSubkey = 'Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge';
+  FirefoxNativeMessagingSubkey = 'Software\Mozilla\NativeMessagingHosts\com.easydict.bridge';
 
 // Deploy Native Messaging bridge exe and manifest files
 procedure DeployNativeMessaging;
@@ -178,11 +180,33 @@ begin
   end;
 end;
 
+procedure DeleteNativeMessagingRegistryIfOwned(Subkey, ExpectedManifest: String);
+var
+  CurrentValue: String;
+begin
+  if RegQueryStringValue(HKEY_CURRENT_USER, Subkey, '', CurrentValue) then
+  begin
+    if Lowercase(CurrentValue) = Lowercase(ExpectedManifest) then
+      RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, Subkey);
+  end;
+end;
+
+procedure CleanupNativeMessagingRegistryIfOwned;
+begin
+  DeleteNativeMessagingRegistryIfOwned(
+    ChromeNativeMessagingSubkey,
+    ExpandConstant('{localappdata}\Easydict\browser-bridge\chrome-manifest.json'));
+  DeleteNativeMessagingRegistryIfOwned(
+    FirefoxNativeMessagingSubkey,
+    ExpandConstant('{localappdata}\Easydict\browser-bridge\firefox-manifest.json'));
+end;
+
 // Clean up user data directory on uninstall
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
   begin
+    CleanupNativeMessagingRegistryIfOwned;
     if DirExists(ExpandConstant('{localappdata}\Easydict')) then
       DelTree(ExpandConstant('{localappdata}\Easydict'), True, True, True);
   end;

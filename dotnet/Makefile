@@ -122,12 +122,20 @@ clean:
 	rm -rf tests/Easydict.UIAutomation.Tests/bin tests/Easydict.UIAutomation.Tests/obj
 	rm -rf publish publish-msix msix
 
-# Publish for distribution (portable)
+# Publish legacy .NET/hybrid portable distribution.
+# The first rs release uses ../rs/scripts/Package-Portable.ps1 instead.
 publish: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true -p:BuildWorkerOutputs=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish
 
-# Publish for specific platform (includes Rust NativeBridge/BrowserRegistrar helpers + retained workers).
+# Publish legacy .NET/hybrid portable output for a specific platform.
+# Includes Rust NativeBridge/BrowserRegistrar helpers + retained workers.
 # Rust helpers are copied beside the app executable so the Rust desktop can run
 # easydict_browser_registrar.exe, the legacy WinUI browser service can run
 # BrowserHostRegistrar.exe, and the browser manifest can point at
@@ -144,26 +152,48 @@ publish: restore
 # OCR recognition is now Rust-native, so release outputs no longer publish the
 # old .NET OCR worker.
 publish-x64: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64
-	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64; \
 	else \
+		rm -rf ./publish/x64/workers ./publish/x64/dotnet; \
 		echo "Skipping retained .NET workers for RustOnly runtime profile."; \
 	fi
 
 publish-x86: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86
 
 publish-arm64: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64
-	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64; \
 	else \
+		rm -rf ./publish/arm64/workers ./publish/arm64/dotnet; \
 		echo "Skipping retained .NET workers for RustOnly runtime profile."; \
 	fi
 
@@ -171,30 +201,52 @@ publish-arm64: restore
 # MSIX declares a framework package dependency so bundled DLLs are redundant and cause launch failures.
 # Includes Rust NativeBridge/BrowserRegistrar helpers + retained workers published into the same output directory.
 publish-msix-x64: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64
-	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64; \
-		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet; \
+		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet -RuntimeProfile $(RUNTIME_PROFILE); \
 	else \
+		rm -rf ./publish-msix/x64/workers ./publish-msix/x64/dotnet; \
 		echo "Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile."; \
 	fi
 
 publish-msix-x86: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish-msix/x86
 
 publish-msix-arm64: restore
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" = "rust-only" ] || [ "$$runtime_profile" = "rustonly" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets for the first rs release."; \
+		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
+		exit 1; \
+	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64
-	@if [ "$(RUNTIME_PROFILE)" != "rust-only" ]; then \
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64; \
-		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet; \
+		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet -RuntimeProfile $(RUNTIME_PROFILE); \
 	else \
+		rm -rf ./publish-msix/arm64/workers ./publish-msix/arm64/dotnet; \
 		echo "Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile."; \
 	fi
 
@@ -225,17 +277,20 @@ endif
 # Create MSIX package for x64
 msix-x64: publish-msix-x64
 	@mkdir -p msix
-	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x64 -PublishDir ./publish-msix/x64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x64.msix -MsixVersion $(VERSION)
+	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x64 -PublishDir ./publish-msix/x64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x64.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x64.msix --runtime-profile "$(RUNTIME_PROFILE)" --allow-unsigned
 
 # Create MSIX package for x86
 msix-x86: publish-msix-x86
 	@mkdir -p msix
-	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x86 -PublishDir ./publish-msix/x86 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x86.msix -MsixVersion $(VERSION)
+	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x86 -PublishDir ./publish-msix/x86 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x86.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x86.msix --runtime-profile "$(RUNTIME_PROFILE)" --allow-unsigned
 
 # Create MSIX package for ARM64
 msix-arm64: publish-msix-arm64
 	@mkdir -p msix
-	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform arm64 -PublishDir ./publish-msix/arm64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-arm64.msix -MsixVersion $(VERSION)
+	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform arm64 -PublishDir ./publish-msix/arm64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-arm64.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-arm64.msix --runtime-profile "$(RUNTIME_PROFILE)" --allow-unsigned
 
 # Create MSIX package for current platform (default: x64)
 msix: msix-x64
@@ -362,11 +417,11 @@ help:
 	@echo "  make test-integration SERVICE=google - Run integration tests for specific service"
 	@echo "  make test-verbose - Run tests with verbose output"
 	@echo ""
-	@echo "Publishing (portable, with bundled Windows App SDK):"
-	@echo "  make publish      - Publish for distribution (portable)"
-	@echo "  make publish-x64  - Publish for x64"
-	@echo "  make publish-x86  - Publish for x86"
-	@echo "  make publish-arm64 - Publish for ARM64"
+	@echo "Publishing (legacy .NET/hybrid portable, with bundled Windows App SDK):"
+	@echo "  make publish      - Publish legacy .NET/hybrid portable output"
+	@echo "  make publish-x64  - Publish legacy .NET/hybrid portable x64"
+	@echo "  make publish-x86  - Publish legacy .NET/hybrid portable x86"
+	@echo "  make publish-arm64 - Publish legacy .NET/hybrid portable ARM64"
 	@echo ""
 	@echo "Publishing (MSIX, without bundled Windows App SDK):"
 	@echo "  make publish-msix-x64  - Publish for x64 (MSIX)"
@@ -399,6 +454,7 @@ help:
 	@echo "  CERT_PASSWORD=... - Certificate password (required for cert/sign targets)"
 	@echo "  CERT_PATH=...     - Certificate file path (default: ./certs/dev.pfx)"
 	@echo "  SERVICE=...       - Integration test service filter (default: all)"
+	@echo "  RUNTIME_PROFILE=hybrid - Required for dotnet publish/MSIX targets; rs portable uses ../rs/scripts/Package-Portable.ps1"
 	@echo "                      Available: google, openai, deepl, deepseek, groq, zhipu,"
 	@echo "                      github-models, gemini, doubao, caiyun, niutrans,"
 	@echo "                      bing, youdao, phonetic"

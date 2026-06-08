@@ -5,7 +5,6 @@ param(
     [string]$Version = "",
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
-    [ValidateSet("Hybrid", "RustOnly")]
     [string]$RuntimeProfile = "Hybrid",
     [string]$CertPath = ".\certs\dev-signing.pfx",
     [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" }),
@@ -23,8 +22,27 @@ try {
     Write-Host "=== Easydict MSIX Package and Install Script ===" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Runtime profile: $RuntimeProfile" -ForegroundColor Gray
-    $isRustOnlyRuntime = $RuntimeProfile -eq "RustOnly"
-    $validatorRuntimeProfile = if ($isRustOnlyRuntime) { "rust-only" } else { "hybrid" }
+
+    function Test-RustOnlyRuntimeProfile {
+        param([string]$Value)
+        $normalized = $Value.Trim().ToLowerInvariant().Replace("_", "-")
+        return $normalized -eq "rust-only" -or $normalized -eq "rustonly"
+    }
+
+    function Test-HybridRuntimeProfile {
+        param([string]$Value)
+        return $Value.Trim().ToLowerInvariant() -eq "hybrid"
+    }
+
+    $isRustOnlyRuntime = Test-RustOnlyRuntimeProfile $RuntimeProfile
+    if ($isRustOnlyRuntime) {
+        throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/package-and-install.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+    }
+    if (-not (Test-HybridRuntimeProfile $RuntimeProfile)) {
+        throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/package-and-install.ps1. Only Hybrid is supported for legacy .NET/hybrid MSIX packaging."
+    }
+
+    $validatorRuntimeProfile = $RuntimeProfile
 
     # Auto-detect version from csproj if not provided
     if (-not $Version) {
@@ -68,9 +86,7 @@ try {
         -Configuration $Configuration `
         -OutputDir $publishDir
 
-    if ($isRustOnlyRuntime) {
-        Write-Host "  Skipping retained .NET workers and bundled worker runtime for RustOnly profile." -ForegroundColor Yellow
-    } elseif ($Platform -ne "x86") {
+    if ($Platform -ne "x86") {
         Write-Host "  Publishing remaining .NET workers..." -ForegroundColor Gray
         dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj `
             -c $Configuration `
@@ -95,7 +111,8 @@ try {
         & "$scriptDir/Dedupe-WorkerSharedFiles.ps1" -PublishDir $publishDir
         & "$scriptDir/Extract-DotnetRuntime.ps1" `
             -Rid "win-$Platform" `
-            -OutputDir "$publishDir/dotnet"
+            -OutputDir "$publishDir/dotnet" `
+            -RuntimeProfile $RuntimeProfile
     } else {
         Write-Host "  Skipping .NET workers for x86; worker projects do not support win-x86." -ForegroundColor Yellow
     }
@@ -119,6 +136,7 @@ try {
         -ManifestPath $manifestPath `
         -OutputMsixPath $msixPath `
         -MsixVersion $msixVersion `
+        -RuntimeProfile $RuntimeProfile `
         -VerifyTargetsizeIcons
     if ($LASTEXITCODE -ne 0) { throw "Packaging failed" }
     Write-Host "Package created: $msixPath" -ForegroundColor Green

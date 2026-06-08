@@ -28,11 +28,53 @@ const REQUIRED_RETAINED_WORKER_PAYLOADS: &[&str] = &[
     "workers/longdoc/Easydict.Workers.LongDoc.exe",
     "workers/localai/Easydict.Workers.LocalAi.exe",
 ];
-const FORBIDDEN_PAYLOAD_FILES: &[(&str, &str)] = &[
-    (
-        "easydict.compathost.exe",
-        ".NET CompatHost has been removed; Rust must start retained workers directly",
-    ),
+const RUST_ONLY_FORBIDDEN_PREFIXES: &[&str] = &["workers/", "dotnet/"];
+const RUST_ONLY_FORBIDDEN_RUNTIME_FILE_NAMES: &[&str] = &[
+    "createdump.exe",
+    "dotnet.exe",
+    "hostfxr.dll",
+    "coreclr.dll",
+    "hostpolicy.dll",
+    "clrjit.dll",
+    "mscordaccore.dll",
+    "mscordbi.dll",
+    "mscorlib.dll",
+    "netstandard.dll",
+    "singlefilehost.exe",
+    "system.private.corelib.dll",
+    "windowsbase.dll",
+    "presentationcore.dll",
+    "presentationframework.dll",
+];
+const RUST_ONLY_FORBIDDEN_DOTNET_SHARED_FRAMEWORKS: &[&str] = &[
+    "shared/microsoft.netcore.app/",
+    "shared/microsoft.windowsdesktop.app/",
+    "shared/microsoft.aspnetcore.app/",
+];
+const RUST_ONLY_FORBIDDEN_WORKER_SHARED_FILE_NAMES: &[&str] = &[
+    "microsoft.interactiveexperiences.projection.dll",
+    "microsoft.web.webview2.core.projection.dll",
+    "microsoft.windows.sdk.net.dll",
+    "microsoft.windows.ui.xaml.dll",
+    "microsoft.winui.dll",
+    "winrt.runtime.dll",
+];
+const RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY_FILE_NAMES: &[&str] = &[
+    "easydict.documentexport.dll",
+    "easydict.llm.streaming.dll",
+    "easydict.openvino.dll",
+    "easydict.sidecarclient.dll",
+    "easydict.translationservice.dll",
+    "easydict.windowsai.dll",
+    "lexindex.dll",
+    "mdict.csharp.dll",
+    "polyglot.textlayout.dll",
+];
+const RUST_ONLY_FORBIDDEN_REASON: &str =
+    "Rust-only packages must not ship retained .NET workers or bundled .NET runtime";
+const NO_RETAINED_WORKERS_FORBIDDEN_REASON: &str =
+    "Packages without retained .NET workers must not ship retained workers or bundled .NET runtime";
+const FORBIDDEN_PAYLOAD_FILE_NAMES: &[(&str, &str)] = &[
     (
         "easydict.workers.ocr.exe",
         "OCR is Rust-native and must not ship the retired .NET OCR worker",
@@ -58,6 +100,10 @@ const FORBIDDEN_PAYLOAD_FILES: &[(&str, &str)] = &[
         "PDF image conversion is now the Rust easydict_pdf_to_images tool",
     ),
 ];
+const FORBIDDEN_PAYLOAD_FILE_PREFIXES: &[(&str, &str)] = &[(
+    "easydict.compathost",
+    ".NET CompatHost has been removed; Rust must start retained workers directly",
+)];
 const FORBIDDEN_ROOT_LONGDOC_PAYLOADS: &[&str] = &[
     "easydict.documentexport.dll",
     "mupdf.net.dll",
@@ -101,7 +147,7 @@ impl Default for MsixValidationOptions {
             expected_publisher: DEFAULT_EXPECTED_PUBLISHER.to_string(),
             min_version: DEFAULT_MIN_VERSION.to_string(),
             allow_unsigned: false,
-            runtime_profile: PackageRuntimeProfile::Hybrid,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
         }
     }
 }
@@ -1457,6 +1503,15 @@ impl ArchivePayloadIndex {
             .find(|entry| entry.file_name() == Some(file_name.as_str()))
     }
 
+    fn first_file_prefixed(&self, file_prefix: &str) -> Option<&ArchivePayloadEntry> {
+        let file_prefix = file_prefix.to_ascii_lowercase();
+        self.entries.iter().find(|entry| {
+            entry
+                .file_name()
+                .is_some_and(|file_name| file_name.starts_with(&file_prefix))
+        })
+    }
+
     fn first_root_file_named(&self, file_name: &str) -> Option<&ArchivePayloadEntry> {
         let file_name = file_name.to_ascii_lowercase();
         self.entries.iter().find(|entry| {
@@ -1513,7 +1568,16 @@ fn validate_payload_layout(
         }
     }
 
-    for (file_name, reason) in FORBIDDEN_PAYLOAD_FILES {
+    for (file_prefix, reason) in FORBIDDEN_PAYLOAD_FILE_PREFIXES {
+        if let Some(entry) = payload.first_file_prefixed(file_prefix) {
+            return Err(ValidationError::ForbiddenPayload {
+                path: entry.original.clone(),
+                reason,
+            });
+        }
+    }
+
+    for (file_name, reason) in FORBIDDEN_PAYLOAD_FILE_NAMES {
         if let Some(entry) = payload.first_file_named(file_name) {
             return Err(ValidationError::ForbiddenPayload {
                 path: entry.original.clone(),
@@ -1551,7 +1615,10 @@ fn validate_hybrid_runtime_payload(
     payload: &ArchivePayloadIndex,
 ) -> Result<(), ValidationError> {
     if !retained_workers_required(manifest) {
-        return Ok(());
+        return validate_retained_runtime_payload_absent(
+            payload,
+            NO_RETAINED_WORKERS_FORBIDDEN_REASON,
+        );
     }
 
     for required in REQUIRED_RETAINED_WORKER_PAYLOADS {
@@ -1580,17 +1647,58 @@ fn validate_hybrid_runtime_payload(
 fn validate_rust_only_runtime_payload(
     payload: &ArchivePayloadIndex,
 ) -> Result<(), ValidationError> {
-    for prefix in ["workers/longdoc/", "workers/localai/", "dotnet/"] {
+    validate_retained_runtime_payload_absent(payload, RUST_ONLY_FORBIDDEN_REASON)
+}
+
+fn validate_retained_runtime_payload_absent(
+    payload: &ArchivePayloadIndex,
+    reason: &'static str,
+) -> Result<(), ValidationError> {
+    for prefix in RUST_ONLY_FORBIDDEN_PREFIXES {
         if let Some(entry) = payload.first_under(prefix) {
             return Err(ValidationError::ForbiddenPayload {
                 path: entry.original.clone(),
-                reason:
-                    "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+                reason,
             });
         }
     }
 
+    if let Some(entry) = payload
+        .entries
+        .iter()
+        .find(|entry| rust_only_forbidden_runtime_marker(entry))
+    {
+        return Err(ValidationError::ForbiddenPayload {
+            path: entry.original.clone(),
+            reason,
+        });
+    }
+
     Ok(())
+}
+
+fn rust_only_forbidden_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
+    let Some(file_name) = entry.file_name() else {
+        return false;
+    };
+
+    file_name.ends_with(".runtimeconfig.json")
+        || file_name.ends_with(".deps.json")
+        || file_name.starts_with("easydict.workers.")
+        || file_name.starts_with("easydict.nativebridge")
+        || file_name.starts_with("easydict.sidecarclient")
+        || file_name.starts_with("easydict.winui")
+        || (file_name.starts_with("system.") && file_name.ends_with(".dll"))
+        || file_name.starts_with("microsoft.csharp")
+        || file_name.starts_with("microsoft.visualbasic")
+        || file_name.starts_with("microsoft.win32")
+        || RUST_ONLY_FORBIDDEN_RUNTIME_FILE_NAMES.contains(&file_name)
+        || RUST_ONLY_FORBIDDEN_WORKER_SHARED_FILE_NAMES.contains(&file_name)
+        || RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY_FILE_NAMES.contains(&file_name)
+        || RUST_ONLY_FORBIDDEN_DOTNET_SHARED_FRAMEWORKS
+            .iter()
+            .any(|prefix| entry.normalized.contains(prefix))
+        || entry.normalized.contains("host/fxr/")
 }
 
 fn retained_workers_required(manifest: &ManifestInfo) -> bool {
@@ -1717,6 +1825,21 @@ mod tests {
     use zip::write::FileOptions;
     use zip::ZipWriter;
 
+    fn hybrid_validation_options() -> MsixValidationOptions {
+        MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::Hybrid,
+            ..MsixValidationOptions::default()
+        }
+    }
+
+    #[test]
+    fn validation_options_default_to_rust_only_profile() {
+        assert_eq!(
+            MsixValidationOptions::default().runtime_profile,
+            PackageRuntimeProfile::RustOnly
+        );
+    }
+
     #[test]
     fn validates_identity_min_version_and_signature() {
         let path = temp_msix_path("valid");
@@ -1732,7 +1855,8 @@ mod tests {
             &x64_payload_entries(),
         );
 
-        let result = validate_msix(&path, &MsixValidationOptions::default());
+        let options = hybrid_validation_options();
+        let result = validate_msix(&path, &options);
 
         assert!(result.is_ok());
         let _ = fs::remove_file(path);
@@ -1754,7 +1878,7 @@ mod tests {
         );
         let options = MsixValidationOptions {
             allow_unsigned: true,
-            ..MsixValidationOptions::default()
+            ..hybrid_validation_options()
         };
 
         let result = validate_msix(&path, &options);
@@ -1778,7 +1902,8 @@ mod tests {
             &x64_payload_entries(),
         );
 
-        let failures = validate_msix(&path, &MsixValidationOptions::default()).unwrap_err();
+        let options = hybrid_validation_options();
+        let failures = validate_msix(&path, &options).unwrap_err();
 
         assert_eq!(
             failures,
@@ -1800,7 +1925,8 @@ mod tests {
             &x64_payload_entries(),
         );
 
-        let failures = validate_msix(&path, &MsixValidationOptions::default()).unwrap_err();
+        let options = hybrid_validation_options();
+        let failures = validate_msix(&path, &options).unwrap_err();
 
         assert!(matches!(
             &failures[0],
@@ -1841,6 +1967,40 @@ mod tests {
     }
 
     #[test]
+    fn hybrid_x86_package_rejects_stale_retained_workers_or_dotnet_runtime() {
+        let path = temp_msix_path("x86-stale-retained-workers");
+        let mut entries = rust_helper_entries();
+        entries.push(("workers/longdoc/Easydict.Workers.LongDoc.exe", b"longdoc"));
+        entries.push(("dotnet/host/fxr/8.0.11/hostfxr.dll", b"hostfxr"));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x86",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+
+        let options = hybrid_validation_options();
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "workers/longdoc/Easydict.Workers.LongDoc.exe".to_string(),
+                    reason: "Packages without retained .NET workers must not ship retained workers or bundled .NET runtime"
+                }
+            )]
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn x64_and_arm64_packages_require_retained_workers_and_shared_dotnet_runtime() {
         let path = temp_msix_path("missing-retained-workers");
         write_msix(
@@ -1855,7 +2015,8 @@ mod tests {
             &rust_helper_entries(),
         );
 
-        let failures = validate_msix(&path, &MsixValidationOptions::default()).unwrap_err();
+        let options = hybrid_validation_options();
+        let failures = validate_msix(&path, &options).unwrap_err();
 
         assert_eq!(
             failures,
@@ -1965,6 +2126,288 @@ mod tests {
     }
 
     #[test]
+    fn rust_only_package_rejects_any_workers_directory_residue() {
+        let path = temp_msix_path("rust-only-workers-shared");
+        let mut entries = rust_helper_entries();
+        entries.push(("workers/shared/Microsoft.WinUI.dll", b"shared"));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "workers/shared/Microsoft.WinUI.dll".to_string(),
+                    reason: "Rust-only packages must not ship retained .NET workers or bundled .NET runtime"
+                }
+            )]
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_root_worker_runtimeconfig_marker() {
+        let path = temp_msix_path("rust-only-root-runtimeconfig");
+        let mut entries = rust_helper_entries();
+        entries.push((
+            "Easydict.Workers.LocalAi.runtimeconfig.json",
+            b"{\"runtimeOptions\":{}}",
+        ));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "Easydict.Workers.LocalAi.runtimeconfig.json".to_string(),
+                    reason: "Rust-only packages must not ship retained .NET workers or bundled .NET runtime"
+                }
+            )]
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_dotnet_runtime_markers_outside_dotnet_directory() {
+        let path = temp_msix_path("rust-only-runtime-marker");
+        let mut entries = rust_helper_entries();
+        entries.push((
+            "shared/Microsoft.NETCore.App/8.0.11/System.Private.CoreLib.dll",
+            b"corelib",
+        ));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "shared/Microsoft.NETCore.App/8.0.11/System.Private.CoreLib.dll"
+                        .to_string(),
+                    reason: "Rust-only packages must not ship retained .NET workers or bundled .NET runtime"
+                }
+            )]
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_windows_desktop_runtime_layout_residue() {
+        let path = temp_msix_path("rust-only-windowsdesktop-runtime-layout");
+        let mut entries = rust_helper_entries();
+        entries.push((
+            "runtime/shared/Microsoft.WindowsDesktop.App/8.0.11/PresentationCore.dll",
+            b"presentation-core",
+        ));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "runtime/shared/Microsoft.WindowsDesktop.App/8.0.11/PresentationCore.dll"
+                        .to_string(),
+                    reason: "Rust-only packages must not ship retained .NET workers or bundled .NET runtime"
+                }
+            )]
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_loose_dotnet_assemblies_and_legacy_helpers() {
+        for (payload, reason) in [
+            (
+                "Easydict.NativeBridge.exe",
+                "browser Native Messaging host is now easydict-native-bridge.exe",
+            ),
+            (
+                "Easydict.SidecarClient.exe",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Easydict.WinUI.exe",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Easydict.TranslationService.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Easydict.DocumentExport.dll",
+                "LongDoc PDF/export dependencies must stay isolated in the worker payload",
+            ),
+            (
+                "Easydict.Llm.Streaming.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Easydict.OpenVINO.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Easydict.WindowsAI.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "LexIndex.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "MDict.Csharp.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Polyglot.TextLayout.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "System.Text.Json.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Microsoft.CSharp.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Microsoft.Win32.Registry.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "WindowsBase.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Microsoft.WinUI.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Microsoft.Windows.SDK.NET.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "WinRT.Runtime.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "Microsoft.Web.WebView2.Core.Projection.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "netstandard.dll",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+            (
+                "createdump.exe",
+                "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
+            ),
+        ] {
+            let path = temp_msix_path(&format!(
+                "rust-only-loose-dotnet-{}",
+                payload.replace('.', "-")
+            ));
+            let mut entries = rust_helper_entries();
+            entries.push((payload, b"dotnet-payload"));
+            write_msix(
+                &path,
+                manifest(
+                    DEFAULT_EXPECTED_NAME,
+                    DEFAULT_EXPECTED_PUBLISHER,
+                    DEFAULT_MIN_VERSION,
+                    "x64",
+                ),
+                Some(b"sig"),
+                &entries,
+            );
+            let options = MsixValidationOptions {
+                runtime_profile: PackageRuntimeProfile::RustOnly,
+                ..MsixValidationOptions::default()
+            };
+
+            let failures = validate_msix(&path, &options).unwrap_err();
+
+            assert_eq!(
+                failures,
+                vec![(
+                    PAYLOAD_LAYOUT_VALIDATOR,
+                    ValidationError::ForbiddenPayload {
+                        path: payload.to_string(),
+                        reason,
+                    }
+                )],
+                "{payload} should be forbidden in rust-only MSIX payload"
+            );
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    #[test]
     fn runtime_profile_parser_accepts_hybrid_and_rust_only_spellings() {
         assert_eq!(
             PackageRuntimeProfile::parse("hybrid"),
@@ -1983,38 +2426,50 @@ mod tests {
 
     #[test]
     fn rejects_retired_comphost_ocr_worker_and_dotnet_tool_payloads() {
-        let path = temp_msix_path("forbidden-runtime-payloads");
-        let mut entries = x64_payload_entries();
-        entries.extend([
-            ("Easydict.CompatHost.exe", b"compat" as &[u8]),
-            ("workers/ocr/Easydict.Workers.Ocr.exe", b"ocr"),
-            ("tools/MsixValidate/MsixValidate.exe", b"tool"),
-        ]);
-        write_msix(
-            &path,
-            manifest(
-                DEFAULT_EXPECTED_NAME,
-                DEFAULT_EXPECTED_PUBLISHER,
-                DEFAULT_MIN_VERSION,
-                "x64",
-            ),
-            Some(b"sig"),
-            &entries,
-        );
+        for compat_host_payload in [
+            "Easydict.CompatHost.exe",
+            "Easydict.CompatHost.dll",
+            "Easydict.CompatHost.pdb",
+            "Easydict.CompatHost.runtimeconfig.json",
+            "Easydict.CompatHost.deps.json",
+        ] {
+            let path = temp_msix_path(&format!(
+                "forbidden-runtime-payloads-{}",
+                compat_host_payload.replace('.', "-")
+            ));
+            let mut entries = x64_payload_entries();
+            entries.extend([
+                (compat_host_payload, b"compat" as &[u8]),
+                ("workers/ocr/Easydict.Workers.Ocr.exe", b"ocr"),
+                ("tools/MsixValidate/MsixValidate.exe", b"tool"),
+            ]);
+            write_msix(
+                &path,
+                manifest(
+                    DEFAULT_EXPECTED_NAME,
+                    DEFAULT_EXPECTED_PUBLISHER,
+                    DEFAULT_MIN_VERSION,
+                    "x64",
+                ),
+                Some(b"sig"),
+                &entries,
+            );
 
-        let failures = validate_msix(&path, &MsixValidationOptions::default()).unwrap_err();
+            let options = hybrid_validation_options();
+            let failures = validate_msix(&path, &options).unwrap_err();
 
-        assert_eq!(
-            failures,
-            vec![(
-                PAYLOAD_LAYOUT_VALIDATOR,
-                ValidationError::ForbiddenPayload {
-                    path: "Easydict.CompatHost.exe".to_string(),
-                    reason: ".NET CompatHost has been removed; Rust must start retained workers directly"
-                }
-            )]
-        );
-        let _ = fs::remove_file(path);
+            assert_eq!(
+                failures,
+                vec![(
+                    PAYLOAD_LAYOUT_VALIDATOR,
+                    ValidationError::ForbiddenPayload {
+                        path: compat_host_payload.to_string(),
+                        reason: ".NET CompatHost has been removed; Rust must start retained workers directly"
+                    }
+                )]
+            );
+            let _ = fs::remove_file(path);
+        }
     }
 
     #[test]
@@ -2037,7 +2492,8 @@ mod tests {
             &entries,
         );
 
-        let failures = validate_msix(&path, &MsixValidationOptions::default()).unwrap_err();
+        let options = hybrid_validation_options();
+        let failures = validate_msix(&path, &options).unwrap_err();
 
         assert_eq!(
             failures,

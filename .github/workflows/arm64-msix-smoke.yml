@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - hybrid
-          - rust-only
 
 permissions:
   contents: read
@@ -31,6 +30,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Reject Rust-only profile for dotnet/MSIX smoke
+        shell: pwsh
+        run: |
+          $profile = "${{ env.RUNTIME_PROFILE }}".Trim().ToLowerInvariant().Replace("_", "-")
+          if ($profile -eq "rust-only" -or $profile -eq "rustonly") {
+            throw "The first rs release is portable-only. Use rs/scripts/Package-Portable.ps1 instead of the dotnet/MSIX smoke path with runtime_profile=${{ env.RUNTIME_PROFILE }}."
+          }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -135,7 +142,8 @@ jobs:
         run: |
           ./scripts/Extract-DotnetRuntime.ps1 `
             -Rid win-arm64 `
-            -OutputDir ./publish-msix/arm64/dotnet
+            -OutputDir ./publish-msix/arm64/dotnet `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}"
 
       - name: Package MSIX (shared script)
         shell: pwsh
@@ -145,6 +153,7 @@ jobs:
             -PublishDir "dotnet/publish-msix/arm64" `
             -ManifestPath "dotnet/src/Easydict.WinUI/Package.appxmanifest" `
             -OutputMsixPath "dotnet/msix/Easydict-arm64-smoke.msix" `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}" `
             -VerifyTargetsizeIcons
 
       - name: Validate MSIX (identity, MinVersion, runtime payload)

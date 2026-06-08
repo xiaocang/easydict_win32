@@ -451,7 +451,12 @@ fn print_usage() {
     println!(
         "       easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons]"
     );
-    println!("  defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}");
+    println!(
+        "  defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}, runtime-profile=rust-only"
+    );
+    println!(
+        "  --runtime-profile hybrid: validate retained worker/coexistence payloads explicitly"
+    );
     println!(
         "  --runtime-profile rust-only: reject retained .NET workers and bundled .NET runtime payloads"
     );

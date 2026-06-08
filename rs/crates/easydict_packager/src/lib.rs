@@ -27,6 +27,7 @@ pub struct ExtractDotnetRuntimeOptions {
     pub rid: String,
     pub output_dir: PathBuf,
     pub version: String,
+    pub runtime_profile: PackageRuntimeProfile,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -34,6 +35,31 @@ pub struct ExtractDotnetRuntimeOutcome {
     pub bundled_version: String,
     pub total_bytes: u64,
     pub archive_bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PackageRuntimeProfile {
+    Hybrid,
+    RustOnly,
+}
+
+impl PackageRuntimeProfile {
+    pub fn parse_explicit(value: &str) -> Option<Self> {
+        let normalized = normalize_runtime_profile(value);
+        if normalized == "hybrid" {
+            return Some(Self::Hybrid);
+        }
+        runtime_profile_is_rust_only(&normalized).then_some(Self::RustOnly)
+    }
+
+    fn parse_environment(value: &str) -> Self {
+        let normalized = normalize_runtime_profile(value);
+        if normalized == "hybrid" {
+            Self::Hybrid
+        } else {
+            Self::RustOnly
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -65,6 +91,37 @@ pub struct PackageBrowserExtensionOutcome {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackRustPortableOptions {
+    pub rust_workspace: PathBuf,
+    pub platform: String,
+    pub configuration: String,
+    pub output_root: PathBuf,
+    pub package_version: Option<String>,
+    pub create_zip: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackRustPortableOutcome {
+    pub package_name: String,
+    pub package_dir: PathBuf,
+    pub zip_path: Option<PathBuf>,
+    pub file_count: usize,
+    pub total_bytes: u64,
+    pub directory_validation_entries: usize,
+    pub zip_validation_entries: Option<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValidateRustPortableOptions {
+    pub package_path: PathBuf,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValidateRustPortableOutcome {
+    pub checked_entries: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BrowserExtensionPackage {
     pub label: String,
     pub path: PathBuf,
@@ -89,6 +146,8 @@ pub enum ZipDirectoryError {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ExtractDotnetRuntimeError {
+    RuntimeProfileMustBeHybrid(PackageRuntimeProfile),
+    RuntimeProfileEnvironmentRustOnly { name: &'static str, value: String },
     UnsupportedRid(String),
     ArchiveTooSmall { path: PathBuf, bytes: u64 },
     InvalidArchiveEntry(String),
@@ -120,6 +179,40 @@ pub enum PackageBrowserExtensionError {
     ManifestNotObject(PathBuf),
     InvalidManifestJson { path: PathBuf, message: String },
     InvalidEntryPath(PathBuf),
+    Io { path: PathBuf, message: String },
+    Zip(String),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum PackRustPortableError {
+    UnsupportedPlatform(String),
+    UnsupportedConfiguration(String),
+    WorkspaceMissing(PathBuf),
+    CargoFailed {
+        command: &'static str,
+        exit_code: Option<i32>,
+    },
+    MissingExecutable(PathBuf),
+    UnsafeOutputPath {
+        output_root: PathBuf,
+        package_dir: PathBuf,
+    },
+    Io {
+        path: PathBuf,
+        message: String,
+    },
+    Zip(String),
+    Validation(String),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum ValidateRustPortableError {
+    PackageMissing(PathBuf),
+    UnsupportedPackagePath(PathBuf),
+    InvalidArchiveEntry(String),
+    ForbiddenEntries(Vec<String>),
+    MissingRequiredEntries(Vec<String>),
+    UnexpectedEntries(Vec<String>),
     Io { path: PathBuf, message: String },
     Zip(String),
 }
@@ -162,6 +255,14 @@ impl std::error::Error for ZipDirectoryError {}
 impl fmt::Display for ExtractDotnetRuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::RuntimeProfileMustBeHybrid(_) => write!(
+                formatter,
+                "extract-dotnet-runtime requires explicit --runtime-profile hybrid; rs portable packages must not bundle .NET runtime"
+            ),
+            Self::RuntimeProfileEnvironmentRustOnly { .. } => write!(
+                formatter,
+                "extract-dotnet-runtime is disabled by rust-only runtime profile environment; rs portable packages must not bundle .NET runtime"
+            ),
             Self::UnsupportedRid(rid) => {
                 write!(formatter, "unsupported .NET runtime RID: {rid}")
             }
@@ -293,6 +394,106 @@ impl fmt::Display for PackageBrowserExtensionError {
 
 impl std::error::Error for PackageBrowserExtensionError {}
 
+impl fmt::Display for PackRustPortableError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedPlatform(platform) => {
+                write!(formatter, "unsupported Rust portable platform: {platform}")
+            }
+            Self::UnsupportedConfiguration(configuration) => {
+                write!(
+                    formatter,
+                    "unsupported Rust portable configuration: {configuration}"
+                )
+            }
+            Self::WorkspaceMissing(path) => {
+                write!(formatter, "Rust workspace not found at {}", path.display())
+            }
+            Self::CargoFailed { command, exit_code } => match exit_code {
+                Some(code) => write!(formatter, "{command} failed with exit code {code}"),
+                None => write!(formatter, "{command} failed"),
+            },
+            Self::MissingExecutable(path) => {
+                write!(
+                    formatter,
+                    "Rust executable was not produced: {}",
+                    path.display()
+                )
+            }
+            Self::UnsafeOutputPath {
+                output_root,
+                package_dir,
+            } => write!(
+                formatter,
+                "refusing to remove package directory {} outside output root {}",
+                package_dir.display(),
+                output_root.display()
+            ),
+            Self::Io { path, message } => write!(formatter, "{}: {message}", path.display()),
+            Self::Zip(message) | Self::Validation(message) => write!(formatter, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for PackRustPortableError {}
+
+impl fmt::Display for ValidateRustPortableError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PackageMissing(path) => {
+                write!(
+                    formatter,
+                    "Rust portable package path not found: {}",
+                    path.display()
+                )
+            }
+            Self::UnsupportedPackagePath(path) => write!(
+                formatter,
+                "Rust portable package path must be a directory or ZIP: {}",
+                path.display()
+            ),
+            Self::InvalidArchiveEntry(name) => write!(
+                formatter,
+                "Rust portable ZIP contains unsafe entry path: {name}"
+            ),
+            Self::ForbiddenEntries(entries) => write!(
+                formatter,
+                "Rust portable package contains retained .NET payload entries: {}",
+                entries
+                    .iter()
+                    .take(10)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::MissingRequiredEntries(entries) => write!(
+                formatter,
+                "Rust portable package is missing required entries: {}",
+                entries
+                    .iter()
+                    .take(10)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::UnexpectedEntries(entries) => write!(
+                formatter,
+                "Rust portable package contains entries outside the first-release allowlist: {}",
+                entries
+                    .iter()
+                    .take(10)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Io { path, message } => write!(formatter, "{}: {message}", path.display()),
+            Self::Zip(message) => write!(formatter, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for ValidateRustPortableError {}
+
 pub fn zip_directory(
     options: &ZipDirectoryOptions,
 ) -> Result<ZipDirectoryOutcome, ZipDirectoryError> {
@@ -352,6 +553,7 @@ pub fn zip_directory(
 pub fn download_and_extract_dotnet_runtime(
     options: &ExtractDotnetRuntimeOptions,
 ) -> Result<ExtractDotnetRuntimeOutcome, ExtractDotnetRuntimeError> {
+    validate_extract_dotnet_runtime_profile(options.runtime_profile)?;
     validate_runtime_rid(&options.rid)?;
     let url = dotnet_runtime_url(&options.version, &options.rid);
     let temp_file = tempfile::Builder::new()
@@ -416,6 +618,7 @@ pub fn build_rust_helpers(
     let mut cargo_args = rust_helper_cargo_args(cargo_target, &options.configuration);
     let status = std::process::Command::new("cargo")
         .args(&cargo_args)
+        .envs(rust_portable_cargo_environment())
         .current_dir(&options.rust_workspace)
         .status()
         .map_err(|error| BuildRustHelpersError::Io {
@@ -476,6 +679,159 @@ pub fn package_browser_extension(
     }
 
     Ok(PackageBrowserExtensionOutcome { version, packages })
+}
+
+pub fn pack_rs_portable(
+    options: &PackRustPortableOptions,
+) -> Result<PackRustPortableOutcome, PackRustPortableError> {
+    let cargo_target =
+        cargo_target_for_platform(&options.platform).map_err(|error| match error {
+            BuildRustHelpersError::UnsupportedPlatform(platform) => {
+                PackRustPortableError::UnsupportedPlatform(platform)
+            }
+            _ => unreachable!("cargo_target_for_platform only returns unsupported platform"),
+        })?;
+    let profile_dir =
+        profile_dir_for_configuration(&options.configuration).map_err(|error| match error {
+            BuildRustHelpersError::UnsupportedConfiguration(configuration) => {
+                PackRustPortableError::UnsupportedConfiguration(configuration)
+            }
+            _ => unreachable!("profile_dir_for_configuration only returns unsupported config"),
+        })?;
+    if !options.rust_workspace.join("Cargo.toml").is_file() {
+        return Err(PackRustPortableError::WorkspaceMissing(
+            options.rust_workspace.clone(),
+        ));
+    }
+
+    let package_name =
+        rust_portable_package_name(options.package_version.as_deref(), &options.platform);
+    let output_root = prepare_output_root(&options.output_root)?;
+    let package_dir = output_root.join(&package_name);
+    let zip_path = output_root.join(format!("{package_name}.zip"));
+
+    remove_existing_package_dir(&output_root, &package_dir)?;
+    fs::create_dir_all(&package_dir).map_err(|error| PackRustPortableError::Io {
+        path: package_dir.clone(),
+        message: error.to_string(),
+    })?;
+
+    run_rustup_target_add_if_available(cargo_target).map_err(pack_error_from_build_error)?;
+    run_pack_cargo_command(
+        &options.rust_workspace,
+        preview_app_cargo_args(cargo_target, &options.configuration),
+        "cargo build easydict_preview_iced",
+    )?;
+    run_pack_cargo_command(
+        &options.rust_workspace,
+        rust_helper_cargo_args(cargo_target, &options.configuration),
+        "cargo build Rust helper executables",
+    )?;
+
+    stage_rust_portable_payload(
+        &options.rust_workspace,
+        cargo_target,
+        profile_dir,
+        &package_dir,
+    )?;
+    let directory_validation = validate_rs_portable_payload(&ValidateRustPortableOptions {
+        package_path: package_dir.clone(),
+    })
+    .map_err(|error| PackRustPortableError::Validation(error.to_string()))?;
+
+    let zip_validation_entries = if options.create_zip {
+        if zip_path.exists() {
+            fs::remove_file(&zip_path).map_err(|error| PackRustPortableError::Io {
+                path: zip_path.clone(),
+                message: error.to_string(),
+            })?;
+        }
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package_dir.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .map_err(|error| PackRustPortableError::Zip(error.to_string()))?;
+        let validation = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .map_err(|error| PackRustPortableError::Validation(error.to_string()))?;
+        Some(validation.checked_entries)
+    } else {
+        None
+    };
+
+    let (file_count, total_bytes) = package_file_count_and_size(&package_dir)?;
+    Ok(PackRustPortableOutcome {
+        package_name,
+        package_dir,
+        zip_path: options.create_zip.then_some(zip_path),
+        file_count,
+        total_bytes,
+        directory_validation_entries: directory_validation.checked_entries,
+        zip_validation_entries,
+    })
+}
+
+pub fn validate_rs_portable_payload(
+    options: &ValidateRustPortableOptions,
+) -> Result<ValidateRustPortableOutcome, ValidateRustPortableError> {
+    let path = &options.package_path;
+    if !path.exists() {
+        return Err(ValidateRustPortableError::PackageMissing(path.clone()));
+    }
+
+    let entries = if path.is_dir() {
+        rust_portable_directory_entries(path)?
+    } else if path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+    {
+        rust_portable_zip_entries(path)?
+    } else {
+        return Err(ValidateRustPortableError::UnsupportedPackagePath(
+            path.clone(),
+        ));
+    };
+
+    let forbidden_entries = entries
+        .iter()
+        .filter(|entry| rust_portable_entry_is_forbidden(entry))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !forbidden_entries.is_empty() {
+        return Err(ValidateRustPortableError::ForbiddenEntries(
+            forbidden_entries,
+        ));
+    }
+
+    let missing_entries = RUST_PORTABLE_REQUIRED_ENTRIES
+        .iter()
+        .filter(|entry| !entries.iter().any(|actual| actual == **entry))
+        .map(|entry| (*entry).to_string())
+        .collect::<Vec<_>>();
+    if !missing_entries.is_empty() {
+        return Err(ValidateRustPortableError::MissingRequiredEntries(
+            missing_entries,
+        ));
+    }
+
+    let unexpected_entries = entries
+        .iter()
+        .filter(|entry| !rust_portable_entry_is_allowed(entry))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unexpected_entries.is_empty() {
+        return Err(ValidateRustPortableError::UnexpectedEntries(
+            unexpected_entries,
+        ));
+    }
+
+    Ok(ValidateRustPortableOutcome {
+        checked_entries: entries.len(),
+    })
 }
 
 pub fn copy_built_rust_helpers(
@@ -626,11 +982,52 @@ pub fn dotnet_runtime_url(version: &str, rid: &str) -> String {
     )
 }
 
+fn validate_extract_dotnet_runtime_profile(
+    runtime_profile: PackageRuntimeProfile,
+) -> Result<(), ExtractDotnetRuntimeError> {
+    if runtime_profile != PackageRuntimeProfile::Hybrid {
+        return Err(ExtractDotnetRuntimeError::RuntimeProfileMustBeHybrid(
+            runtime_profile,
+        ));
+    }
+
+    for name in ["EASYDICT_RUNTIME_PROFILE", "RUNTIME_PROFILE"] {
+        let Ok(value) = std::env::var(name) else {
+            continue;
+        };
+        if PackageRuntimeProfile::parse_environment(&value) == PackageRuntimeProfile::RustOnly {
+            return Err(
+                ExtractDotnetRuntimeError::RuntimeProfileEnvironmentRustOnly { name, value },
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn normalize_runtime_profile(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn runtime_profile_is_rust_only(normalized: &str) -> bool {
+    matches!(normalized, "rust-only" | "rustonly" | "rust_only")
+}
+
 pub const RUST_HELPER_EXECUTABLES: &[&str] = &[
     "easydict-native-bridge.exe",
     "easydict_browser_registrar.exe",
     "easydict_cli.exe",
     "easydict_long_doc.exe",
+];
+
+const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
+    "Easydict.Rust.exe",
+    "easydict-native-bridge.exe",
+    "easydict_browser_registrar.exe",
+    "easydict_cli.exe",
+    "easydict_long_doc.exe",
+    "BrowserHostRegistrar.exe",
+    "README-portable.txt",
 ];
 
 pub const BROWSER_EXTENSION_COMMON_FILES: &[&str] = &[
@@ -688,6 +1085,215 @@ pub fn rust_helper_cargo_args(cargo_target: &str, configuration: &str) -> Vec<St
         args.push("--release".to_string());
     }
     args
+}
+
+pub fn rust_portable_package_name(package_version: Option<&str>, platform: &str) -> String {
+    let version = package_version
+        .map(str::trim)
+        .filter(|version| !version.is_empty());
+    match version {
+        Some(version) => format!("easydict-rs-portable-{version}-win-{platform}"),
+        None => format!("easydict-rs-portable-win-{platform}"),
+    }
+}
+
+pub fn preview_app_cargo_args(cargo_target: &str, configuration: &str) -> Vec<String> {
+    let mut args = vec![
+        "build".to_string(),
+        "-p".to_string(),
+        "easydict_preview_iced".to_string(),
+        "--target".to_string(),
+        cargo_target.to_string(),
+    ];
+    if configuration == "Release" {
+        args.push("--release".to_string());
+    }
+    args
+}
+
+fn run_pack_cargo_command(
+    rust_workspace: &Path,
+    cargo_args: Vec<String>,
+    command_name: &'static str,
+) -> Result<(), PackRustPortableError> {
+    let status = std::process::Command::new("cargo")
+        .args(&cargo_args)
+        .envs(rust_portable_cargo_environment())
+        .current_dir(rust_workspace)
+        .status()
+        .map_err(|error| PackRustPortableError::Io {
+            path: PathBuf::from("cargo"),
+            message: error.to_string(),
+        })?;
+    if !status.success() {
+        return Err(PackRustPortableError::CargoFailed {
+            command: command_name,
+            exit_code: status.code(),
+        });
+    }
+    Ok(())
+}
+
+fn rust_portable_cargo_environment() -> [(&'static str, &'static str); 2] {
+    [
+        ("EASYDICT_RUNTIME_PROFILE", "rust-only"),
+        ("RUNTIME_PROFILE", "rust-only"),
+    ]
+}
+
+fn stage_rust_portable_payload(
+    rust_workspace: &Path,
+    cargo_target: &str,
+    profile_dir: &str,
+    package_dir: &Path,
+) -> Result<(), PackRustPortableError> {
+    let built_dir = rust_workspace
+        .join("target")
+        .join(cargo_target)
+        .join(profile_dir);
+    let preview_exe = built_dir.join("easydict_preview_iced.exe");
+    if !preview_exe.is_file() {
+        return Err(PackRustPortableError::MissingExecutable(preview_exe));
+    }
+
+    fs::copy(&preview_exe, package_dir.join("Easydict.Rust.exe")).map_err(|error| {
+        PackRustPortableError::Io {
+            path: package_dir.join("Easydict.Rust.exe"),
+            message: error.to_string(),
+        }
+    })?;
+
+    copy_built_rust_helpers_for_portable(rust_workspace, cargo_target, profile_dir, package_dir)?;
+    fs::write(
+        package_dir.join("README-portable.txt"),
+        rust_portable_readme(),
+    )
+    .map_err(|error| PackRustPortableError::Io {
+        path: package_dir.join("README-portable.txt"),
+        message: error.to_string(),
+    })?;
+
+    Ok(())
+}
+
+fn copy_built_rust_helpers_for_portable(
+    rust_workspace: &Path,
+    cargo_target: &str,
+    profile_dir: &str,
+    output_dir: &Path,
+) -> Result<(), PackRustPortableError> {
+    copy_built_rust_helpers(rust_workspace, cargo_target, profile_dir, output_dir)
+        .map(|_| ())
+        .map_err(pack_error_from_build_error)
+}
+
+fn rust_portable_readme() -> &'static str {
+    "Easydict Rust portable preview\n\
+==============================\n\
+\n\
+Entry point: Easydict.Rust.exe\n\
+\n\
+This first Rust package is portable-only and intentionally named separately from\n\
+the .NET package so both versions can coexist on the same machine.\n\
+\n\
+This package does not include MSIX metadata, an installer, retained .NET workers,\n\
+or a bundled .NET runtime.\n"
+}
+
+fn pack_error_from_build_error(error: BuildRustHelpersError) -> PackRustPortableError {
+    match error {
+        BuildRustHelpersError::UnsupportedPlatform(platform) => {
+            PackRustPortableError::UnsupportedPlatform(platform)
+        }
+        BuildRustHelpersError::UnsupportedConfiguration(configuration) => {
+            PackRustPortableError::UnsupportedConfiguration(configuration)
+        }
+        BuildRustHelpersError::WorkspaceMissing(path) => {
+            PackRustPortableError::WorkspaceMissing(path)
+        }
+        BuildRustHelpersError::RustupFailed { exit_code } => PackRustPortableError::CargoFailed {
+            command: "rustup target add",
+            exit_code,
+        },
+        BuildRustHelpersError::CargoFailed { exit_code } => PackRustPortableError::CargoFailed {
+            command: "cargo build Rust helper executables",
+            exit_code,
+        },
+        BuildRustHelpersError::MissingHelper(path) => {
+            PackRustPortableError::MissingExecutable(path)
+        }
+        BuildRustHelpersError::Io { path, message } => PackRustPortableError::Io { path, message },
+    }
+}
+
+fn prepare_output_root(output_root: &Path) -> Result<PathBuf, PackRustPortableError> {
+    fs::create_dir_all(output_root).map_err(|error| PackRustPortableError::Io {
+        path: output_root.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    fs::canonicalize(output_root).map_err(|error| PackRustPortableError::Io {
+        path: output_root.to_path_buf(),
+        message: error.to_string(),
+    })
+}
+
+fn remove_existing_package_dir(
+    output_root: &Path,
+    package_dir: &Path,
+) -> Result<(), PackRustPortableError> {
+    if !package_dir.exists() {
+        return Ok(());
+    }
+    let canonical_package_dir =
+        fs::canonicalize(package_dir).map_err(|error| PackRustPortableError::Io {
+            path: package_dir.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    if !canonical_package_dir.starts_with(output_root) {
+        return Err(PackRustPortableError::UnsafeOutputPath {
+            output_root: output_root.to_path_buf(),
+            package_dir: canonical_package_dir,
+        });
+    }
+    fs::remove_dir_all(&canonical_package_dir).map_err(|error| PackRustPortableError::Io {
+        path: canonical_package_dir,
+        message: error.to_string(),
+    })
+}
+
+fn package_file_count_and_size(package_dir: &Path) -> Result<(usize, u64), PackRustPortableError> {
+    let mut count = 0;
+    let mut total = 0;
+    collect_package_file_count_and_size(package_dir, &mut count, &mut total)?;
+    Ok((count, total))
+}
+
+fn collect_package_file_count_and_size(
+    current: &Path,
+    count: &mut usize,
+    total: &mut u64,
+) -> Result<(), PackRustPortableError> {
+    for entry in fs::read_dir(current).map_err(|error| PackRustPortableError::Io {
+        path: current.to_path_buf(),
+        message: error.to_string(),
+    })? {
+        let entry = entry.map_err(|error| PackRustPortableError::Io {
+            path: current.to_path_buf(),
+            message: error.to_string(),
+        })?;
+        let path = entry.path();
+        let metadata = fs::metadata(&path).map_err(|error| PackRustPortableError::Io {
+            path: path.clone(),
+            message: error.to_string(),
+        })?;
+        if metadata.is_dir() {
+            collect_package_file_count_and_size(&path, count, total)?;
+        } else if metadata.is_file() {
+            *count += 1;
+            *total += metadata.len();
+        }
+    }
+    Ok(())
 }
 
 fn run_rustup_target_add_if_available(cargo_target: &str) -> Result<(), BuildRustHelpersError> {
@@ -900,6 +1506,192 @@ fn package_browser_extension_target(
     })
 }
 
+fn rust_portable_directory_entries(
+    package_dir: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    let package_dir =
+        fs::canonicalize(package_dir).map_err(|error| ValidateRustPortableError::Io {
+            path: package_dir.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    let mut entries = Vec::new();
+    collect_rust_portable_directory_entries(&package_dir, &package_dir, &mut entries)?;
+    entries.sort();
+    Ok(entries)
+}
+
+fn collect_rust_portable_directory_entries(
+    root: &Path,
+    current: &Path,
+    entries: &mut Vec<String>,
+) -> Result<(), ValidateRustPortableError> {
+    let mut children = fs::read_dir(current)
+        .map_err(|error| ValidateRustPortableError::Io {
+            path: current.to_path_buf(),
+            message: error.to_string(),
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| ValidateRustPortableError::Io {
+            path: current.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    children.sort_by_key(|entry| entry.path());
+
+    for child in children {
+        let child_path = child.path();
+        entries.push(rust_portable_entry_name(root, &child_path)?);
+        if child_path.is_dir() {
+            collect_rust_portable_directory_entries(root, &child_path, entries)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn rust_portable_zip_entries(
+    archive_path: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    let file = File::open(archive_path).map_err(|error| ValidateRustPortableError::Io {
+        path: archive_path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+    let mut entries = Vec::new();
+
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+        let Some(enclosed_name) = entry.enclosed_name() else {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                entry.name().to_string(),
+            ));
+        };
+        let name = rust_portable_path_entry_name(&enclosed_name).ok_or_else(|| {
+            ValidateRustPortableError::InvalidArchiveEntry(entry.name().to_string())
+        })?;
+        entries.push(name);
+    }
+
+    entries.sort();
+    Ok(entries)
+}
+
+fn rust_portable_entry_name(root: &Path, path: &Path) -> Result<String, ValidateRustPortableError> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|error| ValidateRustPortableError::Io {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    rust_portable_path_entry_name(relative)
+        .ok_or_else(|| ValidateRustPortableError::UnsupportedPackagePath(path.to_path_buf()))
+}
+
+fn rust_portable_path_entry_name(path: &Path) -> Option<String> {
+    let components = path
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(value) => value.to_str(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    (!components.is_empty()).then(|| components.join("/"))
+}
+
+fn rust_portable_entry_is_forbidden(entry_name: &str) -> bool {
+    let normalized = entry_name.replace('\\', "/").trim_matches('/').to_string();
+    let components = normalized.split('/').collect::<Vec<_>>();
+    if components.is_empty() {
+        return false;
+    }
+
+    let root = components[0].to_ascii_lowercase();
+    if root == "dotnet" || root == "workers" {
+        return true;
+    }
+    if rust_portable_entry_contains_dotnet_runtime_layout(&components) {
+        return true;
+    }
+
+    let Some(file_name) = components.last() else {
+        return false;
+    };
+    let file_name = file_name.to_ascii_lowercase();
+    matches!(
+        file_name.as_str(),
+        "createdump.exe"
+            | "dotnet.exe"
+            | "hostfxr.dll"
+            | "coreclr.dll"
+            | "hostpolicy.dll"
+            | "clrjit.dll"
+            | "mscordaccore.dll"
+            | "mscordbi.dll"
+            | "mscorlib.dll"
+            | "netstandard.dll"
+            | "singlefilehost.exe"
+            | "system.private.corelib.dll"
+            | "windowsbase.dll"
+            | "presentationcore.dll"
+            | "presentationframework.dll"
+    ) || file_name.ends_with(".runtimeconfig.json")
+        || file_name.ends_with(".deps.json")
+        || file_name.starts_with("easydict.compathost")
+        || file_name.starts_with("easydict.nativebridge")
+        || file_name.starts_with("easydict.sidecarclient")
+        || file_name.starts_with("easydict.workers.")
+        || file_name.starts_with("easydict.winui")
+        || (file_name.starts_with("system.") && file_name.ends_with(".dll"))
+        || file_name.starts_with("microsoft.csharp")
+        || file_name.starts_with("microsoft.visualbasic")
+        || file_name.starts_with("microsoft.win32")
+        || FORBIDDEN_RUST_PORTABLE_DOTNET_ASSEMBLIES.contains(&file_name.as_str())
+        || FORBIDDEN_RUST_PORTABLE_WORKER_SHARED_DOTNET_ASSEMBLIES.contains(&file_name.as_str())
+}
+
+fn rust_portable_entry_is_allowed(entry_name: &str) -> bool {
+    RUST_PORTABLE_REQUIRED_ENTRIES.contains(&entry_name)
+}
+
+fn rust_portable_entry_contains_dotnet_runtime_layout(components: &[&str]) -> bool {
+    components.windows(2).any(|window| {
+        let parent = window[0].to_ascii_lowercase();
+        let child = window[1].to_ascii_lowercase();
+        (parent == "host" && child == "fxr")
+            || (parent == "shared"
+                && FORBIDDEN_RUST_PORTABLE_DOTNET_SHARED_FRAMEWORKS.contains(&child.as_str()))
+    })
+}
+
+const FORBIDDEN_RUST_PORTABLE_DOTNET_SHARED_FRAMEWORKS: &[&str] = &[
+    "microsoft.netcore.app",
+    "microsoft.windowsdesktop.app",
+    "microsoft.aspnetcore.app",
+];
+
+const FORBIDDEN_RUST_PORTABLE_DOTNET_ASSEMBLIES: &[&str] = &[
+    "easydict.documentexport.dll",
+    "easydict.llm.streaming.dll",
+    "easydict.openvino.dll",
+    "easydict.sidecarclient.dll",
+    "easydict.translationservice.dll",
+    "easydict.windowsai.dll",
+    "lexindex.dll",
+    "mdict.csharp.dll",
+    "polyglot.textlayout.dll",
+];
+
+const FORBIDDEN_RUST_PORTABLE_WORKER_SHARED_DOTNET_ASSEMBLIES: &[&str] = &[
+    "microsoft.interactiveexperiences.projection.dll",
+    "microsoft.web.webview2.core.projection.dll",
+    "microsoft.windows.sdk.net.dll",
+    "microsoft.windows.ui.xaml.dll",
+    "microsoft.winui.dll",
+    "winrt.runtime.dll",
+];
+
 fn read_manifest_json(manifest_path: &Path) -> Result<Value, PackageBrowserExtensionError> {
     if !manifest_path.is_file() {
         return Err(PackageBrowserExtensionError::ManifestMissing(
@@ -1053,7 +1845,10 @@ fn directory_size(path: &Path) -> Result<u64, ExtractDotnetRuntimeError> {
 mod tests {
     use super::*;
     use std::io::Read;
+    use std::sync::Mutex;
     use zip::ZipArchive;
+
+    static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn zip_directory_writes_source_contents_and_excludes_extensions() {
@@ -1113,6 +1908,440 @@ mod tests {
             zip_directory(&options).unwrap_err(),
             ZipDirectoryError::SourceMissing(missing)
         );
+    }
+
+    #[test]
+    fn validate_rs_portable_accepts_rust_only_directory_payload() {
+        let package = tempfile_dir("rs-portable-ok");
+        write_rust_portable_allowed_payload(&package);
+
+        let outcome = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .expect("Rust-only portable payload should validate");
+
+        assert_eq!(
+            outcome.checked_entries,
+            RUST_PORTABLE_REQUIRED_ENTRIES.len()
+        );
+        let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_missing_required_first_release_payload() {
+        let package = tempfile_dir("rs-portable-missing-required");
+        write_file(&package, "Easydict.Rust.exe", b"gui");
+        write_file(&package, "README-portable.txt", b"readme");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::MissingRequiredEntries(entries) = error else {
+            panic!("expected missing required entries");
+        };
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "easydict-native-bridge.exe"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "easydict_browser_registrar.exe"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "BrowserHostRegistrar.exe"));
+        let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_unknown_payload_outside_first_release_allowlist() {
+        let package = tempfile_dir("rs-portable-unknown-payload");
+        write_rust_portable_allowed_payload(&package);
+        write_file(&package, "SomePayload.dll", b"unknown");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::UnexpectedEntries(entries) = error else {
+            panic!("expected unexpected entries");
+        };
+        assert_eq!(entries, vec!["SomePayload.dll"]);
+        let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_retained_dotnet_directory_payload() {
+        let package = tempfile_dir("rs-portable-bad-dir");
+        write_rust_portable_allowed_payload(&package);
+        write_file(&package, "dotnet/host/fxr/8.0.11/hostfxr.dll", b"hostfxr");
+        write_file(
+            &package,
+            "workers/localai/Easydict.Workers.LocalAi.exe",
+            b"worker",
+        );
+        write_file(&package, "Easydict.CompatHost.exe", b"compathost");
+        write_file(&package, "System.Private.CoreLib.dll", b"corelib");
+        write_file(
+            &package,
+            "Easydict.TranslationService.dll",
+            b"translation-service",
+        );
+        write_file(&package, "Easydict.OpenVINO.dll", b"openvino");
+        write_file(&package, "Polyglot.TextLayout.dll", b"text-layout");
+        write_file(&package, "MDict.Csharp.dll", b"mdict");
+        write_file(&package, "dotnet.exe", b"dotnet");
+        write_file(&package, "WindowsBase.dll", b"windows-base");
+        write_file(&package, "Microsoft.CSharp.dll", b"csharp");
+        write_file(&package, "Microsoft.WinUI.dll", b"winui");
+        write_file(&package, "WinRT.Runtime.dll", b"winrt");
+        write_file(
+            &package,
+            "shared/Microsoft.NETCore.App/8.0.11/placeholder.txt",
+            b"runtime-layout",
+        );
+        write_file(
+            &package,
+            "shared/Microsoft.AspNetCore.App/8.0.11/placeholder.txt",
+            b"aspnet-runtime-layout",
+        );
+        write_file(&package, "host/fxr/8.0.11/placeholder.txt", b"host-layout");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert!(entries.iter().any(|entry| entry == "dotnet"));
+        assert!(entries.iter().any(|entry| entry == "workers"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "Easydict.CompatHost.exe"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "System.Private.CoreLib.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "Easydict.TranslationService.dll"));
+        assert!(entries.iter().any(|entry| entry == "Easydict.OpenVINO.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "Polyglot.TextLayout.dll"));
+        assert!(entries.iter().any(|entry| entry == "MDict.Csharp.dll"));
+        assert!(entries.iter().any(|entry| entry == "dotnet.exe"));
+        assert!(entries.iter().any(|entry| entry == "WindowsBase.dll"));
+        assert!(entries.iter().any(|entry| entry == "Microsoft.CSharp.dll"));
+        assert!(entries.iter().any(|entry| entry == "Microsoft.WinUI.dll"));
+        assert!(entries.iter().any(|entry| entry == "WinRT.Runtime.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| { entry == "shared/Microsoft.NETCore.App/8.0.11/placeholder.txt" }));
+        assert!(entries
+            .iter()
+            .any(|entry| { entry == "shared/Microsoft.AspNetCore.App/8.0.11/placeholder.txt" }));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "host/fxr/8.0.11/placeholder.txt"));
+        let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_retained_dotnet_zip_payload() {
+        let package = tempfile_dir("rs-portable-bad-zip");
+        write_rust_portable_allowed_payload(&package);
+        write_file(&package, "Easydict.WinUI.deps.json", b"deps");
+        write_file(&package, "nested/Easydict.CompatHost.exe", b"compathost");
+        write_file(&package, "nested/hostpolicy.dll", b"hostpolicy");
+        write_file(&package, "nested/Easydict.SidecarClient.dll", b"sidecar");
+        write_file(&package, "nested/Easydict.Llm.Streaming.dll", b"streaming");
+        write_file(&package, "nested/Easydict.WindowsAI.dll", b"windows-ai");
+        write_file(&package, "nested/LexIndex.dll", b"lex-index");
+        write_file(
+            &package,
+            "nested/Easydict.NativeBridge.exe",
+            b"nativebridge",
+        );
+        write_file(
+            &package,
+            "nested/Easydict.SidecarClient.exe",
+            b"sidecar-exe",
+        );
+        write_file(&package, "nested/System.Text.Json.dll", b"system-json");
+        write_file(&package, "nested/createdump.exe", b"createdump");
+        write_file(&package, "nested/netstandard.dll", b"netstandard");
+        write_file(&package, "nested/PresentationCore.dll", b"presentation");
+        write_file(&package, "nested/Microsoft.Win32.Registry.dll", b"registry");
+        write_file(
+            &package,
+            "nested/Microsoft.Windows.SDK.NET.dll",
+            b"windows-sdk-net",
+        );
+        write_file(
+            &package,
+            "nested/Microsoft.Web.WebView2.Core.Projection.dll",
+            b"webview2-projection",
+        );
+        write_file(
+            &package,
+            "runtime/shared/Microsoft.WindowsDesktop.App/8.0.11/placeholder.txt",
+            b"desktop-runtime-layout",
+        );
+        write_file(
+            &package,
+            "runtime/host/fxr/8.0.11/placeholder.txt",
+            b"host-layout",
+        );
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create test zip");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "Easydict.WinUI.deps.json"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Easydict.CompatHost.exe"));
+        assert!(entries.iter().any(|entry| entry == "nested/hostpolicy.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Easydict.SidecarClient.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Easydict.Llm.Streaming.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Easydict.WindowsAI.dll"));
+        assert!(entries.iter().any(|entry| entry == "nested/LexIndex.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Easydict.NativeBridge.exe"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Easydict.SidecarClient.exe"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/System.Text.Json.dll"));
+        assert!(entries.iter().any(|entry| entry == "nested/createdump.exe"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/netstandard.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/PresentationCore.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Microsoft.Win32.Registry.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "nested/Microsoft.Windows.SDK.NET.dll"));
+        assert!(entries
+            .iter()
+            .any(|entry| { entry == "nested/Microsoft.Web.WebView2.Core.Projection.dll" }));
+        assert!(entries.iter().any(|entry| {
+            entry == "runtime/shared/Microsoft.WindowsDesktop.App/8.0.11/placeholder.txt"
+        }));
+        assert!(entries
+            .iter()
+            .any(|entry| entry == "runtime/host/fxr/8.0.11/placeholder.txt"));
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_zip_path_traversal_entry() {
+        let package = tempfile_dir("rs-portable-path-traversal");
+        let zip_path = package.with_extension("zip");
+        let file = File::create(&zip_path).expect("test zip should be created");
+        let mut writer = ZipWriter::new(file);
+        let options = FileOptions::<()>::default().compression_method(CompressionMethod::Stored);
+        writer
+            .start_file("../hostfxr.dll", options)
+            .expect("path traversal entry should be written");
+        writer
+            .write_all(b"hostfxr")
+            .expect("path traversal entry contents should be written");
+        writer.finish().expect("test zip should be finalized");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            ValidateRustPortableError::InvalidArchiveEntry("../hostfxr.dll".to_string())
+        );
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn rust_portable_package_name_matches_coexistence_contract() {
+        assert_eq!(
+            rust_portable_package_name(None, "x64"),
+            "easydict-rs-portable-win-x64"
+        );
+        assert_eq!(
+            rust_portable_package_name(Some("v1.2.3"), "arm64"),
+            "easydict-rs-portable-v1.2.3-win-arm64"
+        );
+        assert_eq!(
+            rust_portable_package_name(Some("   "), "x86"),
+            "easydict-rs-portable-win-x86"
+        );
+    }
+
+    #[test]
+    fn rust_portable_preview_build_arguments_match_packaging_contract() {
+        let release_args = preview_app_cargo_args("x86_64-pc-windows-msvc", "Release");
+        assert_rust_portable_cargo_args_do_not_enable_retained_dotnet(&release_args);
+        assert_eq!(
+            release_args,
+            vec![
+                "build",
+                "-p",
+                "easydict_preview_iced",
+                "--target",
+                "x86_64-pc-windows-msvc",
+                "--release"
+            ]
+        );
+        let debug_args = preview_app_cargo_args("i686-pc-windows-msvc", "Debug");
+        assert_rust_portable_cargo_args_do_not_enable_retained_dotnet(&debug_args);
+        assert_eq!(
+            debug_args,
+            vec![
+                "build",
+                "-p",
+                "easydict_preview_iced",
+                "--target",
+                "i686-pc-windows-msvc"
+            ]
+        );
+    }
+
+    #[test]
+    fn rust_packager_cargo_environment_forces_rust_only_child_builds() {
+        assert_eq!(
+            rust_portable_cargo_environment(),
+            [
+                ("EASYDICT_RUNTIME_PROFILE", "rust-only"),
+                ("RUNTIME_PROFILE", "rust-only")
+            ]
+        );
+    }
+
+    #[test]
+    fn stage_rust_portable_payload_copies_preview_helpers_alias_and_readme() {
+        let workspace = tempfile_dir("rs-portable-stage-workspace");
+        let built_dir = workspace
+            .join("target")
+            .join("x86_64-pc-windows-msvc")
+            .join("debug");
+        write_file(&built_dir, "easydict_preview_iced.exe", b"preview");
+        for exe_name in RUST_HELPER_EXECUTABLES {
+            write_file(&built_dir, exe_name, exe_name.as_bytes());
+        }
+        let package = tempfile_dir("rs-portable-stage-output");
+
+        stage_rust_portable_payload(&workspace, "x86_64-pc-windows-msvc", "debug", &package)
+            .expect("stage portable payload");
+
+        assert_eq!(
+            fs::read(package.join("Easydict.Rust.exe")).expect("read GUI alias"),
+            b"preview"
+        );
+        for exe_name in RUST_HELPER_EXECUTABLES {
+            assert!(
+                package.join(exe_name).is_file(),
+                "{exe_name} should be copied"
+            );
+        }
+        assert_eq!(
+            fs::read(package.join("BrowserHostRegistrar.exe")).expect("read alias"),
+            b"easydict_browser_registrar.exe"
+        );
+        assert!(fs::read_to_string(package.join("README-portable.txt"))
+            .expect("read readme")
+            .contains("does not include MSIX metadata"));
+        validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .expect("staged payload should pass validator");
+        assert!(!package.join("Easydict.WinUI.exe").exists());
+        assert!(!package.join("workers").exists());
+        assert!(!package.join("dotnet").exists());
+
+        let _ = fs::remove_dir_all(workspace);
+        let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn download_dotnet_runtime_requires_explicit_hybrid_profile_before_network() {
+        let output = tempfile_dir("dotnet-runtime-profile-rust-only");
+        let error = download_and_extract_dotnet_runtime(&ExtractDotnetRuntimeOptions {
+            rid: "win-x64".to_string(),
+            output_dir: output.clone(),
+            version: "8.0.11".to_string(),
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            ExtractDotnetRuntimeError::RuntimeProfileMustBeHybrid(PackageRuntimeProfile::RustOnly)
+        );
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn download_dotnet_runtime_rejects_rust_only_environment_before_network() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = RuntimeProfileEnvironmentSnapshot::capture();
+        clear_runtime_profile_environment();
+        std::env::set_var("RUNTIME_PROFILE", "rust-only");
+
+        let output = tempfile_dir("dotnet-runtime-profile-env-rust-only");
+        let error = download_and_extract_dotnet_runtime(&ExtractDotnetRuntimeOptions {
+            rid: "win-x64".to_string(),
+            output_dir: output.clone(),
+            version: "8.0.11".to_string(),
+            runtime_profile: PackageRuntimeProfile::Hybrid,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            ExtractDotnetRuntimeError::RuntimeProfileEnvironmentRustOnly {
+                name: "RUNTIME_PROFILE",
+                value: "rust-only".to_string(),
+            }
+        );
+        assert!(
+            fs::read_dir(&output)
+                .expect("read temp output")
+                .next()
+                .is_none(),
+            "runtime guard should fail before creating extracted runtime files"
+        );
+        let _ = fs::remove_dir_all(output);
+        snapshot.restore();
     }
 
     #[test]
@@ -1198,6 +2427,7 @@ mod tests {
         let args = rust_helper_cargo_args("x86_64-pc-windows-msvc", "Release");
 
         assert!(args.ends_with(&["--release".to_string()]));
+        assert_rust_portable_cargo_args_do_not_enable_retained_dotnet(&args);
         for bin in [
             "easydict-native-bridge",
             "easydict_browser_registrar",
@@ -1344,6 +2574,44 @@ mod tests {
         fs::write(path, bytes).expect("write file");
     }
 
+    fn write_rust_portable_allowed_payload(root: &Path) {
+        for entry in RUST_PORTABLE_REQUIRED_ENTRIES {
+            write_file(root, entry, entry.as_bytes());
+        }
+    }
+
+    struct RuntimeProfileEnvironmentSnapshot {
+        easydict_runtime_profile: Option<String>,
+        runtime_profile: Option<String>,
+    }
+
+    impl RuntimeProfileEnvironmentSnapshot {
+        fn capture() -> Self {
+            Self {
+                easydict_runtime_profile: std::env::var("EASYDICT_RUNTIME_PROFILE").ok(),
+                runtime_profile: std::env::var("RUNTIME_PROFILE").ok(),
+            }
+        }
+
+        fn restore(self) {
+            restore_environment_value("EASYDICT_RUNTIME_PROFILE", self.easydict_runtime_profile);
+            restore_environment_value("RUNTIME_PROFILE", self.runtime_profile);
+        }
+    }
+
+    fn clear_runtime_profile_environment() {
+        std::env::remove_var("EASYDICT_RUNTIME_PROFILE");
+        std::env::remove_var("RUNTIME_PROFILE");
+    }
+
+    fn restore_environment_value(name: &str, value: Option<String>) {
+        if let Some(value) = value {
+            std::env::set_var(name, value);
+        } else {
+            std::env::remove_var(name);
+        }
+    }
+
     fn browser_extension_source(name: &str) -> PathBuf {
         let root = tempfile_dir(name);
         write_file(
@@ -1424,5 +2692,14 @@ mod tests {
         let mut text = String::new();
         entry.read_to_string(&mut text).expect("read zip entry");
         text
+    }
+
+    fn assert_rust_portable_cargo_args_do_not_enable_retained_dotnet(args: &[String]) {
+        assert!(
+            !args.iter().any(|arg| arg == "--features"
+                || arg == "--all-features"
+                || arg.contains("retained-dotnet-workers")),
+            "rs portable cargo args must keep retained .NET worker bridge disabled: {args:?}"
+        );
     }
 }

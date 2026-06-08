@@ -30,7 +30,10 @@ public sealed class WorkerPackagingTests
         workflow.Should().Contain("runtime_profile:");
         workflow.Should().Contain("    env:\n      RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}");
         workflow.Should().Contain("if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'hybrid' }}");
-        workflow.Should().Contain("if: env.RUNTIME_PROFILE != 'rust-only'");
+        workflow.Should().Contain("Require explicit hybrid profile for dotnet/MSIX artifacts");
+        workflow.Should().Contain("RETAINED_WORKERS_ENABLED=true");
+        workflow.Should().Contain("if: env.RETAINED_WORKERS_ENABLED == 'true'");
+        workflow.Should().NotContain("if: env.RUNTIME_PROFILE != 'rust-only'");
         workflow.Should().Contain("Publish Rust helper executables");
         workflow.Should().Contain("Build-RustHelpers.ps1");
         workflow.Should().Contain("./publish/${{ matrix.platform }}/workers/longdoc");
@@ -641,12 +644,15 @@ public sealed class WorkerPackagingTests
         makefile.Should().Contain("runtime_profile=$$(printf '%s' \"$(RUNTIME_PROFILE)\" | tr '[:upper:]' '[:lower:]' | tr '_' '-')");
         makefile.Should().Contain("is not supported by dotnet publish targets for the first rs release");
         makefile.Should().Contain("is not supported by dotnet MSIX targets for the first rs release");
+        makefile.Should().Contain("only hybrid is supported for legacy .NET packaging");
+        makefile.Should().Contain("only hybrid is supported for legacy .NET/MSIX packaging");
         makefile.Should().Contain("Use ../rs/scripts/Package-Portable.ps1 for the rs portable package.");
-        makefile.Should().Contain("if [ \"$$runtime_profile\" != \"rust-only\" ] && [ \"$$runtime_profile\" != \"rustonly\" ]");
+        makefile.Should().Contain("if [ \"$$runtime_profile\" = \"hybrid\" ]; then");
         makefile.Split("runtime_profile=$$(printf '%s' \"$(RUNTIME_PROFILE)\" | tr '[:upper:]' '[:lower:]' | tr '_' '-')").Length
             .Should().BeGreaterThanOrEqualTo(5);
-        makefile.Split("if [ \"$$runtime_profile\" != \"rust-only\" ] && [ \"$$runtime_profile\" != \"rustonly\" ]").Length
+        makefile.Split("if [ \"$$runtime_profile\" = \"hybrid\" ]; then").Length
             .Should().BeGreaterThanOrEqualTo(5);
+        makefile.Should().NotContain("if [ \"$$runtime_profile\" != \"rust-only\" ] && [ \"$$runtime_profile\" != \"rustonly\" ]");
         makefile.Should().NotContain("if [ \"$(RUNTIME_PROFILE)\" != \"rust-only\" ]");
         makefile.Should().Contain("-RuntimeProfile $(RUNTIME_PROFILE)");
         makefile.Should().Contain("Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile.");
@@ -716,7 +722,8 @@ public sealed class WorkerPackagingTests
         script.Should().Contain("Easydict WinUI Legacy .NET/Hybrid Publisher");
         script.Should().Contain("The first rs release uses ..\\rs\\scripts\\Package-Portable.ps1 instead.");
         script.Should().Contain("RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/publish.ps1");
-        script.Should().Contain("[string]$RuntimeProfile = \"Hybrid\"");
+        script.Should().Contain("[string]$RuntimeProfile = \"\"");
+        script.Should().Contain("RuntimeProfile must be explicitly set to Hybrid");
         script.Should().Contain("function Test-HybridRuntimeProfile");
         script.Should().NotContain("[ValidateSet(\"Hybrid\", \"hybrid\", \"RustOnly\", \"rust-only\", \"rustonly\", \"rust_only\")]");
         script.Should().Contain("Publishing remaining .NET workers");
@@ -736,7 +743,8 @@ public sealed class WorkerPackagingTests
         {
             var script = File.ReadAllText(scriptPath);
 
-            script.Should().Contain("[string]$RuntimeProfile = \"Hybrid\"");
+            script.Should().Contain("[string]$RuntimeProfile = \"\"");
+            script.Should().Contain("RuntimeProfile must be explicitly set to Hybrid");
             script.Should().Contain("function Test-RustOnlyRuntimeProfile");
             script.Should().Contain("function Test-HybridRuntimeProfile");
             script.Should().Contain("The first rs release is portable-only");

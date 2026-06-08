@@ -36,6 +36,15 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
         "validate-rs-portable",
         "workflow should validate the staged/ZIP rs portable payload",
     );
+    assert_contains(
+        &workflow,
+        "RETAINED_WORKERS_ENABLED=true",
+        "workflow should mark retained worker steps only after explicit hybrid validation",
+    );
+    assert!(
+        !workflow.contains("if: env.RUNTIME_PROFILE != 'rust-only'"),
+        "release workflow should not use negative rust-only checks for retained worker/runtime steps"
+    );
 
     assert_contains(
         &portable_script,
@@ -68,6 +77,27 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
 fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
     let root = repo_root();
     for relative_path in [
+        ".github/workflows/release-publish.yml",
+        ".github/workflows/arm64-msix-smoke.yml",
+    ] {
+        let text = read_text(&root.join(relative_path));
+        assert_contains(
+            &text,
+            "RETAINED_WORKERS_ENABLED=true",
+            &format!("{relative_path} should only enable retained workers after hybrid validation"),
+        );
+        assert_contains(
+            &text,
+            "if: env.RETAINED_WORKERS_ENABLED == 'true'",
+            &format!("{relative_path} should gate retained worker/runtime steps positively"),
+        );
+        assert!(
+            !text.contains("if: env.RUNTIME_PROFILE != 'rust-only'"),
+            "{relative_path} should not use negative rust-only checks for retained worker/runtime steps"
+        );
+    }
+
+    for relative_path in [
         "dotnet/scripts/publish.ps1",
         "dotnet/scripts/package-and-install.ps1",
         "dotnet/scripts/Package-Msix.ps1",
@@ -92,6 +122,20 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
             &text,
             "Only Hybrid is supported",
             &format!("{relative_path} should reject unknown legacy packaging profiles"),
+        );
+        assert_contains(
+            &text,
+            "[string]$RuntimeProfile = \"\"",
+            &format!("{relative_path} should require an explicit hybrid profile"),
+        );
+        assert_contains(
+            &text,
+            "RuntimeProfile must be explicitly set to Hybrid",
+            &format!("{relative_path} should fail when RuntimeProfile is omitted"),
+        );
+        assert!(
+            !text.contains("[string]$RuntimeProfile = \"Hybrid\""),
+            "{relative_path} should not silently default to a runtime-producing profile"
         );
     }
 }

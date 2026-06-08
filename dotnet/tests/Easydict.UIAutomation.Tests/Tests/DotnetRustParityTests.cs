@@ -1479,11 +1479,8 @@ public sealed class DotnetRustParityTests : IDisposable
             message => _output.WriteLine($"[{step.Key}][dotnet] {message}"));
         if (step.ScrollPercent <= 0)
         {
-            ScrollHelper.MouseScrollToPercent(
-                rustWindow,
-                step.ScrollPercent,
-                message => _output.WriteLine($"[{step.Key}][rust] {message}"),
-                GetRustPreviewScrollPoint(rustWindow));
+            _output.WriteLine(
+                $"[{step.Key}][rust] Fresh preview starts at top; skipping mouse-wheel reset for 0% scroll capture.");
         }
         else
         {
@@ -1664,14 +1661,6 @@ public sealed class DotnetRustParityTests : IDisposable
         {
             return 0;
         }
-    }
-
-    private static Point GetRustPreviewScrollPoint(Window rustWindow)
-    {
-        var bounds = ScreenshotHelper.GetWindowPhysicalBounds(rustWindow);
-        return new Point(
-            bounds.Left + Math.Max(80, (int)Math.Round(bounds.Width * 0.62)),
-            bounds.Top + Math.Max(140, (int)Math.Round(bounds.Height * 0.54)));
     }
 
     private static void WaitForMainWindowReady(Window window, string label)
@@ -3809,6 +3798,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 UseShellExecute = false
             };
             UiaSettingsIsolation.ApplyTo(startInfo);
+            ClearRustPreviewSettingsStepEnvironment(startInfo);
             startInfo.Environment["EASYDICT_PREVIEW_WINDOW"] = "settings";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_OPEN"] = "1";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_SECTION"] = step.Section.Id;
@@ -3865,6 +3855,27 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 automation.Dispose();
                 throw;
+            }
+        }
+
+        private static void ClearRustPreviewSettingsStepEnvironment(ProcessStartInfo startInfo)
+        {
+            foreach (var key in new[]
+            {
+                "EASYDICT_PREVIEW_SETTINGS_SECTION",
+                "EASYDICT_PREVIEW_SETTINGS_HOVERED_SECTION",
+                "EASYDICT_PREVIEW_SETTINGS_PRESSED_SECTION",
+                "EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING",
+                "EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE",
+                "EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE",
+                "EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED",
+                "EASYDICT_PREVIEW_SCROLL_PERCENT",
+                "EASYDICT_PREVIEW_SCROLL_TARGET",
+                "EASYDICT_PREVIEW_SCROLL_DELAY_MS"
+            })
+            {
+                startInfo.Environment.Remove(key);
             }
         }
 

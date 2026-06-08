@@ -1,13 +1,14 @@
-use crate::compat_protocol::{
-    local_ai_provider_modes, ImportedMdxDictionarySnapshot, SettingsSnapshot, WordResultDto,
-};
+use crate::i18n::{tr, tr_locale};
 use crate::local_dictionary::{
     apply_active_local_dictionary_suggestion, apply_local_dictionary_suggestion,
     dismiss_local_dictionary_suggestions, exit_local_dictionary_suggestions,
     focus_local_dictionary_suggestions, move_local_dictionary_suggestion,
     LocalDictionarySuggestionUpdate,
 };
-use crate::mdx_native::detect_mdx_file_is_encrypted;
+use crate::mdx_native::{detect_mdx_file_is_encrypted, discover_mdd_file_paths};
+use crate::protocol::{
+    local_ai_provider_modes, ImportedMdxDictionarySnapshot, SettingsSnapshot, WordResultDto,
+};
 use crate::quick_translate::{QuickQueryMode, QuickTranslateSurface};
 use crate::translation_services::{
     default_translation_service_descriptors, translation_service_capabilities,
@@ -18,8 +19,7 @@ use crate::{
     HOTKEY_TRANSLATE_CLIPBOARD,
 };
 use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use win_fluent::prelude::*;
 use win_fluent::IconToken;
 
@@ -28,6 +28,7 @@ pub const TRANSLATION_LANGUAGE_IDS: [&str; 43] = [
     "zh-Hant",
     "ja",
     "ko",
+    "zh-classical",
     "en",
     "de",
     "nl",
@@ -66,7 +67,6 @@ pub const TRANSLATION_LANGUAGE_IDS: [&str; 43] = [
     "id",
     "ms",
     "tl",
-    "zh-classical",
 ];
 
 pub const DEFAULT_OCR_SYSTEM_PROMPT: &str = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
@@ -346,6 +346,7 @@ pub struct TranslationResultPreview {
     pub grammar_result: Option<GrammarCorrectionPreview>,
     pub alternatives: Option<Vec<String>>,
     pub word_result: Option<WordResultDto>,
+    pub raw_html: Option<String>,
     pub streamed_chunks: Vec<String>,
     pub no_result: bool,
     pub status: ResultStatus,
@@ -373,6 +374,7 @@ impl TranslationResultPreview {
             grammar_result: None,
             alternatives: None,
             word_result: None,
+            raw_html: None,
             streamed_chunks: Vec::new(),
             no_result: false,
             status: ResultStatus::Ready,
@@ -449,7 +451,10 @@ impl TranslationResultPreview {
         }
 
         if !self.enabled_query && !self.has_queried {
-            item = item.pending_hint("Click to query this service");
+            item = item.pending_hint(tr(
+                "main.result.pending_query",
+                "Click to query this service",
+            ));
         }
 
         item
@@ -667,7 +672,11 @@ fn service_icon(service_id: &str) -> IconToken {
     match service_id {
         "google" => icon::translate(),
         "bing" => IconToken::with_glyph("service-bing", '\u{E774}'),
+        "windows-local-ai" => IconToken::with_glyph("service-local-ai", '\u{E950}'),
         "openai" => IconToken::with_glyph("service-ai", '\u{E8D4}'),
+        service_id if service_id.starts_with("mdx::") => {
+            IconToken::with_glyph("service-mdx", '\u{E8D5}')
+        }
         _ => icon::translate(),
     }
 }
@@ -937,6 +946,7 @@ pub struct SettingsState {
     pub hovered_section: Option<SettingsSection>,
     pub pressed_section: Option<SettingsSection>,
     pub tab_switching: bool,
+    pub scrollbars_visible: bool,
     pub unsaved_changes: bool,
     pub show_unsaved_changes_dialog: bool,
     pub save_error_message: Option<String>,
@@ -1058,6 +1068,7 @@ impl Default for SettingsState {
             hovered_section: None,
             pressed_section: None,
             tab_switching: false,
+            scrollbars_visible: false,
             unsaved_changes: false,
             show_unsaved_changes_dialog: false,
             save_error_message: None,
@@ -1289,6 +1300,10 @@ impl EasydictUiState {
     pub fn preview(scenario: PreviewScenario, theme: ThemeMode) -> Self {
         let mut state = Self::default();
         state.settings.theme = theme;
+        state.connection_status = ConnectionStatus::Connected;
+        state.status_text = "Ready".to_string();
+        state.source_text_focused = false;
+        state.source_text_state = ControlState::default();
         state.saved_settings = sanitized_settings_snapshot(&state.settings);
 
         match scenario {
@@ -1329,7 +1344,7 @@ impl EasydictUiState {
             }
             PreviewScenario::AfterTranslate => {
                 state.connection_status = ConnectionStatus::Connected;
-                state.status_text = "Connected".to_string();
+                state.status_text = "Ready".to_string();
             }
             PreviewScenario::Error => {
                 state.connection_status = ConnectionStatus::Error;
@@ -1359,9 +1374,13 @@ impl EasydictUiState {
                 state.status_text = "Switching mode".to_string();
             }
             PreviewScenario::PrimaryHover => {
+                state.source_text_focused = false;
+                state.source_text_state = ControlState::default();
                 state.main_translate_button_state = ControlState::default().hovered(true);
             }
             PreviewScenario::PrimaryPressed => {
+                state.source_text_focused = false;
+                state.source_text_state = ControlState::default();
                 state.main_translate_button_state =
                     ControlState::default().hovered(true).pressed(true);
             }
@@ -1374,13 +1393,17 @@ impl EasydictUiState {
                 state.source_text_state = ControlState::default().focused(true);
             }
             PreviewScenario::ResultHeaderHover => {
+                state.results = preview_waiting_results();
+                state.source_text_focused = false;
+                state.source_text_state = ControlState::default();
                 if let Some(result) = state.results.first_mut() {
                     result.header_state = ControlState::default().hovered(true);
                 }
             }
             PreviewScenario::ResultCollapsed => {
+                state.results = preview_waiting_results();
                 state.connection_status = ConnectionStatus::Connected;
-                state.status_text = "Connected".to_string();
+                state.status_text = "Ready".to_string();
                 if let Some(result) = state.results.first_mut() {
                     result.expanded = false;
                 }
@@ -1404,7 +1427,7 @@ impl EasydictUiState {
             PreviewScenario::LongDocument => {
                 state.mode = AppMode::LongDocument;
                 state.connection_status = ConnectionStatus::Connected;
-                state.status_text = "Connected".to_string();
+                state.status_text = "Ready".to_string();
             }
             PreviewScenario::LongDocumentRunning => {
                 state.mode = AppMode::LongDocument;
@@ -1472,6 +1495,7 @@ impl EasydictUiState {
             let value = value.trim();
             if !value.is_empty() {
                 state.settings.ui_language = value.to_string();
+                localize_preview_status_text(&mut state);
                 state.saved_settings = sanitized_settings_snapshot(&state.settings);
             }
         }
@@ -1482,6 +1506,17 @@ impl EasydictUiState {
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP") {
             state.settings.fixed_always_on_top = env_truthy(&value);
+            settings_seed_changed = true;
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_HIDE_EMPTY_SERVICE_RESULTS") {
+            state.settings.hide_empty_service_results = env_truthy(&value);
+            settings_seed_changed = true;
+        }
+        if std::env::var("EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            apply_preview_imported_mdx_dictionary(&mut state.settings);
             settings_seed_changed = true;
         }
         if settings_seed_changed {
@@ -1552,6 +1587,13 @@ impl EasydictUiState {
             state.settings.pressed_section = Some(section);
             state.settings.hovered_section.get_or_insert(section);
         }
+        if std::env::var("EASYDICT_PREVIEW_SCROLL_PERCENT")
+            .ok()
+            .and_then(|value| value.trim().parse::<f32>().ok())
+            .is_some_and(|value| value > 0.0)
+        {
+            state.settings.scrollbars_visible = true;
+        }
         if std::env::var("EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING")
             .ok()
             .is_some_and(|value| env_truthy(&value))
@@ -1578,6 +1620,18 @@ impl EasydictUiState {
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE") {
             state.fixed.translate_button_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FLOATING_CONTENT") {
+            if matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "empty" | "blank" | "initial"
+            ) {
+                apply_empty_floating_preview(&mut state.mini);
+                apply_empty_floating_preview(&mut state.fixed);
+                state.fixed.results.push(
+                    TranslationResultPreview::new("bing", "Bing Translate", "").expanded(false),
+                );
+            }
         }
 
         state
@@ -1751,6 +1805,9 @@ impl EasydictUiState {
             Message::SettingsRuntimeStatusLoaded(status) => {
                 self.settings.layout_model_status = status.layout_model.clone();
                 self.settings.cjk_font_status = status.cjk_font.clone();
+                if should_apply_windows_ai_runtime_status(&self.settings) {
+                    self.settings.local_ai_status = status.windows_ai_status.clone();
+                }
                 if should_apply_foundry_runtime_status(&self.settings.foundry_local_status) {
                     self.settings.foundry_local_status = status.foundry_local_status.clone();
                 }
@@ -2044,8 +2101,8 @@ impl EasydictUiState {
                     mark_settings_changed(&mut self.settings);
                 }
             }
-            Message::PrepareLocalAiModel => {
-                if self.settings.local_ai_provider == local_ai_provider_modes::FOUNDRY_LOCAL {
+            Message::PrepareLocalAiModel => match self.settings.local_ai_provider.as_str() {
+                local_ai_provider_modes::FOUNDRY_LOCAL => {
                     self.settings.local_ai_status =
                         local_ai_provider_status(local_ai_provider_modes::FOUNDRY_LOCAL)
                             .to_string();
@@ -2053,13 +2110,38 @@ impl EasydictUiState {
                         "Starting Foundry Local service...".to_string();
                     self.settings.foundry_local_status =
                         "Starting Foundry Local service...".to_string();
-                } else {
+                }
+                local_ai_provider_modes::OPENVINO => {
                     self.settings.local_ai_status =
-                        "Prepare requested for Phi Silica model".to_string();
+                        local_ai_provider_status(local_ai_provider_modes::OPENVINO).to_string();
+                    self.settings.local_ai_prepare_progress =
+                        "Use Download model to prepare OpenVINO assets".to_string();
+                }
+                _ => {
+                    self.settings.local_ai_status = "Preparing Phi Silica model".to_string();
                     self.settings.local_ai_prepare_progress =
                         "Requesting model download and preparation from Windows".to_string();
                 }
-            }
+            },
+            Message::WindowsAiPrepareFinished(result) => match result {
+                Ok(status) => {
+                    self.settings.local_ai_status = status.message.clone();
+                    self.settings.local_ai_prepare_progress = match status.state {
+                        easydict_windows_ai::WindowsAiModelState::Ready => "Ready".to_string(),
+                        easydict_windows_ai::WindowsAiModelState::NeedsPreparation => {
+                            "Needs preparation".to_string()
+                        }
+                        easydict_windows_ai::WindowsAiModelState::NotCompatible => {
+                            "Not compatible".to_string()
+                        }
+                        easydict_windows_ai::WindowsAiModelState::Failed => "Failed".to_string(),
+                    };
+                }
+                Err(message) => {
+                    self.settings.local_ai_status = message;
+                    self.settings.local_ai_prepare_progress = "Failed".to_string();
+                }
+            },
             Message::OpenWindowsAiUpdate => {
                 self.settings.local_ai_prepare_progress =
                     "Windows Update progress link requested".to_string();
@@ -2442,6 +2524,18 @@ impl EasydictUiState {
     }
 }
 
+fn apply_empty_floating_preview(state: &mut FloatingWindowState) {
+    state.text.clear();
+    state.detected_language = None;
+    state.status_text.clear();
+    state.is_translating = false;
+    state.services_completed = 0;
+    state.active_query_id = None;
+    state.active_query_service_count = 0;
+    state.active_query_success_count = 0;
+    state.results.clear();
+}
+
 pub fn settings_snapshot(settings: &SettingsState) -> SettingsSnapshot {
     let deepseek = service_provider_setting(settings, "deepseek");
     let groq = service_provider_setting(settings, "groq");
@@ -2653,6 +2747,16 @@ fn should_apply_foundry_runtime_status(current: &str) -> bool {
         || current.contains("not available on PATH")
 }
 
+fn should_apply_windows_ai_runtime_status(settings: &SettingsState) -> bool {
+    matches!(
+        settings.local_ai_provider.as_str(),
+        local_ai_provider_modes::AUTO | local_ai_provider_modes::WINDOWS_AI
+    ) && matches!(
+        settings.local_ai_prepare_progress.as_str(),
+        "" | "Idle" | "Ready" | "Needs preparation" | "Not compatible" | "Failed"
+    )
+}
+
 fn youdao_mode_status(use_official_api: bool) -> &'static str {
     if use_official_api {
         "Official API mode"
@@ -2818,6 +2922,10 @@ fn apply_settings_view_service_preview_profile(settings: &mut SettingsState, pro
     settings.main_window_services = services.clone();
     settings.mini_window_services = services.clone();
     settings.fixed_window_services = services;
+    apply_preview_imported_mdx_dictionary(settings);
+}
+
+fn apply_preview_imported_mdx_dictionary(settings: &mut SettingsState) {
     settings.imported_mdx_dictionaries = vec![ImportedMdxDictionary {
         service_id: PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID.to_string(),
         display_name: PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME.to_string(),
@@ -2846,6 +2954,7 @@ fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
         "windows-local-ai",
         PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
         "google",
+        "volcano",
         "google_web",
         "deepl",
         "ollama",
@@ -2861,7 +2970,6 @@ fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
         "caiyun",
         "niutrans",
         "youdao",
-        "volcano",
         "linguee",
     ];
 
@@ -2888,9 +2996,19 @@ fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
 fn apply_dotnet_reference_window_service_state(setting: &mut WindowServiceSetting) {
     setting.enabled = matches!(
         setting.service_id.as_str(),
-        "bing" | "windows-local-ai" | PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID | "google"
+        "bing"
+            | "windows-local-ai"
+            | PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID
+            | "google"
+            | "volcano"
     );
-    setting.enabled_query = !matches!(setting.service_id.as_str(), "bing" | "windows-local-ai");
+    setting.enabled_query = !matches!(
+        setting.service_id.as_str(),
+        "bing" | "windows-local-ai" | "volcano"
+    );
+    if setting.enabled {
+        setting.configured = true;
+    }
 }
 
 fn default_service_provider_settings() -> Vec<ServiceProviderSetting> {
@@ -2956,7 +3074,7 @@ fn hotkey_setting_mut<'a>(
 }
 
 fn default_selected_languages() -> Vec<String> {
-    TRANSLATION_LANGUAGE_IDS
+    ["zh-Hans", "en", "ja", "ko", "fr", "de", "es"]
         .into_iter()
         .map(str::to_string)
         .collect()
@@ -3143,6 +3261,15 @@ fn normalize_settings_language(language_id: &str) -> String {
         "ur-pk" => "ur".to_string(),
         "vi-vn" => "vi".to_string(),
         other => other.to_string(),
+    }
+}
+
+fn localize_preview_status_text(state: &mut EasydictUiState) {
+    if matches!(
+        state.status_text.as_str(),
+        "Ready" | "Connected" | "Disconnected"
+    ) {
+        state.status_text = tr_locale(&state.settings.ui_language, "status.ready", "Ready");
     }
 }
 
@@ -3582,74 +3709,6 @@ fn mdx_display_name(path: &str) -> String {
         .unwrap_or_else(|| "MDX Dictionary".to_string())
 }
 
-fn discover_mdd_file_paths(mdx_file_path: &str) -> Vec<String> {
-    let mdx_path = Path::new(mdx_file_path);
-    let Some(directory) = mdx_path
-        .parent()
-        .filter(|directory| !directory.as_os_str().is_empty() && directory.is_dir())
-    else {
-        return Vec::new();
-    };
-    let Some(base_name) = mdx_path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .filter(|stem| !stem.trim().is_empty())
-    else {
-        return Vec::new();
-    };
-
-    let mut discovered = fs::read_dir(directory)
-        .ok()
-        .into_iter()
-        .flat_map(|entries| entries.filter_map(|entry| entry.ok()))
-        .filter_map(|entry| {
-            let path = entry.path();
-            if !path.is_file()
-                || path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .map(|extension| !extension.eq_ignore_ascii_case("mdd"))
-                    .unwrap_or(true)
-            {
-                return None;
-            }
-
-            let stem = path.file_stem()?.to_str()?;
-            let order = mdd_companion_order(base_name, stem)?;
-            Some((order, path))
-        })
-        .collect::<Vec<_>>();
-    discovered.sort_by(|(left_order, left_path), (right_order, right_path)| {
-        left_order.cmp(right_order).then_with(|| {
-            path_to_string(left_path.clone()).cmp(&path_to_string(right_path.clone()))
-        })
-    });
-
-    discovered
-        .into_iter()
-        .map(|(_, path)| path_to_string(path))
-        .collect()
-}
-
-fn mdd_companion_order(base_name: &str, stem: &str) -> Option<(u8, u32)> {
-    if stem.eq_ignore_ascii_case(base_name) {
-        return Some((0, 0));
-    }
-
-    let stem_prefix = stem.get(..base_name.len())?;
-    if !stem_prefix.eq_ignore_ascii_case(base_name) {
-        return None;
-    }
-    let suffix = stem.get(base_name.len()..)?;
-    let suffix = suffix.strip_prefix('.')?;
-    let number = suffix.parse::<u32>().ok()?;
-    (number > 0).then_some((1, number))
-}
-
-fn path_to_string(path: PathBuf) -> String {
-    path.to_string_lossy().into_owned()
-}
-
 fn mdx_service_id(
     display_name: &str,
     path: &str,
@@ -3908,11 +3967,14 @@ fn result_action_language(state: &EasydictUiState, surface: QuickTranslateSurfac
 
 fn preview_waiting_results() -> Vec<TranslationResultPreview> {
     vec![
-        TranslationResultPreview::new("google", "Google Translate", "").manual_query(),
         TranslationResultPreview::new("bing", "Bing Translate", "").manual_query(),
-        TranslationResultPreview::new("openai", "OpenAI", "")
-            .streaming_capable(true)
-            .manual_query(),
+        TranslationResultPreview::new("windows-local-ai", "Windows Local AI", "").manual_query(),
+        TranslationResultPreview::new(
+            "mdx::collins-cobuild-english-usage",
+            PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
+            "",
+        )
+        .manual_query(),
     ]
 }
 
@@ -4041,6 +4103,7 @@ pub enum Message {
     FoundryLocalPrepareFinished(
         Result<crate::openai_compatible::FoundryLocalPrepareOutcome, String>,
     ),
+    WindowsAiPrepareFinished(Result<easydict_windows_ai::WindowsAiStatus, String>),
     InstallFoundryLocal,
     OpenFoundryLocalDocs,
     OpenVinoDeviceChanged(String),
@@ -4167,4 +4230,51 @@ pub enum Message {
     PopButtonAutoDismiss(u64),
     PopButtonClicked,
     Noop,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dotnet_reference_window_services_use_catalog_ids_for_parity_order() {
+        let services = dotnet_reference_window_services();
+        let first_ids = services
+            .iter()
+            .take(5)
+            .map(|service| service.service_id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            first_ids,
+            [
+                "bing",
+                "windows-local-ai",
+                PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
+                "google",
+                "volcano",
+            ]
+        );
+
+        let windows_local_ai = services
+            .iter()
+            .find(|service| service.service_id == "windows-local-ai")
+            .expect("dotnet reference profile should include Windows Local AI");
+        assert!(windows_local_ai.enabled);
+        assert!(!windows_local_ai.enabled_query);
+
+        let custom_openai = services
+            .iter()
+            .find(|service| service.service_id == "custom-openai")
+            .expect("dotnet reference profile should keep Custom OpenAI by catalog id");
+        assert!(!custom_openai.enabled);
+
+        let volcano = services
+            .iter()
+            .find(|service| service.service_id == "volcano")
+            .expect("dotnet reference profile should include Volcano");
+        assert!(volcano.enabled);
+        assert!(volcano.configured);
+        assert!(!volcano.enabled_query);
+    }
 }

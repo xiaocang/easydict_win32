@@ -3,7 +3,7 @@ use win_fluent::prelude::*;
 pub fn main_window_options() -> WindowOptions {
     WindowOptions::new("main", "Easydict")
         .size(940.0, 1220.0)
-        .min_size(640.0, 720.0)
+        .min_size(400.0, 500.0)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Center)

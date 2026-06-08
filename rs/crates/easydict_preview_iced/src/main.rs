@@ -16,7 +16,8 @@ fn main() {
 }
 
 fn preview_window_options() -> WindowOptions {
-    match preview_window_id().as_str() {
+    let window_id = preview_window_id();
+    match window_id.as_str() {
         "settings" => return settings_window_options(),
         "mini" => return mini_window_options(),
         "fixed" => return fixed_window_options(),
@@ -25,19 +26,25 @@ fn preview_window_options() -> WindowOptions {
         _ => {}
     }
 
-    let settings_preview = std::env::var("EASYDICT_PREVIEW_SETTINGS_OPEN")
-        .ok()
-        .is_some_and(|value| preview_env_truthy(&value));
-    let (width, height) = if settings_preview {
-        (620.0, 720.0)
+    let settings_preview = preview_settings_open();
+    let (default_width, default_height) = if settings_preview {
+        (846.0, 913.0)
     } else {
         (940.0, 1220.0)
     };
-    let min_width = if settings_preview { 560.0 } else { 640.0 };
+    let width = preview_env_f32("EASYDICT_PREVIEW_WIDTH_DIPS").unwrap_or(default_width);
+    let height = preview_env_f32("EASYDICT_PREVIEW_HEIGHT_DIPS").unwrap_or(default_height);
+    let min_width = if settings_preview { 760.0 } else { 400.0 };
+    let min_height = if settings_preview { 620.0 } else { 500.0 };
+    let title = if settings_preview {
+        "Easydict Settings"
+    } else {
+        "Easydict Rust Main Window Preview"
+    };
 
-    WindowOptions::new("main", "Easydict Rust Main Window Preview")
+    WindowOptions::new(window_id, title)
         .size(width, height)
-        .min_size(min_width, 720.0)
+        .min_size(min_width, min_height)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Explicit { x: 40.0, y: 20.0 })
@@ -54,7 +61,19 @@ fn preview_window_id() -> String {
             "popbutton" | "pop-button" => "pop-button".to_string(),
             _ => "main".to_string(),
         })
-        .unwrap_or_else(|| "main".to_string())
+        .unwrap_or_else(|| {
+            if preview_settings_open() {
+                "settings".to_string()
+            } else {
+                "main".to_string()
+            }
+        })
+}
+
+fn preview_settings_open() -> bool {
+    std::env::var("EASYDICT_PREVIEW_SETTINGS_OPEN")
+        .ok()
+        .is_some_and(|value| preview_env_truthy(&value))
 }
 
 fn preview_env_truthy(value: &str) -> bool {
@@ -64,6 +83,13 @@ fn preview_env_truthy(value: &str) -> bool {
     )
 }
 
+fn preview_env_f32(name: &str) -> Option<f32> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.trim().parse::<f32>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0)
+}
+
 fn pop_button_preview_state() -> ControlState {
     std::env::var("EASYDICT_PREVIEW_POPBUTTON_STATE")
         .ok()
@@ -71,8 +97,31 @@ fn pop_button_preview_state() -> ControlState {
         .unwrap_or_default()
 }
 
+#[derive(Clone, Debug)]
+struct PreviewScroll {
+    target_id: String,
+    y: f32,
+}
+
+fn preview_scroll_from_env() -> Option<PreviewScroll> {
+    let raw_percent = std::env::var("EASYDICT_PREVIEW_SCROLL_PERCENT").ok()?;
+    let y = raw_percent
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .map(|value| if value > 1.0 { value / 100.0 } else { value })?
+        .clamp(0.0, 1.0);
+    let target_id = std::env::var("EASYDICT_PREVIEW_SCROLL_TARGET")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "MainScrollViewer".to_string());
+
+    Some(PreviewScroll { target_id, y })
+}
+
 struct PreviewApp {
     inner: EasydictApp,
+    pending_scroll: Option<PreviewScroll>,
 }
 
 impl Application for PreviewApp {
@@ -100,9 +149,29 @@ impl Application for PreviewApp {
             })
             .unwrap_or_else(Task::none);
 
+        let pending_scroll = preview_scroll_from_env();
+        let preview_scroll_task = pending_scroll
+            .as_ref()
+            .map(|_| {
+                let delay_ms = std::env::var("EASYDICT_PREVIEW_SCROLL_DELAY_MS")
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(900);
+                Task::perform(
+                    async move {
+                        std::thread::sleep(Duration::from_millis(delay_ms));
+                    },
+                    |_| Message::Noop,
+                )
+            })
+            .unwrap_or_else(Task::none);
+
         (
-            Self { inner },
-            Task::batch([initial_task, auto_toggle_task]),
+            Self {
+                inner,
+                pending_scroll,
+            },
+            Task::batch([initial_task, auto_toggle_task, preview_scroll_task]),
         )
     }
 
@@ -119,11 +188,23 @@ impl Application for PreviewApp {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
-        self.inner.update(message)
+        let is_noop = message == Message::Noop;
+        let task = self.inner.update(message);
+        if is_noop {
+            if let Some(scroll) = self.pending_scroll.take() {
+                return Task::batch([task, Task::scroll_to(scroll.target_id, 0.0, scroll.y)]);
+            }
+        }
+
+        task
     }
 
     fn theme(&self) -> ThemeMode {
         self.inner.theme()
+    }
+
+    fn theme_tokens(&self) -> ThemeTokens {
+        self.inner.theme_tokens()
     }
 }
 
@@ -149,5 +230,54 @@ fn dump_preview_schema_if_requested(app: &EasydictApp) {
 
     if let Err(error) = fs::write(&path, schema) {
         eprintln!("Failed to write preview schema to {path}: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn preview_app_forwards_easydict_theme_tokens() {
+        let state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        let (app, _) = PreviewApp::new(state);
+
+        assert_eq!(
+            app.theme_tokens(),
+            easydict_app::easydict_theme_tokens(ThemeMode::Light)
+        );
+    }
+
+    #[test]
+    fn settings_open_preview_defaults_to_settings_window_size() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let previous_window = std::env::var("EASYDICT_PREVIEW_WINDOW").ok();
+        let previous_settings_open = std::env::var("EASYDICT_PREVIEW_SETTINGS_OPEN").ok();
+
+        std::env::remove_var("EASYDICT_PREVIEW_WINDOW");
+        std::env::set_var("EASYDICT_PREVIEW_SETTINGS_OPEN", "1");
+
+        let options = preview_window_options();
+
+        restore_env("EASYDICT_PREVIEW_WINDOW", previous_window);
+        restore_env("EASYDICT_PREVIEW_SETTINGS_OPEN", previous_settings_open);
+
+        assert_eq!(options.id.as_str(), "settings");
+        assert_eq!(options.width, 846.0);
+        assert_eq!(options.height, 913.0);
+        assert_eq!(options.min_width, Some(760.0));
+        assert_eq!(options.min_height, Some(620.0));
+    }
+
+    fn restore_env(name: &str, value: Option<String>) {
+        if let Some(value) = value {
+            std::env::set_var(name, value);
+        } else {
+            std::env::remove_var(name);
+        }
     }
 }

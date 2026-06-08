@@ -62,12 +62,15 @@ fn easydict_light() -> ThemeTokens {
         selected_surface: Color::rgb(234, 243, 255),
         selected_foreground: Color::rgb(23, 78, 139),
         selected_border: Color::rgb(92, 143, 199),
+        tile_surface: Color::rgba(255, 255, 255, 0),
+        tile_foreground: Color::rgb(42, 47, 54),
+        tile_border: Color::rgb(214, 221, 232),
         input_surface: Color::rgb(241, 244, 248),
         result_surface: Color::rgb(255, 255, 255),
         result_header: Color::rgb(251, 252, 254),
         result_header_hover: Color::rgb(241, 244, 248),
-        button_hover: Color::rgb(238, 243, 248),
-        button_pressed: Color::rgb(229, 235, 243),
+        button_hover: Color::rgb(241, 244, 248),
+        button_pressed: Color::rgb(236, 236, 233),
         floating_input_surface: Color::rgb(241, 244, 248),
         floating_input_border: Color::rgb(225, 231, 239),
         floating_action_surface: Color::rgb(247, 251, 255),
@@ -141,12 +144,15 @@ fn easydict_dark() -> ThemeTokens {
         selected_surface: Color::rgb(36, 50, 71),
         selected_foreground: Color::rgb(216, 232, 255),
         selected_border: Color::rgb(91, 127, 166),
+        tile_surface: Color::rgb(32, 33, 39),
+        tile_foreground: Color::rgb(230, 235, 242),
+        tile_border: Color::rgb(58, 66, 80),
         input_surface: Color::rgb(42, 47, 57),
         result_surface: Color::rgb(34, 39, 49),
         result_header: Color::rgb(40, 45, 55),
         result_header_hover: Color::rgb(50, 57, 70),
         button_hover: Color::rgb(50, 57, 70),
-        button_pressed: Color::rgb(42, 47, 57),
+        button_pressed: Color::rgb(56, 60, 72),
         floating_input_surface: Color::rgb(42, 47, 57),
         floating_input_border: Color::rgb(58, 66, 80),
         floating_action_surface: Color::rgb(37, 42, 51),
@@ -173,6 +179,9 @@ fn easydict_minimal() -> ThemeTokens {
     theme.background = Color::rgb(255, 255, 255);
     theme.surface = Color::rgb(255, 255, 255);
     theme.surface_alt = Color::rgb(247, 247, 247);
+    theme.tile_surface = Color::rgb(255, 255, 255);
+    theme.tile_foreground = Color::rgb(17, 17, 17);
+    theme.tile_border = Color::rgb(153, 153, 153);
     theme.input_surface = Color::rgb(255, 255, 255);
     theme.result_surface = Color::rgb(255, 255, 255);
     theme.result_header = Color::rgb(255, 255, 255);

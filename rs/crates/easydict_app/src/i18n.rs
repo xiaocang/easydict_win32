@@ -63,15 +63,17 @@ fn normalize_locale(locale: &str) -> String {
 
 fn en_us_bundle() -> I18nBundle {
     I18nBundle::new("en-US")
-        .with("app.name", "Easydict")
-        .with("app.beta", "beta")
+            .with("app.name", "Easydict")
+            .with("app.beta", "ᵇᵉᵗᵃ")
         .with("main.source_text", "Source Text")
         .with(
             "main.source_placeholder",
             "Enter or paste text to translate.",
         )
         .with("main.results", "Translation Results")
+        .with("main.result.pending_query", "Click to query this service")
         .with("main.completed", "{count} service(s) completed")
+        .with("status.ready", "Ready")
         .with("main.auto_detect", "Auto Detect")
         .with("main.target_zh_hans", "Chinese (Simplified)")
         .with("main.language_help", "Language help")
@@ -231,16 +233,16 @@ fn en_us_bundle() -> I18nBundle {
         )
         .with(
             "settings.language.auto_select_target.compact",
-            "Auto-select target language based on detected source language",
+            "Automatically select target language based on detected source",
         )
         .with(
             "settings.language.preference_rule.description",
-            "When the detected language matches your first language, the target becomes your second language, and vice versa.",
+            "When detected language matches your First Language, translation target will be your Second Language, and vice versa.",
         )
         .with("settings.language.display", "Display language")
         .with(
             "settings.language.display.description",
-            "Choose the language used by the app UI. Restart required for full effect.",
+            "Select the display language for the application interface. Restart required.",
         )
         .with(
             "settings.language.translation_languages",
@@ -268,12 +270,14 @@ fn en_us_bundle() -> I18nBundle {
 
 fn zh_cn_bundle() -> I18nBundle {
     I18nBundle::new("zh-CN")
-        .with("app.name", "Easydict")
-        .with("app.beta", "beta")
+            .with("app.name", "Easydict")
+            .with("app.beta", "ᵇᵉᵗᵃ")
         .with("main.source_text", "原文")
         .with("main.source_placeholder", "输入或粘贴要翻译的文本。")
         .with("main.results", "翻译结果")
+        .with("main.result.pending_query", "点击查询")
         .with("main.completed", "已完成 {count} 个服务")
+        .with("status.ready", "就绪")
         .with("main.auto_detect", "自动检测")
         .with("main.target_zh_hans", "简体中文")
         .with("main.language_help", "语言帮助")
@@ -409,7 +413,7 @@ fn zh_cn_bundle() -> I18nBundle {
         .with("settings.language.display", "界面语言")
         .with(
             "settings.language.display.description",
-            "选择应用界面使用的语言。完整生效需要重启。",
+            "选择应用程序界面的显示语言。需要重启生效。",
         )
         .with("settings.language.translation_languages", "可用语言")
         .with(
@@ -418,7 +422,7 @@ fn zh_cn_bundle() -> I18nBundle {
         )
         .with(
             "settings.language.available.description",
-            "选择源语言/目标语言选择器中可用的语言。至少需要 2 种。",
+            "选择在源语言/目标语言选择器中可用的语言。至少需要选择2种语言。",
         )
         .with("settings.about.title", "关于")
         .with("settings.about.app_name", "Easydict for Windows ᵇᵉᵗᵃ")

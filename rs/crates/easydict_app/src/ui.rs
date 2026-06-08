@@ -1,6 +1,6 @@
-use crate::compat_protocol::local_ai_provider_modes;
 use crate::i18n::{tr, tr_count, tr_locale};
 use crate::mdx_native::native_mdx_dictionary_can_route_natively;
+use crate::protocol::local_ai_provider_modes;
 use crate::quick_translate::QuickTranslateSurface;
 use crate::screen_capture::{CaptureInteractionState, CapturePhase, CaptureRect};
 use crate::state::{
@@ -33,7 +33,7 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
                 title_bar(tr("app.name", "Easydict"))
                     .id("main.title_bar")
                     .subtitle(tr("app.beta", "beta"))
-                    .icon(icon::translate())
+                    .icon(icon::app())
                     .caption_controls(true)
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
@@ -53,24 +53,29 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
 }
 
 pub fn settings_view(state: &SettingsState) -> View<Message> {
-    let mut content_children = vec![
-        settings_header(&state.ui_language),
-        row((
-            settings_category_bar(state),
+    let mut tabs_row_children = vec![settings_category_bar(state)];
+    if state.tab_switching {
+        tabs_row_children.push(
             progress_ring()
                 .id("SettingsTabSwitchRing")
-                .active(state.tab_switching)
-                .size(20),
-        ))
-        .id("settings.tabs_row")
-        .spacing(12)
-        .align(Alignment::Start)
-        .width(Length::Fill)
-        .margin(Edges {
-            bottom: 10,
-            ..Edges::ZERO
-        })
-        .into_view(),
+                .active(true)
+                .size(20)
+                .into_view(),
+        );
+    }
+
+    let mut content_children = vec![
+        settings_header(&state.ui_language),
+        row(tabs_row_children)
+            .id("settings.tabs_row")
+            .spacing(12)
+            .align(Alignment::Start)
+            .width(Length::Fill)
+            .margin(Edges {
+                bottom: 10,
+                ..Edges::ZERO
+            })
+            .into_view(),
         settings_section_content(state),
     ];
 
@@ -92,6 +97,7 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
             .tw("max-w-[1040px] mx-auto"),
     )
     .id("MainScrollViewer")
+    .scrollbars_visible(state.scrollbars_visible)
     // UIA automation hook mirroring WinUI `MainScrollViewer.HelpText`.
     .help_text(format!(
         "SelectedSettingsTab:{}",
@@ -139,7 +145,7 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
                 title_bar(tr("app.name", "Easydict"))
                     .id("settings.title_bar")
                     .subtitle(tr("app.beta", "beta"))
-                    .icon(icon::translate())
+                    .icon(icon::app())
                     .caption_controls(true)
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
@@ -155,12 +161,24 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
 fn settings_header(locale: &str) -> View<Message> {
     let back_label = tr_locale(locale, "settings.back", "Back");
     row((
-        primary_button("")
-            .id("BackButton")
-            .icon(win_fluent::IconToken::with_glyph("back", '\u{E72B}'))
-            .tooltip(back_label.clone())
-            .a11y(A11yHint::named(back_label))
-            .on_press(Message::Back),
+        column((
+            spacer().width(Length::Fixed(32)).height(Length::Fixed(5)),
+            primary_button("")
+                .id("BackButton")
+                .icon(win_fluent::IconToken::with_glyph("back", '\u{E72B}'))
+                .tooltip(back_label.clone())
+                .width(Length::Fixed(32))
+                .height(Length::Fixed(32))
+                .a11y(A11yHint::named(back_label))
+                .on_press(Message::Back),
+        ))
+        .id("BackButtonSlot")
+        .width(Length::Fixed(32))
+        .height(Length::Fixed(40))
+        .margin(Edges {
+            left: 1,
+            ..Edges::ZERO
+        }),
         styled_text_id(
             "SettingsHeaderText",
             tr_locale(locale, "settings.title", "Settings"),
@@ -756,10 +774,9 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
     let mut source_editor = text_editor(state.source_text.clone())
         .id("InputTextBox")
         .placeholder("Enter or paste text to translate...")
-        .min_height(150)
-        .max_height(260)
+        .min_height(80)
+        .max_height(96)
         .text_style(TextStyle::BodyLarge)
-        .frameless()
         .state(source_text_state)
         .on_key(
             TextEditorKey::Enter,
@@ -1179,7 +1196,13 @@ fn floating_translate_view(
         .content(
             column((
                 floating_header(id_prefix, state, show_pin),
-                floating_input_surface(id_prefix, surface, state, id_prefix == "mini"),
+                floating_input_surface(
+                    id_prefix,
+                    surface,
+                    state,
+                    id_prefix == "mini",
+                    &settings.ui_language,
+                ),
                 translate_language_bar(
                     id_prefix,
                     surface,
@@ -1199,10 +1222,10 @@ fn floating_translate_view(
                     move |id| Message::ReplaceResultIn(surface, id),
                     move |id| Message::RetryResultIn(surface, id),
                 ),
-                text(state.status_text.clone()),
+                floating_status_text(id_prefix, state, &settings.ui_language),
             ))
             .id(format!("{id_prefix}.content"))
-            .padding(if id_prefix == "mini" { 8 } else { 12 })
+            .padding(16)
             .spacing(if id_prefix == "mini" { 4 } else { 6 })
             .width(Length::Fill)
             .height(Length::Fill),
@@ -1230,22 +1253,46 @@ fn floating_detected_language_label(
     }
 }
 
+fn floating_status_text(
+    id_prefix: &'static str,
+    state: &FloatingWindowState,
+    locale: &str,
+) -> View<Message> {
+    let value = if state.status_text.trim().is_empty() {
+        tr_locale(locale, "status.ready", "Ready")
+    } else {
+        state.status_text.clone()
+    };
+
+    row((
+        spacer().width(Length::Fill),
+        styled_text_id(format!("{id_prefix}.status"), value, TextStyle::Caption),
+    ))
+    .id(format!("{id_prefix}.status_row"))
+    .align(Alignment::Center)
+    .width(Length::Fill)
+    .into_view()
+}
+
 fn floating_input_surface(
     id_prefix: &'static str,
     surface: QuickTranslateSurface,
     state: &FloatingWindowState,
     show_source_play: bool,
+    locale: &str,
 ) -> View<Message> {
+    let placeholder = floating_input_placeholder(locale);
     let input = if id_prefix == "mini" {
-        styled_text_id(
-            format!("{id_prefix}.input"),
-            state.text.clone(),
-            TextStyle::Body,
-        )
+        let value = if state.text.trim().is_empty() {
+            placeholder.clone()
+        } else {
+            state.text.clone()
+        };
+        styled_text_id(format!("{id_prefix}.input"), value, TextStyle::Body)
     } else {
         text_editor(state.text.clone())
             .id(format!("{id_prefix}.input"))
-            .placeholder("Enter text...")
+            .placeholder(placeholder)
             .min_height(40)
             .max_height(120)
             .frameless()
@@ -1257,7 +1304,7 @@ fn floating_input_surface(
             input,
             button("Play source")
                 .id(format!("{id_prefix}.play_source"))
-                .icon(icon::speaker())
+                .icon(icon::play())
                 .icon_only()
                 .width(Length::Fixed(28))
                 .height(Length::Fixed(28))
@@ -1280,22 +1327,39 @@ fn floating_input_surface(
         .into_view()
 }
 
+fn floating_input_placeholder(locale: &str) -> String {
+    tr_locale(
+        locale,
+        "main.source_placeholder",
+        "Enter or paste text to translate...",
+    )
+}
+
 fn floating_header(
     id_prefix: &'static str,
     state: &FloatingWindowState,
     show_pin: bool,
 ) -> View<Message> {
     let pin = if show_pin {
-        toggle_switch("Pin", state.pinned)
+        button("Pin")
             .id(format!("{id_prefix}.pin"))
-            .on_toggle(Message::TogglePin)
+            .icon(icon::pin())
+            .icon_only()
+            .width(Length::Fixed(28))
+            .height(Length::Fixed(28))
+            .tooltip("Pin window (stay on top)")
+            .on_press(Message::TogglePin(!state.pinned))
     } else {
-        text("")
+        spacer().width(Length::Fixed(28)).into_view()
     };
 
     row((
         pin,
-        text(state.title.clone()),
+        styled_text_id(
+            format!("{id_prefix}.title"),
+            state.title.clone(),
+            TextStyle::Caption,
+        ),
         button("Close")
             .id(format!("{id_prefix}.close"))
             .icon(icon::clear())
@@ -1306,7 +1370,7 @@ fn floating_header(
             .on_press(Message::CloseWindow),
     ))
     .id(format!("{id_prefix}.header"))
-    .spacing(12)
+    .spacing(4)
     .align(Alignment::Center)
     .space_between()
     .into_view()
@@ -1314,7 +1378,7 @@ fn floating_header(
 
 fn main_translate_action_bar(state: &EasydictUiState) -> View<Message> {
     adaptive_switch(
-        500,
+        360,
         main_translate_action_bar_wide(state),
         main_translate_action_bar_narrow(state),
     )
@@ -1328,7 +1392,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .id("SourceLangCombo")
             .label("Source Language")
             .selected(state.source_language.clone())
-            .width(Length::Fixed(200))
+            .width(Length::Fixed(130))
             .on_change(Message::SourceLanguageChanged),
         button("Swap languages")
             .id("SwapLanguageButton")
@@ -1340,7 +1404,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .id("TargetLangCombo")
             .label("Target Language")
             .selected(state.target_language.clone())
-            .width(Length::Fixed(200))
+            .width(Length::Fixed(130))
             .on_change(Message::TargetLanguageChanged),
     ];
     if state.settings.theme != ThemeMode::Minimal {
@@ -1355,7 +1419,6 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
     row(children)
         .id("ActionBarWide")
         .tw("gap-2 w-full items-center")
-        .space_between()
         .into_view()
 }
 
@@ -1405,13 +1468,16 @@ fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState
     if is_loading {
         progress_ring()
             .id(id)
-            .size(20)
+            .size(16)
             .a11y(A11yHint::named("Translating"))
             .into_view()
     } else {
         primary_button("")
             .id(id)
             .icon(icon::translate())
+            .primary_round()
+            .width(Length::Fixed(40))
+            .height(Length::Fixed(40))
             .tooltip(tr("main.translate", "Translate"))
             .state(state)
             .a11y(A11yHint::named(tr("main.translate", "Translate")))
@@ -1420,13 +1486,7 @@ fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState
 }
 
 fn language_help_button() -> View<Message> {
-    button("Language help")
-        .id("LanguageHelpButton")
-        .icon(icon::help())
-        .icon_only()
-        .tooltip("Language help")
-        .enabled(false)
-        .into_view()
+    styled_text_id("LanguageHelpButton", "?", TextStyle::Body)
 }
 
 fn mode_menu_label(mode: AppMode, minimal: bool) -> &'static str {
@@ -1464,8 +1524,9 @@ fn translate_language_bar(
     let target_width = if is_main {
         Length::Fixed(344)
     } else {
-        Length::Fixed(96)
+        Length::Fill
     };
+    let source_width = if is_main { source_width } else { Length::Fill };
 
     let language_items = if is_main {
         selected_language_items(true, settings)
@@ -1473,7 +1534,7 @@ fn translate_language_bar(
         selected_floating_language_items(true, settings)
     };
 
-    row((
+    let bar = row((
         combo_box(language_items.clone())
             .id(format!("{id_prefix}.source_language"))
             .label("Source Language")
@@ -1502,9 +1563,17 @@ fn translate_language_bar(
         ),
     ))
     .id(format!("{id_prefix}.language_bar"))
-    .tw("gap-2 w-full items-center")
-    .space_between()
-    .into_view()
+    .tw(if is_main {
+        "gap-2 w-full items-center"
+    } else {
+        "gap-1 w-full items-center"
+    });
+
+    if is_main {
+        bar.space_between().into_view()
+    } else {
+        bar.into_view()
+    }
 }
 
 fn floating_translate_button(
@@ -1516,14 +1585,16 @@ fn floating_translate_button(
     if is_loading {
         progress_ring()
             .id(id)
-            .size(20)
+            .size(14)
             .a11y(A11yHint::named("Translating"))
             .into_view()
     } else {
         primary_button("")
             .id(id)
             .icon(icon::translate())
-            .floating_action()
+            .primary_round()
+            .width(Length::Fixed(32))
+            .height(Length::Fixed(32))
             .tooltip(tr("main.translate", "Translate"))
             .state(state)
             .a11y(A11yHint::named(tr("main.translate", "Translate")))
@@ -1546,6 +1617,8 @@ fn styled_text(value: impl Into<String>, style: TextStyle) -> View<Message> {
         id: None,
         value: value.into(),
         style,
+        width: None,
+        height: None,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1560,6 +1633,26 @@ fn styled_text_id(
         id: Some(id.into()),
         value: value.into(),
         style,
+        width: None,
+        height: None,
+        selectable: false,
+        a11y: A11yHint::default(),
+    }))
+}
+
+fn sized_styled_text_id(
+    id: impl Into<String>,
+    value: impl Into<String>,
+    style: TextStyle,
+    width: Length,
+    height: Length,
+) -> View<Message> {
+    View::new(ViewToken::Text(TextToken {
+        id: Some(id.into()),
+        value: value.into(),
+        style,
+        width: Some(width),
+        height: Some(height),
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1598,6 +1691,7 @@ fn settings_category_bar(state: &SettingsState) -> View<Message> {
         .id("settings.categories")
         .max_columns(7)
         .spacing(10)
+        .run_spacing(10)
         .into_view()
 }
 
@@ -1669,7 +1763,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
             ),
         ))
         .id("settings.general.theme")
-        .spacing(8)
+        .spacing(12)
         .align(Alignment::Start)
         .width(Length::Fill)
         .into_view(),
@@ -1681,6 +1775,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
                 "Minimize to system tray",
             ),
             "MinimizeToTrayToggle",
+            settings_toggle_on_label(locale),
             state.minimize_to_tray,
             Message::ToggleMinimizeToTray,
         ),
@@ -1692,6 +1787,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
                 "Start minimized to tray",
             ),
             "MinimizeToTrayOnStartupToggle",
+            settings_toggle_on_label(locale),
             state.start_minimized,
             Message::ToggleStartMinimized,
         ),
@@ -1703,6 +1799,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
                 "Monitor clipboard for text",
             ),
             "ClipboardMonitorToggle",
+            settings_toggle_on_label(locale),
             state.monitor_clipboard,
             Message::ToggleMonitorClipboard,
         ),
@@ -1714,6 +1811,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
                 "Mouse selection translate",
             ),
             "MouseSelectionTranslateToggle",
+            settings_toggle_on_label(locale),
             state.mouse_selection_translate,
             Message::ToggleMouseSelectionTranslate,
         ),
@@ -1727,6 +1825,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
         "settings.general.always_on_top",
         tr_locale(locale, "settings.general.always_on_top", "Always on top"),
         "AlwaysOnTopToggle",
+        settings_toggle_on_label(locale),
         state.fixed_always_on_top,
         Message::ToggleFixedAlwaysOnTop,
     ));
@@ -1738,6 +1837,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
             "Launch at Windows startup",
         ),
         "LaunchAtStartupToggle",
+        settings_toggle_on_label(locale),
         state.launch_at_startup,
         Message::ToggleLaunchAtStartup,
     ));
@@ -1749,6 +1849,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
             "Hide dictionaries with no result",
         ),
         "HideEmptyServiceResultsToggle",
+        settings_winui_default_toggle_on_label(),
         state.hide_empty_service_results,
         Message::ToggleHideEmptyServiceResults,
     ));
@@ -1771,60 +1872,68 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
     .spacing(12)
     .width(Length::Fill);
 
+    let tts_speed_control = column((
+        styled_text_id(
+            "TtsSpeedLabelText",
+            tr_locale(
+                locale,
+                "settings.general.tts.speed",
+                "TTS Reading Speed (0.5x - 3.0x)",
+            ),
+            TextStyle::Body,
+        ),
+        slider(tts_speed_value(&state.tts_speed))
+            .id("TtsSpeedSlider")
+            .range(0.5, 3.0)
+            .step(0.5)
+            .width(Length::Fixed(250))
+            .state(state.tts_speed_slider_state.clone())
+            .a11y(A11yHint::named(tr_locale(
+                locale,
+                "settings.general.tts.speed.a11y",
+                "TTS speed",
+            )))
+            .on_change(|value| Message::TtsSpeedChanged(format_tts_speed(value))),
+    ))
+    .id("settings.general.tts_speed")
+    .spacing(4)
+    .align(Alignment::Start)
+    .width(Length::Fill)
+    .into_view();
+
+    let auto_play_toggle = toggle_switch(
+        settings_winui_default_toggle_on_label(),
+        state.auto_play_translation,
+    )
+    .id("AutoPlayTranslationToggle")
+    .header(tr_locale(
+        locale,
+        "settings.general.auto_play_translation",
+        "Auto play translation",
+    ))
+    .state(state.auto_play_translation_toggle_state.clone())
+    .on_toggle(Message::ToggleAutoPlayTranslation);
+
+    let tts_card = column((
+        tts_speed_control,
+        column((auto_play_toggle,))
+            .id("settings.general.auto_play_translation")
+            .height(Length::Fixed(63))
+            .width(Length::Fill),
+    ))
+    .id("TtsSettingsCard")
+    .padding(16)
+    .spacing(16)
+    .width(Length::Fill)
+    .tw("surface-card rounded-lg border w-full");
+
     let tts_children: Vec<View<Message>> = vec![
         styled_text_id(
             "TtsSettingsHeaderText",
             tr_locale(locale, "settings.general.tts.header", "TTS Output Settings"),
             TextStyle::Subtitle,
         ),
-        settings_row(tr_locale(
-            locale,
-            "settings.general.tts.speed",
-            "TTS Reading Speed (0.5x - 3.0x)",
-        ))
-        .id("settings.general.tts_speed")
-        .title_id("TtsSpeedLabelText")
-        .content(
-            row((
-                slider(tts_speed_value(&state.tts_speed))
-                    .id("TtsSpeedSlider")
-                    .range(0.5, 3.0)
-                    .step(0.5)
-                    .width(Length::Fixed(250))
-                    .state(state.tts_speed_slider_state.clone())
-                    .a11y(A11yHint::named(tr_locale(
-                        locale,
-                        "settings.general.tts.speed.a11y",
-                        "TTS speed",
-                    )))
-                    .on_change(|value| Message::TtsSpeedChanged(format_tts_speed(value))),
-                styled_text_id(
-                    "TtsSpeedValueText",
-                    format!("{}x", format_tts_speed(tts_speed_value(&state.tts_speed))),
-                    TextStyle::Body,
-                ),
-            ))
-            .id("settings.general.tts_speed.control")
-            .spacing(12)
-            .align(Alignment::Center),
-        )
-        .into_view(),
-        settings_row(tr_locale(
-            locale,
-            "settings.general.auto_play_translation",
-            "Auto play translation",
-        ))
-        .id("settings.general.auto_play_translation")
-        .description(tr_locale(
-            locale,
-            "settings.general.auto_play_translation.description",
-            "Play translated text after a translation finishes.",
-        ))
-        .trailing((toggle_switch("On", state.auto_play_translation)
-            .id("AutoPlayTranslationToggle")
-            .state(state.auto_play_translation_toggle_state.clone())
-            .on_toggle(Message::ToggleAutoPlayTranslation),))
-        .into_view(),
+        tts_card.into_view(),
     ];
 
     let general_tab_content = column((
@@ -1849,18 +1958,19 @@ fn settings_behavior_toggle(
     id: &'static str,
     title: impl Into<String>,
     toggle_id: &'static str,
+    on_label: impl Into<String>,
     checked: bool,
     on_toggle: impl Fn(bool) -> Message + Send + Sync + 'static,
 ) -> View<Message> {
-    column((
-        styled_text(title.into(), TextStyle::Body),
-        toggle_switch("On", checked)
-            .id(toggle_id)
-            .on_toggle(on_toggle),
-    ))
+    let title = title.into();
+    column((toggle_switch(on_label, checked)
+        .id(toggle_id)
+        .header(title)
+        .on_toggle(on_toggle),))
     .id(id)
-    .spacing(6)
+    .spacing(14)
     .align(Alignment::Start)
+    .height(Length::Fixed(63))
     .width(Length::Fill)
     .into_view()
 }
@@ -1886,22 +1996,17 @@ fn theme_combo_items(locale: &str) -> [ComboBoxItem; 4] {
     ]
 }
 
-fn local_dictionary_suggestions_row(state: &SettingsState, locale: &str) -> View<Message> {
-    let description = if state.imported_mdx_dictionaries.is_empty() {
-        tr_locale(
-            locale,
-            "settings.general.local_dictionary_suggestions.empty",
-            "Import an MDX dictionary to enable local input suggestions.",
-        )
-    } else {
-        tr_locale(
-            locale,
-            "settings.general.local_dictionary_suggestions.ready",
-            "Suggest local dictionary entries while typing.",
-        )
-    };
+fn settings_toggle_on_label(locale: &str) -> String {
+    tr_locale(locale, "settings.toggle.on", "On")
+}
 
-    column((
+fn settings_winui_default_toggle_on_label() -> &'static str {
+    "On"
+}
+
+fn local_dictionary_suggestions_row(state: &SettingsState, locale: &str) -> View<Message> {
+    let show_hint = state.imported_mdx_dictionaries.is_empty();
+    let mut children: Vec<View<Message>> = vec![
         row((
             styled_text_id(
                 "EnableLocalDictionarySuggestionsLabelText",
@@ -1920,22 +2025,40 @@ fn local_dictionary_suggestions_row(state: &SettingsState, locale: &str) -> View
         ))
         .id("EnableLocalDictionarySuggestionsHeader")
         .spacing(6)
-        .align(Alignment::Center),
-        toggle_switch("On", state.local_dictionary_suggestions)
-            .id("EnableLocalDictionarySuggestionsToggle")
-            .enabled(!state.imported_mdx_dictionaries.is_empty())
-            .on_toggle(Message::ToggleLocalDictionarySuggestions),
-        styled_text_id(
+        .align(Alignment::Center)
+        .into_view(),
+        toggle_switch(
+            settings_winui_default_toggle_on_label(),
+            state.local_dictionary_suggestions,
+        )
+        .id("EnableLocalDictionarySuggestionsToggle")
+        .enabled(!state.imported_mdx_dictionaries.is_empty())
+        .on_toggle(Message::ToggleLocalDictionarySuggestions),
+    ];
+
+    if show_hint {
+        children.push(styled_text_id(
             "EnableLocalDictionarySuggestionsHintText",
-            description,
+            tr_locale(
+                locale,
+                "settings.general.local_dictionary_suggestions.empty",
+                "Import an MDX dictionary to enable local input suggestions.",
+            ),
             TextStyle::Caption,
-        ),
-    ))
-    .id("settings.general.local_dictionary_suggestions")
-    .spacing(6)
-    .align(Alignment::Start)
-    .width(Length::Fill)
-    .into_view()
+        ));
+    }
+
+    let mut row = column(children)
+        .id("settings.general.local_dictionary_suggestions")
+        .spacing(6)
+        .align(Alignment::Start)
+        .width(Length::Fill);
+
+    if !show_hint {
+        row = row.height(Length::Fixed(63));
+    }
+
+    row.into_view()
 }
 
 fn tts_speed_value(value: &str) -> f32 {
@@ -1964,6 +2087,7 @@ fn mouse_selection_excluded_apps_panel(state: &SettingsState, locale: &str) -> V
         text_editor(state.mouse_selection_excluded_apps.clone())
             .id("MouseSelectionExcludedAppsBox")
             .placeholder("code, slack, discord")
+            .min_height(36)
             .max_height(36)
             .on_input(Message::MouseSelectionExcludedAppsChanged),
         styled_text_id(
@@ -1973,7 +2097,7 @@ fn mouse_selection_excluded_apps_panel(state: &SettingsState, locale: &str) -> V
                 "settings.general.excluded_apps.description",
                 "Process names to exclude from mouse selection translate, separated by commas. Example: \"code\" for VS Code.",
             ),
-            TextStyle::Caption,
+            TextStyle::CaptionSmall,
         ),
     ))
     .id("MouseSelectionExcludedAppsPanel")
@@ -3078,6 +3202,7 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
                     &state.main_window_services,
                     locale,
                 ),
+                settings_divider("settings.views.main.divider"),
                 settings_view_window_results_section(
                     tr_locale(locale, "settings.views.mini_window", "Mini Window"),
                     "settings.views.mini",
@@ -3088,18 +3213,7 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
                     &state.mini_window_services,
                     locale,
                 ),
-                settings_view_behavior_row(
-                    "settings.views.mini.behavior",
-                    tr_locale(locale, "settings.views.mini_behavior", "Mini Window behavior"),
-                    tr_locale(
-                        locale,
-                        "settings.views.mini_behavior.description",
-                        "Close the Mini window automatically after focus moves away.",
-                    ),
-                    tr_locale(locale, "settings.views.auto_close", "Auto close"),
-                    state.mini_auto_close,
-                    Message::ToggleMiniAutoClose,
-                ),
+                settings_divider("settings.views.mini.divider"),
                 settings_view_window_results_section(
                     tr_locale(locale, "settings.views.fixed_window", "Fixed Window"),
                     "settings.views.fixed",
@@ -3109,18 +3223,6 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
                     state.fixed_window_reorder_mode,
                     &state.fixed_window_services,
                     locale,
-                ),
-                settings_view_behavior_row(
-                    "settings.views.fixed.behavior",
-                    tr_locale(locale, "settings.views.fixed_behavior", "Fixed Window behavior"),
-                    tr_locale(
-                        locale,
-                        "settings.views.fixed_behavior.description",
-                        "Keep the Fixed window above other windows.",
-                    ),
-                    tr_locale(locale, "settings.general.always_on_top", "Always on top"),
-                    state.fixed_always_on_top,
-                    Message::ToggleFixedAlwaysOnTop,
                 ),
             ],
         ),
@@ -3166,31 +3268,6 @@ fn settings_view_window_results_section(
     .into_view()
 }
 
-fn settings_view_behavior_row(
-    row_id: &'static str,
-    title: String,
-    description: String,
-    toggle_label: String,
-    checked: bool,
-    message: impl Fn(bool) -> Message + Send + Sync + 'static,
-) -> View<Message> {
-    row((
-        column((
-            styled_text(title, TextStyle::BodyStrong),
-            styled_text(description, TextStyle::Caption),
-        ))
-        .id(format!("{row_id}.text"))
-        .spacing(4)
-        .width(Length::Fill),
-        toggle_switch(toggle_label, checked).on_toggle(message),
-    ))
-    .id(row_id)
-    .spacing(12)
-    .align(Alignment::Center)
-    .width(Length::Fill)
-    .into_view()
-}
-
 fn window_service_rows(
     control_prefix: &'static str,
     surface: QuickTranslateSurface,
@@ -3202,10 +3279,12 @@ fn window_service_rows(
         .iter()
         .enumerate()
         .map(|(index, service)| {
+            let next_service = services.get(index + 1);
             window_service_row(
                 control_prefix,
                 surface,
                 service,
+                next_service,
                 index,
                 services.len(),
                 reorder_mode,
@@ -3216,7 +3295,7 @@ fn window_service_rows(
 
     column(rows)
         .id(format!("{control_prefix}.service_list"))
-        .spacing(6)
+        .spacing(0)
         .width(Length::Fill)
         .into_view()
 }
@@ -3225,6 +3304,7 @@ fn window_service_row(
     control_prefix: &'static str,
     surface: QuickTranslateSurface,
     service: &WindowServiceSetting,
+    next_service: Option<&WindowServiceSetting>,
     index: usize,
     service_count: usize,
     reorder_mode: bool,
@@ -3233,11 +3313,13 @@ fn window_service_row(
     let control_id = service_control_id(&service.service_id);
     let mut trailing: Vec<View<Message>> = Vec::new();
     let service_id = service.service_id.clone();
-    let enabled_checkbox = checkbox(service.display_name.clone(), service.enabled)
+    let display_label = window_service_display_label(service);
+    let enabled_checkbox = checkbox(display_label.clone(), service.enabled)
         .id(format!("{control_prefix}.{control_id}.enabled"))
+        .label_italic(!service.configured)
         .a11y(A11yHint::named(format!(
             "{} {}",
-            service.display_name,
+            display_label,
             tr_locale(locale, "settings.views.enabled", "enabled")
         )))
         .on_toggle(move |enabled| {
@@ -3287,10 +3369,16 @@ fn window_service_row(
         );
     }
 
+    let bottom_gap = service_row_bottom_gap(service, next_service);
+
     row((
         column((enabled_checkbox,))
             .id(format!("{control_prefix}.service.{control_id}.text"))
-            .width(Length::Fill),
+            .width(Length::Fill)
+            .margin(Edges {
+                left: 2,
+                ..Edges::ZERO
+            }),
         row(trailing)
             .id(format!("{control_prefix}.service.{control_id}.controls"))
             .spacing(8)
@@ -3301,7 +3389,26 @@ fn window_service_row(
     .align(Alignment::Center)
     .width(Length::Fill)
     .height(Length::Fixed(28))
+    .margin(Edges {
+        bottom: bottom_gap,
+        ..Edges::ZERO
+    })
     .into_view()
+}
+
+fn service_row_bottom_gap(
+    service: &WindowServiceSetting,
+    next_service: Option<&WindowServiceSetting>,
+) -> u16 {
+    let Some(next_service) = next_service else {
+        return 0;
+    };
+
+    match (service.enabled, next_service.enabled) {
+        (true, true) => 16,
+        (false, false) => 4,
+        _ => 10,
+    }
 }
 
 fn service_control_id(service_id: &str) -> String {
@@ -3315,6 +3422,29 @@ fn service_control_id(service_id: &str) -> String {
             }
         })
         .collect()
+}
+
+fn settings_divider(id: impl Into<String>) -> View<Message> {
+    column(Vec::<View<Message>>::new())
+        .id(id)
+        .tw("bg-border w-full h-[1px]")
+        .into_view()
+}
+
+fn window_service_display_label(service: &WindowServiceSetting) -> String {
+    if service.display_name.starts_with('\u{1f4d6}')
+        || service.display_name.starts_with('\u{1f4da}')
+    {
+        return service.display_name.clone();
+    }
+
+    if service.service_id == "google_web" || service.service_id == "linguee" {
+        format!("\u{1f4d6} {}", service.display_name)
+    } else if service.service_id.starts_with("mdx::") {
+        format!("\u{1f4da} {}", service.display_name)
+    } else {
+        service.display_name.clone()
+    }
 }
 
 fn settings_hotkeys_content(state: &SettingsState, locale: &str) -> View<Message> {
@@ -3837,17 +3967,17 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
             let selected = state
                 .selected_languages
                 .iter()
-                .any(|language| language == id);
-            row(
-                (toggle_switch(settings_language_label(locale, id), selected)
-                    .id(format!("settings.language.selected.{id}.toggle"))
-                    .enabled(!selected || selected_count > 2)
-                    .on_toggle(move |value| {
-                        Message::ToggleSelectedLanguage(id.to_string(), value)
-                    }),),
-            )
+                .any(|language| language == id)
+                || id == "en";
+            let enabled = id != "en" && (!selected || selected_count > 2);
+            row((checkbox(settings_language_label(locale, id), selected)
+                .id(format!("settings.language.selected.{id}.checkbox"))
+                .enabled(enabled)
+                .on_toggle(move |value| Message::ToggleSelectedLanguage(id.to_string(), value)),))
             .id(format!("settings.language.selected.{id}"))
-            .width(Length::Fixed(220))
+            .width(Length::Fixed(180))
+            .height(Length::Fixed(32))
+            .align(Alignment::Center)
             .into_view()
         })
         .collect::<Vec<_>>();
@@ -3893,7 +4023,7 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                     tr_locale(
                         locale,
                         "settings.language.preference_rule.description",
-                        "When the detected language matches your first language, the target becomes your second language, and vice versa.",
+                        "When detected language matches your First Language, translation target will be your Second Language, and vice versa.",
                     ),
                     TextStyle::Caption,
                 ),
@@ -3903,7 +4033,7 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                         tr_locale(
                             locale,
                             "settings.language.auto_select_target.compact",
-                            "Auto-select target language based on detected source language",
+                            "Automatically select target language based on detected source",
                         ),
                         TextStyle::Body,
                     ),
@@ -3933,13 +4063,13 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                     tr_locale(
                         locale,
                         "settings.language.display.description",
-                        "Choose the language used by the app UI. Restart required for full effect.",
+                        "Select the display language for the application interface. Restart required.",
                     ),
                     TextStyle::Caption,
                 ),
             ))
             .id("settings.language.preferences.card.content")
-            .spacing(20)
+            .spacing(16)
             .margin(Edges {
                 top: 4,
                 right: 4,
@@ -3970,10 +4100,14 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                     .id("settings.language.selected_languages")
                     .max_columns(4)
                     .spacing(8)
-                    .run_spacing(6),
+                    .run_spacing(4),
+                spacer()
+                    .id("settings.language.selected_languages.bottom_spacer")
+                    .height(Length::Fixed(10)),
             ))
             .id("settings.language.selected_languages.content")
-            .spacing(8),
+            .spacing(8)
+            .width(Length::Fill),
         ),
     ))
     .id("settings.language")
@@ -4001,14 +4135,16 @@ fn language_combo_field(
 
 fn settings_about_content(locale: &str) -> View<Message> {
     column((
-        styled_text_id(
+        sized_styled_text_id(
             "AboutHeaderText",
             tr_locale(locale, "settings.about.title", "About"),
             TextStyle::Subtitle,
+            Length::Fill,
+            Length::Fixed(24),
         ),
         card("").id("settings.about.card").content(
             column((
-                styled_text_id(
+                sized_styled_text_id(
                     "AboutAppNameText",
                     tr_locale(
                         locale,
@@ -4016,39 +4152,43 @@ fn settings_about_content(locale: &str) -> View<Message> {
                         "Easydict for Windows ᵇᵉᵗᵃ",
                     ),
                     TextStyle::BodyStrong,
+                    Length::Fill,
+                    Length::Fixed(19),
                 ),
-                styled_text_id(
+                sized_styled_text_id(
                     "VersionText",
                     settings_version_text(locale),
                     TextStyle::Caption,
+                    Length::Fill,
+                    Length::Fixed(19),
                 ),
                 settings_link_button(SettingsLink::GitHubRepository, locale),
                 settings_link_button(SettingsLink::IssueFeedback, locale),
                 row((
-                    styled_text_id(
+                    sized_styled_text_id(
                         "AboutInspiredByText",
                         tr_locale(locale, "settings.about.inspired_by", "Inspired by"),
                         TextStyle::Caption,
+                        Length::Shrink,
+                        Length::Fixed(18),
                     ),
                     settings_link_button(SettingsLink::EasydictForMacOS, locale),
                 ))
                 .id("settings.about.inspired_by")
                 .spacing(4)
                 .align(Alignment::Center),
-                styled_text_id(
+                sized_styled_text_id(
                     "LicenseText",
                     tr_locale(locale, "settings.about.license", "License: GPL-3.0"),
                     TextStyle::Caption,
+                    Length::Shrink,
+                    Length::Fixed(18),
                 ),
             ))
             .id("settings.about.card.content")
             .spacing(8)
-            .margin(Edges {
-                top: 4,
-                right: 4,
-                bottom: 4,
-                left: 4,
-            }),
+            .width(Length::Fill)
+            .padding(4),
         ),
     ))
     .id("settings.about")
@@ -4075,11 +4215,27 @@ fn app_display_version() -> String {
 }
 
 fn settings_link_button(link: SettingsLink, locale: &str) -> View<Message> {
-    button(settings_link_label(link, locale))
+    let label = settings_link_label(link, locale);
+    let (width, height) = settings_link_button_size(link, locale);
+    let mut link_button = button(label)
         .id(link.id())
         .link()
         .tooltip(link.url())
-        .on_press(Message::OpenSettingsLink(link))
+        .width(Length::Fixed(width))
+        .height(Length::Fixed(height));
+    if link == SettingsLink::EasydictForMacOS {
+        link_button = link_button.text_style(TextStyle::Caption);
+    }
+    link_button.on_press(Message::OpenSettingsLink(link))
+}
+
+fn settings_link_button_size(link: SettingsLink, locale: &str) -> (u16, u16) {
+    match link {
+        SettingsLink::GitHubRepository => (116, 21),
+        SettingsLink::IssueFeedback if locale.eq_ignore_ascii_case("zh-CN") => (58, 21),
+        SettingsLink::IssueFeedback => (94, 21),
+        SettingsLink::EasydictForMacOS => (106, 18),
+    }
 }
 
 fn settings_link_label(link: SettingsLink, locale: &str) -> String {
@@ -4128,20 +4284,82 @@ fn selected_floating_language_items(
     include_auto: bool,
     settings: &SettingsState,
 ) -> Vec<ComboBoxItem> {
-    selected_language_items(include_auto, settings)
-        .into_iter()
-        .map(compact_language_item)
-        .collect()
+    let mut items = Vec::new();
+    if include_auto {
+        items.push(ComboBoxItem::new(
+            "auto",
+            floating_language_label(&settings.ui_language, "auto"),
+        ));
+    }
+    items.extend(
+        TRANSLATION_LANGUAGE_IDS
+            .into_iter()
+            .filter(|id| {
+                settings
+                    .selected_languages
+                    .iter()
+                    .any(|language| language == id)
+            })
+            .map(|id| ComboBoxItem::new(id, floating_language_label(&settings.ui_language, id))),
+    );
+    items
 }
 
-fn compact_language_item(item: ComboBoxItem) -> ComboBoxItem {
-    let label = match item.id.as_str() {
-        "auto" => "Auto",
-        "zh-Hans" => "Chinese",
-        "zh-Hant" => "Traditional",
-        _ => item.label.as_str(),
-    };
-    ComboBoxItem::new(item.id, label)
+fn floating_language_label(locale: &str, id: &str) -> String {
+    if id == "auto" {
+        return tr_locale(locale, "main.auto_detect", "Auto Detect");
+    }
+    if !locale_is_zh(locale) {
+        return language_label(id);
+    }
+
+    match id {
+        "ar" => "阿拉伯语",
+        "bg" => "保加利亚语",
+        "bn" => "孟加拉语",
+        "cs" => "捷克语",
+        "da" => "丹麦语",
+        "de" => "德语",
+        "el" => "希腊语",
+        "en" => "英语",
+        "es" => "西班牙语",
+        "et" => "爱沙尼亚语",
+        "fa" => "波斯语",
+        "fi" => "芬兰语",
+        "fr" => "法语",
+        "he" => "希伯来语",
+        "hi" => "印地语",
+        "hu" => "匈牙利语",
+        "id" => "印尼语",
+        "it" => "意大利语",
+        "ja" => "日语",
+        "ko" => "韩语",
+        "lt" => "立陶宛语",
+        "lv" => "拉脱维亚语",
+        "ms" => "马来语",
+        "nl" => "荷兰语",
+        "no" => "挪威语",
+        "pl" => "波兰语",
+        "pt" => "葡萄牙语",
+        "ro" => "罗马尼亚语",
+        "ru" => "俄语",
+        "sk" => "斯洛伐克语",
+        "sl" => "斯洛文尼亚语",
+        "sv" => "瑞典语",
+        "ta" => "泰米尔语",
+        "te" => "泰卢固语",
+        "th" => "泰语",
+        "tl" => "菲律宾语",
+        "tr" => "土耳其语",
+        "uk" => "乌克兰语",
+        "ur" => "乌尔都语",
+        "vi" => "越南语",
+        "zh-Hans" => return tr_locale(locale, "main.target_zh_hans", "简体中文"),
+        "zh-Hant" => "繁体中文",
+        "zh-classical" => "文言文",
+        _ => return language_label(id),
+    }
+    .to_string()
 }
 
 fn all_language_items(include_auto: bool) -> Vec<ComboBoxItem> {
@@ -4235,47 +4453,49 @@ fn settings_language_label(locale: &str, id: &str) -> String {
     }
 
     match id {
-        "ar" => "阿拉伯语",
-        "bg" => "保加利亚语",
-        "bn" => "孟加拉语",
-        "cs" => "捷克语",
-        "da" => "丹麦语",
-        "de" => "德语",
-        "el" => "希腊语",
+        "ar" => "SA 阿拉伯语",
+        "bg" => "BG 保加利亚语",
+        "bn" => "BD 孟加拉语",
+        "cs" => "CZ 捷克语",
+        "da" => "DK 丹麦语",
+        "de" => "DE 德语",
+        "el" => "GR 希腊语",
         "en" => "US 英语",
-        "es" => "西班牙语",
-        "et" => "爱沙尼亚语",
-        "fa" => "波斯语",
-        "fi" => "芬兰语",
-        "fr" => "法语",
-        "he" => "希伯来语",
-        "hi" => "印地语",
-        "hu" => "匈牙利语",
-        "id" => "印尼语",
-        "it" => "意大利语",
-        "ja" => "日语",
-        "ko" => "韩语",
-        "lt" => "立陶宛语",
-        "lv" => "拉脱维亚语",
-        "ms" => "马来语",
-        "nl" => "荷兰语",
-        "no" => "挪威语",
-        "pl" => "波兰语",
-        "pt" => "葡萄牙语",
-        "ro" => "罗马尼亚语",
-        "ru" => "俄语",
-        "sk" => "斯洛伐克语",
-        "sl" => "斯洛文尼亚语",
-        "sv" => "瑞典语",
-        "ta" => "泰米尔语",
-        "th" => "泰语",
-        "tr" => "土耳其语",
-        "uk" => "乌克兰语",
-        "ur" => "乌尔都语",
-        "vi" => "越南语",
+        "es" => "ES 西班牙语",
+        "et" => "EE 爱沙尼亚语",
+        "fa" => "IR 波斯语",
+        "fi" => "FI 芬兰语",
+        "fr" => "FR 法语",
+        "he" => "IL 希伯来语",
+        "hi" => "IN 印地语",
+        "hu" => "HU 匈牙利语",
+        "id" => "ID 印尼语",
+        "it" => "IT 意大利语",
+        "ja" => "JP 日语",
+        "ko" => "KR 韩语",
+        "lt" => "LT 立陶宛语",
+        "lv" => "LV 拉脱维亚语",
+        "ms" => "MY 马来语",
+        "nl" => "NL 荷兰语",
+        "no" => "NO 挪威语",
+        "pl" => "PL 波兰语",
+        "pt" => "BR 葡萄牙语",
+        "ro" => "RO 罗马尼亚语",
+        "ru" => "RU 俄语",
+        "sk" => "SK 斯洛伐克语",
+        "sl" => "SI 斯洛文尼亚语",
+        "sv" => "SE 瑞典语",
+        "ta" => "IN 泰米尔语",
+        "te" => "IN 泰卢固语",
+        "th" => "TH 泰语",
+        "tl" => "PH 菲律宾语",
+        "tr" => "TR 土耳其语",
+        "uk" => "UA 乌克兰语",
+        "ur" => "PK 乌尔都语",
+        "vi" => "VN 越南语",
         "zh-Hans" => "CN 简体中文",
         "zh-Hant" => "TW 繁体中文",
-        "zh-classical" => "文言文",
+        "zh-classical" => "CN 文言文",
         _ => return language_label(id),
     }
     .to_string()

@@ -9,7 +9,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
 
-    [string]$RuntimeProfile = "Hybrid",
+    [string]$RuntimeProfile = "",
     
     [switch]$CreateZip
 )
@@ -33,6 +33,9 @@ function Test-HybridRuntimeProfile {
     return $Value.Trim().ToLowerInvariant() -eq "hybrid"
 }
 
+if ([string]::IsNullOrWhiteSpace($RuntimeProfile)) {
+    throw "RuntimeProfile must be explicitly set to Hybrid for dotnet/scripts/publish.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+}
 $IsRustOnlyRuntime = Test-RustOnlyRuntimeProfile $RuntimeProfile
 if ($IsRustOnlyRuntime) {
     throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/publish.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."

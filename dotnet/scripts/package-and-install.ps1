@@ -5,7 +5,7 @@ param(
     [string]$Version = "",
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
-    [string]$RuntimeProfile = "Hybrid",
+    [string]$RuntimeProfile = "",
     [string]$CertPath = ".\certs\dev-signing.pfx",
     [string]$CertPassword = $(if ($env:CERT_PASSWORD) { $env:CERT_PASSWORD } else { "password" }),
     [switch]$SkipInstall
@@ -34,6 +34,9 @@ try {
         return $Value.Trim().ToLowerInvariant() -eq "hybrid"
     }
 
+    if ([string]::IsNullOrWhiteSpace($RuntimeProfile)) {
+        throw "RuntimeProfile must be explicitly set to Hybrid for dotnet/scripts/package-and-install.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+    }
     $isRustOnlyRuntime = Test-RustOnlyRuntimeProfile $RuntimeProfile
     if ($isRustOnlyRuntime) {
         throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/package-and-install.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."

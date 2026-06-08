@@ -31,13 +31,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Reject Rust-only profile for dotnet/MSIX smoke
+      - name: Require explicit hybrid profile for dotnet/MSIX smoke
         shell: pwsh
         run: |
           $profile = "${{ env.RUNTIME_PROFILE }}".Trim().ToLowerInvariant().Replace("_", "-")
           if ($profile -eq "rust-only" -or $profile -eq "rustonly") {
             throw "The first rs release is portable-only. Use rs/scripts/Package-Portable.ps1 instead of the dotnet/MSIX smoke path with runtime_profile=${{ env.RUNTIME_PROFILE }}."
           }
+          if ($profile -ne "hybrid") {
+            throw "runtime_profile=${{ env.RUNTIME_PROFILE }} is not supported for dotnet/MSIX smoke. Use explicit hybrid for retained-worker coexistence, or rs/scripts/Package-Portable.ps1 for the rs package."
+          }
+          "RUNTIME_PROFILE=hybrid" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RETAINED_WORKERS_ENABLED=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -100,7 +105,7 @@ jobs:
             -OutputDir ./publish-msix/arm64
 
       - name: Publish LongDoc Worker (arm64)
-        if: env.RUNTIME_PROFILE != 'rust-only'
+        if: env.RETAINED_WORKERS_ENABLED == 'true'
         working-directory: dotnet
         shell: pwsh
         run: |
@@ -114,7 +119,7 @@ jobs:
             -p:WindowsAppSDKSelfContained=false
 
       - name: Publish LocalAi Worker (arm64)
-        if: env.RUNTIME_PROFILE != 'rust-only'
+        if: env.RETAINED_WORKERS_ENABLED == 'true'
         working-directory: dotnet
         shell: pwsh
         run: |
@@ -128,7 +133,7 @@ jobs:
             -p:WindowsAppSDKSelfContained=false
 
       - name: Dedupe worker shared files (arm64)
-        if: env.RUNTIME_PROFILE != 'rust-only'
+        if: env.RETAINED_WORKERS_ENABLED == 'true'
         working-directory: dotnet
         shell: pwsh
         run: |
@@ -136,7 +141,7 @@ jobs:
             -PublishDir ./publish-msix/arm64
 
       - name: Bundle .NET 8 Runtime (arm64)
-        if: env.RUNTIME_PROFILE != 'rust-only'
+        if: env.RETAINED_WORKERS_ENABLED == 'true'
         shell: pwsh
         working-directory: dotnet
         run: |

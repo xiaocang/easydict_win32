@@ -1,7 +1,7 @@
 use easydict_app::cli_translate::{parse_args, usage, CliMode, CliOptions, CliParseError};
 use easydict_app::protocol::{
-    local_ai_provider_modes, GrammarCorrectParams, GrammarCorrectResultDto, SettingsSnapshot,
-    TranslateParams, TranslationResultDto,
+    normalize_local_ai_provider_mode, GrammarCorrectParams, GrammarCorrectResultDto,
+    SettingsSnapshot, TranslateParams, TranslationResultDto,
 };
 use easydict_app::quick_translate_request_can_route_natively;
 use easydict_app::{
@@ -288,16 +288,7 @@ fn apply_environment_overrides(settings: &mut SettingsSnapshot) {
 }
 
 fn normalize_local_ai_provider_env(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "windowsai" | "windows-ai" | "windows_ai" | "phi" | "phi-silica" | "phisilica" => {
-            local_ai_provider_modes::WINDOWS_AI.to_string()
-        }
-        "foundrylocal" | "foundry-local" | "foundry_local" | "local-ai" | "localai" => {
-            local_ai_provider_modes::FOUNDRY_LOCAL.to_string()
-        }
-        "openvino" | "open-vino" | "open_vino" => local_ai_provider_modes::OPENVINO.to_string(),
-        _ => local_ai_provider_modes::AUTO.to_string(),
-    }
+    normalize_local_ai_provider_mode(Some(value)).to_string()
 }
 
 fn env_value(keys: &[&str]) -> Option<String> {

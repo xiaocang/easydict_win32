@@ -51,8 +51,9 @@ use crate::pdf_source_extraction::{
     PdfSourcePageLayoutDetections, PdfSourcePageTableStructures,
 };
 use crate::protocol::{
-    local_ai_provider_modes, BlockTranslatedEventData, ProgressEventData, SettingsSnapshot,
-    StatusEventData, TranslateDocumentParams, TranslateDocumentResult, TranslateParams,
+    local_ai_provider_modes, normalize_local_ai_provider_mode, BlockTranslatedEventData,
+    ProgressEventData, SettingsSnapshot, StatusEventData, TranslateDocumentParams,
+    TranslateDocumentResult, TranslateParams,
 };
 #[cfg(test)]
 use crate::quick_translate::auto_windows_ai_native_probe_status;
@@ -4596,21 +4597,7 @@ fn local_ai_long_document_request_uses_auto_windows_ai(
 }
 
 fn local_ai_provider_mode_for_long_document(settings: &SettingsSnapshot) -> &'static str {
-    match settings
-        .local_ai_provider
-        .as_deref()
-        .unwrap_or(local_ai_provider_modes::AUTO)
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "windowsai" | "windows-ai" | "phi-silica" | "phisilica" => {
-            local_ai_provider_modes::WINDOWS_AI
-        }
-        "foundrylocal" | "foundry-local" => local_ai_provider_modes::FOUNDRY_LOCAL,
-        "openvino" | "open-vino" => local_ai_provider_modes::OPENVINO,
-        _ => local_ai_provider_modes::AUTO,
-    }
+    normalize_local_ai_provider_mode(settings.local_ai_provider.as_deref())
 }
 
 fn windows_ai_translation_request_from_quick_params(
@@ -5617,14 +5604,8 @@ fn uses_foundry_local_long_document_profile(service_id: &str, settings: &Setting
     }
 
     matches!(
-        settings
-            .local_ai_provider
-            .as_deref()
-            .unwrap_or(local_ai_provider_modes::AUTO)
-            .trim()
-            .to_ascii_lowercase()
-            .as_str(),
-        "" | "auto" | "foundrylocal" | "foundry-local"
+        normalize_local_ai_provider_mode(settings.local_ai_provider.as_deref()),
+        local_ai_provider_modes::AUTO | local_ai_provider_modes::FOUNDRY_LOCAL
     )
 }
 

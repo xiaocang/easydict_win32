@@ -7,6 +7,22 @@ pub mod local_ai_provider_modes {
     pub const OPENVINO: &str = "OpenVINO";
     pub const AUTO: &str = "Auto";
 }
+
+pub fn normalize_local_ai_provider_mode(value: Option<&str>) -> &'static str {
+    let normalized = value
+        .unwrap_or(local_ai_provider_modes::AUTO)
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['-', '_', ' '], "");
+    match normalized.as_str() {
+        "" | "auto" => local_ai_provider_modes::AUTO,
+        "windowsai" | "phi" | "phisilica" => local_ai_provider_modes::WINDOWS_AI,
+        "foundry" | "foundrylocal" | "localai" => local_ai_provider_modes::FOUNDRY_LOCAL,
+        "openvino" => local_ai_provider_modes::OPENVINO,
+        _ => local_ai_provider_modes::AUTO,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslateParams {

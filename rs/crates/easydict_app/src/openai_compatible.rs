@@ -7,7 +7,8 @@ use crate::translation_language::TranslationLanguage;
 use crate::{
     grammar_correction::GrammarCorrectionResult,
     protocol::{
-        local_ai_provider_modes, GrammarCorrectResultDto, SettingsSnapshot, TranslationResultDto,
+        local_ai_provider_modes, normalize_local_ai_provider_mode, GrammarCorrectResultDto,
+        SettingsSnapshot, TranslationResultDto,
     },
 };
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
@@ -1542,21 +1543,11 @@ fn built_in_ai_secret_key() -> [u8; 16] {
 }
 
 fn is_foundry_local_provider(value: Option<&str>) -> bool {
-    let normalized = value
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['-', '_', ' '], "");
-    normalized == local_ai_provider_modes::FOUNDRY_LOCAL.to_ascii_lowercase()
+    normalize_local_ai_provider_mode(value) == local_ai_provider_modes::FOUNDRY_LOCAL
 }
 
 fn is_auto_local_ai_provider(value: Option<&str>) -> bool {
-    let normalized = value
-        .unwrap_or(local_ai_provider_modes::AUTO)
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['-', '_', ' '], "");
-    normalized.is_empty() || normalized == local_ai_provider_modes::AUTO.to_ascii_lowercase()
+    normalize_local_ai_provider_mode(value) == local_ai_provider_modes::AUTO
 }
 
 fn can_use_configured_foundry_local_endpoint(

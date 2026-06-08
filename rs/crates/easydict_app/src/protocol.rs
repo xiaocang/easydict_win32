@@ -5,9 +5,9 @@
 //! the optional `retained-dotnet-workers` feature.
 
 pub use crate::protocol_core::{
-    deserialize_json, local_ai_provider_modes, serialize_json, BlockTranslatedEventData,
-    DefinitionDto, GrammarCorrectParams, GrammarCorrectResultDto, ImportedMdxDictionarySnapshot,
-    MdxLookupEntry, MdxLookupParams, MdxLookupResult, PhoneticDto, ProgressEventData,
-    SettingsSnapshot, StatusEventData, SynonymDto, TranslateDocumentParams,
+    deserialize_json, local_ai_provider_modes, normalize_local_ai_provider_mode, serialize_json,
+    BlockTranslatedEventData, DefinitionDto, GrammarCorrectParams, GrammarCorrectResultDto,
+    ImportedMdxDictionarySnapshot, MdxLookupEntry, MdxLookupParams, MdxLookupResult, PhoneticDto,
+    ProgressEventData, SettingsSnapshot, StatusEventData, SynonymDto, TranslateDocumentParams,
     TranslateDocumentResult, TranslateParams, TranslationResultDto, WordFormDto, WordResultDto,
 };

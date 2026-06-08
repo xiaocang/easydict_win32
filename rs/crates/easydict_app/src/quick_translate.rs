@@ -27,9 +27,10 @@ use crate::openvino_download::{
     default_openvino_data_directory, ensure_openvino_runtime_directory_on_path,
 };
 use crate::protocol::{
-    local_ai_provider_modes, DefinitionDto, GrammarCorrectParams, GrammarCorrectResultDto,
-    MdxLookupEntry, MdxLookupParams, MdxLookupResult, PhoneticDto, SettingsSnapshot, SynonymDto,
-    TranslateParams, TranslationResultDto, WordFormDto, WordResultDto,
+    local_ai_provider_modes, normalize_local_ai_provider_mode, DefinitionDto, GrammarCorrectParams,
+    GrammarCorrectResultDto, MdxLookupEntry, MdxLookupParams, MdxLookupResult, PhoneticDto,
+    SettingsSnapshot, SynonymDto, TranslateParams, TranslationResultDto, WordFormDto,
+    WordResultDto,
 };
 use crate::retained_workers::RetainedWorkerPolicy;
 #[cfg(not(feature = "retained-dotnet-workers"))]
@@ -3174,7 +3175,7 @@ fn local_ai_params_from_translate_params(
         text: params.text.clone(),
         from_language: language_name_from_code(params.from.as_deref(), "Auto"),
         to_language: language_name_from_code(params.to.as_deref(), "English"),
-        provider_mode: local_ai_provider_mode(settings),
+        provider_mode: local_ai_provider_mode(settings).to_string(),
         custom_prompt: params.custom_prompt.clone(),
         include_explanations,
     }
@@ -3189,7 +3190,7 @@ fn local_ai_params_from_grammar_params(
         text: params.text.clone(),
         from_language: language_name_from_code(params.language.as_deref(), "Auto"),
         to_language: "English".to_string(),
-        provider_mode: local_ai_provider_mode(settings),
+        provider_mode: local_ai_provider_mode(settings).to_string(),
         custom_prompt: None,
         include_explanations: Some(params.include_explanations),
     }
@@ -3330,22 +3331,8 @@ fn windows_ai_grammar_chunks_to_result(
     }
 }
 
-fn local_ai_provider_mode(settings: &SettingsSnapshot) -> String {
-    match settings
-        .local_ai_provider
-        .as_deref()
-        .unwrap_or(local_ai_provider_modes::AUTO)
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "windowsai" | "windows-ai" | "phi-silica" | "phisilica" => {
-            local_ai_provider_modes::WINDOWS_AI.to_string()
-        }
-        "foundrylocal" | "foundry-local" => local_ai_provider_modes::FOUNDRY_LOCAL.to_string(),
-        "openvino" | "open-vino" => local_ai_provider_modes::OPENVINO.to_string(),
-        _ => local_ai_provider_modes::AUTO.to_string(),
-    }
+fn local_ai_provider_mode(settings: &SettingsSnapshot) -> &'static str {
+    normalize_local_ai_provider_mode(settings.local_ai_provider.as_deref())
 }
 
 #[cfg(feature = "retained-dotnet-workers")]

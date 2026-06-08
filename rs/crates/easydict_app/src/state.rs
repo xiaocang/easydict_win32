@@ -7,7 +7,8 @@ use crate::local_dictionary::{
 };
 use crate::mdx_native::{detect_mdx_file_is_encrypted, discover_mdd_file_paths};
 use crate::protocol::{
-    local_ai_provider_modes, ImportedMdxDictionarySnapshot, SettingsSnapshot, WordResultDto,
+    local_ai_provider_modes, normalize_local_ai_provider_mode, ImportedMdxDictionarySnapshot,
+    SettingsSnapshot, WordResultDto,
 };
 use crate::quick_translate::{QuickQueryMode, QuickTranslateSurface};
 use crate::translation_services::{
@@ -2699,16 +2700,7 @@ fn setting_or_default(value: &str, fallback: &str) -> String {
 }
 
 fn normalize_local_ai_provider(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "windowsai" | "windows-ai" | "phi" | "phi-silica" | "phisilica" => {
-            local_ai_provider_modes::WINDOWS_AI.to_string()
-        }
-        "foundrylocal" | "foundry-local" | "foundry" => {
-            local_ai_provider_modes::FOUNDRY_LOCAL.to_string()
-        }
-        "openvino" | "open-vino" => local_ai_provider_modes::OPENVINO.to_string(),
-        _ => local_ai_provider_modes::AUTO.to_string(),
-    }
+    normalize_local_ai_provider_mode(Some(value)).to_string()
 }
 
 fn normalize_ocr_engine(value: &str) -> String {

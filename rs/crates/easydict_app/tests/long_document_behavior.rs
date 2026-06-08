@@ -3371,6 +3371,32 @@ fn openvino_local_ai_long_document_cache_miss_reports_native_download_preflight(
 }
 
 #[test]
+fn local_ai_provider_alias_open_vino_long_document_uses_openvino_preflight() {
+    let temp_dir = unique_temp_dir("longdoc-openvino-alias-cache-missing-native-preflight");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mut request = openvino_local_ai_long_document_request(&temp_dir, "en", "zh-Hans", 40);
+    request.settings.local_ai_provider = Some("open_vino".to_string());
+    request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let outcome = run_long_document_request_with_app_dir(request, &temp_dir);
+    let error = outcome
+        .result
+        .expect_err("OpenVINO alias should fail before retained workers");
+
+    assert!(error
+        .message
+        .contains("OpenVINO runtime or NLLB-200 model is not downloaded"));
+    assert!(!error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains("Long Document worker"));
+    assert!(!error.message.contains(".NET"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn openvino_local_ai_long_document_unknown_target_reports_native_language_preflight() {
     let temp_dir = unique_temp_dir("longdoc-openvino-unknown-target-native-preflight");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");

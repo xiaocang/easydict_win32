@@ -10,6 +10,58 @@ use easydict_app::compat_protocol::{
 use easydict_app::protocol::*;
 
 #[test]
+fn local_ai_provider_mode_aliases_normalize_to_protocol_values() {
+    for alias in [
+        None,
+        Some(""),
+        Some("Auto"),
+        Some(" auto "),
+        Some("unknown"),
+    ] {
+        assert_eq!(
+            normalize_local_ai_provider_mode(alias),
+            local_ai_provider_modes::AUTO,
+            "alias {alias:?} should normalize to Auto"
+        );
+    }
+    for alias in [
+        Some("WindowsAI"),
+        Some("windows-ai"),
+        Some("windows_ai"),
+        Some("Phi"),
+        Some("phi-silica"),
+        Some("phi_silica"),
+    ] {
+        assert_eq!(
+            normalize_local_ai_provider_mode(alias),
+            local_ai_provider_modes::WINDOWS_AI,
+            "alias {alias:?} should normalize to WindowsAI"
+        );
+    }
+    for alias in [
+        Some("FoundryLocal"),
+        Some("foundry-local"),
+        Some("foundry_local"),
+        Some("foundry"),
+        Some("local-ai"),
+        Some("local_ai"),
+    ] {
+        assert_eq!(
+            normalize_local_ai_provider_mode(alias),
+            local_ai_provider_modes::FOUNDRY_LOCAL,
+            "alias {alias:?} should normalize to FoundryLocal"
+        );
+    }
+    for alias in [Some("OpenVINO"), Some("open-vino"), Some("open_vino")] {
+        assert_eq!(
+            normalize_local_ai_provider_mode(alias),
+            local_ai_provider_modes::OPENVINO,
+            "alias {alias:?} should normalize to OpenVINO"
+        );
+    }
+}
+
+#[test]
 #[cfg(feature = "retained-dotnet-workers")]
 fn existing_worker_method_names_stay_compatible_with_dotnet_workers() {
     assert_eq!(worker_methods::CONFIGURE, "configure");

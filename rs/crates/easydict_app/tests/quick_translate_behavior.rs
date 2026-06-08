@@ -5664,6 +5664,47 @@ fn openvino_local_ai_supported_translation_without_cached_model_fails_locally_wi
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
+#[test]
+fn local_ai_provider_alias_open_vino_routes_to_openvino_preflight_without_worker() {
+    let temp_dir = unique_temp_dir("easydict-openvino-alias-cache-missing-no-worker");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 116,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some("open_vino".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert!(!quick_translate_request_can_route_natively(&request));
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
+    let error = update
+        .outcome
+        .result
+        .expect_err("OpenVINO alias should fail in native preflight before worker startup");
+
+    assert!(error
+        .message
+        .contains("OpenVINO runtime or NLLB-200 model is not downloaded"));
+    assert!(!error.message.contains("Local AI worker"));
+    assert!(!error.message.contains(".NET"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 #[test]
 fn openvino_local_ai_supported_translation_with_cached_model_routes_to_native_ort_without_worker() {

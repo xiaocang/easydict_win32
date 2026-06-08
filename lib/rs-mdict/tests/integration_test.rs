@@ -1,16 +1,42 @@
-//! Integration tests for rust-mdict using real dictionary files
+//! Real-corpus integration tests for rust-mdict.
+//!
+//! These tests depend on local MDX/MDD files and are disabled by default through
+//! the `real-corpus-tests` feature in `Cargo.toml`.
 
 use rust_mdict::{Mdd, Mdx};
 
-const MDX_PATH: &str = "/Users/fuyanxu/Documents/dict/牛津高阶英汉双解词典（第9版）.mdx";
-const MDD_PATH: &str = "/Users/fuyanxu/Documents/dict/牛津高阶英汉双解词典（第9版）.mdd";
+const MDX_ENV: &str = "RS_MDICT_TEST_MDX";
+const MDD_ENV: &str = "RS_MDICT_TEST_MDD";
+
+fn corpus_path(env_name: &str) -> Option<String> {
+    match std::env::var(env_name) {
+        Ok(path) if !path.trim().is_empty() => Some(path),
+        _ => {
+            eprintln!("Skipping real-corpus test; set {env_name} to a local dictionary file path");
+            None
+        }
+    }
+}
+
+fn open_mdx() -> Option<Mdx> {
+    let path = corpus_path(MDX_ENV)?;
+    Some(
+        Mdx::new(&path)
+            .unwrap_or_else(|error| panic!("Failed to load MDX file '{path}': {error:?}")),
+    )
+}
+
+fn open_mdd() -> Option<Mdd> {
+    let path = corpus_path(MDD_ENV)?;
+    Some(
+        Mdd::new(&path)
+            .unwrap_or_else(|error| panic!("Failed to load MDD file '{path}': {error:?}")),
+    )
+}
 
 #[test]
 fn test_mdx_load() {
-    let mdx = Mdx::new(MDX_PATH);
-    assert!(mdx.is_ok(), "Failed to load MDX file: {:?}", mdx.err());
-
-    let mdx = mdx.unwrap();
+    let Some(mdx) = open_mdx() else { return };
     println!("MDX loaded successfully!");
     println!("  Version: {}", mdx.meta().version);
     println!("  Encoding: {:?}", mdx.meta().encoding);
@@ -19,7 +45,7 @@ fn test_mdx_load() {
 
 #[test]
 fn test_mdx_info() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     println!("=== MDX Dictionary Info ===");
     println!("File: {}", mdx.filepath());
@@ -43,7 +69,7 @@ fn test_mdx_info() {
 
 #[test]
 fn test_mdx_lookup_hello() {
-    let mut mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mut mdx) = open_mdx() else { return };
 
     let result = mdx.lookup("hello");
     assert!(result.is_some(), "Word 'hello' not found");
@@ -60,7 +86,7 @@ fn test_mdx_lookup_hello() {
 
 #[test]
 fn test_mdx_lookup_world() {
-    let mut mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mut mdx) = open_mdx() else { return };
 
     let result = mdx.lookup("world");
     assert!(result.is_some(), "Word 'world' not found");
@@ -73,7 +99,7 @@ fn test_mdx_lookup_world() {
 
 #[test]
 fn test_mdx_lookup_apple() {
-    let mut mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mut mdx) = open_mdx() else { return };
 
     let result = mdx.lookup("apple");
     assert!(result.is_some(), "Word 'apple' not found");
@@ -86,7 +112,7 @@ fn test_mdx_lookup_apple() {
 
 #[test]
 fn test_mdx_prefix_search() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     let keys = mdx.prefix_keys("hel");
     println!("=== Prefix search 'hel' ===");
@@ -102,7 +128,7 @@ fn test_mdx_prefix_search() {
 
 #[test]
 fn test_mdx_prefix_search_app() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     let keys = mdx.prefix_keys("app");
     println!("=== Prefix search 'app' ===");
@@ -117,7 +143,7 @@ fn test_mdx_prefix_search_app() {
 
 #[test]
 fn test_mdx_suggest() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     // Test with a misspelled word
     let suggestions = mdx.suggest("helo", 2);
@@ -131,7 +157,7 @@ fn test_mdx_suggest() {
 
 #[test]
 fn test_mdx_contains() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     assert!(mdx.contains("hello"), "'hello' should exist");
     assert!(mdx.contains("world"), "'world' should exist");
@@ -146,7 +172,7 @@ fn test_mdx_contains() {
 
 #[test]
 fn test_mdx_keywords_sample() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     let keywords = mdx.keywords();
     println!("=== Sample keywords ===");
@@ -167,10 +193,7 @@ fn test_mdx_keywords_sample() {
 
 #[test]
 fn test_mdd_load() {
-    let mdd = Mdd::new(MDD_PATH);
-    assert!(mdd.is_ok(), "Failed to load MDD file: {:?}", mdd.err());
-
-    let mdd = mdd.unwrap();
+    let Some(mdd) = open_mdd() else { return };
     println!("MDD loaded successfully!");
     println!("  Version: {}", mdd.meta().version);
     println!("  Encoding: {:?}", mdd.meta().encoding);
@@ -179,7 +202,7 @@ fn test_mdd_load() {
 
 #[test]
 fn test_mdd_info() {
-    let mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mdd) = open_mdd() else { return };
 
     println!("=== MDD Resource File Info ===");
     println!("File: {}", mdd.filepath());
@@ -203,7 +226,7 @@ fn test_mdd_info() {
 
 #[test]
 fn test_mdd_resource_keys_sample() {
-    let mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mdd) = open_mdd() else { return };
 
     let keys = mdd.resource_keys();
     println!("=== Sample resource keys ===");
@@ -218,7 +241,7 @@ fn test_mdd_resource_keys_sample() {
 
 #[test]
 fn test_mdd_prefix_search() {
-    let mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mdd) = open_mdd() else { return };
 
     // Search for resources starting with backslash
     let keys = mdd.prefix_keys("\\");
@@ -232,7 +255,7 @@ fn test_mdd_prefix_search() {
 
 #[test]
 fn test_mdd_locate_resource() {
-    let mut mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mut mdd) = open_mdd() else { return };
 
     // Get first available resource key - clone to avoid borrow issues
     let keys: Vec<String> = mdd.resource_keys().iter().map(|s| s.to_string()).collect();
@@ -261,7 +284,7 @@ fn test_mdd_locate_resource() {
 
 #[test]
 fn test_mdd_locate_raw() {
-    let mut mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mut mdd) = open_mdd() else { return };
 
     // Get first available resource key - clone to avoid borrow issues
     let keys: Vec<String> = mdd.resource_keys().iter().map(|s| s.to_string()).collect();
@@ -292,7 +315,7 @@ fn test_mdd_locate_raw() {
 
 #[test]
 fn test_mdd_resource_info() {
-    let mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mdd) = open_mdd() else { return };
 
     let keys = mdd.resource_keys();
 
@@ -309,7 +332,7 @@ fn test_mdd_resource_info() {
 
 #[test]
 fn test_mdd_contains() {
-    let mdd = Mdd::new(MDD_PATH).expect("Failed to load MDD");
+    let Some(mdd) = open_mdd() else { return };
 
     let keys = mdd.resource_keys();
     if !keys.is_empty() {
@@ -329,7 +352,7 @@ fn test_mdd_contains() {
 
 #[test]
 fn test_mdx_associate() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     // Get associated keywords for "apple"
     let associated = mdx.associate("apple");
@@ -364,7 +387,7 @@ fn test_mdx_associate() {
 
 #[test]
 fn test_mdx_lookup_keyword() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     // Lookup keyword item for "hello"
     let keyword = mdx.lookup_keyword("hello");
@@ -384,7 +407,7 @@ fn test_mdx_lookup_keyword() {
 
 #[test]
 fn test_mdx_fetch() {
-    let mut mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mut mdx) = open_mdx() else { return };
 
     // First lookup the keyword
     let keyword = mdx.lookup_keyword("world").cloned();
@@ -411,7 +434,7 @@ fn test_mdx_fetch() {
 
 #[test]
 fn test_mdx_keyword_list() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     let keyword_list = mdx.keyword_list();
 
@@ -432,7 +455,7 @@ fn test_mdx_keyword_list() {
 
 #[test]
 fn test_mdx_fuzzy_search() {
-    let mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mdx) = open_mdx() else { return };
 
     // Fuzzy search for "aple" (misspelled "apple")
     let fuzzy_results = mdx.fuzzy_search("aple", 5, 2);
@@ -458,7 +481,7 @@ fn test_mdx_fuzzy_search() {
 
 #[test]
 fn test_mdx_get_definition() {
-    let mut mdx = Mdx::new(MDX_PATH).expect("Failed to load MDX");
+    let Some(mut mdx) = open_mdx() else { return };
 
     // Get keyword list and pick one
     let keyword = mdx.keyword_list().first().cloned();

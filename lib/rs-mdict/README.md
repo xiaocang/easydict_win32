@@ -88,6 +88,11 @@ fn main() {
         // Use raw bytes directly
         std::fs::write("logo.jpg", data).unwrap();
     }
+
+    // Preserve IO/decompression errors when callers need diagnostics
+    if let Some((resolved_key, data)) = mdd.locate_raw_result("Logo.jpg").unwrap() {
+        println!("{} -> {} bytes", resolved_key, data.len());
+    }
     
     // Get resource info
     if let Some(info) = mdd.get_resource_info("\\Logo.jpg") {
@@ -135,7 +140,9 @@ mdict-cli dictionary.mdd info
 |--------|-------------|
 | `new(path)` | Create a new MDD parser |
 | `locate(key)` | Locate a resource (returns base64) |
+| `locate_result(key)` | Locate a resource while preserving read/decompression errors |
 | `locate_raw(key)` | Locate a resource (returns raw bytes) |
+| `locate_raw_result(key)` | Locate a resource as `(resolved_key, bytes)` while preserving errors |
 | `prefix(prefix)` | Find resources with prefix |
 | `prefix_keys(prefix)` | Find resource keys with prefix |
 | `contains(key)` | Check if a resource exists |
@@ -144,6 +151,25 @@ mdict-cli dictionary.mdd info
 | `resource_count()` | Get total resource count |
 | `header()` | Get file header attributes |
 | `meta()` | Get file metadata |
+
+## Tests
+
+The default test suite uses reproducible in-memory MDX/MDD fixtures:
+
+```bash
+cargo test
+```
+
+Real dictionary corpus tests are retained as an opt-in local check:
+
+```bash
+set RS_MDICT_TEST_MDX=C:\Dicts\dictionary.mdx
+set RS_MDICT_TEST_MDD=C:\Dicts\dictionary.mdd
+cargo test --features real-corpus-tests --test integration_test
+```
+
+On PowerShell, use `$env:RS_MDICT_TEST_MDX` and `$env:RS_MDICT_TEST_MDD`
+instead. If either variable is unset, tests for that file type are skipped.
 
 ## License
 

@@ -29,7 +29,9 @@ mod types;
 mod utils;
 
 pub use error::{MdictError, Result};
-pub use mdd::Mdd;
+pub use mdd::{
+    mime_type_for_mdd_resource_key, normalize_mdd_resource_key, Mdd, MddResource, ResourceInfo,
+};
 pub use mdx::Mdx;
 pub use types::*;
 pub use utils::parse_header;

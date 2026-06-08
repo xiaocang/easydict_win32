@@ -1,20 +1,22 @@
 use base64::Engine;
-use easydict_app::compat_protocol::{
-    ImportedMdxDictionarySnapshot, MdxLookupParams, SettingsSnapshot,
-};
+use easydict_app::protocol::{ImportedMdxDictionarySnapshot, MdxLookupParams, SettingsSnapshot};
 use easydict_app::{
-    detect_mdx_file_encryption_mode, mdx_decode_base64_regcode, mdx_decrypt_block,
+    detect_mdx_file_encryption_mode, discover_mdd_file_paths,
+    inline_mdd_resources_in_html_with_factory, mdx_decode_base64_regcode, mdx_decrypt_block,
     mdx_decrypt_regcode_by_device_id, mdx_decrypt_regcode_by_email, mdx_fast_decrypt,
     mdx_ripemd128, mdx_salsa20_8, mime_type_for_mdd_resource_key, native_mdx_lookup_can_route,
     native_mdx_lookup_local_input_error, native_mdx_lookup_needs_credentials,
-    native_mdx_lookup_requires_credential_bridge, normalize_mdd_resource_key,
+    normalize_mdd_resource_key, run_native_mdd_resource_lookup,
     run_native_mdd_resource_lookup_with_factory, run_native_mdx_lookup,
-    run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factory, MdxEncryptionMode,
-    NativeMddResourceError, NativeMddResourceReader, NativeMddResourceReaderFactory,
-    NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
+    run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factories_and_mdd_policy,
+    run_native_mdx_lookup_with_factory, MdxEncryptionMode, NativeMddResourceError,
+    NativeMddResourceReader, NativeMddResourceReaderFactory, NativeMdxDictionaryReader,
+    NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
 };
+use flate2::{write::ZlibEncoder, Compression};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[test]
@@ -105,19 +107,11 @@ fn native_mdx_route_is_limited_to_dictionaries_without_required_credentials() {
         &params,
         &encrypted_without_credentials
     ));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &params,
-        &encrypted_without_credentials
-    ));
     assert!(native_mdx_lookup_needs_credentials(
         &params,
         &encrypted_without_credentials
     ));
     assert!(!native_mdx_lookup_can_route(
-        &params,
-        &encrypted_with_credentials
-    ));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
         &params,
         &encrypted_with_credentials
     ));
@@ -157,9 +151,6 @@ fn native_mdx_key_info_encrypted_dictionary_routes_natively_without_credentials(
         MdxEncryptionMode::KeyInfoBlock
     );
     assert!(native_mdx_lookup_can_route(&params, &settings));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &params, &settings
-    ));
     assert!(!native_mdx_lookup_needs_credentials(&params, &settings));
     assert!(native_mdx_lookup_local_input_error(&params, &settings).is_none());
 
@@ -196,9 +187,6 @@ fn native_mdx_record_encrypted_dictionary_still_requires_credentials() {
     );
     assert!(!native_mdx_lookup_can_route(&params, &settings));
     assert!(native_mdx_lookup_needs_credentials(&params, &settings));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &params, &settings
-    ));
 
     let settings =
         mdx_settings_with_credentials(true, "MDEyMzQ1Njc4OTo7PD0+Pw==", "email@example.com");
@@ -211,16 +199,13 @@ fn native_mdx_record_encrypted_dictionary_still_requires_credentials() {
     let settings = mdx_settings_with_dictionary(dictionary);
 
     assert!(native_mdx_lookup_can_route(&params, &settings));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &params, &settings
-    ));
     assert!(!native_mdx_lookup_needs_credentials(&params, &settings));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
 #[test]
-fn native_mdx_header_encryption_edge_values_fail_locally_without_bridge_boundary() {
+fn native_mdx_header_encryption_edge_values_classify_rust_native_boundaries() {
     let temp_dir = unique_temp_dir("easydict-mdx-encryption-edge-values");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
 
@@ -280,11 +265,6 @@ fn native_mdx_header_encryption_edge_values_fail_locally_without_bridge_boundary
             "{name}"
         );
         assert_eq!(
-            native_mdx_lookup_requires_credential_bridge(&params, &settings),
-            false,
-            "{name}"
-        );
-        assert_eq!(
             native_mdx_lookup_local_input_error(&params, &settings)
                 .map(|error| error
                     .to_string()
@@ -335,9 +315,6 @@ fn native_mdx_record_encrypted_dictionary_with_credentials_reads_natively() {
         MdxEncryptionMode::RecordBlock
     );
     assert!(native_mdx_lookup_can_route(&params, &settings));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &params, &settings
-    ));
 
     let result =
         run_native_mdx_lookup(&params, &settings).expect("encrypted fixture should read natively");
@@ -373,9 +350,6 @@ fn native_mdx_record_encrypted_dictionary_with_device_id_credentials_reads_nativ
         MdxEncryptionMode::RecordBlock
     );
     assert!(native_mdx_lookup_can_route(&params, &settings));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &params, &settings
-    ));
 
     let result = run_native_mdx_lookup(&params, &settings)
         .expect("device-id encrypted fixture should read natively");
@@ -407,7 +381,7 @@ fn native_mdx_lookup_reports_missing_credentials_without_opening_reader() {
 }
 
 #[test]
-fn native_mdx_lookup_reports_missing_encrypted_file_before_credential_bridge() {
+fn native_mdx_lookup_reports_missing_encrypted_file_before_opening_reader() {
     let settings = mdx_settings_with_credentials(true, "reg", "email@example.com");
     let mut factory = RecordingMdxReaderFactory::default();
     let params = MdxLookupParams {
@@ -500,7 +474,7 @@ fn native_mdx_missing_dictionary_is_empty_result() {
         },
         &settings,
     )
-    .expect("missing dictionary mirrors CompatHost empty result");
+    .expect("missing dictionary should remain a neutral empty result");
 
     assert!(result.entries.is_empty());
     assert!(factory.opened.is_empty());
@@ -552,6 +526,27 @@ fn native_mdd_resource_lookup_skips_failed_mdd_files() {
 }
 
 #[test]
+fn native_mdd_resource_lookup_skips_mdd_lookup_errors() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\bad.mdd", r"C:\Dicts\demo.mdd"]);
+    let mut factory = RecordingMddReaderFactory::with_readers([
+        Ok(RecordingMddReader::failing_lookup("bad record block")),
+        Ok(RecordingMddReader::new([(
+            r"\styles\dict.css",
+            b"body{}".as_slice(),
+        )])),
+    ]);
+
+    let resource =
+        run_native_mdd_resource_lookup_with_factory(&mut factory, &dictionary, "styles/dict.css")
+            .expect("failed MDD lookup should be skipped")
+            .expect("second MDD should be checked after a failed lookup");
+
+    assert_eq!(resource.key, r"\styles\dict.css");
+    assert_eq!(resource.mime_type, "text/css");
+    assert_eq!(resource.data, b"body{}");
+}
+
+#[test]
 fn native_mdd_resource_lookup_returns_none_without_mdd_paths_or_hits() {
     let dictionary = mdx_dictionary(false, []);
     let mut factory = RecordingMddReaderFactory::default();
@@ -562,6 +557,54 @@ fn native_mdd_resource_lookup_returns_none_without_mdd_paths_or_hits() {
 
     assert_eq!(resource, None);
     assert!(factory.opened.is_empty());
+}
+
+#[test]
+fn native_mdd_resource_lookup_treats_empty_key_as_neutral_miss() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([(
+        r"\images\logo.png",
+        b"\x89PNG".as_slice(),
+    )]))]);
+
+    let resource = run_native_mdd_resource_lookup_with_factory(&mut factory, &dictionary, "   ")
+        .expect("empty direct resource key should be a neutral miss");
+
+    assert_eq!(resource, None);
+    assert!(factory.opened.is_empty());
+}
+
+#[test]
+fn native_mdd_resource_lookup_reads_real_rs_mdict_mdd_fixture() {
+    let temp_dir = unique_temp_dir("easydict-native-mdd-real-fixture");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mdd_path = temp_dir.join("Demo.mdd");
+    write_minimal_mdd_fixture(
+        &mdd_path,
+        &[
+            (r"\images\logo.png", b"\x89PNG".as_slice()),
+            (r"\styles\dict.css", b"body{}".as_slice()),
+        ],
+    );
+
+    let mut dictionary = mdx_dictionary(false, []);
+    dictionary.mdd_file_paths = vec![path_string(&mdd_path)];
+
+    let css = run_native_mdd_resource_lookup(&dictionary, "styles/dict.css")
+        .expect("real MDD lookup should not fail")
+        .expect("CSS resource should exist");
+    assert_eq!(css.key, r"\styles\dict.css");
+    assert_eq!(css.mime_type, "text/css");
+    assert_eq!(css.data, b"body{}");
+
+    let logo = run_native_mdd_resource_lookup(&dictionary, "/images/logo.png")
+        .expect("real MDD lookup should normalize slash-prefixed keys")
+        .expect("PNG resource should exist");
+    assert_eq!(logo.key, r"\images\logo.png");
+    assert_eq!(logo.mime_type, "image/png");
+    assert_eq!(logo.data, b"\x89PNG");
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
 #[test]
@@ -577,8 +620,10 @@ fn native_mdx_lookup_inlines_mdd_resources_into_webview_ready_html() {
                     <img src="images/logo.png">
                     <link href='styles/dict.css'>
                     <audio src="https://dictassets/audio/pron.mp3"></audio>
+                    <a href="sound://audio/click.mp3">play</a>
                     <span style="background-image:url(images/bg.webp)"></span>
                     <a href="https://example.com/keep">external</a>
+                    <a href="entry://banana">entry</a>
                     <img src="data:image/png;base64,OLD">
                     <a href="javascript:alert(1)">script</a>
                 </div>"#,
@@ -592,6 +637,7 @@ fn native_mdx_lookup_inlines_mdd_resources_into_webview_ready_html() {
             (r"\images\logo.png", b"\x89PNG".as_slice()),
             (r"\styles\dict.css", b"body{}".as_slice()),
             (r"\audio\pron.mp3", b"ID3".as_slice()),
+            (r"\audio\click.mp3", b"CLICK".as_slice()),
             (r"\images\bg.webp", b"RIFF".as_slice()),
         ])),
     ]);
@@ -616,11 +662,181 @@ fn native_mdx_lookup_inlines_mdd_resources_into_webview_ready_html() {
     assert!(html.contains(r#"src="data:image/png;base64,iVBORw==""#));
     assert!(html.contains("href='data:text/css;base64,Ym9keXt9'"));
     assert!(html.contains(r#"src="data:audio/mpeg;base64,SUQz""#));
+    assert!(html.contains(r#"href="data:audio/mpeg;base64,Q0xJQ0s=""#));
     assert!(html.contains("url('data:image/webp;base64,UklGRg==')"));
     assert!(html.contains(r#"href="https://example.com/keep""#));
+    assert!(html.contains(r#"href="entry://banana""#));
     assert!(html.contains(r#"src="data:image/png;base64,OLD""#));
     assert!(html.contains(r#"href="javascript:alert(1)""#));
     assert!(!html.contains("https://dictassets/audio/pron.mp3"));
+    assert!(!html.contains("sound://audio/click.mp3"));
+}
+
+#[test]
+fn native_mdx_lookup_can_skip_mdd_resource_inline_for_key_only_callers() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let settings = mdx_settings_with_dictionary(dictionary);
+    let mut mdx_factory = RecordingMdxReaderFactory::with_readers([RecordingMdxReader::new(
+        [("apple", ("apple", r#"<img src="images/logo.png">"#))],
+        [],
+    )]);
+    let mut mdd_factory =
+        RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([(
+            r"\images\logo.png",
+            b"\x89PNG".as_slice(),
+        )]))]);
+
+    let result = run_native_mdx_lookup_with_factories_and_mdd_policy(
+        &mut mdx_factory,
+        &mut mdd_factory,
+        &MdxLookupParams {
+            dictionary_id: "mdx::demo".to_string(),
+            query: "apple".to_string(),
+            fuzzy: false,
+        },
+        &settings,
+        false,
+    )
+    .expect("MDX lookup should allow callers to skip MDD resource inlining");
+
+    assert_eq!(mdd_factory.opened, Vec::<String>::new());
+    assert_eq!(result.entries[0].html, r#"<img src="images/logo.png">"#);
+}
+
+#[test]
+fn native_mdx_lookup_continues_mdd_inline_after_lookup_error() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\bad.mdd", r"C:\Dicts\demo.mdd"]);
+    let settings = mdx_settings_with_dictionary(dictionary);
+    let mut mdx_factory = RecordingMdxReaderFactory::with_readers([RecordingMdxReader::new(
+        [("apple", ("apple", r#"<img src="images/logo.png">"#))],
+        [],
+    )]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([
+        Ok(RecordingMddReader::failing_lookup("bad record block")),
+        Ok(RecordingMddReader::new([(
+            r"\images\logo.png",
+            b"\x89PNG".as_slice(),
+        )])),
+    ]);
+
+    let result = run_native_mdx_lookup_with_factories(
+        &mut mdx_factory,
+        &mut mdd_factory,
+        &MdxLookupParams {
+            dictionary_id: "mdx::demo".to_string(),
+            query: "apple".to_string(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("MDD lookup errors should not fail the MDX lookup");
+
+    assert!(result.entries[0]
+        .html
+        .contains(r#"src="data:image/png;base64,iVBORw==""#));
+}
+
+#[test]
+fn native_mdd_html_inline_decodes_dictassets_urls_and_strips_cache_busters() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([
+        (r"\images\logo large.png", b"\x89PNG".as_slice()),
+        (r"\audio\hello world.mp3", b"ID3".as_slice()),
+        (r"\styles\theme.css", b"body{}".as_slice()),
+    ]))]);
+
+    let html = inline_mdd_resources_in_html_with_factory(
+        &mut mdd_factory,
+        &dictionary,
+        r#"<div>
+            <img src="https://dictassets/images/logo%20large.png?v=1#hero">
+            <audio src="audio/hello%20world.mp3?cache=skip"></audio>
+            <span style="background:url('/styles/theme.css#dark')"></span>
+        </div>"#,
+    )
+    .expect("MDD resource references should be rewritten");
+
+    assert_eq!(mdd_factory.opened, [r"C:\Dicts\demo.mdd"]);
+    assert!(html.contains(r#"src="data:image/png;base64,iVBORw==""#));
+    assert!(html.contains(r#"src="data:audio/mpeg;base64,SUQz""#));
+    assert!(html.contains("url('data:text/css;base64,Ym9keXt9')"));
+    assert!(!html.contains("dictassets"));
+    assert!(!html.contains("%20"));
+}
+
+#[test]
+fn native_mdd_html_inline_rewrites_srcset_poster_and_lazy_resource_attrs() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([
+        (r"\images\hero small.png", b"SMALL".as_slice()),
+        (r"\images\hero.png", b"HERO".as_slice()),
+        (r"\images\logo.png", b"\x89PNG".as_slice()),
+        (r"\images\poster.jpg", b"JPG".as_slice()),
+        (r"\images\lazy.webp", b"RIFF".as_slice()),
+        (r"\images\original.gif", b"GIF".as_slice()),
+    ]))]);
+
+    let html = inline_mdd_resources_in_html_with_factory(
+        &mut mdd_factory,
+        &dictionary,
+        r#"<picture>
+            <source srcset="images/hero%20small.png?v=1 1x, https://example.com/external.png 2x, data:image/png;base64,OLD 3x">
+            <img srcset='images/hero.png 480w, /images/logo.png#main 960w'
+                 poster=images/poster.jpg
+                 data-src="images/lazy.webp"
+                 data-original=images/original.gif>
+        </picture>"#,
+    )
+    .expect("srcset and lazy MDD resource references should be rewritten");
+
+    assert!(html.contains(
+        r#"srcset="data:image/png;base64,U01BTEw= 1x, https://example.com/external.png 2x, data:image/png;base64,OLD 3x""#
+    ));
+    assert!(html.contains(
+        "srcset='data:image/png;base64,SEVSTw== 480w, data:image/png;base64,iVBORw== 960w'"
+    ));
+    assert!(html.contains(r#"poster="data:image/jpeg;base64,SlBH""#));
+    assert!(html.contains(r#"data-src="data:image/webp;base64,UklGRg==""#));
+    assert!(html.contains(r#"data-original="data:image/gif;base64,R0lG""#));
+    assert!(!html.contains("hero%20small.png"));
+    assert!(!html.contains("poster=images/poster.jpg"));
+}
+
+#[test]
+fn native_mdd_html_inline_rewrites_background_data_srcset_and_sound_variants() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([
+        (r"\images\background.png", b"BG".as_slice()),
+        (r"\images\lazy-two.webp", b"LAZY".as_slice()),
+        (r"\images\original-two.gif", b"ORIG".as_slice()),
+        (r"\images\source-two.png", b"SRCSET".as_slice()),
+        (r"\audio\short.wav", b"WAV".as_slice()),
+        (r"\audio\loose.ogg", b"OGG".as_slice()),
+    ]))]);
+
+    let html = inline_mdd_resources_in_html_with_factory(
+        &mut mdd_factory,
+        &dictionary,
+        r#"<div background=images/background.png
+                 data-lazy-src='images/lazy-two.webp'
+                 data-original-src=images/original-two.gif>
+            <source data-srcset="images/source-two.png 1x, https://example.com/keep.png 2x">
+            <a href="sound:/audio/short.wav">short</a>
+            <a href='sound:audio/loose.ogg?cache=1'>loose</a>
+        </div>"#,
+    )
+    .expect("extra MDD resource reference variants should be rewritten");
+
+    assert!(html.contains(r#"background="data:image/png;base64,Qkc=""#));
+    assert!(html.contains(r#"data-lazy-src='data:image/webp;base64,TEFaWQ=='"#));
+    assert!(html.contains(r#"data-original-src="data:image/gif;base64,T1JJRw==""#));
+    assert!(html.contains(
+        r#"data-srcset="data:image/png;base64,U1JDU0VU 1x, https://example.com/keep.png 2x""#
+    ));
+    assert!(html.contains(r#"href="data:audio/wav;base64,V0FW""#));
+    assert!(html.contains(r#"href='data:audio/ogg;base64,T0dH'"#));
+    assert!(!html.contains("sound:/audio/short.wav"));
+    assert!(!html.contains("sound:audio/loose.ogg"));
 }
 
 #[test]
@@ -750,6 +966,39 @@ fn mdx_encryption_block_decrypt_matches_mdict_csharp_vector() {
     assert!(error.to_string().contains("at least 8 bytes"));
 }
 
+#[test]
+fn native_mdd_companion_discovery_matches_mdict_resource_file_convention() {
+    let temp_dir = unique_temp_dir("easydict-native-mdd-discovery");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mdx_path = temp_dir.join("Oxford.mdx");
+    let base_mdd = temp_dir.join("Oxford.mdd");
+    let first_mdd = temp_dir.join("Oxford.1.mdd");
+    let second_mdd = temp_dir.join("Oxford.2.mdd");
+    let gap_mdd = temp_dir.join("oxford.4.MDD");
+    let zero_mdd = temp_dir.join("Oxford.0.mdd");
+    let non_numeric_mdd = temp_dir.join("Oxford.assets.mdd");
+
+    fs::write(&mdx_path, b"mdx").expect("MDX file should be created");
+    fs::write(&base_mdd, b"mdd").expect("base MDD file should be created");
+    fs::write(&first_mdd, b"mdd1").expect("numbered MDD file should be created");
+    fs::write(&second_mdd, b"mdd2").expect("numbered MDD file should be created");
+    fs::write(&gap_mdd, b"mdd4").expect("gap MDD file should be created");
+    fs::write(&zero_mdd, b"mdd0").expect("zero-suffix MDD file should be created");
+    fs::write(&non_numeric_mdd, b"assets").expect("non-numeric MDD file should be created");
+
+    assert_eq!(
+        discover_mdd_file_paths(&path_string(&mdx_path)),
+        vec![
+            path_string(&base_mdd),
+            path_string(&first_mdd),
+            path_string(&second_mdd),
+            path_string(&gap_mdd),
+        ]
+    );
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
 fn mdx_settings(is_encrypted: bool) -> SettingsSnapshot {
     mdx_settings_with_dictionary(mdx_dictionary(is_encrypted, []))
 }
@@ -824,6 +1073,97 @@ fn write_raw_mdx_header(path: &Path, header_bytes: &[u8]) {
     file_bytes.extend_from_slice(header_bytes);
     file_bytes.extend_from_slice(&0u32.to_be_bytes());
     fs::write(path, file_bytes).expect("raw MDX header should be written");
+}
+
+fn write_minimal_mdd_fixture(path: &Path, resources: &[(&str, &[u8])]) {
+    assert!(!resources.is_empty());
+
+    let mut file = fs::File::create(path).expect("MDD fixture should be created");
+    let header_text = r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" KeyCaseSensitive="No" StripKey="Yes" />"#;
+    let header_bytes = utf16_le(header_text);
+    write_u32_be_file(&mut file, header_bytes.len() as u32);
+    file.write_all(&header_bytes)
+        .expect("MDD header should be written");
+    file.write_all(&0u32.to_be_bytes())
+        .expect("MDD header checksum should be written");
+
+    let mut key_block_payload = Vec::new();
+    let mut record_payload = Vec::new();
+    for (key, data) in resources {
+        push_u64_be_vec(&mut key_block_payload, record_payload.len() as u64);
+        key_block_payload.extend_from_slice(&utf16_le(key));
+        key_block_payload.extend_from_slice(&[0, 0]);
+        record_payload.extend_from_slice(data);
+    }
+
+    let key_block = mdd_none_block(&key_block_payload);
+    let key_info_payload = mdd_key_info_payload(
+        resources.first().expect("first resource").0,
+        resources.last().expect("last resource").0,
+        resources.len() as u64,
+        key_block.len() as u64,
+        key_block_payload.len() as u64,
+    );
+    let key_info = mdd_zlib_block(&key_info_payload);
+
+    write_u64_be_file(&mut file, 1);
+    write_u64_be_file(&mut file, resources.len() as u64);
+    write_u64_be_file(&mut file, key_info_payload.len() as u64);
+    write_u64_be_file(&mut file, key_info.len() as u64);
+    write_u64_be_file(&mut file, key_block.len() as u64);
+    file.write_all(&0u32.to_be_bytes())
+        .expect("MDD key header checksum should be written");
+    file.write_all(&key_info)
+        .expect("MDD key info should be written");
+    file.write_all(&key_block)
+        .expect("MDD key block should be written");
+
+    let record_block = mdd_none_block(&record_payload);
+    write_u64_be_file(&mut file, 1);
+    write_u64_be_file(&mut file, resources.len() as u64);
+    write_u64_be_file(&mut file, 16);
+    write_u64_be_file(&mut file, record_block.len() as u64);
+    write_u64_be_file(&mut file, record_block.len() as u64);
+    write_u64_be_file(&mut file, record_payload.len() as u64);
+    file.write_all(&record_block)
+        .expect("MDD record block should be written");
+}
+
+fn mdd_key_info_payload(
+    first_key: &str,
+    last_key: &str,
+    resource_count: u64,
+    key_block_pack_size: u64,
+    key_block_unpack_size: u64,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    push_u64_be_vec(&mut payload, resource_count);
+    push_u16_be_vec(&mut payload, first_key.encode_utf16().count() as u16);
+    payload.extend_from_slice(&utf16_le(first_key));
+    payload.extend_from_slice(&[0, 0]);
+    push_u16_be_vec(&mut payload, last_key.encode_utf16().count() as u16);
+    payload.extend_from_slice(&utf16_le(last_key));
+    payload.extend_from_slice(&[0, 0]);
+    push_u64_be_vec(&mut payload, key_block_pack_size);
+    push_u64_be_vec(&mut payload, key_block_unpack_size);
+    payload
+}
+
+fn mdd_none_block(payload: &[u8]) -> Vec<u8> {
+    let mut block = vec![0, 0, 0, 0, 0, 0, 0, 0];
+    block.extend_from_slice(payload);
+    block
+}
+
+fn mdd_zlib_block(payload: &[u8]) -> Vec<u8> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(payload)
+        .expect("MDD key info should compress");
+    let compressed = encoder.finish().expect("MDD key info compression");
+    let mut block = vec![2, 0, 0, 0, 0, 0, 0, 0];
+    block.extend_from_slice(&compressed);
+    block
 }
 
 fn write_record_encrypted_mdx_fixture(path: &Path, regcode: &str, email: &str) {
@@ -950,6 +1290,24 @@ fn mdx_fast_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
 
 fn push_u32_be(bytes: &mut Vec<u8>, value: u32) {
     bytes.extend_from_slice(&value.to_be_bytes());
+}
+
+fn push_u16_be_vec(bytes: &mut Vec<u8>, value: u16) {
+    bytes.extend_from_slice(&value.to_be_bytes());
+}
+
+fn push_u64_be_vec(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_be_bytes());
+}
+
+fn write_u32_be_file(file: &mut fs::File, value: u32) {
+    file.write_all(&value.to_be_bytes())
+        .expect("u32 should be written");
+}
+
+fn write_u64_be_file(file: &mut fs::File, value: u64) {
+    file.write_all(&value.to_be_bytes())
+        .expect("u64 should be written");
 }
 
 fn data40() -> Vec<u8> {
@@ -1101,6 +1459,7 @@ impl NativeMddResourceReaderFactory for RecordingMddReaderFactory {
 
 struct RecordingMddReader {
     resources: HashMap<String, Vec<u8>>,
+    lookup_error: Option<NativeMddResourceError>,
 }
 
 impl RecordingMddReader {
@@ -1110,6 +1469,14 @@ impl RecordingMddReader {
                 .into_iter()
                 .map(|(key, data)| (key.to_string(), data.to_vec()))
                 .collect(),
+            lookup_error: None,
+        }
+    }
+
+    fn failing_lookup(message: &'static str) -> Self {
+        Self {
+            resources: HashMap::new(),
+            lookup_error: Some(NativeMddResourceError::new(message)),
         }
     }
 }
@@ -1119,6 +1486,10 @@ impl NativeMddResourceReader for RecordingMddReader {
         &mut self,
         resource_key: &str,
     ) -> Result<Option<(String, Vec<u8>)>, NativeMddResourceError> {
+        if let Some(error) = &self.lookup_error {
+            return Err(error.clone());
+        }
+
         Ok(self
             .resources
             .get(resource_key)

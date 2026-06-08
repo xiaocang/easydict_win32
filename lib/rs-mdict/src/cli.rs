@@ -132,8 +132,8 @@ fn handle_mdd(filepath: &str, command: &str, args: &[String]) {
                 process::exit(1);
             }
             let key = &args[0];
-            match mdd.locate(key) {
-                Some(result) => {
+            match mdd.locate_result(key) {
+                Ok(Some(result)) => {
                     println!("Resource: {}", result.key_text);
                     // Show truncated base64 for large resources
                     if result.definition.len() > 100 {
@@ -143,8 +143,12 @@ fn handle_mdd(filepath: &str, command: &str, args: &[String]) {
                         println!("Data (base64): {}", result.definition);
                     }
                 }
-                None => {
+                Ok(None) => {
                     println!("Resource '{}' not found", key);
+                }
+                Err(e) => {
+                    eprintln!("Error locating MDD resource: {}", e);
+                    process::exit(1);
                 }
             }
         }

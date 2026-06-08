@@ -182,11 +182,15 @@ pub fn strip_key_preserving_case(key: &str, is_mdd: bool) -> String {
     let mut result = key.to_string();
 
     if is_mdd {
-        // For MDD: remove extension and special characters
-        if let Some(pos) = result.rfind('.') {
-            result = result[..pos].to_string();
+        // For MDD resources, preserve the final file extension so
+        // "\\style.css" and "\\style.js" remain distinct lookup keys.
+        result = result.replace(['(', ')', ',', ' ', '\'', '/', '@'], "");
+        if let Some(extension_index) = result.rfind('.') {
+            let (stem, extension) = result.split_at(extension_index);
+            result = format!("{}{}", stem.replace('.', ""), extension);
+        } else {
+            result = result.replace('.', "");
         }
-        result = result.replace(['(', ')', '.', ',', ' ', '\'', '/', '@'], "");
         result = result.replace('_', "!");
     } else {
         // For MDX: remove punctuation
@@ -335,6 +339,22 @@ mod tests {
         assert_eq!(levenshtein_distance("hello", "world"), 4);
         assert_eq!(levenshtein_distance("", "abc"), 3);
         assert_eq!(levenshtein_distance("abc", ""), 3);
+    }
+
+    #[test]
+    fn strip_key_for_mdd_preserves_resource_extensions() {
+        assert_eq!(
+            strip_key_preserving_case(r"\styles\dict.css", true),
+            r"\styles\dict.css"
+        );
+        assert_eq!(
+            strip_key_preserving_case(r"\styles\dict.js", true),
+            r"\styles\dict.js"
+        );
+        assert_eq!(
+            strip_key_preserving_case(r"\images\logo.large.png", true),
+            r"\images\logolarge.png"
+        );
     }
 
     #[test]

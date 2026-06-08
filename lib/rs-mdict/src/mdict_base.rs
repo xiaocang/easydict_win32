@@ -649,6 +649,55 @@ impl MdictBase {
         }
     }
 
+    /// Look up an MDD resource key while preserving resource-file semantics.
+    ///
+    /// Ordinary MDict strip rules are useful as a fallback, but MDD resources
+    /// can legitimately share the same stem with different extensions (for
+    /// example `dict.css` and `dict.js`). Prefer exact canonical path matches
+    /// inside the normalized-equal group before falling back to stripped lookup.
+    pub fn lookup_mdd_resource_by_key(&self, resource_key: &str) -> Option<&KeyWordItem> {
+        if self.meta.ext != FileExt::Mdd {
+            return self.lookup_keyword_by_word(resource_key, false);
+        }
+
+        let list = &self.keyword_list;
+        if list.is_empty() {
+            return None;
+        }
+
+        let lookup_key = crate::mdd::normalize_mdd_resource_key(resource_key);
+        let normalization = self.key_normalization();
+        let normalized_lookup = normalization.normalize(&lookup_key);
+        let index = list
+            .binary_search_by(|item| {
+                normalization
+                    .normalize(&item.key_text)
+                    .cmp(&normalized_lookup)
+            })
+            .ok()?;
+
+        let mut group_start = index;
+        while group_start > 0
+            && normalization.compare(&list[group_start - 1].key_text, &lookup_key)
+                == std::cmp::Ordering::Equal
+        {
+            group_start -= 1;
+        }
+
+        let mut group_end = index + 1;
+        while group_end < list.len()
+            && normalization.compare(&list[group_end].key_text, &lookup_key)
+                == std::cmp::Ordering::Equal
+        {
+            group_end += 1;
+        }
+
+        list[group_start..group_end]
+            .iter()
+            .find(|item| self.mdd_resource_keys_equal(&item.key_text, &lookup_key))
+            .or_else(|| list.get(index))
+    }
+
     /// Find record block index by record start offset
     pub fn find_record_block_index(&self, record_start: u64) -> usize {
         let mut left = 0;
@@ -672,32 +721,71 @@ impl MdictBase {
 
     /// Lookup record by keyword item
     pub fn lookup_record_by_keyword(&mut self, item: &KeyWordItem) -> Result<Vec<u8>> {
-        let record_block_index = self.find_record_block_index(item.record_start_offset);
+        if self.record_info_list.is_empty() {
+            return Err(MdictError::InvalidFormat(
+                "record block info list is empty".to_string(),
+            ));
+        }
 
-        // Copy needed values to avoid borrowing issues
-        let pack_accumulate_offset =
-            self.record_info_list[record_block_index].pack_accumulate_offset;
-        let pack_size = self.record_info_list[record_block_index].pack_size as usize;
-        let unpack_size = self.record_info_list[record_block_index].unpack_size as usize;
-        let unpack_accumulate_offset =
-            self.record_info_list[record_block_index].unpack_accumulate_offset;
+        let record_start = item.record_start_offset;
+        let record_end = self.effective_record_end_offset(item)?;
+        if record_end <= record_start {
+            return Ok(Vec::new());
+        }
 
-        // Read compressed record block
+        let start_block_index = self.find_record_block_index(record_start);
+        let end_block_index = self.find_record_block_index(record_end.saturating_sub(1));
+        let mut result = Vec::with_capacity((record_end - record_start) as usize);
+
+        for block_index in start_block_index..=end_block_index {
+            let (block_start, unpacked_buffer) = self.read_unpacked_record_block(block_index)?;
+            let block_end = block_start + unpacked_buffer.len() as u64;
+            let slice_start = record_start.max(block_start);
+            let slice_end = record_end.min(block_end);
+
+            if slice_start >= slice_end {
+                continue;
+            }
+
+            let local_start = (slice_start - block_start) as usize;
+            let local_end = (slice_end - block_start) as usize;
+            result.extend_from_slice(&unpacked_buffer[local_start..local_end]);
+        }
+
+        Ok(result)
+    }
+
+    fn read_unpacked_record_block(&mut self, record_block_index: usize) -> Result<(u64, Vec<u8>)> {
+        let record_info = self
+            .record_info_list
+            .get(record_block_index)
+            .ok_or_else(|| {
+                MdictError::InvalidFormat(format!(
+                    "record block index {record_block_index} out of range"
+                ))
+            })?;
+
+        let pack_accumulate_offset = record_info.pack_accumulate_offset;
+        let pack_size = record_info.pack_size as usize;
+        let unpack_size = record_info.unpack_size as usize;
+        let unpack_accumulate_offset = record_info.unpack_accumulate_offset;
+
         let offset = self.record_block_start_offset + pack_accumulate_offset;
         let record_buffer = self.read_buffer(offset, pack_size)?;
-
-        // Decompress record block
         let unpacked_buffer = self.decompress_record_block(&record_buffer, unpack_size)?;
 
-        // Calculate relative offsets
-        let start = (item.record_start_offset - unpack_accumulate_offset) as usize;
-        let end = if item.record_end_offset > 0 {
-            (item.record_end_offset - unpack_accumulate_offset) as usize
-        } else {
-            unpacked_buffer.len()
-        };
+        Ok((unpack_accumulate_offset, unpacked_buffer))
+    }
 
-        Ok(unpacked_buffer[start..end.min(unpacked_buffer.len())].to_vec())
+    fn effective_record_end_offset(&self, item: &KeyWordItem) -> Result<u64> {
+        if item.record_end_offset > 0 {
+            return Ok(item.record_end_offset);
+        }
+
+        self.record_info_list
+            .last()
+            .map(|info| info.unpack_accumulate_offset + info.unpack_size)
+            .ok_or_else(|| MdictError::InvalidFormat("record block info list is empty".to_string()))
     }
 
     /// Decompress record block
@@ -712,7 +800,14 @@ impl MdictBase {
         })?;
 
         match comp_type {
-            CompressionType::None => Ok(record_buffer[8..].to_vec()),
+            CompressionType::None => {
+                let data = if self.meta.encrypt == EncryptType::RecordBlock {
+                    utils::mdx_decrypt(record_buffer)
+                } else {
+                    record_buffer.to_vec()
+                };
+                Ok(data[8..].to_vec())
+            }
             CompressionType::Lzo => {
                 let data = if self.meta.encrypt == EncryptType::RecordBlock {
                     utils::mdx_decrypt(record_buffer)
@@ -773,6 +868,47 @@ impl MdictBase {
             ext: self.meta.ext,
             strip_key: header_yes_no(&self.header, "StripKey", true),
             case_sensitive: header_yes_no(&self.header, "KeyCaseSensitive", false),
+        }
+    }
+
+    fn mdd_resource_keys_equal(&self, a: &str, b: &str) -> bool {
+        let a = crate::mdd::normalize_mdd_resource_key(a);
+        let b = crate::mdd::normalize_mdd_resource_key(b);
+        if header_yes_no(&self.header, "KeyCaseSensitive", false) {
+            a == b
+        } else {
+            a.eq_ignore_ascii_case(&b)
+        }
+    }
+}
+
+#[cfg(test)]
+impl MdictBase {
+    pub(crate) fn from_test_file(file: File, ext: FileExt) -> Self {
+        MdictBase {
+            file,
+            filepath: String::new(),
+            meta: DictMeta {
+                ext,
+                ..Default::default()
+            },
+            header: DictHeader::new(),
+            key_header: KeyHeader::default(),
+            key_info_list: Vec::new(),
+            keyword_list: Vec::new(),
+            record_header: RecordHeader::default(),
+            record_info_list: Vec::new(),
+            header_end_offset: 0,
+            key_header_start_offset: 0,
+            key_header_end_offset: 0,
+            key_block_info_start_offset: 0,
+            key_block_info_end_offset: 0,
+            record_header_start_offset: 0,
+            record_header_end_offset: 0,
+            record_info_start_offset: 0,
+            record_info_end_offset: 0,
+            record_block_start_offset: 0,
+            key_header_transform: None,
         }
     }
 }
@@ -913,6 +1049,112 @@ mod tests {
     }
 
     #[test]
+    fn mdd_resource_lookup_prefers_exact_resource_path_over_stripped_collision() {
+        let mut base = test_base_with_header(
+            &[],
+            &[r"\styles\dict.css", r"\styles\dict.js"],
+            FileExt::Mdd,
+        );
+        base.sort_keywords_for_lookup();
+
+        assert_eq!(
+            base.lookup_mdd_resource_by_key("styles/dict.js")
+                .expect("js resource")
+                .key_text,
+            r"\styles\dict.js"
+        );
+        assert_eq!(
+            base.lookup_mdd_resource_by_key(r"/styles/dict.css")
+                .expect("css resource")
+                .key_text,
+            r"\styles\dict.css"
+        );
+    }
+
+    #[test]
+    fn record_lookup_can_span_multiple_record_blocks() {
+        use std::io::{Seek, SeekFrom, Write};
+
+        let mut file = tempfile::tempfile().expect("tempfile");
+        file.write_all(&uncompressed_record_block(b"abcde"))
+            .expect("first record block");
+        file.write_all(&uncompressed_record_block(b"fghij"))
+            .expect("second record block");
+        file.seek(SeekFrom::Start(0)).expect("rewind");
+
+        let mut base = test_base_with_file(file, FileExt::Mdx);
+        base.record_info_list = vec![
+            RecordInfo {
+                pack_size: 13,
+                pack_accumulate_offset: 0,
+                unpack_size: 5,
+                unpack_accumulate_offset: 0,
+            },
+            RecordInfo {
+                pack_size: 13,
+                pack_accumulate_offset: 13,
+                unpack_size: 5,
+                unpack_accumulate_offset: 5,
+            },
+        ];
+        base.record_block_start_offset = 0;
+
+        let item = KeyWordItem {
+            record_start_offset: 3,
+            record_end_offset: 8,
+            key_text: "cross".to_string(),
+            key_block_idx: 0,
+        };
+
+        assert_eq!(
+            base.lookup_record_by_keyword(&item)
+                .expect("cross-block record"),
+            b"defgh"
+        );
+    }
+
+    #[test]
+    fn final_record_uses_total_unpacked_size_as_end_offset() {
+        use std::io::{Seek, SeekFrom, Write};
+
+        let mut file = tempfile::tempfile().expect("tempfile");
+        file.write_all(&uncompressed_record_block(b"abcde"))
+            .expect("first record block");
+        file.write_all(&uncompressed_record_block(b"fghij"))
+            .expect("second record block");
+        file.seek(SeekFrom::Start(0)).expect("rewind");
+
+        let mut base = test_base_with_file(file, FileExt::Mdx);
+        base.record_info_list = vec![
+            RecordInfo {
+                pack_size: 13,
+                pack_accumulate_offset: 0,
+                unpack_size: 5,
+                unpack_accumulate_offset: 0,
+            },
+            RecordInfo {
+                pack_size: 13,
+                pack_accumulate_offset: 13,
+                unpack_size: 5,
+                unpack_accumulate_offset: 5,
+            },
+        ];
+        base.record_block_start_offset = 0;
+
+        let item = KeyWordItem {
+            record_start_offset: 7,
+            record_end_offset: 0,
+            key_text: "tail".to_string(),
+            key_block_idx: 0,
+        };
+
+        assert_eq!(
+            base.lookup_record_by_keyword(&item).expect("tail record"),
+            b"hij"
+        );
+    }
+
+    #[test]
     fn encrypted_header_values_are_case_insensitive_and_explicitly_unsupported() {
         assert_eq!(parse_encrypt_type(None).unwrap(), EncryptType::None);
         assert_eq!(parse_encrypt_type(Some("")).unwrap(), EncryptType::None);
@@ -945,45 +1187,31 @@ mod tests {
         keywords: &[&str],
         ext: FileExt,
     ) -> MdictBase {
-        let mut header = DictHeader::new();
+        let mut base = test_base_with_file(tempfile::tempfile().expect("tempfile"), ext);
         for (key, value) in header_entries {
-            header.insert((*key).to_string(), (*value).to_string());
+            base.header.insert((*key).to_string(), (*value).to_string());
         }
+        base.keyword_list = keywords
+            .iter()
+            .enumerate()
+            .map(|(index, key_text)| KeyWordItem {
+                record_start_offset: index as u64,
+                record_end_offset: index as u64 + 1,
+                key_text: (*key_text).to_string(),
+                key_block_idx: 0,
+            })
+            .collect();
+        base
+    }
 
-        MdictBase {
-            file: tempfile::tempfile().expect("tempfile"),
-            filepath: String::new(),
-            meta: DictMeta {
-                ext,
-                ..Default::default()
-            },
-            header,
-            key_header: KeyHeader::default(),
-            key_info_list: Vec::new(),
-            keyword_list: keywords
-                .iter()
-                .enumerate()
-                .map(|(index, key_text)| KeyWordItem {
-                    record_start_offset: index as u64,
-                    record_end_offset: index as u64 + 1,
-                    key_text: (*key_text).to_string(),
-                    key_block_idx: 0,
-                })
-                .collect(),
-            record_header: RecordHeader::default(),
-            record_info_list: Vec::new(),
-            header_end_offset: 0,
-            key_header_start_offset: 0,
-            key_header_end_offset: 0,
-            key_block_info_start_offset: 0,
-            key_block_info_end_offset: 0,
-            record_header_start_offset: 0,
-            record_header_end_offset: 0,
-            record_info_start_offset: 0,
-            record_info_end_offset: 0,
-            record_block_start_offset: 0,
-            key_header_transform: None,
-        }
+    fn test_base_with_file(file: std::fs::File, ext: FileExt) -> MdictBase {
+        MdictBase::from_test_file(file, ext)
+    }
+
+    fn uncompressed_record_block(payload: &[u8]) -> Vec<u8> {
+        let mut block = vec![0, 0, 0, 0, 0, 0, 0, 0];
+        block.extend_from_slice(payload);
+        block
     }
 
     fn test_keyword_texts(base: &MdictBase) -> Vec<&str> {

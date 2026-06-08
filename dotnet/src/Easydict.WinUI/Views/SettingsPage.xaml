@@ -2092,7 +2092,8 @@
 
                                 <StackPanel Orientation="Horizontal"
                                         Spacing="4">
-                                    <TextBlock Text="Inspired by"
+                                    <TextBlock AutomationProperties.AutomationId="AboutInspiredByText"
+                                            Text="Inspired by"
                                             FontSize="12"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             VerticalAlignment="Center"/>
@@ -2103,7 +2104,8 @@
                                             Style="{StaticResource SettingsLinkButtonStyle}"/>
                                 </StackPanel>
 
-                                <TextBlock Text="License: GPL-3.0"
+                                <TextBlock AutomationProperties.AutomationId="LicenseText"
+                                        Text="License: GPL-3.0"
                                         FontSize="12"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Easydict.UIAutomation.Tests.Infrastructure;
@@ -29,9 +30,11 @@ public sealed class DotnetRustParityTests : IDisposable
     private const string SettingsSectionEnvironmentVariable = "EASYDICT_UIA_PARITY_SETTINGS_SECTION";
     private const string EffectsEnvironmentVariable = "EASYDICT_UIA_PARITY_EFFECTS";
     private const string AllowOversizedCaptureEnvironmentVariable = "EASYDICT_UIA_ALLOW_OVERSIZED_CAPTURE";
+    private const string UiLanguageEnvironmentVariable = "EASYDICT_UIA_PARITY_UI_LANGUAGE";
 
     private readonly ITestOutputHelper _output;
     private readonly AppLauncher _dotnetLauncher = new();
+    private static bool _parityDpiAwarenessAttempted;
 
     public DotnetRustParityTests(ITestOutputHelper output)
     {
@@ -51,6 +54,7 @@ public sealed class DotnetRustParityTests : IDisposable
         var steps = ResolveCaptureSteps();
         var manifestEntries = new List<UiParityManifestEntry>();
 
+        EnsureParityDpiAwareness();
         SeedDotnetParitySettings();
         _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
         var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
@@ -61,7 +65,7 @@ public sealed class DotnetRustParityTests : IDisposable
             var rustWindow = rustPreview.GetMainWindow(TimeSpan.FromSeconds(30));
             var dotnetScrollViewer = OpenDotnetSettingsSection(dotnetWindow, step.Section);
 
-            ArrangeSideBySide(dotnetWindow, rustWindow);
+            ArrangeSettingsWindowsForCapture(dotnetWindow, rustWindow);
 
             if (step.ExpandAvailableLanguages)
             {
@@ -74,10 +78,14 @@ public sealed class DotnetRustParityTests : IDisposable
             AssertWindowFullyVisible(dotnetWindow, step.Key, "dotnet");
             AssertWindowFullyVisible(rustWindow, step.Key, "rust");
 
+            dotnetWindow.SetForeground();
+            Thread.Sleep(150);
             var dotnetPath = CaptureDotnetSettingsStep(
                 dotnetWindow,
                 step,
                 $"{step.Key}-dotnet-winui-reference");
+            rustWindow.SetForeground();
+            Thread.Sleep(150);
             var rustPath = ScreenshotHelper.CaptureWindow(
                 rustWindow,
                 $"{step.Key}-rust-win-fluent-iced");
@@ -126,10 +134,12 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var manifestEntries = new List<UiParityManifestEntry>();
 
+        EnsureParityDpiAwareness();
         SeedDotnetParitySettings();
         _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
         var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
         WaitForMainWindowReady(dotnetWindow, "dotnet");
+        ConfigureRustMainPreviewSizeFromReference(dotnetWindow);
 
         using var rustPreview = RustPreviewApp.LaunchMainPreview("initial", "light", _output);
         var rustWindow = rustPreview.GetMainWindow(TimeSpan.FromSeconds(30));
@@ -141,10 +151,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustWindow, "main.initial", "rust");
 
         MoveMouseToNeutralPoint();
-        var initialDotnetPath = ScreenshotHelper.CaptureWindow(
+        var initialDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "main.initial-dotnet-winui-reference");
-        var initialRustPath = ScreenshotHelper.CaptureWindow(
+        var initialRustPath = CaptureForegroundWindow(
             rustWindow,
             "main.initial-rust-win-fluent-iced");
         var initialSideBySidePath = SaveSideBySideComparison(
@@ -168,11 +178,11 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertImageHasVisibleContent(initialSideBySidePath);
 
         MoveMouseToHoverTarget(dotnetWindow, "TranslateButton", fallbackX: 0.92, fallbackY: 0.24);
-        var hoverDotnetPath = ScreenshotHelper.CaptureWindow(
+        var hoverDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "effects.primary-hover-dotnet-winui-reference");
         MoveMouseToHoverTarget(rustWindow, "TranslateButton", fallbackX: 0.92, fallbackY: 0.24);
-        var hoverRustPath = ScreenshotHelper.CaptureWindow(
+        var hoverRustPath = CaptureForegroundWindow(
             rustWindow,
             "effects.primary-hover-rust-win-fluent-iced");
         var hoverSideBySidePath = SaveSideBySideComparison(
@@ -238,10 +248,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustResultHeaderWindow, "effects.result-header-hover", "rust");
 
         MoveMouseToHoverTarget(dotnetWindow, "QuickOutputCard", fallbackX: 0.50, fallbackY: 0.65);
-        var resultHeaderHoverDotnetPath = ScreenshotHelper.CaptureWindow(
+        var resultHeaderHoverDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "effects.result-header-hover-dotnet-winui-reference");
-        var resultHeaderHoverRustPath = ScreenshotHelper.CaptureWindow(
+        var resultHeaderHoverRustPath = CaptureForegroundWindow(
             rustResultHeaderWindow,
             "effects.result-header-hover-rust-win-fluent-iced");
         var resultHeaderHoverSideBySidePath = SaveSideBySideComparison(
@@ -276,10 +286,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustBeforeTranslateWindow, "main.before-translate", "rust");
 
         MoveMouseToNeutralPoint();
-        var beforeTranslateDotnetPath = ScreenshotHelper.CaptureWindow(
+        var beforeTranslateDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "main.before-translate-dotnet-winui-reference");
-        var beforeTranslateRustPath = ScreenshotHelper.CaptureWindow(
+        var beforeTranslateRustPath = CaptureForegroundWindow(
             rustBeforeTranslateWindow,
             "main.before-translate-rust-win-fluent-iced");
         var beforeTranslateSideBySidePath = SaveSideBySideComparison(
@@ -319,10 +329,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustSourceInputHoverWindow, "effects.source-input-hover", "rust");
 
         MoveMouseToHoverTarget(dotnetWindow, "InputTextBox", fallbackX: 0.50, fallbackY: 0.45);
-        var sourceInputHoverDotnetPath = ScreenshotHelper.CaptureWindow(
+        var sourceInputHoverDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "effects.source-input-hover-dotnet-winui-reference");
-        var sourceInputHoverRustPath = ScreenshotHelper.CaptureWindow(
+        var sourceInputHoverRustPath = CaptureForegroundWindow(
             rustSourceInputHoverWindow,
             "effects.source-input-hover-rust-win-fluent-iced");
         var sourceInputHoverSideBySidePath = SaveSideBySideComparison(
@@ -363,10 +373,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustSourceInputFocusWindow, "effects.source-input-focus", "rust");
 
         FocusElement(dotnetWindow, "InputTextBox", fallbackX: 0.50, fallbackY: 0.45);
-        var sourceInputFocusDotnetPath = ScreenshotHelper.CaptureWindow(
+        var sourceInputFocusDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "effects.source-input-focus-dotnet-winui-reference");
-        var sourceInputFocusRustPath = ScreenshotHelper.CaptureWindow(
+        var sourceInputFocusRustPath = CaptureForegroundWindow(
             rustSourceInputFocusWindow,
             "effects.source-input-focus-rust-win-fluent-iced");
         var sourceInputFocusSideBySidePath = SaveSideBySideComparison(
@@ -402,7 +412,7 @@ public sealed class DotnetRustParityTests : IDisposable
         var overlayFadeDotnetPath = CaptureDotnetModeSwitchOverlayToLongDocument(
             dotnetWindow,
             "effects.overlay-fade-dotnet-winui-reference");
-        var overlayFadeRustPath = ScreenshotHelper.CaptureWindow(
+        var overlayFadeRustPath = CaptureForegroundWindow(
             rustModeOverlayWindow,
             "effects.overlay-fade-rust-win-fluent-iced");
         var overlayFadeSideBySidePath = SaveSideBySideComparison(
@@ -437,10 +447,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustLongDocumentWindow, "long-doc.tab", "rust");
 
         MoveMouseToNeutralPoint();
-        var longDocDotnetPath = ScreenshotHelper.CaptureWindow(
+        var longDocDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "long-doc.tab-dotnet-winui-reference");
-        var longDocRustPath = ScreenshotHelper.CaptureWindow(
+        var longDocRustPath = CaptureForegroundWindow(
             rustLongDocumentWindow,
             "long-doc.tab-rust-win-fluent-iced");
         var longDocSideBySidePath = SaveSideBySideComparison(
@@ -484,10 +494,10 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(rustLongDocumentModesWindow, "long-doc.output-modes", "rust");
 
         MoveMouseToNeutralPoint();
-        var longDocModesDotnetPath = ScreenshotHelper.CaptureWindow(
+        var longDocModesDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "long-doc.output-modes-dotnet-winui-reference");
-        var longDocModesRustPath = ScreenshotHelper.CaptureWindow(
+        var longDocModesRustPath = CaptureForegroundWindow(
             rustLongDocumentModesWindow,
             "long-doc.output-modes-rust-win-fluent-iced");
         var longDocModesSideBySidePath = SaveSideBySideComparison(
@@ -544,8 +554,9 @@ public sealed class DotnetRustParityTests : IDisposable
             "main.long-doc.service",
             fallbackX: 0.55,
             fallbackY: 0.42);
-        var longDocServiceDropdownRustPath = ScreenshotHelper.CaptureWindow(
-            rustLongDocumentServiceDropdownWindow,
+        rustLongDocumentServiceDropdownWindow.SetForeground();
+        Thread.Sleep(250);
+        var longDocServiceDropdownRustPath = ScreenshotHelper.CaptureScreen(
             "long-doc.service-dropdown-rust-win-fluent-iced");
         var longDocServiceDropdownSideBySidePath = SaveSideBySideComparison(
             longDocServiceDropdownDotnetPath,
@@ -604,6 +615,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var manifestEntries = new List<UiParityManifestEntry>();
 
+        EnsureParityDpiAwareness();
         SeedDotnetParitySettings();
         _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
         var dotnetMainWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
@@ -616,8 +628,8 @@ public sealed class DotnetRustParityTests : IDisposable
             "mini",
             "Mini",
             "EASYDICT_PREVIEW_MINI_TRANSLATE_STATE",
-            targetWidth: 420,
-            targetHeight: 300);
+            targetWidth: 640,
+            targetHeight: 400);
         CloseDotnetFloatingWindow(miniWindow, "MiniWindowCloseButton");
 
         var fixedWindow = OpenDotnetFloatingWindow("Fixed", VirtualKeyShort.KEY_F);
@@ -627,8 +639,8 @@ public sealed class DotnetRustParityTests : IDisposable
             "fixed",
             "Fixed",
             "EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE",
-            targetWidth: 420,
-            targetHeight: 360);
+            targetWidth: 640,
+            targetHeight: 560);
         CloseDotnetFloatingWindow(fixedWindow, "FixedWindowCloseButton");
 
         SaveManifest(manifestEntries);
@@ -646,6 +658,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var manifestEntries = new List<UiParityManifestEntry>();
 
+        EnsureParityDpiAwareness();
         SeedDotnetParitySettings();
         using var fixture = new PopButtonSelectionFixture();
         foreach (var msg in fixture.SetupLog)
@@ -777,6 +790,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var manifestEntries = new List<UiParityManifestEntry>();
 
+        EnsureParityDpiAwareness();
         SeedDotnetParitySettings();
         _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
         var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
@@ -1114,7 +1128,8 @@ public sealed class DotnetRustParityTests : IDisposable
             initialSideBySidePath,
             UiParityRegion.FloatingWindowRegions,
             [$"{windowKind}.translate", $"{windowKind}.results"],
-            windowKindOverride: windowKind));
+            windowKindOverride: windowKind,
+            rustSchemaPath: rustInitialPreview.SchemaPath));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(initialDotnetPath);
@@ -1155,7 +1170,8 @@ public sealed class DotnetRustParityTests : IDisposable
             hoverSideBySidePath,
             UiParityRegion.FloatingActionEffectRegions,
             [$"{windowKind}.translate"],
-            windowKindOverride: windowKind));
+            windowKindOverride: windowKind,
+            rustSchemaPath: rustHoverPreview.SchemaPath));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(hoverDotnetPath);
@@ -1198,7 +1214,8 @@ public sealed class DotnetRustParityTests : IDisposable
             pressedSideBySidePath,
             UiParityRegion.FloatingActionEffectRegions,
             [$"{windowKind}.translate"],
-            windowKindOverride: windowKind));
+            windowKindOverride: windowKind,
+            rustSchemaPath: rustPressedPreview.SchemaPath));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(pressedDotnetPath);
@@ -1256,17 +1273,26 @@ public sealed class DotnetRustParityTests : IDisposable
 
         if (scrollViewer == null)
         {
-            var settingsButton = UITestHelper.WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+            var settingsButton = Retry.WhileNull(
+                    () => FindVisibleSettingsNavigationButton(window),
+                    TimeSpan.FromSeconds(60))
+                .Result;
             settingsButton.Should().NotBeNull("dotnet app should expose the Settings button");
             UITestHelper.ClickElement(settingsButton!);
 
             scrollViewer = Retry.WhileNull(
                     () => FindVisibleByAutomationId(window, "MainScrollViewer"),
-                    TimeSpan.FromSeconds(15))
+                    TimeSpan.FromSeconds(30))
                 .Result;
         }
 
+        if (scrollViewer == null)
+        {
+            CaptureDotnetSettingsNavigationDiagnostics(window, section);
+        }
+
         scrollViewer.Should().NotBeNull("dotnet Settings page should open before section comparison");
+        ArrangeSettingsWindowForCapture(window);
         ScrollHelper.MouseScrollToPercent(scrollViewer!, 0);
 
         var tab = Retry.WhileNull(
@@ -1276,14 +1302,170 @@ public sealed class DotnetRustParityTests : IDisposable
         tab.Should().NotBeNull($"dotnet Settings tab {section.Label} should be visible");
         UITestHelper.ClickElement(tab!);
 
-        Retry.WhileNull(
+        var readyElement = Retry.WhileNull(
                 () => FindVisibleByAutomationIdOrName(window, section.DotnetReadyElement),
                 TimeSpan.FromSeconds(15))
-            .Result
-            .Should()
-            .NotBeNull($"dotnet Settings section {section.Label} should show {section.DotnetReadyElement}");
+            .Result;
+        if (readyElement == null)
+        {
+            CaptureDotnetSettingsSectionDiagnostics(window, section, section.DotnetReadyElement);
+        }
+
+        readyElement.Should().NotBeNull(
+            $"dotnet Settings section {section.Label} should show {section.DotnetReadyElement}");
+
+        foreach (var requiredId in AdditionalRequiredSettingsSemanticTags(section))
+        {
+            var element = Retry.WhileNull(
+                    () => FindVisibleByAutomationIdOrName(window, requiredId),
+                    TimeSpan.FromSeconds(5))
+                .Result;
+            if (element == null)
+            {
+                CaptureDotnetSettingsSectionDiagnostics(window, section, requiredId);
+            }
+
+            element.Should().NotBeNull(
+                $"dotnet Settings section {section.Label} should expose complete About element {requiredId}");
+        }
+
+        foreach (var requiredText in AdditionalRequiredSettingsVisibleText(section))
+        {
+            var element = Retry.WhileNull(
+                    () => FindVisibleByAutomationIdOrName(window, requiredText),
+                    TimeSpan.FromSeconds(5))
+                .Result;
+            if (element == null)
+            {
+                CaptureDotnetSettingsSectionDiagnostics(window, section, requiredText);
+            }
+
+            element.Should().NotBeNull(
+                $"dotnet Settings section {section.Label} should expose complete About text {requiredText}");
+        }
 
         return scrollViewer!;
+    }
+
+    private static AutomationElement? FindVisibleSettingsNavigationButton(Window window)
+    {
+        try
+        {
+            return window
+                .FindAllDescendants(cf => cf.ByControlType(ControlType.Button))
+                .Where(button => IsOnScreenOrUnknown(button))
+                .Where(button =>
+                {
+                    var automationId = SafeElementAutomationId(button);
+                    var name = SafeElementName(button);
+                    return IsSettingsNavigationLabel(automationId) ||
+                           IsSettingsNavigationLabel(name);
+                })
+                .OrderBy(button => button.BoundingRectangle.Top)
+                .ThenByDescending(button => button.BoundingRectangle.Right)
+                .FirstOrDefault();
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsSettingsNavigationLabel(string value)
+    {
+        return string.Equals(value, "SettingsButton", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "Settings", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "设置", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void CaptureDotnetSettingsNavigationDiagnostics(Window window, SettingsParitySection section)
+    {
+        try
+        {
+            var screenshotPath = ScreenshotHelper.CaptureWindow(
+                window,
+                $"dotnet-settings-navigation-failed-{section.Id}");
+            _output.WriteLine($"Dotnet settings navigation diagnostic screenshot: {screenshotPath}");
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or TimeoutException)
+        {
+            _output.WriteLine($"Could not capture dotnet settings navigation screenshot: {ex.Message}");
+        }
+
+        try
+        {
+            var path = Path.Combine(
+                ScreenshotHelper.OutputDir,
+                $"dotnet-settings-navigation-failed-{section.Id}-buttons.txt");
+            var lines = window
+                .FindAllDescendants(cf => cf.ByControlType(ControlType.Button))
+                .Select(button =>
+                {
+                    var bounds = button.BoundingRectangle;
+                    return string.Join(
+                        " | ",
+                        $"automationId=\"{SafeElementAutomationId(button)}\"",
+                        $"name=\"{SafeElementName(button)}\"",
+                        $"offscreen={SafeElementIsOffscreen(button)}",
+                        $"bounds={bounds}");
+                })
+                .ToArray();
+
+            File.WriteAllLines(path, lines);
+            _output.WriteLine($"Dotnet settings navigation button diagnostics: {path}");
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or TimeoutException or IOException)
+        {
+            _output.WriteLine($"Could not write dotnet settings navigation button diagnostics: {ex.Message}");
+        }
+    }
+
+    private void CaptureDotnetSettingsSectionDiagnostics(
+        Window window,
+        SettingsParitySection section,
+        string missingElement)
+    {
+        try
+        {
+            var screenshotPath = ScreenshotHelper.CaptureWindow(
+                window,
+                $"dotnet-settings-section-missing-{section.Id}-{SanitizeFileName(missingElement)}");
+            _output.WriteLine($"Dotnet settings section diagnostic screenshot: {screenshotPath}");
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or TimeoutException or ExternalException or IOException)
+        {
+            _output.WriteLine($"Could not capture dotnet settings section screenshot: {ex.Message}");
+        }
+
+        try
+        {
+            var path = Path.Combine(
+                ScreenshotHelper.OutputDir,
+                $"dotnet-settings-section-missing-{section.Id}-{SanitizeFileName(missingElement)}-visible-elements.txt");
+            var lines = window
+                .FindAllDescendants()
+                .Where(IsOnScreenOrUnknown)
+                .Select(element =>
+                {
+                    var bounds = element.BoundingRectangle;
+                    return string.Join(
+                        " | ",
+                        $"controlType={SafeControlTypeName(element)}",
+                        $"automationId=\"{SafeElementAutomationId(element)}\"",
+                        $"name=\"{SafeElementName(element)}\"",
+                        $"bounds={bounds}");
+                })
+                .OrderBy(line => line, StringComparer.Ordinal)
+                .ToArray();
+
+            File.WriteAllLines(path, lines);
+            _output.WriteLine(
+                $"Dotnet settings section visible-element diagnostics for missing {missingElement}: {path}");
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException or IOException)
+        {
+            _output.WriteLine($"Could not write dotnet settings section diagnostics: {ex.Message}");
+        }
     }
 
     private void ScrollBothWindowsToPercent(
@@ -1295,11 +1477,20 @@ public sealed class DotnetRustParityTests : IDisposable
             dotnetScrollViewer,
             step.ScrollPercent,
             message => _output.WriteLine($"[{step.Key}][dotnet] {message}"));
-        ScrollHelper.MouseScrollToPercent(
-            rustWindow,
-            step.ScrollPercent,
-            message => _output.WriteLine($"[{step.Key}][rust] {message}"),
-            GetRustPreviewScrollPoint(rustWindow));
+        if (step.ScrollPercent <= 0)
+        {
+            ScrollHelper.MouseScrollToPercent(
+                rustWindow,
+                step.ScrollPercent,
+                message => _output.WriteLine($"[{step.Key}][rust] {message}"),
+                GetRustPreviewScrollPoint(rustWindow));
+        }
+        else
+        {
+            _output.WriteLine(
+                $"[{step.Key}][rust] Initial preview scroll handled by EASYDICT_PREVIEW_SCROLL_PERCENT={step.ScrollPercent.ToString(CultureInfo.InvariantCulture)}");
+            Thread.Sleep(TimeSpan.FromMilliseconds(1100));
+        }
     }
 
     private void ExpandDotnetAvailableLanguages(
@@ -1364,11 +1555,9 @@ public sealed class DotnetRustParityTests : IDisposable
                     "collapsed translation-languages screenshot should keep the dotnet expander collapsed");
             }
 
-            ScrollHelper.MouseScrollToPercent(
-                rustWindow,
-                step.ScrollPercent,
-                message => _output.WriteLine($"[{step.Key}][rust] {message}"),
-                GetRustPreviewScrollPoint(rustWindow));
+            _output.WriteLine(
+                $"[{step.Key}][rust] Initial preview scroll handled by EASYDICT_PREVIEW_SCROLL_PERCENT={step.ScrollPercent.ToString(CultureInfo.InvariantCulture)}");
+            Thread.Sleep(TimeSpan.FromMilliseconds(1100));
         }
 
         if (step.ExpandAvailableLanguages)
@@ -1699,12 +1888,14 @@ public sealed class DotnetRustParityTests : IDisposable
         double fallbackY,
         string screenshotName)
     {
+        window.SetForeground();
+        Thread.Sleep(180);
         MoveMouseToHoverTarget(window, automationIdOrName, fallbackX, fallbackY);
         Mouse.Down(MouseButton.Left);
         try
         {
             Thread.Sleep(180);
-            return ScreenshotHelper.CaptureWindow(window, screenshotName);
+            return CaptureWindowPreferHwnd(window, screenshotName);
         }
         finally
         {
@@ -1781,6 +1972,42 @@ public sealed class DotnetRustParityTests : IDisposable
         }
     }
 
+    private static string SafeElementName(AutomationElement element)
+    {
+        try
+        {
+            return element.Name ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeElementAutomationId(AutomationElement element)
+    {
+        try
+        {
+            return element.AutomationId ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeElementIsOffscreen(AutomationElement element)
+    {
+        try
+        {
+            return element.IsOffscreen.ToString();
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return "unknown";
+        }
+    }
+
     private static void ArrangeSideBySide(Window dotnetWindow, Window rustWindow)
     {
         var screen = ScreenshotHelper.GetVirtualScreenBounds();
@@ -1791,8 +2018,51 @@ public sealed class DotnetRustParityTests : IDisposable
         var left = screen.Left + 24;
 
         TrySetWindowToPhysicalTarget(dotnetWindow, new Rectangle(left, top, width, height));
-        TrySetWindowToPhysicalTarget(rustWindow, new Rectangle(left + width + 24, top, width, height));
+        Thread.Sleep(250);
+
+        var dotnetBounds = ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow);
+        var rustWidth = dotnetBounds.Width > 0 ? dotnetBounds.Width : width;
+        var rustHeight = dotnetBounds.Height > 0 ? dotnetBounds.Height : height;
+        var rustLeft = dotnetBounds.Width > 0 ? dotnetBounds.Right + 24 : left + width + 24;
+        var rustTop = dotnetBounds.Height > 0 ? dotnetBounds.Top : top;
+        if (rustLeft + rustWidth > screen.Right || rustTop + rustHeight > screen.Bottom)
+        {
+            rustLeft = ClampWindowStart(left, rustWidth, screen.Left, screen.Right);
+            rustTop = ClampWindowStart(top, rustHeight, screen.Top, screen.Bottom);
+        }
+
+        TrySetWindowToPhysicalTarget(rustWindow, new Rectangle(rustLeft, rustTop, rustWidth, rustHeight));
         Thread.Sleep(600);
+    }
+
+    private static void ArrangeSettingsWindowsForCapture(Window dotnetWindow, Window rustWindow)
+    {
+        // Settings parity cares about absolute dimensions. On constrained desktops
+        // two full-size settings windows cannot fit side-by-side, so capture them
+        // from the same effective target and bring each foreground before its own
+        // screenshot. That keeps window-size evidence honest instead of shrinking
+        // one side just to make a contact sheet convenient.
+        ArrangeSettingsWindowForCapture(dotnetWindow);
+        Thread.Sleep(250);
+
+        ArrangeSettingsWindowForCapture(rustWindow);
+        Thread.Sleep(600);
+    }
+
+    private static void ArrangeSettingsWindowForCapture(Window window)
+    {
+        const double settingsWidthDips = 846;
+        const double settingsHeightDips = 913;
+
+        var screen = ScreenshotHelper.GetVirtualScreenBounds();
+        var target = ClampPhysicalTargetToScreen(
+            new Rectangle(
+                screen.Left + 24,
+                screen.Top + 30,
+                DipsToPhysicalPixels(settingsWidthDips, ScreenshotHelper.GetWindowDpiScale(window)),
+                DipsToPhysicalPixels(settingsHeightDips, ScreenshotHelper.GetWindowDpiScale(window))),
+            screen);
+        TrySetWindowToPhysicalTargetWithFrameCompensation(window, target);
     }
 
     private static void ArrangeFloatingSideBySide(
@@ -1809,12 +2079,77 @@ public sealed class DotnetRustParityTests : IDisposable
         var top = screen.Top + 80;
 
         TrySetWindowToPhysicalTarget(dotnetWindow, new Rectangle(left, top, width, height));
-        TrySetWindowToPhysicalTarget(rustWindow, new Rectangle(left + width + gap, top, width, height));
+        Thread.Sleep(250);
+
+        var dotnetBounds = ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow);
+        var rustWidth = dotnetBounds.Width > 0 ? dotnetBounds.Width : width;
+        var rustHeight = dotnetBounds.Height > 0 ? dotnetBounds.Height : height;
+        var rustTop = dotnetBounds.Height > 0 ? dotnetBounds.Top : top;
+        var rustLeft = dotnetBounds.Width > 0 ? dotnetBounds.Right + gap : left + width + gap;
+        if (rustLeft + rustWidth > screen.Right || rustTop + rustHeight > screen.Bottom)
+        {
+            rustLeft = ClampWindowStart(left, rustWidth, screen.Left, screen.Right);
+            rustTop = ClampWindowStart(top, rustHeight, screen.Top, screen.Bottom);
+        }
+
+        TrySetWindowToPhysicalTarget(rustWindow, new Rectangle(rustLeft, rustTop, rustWidth, rustHeight));
         Thread.Sleep(600);
+    }
+
+    private static int ClampWindowStart(int preferred, int size, int min, int max)
+    {
+        if (max <= min || size >= max - min)
+        {
+            return min;
+        }
+
+        return Math.Min(Math.Max(preferred, min), max - size);
+    }
+
+    private static Rectangle ClampPhysicalTargetToScreen(Rectangle preferred, Rectangle screen)
+    {
+        if (screen.Width <= 0 || screen.Height <= 0)
+        {
+            return preferred;
+        }
+
+        var width = Math.Min(preferred.Width, screen.Width);
+        var height = Math.Min(preferred.Height, screen.Height);
+        return new Rectangle(
+            ClampWindowStart(preferred.Left, width, screen.Left, screen.Right),
+            ClampWindowStart(preferred.Top, height, screen.Top, screen.Bottom),
+            width,
+            height);
+    }
+
+    private static int DipsToPhysicalPixels(double dips, double dpiScale) =>
+        (int)Math.Round(dips * Math.Max(0.001, dpiScale));
+
+    private void ConfigureRustMainPreviewSizeFromReference(Window referenceWindow)
+    {
+        var bounds = ScreenshotHelper.GetWindowPhysicalBounds(referenceWindow);
+        var scale = ScreenshotHelper.GetWindowDpiScale(referenceWindow);
+        if (bounds.Width <= 0 || bounds.Height <= 0 || scale <= 0)
+        {
+            return;
+        }
+
+        var widthDips = bounds.Width / scale;
+        var heightDips = bounds.Height / scale;
+        Environment.SetEnvironmentVariable(
+            "EASYDICT_PREVIEW_WIDTH_DIPS",
+            widthDips.ToString("0.###", CultureInfo.InvariantCulture));
+        Environment.SetEnvironmentVariable(
+            "EASYDICT_PREVIEW_HEIGHT_DIPS",
+            heightDips.ToString("0.###", CultureInfo.InvariantCulture));
+        _output.WriteLine(
+            $"Rust preview initial main size: {widthDips:0.###}x{heightDips:0.###} DIP from reference window {bounds.Width}x{bounds.Height}px @ {scale:0.###}x.");
     }
 
     private static void TrySetWindowToPhysicalTarget(Window window, Rectangle physicalTarget)
     {
+        TryRestoreWindow(window);
+
         var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
         var requestedBounds = new Rectangle(
             (int)Math.Round(physicalTarget.Left / dpiScale),
@@ -1823,6 +2158,62 @@ public sealed class DotnetRustParityTests : IDisposable
             (int)Math.Round(physicalTarget.Height / dpiScale));
 
         ScreenshotHelper.TrySetWindowPhysicalBounds(window, requestedBounds);
+        Thread.Sleep(120);
+
+        var logicalAttemptBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        if (WindowSizeDistance(logicalAttemptBounds, physicalTarget) <= 8)
+        {
+            return;
+        }
+
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window, physicalTarget);
+        Thread.Sleep(120);
+
+        var physicalAttemptBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        if (WindowSizeDistance(physicalAttemptBounds, physicalTarget) >
+            WindowSizeDistance(logicalAttemptBounds, physicalTarget))
+        {
+            ScreenshotHelper.TrySetWindowPhysicalBounds(window, requestedBounds);
+            Thread.Sleep(120);
+        }
+    }
+
+    private static void TrySetWindowToPhysicalTargetWithFrameCompensation(
+        Window window,
+        Rectangle physicalTarget)
+    {
+        TrySetWindowToPhysicalTarget(window, physicalTarget);
+
+        var actual = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        if (actual.Width <= 0 || actual.Height <= 0 ||
+            WindowSizeDistance(actual, physicalTarget) <= 8)
+        {
+            return;
+        }
+
+        var adjusted = new Rectangle(
+            physicalTarget.Left - (actual.Left - physicalTarget.Left),
+            physicalTarget.Top - (actual.Top - physicalTarget.Top),
+            physicalTarget.Width + (physicalTarget.Width - actual.Width),
+            physicalTarget.Height + (physicalTarget.Height - actual.Height));
+
+        ScreenshotHelper.TrySetWindowPhysicalBounds(window, adjusted);
+        Thread.Sleep(160);
+    }
+
+    private static int WindowSizeDistance(Rectangle actual, Rectangle target) =>
+        Math.Abs(actual.Width - target.Width) + Math.Abs(actual.Height - target.Height);
+
+    private static void TryRestoreWindow(Window window)
+    {
+        var hwnd = SafeNativeWindowHandle(window);
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        ShowWindow(hwnd, ShowWindowRestore);
+        Thread.Sleep(80);
     }
 
     private static void AssertWindowFullyVisible(Window window, string stepKey, string label)
@@ -1877,6 +2268,13 @@ public sealed class DotnetRustParityTests : IDisposable
         }
     }
 
+    private static string CaptureForegroundWindow(Window window, string name)
+    {
+        window.SetForeground();
+        Thread.Sleep(250);
+        return CaptureWindowPreferHwnd(window, name);
+    }
+
     private static string SaveSideBySideComparison(string dotnetPath, string rustPath, string name)
     {
         using var dotnet = new Bitmap(dotnetPath);
@@ -1921,10 +2319,16 @@ public sealed class DotnetRustParityTests : IDisposable
                 step.FocusedElement,
                 step.PressedElement
             }
+            .Concat(AdditionalRequiredSettingsSemanticTags(step))
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .Select(tag => tag!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        var referenceWindow = CaptureWindowManifest(dotnetWindow);
+        var candidateWindow = CaptureWindowManifest(rustWindow);
+        var referenceExpectedWindowDips = ExpectedSettingsWindowDips(step);
+        var candidateExpectedWindowDips = ExpectedSettingsWindowDips(step);
 
         return new UiParityManifestEntry(
             ScenarioId: step.Key,
@@ -1937,13 +2341,165 @@ public sealed class DotnetRustParityTests : IDisposable
             ReferenceScreenshot: ToOutputRelativePath(dotnetPath),
             CandidateScreenshot: ToOutputRelativePath(rustPath),
             SideBySideScreenshot: ToOutputRelativePath(sideBySidePath),
-            ReferenceWindow: CaptureWindowManifest(dotnetWindow),
-            CandidateWindow: CaptureWindowManifest(rustWindow),
-            Regions: UiParityRegion.DefaultSettingsRegions,
+            ReferenceWindow: referenceWindow,
+            CandidateWindow: candidateWindow,
+            Regions: SelectSettingsRegions(step),
             RequiredSemanticTags: requiredSemanticTags,
             ReferenceUiSummary: CaptureUiSummary(dotnetWindow),
-            CandidateUiSummary: CaptureRustUiSummary(rustWindow, rustSchemaPath));
+            CandidateUiSummary: CaptureRustUiSummary(rustWindow, rustSchemaPath, step),
+            ReferenceExpectedWindowDips: referenceExpectedWindowDips,
+            ReferenceWindowSizeAudit: referenceExpectedWindowDips is null
+                ? null
+                : CreateWindowSizeAudit(referenceExpectedWindowDips, referenceWindow),
+            CandidateExpectedWindowDips: candidateExpectedWindowDips,
+            CandidateWindowSizeAudit: candidateExpectedWindowDips is null
+                ? null
+                : CreateWindowSizeAudit(candidateExpectedWindowDips, candidateWindow),
+            RequiredVisibleTexts: AdditionalRequiredSettingsVisibleText(step.Section),
+            BaselineScenarioId: step.BaselineScenarioId,
+            RequiredControlStates: RequiredSettingsControlStates(step));
     }
+
+    private static IReadOnlyList<UiParityRegion> SelectSettingsRegions(SettingsParityCaptureStep step)
+    {
+        return step.HoveredTab != null || step.PressedTab != null
+            ? UiParityRegion.SettingsTabInteractionRegions
+            : UiParityRegion.DefaultSettingsRegions;
+    }
+
+    private static UiParitySize? ExpectedSettingsWindowDips(SettingsParityCaptureStep _) =>
+        // Rust settings_window_options() mirrors the WinUI settings target before
+        // monitor work-area clamping. Keep this explicit so visual parity reports
+        // cannot hide a wrong absolute settings window size behind normalization.
+        new(846, 913);
+
+    private static IReadOnlyList<string> AdditionalRequiredSettingsSemanticTags(
+        SettingsParityCaptureStep step)
+        => AdditionalRequiredSettingsSemanticTags(step.Section);
+
+    private static IReadOnlyList<string> AdditionalRequiredSettingsSemanticTags(
+        SettingsParitySection section)
+    {
+        return section == SettingsParitySection.About
+            ?
+            [
+                "AboutHeaderText",
+                "AboutAppNameText",
+                "VersionText",
+                "GitHubRepositoryLink",
+                "IssueFeedbackLink",
+                "InspiredByLink"
+            ]
+            : [];
+    }
+
+    private static IReadOnlyList<string> AdditionalRequiredSettingsVisibleText(SettingsParitySection section)
+    {
+        return section == SettingsParitySection.About
+            ? ["Inspired by", "License: GPL-3.0"]
+            : [];
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> RequiredSettingsControlStates(
+        SettingsParityCaptureStep step)
+    {
+        var states = new SortedDictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        AddRequiredControlStates(states, $"SettingsTab_{step.Section.Label}", "selected");
+
+        if (step.HoveredTab is { } hoveredTab)
+        {
+            AddRequiredControlStates(states, $"SettingsTab_{hoveredTab.Label}", "hovered");
+        }
+
+        if (step.PressedTab is { } pressedTab)
+        {
+            AddRequiredControlStates(states, $"SettingsTab_{pressedTab.Label}", "hovered", "pressed");
+        }
+
+        if (step.HoveredElement is { } hoveredElement)
+        {
+            AddRequiredControlStates(states, hoveredElement, "hovered");
+        }
+
+        if (step.PressedElement is { } pressedElement)
+        {
+            AddRequiredControlStates(states, pressedElement, "hovered", "pressed");
+        }
+
+        if (step.FocusedElement is { } focusedElement)
+        {
+            AddRequiredControlStates(states, focusedElement, "focused");
+        }
+
+        return states;
+    }
+
+    private static void AddRequiredControlStates(
+        IDictionary<string, IReadOnlyList<string>> states,
+        string automationId,
+        params string[] requiredStates)
+    {
+        if (string.IsNullOrWhiteSpace(automationId) || requiredStates.Length == 0)
+        {
+            return;
+        }
+
+        var merged = states.TryGetValue(automationId, out var existing)
+            ? existing.Concat(requiredStates)
+            : requiredStates;
+        states[automationId] = merged
+            .Select(state => state.Trim())
+            .Where(state => !string.IsNullOrWhiteSpace(state))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(state => state, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static UiParityWindowSizeAudit CreateWindowSizeAudit(
+        UiParitySize expectedWindowDips,
+        UiParityWindowManifest window)
+    {
+        var dpiScale = Math.Max(0.001, window.DpiScale);
+        var actualWindowDips = new UiParitySize(
+            Round2(window.Bounds.Width / dpiScale),
+            Round2(window.Bounds.Height / dpiScale));
+        var monitorWorkAreaDips = EstimateMonitorWorkAreaDips(window, dpiScale);
+        var deltaDips = new UiParitySize(
+            Round2(actualWindowDips.Width - expectedWindowDips.Width),
+            Round2(actualWindowDips.Height - expectedWindowDips.Height));
+        var deltaPercent = new UiParitySize(
+            Round2(PercentDelta(expectedWindowDips.Width, actualWindowDips.Width)),
+            Round2(PercentDelta(expectedWindowDips.Height, actualWindowDips.Height)));
+
+        return new UiParityWindowSizeAudit(
+            ExpectedWindowDips: expectedWindowDips,
+            ActualWindowDips: actualWindowDips,
+            DeltaDips: deltaDips,
+            DeltaPercent: deltaPercent,
+            MonitorWorkAreaDips: monitorWorkAreaDips,
+            ExpectedLargerThanWorkArea: expectedWindowDips.Width > monitorWorkAreaDips.Width ||
+                                        expectedWindowDips.Height > monitorWorkAreaDips.Height);
+    }
+
+    private static UiParitySize EstimateMonitorWorkAreaDips(
+        UiParityWindowManifest window,
+        double dpiScale)
+    {
+        var virtualWidth = window.VirtualScreenBounds.Width;
+        var virtualHeight = window.VirtualScreenBounds.Height;
+        var boundsAppearPhysicalAgainstLogicalScreen =
+            dpiScale > 1.01 &&
+            (window.Bounds.Width > virtualWidth * 1.05 ||
+             window.Bounds.Height > virtualHeight * 1.05);
+        return boundsAppearPhysicalAgainstLogicalScreen
+            ? new UiParitySize(Round2(virtualWidth), Round2(virtualHeight))
+            : new UiParitySize(Round2(virtualWidth / dpiScale), Round2(virtualHeight / dpiScale));
+    }
+
+    private static double PercentDelta(double expected, double actual) =>
+        Math.Abs(expected) < double.Epsilon ? 0 : ((actual - expected) / expected) * 100d;
+
+    private static double Round2(double value) => Math.Round(value, 2);
 
     private static UiParityManifestEntry CreateMainManifestEntry(
         string scenarioId,
@@ -1955,7 +2511,8 @@ public sealed class DotnetRustParityTests : IDisposable
         string sideBySidePath,
         IReadOnlyList<UiParityRegion> regions,
         IReadOnlyList<string> requiredSemanticTags,
-        string? windowKindOverride = null)
+        string? windowKindOverride = null,
+        string? rustSchemaPath = null)
     {
         var windowKind = windowKindOverride
             ?? (scenarioId.StartsWith("effects.", StringComparison.OrdinalIgnoreCase)
@@ -1977,7 +2534,7 @@ public sealed class DotnetRustParityTests : IDisposable
             Regions: regions,
             RequiredSemanticTags: requiredSemanticTags,
             ReferenceUiSummary: CaptureUiSummary(dotnetWindow),
-            CandidateUiSummary: CaptureUiSummary(rustWindow));
+            CandidateUiSummary: CaptureRustUiSummary(rustWindow, rustSchemaPath));
     }
 
     private static UiParityManifestEntry CreatePopButtonManifestEntry(
@@ -2039,7 +2596,10 @@ public sealed class DotnetRustParityTests : IDisposable
     }
 
     private static UiParityUiSummary EmptyUiSummary() =>
-        new(new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase), []);
+        new(
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+            [],
+            new Dictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase));
 
     private static UiParityWindowManifest CaptureWindowManifest(Window window)
     {
@@ -2113,10 +2673,17 @@ public sealed class DotnetRustParityTests : IDisposable
         counts["tabItem"] = CountDescendants(window, ControlType.TabItem);
         counts["text"] = CountDescendants(window, ControlType.Text);
 
-        return new UiParityUiSummary(counts, CollectVisibleAutomationIds(window));
+        return new UiParityUiSummary(
+            counts,
+            CollectVisibleAutomationIds(window),
+            CollectVisibleControlDimensions(window),
+            CollectVisibleTexts(window));
     }
 
-    private static UiParityUiSummary CaptureRustUiSummary(Window window, string? schemaPath)
+    private static UiParityUiSummary CaptureRustUiSummary(
+        Window window,
+        string? schemaPath,
+        SettingsParityCaptureStep? step = null)
     {
         var nativeSummary = CaptureUiSummary(window);
         if (nativeSummary.VisibleAutomationIds.Count > 0)
@@ -2124,10 +2691,12 @@ public sealed class DotnetRustParityTests : IDisposable
             return nativeSummary;
         }
 
-        return TryReadRustSchemaUiSummary(schemaPath) ?? nativeSummary;
+        return TryReadRustSchemaUiSummary(schemaPath, step) ?? nativeSummary;
     }
 
-    private static UiParityUiSummary? TryReadRustSchemaUiSummary(string? schemaPath)
+    private static UiParityUiSummary? TryReadRustSchemaUiSummary(
+        string? schemaPath,
+        SettingsParityCaptureStep? step = null)
     {
         if (string.IsNullOrWhiteSpace(schemaPath) || !File.Exists(schemaPath))
         {
@@ -2136,6 +2705,9 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var counts = EmptyControlCounts();
         var ids = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dimensions = new SortedDictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase);
+        var visibleTexts = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scope = RustSchemaSummaryScope.FromStep(step);
         foreach (var line in File.ReadLines(schemaPath))
         {
             var trimmed = line.TrimStart();
@@ -2146,16 +2718,186 @@ public sealed class DotnetRustParityTests : IDisposable
 
             var kindEnd = trimmed.IndexOf(' ');
             var kind = kindEnd < 0 ? trimmed : trimmed[..kindEnd];
-            IncrementSchemaControlCount(counts, kind);
+            var automationId = TryExtractRustSchemaId(trimmed);
+            scope.Update(automationId);
 
-            if (TryExtractRustSchemaId(trimmed) is { } automationId)
+            if (kind == "TitleBar" &&
+                trimmed.Contains("caption_controls=true", StringComparison.Ordinal) &&
+                scope.ShouldIncludeTitleBarChrome())
+            {
+                AddRustSchemaTitleBarSummary(counts, ids);
+            }
+
+            if (!scope.ShouldIncludeLine(kind, automationId, trimmed))
+            {
+                continue;
+            }
+
+            var summaryKind = kind == "Button" &&
+                trimmed.Contains("kind=Link", StringComparison.Ordinal)
+                    ? "Hyperlink"
+                    : kind;
+            IncrementSchemaControlCount(counts, summaryKind);
+
+            if (summaryKind == "Button" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } buttonLabel)
+            {
+                IncrementSchemaControlCount(counts, "Text");
+                visibleTexts.Add(buttonLabel);
+            }
+
+            if (kind == "Text" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "value") is { Length: > 0 } textValue)
+            {
+                visibleTexts.Add(textValue);
+            }
+
+            if (kind == "Text" && scope.IsSettingsViewsMainWindowHeader(trimmed))
+            {
+                ids.Add("MainWindowHeaderText");
+            }
+
+            if (automationId is not null && scope.ShouldIncludeAutomationId(automationId))
             {
                 ids.Add(automationId);
             }
+
+            if (automationId is not null)
+            {
+                dimensions[automationId] = ExtractRustSchemaControlDimension(kind, trimmed);
+            }
         }
 
-        return new UiParityUiSummary(counts, ids.ToArray());
+        return new UiParityUiSummary(counts, ids.ToArray(), dimensions, visibleTexts.ToArray());
     }
+
+    private static IReadOnlyList<string> CollectVisibleTexts(Window window)
+    {
+        try
+        {
+            var texts = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in window.FindAllDescendants().Where(IsOnScreenOrUnknown))
+            {
+                var text = SafeElementName(element).Trim();
+                if (text.Length > 0)
+                {
+                    texts.Add(text);
+                }
+            }
+
+            return texts.ToArray();
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyDictionary<string, UiParityControlDimension> CollectVisibleControlDimensions(Window window)
+    {
+        try
+        {
+            var dimensions = new Dictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase);
+            var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
+            var windowBounds = window.BoundingRectangle;
+            foreach (var element in window.FindAllDescendants().Where(IsOnScreenOrUnknown))
+            {
+                var automationId = SafeElementAutomationId(element);
+                if (string.IsNullOrWhiteSpace(automationId))
+                {
+                    continue;
+                }
+
+                var bounds = element.BoundingRectangle;
+                if (bounds.Width <= 0 || bounds.Height <= 0)
+                {
+                    continue;
+                }
+
+                dimensions[automationId] = new UiParityControlDimension(
+                    Kind: SafeControlTypeName(element),
+                    Width: FormatDip(bounds.Width / dpiScale),
+                    Height: FormatDip(bounds.Height / dpiScale),
+                    BoundsDips: new UiParityControlBoundsDips(
+                        Left: Round2((bounds.Left - windowBounds.Left) / dpiScale),
+                        Top: Round2((bounds.Top - windowBounds.Top) / dpiScale),
+                        Width: Round2(bounds.Width / dpiScale),
+                        Height: Round2(bounds.Height / dpiScale)));
+            }
+
+            return dimensions;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return new Dictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static UiParityControlDimension ExtractRustSchemaControlDimension(string kind, string schemaLine) =>
+        new(
+            Kind: kind,
+            State: TryExtractRustSchemaTokenValue(schemaLine, "state"),
+            Width: TryExtractRustSchemaTokenValue(schemaLine, "width"),
+            LabeledWidth: TryExtractRustSchemaTokenValue(schemaLine, "labeled_width"),
+            Height: TryExtractRustSchemaTokenValue(schemaLine, "height"),
+            LabeledHeight: TryExtractRustSchemaTokenValue(schemaLine, "labeled_height"),
+            MaxWidth: TryExtractRustSchemaTokenValue(schemaLine, "max_width"),
+            MinWidth: TryExtractRustSchemaTokenValue(schemaLine, "min_width"),
+            MinHeight: TryExtractRustSchemaTokenValue(schemaLine, "min_height"),
+            MaxHeight: TryExtractRustSchemaTokenValue(schemaLine, "max_height"),
+            Padding: TryExtractRustSchemaTokenValue(schemaLine, "padding"),
+            Spacing: TryExtractRustSchemaTokenValue(schemaLine, "spacing"),
+            RowSpacing: TryExtractRustSchemaTokenValue(schemaLine, "run_spacing"),
+            ColumnSpacing: TryExtractRustSchemaTokenValue(schemaLine, "column_spacing"),
+            Columns: TryExtractRustSchemaTokenValue(schemaLine, "columns"),
+            MaximumRowsOrColumns: TryExtractRustSchemaTokenValue(schemaLine, "max_columns"),
+            Margin: TryExtractRustSchemaEdgesValue(schemaLine, "margin"));
+
+    private static string? TryExtractRustSchemaTokenValue(string schemaLine, string name)
+    {
+        var marker = $" {name}=";
+        var markerIndex = schemaLine.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return null;
+        }
+
+        var valueStart = markerIndex + marker.Length;
+        var valueEnd = schemaLine.IndexOf(' ', valueStart);
+        var value = valueEnd < 0 ? schemaLine[valueStart..] : schemaLine[valueStart..valueEnd];
+        return string.IsNullOrWhiteSpace(value) || value == "none" ? null : value;
+    }
+
+    private static string? TryExtractRustSchemaEdgesValue(string schemaLine, string name)
+    {
+        var marker = $" {name}=Edges {{";
+        var markerIndex = schemaLine.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return TryExtractRustSchemaTokenValue(schemaLine, name);
+        }
+
+        var valueStart = markerIndex + $" {name}=".Length;
+        var valueEnd = schemaLine.IndexOf(" }", valueStart, StringComparison.Ordinal);
+        return valueEnd < 0
+            ? schemaLine[valueStart..]
+            : schemaLine[valueStart..(valueEnd + 2)];
+    }
+
+    private static string SafeControlTypeName(AutomationElement element)
+    {
+        try
+        {
+            return element.ControlType.ToString();
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return "Control";
+        }
+    }
+
+    private static string FormatDip(double value) =>
+        Round2(value).ToString("0.##", CultureInfo.InvariantCulture);
 
     private static Dictionary<string, int> EmptyControlCounts() =>
         new(StringComparer.OrdinalIgnoreCase)
@@ -2176,7 +2918,8 @@ public sealed class DotnetRustParityTests : IDisposable
         var bucket = kind switch
         {
             "Button" or "FlyoutButton" => "button",
-            "ToggleSwitch" => "checkbox",
+            "CheckBox" => "checkbox",
+            "ToggleSwitch" => "button",
             "ComboBox" => "comboBox",
             "TextEditor" => "edit",
             "Link" or "Hyperlink" => "hyperlink",
@@ -2190,6 +2933,17 @@ public sealed class DotnetRustParityTests : IDisposable
         if (bucket != null)
         {
             counts[bucket] = counts.TryGetValue(bucket, out var count) ? count + 1 : 1;
+        }
+    }
+
+    private static void AddRustSchemaTitleBarSummary(
+        IDictionary<string, int> counts,
+        ISet<string> ids)
+    {
+        counts["button"] = counts.TryGetValue("button", out var count) ? count + 3 : 3;
+        foreach (var id in new[] { "TitleBar", "SystemMenuBar", "Minimize", "Maximize", "Close" })
+        {
+            ids.Add(id);
         }
     }
 
@@ -2210,6 +2964,237 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var endQuote = value.IndexOf('"', 1);
         return endQuote <= 1 ? null : value[1..endQuote];
+    }
+
+    private static string? TryExtractRustSchemaQuotedValue(string schemaLine, string name)
+    {
+        var marker = $" {name}=";
+        var markerIndex = schemaLine.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return null;
+        }
+
+        var value = schemaLine[(markerIndex + marker.Length)..].TrimStart();
+        if (value.Length < 2 || value[0] != '"')
+        {
+            return null;
+        }
+
+        var endQuote = value.IndexOf('"', 1);
+        return endQuote <= 1 ? null : value[1..endQuote];
+    }
+
+    private sealed class RustSchemaSummaryScope
+    {
+        private string _currentViewsWindow = string.Empty;
+        private int _mainServiceCheckboxCount;
+        private bool _lastMainServiceVisible;
+
+        private RustSchemaSummaryScope(string sectionId)
+        {
+            SectionId = sectionId;
+        }
+
+        public string SectionId { get; }
+
+        public bool IsSettings => !string.IsNullOrWhiteSpace(SectionId);
+
+        public static RustSchemaSummaryScope FromStep(SettingsParityCaptureStep? step) =>
+            new(step?.Section.Id ?? string.Empty);
+
+        public void Update(string? automationId)
+        {
+            if (!IsSettings ||
+                !SectionId.Equals("views", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(automationId))
+            {
+                return;
+            }
+
+            _currentViewsWindow = automationId switch
+            {
+                "settings.views.main" => "main",
+                "settings.views.mini" => "mini",
+                "settings.views.fixed" => "fixed",
+                _ => _currentViewsWindow
+            };
+            if (automationId is "settings.views.main" or "settings.views.mini" or "settings.views.fixed")
+            {
+                _lastMainServiceVisible = false;
+            }
+        }
+
+        public bool ShouldIncludeTitleBarChrome() =>
+            !IsSettings ||
+            SectionId.Equals("general", StringComparison.OrdinalIgnoreCase) ||
+            SectionId.Equals("views", StringComparison.OrdinalIgnoreCase) ||
+            SectionId.Equals("about", StringComparison.OrdinalIgnoreCase);
+
+        public bool ShouldIncludeLine(string kind, string? automationId, string line)
+        {
+            if (!IsSettings)
+            {
+                return true;
+            }
+
+            if (automationId is "BackButton" or "SettingsHeaderText" or "MainScrollViewer")
+            {
+                return true;
+            }
+            if (automationId?.StartsWith("SettingsTab_", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return true;
+            }
+
+            if (SectionId.Equals("views", StringComparison.OrdinalIgnoreCase))
+            {
+                if (automationId is "WindowResultsHeaderText" or
+                    "WindowResultsDescriptionText" or
+                    "MainWindowReorderModeButton")
+                {
+                    return true;
+                }
+                if (IsSettingsViewsMainWindowHeader(line))
+                {
+                    return true;
+                }
+                if (kind == "CheckBox" &&
+                    _currentViewsWindow == "main" &&
+                    IsMainServiceEnabledId(automationId))
+                {
+                    _mainServiceCheckboxCount++;
+                    _lastMainServiceVisible = _mainServiceCheckboxCount <= 16;
+                    return _lastMainServiceVisible;
+                }
+                if (kind == "ToggleSwitch" &&
+                    _currentViewsWindow == "main" &&
+                    IsMainServiceEnabledQueryId(automationId))
+                {
+                    return _lastMainServiceVisible;
+                }
+
+                return false;
+            }
+
+            if (SectionId.Equals("general", StringComparison.OrdinalIgnoreCase))
+            {
+                return automationId is "SettingsGeneralBehaviorHeader" or
+                    "AppThemeCombo" or
+                    "AppThemeDescriptionText" or
+                    "MinimizeToTrayToggle" or
+                    "MinimizeToTrayOnStartupToggle" or
+                    "ClipboardMonitorToggle" or
+                    "MouseSelectionTranslateToggle" or
+                    "MouseSelectionExcludedAppsBox" or
+                    "MouseSelectionExcludedAppsDescriptionText" or
+                    "AlwaysOnTopToggle" or
+                    "LaunchAtStartupToggle" or
+                    "HideEmptyServiceResultsToggle" or
+                    "EnableLocalDictionarySuggestionsHeader" or
+                    "EnableLocalDictionarySuggestionsLabelText" or
+                    "ExperimentalLabelText" or
+                    "EnableLocalDictionarySuggestionsHintText" or
+                    "EnableLocalDictionarySuggestionsToggle" or
+                    "TtsSettingsHeaderText" or
+                    "TtsSpeedLabelText" or
+                    "TtsSpeedSlider" or
+                    "AutoPlayTranslationToggle";
+            }
+
+            if (SectionId.Equals("about", StringComparison.OrdinalIgnoreCase))
+            {
+                return automationId is "AboutHeaderText" or
+                    "AboutAppNameText" or
+                    "VersionText" or
+                    "GitHubRepositoryLink" or
+                    "IssueFeedbackLink" or
+                    "AboutInspiredByText" or
+                    "InspiredByLink" or
+                    "LicenseText";
+            }
+
+            return true;
+        }
+
+        public bool ShouldIncludeAutomationId(string? automationId)
+        {
+            if (string.IsNullOrWhiteSpace(automationId))
+            {
+                return false;
+            }
+            if (!IsSettings)
+            {
+                return true;
+            }
+            if (automationId is "BackButton" or "MainScrollViewer" or "SettingsHeaderText")
+            {
+                return true;
+            }
+            if (automationId.StartsWith("SettingsTab_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (SectionId.Equals("views", StringComparison.OrdinalIgnoreCase))
+            {
+                return automationId is "WindowResultsHeaderText" or
+                    "WindowResultsDescriptionText" or
+                    "MainWindowHeaderText" or
+                    "MainWindowReorderModeButton";
+            }
+            if (SectionId.Equals("general", StringComparison.OrdinalIgnoreCase))
+            {
+                return automationId is "SettingsGeneralBehaviorHeader" or
+                    "AppThemeCombo" or
+                    "AppThemeDescriptionText" or
+                    "MinimizeToTrayToggle" or
+                    "MinimizeToTrayOnStartupToggle" or
+                    "ClipboardMonitorToggle" or
+                    "MouseSelectionTranslateToggle" or
+                    "MouseSelectionExcludedAppsBox" or
+                    "MouseSelectionExcludedAppsDescriptionText" or
+                    "AlwaysOnTopToggle" or
+                    "LaunchAtStartupToggle" or
+                    "HideEmptyServiceResultsToggle" or
+                    "EnableLocalDictionarySuggestionsHeader" or
+                    "EnableLocalDictionarySuggestionsLabelText" or
+                    "ExperimentalLabelText" or
+                    "EnableLocalDictionarySuggestionsHintText" or
+                    "EnableLocalDictionarySuggestionsToggle" or
+                    "TtsSettingsHeaderText" or
+                    "TtsSpeedLabelText" or
+                    "TtsSpeedSlider" or
+                    "AutoPlayTranslationToggle";
+            }
+            if (SectionId.Equals("about", StringComparison.OrdinalIgnoreCase))
+            {
+                return automationId is "AboutHeaderText" or
+                    "AboutAppNameText" or
+                    "VersionText" or
+                    "GitHubRepositoryLink" or
+                    "IssueFeedbackLink" or
+                    "AboutInspiredByText" or
+                    "InspiredByLink" or
+                    "LicenseText";
+            }
+
+            return true;
+        }
+
+        public bool IsSettingsViewsMainWindowHeader(string line) =>
+            SectionId.Equals("views", StringComparison.OrdinalIgnoreCase) &&
+            _currentViewsWindow == "main" &&
+            line.StartsWith("Text ", StringComparison.Ordinal) &&
+            line.Contains("style=BodyStrong", StringComparison.Ordinal);
+
+        private static bool IsMainServiceEnabledId(string? automationId) =>
+            automationId?.StartsWith("main.", StringComparison.OrdinalIgnoreCase) == true &&
+            automationId.EndsWith(".enabled", StringComparison.OrdinalIgnoreCase) &&
+            !automationId.EndsWith(".enabled_query", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsMainServiceEnabledQueryId(string? automationId) =>
+            automationId?.StartsWith("main.", StringComparison.OrdinalIgnoreCase) == true &&
+            automationId.EndsWith(".enabled_query", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int CountDescendants(Window window, ControlType controlType)
@@ -2272,10 +3257,36 @@ public sealed class DotnetRustParityTests : IDisposable
         var manifest = new UiParityManifest(
             SchemaVersion: "easydict.ui-parity.manifest.v1",
             GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"),
+            UiLanguage: ResolveParityUiLanguage(),
             Scenarios: mergedEntries);
         File.WriteAllText(
             path,
             JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private void EnsureParityDpiAwareness()
+    {
+        if (_parityDpiAwarenessAttempted)
+        {
+            return;
+        }
+
+        _parityDpiAwarenessAttempted = true;
+        try
+        {
+            if (SetProcessDpiAwarenessContext(DpiAwarenessContextPerMonitorAwareV2))
+            {
+                _output.WriteLine("Parity DPI awareness: PerMonitorV2 enabled for physical-pixel capture.");
+                return;
+            }
+
+            _output.WriteLine(
+                $"Parity DPI awareness: SetProcessDpiAwarenessContext was ignored or denied, lastError={Marshal.GetLastWin32Error()}.");
+        }
+        catch (EntryPointNotFoundException)
+        {
+            _output.WriteLine("Parity DPI awareness: SetProcessDpiAwarenessContext is unavailable on this Windows build.");
+        }
     }
 
     private static IReadOnlyList<UiParityManifestEntry> LoadExistingManifestEntries(string path)
@@ -2352,13 +3363,17 @@ public sealed class DotnetRustParityTests : IDisposable
             }
         }
 
-        settings["UILanguage"] = "en-US";
-        settings["AppTheme"] = "Light";
+        settings["UILanguage"] = ResolveParityUiLanguage();
+        settings["AppTheme"] = "System";
         settings["FirstLanguage"] = "zh";
         settings["SecondLanguage"] = "en";
         settings["SelectedLanguages"] = new[] { "zh", "en", "ja", "ko", "fr", "de", "es" };
         settings["AutoSelectTargetLanguage"] = true;
         settings["SourceLanguage"] = "auto";
+        settings["MouseSelectionTranslate"] = true;
+        settings["MouseSelectionExcludedApps"] = new[] { "code" };
+        settings["WindowWidthDips"] = 846.0;
+        settings["WindowHeightDips"] = 913.0;
 
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         File.WriteAllText(
@@ -2373,6 +3388,66 @@ public sealed class DotnetRustParityTests : IDisposable
                 string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(value, "on", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ResolveParityUiLanguage()
+    {
+        var value = Environment.GetEnvironmentVariable(UiLanguageEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(value) ? "en-US" : value.Trim();
+    }
+
+    private static string ResolveDotnetWinUiVersion()
+    {
+        var projectPath = Path.Combine(
+            FindRepositoryRootForParity(),
+            "dotnet",
+            "src",
+            "Easydict.WinUI",
+            "Easydict.WinUI.csproj");
+        if (!File.Exists(projectPath))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var document = System.Xml.Linq.XDocument.Load(projectPath);
+            return document
+                .Descendants("Version")
+                .Select(element => element.Value.Trim())
+                .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+                ?? string.Empty;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string FindRepositoryRootForParity()
+    {
+        foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+        {
+            var current = Path.GetFullPath(start);
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (Directory.Exists(Path.Combine(current, ".git")) ||
+                    File.Exists(Path.Combine(current, ".git")))
+                {
+                    return current;
+                }
+
+                var parent = Path.GetDirectoryName(current);
+                if (string.Equals(parent, current, StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                current = parent ?? string.Empty;
+            }
+        }
+
+        return Directory.GetCurrentDirectory();
     }
 
     private static bool IsExplicitFalse(string? value)
@@ -2411,7 +3486,7 @@ public sealed class DotnetRustParityTests : IDisposable
         public static readonly SettingsParitySection Hotkeys = new("hotkeys", "Hotkeys", "ShowHotkeyBox");
         public static readonly SettingsParitySection Advanced = new("advanced", "Advanced", "OcrEngineCombo");
         public static readonly SettingsParitySection Language = new("language", "Language", "FirstLanguageCombo");
-        public static readonly SettingsParitySection About = new("about", "About", "GitHub Repository");
+        public static readonly SettingsParitySection About = new("about", "About", "GitHubRepositoryLink");
     }
 
     private sealed record SettingsParityCaptureStep(
@@ -2427,6 +3502,7 @@ public sealed class DotnetRustParityTests : IDisposable
         string? PressedElement = null,
         string? RustTtsSpeedState = null,
         string? RustAutoPlayState = null,
+        string? BaselineScenarioId = null,
         double InteractionFallbackX = 0.50,
         double InteractionFallbackY = 0.62)
     {
@@ -2437,12 +3513,14 @@ public sealed class DotnetRustParityTests : IDisposable
                 "parity-settings-tabs-services-hover",
                 SettingsParitySection.General,
                 0,
-                HoveredTab: SettingsParitySection.Services),
+                HoveredTab: SettingsParitySection.Services,
+                BaselineScenarioId: "parity-settings-general-behavior-top"),
             new(
                 "parity-settings-tabs-views-pressed",
                 SettingsParitySection.General,
                 0,
-                PressedTab: SettingsParitySection.Views),
+                PressedTab: SettingsParitySection.Views,
+                BaselineScenarioId: "parity-settings-general-behavior-top"),
             new("parity-settings-general-tts-speed-slider-scroll-100-percent", SettingsParitySection.General, 100),
             new(
                 "parity-settings-general-tts-speed-slider-hover-scroll-100-percent",
@@ -2450,6 +3528,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 100,
                 HoveredElement: "TtsSpeedSlider",
                 RustTtsSpeedState: "hovered",
+                BaselineScenarioId: "parity-settings-general-tts-speed-slider-scroll-100-percent",
                 InteractionFallbackX: 0.36,
                 InteractionFallbackY: 0.64),
             new(
@@ -2458,6 +3537,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 100,
                 FocusedElement: "TtsSpeedSlider",
                 RustTtsSpeedState: "focused",
+                BaselineScenarioId: "parity-settings-general-tts-speed-slider-scroll-100-percent",
                 InteractionFallbackX: 0.36,
                 InteractionFallbackY: 0.64),
             new(
@@ -2466,6 +3546,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 100,
                 HoveredElement: "AutoPlayTranslationToggle",
                 RustAutoPlayState: "hovered",
+                BaselineScenarioId: "parity-settings-general-tts-speed-slider-scroll-100-percent",
                 InteractionFallbackX: 0.28,
                 InteractionFallbackY: 0.74),
             new(
@@ -2474,6 +3555,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 100,
                 FocusedElement: "AutoPlayTranslationToggle",
                 RustAutoPlayState: "focused",
+                BaselineScenarioId: "parity-settings-general-tts-speed-slider-scroll-100-percent",
                 InteractionFallbackX: 0.28,
                 InteractionFallbackY: 0.74),
             new("parity-settings-services-translation-service-configuration-top", SettingsParitySection.Services, 0),
@@ -2495,6 +3577,7 @@ public sealed class DotnetRustParityTests : IDisposable
     private sealed record UiParityManifest(
         string SchemaVersion,
         string GeneratedAtUtc,
+        string UiLanguage,
         IReadOnlyList<UiParityManifestEntry> Scenarios);
 
     private sealed record UiParityManifestEntry(
@@ -2513,7 +3596,14 @@ public sealed class DotnetRustParityTests : IDisposable
         IReadOnlyList<UiParityRegion> Regions,
         IReadOnlyList<string> RequiredSemanticTags,
         UiParityUiSummary ReferenceUiSummary,
-        UiParityUiSummary CandidateUiSummary);
+        UiParityUiSummary CandidateUiSummary,
+        UiParitySize? ReferenceExpectedWindowDips = null,
+        UiParityWindowSizeAudit? ReferenceWindowSizeAudit = null,
+        UiParitySize? CandidateExpectedWindowDips = null,
+        UiParityWindowSizeAudit? CandidateWindowSizeAudit = null,
+        IReadOnlyList<string>? RequiredVisibleTexts = null,
+        string? BaselineScenarioId = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? RequiredControlStates = null);
 
     private sealed record UiParityWindowManifest(
         UiParityBounds Bounds,
@@ -2531,9 +3621,47 @@ public sealed class DotnetRustParityTests : IDisposable
 
     private sealed record UiParityBounds(int Left, int Top, int Width, int Height);
 
+    private sealed record UiParitySize(double Width, double Height);
+
+    private sealed record UiParityWindowSizeAudit(
+        UiParitySize ExpectedWindowDips,
+        UiParitySize ActualWindowDips,
+        UiParitySize DeltaDips,
+        UiParitySize DeltaPercent,
+        UiParitySize MonitorWorkAreaDips,
+        bool ExpectedLargerThanWorkArea);
+
     private sealed record UiParityUiSummary(
         IReadOnlyDictionary<string, int> VisibleControlCounts,
-        IReadOnlyList<string> VisibleAutomationIds);
+        IReadOnlyList<string> VisibleAutomationIds,
+        IReadOnlyDictionary<string, UiParityControlDimension> VisibleControlDimensions,
+        IReadOnlyList<string>? VisibleTexts = null);
+
+    private sealed record UiParityControlDimension(
+        string? Kind = null,
+        string? State = null,
+        string? Width = null,
+        string? LabeledWidth = null,
+        string? Height = null,
+        string? LabeledHeight = null,
+        string? MaxWidth = null,
+        string? MinWidth = null,
+        string? MinHeight = null,
+        string? MaxHeight = null,
+        string? Padding = null,
+        string? Spacing = null,
+        string? RowSpacing = null,
+        string? ColumnSpacing = null,
+        string? Columns = null,
+        string? MaximumRowsOrColumns = null,
+        string? Margin = null,
+        UiParityControlBoundsDips? BoundsDips = null);
+
+    private sealed record UiParityControlBoundsDips(
+        double Left,
+        double Top,
+        double Width,
+        double Height);
 
     private sealed record UiParityRegion(
         string Name,
@@ -2549,6 +3677,14 @@ public sealed class DotnetRustParityTests : IDisposable
             new("top-navigation", 0.0, 0.12, 1.0, 0.14, 1.0),
             new("content", 0.0, 0.26, 1.0, 0.64, 2.2),
             new("footer", 0.0, 0.90, 1.0, 0.10, 0.8)
+        ];
+
+        public static readonly IReadOnlyList<UiParityRegion> SettingsTabInteractionRegions =
+        [
+            new("header", 0.0, 0.0, 1.0, 0.12, 0.8),
+            new("top-navigation", 0.0, 0.12, 1.0, 0.14, 4.0),
+            new("content-context", 0.0, 0.26, 1.0, 0.64, 0.2),
+            new("footer-context", 0.0, 0.90, 1.0, 0.10, 0.1)
         ];
 
         public static readonly IReadOnlyList<UiParityRegion> DefaultMainRegions =
@@ -2642,12 +3778,21 @@ public sealed class DotnetRustParityTests : IDisposable
     {
         private readonly Application _application;
         private readonly UIA3Automation _automation;
+        private readonly int _minimumWindowWidth;
+        private readonly int _minimumWindowHeight;
         private bool _disposed;
 
-        private RustPreviewApp(Application application, UIA3Automation automation, string schemaPath)
+        private RustPreviewApp(
+            Application application,
+            UIA3Automation automation,
+            string schemaPath,
+            int minimumWindowWidth = 120,
+            int minimumWindowHeight = 120)
         {
             _application = application;
             _automation = automation;
+            _minimumWindowWidth = minimumWindowWidth;
+            _minimumWindowHeight = minimumWindowHeight;
             SchemaPath = schemaPath;
         }
 
@@ -2664,9 +3809,24 @@ public sealed class DotnetRustParityTests : IDisposable
                 UseShellExecute = false
             };
             UiaSettingsIsolation.ApplyTo(startInfo);
+            startInfo.Environment["EASYDICT_PREVIEW_WINDOW"] = "settings";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_OPEN"] = "1";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_SECTION"] = step.Section.Id;
-            startInfo.Environment["EASYDICT_PREVIEW_THEME"] = "light";
+            startInfo.Environment["EASYDICT_PREVIEW_THEME"] = "system";
+            startInfo.Environment["EASYDICT_PREVIEW_UI_LANGUAGE"] = ResolveParityUiLanguage();
+            startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_MOUSE_SELECTION_TRANSLATE"] = "1";
+            startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP"] = "0";
+            startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_HIDE_EMPTY_SERVICE_RESULTS"] = "1";
+            startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX"] = "1";
+            if (step.Section == SettingsParitySection.Views)
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE"] = "dotnet-reference";
+            }
+            var dotnetVersion = ResolveDotnetWinUiVersion();
+            if (!string.IsNullOrWhiteSpace(dotnetVersion))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_APP_VERSION"] = dotnetVersion;
+            }
             startInfo.Environment["EASYDICT_PREVIEW_SCHEMA_PATH"] = schemaPath;
             if (step.RustTranslationLanguagesExpanded)
             {
@@ -2688,6 +3848,12 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE"] = step.RustAutoPlayState;
             }
+            if (step.ScrollPercent > 0)
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SCROLL_PERCENT"] =
+                    step.ScrollPercent.ToString(CultureInfo.InvariantCulture);
+                startInfo.Environment["EASYDICT_PREVIEW_SCROLL_TARGET"] = "MainScrollViewer";
+            }
 
             var automation = new UIA3Automation();
             try
@@ -2706,7 +3872,9 @@ public sealed class DotnetRustParityTests : IDisposable
             string scenario,
             string theme,
             ITestOutputHelper output,
-            IReadOnlyDictionary<string, string>? extraEnvironment = null)
+            IReadOnlyDictionary<string, string>? extraEnvironment = null,
+            int minimumWindowWidth = 120,
+            int minimumWindowHeight = 120)
         {
             var exePath = ResolveRustPreviewExecutable(output);
             var schemaPath = CreateSchemaPath($"main-{scenario}");
@@ -2717,8 +3885,11 @@ public sealed class DotnetRustParityTests : IDisposable
                 UseShellExecute = false
             };
             UiaSettingsIsolation.ApplyTo(startInfo);
+            startInfo.Environment["EASYDICT_PREVIEW_WINDOW"] = "main";
+            startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_OPEN"] = "0";
             startInfo.Environment["EASYDICT_PREVIEW_SCENARIO"] = scenario;
             startInfo.Environment["EASYDICT_PREVIEW_THEME"] = theme;
+            startInfo.Environment["EASYDICT_PREVIEW_UI_LANGUAGE"] = ResolveParityUiLanguage();
             startInfo.Environment["EASYDICT_PREVIEW_SCHEMA_PATH"] = schemaPath;
             if (extraEnvironment != null)
             {
@@ -2732,7 +3903,12 @@ public sealed class DotnetRustParityTests : IDisposable
             try
             {
                 var application = Application.Launch(startInfo);
-                return new RustPreviewApp(application, automation, schemaPath);
+                return new RustPreviewApp(
+                    application,
+                    automation,
+                    schemaPath,
+                    minimumWindowWidth,
+                    minimumWindowHeight);
             }
             catch
             {
@@ -2751,6 +3927,11 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 ["EASYDICT_PREVIEW_WINDOW"] = windowKind
             };
+            if (string.Equals(windowKind, "mini", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(windowKind, "fixed", StringComparison.OrdinalIgnoreCase))
+            {
+                environment["EASYDICT_PREVIEW_FLOATING_CONTENT"] = "empty";
+            }
             if (extraEnvironment != null)
             {
                 foreach (var (key, value) in extraEnvironment)
@@ -2759,7 +3940,18 @@ public sealed class DotnetRustParityTests : IDisposable
                 }
             }
 
-            return LaunchMainPreview("initial", theme, output, environment);
+            var minimumSize = string.Equals(windowKind, "pop-button", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(windowKind, "popbutton", StringComparison.OrdinalIgnoreCase)
+                ? 20
+                : 120;
+
+            return LaunchMainPreview(
+                "initial",
+                theme,
+                output,
+                environment,
+                minimumWindowWidth: minimumSize,
+                minimumWindowHeight: minimumSize);
         }
 
         private static string CreateSchemaPath(string scenarioId)
@@ -2785,7 +3977,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 {
                     var window = TryGetMainWindowFromProcessHandle()
                         ?? TryGetTopLevelWindowForApplicationProcess()
-                        ?? _application.GetMainWindow(_automation, TimeSpan.FromSeconds(3));
+                        ?? TryGetFallbackMainWindow();
                     if (window != null)
                     {
                         return window;
@@ -2802,6 +3994,12 @@ public sealed class DotnetRustParityTests : IDisposable
             throw new TimeoutException("Rust preview window did not appear in time.", lastException);
         }
 
+        private Window? TryGetFallbackMainWindow()
+        {
+            var window = _application.GetMainWindow(_automation, TimeSpan.FromSeconds(3));
+            return window != null && IsUsableWindow(window) ? window : null;
+        }
+
         private Window? TryGetMainWindowFromProcessHandle()
         {
             try
@@ -2813,7 +4011,8 @@ public sealed class DotnetRustParityTests : IDisposable
                     return null;
                 }
 
-                return _automation.FromHandle(process.MainWindowHandle).AsWindow();
+                var window = _automation.FromHandle(process.MainWindowHandle).AsWindow();
+                return IsUsableWindow(window) ? window : null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or COMException)
             {
@@ -2858,10 +4057,10 @@ public sealed class DotnetRustParityTests : IDisposable
             }
         }
 
-        private static bool IsUsableWindow(Window window)
+        private bool IsUsableWindow(Window window)
         {
             var bounds = window.BoundingRectangle;
-            return bounds.Width >= 20 && bounds.Height >= 20;
+            return bounds.Width >= _minimumWindowWidth && bounds.Height >= _minimumWindowHeight;
         }
 
         private static int GetWindowArea(Window window)
@@ -2982,12 +4181,20 @@ public sealed class DotnetRustParityTests : IDisposable
     private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
+
+    [DllImport("user32.dll")]
     private static extern int GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     private const int GWL_EXSTYLE = -20;
+    private const int ShowWindowRestore = 9;
+    private static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_TOPMOST = 0x00000008;
     private const int WS_EX_NOACTIVATE = 0x08000000;

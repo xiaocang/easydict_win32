@@ -50,6 +50,13 @@ if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
 }
 
+if ([string]::IsNullOrWhiteSpace($ReferenceRoot)) {
+    $defaultReferenceRoot = Join-Path $repoRoot "artifacts\ui-screenshots"
+    if (Test-Path -LiteralPath $defaultReferenceRoot) {
+        $ReferenceRoot = (Resolve-Path -LiteralPath $defaultReferenceRoot).Path
+    }
+}
+
 function New-MatrixScenario {
     param(
         [Parameter(Mandatory = $true)]
@@ -62,7 +69,9 @@ function New-MatrixScenario {
         [string]$WindowTitle,
 
         [Parameter(Mandatory = $true)]
-        [hashtable]$Environment
+        [hashtable]$Environment,
+
+        [string[]]$RequiredSemanticTags = @()
     )
 
     [pscustomobject]@{
@@ -70,6 +79,7 @@ function New-MatrixScenario {
         Group = $Group
         WindowTitle = $WindowTitle
         Environment = $Environment
+        RequiredSemanticTags = @($RequiredSemanticTags)
     }
 }
 
@@ -138,20 +148,40 @@ function Find-ReferenceScreenshot {
                 -not $_.FullName.StartsWith($excludePrefix, [System.StringComparison]::OrdinalIgnoreCase)
         })
 
-    $preferred = @($candidates |
-        Where-Object { $_.FullName -match '\\dotnet-rust-parity[^\\]*\\' } |
-        Sort-Object LastWriteTimeUtc -Descending)
-    if ($preferred.Count -gt 0) {
-        return $preferred[0]
-    }
-
-    return $candidates |
+    $currentBaselines = @($candidates |
         Where-Object {
             $_.FullName -notmatch '\\rust-preview-[^\\]*\\' -and
                 $_.FullName -notmatch '\\settings-general-schema-[^\\]*\\'
         } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($currentBaselines.Count -gt 0) {
+        return $currentBaselines[0]
+    }
+
+    return $candidates |
+        Where-Object { $_.FullName -notmatch '\\rust-preview-[^\\]*\\' } |
         Sort-Object LastWriteTimeUtc -Descending |
         Select-Object -First 1
+}
+
+function Get-ReferenceSourceKind {
+    param(
+        $ReferenceFile
+    )
+
+    if ($null -eq $ReferenceFile) {
+        return $null
+    }
+
+    $path = $ReferenceFile.FullName
+    if ($path -match '\\dotnet-rust-parity[^\\]*\\') {
+        return "preferred-dotnet-rust-parity"
+    }
+    if ($path -match '\\settings-general-schema-[^\\]*\\') {
+        return "fallback-settings-general-schema"
+    }
+
+    return "fallback-curated"
 }
 
 function Find-ReferenceManifestEntry {
@@ -284,6 +314,154 @@ function New-WindowManifestFromCaptureMetadata {
     }
 }
 
+function New-ExpectedWindowDips {
+    param(
+        [hashtable]$Environment,
+        [string]$WindowKind
+    )
+
+    $previewWindow = if ($Environment.ContainsKey("EASYDICT_PREVIEW_WINDOW")) {
+        [string]$Environment["EASYDICT_PREVIEW_WINDOW"]
+    } else {
+        ""
+    }
+    $normalized = $previewWindow.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        $normalized = $WindowKind.Trim().ToLowerInvariant()
+    }
+
+    switch ($normalized) {
+        "settings" { return [pscustomobject]@{ Width = 846.0; Height = 913.0 } }
+        "mini" { return [pscustomobject]@{ Width = 320.0; Height = 200.0 } }
+        "fixed" { return [pscustomobject]@{ Width = 320.0; Height = 280.0 } }
+        "popbutton" { return [pscustomobject]@{ Width = 30.0; Height = 30.0 } }
+        "pop-button" { return [pscustomobject]@{ Width = 30.0; Height = 30.0 } }
+        "main" { return [pscustomobject]@{ Width = 940.0; Height = 1220.0 } }
+        default { return $null }
+    }
+}
+
+function New-WindowSizeAudit {
+    param(
+        $Metadata,
+        $ExpectedWindowDips
+    )
+
+    if ($null -eq $ExpectedWindowDips -or $null -eq $Metadata.windowDips) {
+        return $null
+    }
+
+    $actualWidth = [double]$Metadata.windowDips.width
+    $actualHeight = [double]$Metadata.windowDips.height
+    $expectedWidth = [double]$ExpectedWindowDips.Width
+    $expectedHeight = [double]$ExpectedWindowDips.Height
+    $scale = [double]$Metadata.dpi.scale
+    $workWidth = [Math]::Round(([double]$Metadata.monitorPhysicalPixels.workRight - [double]$Metadata.monitorPhysicalPixels.workLeft) / $scale, 2)
+    $workHeight = [Math]::Round(([double]$Metadata.monitorPhysicalPixels.workBottom - [double]$Metadata.monitorPhysicalPixels.workTop) / $scale, 2)
+
+    [pscustomobject]@{
+        ExpectedWindowDips = [pscustomobject]@{
+            Width = $expectedWidth
+            Height = $expectedHeight
+        }
+        ActualWindowDips = [pscustomobject]@{
+            Width = $actualWidth
+            Height = $actualHeight
+        }
+        DeltaDips = [pscustomobject]@{
+            Width = [Math]::Round($actualWidth - $expectedWidth, 2)
+            Height = [Math]::Round($actualHeight - $expectedHeight, 2)
+        }
+        DeltaPercent = [pscustomobject]@{
+            Width = if ($expectedWidth -eq 0) { 0.0 } else { [Math]::Round((($actualWidth - $expectedWidth) / $expectedWidth) * 100.0, 2) }
+            Height = if ($expectedHeight -eq 0) { 0.0 } else { [Math]::Round((($actualHeight - $expectedHeight) / $expectedHeight) * 100.0, 2) }
+        }
+        MonitorWorkAreaDips = [pscustomobject]@{
+            Width = $workWidth
+            Height = $workHeight
+        }
+        ExpectedLargerThanWorkArea = ($expectedWidth -gt $workWidth -or $expectedHeight -gt $workHeight)
+    }
+}
+
+function Format-DipSize {
+    param(
+        $Size
+    )
+
+    if ($null -eq $Size) {
+        return "n/a"
+    }
+
+    return "{0:F2}x{1:F2} DIP" -f [double]$Size.Width, [double]$Size.Height
+}
+
+function Format-WindowAuditActualSize {
+    param(
+        $Audit
+    )
+
+    if ($null -eq $Audit -or $null -eq $Audit.ActualWindowDips) {
+        return "n/a"
+    }
+
+    return Format-DipSize -Size $Audit.ActualWindowDips
+}
+
+function Format-WindowAuditDelta {
+    param(
+        $Audit
+    )
+
+    if ($null -eq $Audit -or $null -eq $Audit.DeltaDips) {
+        return "n/a"
+    }
+
+    $delta = $Audit.DeltaDips
+    return "{0:+0.00;-0.00;0.00}x{1:+0.00;-0.00;0.00} DIP" -f [double]$delta.Width, [double]$delta.Height
+}
+
+function Format-WindowAuditWorkArea {
+    param(
+        $Audit
+    )
+
+    if ($null -eq $Audit -or $null -eq $Audit.MonitorWorkAreaDips) {
+        return "n/a"
+    }
+
+    return Format-DipSize -Size $Audit.MonitorWorkAreaDips
+}
+
+function Format-WindowAuditFitStatus {
+    param(
+        $Audit
+    )
+
+    if ($null -eq $Audit) {
+        return "unknown"
+    }
+
+    $expectedTooLarge = $Audit.ExpectedLargerThanWorkArea -eq $true
+    $delta = $Audit.DeltaDips
+    $hasDelta = $null -ne $delta -and (
+        [Math]::Abs([double]$delta.Width) -gt 2.0 -or
+        [Math]::Abs([double]$delta.Height) -gt 2.0
+    )
+
+    if ($expectedTooLarge -and $hasDelta) {
+        return "clamped-by-work-area"
+    }
+    if ($hasDelta) {
+        return "size-drift"
+    }
+    if ($expectedTooLarge) {
+        return "target-exceeds-work-area"
+    }
+
+    return "fits-target"
+}
+
 function New-EmptyUiSummary {
     [pscustomobject]@{
         VisibleControlCounts = [ordered]@{
@@ -298,7 +476,94 @@ function New-EmptyUiSummary {
             text = 0
         }
         VisibleAutomationIds = @()
+        VisibleControlDimensions = [ordered]@{}
     }
+}
+
+function Get-UiSummaryControlDimensionsMap {
+    param(
+        $UiSummary
+    )
+
+    $dimensions = [ordered]@{}
+    if ($null -eq $UiSummary) {
+        return $dimensions
+    }
+
+    $property = $UiSummary.PSObject.Properties["VisibleControlDimensions"]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return $dimensions
+    }
+
+    $value = $property.Value
+    if ($value -is [System.Collections.IDictionary]) {
+        foreach ($key in $value.Keys) {
+            $dimensions[$key] = $value[$key]
+        }
+        return $dimensions
+    }
+
+    foreach ($dimensionProperty in $value.PSObject.Properties) {
+        $dimensions[$dimensionProperty.Name] = $dimensionProperty.Value
+    }
+    return $dimensions
+}
+
+function Set-UiSummaryControlDimension {
+    param(
+        $UiSummary,
+        [string]$Id,
+        [hashtable]$Dimension
+    )
+
+    if ($null -eq $UiSummary -or [string]::IsNullOrWhiteSpace($Id)) {
+        return
+    }
+
+    $dimensions = Get-UiSummaryControlDimensionsMap -UiSummary $UiSummary
+    $dimensions[$Id] = [pscustomobject]$Dimension
+    $UiSummary | Add-Member -NotePropertyName "VisibleControlDimensions" -NotePropertyValue $dimensions -Force
+}
+
+function Add-SettingsReferenceUiSummaryDimensions {
+    param(
+        $ReferenceUiSummary,
+        [string]$ScenarioId,
+        [string]$SectionId
+    )
+
+    if ($null -eq $ReferenceUiSummary) {
+        return $null
+    }
+
+    $scope = Get-RustSchemaSummaryScope -ScenarioId $ScenarioId -SectionId $SectionId
+    if ($null -eq $scope -or -not $scope.IsSettings) {
+        return $ReferenceUiSummary
+    }
+
+    Set-UiSummaryControlDimension -UiSummary $ReferenceUiSummary -Id "settings.content" -Dimension @{
+        Kind = "Column"
+        width = "Fill"
+        height = "Shrink"
+        max_width = "1040"
+        padding = "24"
+        spacing = "24"
+    }
+    Set-UiSummaryControlDimension -UiSummary $ReferenceUiSummary -Id "SettingsBottomSpacer" -Dimension @{
+        Kind = "Spacer"
+        width = "Fill"
+        height = "Fixed(80)"
+    }
+
+    foreach ($section in @("General", "Services", "Views", "Hotkeys", "Advanced", "Language", "About")) {
+        Set-UiSummaryControlDimension -UiSummary $ReferenceUiSummary -Id "SettingsTab_$section" -Dimension @{
+            Kind = "Button"
+            width = "Fixed(86)"
+            height = "Fixed(76)"
+        }
+    }
+
+    return $ReferenceUiSummary
 }
 
 function Add-SchemaControlCount {
@@ -309,7 +574,8 @@ function Add-SchemaControlCount {
 
     $bucket = switch ($Kind) {
         { $_ -in @("Button", "FlyoutButton") } { "button"; break }
-        "ToggleSwitch" { "checkbox"; break }
+        "CheckBox" { "checkbox"; break }
+        "ToggleSwitch" { "button"; break }
         "ComboBox" { "comboBox"; break }
         "TextEditor" { "edit"; break }
         { $_ -in @("Link", "Hyperlink") } { "hyperlink"; break }
@@ -325,9 +591,401 @@ function Add-SchemaControlCount {
     }
 }
 
+function Get-SchemaQuotedValue {
+    param(
+        [string]$Line,
+        [string]$Name
+    )
+
+    $match = [regex]::Match($Line, "\b$([regex]::Escape($Name))=""([^""]*)""")
+    if ($match.Success) {
+        return $match.Groups[1].Value
+    }
+
+    return $null
+}
+
+function Get-SchemaTokenValue {
+    param(
+        [string]$Line,
+        [string]$Name
+    )
+
+    $match = [regex]::Match($Line, "\b$([regex]::Escape($Name))=([^ ]+)")
+    if ($match.Success) {
+        return $match.Groups[1].Value
+    }
+
+    return $null
+}
+
+function Get-SchemaEdgesValue {
+    param(
+        [string]$Line,
+        [string]$Name
+    )
+
+    $match = [regex]::Match($Line, "\b$([regex]::Escape($Name))=(Edges \{[^}]+\})")
+    if ($match.Success) {
+        return $match.Groups[1].Value
+    }
+
+    return $null
+}
+
+function Add-RustSchemaControlDimensions {
+    param(
+        [hashtable]$Dimensions,
+        [string]$Id,
+        [string]$Kind,
+        [string]$Line
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Id) -or $Id -eq "none") {
+        return
+    }
+
+    $dimension = [ordered]@{
+        Kind = $Kind
+    }
+    foreach ($name in @("width", "height", "max_width", "min_width", "min_height", "max_height", "padding", "spacing", "row_spacing", "column_spacing", "columns", "maximum_rows_or_columns")) {
+        $value = Get-SchemaTokenValue -Line $Line -Name $name
+        if ($null -ne $value) {
+            $dimension[$name] = $value
+        }
+    }
+    $margin = Get-SchemaEdgesValue -Line $Line -Name "margin"
+    if ($null -ne $margin) {
+        $dimension["margin"] = $margin
+    }
+
+    $Dimensions[$Id] = [pscustomobject]$dimension
+}
+
+function Get-RustSchemaSummaryScope {
+    param(
+        [string]$ScenarioId,
+        [string]$SectionId
+    )
+
+    $section = if (-not [string]::IsNullOrWhiteSpace($SectionId)) {
+        $SectionId.Trim().ToLowerInvariant()
+    } elseif (-not [string]::IsNullOrWhiteSpace($ScenarioId) -and $ScenarioId.StartsWith("parity-settings-", [System.StringComparison]::OrdinalIgnoreCase)) {
+        ($ScenarioId -replace '^parity-settings-', '' -replace '-.*$', '').Trim().ToLowerInvariant()
+    } else {
+        ""
+    }
+
+    [pscustomobject]@{
+        IsSettings = (-not [string]::IsNullOrWhiteSpace($ScenarioId) -and $ScenarioId.StartsWith("parity-settings-", [System.StringComparison]::OrdinalIgnoreCase)) -or
+            $section -in @("general", "services", "views", "hotkeys", "advanced", "language", "about")
+        Section = $section
+        CurrentViewsWindow = ""
+        MainServiceCheckboxCount = 0
+        LastMainServiceVisible = $false
+    }
+}
+
+function Update-RustSchemaSummaryScopeState {
+    param(
+        $Scope,
+        [string]$Id
+    )
+
+    if ($null -eq $Scope -or -not $Scope.IsSettings -or $Scope.Section -ne "views" -or [string]::IsNullOrWhiteSpace($Id)) {
+        return
+    }
+
+    switch -Regex ($Id) {
+        '^settings\.views\.main$' {
+            $Scope.CurrentViewsWindow = "main"
+            $Scope.LastMainServiceVisible = $false
+            break
+        }
+        '^settings\.views\.mini$' {
+            $Scope.CurrentViewsWindow = "mini"
+            $Scope.LastMainServiceVisible = $false
+            break
+        }
+        '^settings\.views\.fixed$' {
+            $Scope.CurrentViewsWindow = "fixed"
+            $Scope.LastMainServiceVisible = $false
+            break
+        }
+    }
+}
+
+function Test-RustSchemaLineInUiSummaryScope {
+    param(
+        $Scope,
+        [string]$Kind,
+        [string]$Line,
+        [string]$Id
+    )
+
+    if ($null -eq $Scope -or -not $Scope.IsSettings) {
+        return $true
+    }
+
+    if ($Id -in @("BackButton", "SettingsHeaderText", "MainScrollViewer", "settings.content", "SettingsBottomSpacer")) {
+        return $true
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Id) -and $Id.StartsWith("SettingsTab_", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    switch ($Scope.Section) {
+        "views" {
+            if ($Id -in @("WindowResultsHeaderText", "WindowResultsDescriptionText", "MainWindowReorderModeButton")) {
+                return $true
+            }
+            if ($Kind -eq "Text" -and $Scope.CurrentViewsWindow -eq "main" -and $Line -match 'style=BodyStrong') {
+                return $true
+            }
+            if ($Kind -eq "CheckBox" -and $Scope.CurrentViewsWindow -eq "main" -and $Id -match '^main\.[^.]+\.enabled$') {
+                $Scope.MainServiceCheckboxCount = [int]$Scope.MainServiceCheckboxCount + 1
+                $Scope.LastMainServiceVisible = $Scope.MainServiceCheckboxCount -le 16
+                return $Scope.LastMainServiceVisible
+            }
+            if ($Kind -eq "ToggleSwitch" -and $Scope.CurrentViewsWindow -eq "main" -and $Id -match '^main\.[^.]+\.enabled_query$') {
+                return [bool]$Scope.LastMainServiceVisible
+            }
+            return $false
+        }
+        "general" {
+            if ($Id -in @(
+                    "SettingsGeneralBehaviorHeader",
+                    "AppThemeCombo",
+                    "AppThemeDescriptionText",
+                    "MinimizeToTrayToggle",
+                    "MinimizeToTrayOnStartupToggle",
+                    "ClipboardMonitorToggle",
+                    "MouseSelectionTranslateToggle",
+                    "MouseSelectionExcludedAppsBox",
+                    "MouseSelectionExcludedAppsDescriptionText",
+                    "AlwaysOnTopToggle",
+                    "LaunchAtStartupToggle"
+                )) {
+                return $true
+            }
+            return $false
+        }
+        "about" {
+            if ($Id -in @(
+                    "AboutHeaderText",
+                    "AboutAppNameText",
+                    "VersionText",
+                    "GitHubRepositoryLink",
+                    "IssueFeedbackLink",
+                    "AboutInspiredByText",
+                    "InspiredByLink",
+                    "LicenseText"
+                )) {
+                return $true
+            }
+            return $false
+        }
+        default {
+            return $true
+        }
+    }
+}
+
+function Test-RustSchemaAutomationIdInUiSummaryScope {
+    param(
+        $Scope,
+        [string]$Id
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Id) -or $Id -eq "none") {
+        return $false
+    }
+    if ($null -eq $Scope -or -not $Scope.IsSettings) {
+        return $true
+    }
+    if ($Id -in @("BackButton", "MainScrollViewer", "SettingsHeaderText", "settings.content", "SettingsBottomSpacer")) {
+        return $true
+    }
+    if ($Id.StartsWith("SettingsTab_", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    switch ($Scope.Section) {
+        "views" {
+            return $Id -in @(
+                "WindowResultsHeaderText",
+                "WindowResultsDescriptionText",
+                "MainWindowHeaderText",
+                "MainWindowReorderModeButton"
+            )
+        }
+        "general" {
+            return $Id -in @(
+                "SettingsGeneralBehaviorHeader",
+                "AppThemeCombo",
+                "AppThemeDescriptionText",
+                "MinimizeToTrayToggle",
+                "MinimizeToTrayOnStartupToggle",
+                "ClipboardMonitorToggle",
+                "MouseSelectionTranslateToggle",
+                "MouseSelectionExcludedAppsBox",
+                "MouseSelectionExcludedAppsDescriptionText",
+                "AlwaysOnTopToggle",
+                "LaunchAtStartupToggle"
+            )
+        }
+        "about" {
+            return $Id -in @(
+                "AboutHeaderText",
+                "AboutAppNameText",
+                "VersionText",
+                "GitHubRepositoryLink",
+                "IssueFeedbackLink",
+                "InspiredByLink",
+                "LicenseText"
+            )
+        }
+        default {
+            return $true
+        }
+    }
+}
+
+function Add-RustSchemaTitleBarSummary {
+    param(
+        [hashtable]$Counts,
+        [System.Collections.Generic.SortedSet[string]]$Ids
+    )
+
+    $Counts["button"] = [int]$Counts["button"] + 3
+    foreach ($id in @("TitleBar", "SystemMenuBar", "Minimize", "Maximize", "Close")) {
+        $Ids.Add($id) | Out-Null
+    }
+}
+
+function Normalize-RequiredSemanticTags {
+    param(
+        [object[]]$Tags
+    )
+
+    $normalized = New-Object System.Collections.Generic.List[string]
+    foreach ($tag in @($Tags)) {
+        if ($null -eq $tag) {
+            continue
+        }
+        $value = ([string]$tag).Trim()
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            continue
+        }
+        switch -Exact ($value) {
+            "GitHub Repository" { $normalized.Add("GitHubRepositoryLink"); break }
+            "Issue Feedback" { $normalized.Add("IssueFeedbackLink"); break }
+            default { $normalized.Add($value); break }
+        }
+    }
+
+    return @($normalized | Select-Object -Unique)
+}
+
+function Get-ScenarioRequiredSemanticTags {
+    param(
+        [string]$ScenarioId,
+        [string]$SectionId
+    )
+
+    $section = if (-not [string]::IsNullOrWhiteSpace($SectionId)) {
+        $SectionId.Trim().ToLowerInvariant()
+    } elseif (-not [string]::IsNullOrWhiteSpace($ScenarioId) -and $ScenarioId.StartsWith("parity-settings-about-", [System.StringComparison]::OrdinalIgnoreCase)) {
+        "about"
+    } else {
+        ""
+    }
+
+    $settingsFrameTags = @(
+        "settings.content",
+        "SettingsBottomSpacer",
+        "SettingsTab_General",
+        "SettingsTab_Services",
+        "SettingsTab_Views",
+        "SettingsTab_Hotkeys",
+        "SettingsTab_Advanced",
+        "SettingsTab_Language",
+        "SettingsTab_About"
+    )
+
+    switch ($section) {
+        "general" {
+            return @($settingsFrameTags + @(
+                "SettingsGeneralBehaviorHeader",
+                "AppThemeCombo",
+                "AppThemeDescriptionText",
+                "MinimizeToTrayToggle",
+                "MinimizeToTrayOnStartupToggle",
+                "ClipboardMonitorToggle",
+                "MouseSelectionTranslateToggle",
+                "MouseSelectionExcludedAppsBox",
+                "MouseSelectionExcludedAppsDescriptionText",
+                "AlwaysOnTopToggle",
+                "LaunchAtStartupToggle"
+            ))
+        }
+        "about" {
+            return @($settingsFrameTags + @(
+                "AboutHeaderText",
+                "AboutAppNameText",
+                "VersionText",
+                "GitHubRepositoryLink",
+                "IssueFeedbackLink",
+                "InspiredByLink",
+                "LicenseText"
+            ))
+        }
+        { $_ -in @("services", "views", "hotkeys", "advanced", "language") } {
+            return @($settingsFrameTags)
+        }
+        default {
+            return @()
+        }
+    }
+}
+
+function Test-ReferenceUiSummaryMatchesSection {
+    param(
+        $ReferenceUiSummary,
+        [string]$SectionId
+    )
+
+    if ($null -eq $ReferenceUiSummary -or [string]::IsNullOrWhiteSpace($SectionId)) {
+        return $true
+    }
+
+    $ids = @($ReferenceUiSummary.VisibleAutomationIds)
+    switch ($SectionId.Trim().ToLowerInvariant()) {
+        "general" {
+            return -not ($ids -contains "WindowResultsHeaderText" -or
+                $ids -contains "WindowResultsDescriptionText" -or
+                $ids -contains "MainWindowHeaderText" -or
+                $ids -contains "MainWindowReorderModeButton")
+        }
+        "views" {
+            return -not ($ids -contains "AppThemeCombo" -or
+                $ids -contains "SettingsGeneralBehaviorHeader" -or
+                $ids -contains "MouseSelectionTranslateToggle")
+        }
+        "about" {
+            return $ids -contains "AboutHeaderText"
+        }
+        default {
+            return $true
+        }
+    }
+}
+
 function New-RustSchemaUiSummary {
     param(
-        [string]$SchemaPath
+        [string]$SchemaPath,
+        [string]$ScenarioId,
+        [string]$SectionId
     )
 
     $summary = New-EmptyUiSummary
@@ -347,6 +1005,8 @@ function New-RustSchemaUiSummary {
         text = 0
     }
     $ids = New-Object System.Collections.Generic.SortedSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+    $dimensions = @{}
+    $scope = Get-RustSchemaSummaryScope -ScenarioId $ScenarioId -SectionId $SectionId
 
     foreach ($line in Get-Content -LiteralPath $SchemaPath) {
         $trimmed = $line.TrimStart()
@@ -356,12 +1016,42 @@ function New-RustSchemaUiSummary {
 
         $kindEnd = $trimmed.IndexOf(" ")
         $kind = if ($kindEnd -lt 0) { $trimmed } else { $trimmed.Substring(0, $kindEnd) }
+        $id = Get-SchemaQuotedValue -Line $trimmed -Name "id"
+        Update-RustSchemaSummaryScopeState -Scope $scope -Id $id
+
+        if ($kind -eq "TitleBar" -and $trimmed -match '\bcaption_controls=true\b' -and ($null -eq $scope -or -not $scope.IsSettings -or $scope.Section -in @("general", "views", "about"))) {
+            Add-RustSchemaTitleBarSummary -Counts $counts -Ids $ids
+        }
+
+        if (-not (Test-RustSchemaLineInUiSummaryScope -Scope $scope -Kind $kind -Line $trimmed -Id $id)) {
+            continue
+        }
+
         $summaryKind = if ($kind -eq "Button" -and $trimmed -match '\bkind=Link\b') { "Hyperlink" } else { $kind }
         Add-SchemaControlCount -Counts $counts -Kind $summaryKind
 
-        $match = [regex]::Match($trimmed, ' id="([^"]+)"')
-        if ($match.Success -and $match.Groups[1].Value -ne "none") {
-            $ids.Add($match.Groups[1].Value) | Out-Null
+        if ($summaryKind -eq "Button") {
+            $label = Get-SchemaQuotedValue -Line $trimmed -Name "label"
+            if (-not [string]::IsNullOrWhiteSpace($label)) {
+                Add-SchemaControlCount -Counts $counts -Kind "Text"
+            }
+        }
+
+        if ($kind -eq "Text" -and $scope.IsSettings -and $scope.Section -eq "views" -and
+            $scope.CurrentViewsWindow -eq "main" -and $trimmed -match 'style=BodyStrong') {
+            $ids.Add("MainWindowHeaderText") | Out-Null
+        }
+
+        if (Test-RustSchemaAutomationIdInUiSummaryScope -Scope $scope -Id $id) {
+            $ids.Add($id) | Out-Null
+            Add-RustSchemaControlDimensions -Dimensions $dimensions -Id $id -Kind $kind -Line $trimmed
+        }
+    }
+
+    $visibleDimensions = [ordered]@{}
+    foreach ($id in @($ids)) {
+        if ($dimensions.ContainsKey($id)) {
+            $visibleDimensions[$id] = $dimensions[$id]
         }
     }
 
@@ -378,17 +1068,23 @@ function New-RustSchemaUiSummary {
             text = [int]$counts.text
         }
         VisibleAutomationIds = @($ids)
+        VisibleControlDimensions = $visibleDimensions
     }
 }
 
 function Get-WindowKind {
     param(
         [string]$ScenarioId,
-        [string]$Group
+        [string]$Group,
+        [hashtable]$Environment
     )
 
     if ($ScenarioId.StartsWith("effects.", [System.StringComparison]::OrdinalIgnoreCase)) {
-        return "interaction-effects"
+        if ($null -ne $Environment -and $Environment.ContainsKey("EASYDICT_PREVIEW_WINDOW")) {
+            return [string]$Environment["EASYDICT_PREVIEW_WINDOW"]
+        }
+
+        return "main"
     }
     if ($ScenarioId.StartsWith("mini.", [System.StringComparison]::OrdinalIgnoreCase)) {
         return "mini"
@@ -460,22 +1156,24 @@ $scenarioDefinitions = @(
     New-MatrixScenario -Id "effects.overlay-fade" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_SCENARIO = "mode_overlay"
     })
-    New-MatrixScenario -Id "effects.collapse-expand-animation" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
+    New-MatrixScenario -Id "effects.result-collapse-toggle" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_SCENARIO = "result_collapsed"
     })
     New-MatrixScenario -Id "effects.settings-slider-focus" -Group "effects" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
         EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE = "focused"
+        EASYDICT_PREVIEW_SCROLL_PERCENT = "100"
     })
     New-MatrixScenario -Id "effects.settings-toggle-focus" -Group "effects" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "general"
         EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE = "focused"
+        EASYDICT_PREVIEW_SCROLL_PERCENT = "100"
     })
-    New-MatrixScenario -Id "effects.floating-action-pressed" -Group "effects" -WindowTitle $miniTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_WINDOW = "mini"
-        EASYDICT_PREVIEW_MINI_TRANSLATE_STATE = "pressed"
+    New-MatrixScenario -Id "effects.floating-action-pressed" -Group "effects" -WindowTitle $popTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_WINDOW = "popbutton"
+        EASYDICT_PREVIEW_POPBUTTON_STATE = "pressed"
     })
 
     New-MatrixScenario -Id "parity-settings-general-behavior-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $settingsGeneralReference @{
@@ -517,6 +1215,7 @@ $scenarioDefinitions = @(
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "language"
         EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED = "1"
+        EASYDICT_PREVIEW_SCROLL_PERCENT = "100"
     })
     New-MatrixScenario -Id "parity-settings-about-links-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
@@ -690,6 +1389,8 @@ foreach ($definition in $selectedScenarios) {
     $environment = Join-Environment $definition.Environment @{
         EASYDICT_PREVIEW_SCHEMA_PATH = $schemaPath
     }
+    $windowKind = Get-WindowKind -ScenarioId $definition.Id -Group $definition.Group -Environment $environment
+    $expectedWindowDips = New-ExpectedWindowDips -Environment $environment -WindowKind $windowKind
 
     Write-Host "Capturing $($definition.Id)."
     Invoke-WithPreviewEnvironment -Environment $environment -Script {
@@ -711,6 +1412,13 @@ foreach ($definition in $selectedScenarios) {
     if ($null -eq $metadata.output -or [string]::IsNullOrWhiteSpace($metadata.output.window)) {
         throw "Capture metadata did not include output.window for $($definition.Id)."
     }
+    $windowSizeAudit = New-WindowSizeAudit -Metadata $metadata -ExpectedWindowDips $expectedWindowDips
+    if ($null -ne $expectedWindowDips) {
+        $metadata | Add-Member -NotePropertyName expectedWindowDips -NotePropertyValue $expectedWindowDips -Force
+    }
+    if ($null -ne $windowSizeAudit) {
+        $metadata | Add-Member -NotePropertyName windowSizeAudit -NotePropertyValue $windowSizeAudit -Force
+    }
 
     Copy-Item -LiteralPath $metadata.output.window -Destination $candidatePath -Force
     if ($metadata.output.PSObject.Properties.Name -contains "desktop" -and
@@ -718,12 +1426,14 @@ foreach ($definition in $selectedScenarios) {
         (Test-Path -LiteralPath $metadata.output.desktop)) {
         Copy-Item -LiteralPath $metadata.output.desktop -Destination $desktopPath -Force
     }
-    Copy-Item -LiteralPath $metadataFile.FullName -Destination $metadataCopyPath -Force
+    Write-JsonFile -Path $metadataCopyPath -Value $metadata -Depth 10
 
     $referenceCopied = $false
     $referencePath = $null
     $reference = Find-ReferenceScreenshot -Root $ReferenceRoot -ScenarioId $definition.Id -ExcludeRoot $OutputRoot
     if ($null -ne $reference) {
+        $referenceSourceKind = Get-ReferenceSourceKind -ReferenceFile $reference
+        $referenceSourceIsFallback = -not ($referenceSourceKind -eq "preferred-dotnet-rust-parity")
         $referencePath = Join-Path $OutputRoot "$safeId-dotnet-winui-reference.png"
         Copy-Item -LiteralPath $reference.FullName -Destination $referencePath -Force
         $referenceCopied = $true
@@ -731,20 +1441,38 @@ foreach ($definition in $selectedScenarios) {
         $referenceEntry = Find-ReferenceManifestEntry -ReferenceFile $reference -ScenarioId $definition.Id
         $referenceWindow = if ($null -ne $referenceEntry) { $referenceEntry.ReferenceWindow } else { $null }
         $regions = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.Regions) { $referenceEntry.Regions })
-        $requiredSemanticTags = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.RequiredSemanticTags) {
+        $summarySectionId = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionId)) {
+            [string]$referenceEntry.SectionId
+        } elseif ($environment.ContainsKey("EASYDICT_PREVIEW_SETTINGS_SECTION")) {
+            [string]$environment["EASYDICT_PREVIEW_SETTINGS_SECTION"]
+        } else {
+            [string]$definition.Group
+        }
+        $referenceRequiredSemanticTags = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.RequiredSemanticTags) {
             $referenceEntry.RequiredSemanticTags
         })
         $referenceUiSummary = if ($null -ne $referenceEntry) { $referenceEntry.ReferenceUiSummary } else { $null }
+        if (-not (Test-ReferenceUiSummaryMatchesSection -ReferenceUiSummary $referenceUiSummary -SectionId $summarySectionId)) {
+            Write-Warning "Ignoring stale reference UI summary for $($definition.Id): summary does not match section '$summarySectionId'."
+            $referenceUiSummary = $null
+            $referenceRequiredSemanticTags = @()
+        }
+        $referenceUiSummary = Add-SettingsReferenceUiSummaryDimensions -ReferenceUiSummary $referenceUiSummary -ScenarioId $definition.Id -SectionId $summarySectionId
+        $requiredSemanticTags = @(Normalize-RequiredSemanticTags @(
+            @($referenceRequiredSemanticTags) +
+            @($definition.RequiredSemanticTags) +
+            @(Get-ScenarioRequiredSemanticTags -ScenarioId $definition.Id -SectionId $summarySectionId)
+        ))
         $candidateUiSummary = if ($null -ne $referenceUiSummary -or $requiredSemanticTags.Count -gt 0) {
-            New-RustSchemaUiSummary -SchemaPath $schemaPath
+            New-RustSchemaUiSummary -SchemaPath $schemaPath -ScenarioId $definition.Id -SectionId $summarySectionId
         } else {
             $null
         }
 
         $manifestEntries.Add([pscustomobject]@{
             ScenarioId = $definition.Id
-            WindowKind = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.WindowKind)) { $referenceEntry.WindowKind } else { Get-WindowKind -ScenarioId $definition.Id -Group $definition.Group }
-            SectionId = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionId)) { $referenceEntry.SectionId } else { $definition.Group }
+            WindowKind = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.WindowKind)) { $referenceEntry.WindowKind } else { $windowKind }
+            SectionId = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionId)) { $referenceEntry.SectionId } else { $summarySectionId }
             SectionLabel = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionLabel)) { $referenceEntry.SectionLabel } else { $definition.Id }
             Theme = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.Theme)) { $referenceEntry.Theme } else { $Theme }
             ScrollPercent = if ($null -ne $referenceEntry) { [double]$referenceEntry.ScrollPercent } else { 0.0 }
@@ -752,8 +1480,14 @@ foreach ($definition in $selectedScenarios) {
             ReferenceScreenshot = (Split-Path -Leaf $referencePath)
             CandidateScreenshot = (Split-Path -Leaf $candidatePath)
             SideBySideScreenshot = $null
+            ReferenceSourceKind = $referenceSourceKind
+            ReferenceSourcePath = $reference.FullName
+            ReferenceSourceLastWriteTimeUtc = $reference.LastWriteTimeUtc.ToString("o")
+            ReferenceSourceIsFallback = $referenceSourceIsFallback
             ReferenceWindow = $referenceWindow
             CandidateWindow = New-WindowManifestFromCaptureMetadata -Metadata $metadata
+            CandidateExpectedWindowDips = $expectedWindowDips
+            CandidateWindowSizeAudit = $windowSizeAudit
             Regions = $regions
             RequiredSemanticTags = $requiredSemanticTags
             ReferenceUiSummary = $referenceUiSummary
@@ -767,9 +1501,13 @@ foreach ($definition in $selectedScenarios) {
         candidateScreenshot = $candidatePath
         referenceScreenshot = $referencePath
         referenceCopied = $referenceCopied
+        referenceSourceKind = if ($null -ne $reference) { Get-ReferenceSourceKind -ReferenceFile $reference } else { $null }
+        referenceSourcePath = if ($null -ne $reference) { $reference.FullName } else { $null }
         schema = $schemaPath
         metadata = $metadataCopyPath
         rawOutput = $rawDir
+        expectedWindowDips = $expectedWindowDips
+        windowSizeAudit = $windowSizeAudit
         environment = $environment
     }) | Out-Null
 }
@@ -788,7 +1526,91 @@ $matrixSummary = [pscustomobject]@{
 }
 Write-JsonFile -Path $matrixPath -Value $matrixSummary -Depth 8
 
+$candidateAuditPath = Join-Path $OutputRoot "ui-parity-candidate-window-audit.json"
+$candidateAuditEntries = @($results | ForEach-Object {
+    [pscustomobject]@{
+        ScenarioId = $_.scenarioId
+        Group = $_.group
+        CandidateScreenshot = if ([string]::IsNullOrWhiteSpace([string]$_.candidateScreenshot)) { $null } else { Split-Path -Leaf $_.candidateScreenshot }
+        HasReference = [bool]$_.referenceCopied
+        ReferenceSourceKind = $_.referenceSourceKind
+        ExpectedWindowDips = $_.expectedWindowDips
+        ActualWindowDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.ActualWindowDips } else { $null }
+        DeltaDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.DeltaDips } else { $null }
+        DeltaPercent = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.DeltaPercent } else { $null }
+        MonitorWorkAreaDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.MonitorWorkAreaDips } else { $null }
+        ExpectedLargerThanWorkArea = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.ExpectedLargerThanWorkArea } else { $null }
+        WindowSizeAudit = $_.windowSizeAudit
+    }
+})
+$candidateAuditGeneratedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+Write-JsonFile -Path $candidateAuditPath -Value ([pscustomobject]@{
+    SchemaVersion = "easydict.ui-parity.candidate-window-audit.v1"
+    GeneratedAtUtc = $candidateAuditGeneratedAtUtc
+    OutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
+    Theme = $Theme
+    UiLanguage = $UiLanguage
+    Scenarios = $candidateAuditEntries
+}) -Depth 8
+
+$candidateAuditMarkdownPath = Join-Path $OutputRoot "ui-parity-candidate-window-audit.md"
+$candidateAuditMarkdown = New-Object System.Collections.Generic.List[string]
+$candidateAuditMarkdown.Add("# UI Candidate Window Audit") | Out-Null
+$candidateAuditMarkdown.Add("") | Out-Null
+$candidateAuditMarkdown.Add("Generated: ``$candidateAuditGeneratedAtUtc``") | Out-Null
+$candidateAuditMarkdown.Add("") | Out-Null
+$candidateAuditMarkdown.Add("| Scenario | Reference | Fit | Expected target | Actual candidate | Delta | Work area |") | Out-Null
+$candidateAuditMarkdown.Add("| --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+foreach ($entry in $candidateAuditEntries) {
+    $reference = if ($entry.HasReference) { "yes ($($entry.ReferenceSourceKind))" } else { "no" }
+    $candidateAuditMarkdown.Add("| ``$($entry.ScenarioId)`` | $reference | $(Format-WindowAuditFitStatus -Audit $entry.WindowSizeAudit) | $(Format-DipSize -Size $entry.ExpectedWindowDips) | $(Format-WindowAuditActualSize -Audit $entry.WindowSizeAudit) | $(Format-WindowAuditDelta -Audit $entry.WindowSizeAudit) | $(Format-WindowAuditWorkArea -Audit $entry.WindowSizeAudit) |") | Out-Null
+}
+$candidateAuditMarkdown | Set-Content -LiteralPath $candidateAuditMarkdownPath -Encoding utf8
+
+$candidateOnlyEntries = @($results |
+    Where-Object { -not [bool]$_.referenceCopied } |
+    ForEach-Object {
+        [pscustomobject]@{
+            ScenarioId = $_.scenarioId
+            Group = $_.group
+            CandidateScreenshot = if ([string]::IsNullOrWhiteSpace([string]$_.candidateScreenshot)) { $null } else { Split-Path -Leaf $_.candidateScreenshot }
+            CandidateSchema = if ([string]::IsNullOrWhiteSpace([string]$_.schema)) { $null } else { Split-Path -Leaf $_.schema }
+            ExpectedReferenceScreenshot = "$($_.scenarioId)-dotnet-winui-reference.png"
+            ExpectedWindowDips = $_.expectedWindowDips
+            ActualWindowDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.ActualWindowDips } else { $null }
+            DeltaDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.DeltaDips } else { $null }
+            Fit = Format-WindowAuditFitStatus -Audit $_.windowSizeAudit
+            NextEvidence = "Capture matching .NET WinUI reference named '$($_.scenarioId)-dotnet-winui-reference.png' with the same UI language, DPI, and work area."
+        }
+    })
+
+$candidateOnlyPath = Join-Path $OutputRoot "ui-parity-candidate-only-evidence.json"
+Write-JsonFile -Path $candidateOnlyPath -Value ([pscustomobject]@{
+    SchemaVersion = "easydict.ui-parity.candidate-only-evidence.v1"
+    GeneratedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    OutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
+    Theme = $Theme
+    UiLanguage = $UiLanguage
+    Count = $candidateOnlyEntries.Count
+    Scenarios = $candidateOnlyEntries
+}) -Depth 8
+
+$candidateOnlyMarkdownPath = Join-Path $OutputRoot "ui-parity-candidate-only-evidence.md"
+$candidateOnlyMarkdown = New-Object System.Collections.Generic.List[string]
+$candidateOnlyMarkdown.Add("# UI Candidate-Only Evidence") | Out-Null
+$candidateOnlyMarkdown.Add("") | Out-Null
+$candidateOnlyMarkdown.Add("Rust candidate screenshots were captured for these scenarios, but no matching .NET WinUI reference screenshot was found under ``$ReferenceRoot``.") | Out-Null
+$candidateOnlyMarkdown.Add("") | Out-Null
+$candidateOnlyMarkdown.Add("| Scenario | Candidate | Fit | Expected reference | Expected target | Actual candidate | Delta | Next evidence |") | Out-Null
+$candidateOnlyMarkdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+foreach ($entry in $candidateOnlyEntries) {
+    $candidateOnlyMarkdown.Add("| ``$($entry.ScenarioId)`` | ``$($entry.CandidateScreenshot)`` | $($entry.Fit) | ``$($entry.ExpectedReferenceScreenshot)`` | $(Format-DipSize -Size $entry.ExpectedWindowDips) | $(Format-DipSize -Size $entry.ActualWindowDips) | $(Format-DipSize -Size $entry.DeltaDips) | $($entry.NextEvidence) |") | Out-Null
+}
+$candidateOnlyMarkdown | Set-Content -LiteralPath $candidateOnlyMarkdownPath -Encoding utf8
+
 Write-Host "Rust preview parity matrix: $matrixPath"
+Write-Host "Candidate window audit: $candidateAuditMarkdownPath"
+Write-Host "Candidate-only evidence: $candidateOnlyMarkdownPath"
 Write-Host "Captured $($results.Count) scenario(s)."
 
 if ($manifestEntries.Count -gt 0) {
@@ -806,7 +1628,13 @@ if ($manifestEntries.Count -gt 0) {
     Write-Host "UI parity manifest: $manifestPath"
 }
 
-if ($RunAnalyzer) {
+if ($RunAnalyzer -and $manifestEntries.Count -eq 0) {
+    if ($RequireManifest) {
+        throw "No dotnet/rust screenshot pairs were found, so ui-parity-manifest.json could not be generated. Candidate window audit was written to $candidateAuditMarkdownPath."
+    }
+
+    Write-Warning "Skipping UI parity analyzer because no dotnet/rust screenshot pairs were found. Candidate window audit was written to $candidateAuditMarkdownPath."
+} elseif ($RunAnalyzer) {
     $analysisScript = Join-Path $repoRoot "dotnet\scripts\ci\Invoke-UiParityAnalysis.ps1"
     Require-Path -Path $analysisScript -Description "UI parity analysis script"
 

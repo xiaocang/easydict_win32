@@ -136,6 +136,7 @@ public static class UITestHelper
     {
         return FindByAutomationIdOrName(window, "SettingsButton")
             ?? FindByAutomationIdOrName(window, "Settings")
+            ?? FindByAutomationIdOrName(window, "设置")
             ?? FindTopRightLikelySettingsButton(window);
     }
 
@@ -226,12 +227,32 @@ public static class UITestHelper
         return buttons
             .Where(button =>
                 IsOnScreenOrUnknown(button) &&
+                !IsCaptionControlButton(button) &&
                 button.BoundingRectangle.Top <= headerTopLimit &&
                 button.BoundingRectangle.Right >= rightLimit &&
                 button.BoundingRectangle.Width <= 70 &&
                 button.BoundingRectangle.Height <= 70)
             .OrderByDescending(button => button.BoundingRectangle.Right)
             .FirstOrDefault();
+    }
+
+    private static bool IsCaptionControlButton(AutomationElement button)
+    {
+        var automationId = SafeAutomationId(button);
+        var name = SafeName(button);
+        return IsAnyCaptionControlLabel(automationId) || IsAnyCaptionControlLabel(name);
+    }
+
+    private static bool IsAnyCaptionControlLabel(string value)
+    {
+        return string.Equals(value, "Close", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "Minimize", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "Maximize", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "Restore", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "关闭", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "最小化", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "最大化", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "还原", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

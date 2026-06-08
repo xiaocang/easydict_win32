@@ -4,7 +4,8 @@ param(
     [string]$OutputDir,
     [switch]$StartIfMissing,
     [switch]$StartNewInstance,
-    [string]$Executable
+    [string]$Executable,
+    [int]$SettlingMilliseconds = 900
 )
 
 Set-StrictMode -Version Latest
@@ -22,8 +23,13 @@ if ([string]::IsNullOrWhiteSpace($Executable)) {
     $Executable = Join-Path $rsRoot "target\debug\easydict_preview_iced.exe"
 }
 
+$settingsPreviewOpen = $false
+if (-not [string]::IsNullOrWhiteSpace($env:EASYDICT_PREVIEW_SETTINGS_OPEN)) {
+    $settingsPreviewOpen = @("1", "true", "yes", "on") -contains $env:EASYDICT_PREVIEW_SETTINGS_OPEN.Trim().ToLowerInvariant()
+}
+
 $previewWindow = if ([string]::IsNullOrWhiteSpace($env:EASYDICT_PREVIEW_WINDOW)) {
-    "main"
+    if ($settingsPreviewOpen) { "settings" } else { "main" }
 } else {
     $env:EASYDICT_PREVIEW_WINDOW.Trim().ToLowerInvariant()
 }
@@ -317,7 +323,7 @@ $null = [Win32DpiCapture]::ShowWindow($hwnd, $swRestore)
 $null = [Win32DpiCapture]::SetWindowPos($hwnd, $hwndTopMost, 0, 0, 0, 0, $swpNoMove -bor $swpNoSize -bor $swpShowWindow)
 $restorePreviewZOrder = $true
 $null = [Win32DpiCapture]::SetForegroundWindow($hwnd)
-Start-Sleep -Milliseconds 350
+Start-Sleep -Milliseconds ([Math]::Max(0, $SettlingMilliseconds))
 
 try {
     $rect = Get-WindowRectPhysical $hwnd

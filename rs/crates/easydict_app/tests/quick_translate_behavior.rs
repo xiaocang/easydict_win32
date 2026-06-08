@@ -1,10 +1,25 @@
+use easydict_app::browser_registrar::RUST_BRIDGE_ROOT_NAME;
+#[cfg(feature = "retained-dotnet-workers")]
 use easydict_app::compat_client::{DirectWorkerFacade, WorkerCommand};
-use easydict_app::compat_protocol::{
-    local_ai_provider_modes, worker_kinds, DefinitionDto, GrammarCorrectParams,
-    GrammarCorrectResultDto, ImportedMdxDictionarySnapshot, MdxLookupEntry, MdxLookupParams,
-    MdxLookupResult, PhoneticDto, SettingsSnapshot, SynonymDto, TranslateParams,
-    TranslationResultDto, WordFormDto, WordResultDto,
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::compat_protocol::worker_kinds;
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::mdx_native::{native_mdx_lookup_can_route, native_mdx_lookup_local_input_error};
+use easydict_app::protocol::{
+    local_ai_provider_modes, DefinitionDto, GrammarCorrectParams, GrammarCorrectResultDto,
+    ImportedMdxDictionarySnapshot, MdxLookupEntry, MdxLookupParams, MdxLookupResult, PhoneticDto,
+    SettingsSnapshot, SynonymDto, TranslateParams, TranslationResultDto, WordFormDto,
+    WordResultDto,
 };
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::quick_translate::{
+    local_ai_route_decision_with_worker_policy,
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
+};
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::LocalAiWorkerQuickTranslateBackend;
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::RetainedWorkerPolicy;
 use easydict_app::{
     apply_local_dictionary_suggestion, apply_local_dictionary_suggestion_update,
     apply_quick_translate_outcome, apply_quick_translate_service_update,
@@ -13,23 +28,23 @@ use easydict_app::{
     begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
     build_quick_translate_plan_for_surface, default_hotkeys, default_named_events,
     default_protocol_registrations, default_shell_verbs, default_tray_menu,
-    local_dictionary_query_token, local_dictionary_suggestion_request_can_route_natively,
-    native_mdx_lookup_can_route, native_mdx_lookup_local_input_error,
-    native_mdx_lookup_requires_credential_bridge, parse_startup_activation,
+    local_ai_route_decision, local_dictionary_query_token,
+    local_dictionary_suggestion_request_can_route_natively, parse_startup_activation,
     quick_translate_request_can_route_natively, resolve_quick_query_language,
     resolve_startup_activation_disposition, run_local_dictionary_suggestion_request,
-    run_local_dictionary_suggestion_request_with_lazy_bridge,
-    run_local_dictionary_suggestion_request_with_native_index_root,
-    run_local_dictionary_suggestion_request_with_packaged_app_dir,
-    run_local_dictionary_suggestion_request_with_routed_backends, run_quick_translate,
-    run_quick_translate_service, run_quick_translate_service_with_packaged_app_dir,
-    run_quick_translate_service_with_packaged_app_dir_and_worker_policy,
-    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
+    run_local_dictionary_suggestion_request_with_app_dir,
+    run_local_dictionary_suggestion_request_with_native_index_root, run_quick_translate,
+    run_quick_translate_service, run_quick_translate_service_with_app_dir,
+    run_quick_translate_service_with_app_dir_and_native_local_ai_client,
+    run_quick_translate_service_with_app_dir_and_native_local_ai_probes,
+    run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver,
+    run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client,
     startup_activation_task_for_args, translation_cache_request_for_quick_translate,
     BingHttpClient, BingHttpResponse, BingTranslatorPage, CustomStreamingHttpClient,
     CustomStreamingHttpRequestPlan, EasydictApp, EasydictUiState, FoundryLocalEndpointResolver,
-    LocalAiWorkerQuickTranslateBackend, LocalDictionarySuggestion,
-    LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
+    FoundryLocalError, FoundryLocalErrorCode, FoundryLocalRuntimeController,
+    FoundryLocalRuntimeState, FoundryLocalRuntimeStatus, LocalAiRouteDecision,
+    LocalDictionarySuggestion, LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
     LocalDictionarySuggestionUpdate, Message, NativeBingQuickTranslateBackend,
     NativeCustomStreamingQuickTranslateBackend, NativeMdxDictionaryReader,
     NativeMdxDictionaryReaderFactory, NativeMdxLookupError, NativeOpenAiQuickTranslateBackend,
@@ -40,27 +55,42 @@ use easydict_app::{
     QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
-    RetainedWorkerPolicy, SettingsLink, StartupActivation, StartupActivationDisposition,
-    TraditionalHttpClient, TraditionalHttpRequestPlan, TraditionalHttpServiceKind,
-    TranslationCacheRequest, TranslationLanguage, TranslationResult, BROWSER_REGISTRAR_EXE,
-    HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR,
-    HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI, HOTKEY_TRANSLATE_CLIPBOARD,
-    LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT,
-    SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL, TRAY_EXIT,
-    TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
+    SettingsLink, StartupActivation, StartupActivationDisposition, TraditionalHttpClient,
+    TraditionalHttpRequestPlan, TraditionalHttpServiceKind, TranslationCacheRequest,
+    TranslationLanguage, TranslationResult, BROWSER_REGISTRAR_EXE,
+    FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED,
+    HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR, HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI,
+    HOTKEY_TRANSLATE_CLIPBOARD, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME,
+    PROTOCOL_EASYDICT, SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL,
+    TRAY_EXIT, TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI,
+    TRAY_TRANSLATE_CLIPBOARD,
+};
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::{
+    run_local_dictionary_suggestion_request_with_lazy_bridge,
+    run_local_dictionary_suggestion_request_with_routed_backends,
 };
 use easydict_nllb::{
     NllbError, NllbInferenceEngine, NllbModelPaths, NllbTokenizer, NllbTranslator,
     MODEL_COMPLETION_SENTINEL, NLLB_MODEL_FILES, OPENVINO_RUNTIME_FILES,
 };
+use easydict_windows_ai::{
+    WindowsAiError, WindowsAiGenerationOptions, WindowsAiLanguageModelClient,
+    WindowsAiLanguageModelProbe, WindowsAiReadyState, WindowsAiResponse,
+};
+use futures_channel::mpsc::{unbounded, TryRecvError};
+#[cfg(feature = "retained-dotnet-workers")]
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use win_fluent::prelude::{
     Application, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand, PlatformEvent, ResultStatus,
     RuntimePlan, Subscription, SubscriptionKind, Task, WindowCommand, WindowId,
 };
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn plan_uses_trimmed_text_language_state_and_enabled_services() {
@@ -1247,6 +1277,45 @@ fn app_start_foundry_local_in_auto_provider_enables_native_auto_foundry_route() 
 }
 
 #[test]
+fn foundry_local_prepare_result_persists_only_discovered_empty_fields() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.saved_settings = app.state.settings.clone();
+    app.state.settings.foundry_local_endpoint.clear();
+    app.state.settings.foundry_local_model.clear();
+    app.state.saved_settings.foundry_local_endpoint.clear();
+    app.state.saved_settings.foundry_local_model.clear();
+    app.state.settings.monitor_clipboard = true;
+    app.state.saved_settings.monitor_clipboard = false;
+    app.state.settings.unsaved_changes = true;
+
+    let task = app.update(Message::FoundryLocalPrepareFinished(Ok(
+        easydict_app::FoundryLocalPrepareOutcome {
+            ready: true,
+            status_message: "Foundry Local is ready at http://localhost:5273/v1/chat/completions."
+                .to_string(),
+            endpoint: Some("http://localhost:5273/v1/chat/completions".to_string()),
+            model: "qwen2.5-0.5b".to_string(),
+        },
+    )));
+
+    assert!(contains_future_task(&task));
+    assert_eq!(
+        app.state.settings.foundry_local_endpoint,
+        "http://localhost:5273/v1/chat/completions"
+    );
+    assert_eq!(app.state.settings.foundry_local_model, "qwen2.5-0.5b");
+    assert_eq!(
+        app.state.saved_settings.foundry_local_endpoint,
+        "http://localhost:5273/v1/chat/completions"
+    );
+    assert_eq!(app.state.saved_settings.foundry_local_model, "qwen2.5-0.5b");
+    assert!(app.state.settings.monitor_clipboard);
+    assert!(!app.state.saved_settings.monitor_clipboard);
+}
+
+#[test]
 fn app_prepare_local_ai_model_routes_foundry_provider_to_native_prepare_task() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
@@ -1283,7 +1352,7 @@ fn app_prepare_local_ai_model_routes_foundry_provider_to_native_prepare_task() {
 }
 
 #[test]
-fn app_prepare_local_ai_model_keeps_auto_provider_on_existing_non_foundry_path() {
+fn app_prepare_local_ai_model_routes_auto_provider_to_windows_ai_prepare_task() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -1291,7 +1360,11 @@ fn app_prepare_local_ai_model_keeps_auto_provider_on_existing_non_foundry_path()
 
     let task = app.update(Message::PrepareLocalAiModel);
 
-    assert!(!contains_future_task(&task));
+    assert!(contains_future_task(&task));
+    assert_eq!(
+        app.state.settings.local_ai_status,
+        "Preparing Phi Silica model"
+    );
     assert_eq!(
         app.state.settings.local_ai_prepare_progress,
         "Requesting model download and preparation from Windows"
@@ -1303,15 +1376,75 @@ fn app_prepare_local_ai_model_keeps_auto_provider_on_existing_non_foundry_path()
 }
 
 #[test]
+fn app_prepare_local_ai_model_keeps_openvino_on_download_path() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.local_ai_provider = local_ai_provider_modes::OPENVINO.to_string();
+
+    let task = app.update(Message::PrepareLocalAiModel);
+
+    assert!(!contains_future_task(&task));
+    assert_eq!(app.state.settings.local_ai_status, "OpenVINO selected");
+    assert_eq!(
+        app.state.settings.local_ai_prepare_progress,
+        "Use Download model to prepare OpenVINO assets"
+    );
+}
+
+#[test]
+fn app_windows_ai_prepare_finished_updates_local_ai_status() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.local_ai_provider = local_ai_provider_modes::WINDOWS_AI.to_string();
+
+    let task = app.update(Message::WindowsAiPrepareFinished(Ok(
+        easydict_windows_ai::status_for_ready_state(
+            easydict_windows_ai::WindowsAiReadyState::Ready,
+        ),
+    )));
+
+    assert_eq!(task_kind(&task), "none");
+    assert_eq!(app.state.settings.local_ai_status, "Phi Silica is ready.");
+    assert_eq!(app.state.settings.local_ai_prepare_progress, "Ready");
+}
+
+#[test]
+fn app_windows_ai_prepare_finished_reports_incompatible_status() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.local_ai_provider = local_ai_provider_modes::WINDOWS_AI.to_string();
+
+    app.update(Message::WindowsAiPrepareFinished(Ok(
+        easydict_windows_ai::status_for_ready_state(
+            easydict_windows_ai::WindowsAiReadyState::CapabilityMissing,
+        ),
+    )));
+
+    assert!(app
+        .state
+        .settings
+        .local_ai_status
+        .contains("systemAIModels"));
+    assert_eq!(
+        app.state.settings.local_ai_prepare_progress,
+        "Not compatible"
+    );
+}
+
+#[test]
 fn foundry_local_prepare_result_does_not_overwrite_user_endpoint() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
     app.state.settings.foundry_local_endpoint = "https://foundry.example.test/v1".to_string();
     app.state.settings.foundry_local_model = "custom-model".to_string();
+    app.state.saved_settings = app.state.settings.clone();
     app.state.settings.unsaved_changes = false;
 
-    app.update(Message::FoundryLocalPrepareFinished(Ok(
+    let task = app.update(Message::FoundryLocalPrepareFinished(Ok(
         easydict_app::FoundryLocalPrepareOutcome {
             ready: true,
             status_message: "Foundry Local is ready at http://localhost:5273/v1/chat/completions."
@@ -1326,7 +1459,13 @@ fn foundry_local_prepare_result_does_not_overwrite_user_endpoint() {
         "https://foundry.example.test/v1"
     );
     assert_eq!(app.state.settings.foundry_local_model, "custom-model");
+    assert_eq!(
+        app.state.saved_settings.foundry_local_endpoint,
+        "https://foundry.example.test/v1"
+    );
+    assert_eq!(app.state.saved_settings.foundry_local_model, "custom-model");
     assert!(!app.state.settings.unsaved_changes);
+    assert_eq!(task_kind(&task), "none");
 }
 
 #[test]
@@ -1574,10 +1713,157 @@ fn auto_foundry_local_probe_request_uses_discovered_endpoint_before_worker_route
     assert_eq!(resolver.calls, 1);
     assert_eq!(
         native_request.settings.foundry_local_endpoint.as_deref(),
-        Some("http://localhost:5273/openai/status")
+        Some("http://localhost:5273/v1/chat/completions")
     );
+    assert_eq!(
+        native_request.settings.foundry_local_model.as_deref(),
+        Some("qwen2.5-0.5b")
+    );
+    assert_eq!(resolver.status_calls, 2);
+    assert_eq!(resolver.start_calls, 1);
+    assert_eq!(resolver.load_model_calls, vec!["qwen2.5-0.5b".to_string()]);
     assert!(quick_translate_request_can_route_natively(&native_request));
     assert!(request.settings.foundry_local_endpoint.is_none());
+}
+
+#[test]
+fn local_ai_route_decision_marks_auto_request_for_windows_ai_probe_before_foundry() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 131,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert_eq!(
+        local_ai_route_decision(&request),
+        LocalAiRouteDecision::ProbeWindowsAi
+    );
+}
+
+#[test]
+fn local_ai_route_decision_routes_configured_auto_endpoint_natively() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 132,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_endpoint: Some("http://127.0.0.1:5273/v1/chat/completions".to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert_eq!(
+        local_ai_route_decision(&request),
+        LocalAiRouteDecision::NativeFoundry
+    );
+}
+
+#[test]
+fn local_ai_route_decision_marks_explicit_windows_ai_for_native_probe() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 133,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert_eq!(
+        local_ai_route_decision(&request),
+        LocalAiRouteDecision::ProbeWindowsAi
+    );
+}
+
+#[cfg(not(feature = "retained-dotnet-workers"))]
+#[test]
+fn local_ai_route_decision_keeps_worker_compat_unreachable_without_retained_feature() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 134,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert_eq!(
+        local_ai_route_decision(&request),
+        LocalAiRouteDecision::ProbeWindowsAi
+    );
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
+#[test]
+fn local_ai_route_decision_keeps_windows_ai_native_probe_with_retained_feature() {
+    let request = QuickTranslateServiceRequest {
+        query_id: 135,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert_eq!(
+        local_ai_route_decision_with_worker_policy(&request, RetainedWorkerPolicy::all_enabled()),
+        LocalAiRouteDecision::ProbeWindowsAi
+    );
 }
 
 #[test]
@@ -1608,6 +1894,407 @@ fn auto_foundry_local_probe_request_preserves_worker_route_when_endpoint_missing
     assert!(native_request.is_none());
     assert_eq!(resolver.calls, 1);
     assert!(!quick_translate_request_can_route_natively(&request));
+}
+
+#[test]
+fn auto_local_ai_probes_windows_ai_before_foundry_endpoint_fallback() {
+    let temp_dir = unique_temp_dir("easydict-auto-local-ai-windows-ai-probe-order");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 136,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_probe =
+        RecordingWindowsAiProbe::new([WindowsAiReadyState::NotSupportedOnCurrentSystem]);
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_probes(
+        request,
+        &temp_dir,
+        &mut windows_ai_probe,
+        &mut foundry_resolver,
+    );
+    let error = update
+        .outcome
+        .result
+        .expect_err("Auto LocalAI should continue after unsupported WindowsAI and fail locally");
+
+    assert_eq!(windows_ai_probe.ready_state_calls, 1);
+    assert_eq!(foundry_resolver.calls, 1);
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn explicit_windows_ai_probe_reports_phi_status_without_worker_lookup() {
+    let temp_dir = unique_temp_dir("easydict-explicit-windows-ai-native-probe");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 137,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_probe =
+        RecordingWindowsAiProbe::new([WindowsAiReadyState::CapabilityMissing]);
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_probes(
+        request,
+        &temp_dir,
+        &mut windows_ai_probe,
+        &mut foundry_resolver,
+    );
+    let error = update
+        .outcome
+        .result
+        .expect_err("explicit WindowsAI should fail after Rust-native Phi probe");
+
+    assert_eq!(windows_ai_probe.ready_state_calls, 1);
+    assert_eq!(
+        foundry_resolver.calls, 0,
+        "explicit WindowsAI must not fall back to Foundry Local"
+    );
+    assert!(error.message.contains("systemAIModels"));
+    assert!(error
+        .message
+        .contains("requires a Rust-native Phi Silica generation route"));
+    assert!(!error.message.contains(".NET"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn explicit_windows_ai_client_routes_translation_natively_without_foundry_fallback() {
+    let temp_dir = unique_temp_dir("easydict-explicit-windows-ai-native-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 138,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: Some("Use concise wording.".to_string()),
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_client = RecordingWindowsAiClient::with_stream_responses(
+        [WindowsAiReadyState::Ready],
+        [Ok(vec!["你".to_string(), "好".to_string()])],
+    );
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_client(
+        request,
+        &temp_dir,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    );
+
+    let result = update
+        .outcome
+        .result
+        .expect("explicit WindowsAI should use the injected Rust-native Phi client");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_id.as_deref(), Some("windows-local-ai"));
+    assert_eq!(result.service_name.as_deref(), Some("Phi Silica"));
+    assert_eq!(result.detected_language.as_deref(), Some("en"));
+    assert_eq!(
+        update.outcome.streamed_chunks,
+        vec!["你".to_string(), "好".to_string()]
+    );
+    assert_eq!(windows_ai_client.ready_state_calls, 1);
+    assert_eq!(windows_ai_client.stream_prompts.len(), 1);
+    assert!(windows_ai_client.stream_prompts[0].contains("Hello"));
+    assert!(windows_ai_client.stream_prompts[0].contains("Use concise wording."));
+    assert_eq!(
+        foundry_resolver.calls, 0,
+        "explicit WindowsAI must not fall back to Foundry Local"
+    );
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn auto_local_ai_ready_windows_ai_client_runs_before_foundry_fallback() {
+    let temp_dir = unique_temp_dir("easydict-auto-windows-ai-ready-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 139,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_client = RecordingWindowsAiClient::with_stream_responses(
+        [WindowsAiReadyState::Ready, WindowsAiReadyState::Ready],
+        [Ok(vec!["你好".to_string()])],
+    );
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_client(
+        request,
+        &temp_dir,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    );
+
+    let result = update
+        .outcome
+        .result
+        .expect("Auto LocalAI should use ready WindowsAI before Foundry");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_name.as_deref(), Some("Phi Silica"));
+    assert_eq!(windows_ai_client.ready_state_calls, 2);
+    assert_eq!(windows_ai_client.stream_prompts.len(), 1);
+    assert_eq!(
+        foundry_resolver.calls, 0,
+        "ready WindowsAI should win before Foundry Local discovery"
+    );
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn auto_local_ai_not_ready_windows_ai_client_continues_to_foundry_and_openvino_fallbacks() {
+    let temp_dir = unique_temp_dir("easydict-auto-windows-ai-not-ready-fallback");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 140,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_client =
+        RecordingWindowsAiClient::with_stream_responses([WindowsAiReadyState::NotReady], []);
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_client(
+        request,
+        &temp_dir,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    );
+    let error = update
+        .outcome
+        .result
+        .expect_err("Auto should continue past a not-ready WindowsAI client");
+
+    assert_eq!(windows_ai_client.ready_state_calls, 1);
+    assert!(windows_ai_client.stream_prompts.is_empty());
+    assert_eq!(foundry_resolver.calls, 1);
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn streaming_explicit_windows_ai_client_emits_phi_chunks() {
+    let temp_dir = unique_temp_dir("easydict-streaming-explicit-windows-ai-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 141,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_client = RecordingWindowsAiClient::with_stream_responses(
+        [WindowsAiReadyState::Ready],
+        [Ok(vec!["你".to_string(), "好".to_string()])],
+    );
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+    let (sender, mut receiver) = unbounded();
+
+    let update = run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client(
+        request,
+        &temp_dir,
+        &sender,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    );
+
+    let result = update
+        .outcome
+        .result
+        .expect("streaming explicit WindowsAI should succeed");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(
+        update.outcome.streamed_chunks,
+        vec!["你".to_string(), "好".to_string()]
+    );
+    match receiver.try_recv() {
+        Ok(Message::QuickTranslateStreamChunk(chunk)) => assert_eq!(chunk.text, "你"),
+        other => panic!("expected first WindowsAI stream chunk, got {other:?}"),
+    }
+    match receiver.try_recv() {
+        Ok(Message::QuickTranslateStreamChunk(chunk)) => assert_eq!(chunk.text, "好"),
+        other => panic!("expected second WindowsAI stream chunk, got {other:?}"),
+    }
+    assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+    assert_eq!(foundry_resolver.calls, 0);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn explicit_windows_ai_client_routes_grammar_natively() {
+    let temp_dir = unique_temp_dir("easydict-explicit-windows-ai-grammar-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 142,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::GrammarCorrection,
+        execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+        params: TranslateParams {
+            text: "He go home.".to_string(),
+            from: Some("en".to_string()),
+            to: Some("en".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: Some(GrammarCorrectParams {
+            text: "He go home.".to_string(),
+            language: Some("en".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            include_explanations: true,
+        }),
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_client = RecordingWindowsAiClient::with_stream_responses(
+        [WindowsAiReadyState::Ready],
+        [Ok(vec![
+            "[CORRECTED]He goes home.[/CORRECTED]\n".to_string(),
+            "[EXPLANATION]Subject-verb agreement.[/EXPLANATION]".to_string(),
+        ])],
+    );
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_client(
+        request,
+        &temp_dir,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    );
+
+    let result = update
+        .outcome
+        .result
+        .expect("explicit WindowsAI grammar should use the injected client");
+    assert_eq!(result.translated_text, "He goes home.");
+    assert_eq!(result.service_id.as_deref(), Some("windows-local-ai"));
+    assert_eq!(result.service_name.as_deref(), Some("Phi Silica"));
+    let grammar_result = update
+        .outcome
+        .grammar_result
+        .expect("grammar preview should be retained");
+    assert_eq!(grammar_result.corrected_text, "He goes home.");
+    assert_eq!(
+        grammar_result.explanation.as_deref(),
+        Some("Subject-verb agreement.")
+    );
+    assert!(grammar_result.has_corrections);
+    assert_eq!(windows_ai_client.stream_prompts.len(), 1);
+    assert!(windows_ai_client.stream_prompts[0].contains("Correct the grammar"));
+    assert_eq!(foundry_resolver.calls, 0);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
 #[test]
@@ -1647,6 +2334,12 @@ fn native_openai_quick_translate_discovers_foundry_local_endpoint_when_empty() {
     assert_eq!(result.translated_text, "你好");
     assert_eq!(result.service_id.as_deref(), Some("windows-local-ai"));
     assert_eq!(backend.foundry_local_endpoint_resolver().calls, 1);
+    assert_eq!(backend.foundry_local_endpoint_resolver().status_calls, 2);
+    assert_eq!(backend.foundry_local_endpoint_resolver().start_calls, 1);
+    assert_eq!(
+        backend.foundry_local_endpoint_resolver().load_model_calls,
+        vec!["phi-3-mini".to_string()]
+    );
     let requests = &backend.http_client().requests;
     assert_eq!(
         requests[0].endpoint,
@@ -1718,6 +2411,7 @@ fn native_openai_quick_translate_discovers_foundry_local_grammar_endpoint_when_e
     assert_eq!(requests[0].body["model"], "phi-3-mini");
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[test]
 fn local_ai_worker_backend_stream_uses_dedicated_worker_and_maps_languages() {
     let request = QuickTranslateServiceRequest {
@@ -1757,6 +2451,7 @@ fn local_ai_worker_backend_stream_uses_dedicated_worker_and_maps_languages() {
     );
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[test]
 fn local_ai_worker_backend_translate_reuses_stream_worker() {
     let request = QuickTranslateServiceRequest {
@@ -1793,6 +2488,7 @@ fn local_ai_worker_backend_translate_reuses_stream_worker() {
     assert!(update.outcome.streamed_chunks.is_empty());
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[test]
 fn local_ai_worker_backend_grammar_uses_dedicated_worker_and_preserves_explanation_flag() {
     let request = QuickTranslateServiceRequest {
@@ -1836,6 +2532,7 @@ fn local_ai_worker_backend_grammar_uses_dedicated_worker_and_preserves_explanati
     assert_eq!(grammar_result.explanation.as_deref(), Some("include=True"));
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[test]
 fn local_ai_worker_backend_stream_maps_extended_nllb_languages() {
     let request = QuickTranslateServiceRequest {
@@ -2597,8 +3294,7 @@ fn native_traditional_http_quick_translate_routes_default_youdao_web_mode() {
     let sentence_request = QuickTranslateServiceRequest {
         query_id: 35,
         params: TranslateParams {
-            text: "Hello world. This should stay on CompatHost until webtranslate is ported."
-                .to_string(),
+            text: "Hello world. This should use the native Youdao webtranslate route.".to_string(),
             from: Some("en".to_string()),
             to: Some("zh-Hans".to_string()),
             services: Some(vec!["youdao".to_string()]),
@@ -2761,6 +3457,7 @@ fn quick_translate_applies_and_renders_result_alternatives() {
         timing_ms: Some(12),
         alternatives: Some(vec!["Servus".to_string(), "Hallöchen".to_string()]),
         word_result: None,
+        raw_html: None,
     };
     let update = QuickTranslateServiceUpdate {
         query_id: plan.query_id,
@@ -2827,6 +3524,7 @@ fn quick_translate_applies_renders_and_clears_word_result() {
                 words: Some(vec!["salutation".to_string(), "welcome".to_string()]),
             }]),
         }),
+        raw_html: None,
     };
     let update = QuickTranslateServiceUpdate {
         query_id: plan.query_id,
@@ -3826,7 +4524,7 @@ fn browser_support_messages_run_bundled_registrar_commands() {
         platform_command(&install),
         Some(PlatformCommand::RunBundledExecutable {
             executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: vec!["install".to_string()],
+            arguments: browser_registrar_arguments("install"),
         })
     );
 
@@ -3835,7 +4533,7 @@ fn browser_support_messages_run_bundled_registrar_commands() {
         platform_command(&uninstall),
         Some(PlatformCommand::RunBundledExecutable {
             executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: vec!["uninstall".to_string()],
+            arguments: browser_registrar_arguments("uninstall"),
         })
     );
 }
@@ -4016,8 +4714,69 @@ fn mdx_service_requests_configure_settings_and_use_mdx_lookup() {
 
     let result = outcome.results[0].result.as_ref().expect("MDX result");
     assert_eq!(result.service_name.as_deref(), Some("Demo Dictionary"));
-    assert!(result.translated_text.contains("apple"));
-    assert!(result.translated_text.contains("<div>A fruit</div>"));
+    assert_eq!(result.translated_text, "A fruit");
+    assert!(!result.translated_text.contains("<div"));
+    assert_eq!(result.raw_html, None);
+    let definition = result
+        .word_result
+        .as_ref()
+        .and_then(|word| word.definitions.as_ref())
+        .and_then(|definitions| definitions.first())
+        .expect("MDX result should expose readable dictionary definition");
+    assert_eq!(definition.part_of_speech.as_deref(), Some("dictionary"));
+    assert_eq!(
+        definition.meanings.as_deref(),
+        Some(&["A fruit".to_string()][..])
+    );
+}
+
+#[test]
+fn mdx_service_result_keeps_rich_html_only_when_mdd_resources_are_attached() {
+    let mut state = EasydictUiState::default();
+    state.source_text = "apple".to_string();
+    state.results = Vec::new();
+    state.apply(Message::MdxDictionarySelected(Some(
+        r"C:\Dicts\Demo Dictionary.mdx".to_string(),
+    )));
+    state.settings.imported_mdx_dictionaries[0].mdd_file_paths =
+        vec![r"C:\Dicts\Demo Dictionary.mdd".to_string()];
+    let plan = begin_quick_translate(&mut state).expect("MDX query should begin");
+    let mut backend = RecordingBackend::with_mdx_responses([Ok(MdxLookupResult {
+        entries: vec![MdxLookupEntry {
+            key: "apple".to_string(),
+            html: r#"<div><span>A fruit</span><img src="data:image/png;base64,iVBORw=="></div>"#
+                .to_string(),
+            dictionary_name: Some("Demo Dictionary".to_string()),
+        }],
+    })]);
+
+    let outcome = run_quick_translate(&mut backend, &plan);
+    let result = outcome.results[0].result.as_ref().expect("MDX result");
+
+    assert_eq!(result.translated_text, "A fruit");
+    assert!(!result.translated_text.contains("<span"));
+    assert_eq!(
+        result.raw_html.as_deref(),
+        Some(r#"<div><span>A fruit</span><img src="data:image/png;base64,iVBORw=="></div>"#)
+    );
+    let raw_html = result.raw_html.clone();
+
+    let update = QuickTranslateServiceUpdate {
+        query_id: plan.query_id,
+        outcome: outcome.results.into_iter().next().expect("service outcome"),
+    };
+    apply_quick_translate_service_update(&mut state, update);
+
+    assert_eq!(state.results[0].body, "A fruit");
+    assert_eq!(state.results[0].raw_html, raw_html);
+    assert_eq!(
+        state.results[0].result_body(),
+        "A fruit\nDefinitions: dictionary A fruit"
+    );
+
+    state.source_text = "banana".to_string();
+    begin_quick_translate(&mut state).expect("second query begins");
+    assert_eq!(state.results[0].raw_html, None);
 }
 
 #[test]
@@ -4060,7 +4819,7 @@ fn unencrypted_mdx_service_routes_natively_without_compat_host_spawn() {
 
     assert!(quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4073,7 +4832,7 @@ fn unencrypted_mdx_service_routes_natively_without_compat_host_spawn() {
 }
 
 #[test]
-fn non_native_non_bridge_service_is_rejected_without_compat_host_spawn() {
+fn non_native_service_is_rejected_by_default_app_dir_route() {
     let temp_dir = unique_temp_dir("easydict-no-generic-compat-host");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let request = QuickTranslateServiceRequest {
@@ -4092,11 +4851,7 @@ fn non_native_non_bridge_service_is_rejected_without_compat_host_spawn() {
         settings: SettingsSnapshot::default(),
     };
 
-    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
-        request,
-        &temp_dir,
-        RetainedWorkerPolicy::all_enabled(),
-    );
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4134,11 +4889,7 @@ fn auto_foundry_local_endpoint_routes_natively_without_local_ai_compat_host_spaw
     };
 
     assert!(quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
-        request,
-        &temp_dir,
-        RetainedWorkerPolicy::all_enabled(),
-    );
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4150,8 +4901,11 @@ fn auto_foundry_local_endpoint_routes_natively_without_local_ai_compat_host_spaw
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[test]
 fn auto_local_ai_without_foundry_endpoint_stays_on_local_ai_worker_route() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
     let temp_dir = unique_temp_dir("easydict-auto-local-ai-empty-foundry-still-worker");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let request = QuickTranslateServiceRequest {
@@ -4195,7 +4949,211 @@ fn auto_local_ai_without_foundry_endpoint_stays_on_local_ai_worker_route() {
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
-#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+#[cfg(feature = "retained-dotnet-workers")]
+#[test]
+fn explicit_worker_policy_without_hybrid_runtime_profile_stays_rust_only() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvironmentVariableGuard::remove("EASYDICT_RUNTIME_PROFILE");
+    let _generic_runtime_profile = EnvironmentVariableGuard::remove("RUNTIME_PROFILE");
+    let temp_dir = unique_temp_dir("easydict-explicit-worker-policy-stays-rust-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 106,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+    let update =
+        run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver(
+            request,
+            &temp_dir,
+            RetainedWorkerPolicy::all_enabled(),
+            &mut foundry_resolver,
+        );
+    let error = update
+        .outcome
+        .result
+        .expect_err("injected worker policy must still require explicit hybrid runtime");
+
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains("Local AI worker executable"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn packaged_auto_local_ai_without_foundry_or_openvino_cache_fails_locally_without_worker_probe() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _foundry_cli = EnvironmentVariableGuard::set(
+        FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+        "__missing_foundry_cli__.cmd",
+    );
+    let temp_dir = unique_temp_dir("easydict-packaged-auto-local-ai-native-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 103,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert!(!quick_translate_request_can_route_natively(&request));
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
+    let error = update
+        .outcome
+        .result
+        .expect_err("default packaged LocalAI should fail locally without worker probing");
+
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET Local AI workers"));
+    assert!(!error.message.contains("Local AI worker executable"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn streaming_app_dir_auto_local_ai_without_foundry_or_openvino_cache_fails_locally_without_worker_probe(
+) {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    let _winrt_disabled = EnvironmentVariableGuard::set("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1");
+    let temp_dir = unique_temp_dir("easydict-streaming-auto-local-ai-native-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 104,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert!(!quick_translate_request_can_route_natively(&request));
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(None)]);
+    let (sender, mut receiver) = unbounded();
+    let update = run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver(
+        request,
+        &temp_dir,
+        &sender,
+        &mut foundry_resolver,
+    );
+    let error = update
+        .outcome
+        .result
+        .expect_err("default streaming LocalAI should fail locally without worker probing");
+
+    assert_eq!(foundry_resolver.calls, 1);
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET Local AI workers"));
+    assert!(!error.message.contains("Local AI worker executable"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+    assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn streaming_foundry_resolver_helper_explicit_windows_ai_uses_default_native_client() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _winrt_disabled = EnvironmentVariableGuard::set("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1");
+    let temp_dir = unique_temp_dir("easydict-streaming-explicit-windows-ai-default-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 105,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    assert!(!quick_translate_request_can_route_natively(&request));
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+    let (sender, mut receiver) = unbounded();
+    let update = run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver(
+        request,
+        &temp_dir,
+        &sender,
+        &mut foundry_resolver,
+    );
+    let error = update
+        .outcome
+        .result
+        .expect_err("explicit WindowsAI should use the default Rust-native client");
+
+    assert_eq!(foundry_resolver.calls, 0);
+    assert!(error.message.contains("Phi Silica is not supported"));
+    assert!(!error
+        .message
+        .contains("requires a Rust-native Phi Silica generation route"));
+    assert!(!error.message.contains(".NET Local AI workers"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+    assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[cfg(all(
+    feature = "retained-dotnet-workers",
+    target_os = "windows",
+    target_arch = "x86_64"
+))]
 #[test]
 fn auto_local_ai_without_foundry_endpoint_uses_cache_ready_native_openvino_before_worker() {
     let temp_dir = unique_temp_dir("easydict-auto-local-ai-cache-ready-native-openvino");
@@ -4248,6 +5206,7 @@ fn auto_local_ai_without_foundry_endpoint_uses_cache_ready_native_openvino_befor
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[test]
 fn auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_route() {
     let temp_dir = unique_temp_dir("easydict-auto-local-ai-retained-worker-disabled");
@@ -4288,7 +5247,7 @@ fn auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_r
         .expect_err("disabled retained LocalAI worker should fail locally");
 
     assert!(error.message.contains("requires a Rust-native route"));
-    assert!(error.message.contains(".NET Local AI workers"));
+    assert!(!error.message.contains(".NET Local AI workers"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
     assert!(!error.message.contains("executable"));
 
@@ -4296,7 +5255,8 @@ fn auto_local_ai_without_foundry_endpoint_can_disable_retained_local_ai_worker_r
 }
 
 #[test]
-fn packaged_local_ai_windows_ai_route_fails_locally_without_worker_probe() {
+fn packaged_local_ai_windows_ai_route_uses_native_client_without_worker_probe() {
+    let _winrt_disabled = EnvironmentVariableGuard::set("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1");
     let temp_dir = unique_temp_dir("easydict-packaged-local-ai-windows-ai-no-worker");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let request = QuickTranslateServiceRequest {
@@ -4319,14 +5279,17 @@ fn packaged_local_ai_windows_ai_route_fails_locally_without_worker_probe() {
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
-        .expect_err("WindowsAI should require a Rust-native route before worker probing");
+        .expect_err("WindowsAI should use the Rust-native client before worker probing");
 
-    assert!(error.message.contains("requires a Rust-native route"));
-    assert!(error.message.contains(".NET Local AI workers"));
+    assert!(error.message.contains("Phi Silica is not supported"));
+    assert!(!error
+        .message
+        .contains("requires a Rust-native Phi Silica generation route"));
+    assert!(!error.message.contains(".NET Local AI workers"));
     assert!(!error.message.contains("Local AI worker executable"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
@@ -4362,11 +5325,7 @@ fn openvino_local_ai_grammar_fails_locally_without_local_ai_compat_host_spawn() 
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
-        request,
-        &temp_dir,
-        RetainedWorkerPolicy::all_enabled(),
-    );
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4405,7 +5364,7 @@ fn openvino_local_ai_target_auto_fails_locally_without_local_ai_compat_host_spaw
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4445,7 +5404,7 @@ fn openvino_local_ai_unknown_target_language_fails_locally_without_worker() {
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4489,7 +5448,7 @@ fn auto_foundry_target_auto_fails_locally_before_native_foundry_or_compat_host_s
     };
 
     assert!(quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4499,6 +5458,47 @@ fn auto_foundry_target_auto_fails_locally_before_native_foundry_or_compat_host_s
         .message
         .contains("No local AI provider supports this language pair"));
     assert!(!error.message.contains("foundry-local-invalid"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn auto_foundry_unknown_target_language_fails_locally_before_endpoint_use() {
+    let temp_dir = unique_temp_dir("easydict-auto-foundry-unknown-target-no-endpoint");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 101,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("hr".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_endpoint: Some("foundry-local-invalid".to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
+    let error = update
+        .outcome
+        .result
+        .expect_err("unknown LocalAI target should fail before native Foundry execution");
+
+    assert!(error
+        .message
+        .contains("No local AI provider supports this language pair"));
+    assert!(!error.message.contains("foundry-local-invalid"));
+    assert!(!error.message.contains("requires a Rust-native route"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
@@ -4530,7 +5530,7 @@ fn explicit_foundry_target_auto_fails_locally_before_native_foundry_or_worker_st
     };
 
     assert!(quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4542,6 +5542,44 @@ fn explicit_foundry_target_auto_fails_locally_before_native_foundry_or_worker_st
     assert!(!error.message.contains("foundry-local-invalid"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
     assert!(!error.message.contains("Local AI worker"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn windows_ai_unknown_source_language_fails_locally_before_worker_required_error() {
+    let temp_dir = unique_temp_dir("easydict-windows-ai-unknown-source-no-worker");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 102,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("hr".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            ..SettingsSnapshot::default()
+        },
+    };
+
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
+    let error = update
+        .outcome
+        .result
+        .expect_err("unknown WindowsAI source should fail before worker-required fallback");
+
+    assert!(error
+        .message
+        .contains("No local AI provider supports this language pair"));
+    assert!(!error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -4570,7 +5608,7 @@ fn windows_ai_target_auto_fails_locally_without_local_ai_compat_host_spawn() {
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4610,7 +5648,7 @@ fn openvino_local_ai_supported_translation_without_cached_model_fails_locally_wi
     };
 
     assert!(!quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4653,11 +5691,7 @@ fn openvino_local_ai_supported_translation_with_cached_model_routes_to_native_or
     };
 
     assert!(quick_translate_request_can_route_natively(&request));
-    let update = run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
-        request,
-        &temp_dir,
-        RetainedWorkerPolicy::all_enabled(),
-    );
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4698,7 +5732,7 @@ fn encrypted_mdx_service_routes_natively_without_compat_host_spawn() {
 
     assert!(quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4728,7 +5762,7 @@ fn key_info_encrypted_mdx_service_routes_natively_without_compat_host_spawn() {
 
     assert!(quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4764,7 +5798,7 @@ fn unsupported_encrypted_mdx_service_fails_locally_without_compat_host_spawn() {
 
     assert!(!quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4802,7 +5836,7 @@ fn encrypted_mdx_with_invalid_regcode_fails_locally_without_compat_host_spawn() 
 
     assert!(!quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4833,7 +5867,7 @@ fn encrypted_mdx_without_credentials_fails_locally_without_compat_host_spawn() {
 
     assert!(!quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -4865,7 +5899,7 @@ fn encrypted_mdx_with_credentials_missing_file_fails_locally_without_compat_host
 
     assert!(!quick_translate_request_can_route_natively(&request));
 
-    let update = run_quick_translate_service_with_packaged_app_dir(request, &temp_dir);
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
     let error = update
         .outcome
         .result
@@ -5056,6 +6090,51 @@ fn local_dictionary_suggestion_runner_uses_persistent_native_index_and_skips_fre
 }
 
 #[test]
+fn local_dictionary_native_index_stops_after_full_suggestions_without_opening_later_dictionaries() {
+    let temp_dir = unique_temp_dir("easydict-mdx-suggestions-native-index-full-stop");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let first_mdx_path = temp_dir.join("First Dictionary.mdx");
+    let second_mdx_path = temp_dir.join("Second Dictionary.mdx");
+    fs::write(&first_mdx_path, "fake first mdx").expect("first source file should be written");
+    fs::write(&second_mdx_path, "fake second mdx").expect("second source file should be written");
+    let index_root = temp_dir.join("index");
+
+    let mut state = EasydictUiState::default();
+    state.settings.imported_mdx_dictionaries.clear();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(
+        &first_mdx_path,
+    ))));
+    state.apply(Message::MdxDictionarySelected(Some(path_string(
+        &second_mdx_path,
+    ))));
+    state.source_text = "app".to_string();
+    let request =
+        begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+
+    let first_keys = (0..25)
+        .map(|index| format!("application-{index:02}"))
+        .collect::<Vec<_>>();
+    let mut factory = RecordingNativeIndexReaderFactory::with_key_sets([first_keys]);
+    let update = run_local_dictionary_suggestion_request_with_native_index_root(
+        request,
+        &index_root,
+        &mut factory,
+    );
+
+    assert_eq!(factory.opened, ["mdx::first-dictionary"]);
+    assert_eq!(update.suggestions.len(), 20);
+    assert_eq!(update.error, None);
+    assert_eq!(update.suggestions[0].key, "application-00");
+    assert_eq!(update.suggestions[19].key, "application-19");
+    assert!(
+        !index_root.join("mdx%3A%3Asecond-dictionary").exists(),
+        "default native suggestions should not build or open later dictionaries once the result list is full"
+    );
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
 fn local_dictionary_suggestion_runner_routes_wildcard_queries_through_native_index() {
     let temp_dir = unique_temp_dir("easydict-mdx-suggestions-native-wildcard-index");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -5110,6 +6189,7 @@ fn local_dictionary_suggestion_runner_routes_wildcard_queries_through_native_ind
 }
 
 #[test]
+#[cfg(feature = "retained-dotnet-workers")]
 fn local_dictionary_suggestions_route_plain_and_credential_encrypted_mdx_natively() {
     let temp_dir = unique_temp_dir("easydict-mdx-suggestions-valid-encrypted-native");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -5137,14 +6217,6 @@ fn local_dictionary_suggestions_route_plain_and_credential_encrypted_mdx_nativel
 
     assert!(local_dictionary_suggestion_request_can_route_natively(
         &request
-    ));
-    assert!(!native_mdx_lookup_requires_credential_bridge(
-        &MdxLookupParams {
-            dictionary_id: "mdx::secure-dictionary".to_string(),
-            query: "app".to_string(),
-            fuzzy: true,
-        },
-        &request.settings,
     ));
     assert_eq!(
         native_mdx_lookup_local_input_error(
@@ -5254,7 +6326,7 @@ fn encrypted_local_dictionary_suggestions_with_invalid_regcode_fail_locally_with
         &request
     ));
 
-    let update = run_local_dictionary_suggestion_request_with_packaged_app_dir(request, &temp_dir);
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
 
     assert!(update.suggestions.is_empty());
     assert!(
@@ -5296,7 +6368,7 @@ fn unsupported_encrypted_local_dictionary_suggestions_fail_locally_without_compa
         &request
     ));
 
-    let update = run_local_dictionary_suggestion_request_with_packaged_app_dir(request, &temp_dir);
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
 
     assert!(update.suggestions.is_empty());
     assert!(
@@ -5313,6 +6385,7 @@ fn unsupported_encrypted_local_dictionary_suggestions_fail_locally_without_compa
 }
 
 #[test]
+#[cfg(feature = "retained-dotnet-workers")]
 fn mixed_local_dictionary_suggestions_skip_bridge_when_native_prefix_fills_results() {
     let temp_dir = unique_temp_dir("easydict-mdx-suggestions-native-full-no-bridge");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -5395,7 +6468,7 @@ fn unencrypted_local_dictionary_suggestions_route_natively_without_compat_host_s
         &request
     ));
 
-    let update = run_local_dictionary_suggestion_request_with_packaged_app_dir(request, &temp_dir);
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
 
     assert!(update.suggestions.is_empty());
     assert!(matches!(
@@ -5436,7 +6509,7 @@ fn mixed_local_dictionary_suggestions_with_missing_files_finish_without_compat_h
         &request
     ));
 
-    let update = run_local_dictionary_suggestion_request_with_packaged_app_dir(request, &temp_dir);
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
 
     assert!(update.suggestions.is_empty());
     assert!(
@@ -5474,7 +6547,7 @@ fn encrypted_local_dictionary_suggestions_with_credentials_missing_file_fail_loc
         &request
     ));
 
-    let update = run_local_dictionary_suggestion_request_with_packaged_app_dir(request, &temp_dir);
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
 
     assert!(update.suggestions.is_empty());
     assert!(matches!(
@@ -5511,7 +6584,7 @@ fn encrypted_local_dictionary_suggestions_without_credentials_fail_locally_witho
         &request
     ));
 
-    let update = run_local_dictionary_suggestion_request_with_packaged_app_dir(request, &temp_dir);
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
 
     assert!(update.suggestions.is_empty());
     assert!(matches!(
@@ -5839,7 +6912,7 @@ fn tray_commands_route_to_existing_desktop_actions() {
         platform_command(&browser_install),
         Some(PlatformCommand::RunBundledExecutable {
             executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: vec!["install".to_string()],
+            arguments: browser_registrar_arguments("install"),
         })
     );
 
@@ -5848,7 +6921,7 @@ fn tray_commands_route_to_existing_desktop_actions() {
         platform_command(&browser_uninstall),
         Some(PlatformCommand::RunBundledExecutable {
             executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: vec!["uninstall".to_string()],
+            arguments: browser_registrar_arguments("uninstall"),
         })
     );
 
@@ -5898,6 +6971,7 @@ fn shell_and_protocol_entries_cover_ocr_activation_contract() {
     let named_events = default_named_events();
     assert_eq!(named_events.len(), 1);
     assert_eq!(named_events[0].name, OCR_TRANSLATE_EVENT_NAME);
+    assert_ne!(named_events[0].name, r"Local\Easydict-OcrTranslate");
     assert!(named_events[0].auto_reset);
     assert_eq!(
         named_events[0].action.press(),
@@ -6135,6 +7209,7 @@ fn settings_runtime_status_loaded_updates_open_vino_panel_status_when_idle() {
         easydict_app::settings_status::SettingsRuntimeStatus {
             layout_model: "Available".to_string(),
             cjk_font: "Available".to_string(),
+            windows_ai_status: "Phi Silica is ready.".to_string(),
             foundry_local_status:
                 "Foundry Local is ready at http://localhost:5273/v1/chat/completions.".to_string(),
             open_vino_status: "NLLB-200 model ready".to_string(),
@@ -6162,6 +7237,7 @@ fn settings_runtime_status_loaded_preserves_queued_open_vino_download_state() {
         easydict_app::settings_status::SettingsRuntimeStatus {
             layout_model: "Available".to_string(),
             cjk_font: "Available".to_string(),
+            windows_ai_status: "Phi Silica is ready.".to_string(),
             foundry_local_status:
                 "Foundry Local is ready at http://localhost:5273/v1/chat/completions.".to_string(),
             open_vino_status: "Model not downloaded".to_string(),
@@ -6185,6 +7261,7 @@ fn settings_runtime_status_loaded_preserves_starting_foundry_local_status() {
         easydict_app::settings_status::SettingsRuntimeStatus {
             layout_model: "Available".to_string(),
             cjk_font: "Available".to_string(),
+            windows_ai_status: "Phi Silica is ready.".to_string(),
             foundry_local_status:
                 "Foundry Local is ready at http://localhost:5273/v1/chat/completions.".to_string(),
             open_vino_status: "NLLB-200 model ready".to_string(),
@@ -6401,7 +7478,28 @@ impl OpenAiHttpClient for RecordingOpenAiHttpClient {
 
 struct RecordingFoundryLocalEndpointResolver {
     calls: usize,
-    responses: VecDeque<Result<Option<String>, OpenAiExecutionError>>,
+    status_calls: usize,
+    start_calls: usize,
+    load_model_calls: Vec<String>,
+    responses: VecDeque<Result<Option<String>, FoundryLocalError>>,
+}
+
+struct RecordingWindowsAiProbe {
+    ready_state_calls: usize,
+    states: VecDeque<WindowsAiReadyState>,
+}
+
+struct RecordingWindowsAiClient {
+    ready_state_calls: usize,
+    states: VecDeque<WindowsAiReadyState>,
+    generate_prompts: Vec<String>,
+    generate_options: Vec<WindowsAiGenerationOptions>,
+    generate_responses: VecDeque<Result<WindowsAiResponse, WindowsAiError>>,
+    stream_prompts: Vec<String>,
+    stream_options: Vec<WindowsAiGenerationOptions>,
+    stream_responses: VecDeque<Result<Vec<String>, WindowsAiError>>,
+    warm_up_prompts: Vec<String>,
+    warm_up_options: Vec<WindowsAiGenerationOptions>,
 }
 
 #[derive(Default)]
@@ -6459,27 +7557,131 @@ struct RecordingNllbEngineCall {
 }
 
 impl RecordingFoundryLocalEndpointResolver {
-    fn new(
-        responses: impl IntoIterator<Item = Result<Option<String>, OpenAiExecutionError>>,
-    ) -> Self {
+    fn new(responses: impl IntoIterator<Item = Result<Option<String>, FoundryLocalError>>) -> Self {
         Self {
             calls: 0,
+            status_calls: 0,
+            start_calls: 0,
+            load_model_calls: Vec::new(),
             responses: responses.into_iter().collect(),
         }
     }
 }
 
-impl FoundryLocalEndpointResolver for RecordingFoundryLocalEndpointResolver {
-    fn resolve_chat_completions_endpoint(
+impl RecordingWindowsAiProbe {
+    fn new(states: impl IntoIterator<Item = WindowsAiReadyState>) -> Self {
+        Self {
+            ready_state_calls: 0,
+            states: states.into_iter().collect(),
+        }
+    }
+}
+
+impl RecordingWindowsAiClient {
+    fn with_stream_responses(
+        states: impl IntoIterator<Item = WindowsAiReadyState>,
+        stream_responses: impl IntoIterator<Item = Result<Vec<String>, WindowsAiError>>,
+    ) -> Self {
+        Self {
+            ready_state_calls: 0,
+            states: states.into_iter().collect(),
+            generate_prompts: Vec::new(),
+            generate_options: Vec::new(),
+            generate_responses: VecDeque::new(),
+            stream_prompts: Vec::new(),
+            stream_options: Vec::new(),
+            stream_responses: stream_responses.into_iter().collect(),
+            warm_up_prompts: Vec::new(),
+            warm_up_options: Vec::new(),
+        }
+    }
+}
+
+impl WindowsAiLanguageModelProbe for RecordingWindowsAiProbe {
+    fn ready_state(&mut self) -> WindowsAiReadyState {
+        self.ready_state_calls += 1;
+        self.states
+            .pop_front()
+            .unwrap_or(WindowsAiReadyState::NotSupportedOnCurrentSystem)
+    }
+}
+
+impl WindowsAiLanguageModelProbe for RecordingWindowsAiClient {
+    fn ready_state(&mut self) -> WindowsAiReadyState {
+        self.ready_state_calls += 1;
+        self.states
+            .pop_front()
+            .unwrap_or(WindowsAiReadyState::NotSupportedOnCurrentSystem)
+    }
+}
+
+impl WindowsAiLanguageModelClient for RecordingWindowsAiClient {
+    fn generate(
         &mut self,
-    ) -> Result<Option<String>, OpenAiExecutionError> {
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+    ) -> Result<WindowsAiResponse, WindowsAiError> {
+        self.generate_prompts.push(prompt.to_string());
+        self.generate_options.push(options);
+        self.generate_responses
+            .pop_front()
+            .unwrap_or_else(|| Ok(WindowsAiResponse::complete(String::new())))
+    }
+
+    fn generate_stream(
+        &mut self,
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+    ) -> Result<Vec<String>, WindowsAiError> {
+        self.stream_prompts.push(prompt.to_string());
+        self.stream_options.push(options);
+        self.stream_responses
+            .pop_front()
+            .unwrap_or_else(|| Ok(Vec::new()))
+    }
+
+    fn warm_up(
+        &mut self,
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+    ) -> Result<(), WindowsAiError> {
+        self.warm_up_prompts.push(prompt.to_string());
+        self.warm_up_options.push(options);
+        Ok(())
+    }
+}
+
+impl FoundryLocalEndpointResolver for RecordingFoundryLocalEndpointResolver {
+    fn resolve_chat_completions_endpoint(&mut self) -> Result<Option<String>, FoundryLocalError> {
         self.calls += 1;
         self.responses.pop_front().unwrap_or_else(|| {
-            Err(OpenAiExecutionError::new(
-                OpenAiExecutionErrorCode::Unknown,
+            Err(FoundryLocalError::new(
+                FoundryLocalErrorCode::ServiceUnavailable,
                 "test Foundry Local endpoint response was not queued",
             ))
         })
+    }
+}
+
+impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
+    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
+        self.status_calls += 1;
+        let state = if self.status_calls == 1 {
+            FoundryLocalRuntimeState::NotRunning
+        } else {
+            FoundryLocalRuntimeState::Running
+        };
+        Ok(FoundryLocalRuntimeStatus::new(state))
+    }
+
+    fn start_service(&mut self) -> Result<(), FoundryLocalError> {
+        self.start_calls += 1;
+        Ok(())
+    }
+
+    fn load_model(&mut self, model: &str) -> Result<(), FoundryLocalError> {
+        self.load_model_calls.push(model.to_string());
+        Ok(())
     }
 }
 
@@ -6573,6 +7775,36 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
     path
 }
 
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    original: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let original = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, original }
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    fn remove(name: &'static str) -> Self {
+        let original = std::env::var(name).ok();
+        std::env::remove_var(name);
+        Self { name, original }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(value) = self.original.as_ref() {
+            std::env::set_var(self.name, value);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
+}
+
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -6610,6 +7842,7 @@ fn write_mdx_header(path: &Path, header_xml: &str) {
     fs::write(path, file_bytes).expect("MDX header should be written");
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn mock_local_ai_worker_facade() -> DirectWorkerFacade {
     DirectWorkerFacade::spawn_worker(
         WorkerCommand::new("powershell.exe")
@@ -6623,6 +7856,7 @@ fn mock_local_ai_worker_facade() -> DirectWorkerFacade {
     .expect("mock local AI worker must spawn")
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 const MOCK_LOCAL_AI_WORKER_SCRIPT: &str = r#"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
@@ -7078,6 +8312,7 @@ fn dto(
         timing_ms,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     }
 }
 
@@ -7097,6 +8332,7 @@ fn no_result_dto(
         timing_ms,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     }
 }
 
@@ -7224,6 +8460,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::Window(_) => "window",
         Task::Platform(_) => "platform",
         Task::ScrollToTop(_) => "scroll_to_top",
+        Task::ScrollTo { .. } => "scroll_to",
         Task::ReadClipboardText(_) => "read_clipboard",
         Task::CaptureScreenRegion { .. } => "capture_screen",
         Task::CaptureScreenWindows { .. } => "capture_screen_windows",
@@ -7250,6 +8487,14 @@ fn platform_command(task: &Task<Message>) -> Option<PlatformCommand> {
         Task::Platform(command) => Some(command.clone()),
         _ => None,
     }
+}
+
+fn browser_registrar_arguments(command: &str) -> Vec<String> {
+    vec![
+        command.to_string(),
+        "--bridge-root-name".to_string(),
+        RUST_BRIDGE_ROOT_NAME.to_string(),
+    ]
 }
 
 fn contains_platform_command(task: &Task<Message>, expected: &PlatformCommand) -> bool {

@@ -1,4 +1,4 @@
-use easydict_app::compat_protocol::SettingsSnapshot;
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     build_built_in_ai_device_registration_request_plan, build_foundry_local_models_request_plan,
     build_openai_grammar_messages, build_openai_grammar_request_plan, build_openai_request_body,
@@ -25,15 +25,16 @@ use easydict_app::{
     translate_openai_compatible, try_resolve_foundry_local_model_id, validate_openai_config,
     zhipu_service_config, BuiltInAiDeviceRegistrationHttpClient,
     BuiltInAiDeviceRegistrationHttpResponse, ChatMessage, ChatRole, FoundryLocalEndpointResolver,
-    FoundryLocalModelState, FoundryLocalRuntimeController, FoundryLocalRuntimeState,
-    FoundryLocalRuntimeStatus, OpenAiApiFormat, OpenAiCompatibleConfig, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan,
-    OpenAiHttpTextResponse, OpenAiPlanError, OpenAiTranslationRequest, TranslationLanguage,
-    BUILT_IN_AI_ALLOWED_PROXY_MODELS, BUILT_IN_AI_DEFAULT_MODEL, CUSTOM_OPENAI_DEFAULT_MODEL,
-    DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL, FOUNDRY_LOCAL_DEFAULT_MODEL,
-    GITHUB_MODELS_DEFAULT_ENDPOINT, GITHUB_MODELS_DEFAULT_MODEL, GROQ_DEFAULT_ENDPOINT,
-    GROQ_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT, OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_ENDPOINT,
-    OPENAI_DEFAULT_MODEL, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT, ZHIPU_DEFAULT_ENDPOINT,
+    FoundryLocalError, FoundryLocalModelState, FoundryLocalRuntimeController,
+    FoundryLocalRuntimeState, FoundryLocalRuntimeStatus, OpenAiApiFormat, OpenAiCompatibleConfig,
+    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan,
+    OpenAiHttpRequestPlan, OpenAiHttpTextResponse, OpenAiPlanError, OpenAiTranslationRequest,
+    TranslationLanguage, BUILT_IN_AI_ALLOWED_PROXY_MODELS, BUILT_IN_AI_DEFAULT_MODEL,
+    CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL,
+    FOUNDRY_LOCAL_DEFAULT_MODEL, GITHUB_MODELS_DEFAULT_ENDPOINT, GITHUB_MODELS_DEFAULT_MODEL,
+    GROQ_DEFAULT_ENDPOINT, GROQ_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT, OLLAMA_DEFAULT_MODEL,
+    OPENAI_DEFAULT_ENDPOINT, OPENAI_DEFAULT_MODEL, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
+    ZHIPU_DEFAULT_ENDPOINT,
 };
 use std::collections::VecDeque;
 use std::fs;
@@ -1088,6 +1089,9 @@ fn config_for_service_uses_settings_snapshot_fields() {
     );
     assert_eq!(discovered.model, "qwen2.5-0.5b");
     assert_eq!(resolver.calls, 1);
+    assert_eq!(resolver.status_calls, 2);
+    assert_eq!(resolver.start_calls, 1);
+    assert_eq!(resolver.load_model_calls, vec!["qwen2.5-0.5b".to_string()]);
 
     let builtin_without_user_key = SettingsSnapshot {
         built_in_ai_model: Some("glm-4-flash-250414".to_string()),
@@ -1640,24 +1644,26 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
 
 struct RecordingFoundryLocalEndpointResolver {
     calls: usize,
-    responses: VecDeque<Result<Option<String>, OpenAiExecutionError>>,
+    status_calls: usize,
+    start_calls: usize,
+    load_model_calls: Vec<String>,
+    responses: VecDeque<Result<Option<String>, FoundryLocalError>>,
 }
 
 impl RecordingFoundryLocalEndpointResolver {
-    fn new(
-        responses: impl IntoIterator<Item = Result<Option<String>, OpenAiExecutionError>>,
-    ) -> Self {
+    fn new(responses: impl IntoIterator<Item = Result<Option<String>, FoundryLocalError>>) -> Self {
         Self {
             calls: 0,
+            status_calls: 0,
+            start_calls: 0,
+            load_model_calls: Vec::new(),
             responses: responses.into_iter().collect(),
         }
     }
 }
 
 impl FoundryLocalEndpointResolver for RecordingFoundryLocalEndpointResolver {
-    fn resolve_chat_completions_endpoint(
-        &mut self,
-    ) -> Result<Option<String>, OpenAiExecutionError> {
+    fn resolve_chat_completions_endpoint(&mut self) -> Result<Option<String>, FoundryLocalError> {
         self.calls += 1;
         self.responses
             .pop_front()
@@ -1665,15 +1671,37 @@ impl FoundryLocalEndpointResolver for RecordingFoundryLocalEndpointResolver {
     }
 }
 
+impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
+    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
+        self.status_calls += 1;
+        let state = if self.status_calls == 1 {
+            FoundryLocalRuntimeState::NotRunning
+        } else {
+            FoundryLocalRuntimeState::Running
+        };
+        Ok(FoundryLocalRuntimeStatus::new(state))
+    }
+
+    fn start_service(&mut self) -> Result<(), FoundryLocalError> {
+        self.start_calls += 1;
+        Ok(())
+    }
+
+    fn load_model(&mut self, model: &str) -> Result<(), FoundryLocalError> {
+        self.load_model_calls.push(model.to_string());
+        Ok(())
+    }
+}
+
 struct RecordingFoundryLocalRuntimeController {
     calls: Vec<String>,
-    endpoint_responses: VecDeque<Result<Option<String>, OpenAiExecutionError>>,
-    status_responses: VecDeque<Result<FoundryLocalRuntimeStatus, OpenAiExecutionError>>,
+    endpoint_responses: VecDeque<Result<Option<String>, FoundryLocalError>>,
+    status_responses: VecDeque<Result<FoundryLocalRuntimeStatus, FoundryLocalError>>,
 }
 
 impl RecordingFoundryLocalRuntimeController {
     fn new(
-        endpoint_responses: impl IntoIterator<Item = Result<Option<String>, OpenAiExecutionError>>,
+        endpoint_responses: impl IntoIterator<Item = Result<Option<String>, FoundryLocalError>>,
     ) -> Self {
         Self::with_statuses(
             [
@@ -1689,10 +1717,8 @@ impl RecordingFoundryLocalRuntimeController {
     }
 
     fn with_statuses(
-        status_responses: impl IntoIterator<
-            Item = Result<FoundryLocalRuntimeStatus, OpenAiExecutionError>,
-        >,
-        endpoint_responses: impl IntoIterator<Item = Result<Option<String>, OpenAiExecutionError>>,
+        status_responses: impl IntoIterator<Item = Result<FoundryLocalRuntimeStatus, FoundryLocalError>>,
+        endpoint_responses: impl IntoIterator<Item = Result<Option<String>, FoundryLocalError>>,
     ) -> Self {
         Self {
             calls: Vec::new(),
@@ -1703,9 +1729,7 @@ impl RecordingFoundryLocalRuntimeController {
 }
 
 impl FoundryLocalEndpointResolver for RecordingFoundryLocalRuntimeController {
-    fn resolve_chat_completions_endpoint(
-        &mut self,
-    ) -> Result<Option<String>, OpenAiExecutionError> {
+    fn resolve_chat_completions_endpoint(&mut self) -> Result<Option<String>, FoundryLocalError> {
         self.calls.push("resolve_endpoint".to_string());
         self.endpoint_responses
             .pop_front()
@@ -1714,7 +1738,7 @@ impl FoundryLocalEndpointResolver for RecordingFoundryLocalRuntimeController {
 }
 
 impl FoundryLocalRuntimeController for RecordingFoundryLocalRuntimeController {
-    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, OpenAiExecutionError> {
+    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
         self.calls.push("get_status".to_string());
         self.status_responses.pop_front().unwrap_or_else(|| {
             Ok(FoundryLocalRuntimeStatus::new(
@@ -1723,12 +1747,12 @@ impl FoundryLocalRuntimeController for RecordingFoundryLocalRuntimeController {
         })
     }
 
-    fn start_service(&mut self) -> Result<(), OpenAiExecutionError> {
+    fn start_service(&mut self) -> Result<(), FoundryLocalError> {
         self.calls.push("start_service".to_string());
         Ok(())
     }
 
-    fn load_model(&mut self, model: &str) -> Result<(), OpenAiExecutionError> {
+    fn load_model(&mut self, model: &str) -> Result<(), FoundryLocalError> {
         self.calls.push(format!("load_model:{model}"));
         Ok(())
     }

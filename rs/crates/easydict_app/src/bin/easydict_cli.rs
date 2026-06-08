@@ -1,7 +1,7 @@
 use easydict_app::cli_translate::{parse_args, usage, CliMode, CliOptions, CliParseError};
-use easydict_app::compat_protocol::{
-    GrammarCorrectParams, GrammarCorrectResultDto, SettingsSnapshot, TranslateParams,
-    TranslationResultDto,
+use easydict_app::protocol::{
+    local_ai_provider_modes, GrammarCorrectParams, GrammarCorrectResultDto, SettingsSnapshot,
+    TranslateParams, TranslationResultDto,
 };
 use easydict_app::quick_translate_request_can_route_natively;
 use easydict_app::{
@@ -11,13 +11,16 @@ use easydict_app::{
     run_quick_translate_service_with_native_route, settings_snapshot,
     CommandFoundryLocalEndpointResolver, QuickQueryMode, QuickTranslateBackendError,
     QuickTranslateExecutionKind, QuickTranslateService, QuickTranslateServiceRequest,
-    QuickTranslateServiceUpdate, RetainedWorkerPolicy, SettingsStorageError,
+    QuickTranslateServiceUpdate, SettingsStorageError,
 };
 use serde_json::json;
 use std::env;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
+
+const LOCAL_AI_WORKER_DISABLED_MESSAGE: &str =
+    "Windows Local AI requires a Rust-native route for this request.";
 
 fn main() -> ExitCode {
     match run() {
@@ -150,15 +153,13 @@ fn try_run_native_service_update(
         ));
     }
 
-    if let Some(error) =
-        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::from_environment())
-    {
+    if let Some(error) = local_ai_quick_translate_local_error(&request) {
         return Err(CliError::UnsupportedRustRoute(error.to_string()));
     }
 
     if request.service.id == "windows-local-ai" {
         return Err(CliError::UnsupportedRustRoute(
-            "Windows Local AI requires a Rust-native route; retained .NET Local AI worker fallback is no longer available in the Rust CLI.".to_string(),
+            LOCAL_AI_WORKER_DISABLED_MESSAGE.to_string(),
         ));
     }
 
@@ -252,13 +253,60 @@ fn native_cli_service_id(
 
 fn cli_settings_snapshot() -> Result<SettingsSnapshot, CliError> {
     let path = default_settings_storage_path();
-    match load_settings_file(&path) {
-        Ok(result) => Ok(settings_snapshot(&result.settings)),
+    let mut settings = match load_settings_file(&path) {
+        Ok(result) => settings_snapshot(&result.settings),
         Err(SettingsStorageError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
-            Ok(SettingsSnapshot::default())
+            SettingsSnapshot::default()
         }
-        Err(error) => Err(CliError::Settings(error)),
+        Err(error) => return Err(CliError::Settings(error)),
+    };
+
+    apply_environment_overrides(&mut settings);
+    Ok(settings)
+}
+
+fn apply_environment_overrides(settings: &mut SettingsSnapshot) {
+    if let Some(value) = env_value(&["EASYDICT_LOCAL_AI_PROVIDER", "LOCAL_AI_PROVIDER"]) {
+        settings.local_ai_provider = Some(normalize_local_ai_provider_env(&value));
     }
+    if let Some(value) = env_value(&["EASYDICT_FOUNDRY_LOCAL_ENDPOINT", "FOUNDRY_LOCAL_ENDPOINT"]) {
+        settings.foundry_local_endpoint = Some(value);
+    }
+    if let Some(value) = env_value(&["EASYDICT_FOUNDRY_LOCAL_MODEL", "FOUNDRY_LOCAL_MODEL"]) {
+        settings.foundry_local_model = Some(value);
+    }
+    if let Some(value) = env_value(&[
+        "EASYDICT_OPENVINO_DEVICE",
+        "EASYDICT_OPEN_VINO_DEVICE",
+        "OPENVINO_DEVICE",
+    ]) {
+        settings.open_vino_device = Some(value);
+    }
+    if let Some(value) = env_value(&["EASYDICT_OPENVINO_CACHE_DIR", "EASYDICT_CACHE_DIR"]) {
+        settings.cache_dir = Some(value);
+    }
+}
+
+fn normalize_local_ai_provider_env(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "windowsai" | "windows-ai" | "windows_ai" | "phi" | "phi-silica" | "phisilica" => {
+            local_ai_provider_modes::WINDOWS_AI.to_string()
+        }
+        "foundrylocal" | "foundry-local" | "foundry_local" | "local-ai" | "localai" => {
+            local_ai_provider_modes::FOUNDRY_LOCAL.to_string()
+        }
+        "openvino" | "open-vino" | "open_vino" => local_ai_provider_modes::OPENVINO.to_string(),
+        _ => local_ai_provider_modes::AUTO.to_string(),
+    }
+}
+
+fn env_value(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 fn translation_result_from_update(

@@ -1,4 +1,4 @@
-use easydict_app::compat_protocol::SettingsSnapshot;
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     build_custom_streaming_grammar_request_plan, build_custom_streaming_translation_request_plan,
     build_doubao_translation_request_plan, build_gemini_translation_request_plan,

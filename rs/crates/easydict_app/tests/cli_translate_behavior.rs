@@ -1,13 +1,26 @@
 #![cfg(windows)]
 
-use easydict_app::{
-    DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-    RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
-};
+use easydict_app::FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "EASYDICT_RUNTIME_PROFILE";
+const DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE: &str = "EASYDICT_DISABLE_LOCALAI_WORKER";
+const LOCAL_AI_ENVIRONMENT_OVERRIDE_KEYS: &[&str] = &[
+    "EASYDICT_LOCAL_AI_PROVIDER",
+    "LOCAL_AI_PROVIDER",
+    "EASYDICT_FOUNDRY_LOCAL_ENDPOINT",
+    "FOUNDRY_LOCAL_ENDPOINT",
+    "EASYDICT_FOUNDRY_LOCAL_MODEL",
+    "FOUNDRY_LOCAL_MODEL",
+    "EASYDICT_OPENVINO_DEVICE",
+    "EASYDICT_OPEN_VINO_DEVICE",
+    "OPENVINO_DEVICE",
+    "EASYDICT_OPENVINO_CACHE_DIR",
+    "EASYDICT_CACHE_DIR",
+];
 
 #[test]
 fn translate_command_rejects_retired_generic_worker_route() {
@@ -160,6 +173,7 @@ fn local_ai_cli_app_dir_no_longer_enables_retained_worker_fallback() {
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
         )
+        .remove_local_ai_env_overrides()
         .output()
         .expect("CLI should run");
 
@@ -170,8 +184,8 @@ fn local_ai_cli_app_dir_no_longer_enables_retained_worker_fallback() {
         "stderr should require a Rust-native LocalAI route:\n{stderr}"
     );
     assert!(
-        stderr.contains("retained .NET Local AI worker fallback is no longer available"),
-        "stderr should report the retired CLI worker fallback:\n{stderr}"
+        !stderr.contains(".NET Local AI workers"),
+        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
@@ -181,6 +195,78 @@ fn local_ai_cli_app_dir_no_longer_enables_retained_worker_fallback() {
         !stderr.to_ascii_lowercase().contains("compat host"),
         "LocalAI CLI should not describe a compat host route:\n{stderr}"
     );
+
+    let _ = fs::remove_dir_all(app_dir);
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn local_ai_stream_cli_host_hint_no_longer_enables_retained_worker_fallback() {
+    let settings_dir = unique_temp_dir("easydict-cli-local-ai-stream-host-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("stream")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--json",
+            "--host",
+            "C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
+        .env(
+            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+            "__missing_foundry_cli__.cmd",
+        )
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert_local_ai_cli_does_not_probe_retained_worker(&output, "stream --host");
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn local_ai_batch_cli_app_dir_no_longer_enables_retained_worker_fallback() {
+    let app_dir = unique_temp_dir("easydict-cli-local-ai-batch-app");
+    let settings_dir = unique_temp_dir("easydict-cli-local-ai-batch-settings");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("batch")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello\nGood morning",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
+        .env(
+            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+            "__missing_foundry_cli__.cmd",
+        )
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert_local_ai_cli_does_not_probe_retained_worker(&output, "batch --app-dir");
 
     let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);
@@ -213,6 +299,7 @@ fn local_ai_cli_default_rs_profile_disables_packaged_worker_fallback() {
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
         )
+        .remove_local_ai_env_overrides()
         .output()
         .expect("CLI should run");
 
@@ -223,8 +310,8 @@ fn local_ai_cli_default_rs_profile_disables_packaged_worker_fallback() {
         "stderr should report the default Rust-only worker policy:\n{stderr}"
     );
     assert!(
-        stderr.contains(".NET Local AI workers"),
-        "stderr should name the disabled retained runtime:\n{stderr}"
+        !stderr.contains(".NET Local AI workers"),
+        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
@@ -258,6 +345,7 @@ fn local_ai_cli_without_app_dir_fails_native_only_without_worker_lookup() {
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
         )
+        .remove_local_ai_env_overrides()
         .output()
         .expect("CLI should run");
 
@@ -268,8 +356,8 @@ fn local_ai_cli_without_app_dir_fails_native_only_without_worker_lookup() {
         "stderr should require a Rust-native LocalAI route:\n{stderr}"
     );
     assert!(
-        stderr.contains("retained .NET Local AI worker fallback is no longer available"),
-        "stderr should report the retired CLI worker fallback:\n{stderr}"
+        !stderr.contains(".NET Local AI workers"),
+        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
@@ -305,6 +393,7 @@ fn local_ai_cli_host_hint_no_longer_enables_retained_worker_fallback() {
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
         )
+        .remove_local_ai_env_overrides()
         .output()
         .expect("CLI should run");
 
@@ -315,8 +404,8 @@ fn local_ai_cli_host_hint_no_longer_enables_retained_worker_fallback() {
         "stderr should require a Rust-native LocalAI route:\n{stderr}"
     );
     assert!(
-        stderr.contains("retained .NET Local AI worker fallback is no longer available"),
-        "stderr should explain that --host no longer opts into LocalAI worker fallback:\n{stderr}"
+        !stderr.contains(".NET Local AI workers"),
+        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
@@ -355,6 +444,7 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
             "__missing_foundry_cli__.cmd",
         )
+        .remove_local_ai_env_overrides()
         .output()
         .expect("CLI should run");
 
@@ -365,8 +455,8 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
         "stderr should report disabled retained LocalAI worker policy:\n{stderr}"
     );
     assert!(
-        stderr.contains(".NET Local AI workers"),
-        "stderr should name retained .NET LocalAI workers:\n{stderr}"
+        !stderr.contains(".NET Local AI workers"),
+        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
@@ -416,6 +506,7 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
+        .remove_local_ai_env_overrides()
         .output()
         .expect("CLI should run");
 
@@ -441,10 +532,167 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
     let _ = fs::remove_dir_all(fake_foundry_dir);
 }
 
+#[test]
+fn local_ai_cli_env_overrides_provider_and_openvino_cache_dir_before_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-cli-openvino-env");
+    let settings_dir = work_dir.join("settings");
+    let cache_dir = work_dir.join("cache");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::create_dir_all(&cache_dir).expect("cache directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "openvino")
+        .env("EASYDICT_OPENVINO_CACHE_DIR", &cache_dir)
+        .env("EASYDICT_OPENVINO_DEVICE", "GPU")
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("OpenVINO runtime or NLLB-200 model is not downloaded"),
+        "stderr should report the native OpenVINO download preflight:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("Download model"),
+        "stderr should guide users to download the OpenVINO model:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "OpenVINO env route should not fall back to generic retained worker wording:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "OpenVINO env route should not probe retained LocalAI workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "OpenVINO env route should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn openvino_local_ai_grammar_cli_fails_locally_without_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-cli-openvino-grammar");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("grammar")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--language",
+            "en",
+            "--text",
+            "He go home.",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "openvino")
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("No local AI provider supports grammar correction"),
+        "stderr should report the native grammar preflight:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "OpenVINO grammar should fail before generic retained-worker wording:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "OpenVINO grammar should not probe retained LocalAI workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(".NET"),
+        "OpenVINO grammar should not expose retained .NET worker details:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "OpenVINO grammar should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn local_ai_cli_env_overrides_foundry_local_endpoint_before_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-cli-foundry-env");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env("EASYDICT_FOUNDRY_LOCAL_ENDPOINT", "foundry-local-invalid")
+        .env("EASYDICT_FOUNDRY_LOCAL_MODEL", "cli-foundry-model")
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "Foundry env route should enter native LocalAI handling:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "Foundry env route should not probe retained LocalAI workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "Foundry env route should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
 fn cli_with_missing_host(subcommand: &str) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_easydict_cli"));
     command.arg(subcommand);
     command.arg("--host").arg("__missing_worker__.exe");
+    command.remove_local_ai_env_overrides();
     command
 }
 
@@ -470,6 +718,32 @@ fn assert_retired_generic_route_error(output: &Output) {
     );
 }
 
+fn assert_local_ai_cli_does_not_probe_retained_worker(output: &Output, context: &str) {
+    assert!(
+        !output.status.success(),
+        "{context} should fail locally\nstdout:\n{}\nstderr:\n{}",
+        stdout(output),
+        stderr(output)
+    );
+    let stderr = stderr(output);
+    assert!(
+        stderr.contains("requires a Rust-native route"),
+        "{context} should require a Rust-native LocalAI route:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(".NET Local AI workers"),
+        "{context} should not expose retained .NET worker details:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "{context} should not probe retained LocalAI worker paths:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "{context} should not describe a compat host route:\n{stderr}"
+    );
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
@@ -484,4 +758,17 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
         .expect("system clock should be after unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("{prefix}-{}-{nanos}", std::process::id()))
+}
+
+trait LocalAiEnvCommandExt {
+    fn remove_local_ai_env_overrides(&mut self) -> &mut Self;
+}
+
+impl LocalAiEnvCommandExt for Command {
+    fn remove_local_ai_env_overrides(&mut self) -> &mut Self {
+        for key in LOCAL_AI_ENVIRONMENT_OVERRIDE_KEYS {
+            self.env_remove(key);
+        }
+        self
+    }
 }

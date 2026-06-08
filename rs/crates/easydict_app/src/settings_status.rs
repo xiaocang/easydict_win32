@@ -6,14 +6,16 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::compat_protocol::SettingsSnapshot;
 use crate::font_download;
 use crate::layout_model_download::{self, LayoutModelDownloadConfig};
-use crate::openai_compatible::{
-    self, CommandFoundryLocalEndpointResolver, FoundryLocalModelState,
-    FoundryLocalRuntimeController,
-};
+#[cfg(test)]
+use crate::openai_compatible::FoundryLocalError;
+use crate::openai_compatible::{self, FoundryLocalModelState, FoundryLocalRuntimeController};
+use crate::protocol::SettingsSnapshot;
 use easydict_nllb::NllbModelPaths;
+use easydict_windows_ai::{
+    default_windows_ai_language_model_client, windows_ai_status, WindowsAiLanguageModelProbe,
+};
 
 #[cfg(test)]
 use easydict_nllb::{MODEL_COMPLETION_SENTINEL, NLLB_MODEL_FILES, OPENVINO_RUNTIME_FILES};
@@ -23,6 +25,7 @@ use easydict_nllb::{MODEL_COMPLETION_SENTINEL, NLLB_MODEL_FILES, OPENVINO_RUNTIM
 pub struct SettingsRuntimeStatus {
     pub layout_model: String,
     pub cjk_font: String,
+    pub windows_ai_status: String,
     pub foundry_local_status: String,
     pub open_vino_status: String,
     pub open_vino_download_progress: String,
@@ -103,26 +106,49 @@ pub fn load_runtime_status() -> SettingsRuntimeStatus {
 }
 
 pub fn load_runtime_status_for_settings(settings: SettingsSnapshot) -> SettingsRuntimeStatus {
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    load_runtime_status_for_settings_with_windows_ai_probe(settings, &mut windows_ai_client)
+}
+
+pub fn load_runtime_status_for_settings_with_windows_ai_probe<P>(
+    settings: SettingsSnapshot,
+    windows_ai_probe: &mut P,
+) -> SettingsRuntimeStatus
+where
+    P: WindowsAiLanguageModelProbe,
+{
     let dir = settings
         .cache_dir
         .as_deref()
         .map(PathBuf::from)
         .unwrap_or_else(data_directory);
-    let mut foundry_controller = CommandFoundryLocalEndpointResolver::default();
-    let foundry_local_status =
-        foundry_local_status_for_settings_with_controller(&settings, &mut foundry_controller);
+    let foundry_local_status = foundry_local_status_for_settings_without_probe(&settings);
+    let windows_ai_status = windows_ai_status_from_probe(windows_ai_probe);
     status_for_directory_with_open_vino_support_and_foundry_status(
         &dir,
         is_open_vino_supported_current_architecture(),
+        windows_ai_status,
         foundry_local_status,
     )
 }
 
 /// Testable core that checks a given base directory.
 pub fn status_for_directory(base: &Path) -> SettingsRuntimeStatus {
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    status_for_directory_with_windows_ai_probe(base, &mut windows_ai_client)
+}
+
+fn status_for_directory_with_windows_ai_probe<P>(
+    base: &Path,
+    windows_ai_probe: &mut P,
+) -> SettingsRuntimeStatus
+where
+    P: WindowsAiLanguageModelProbe,
+{
     status_for_directory_with_open_vino_support_and_foundry_status(
         base,
         is_open_vino_supported_current_architecture(),
+        windows_ai_status_from_probe(windows_ai_probe),
         default_foundry_local_status(),
     )
 }
@@ -144,6 +170,20 @@ where
     }
 }
 
+fn foundry_local_status_for_settings_without_probe(settings: &SettingsSnapshot) -> String {
+    let Some(endpoint) = settings
+        .foundry_local_endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|endpoint| !endpoint.is_empty())
+    else {
+        return default_foundry_local_status();
+    };
+
+    let endpoint = openai_compatible::normalize_foundry_local_chat_completions_endpoint(endpoint);
+    format!("Foundry Local endpoint configured at {endpoint}.")
+}
+
 fn foundry_status_message(status: openai_compatible::FoundryLocalStatusCheck) -> String {
     match status.state {
         FoundryLocalModelState::Ready => status
@@ -162,9 +202,17 @@ fn foundry_status_message(status: openai_compatible::FoundryLocalStatusCheck) ->
     }
 }
 
+fn windows_ai_status_from_probe<P>(probe: &mut P) -> String
+where
+    P: WindowsAiLanguageModelProbe,
+{
+    windows_ai_status(probe).message
+}
+
 fn status_for_directory_with_open_vino_support_and_foundry_status(
     base: &Path,
     open_vino_supported: bool,
+    windows_ai_status: String,
     foundry_local_status: String,
 ) -> SettingsRuntimeStatus {
     let layout_model = if layout_model_download::is_layout_model_ready_for_directory(
@@ -196,6 +244,7 @@ fn status_for_directory_with_open_vino_support_and_foundry_status(
     SettingsRuntimeStatus {
         layout_model,
         cjk_font,
+        windows_ai_status,
         foundry_local_status,
         open_vino_status,
         open_vino_download_progress: "Idle".to_string(),
@@ -210,6 +259,10 @@ fn status_for_directory_with_open_vino_support(
     status_for_directory_with_open_vino_support_and_foundry_status(
         base,
         open_vino_supported,
+        easydict_windows_ai::status_for_ready_state(
+            easydict_windows_ai::WindowsAiReadyState::NotSupportedOnCurrentSystem,
+        )
+        .message,
         default_foundry_local_status(),
     )
 }
@@ -220,7 +273,6 @@ mod tests {
     use super::*;
     use crate::openai_compatible::{
         FoundryLocalEndpointResolver, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
-        OpenAiExecutionError,
     };
     use std::collections::VecDeque;
     use std::fs;
@@ -261,6 +313,11 @@ mod tests {
         calls: Vec<&'static str>,
     }
 
+    struct FakeWindowsAiProbe {
+        ready_state: easydict_windows_ai::WindowsAiReadyState,
+        calls: usize,
+    }
+
     impl FakeFoundryRuntimeController {
         fn new(
             status_responses: impl IntoIterator<Item = FoundryLocalRuntimeStatus>,
@@ -277,28 +334,44 @@ mod tests {
     impl FoundryLocalEndpointResolver for FakeFoundryRuntimeController {
         fn resolve_chat_completions_endpoint(
             &mut self,
-        ) -> Result<Option<String>, OpenAiExecutionError> {
+        ) -> Result<Option<String>, FoundryLocalError> {
             self.calls.push("resolve_endpoint");
             Ok(self.endpoint_responses.pop_front().flatten())
         }
     }
 
     impl FoundryLocalRuntimeController for FakeFoundryRuntimeController {
-        fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, OpenAiExecutionError> {
+        fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
             self.calls.push("get_status");
             Ok(self.status_responses.pop_front().unwrap_or_else(|| {
                 FoundryLocalRuntimeStatus::new(FoundryLocalRuntimeState::Running)
             }))
         }
 
-        fn start_service(&mut self) -> Result<(), OpenAiExecutionError> {
+        fn start_service(&mut self) -> Result<(), FoundryLocalError> {
             self.calls.push("start_service");
             Ok(())
         }
 
-        fn load_model(&mut self, _model: &str) -> Result<(), OpenAiExecutionError> {
+        fn load_model(&mut self, _model: &str) -> Result<(), FoundryLocalError> {
             self.calls.push("load_model");
             Ok(())
+        }
+    }
+
+    impl FakeWindowsAiProbe {
+        fn new(ready_state: easydict_windows_ai::WindowsAiReadyState) -> Self {
+            Self {
+                ready_state,
+                calls: 0,
+            }
+        }
+    }
+
+    impl WindowsAiLanguageModelProbe for FakeWindowsAiProbe {
+        fn ready_state(&mut self) -> easydict_windows_ai::WindowsAiReadyState {
+            self.calls += 1;
+            self.ready_state
         }
     }
 
@@ -322,6 +395,76 @@ mod tests {
     }
 
     #[test]
+    fn load_runtime_status_for_settings_does_not_probe_foundry_when_endpoint_is_empty() {
+        let dir = temp_status_dir("no-foundry-probe");
+        fs::create_dir_all(&dir).expect("create status dir");
+        let settings = SettingsSnapshot {
+            cache_dir: Some(dir.to_string_lossy().to_string()),
+            foundry_local_endpoint: None,
+            ..SettingsSnapshot::default()
+        };
+
+        let status = load_runtime_status_for_settings(settings);
+
+        assert_eq!(
+            status.foundry_local_status,
+            "Endpoint auto-detected at runtime"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_runtime_status_for_settings_reports_configured_foundry_endpoint_without_cli_status() {
+        let dir = temp_status_dir("configured-foundry-endpoint");
+        fs::create_dir_all(&dir).expect("create status dir");
+        let settings = SettingsSnapshot {
+            cache_dir: Some(dir.to_string_lossy().to_string()),
+            foundry_local_endpoint: Some("http://127.0.0.1:5273/status".to_string()),
+            ..SettingsSnapshot::default()
+        };
+
+        let status = load_runtime_status_for_settings(settings);
+
+        assert_eq!(
+            status.foundry_local_status,
+            "Foundry Local endpoint configured at http://127.0.0.1:5273/v1/chat/completions."
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_runtime_status_for_settings_uses_injected_windows_ai_probe() {
+        let dir = temp_status_dir("windows-ai-ready");
+        fs::create_dir_all(&dir).expect("create status dir");
+        let settings = SettingsSnapshot {
+            cache_dir: Some(dir.to_string_lossy().to_string()),
+            ..SettingsSnapshot::default()
+        };
+        let mut probe = FakeWindowsAiProbe::new(easydict_windows_ai::WindowsAiReadyState::Ready);
+
+        let status = load_runtime_status_for_settings_with_windows_ai_probe(settings, &mut probe);
+
+        assert_eq!(status.windows_ai_status, "Phi Silica is ready.");
+        assert_eq!(probe.calls, 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn status_for_directory_core_uses_injected_windows_ai_probe() {
+        let dir = temp_status_dir("directory-windows-ai-ready");
+        fs::create_dir_all(&dir).expect("create status dir");
+        let mut probe = FakeWindowsAiProbe::new(easydict_windows_ai::WindowsAiReadyState::Ready);
+
+        let status = status_for_directory_with_windows_ai_probe(&dir, &mut probe);
+
+        assert_eq!(status.windows_ai_status, "Phi Silica is ready.");
+        assert_eq!(probe.calls, 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn reports_available_when_model_and_font_present() {
         let dir = temp_status_dir("present");
         let models = dir.join("models");
@@ -331,7 +474,7 @@ mod tests {
         fs::write(models.join("layout.onnx"), b"x").expect("write model");
         fs::write(fonts.join("noto.ttf"), b"x").expect("write font");
 
-        let status = status_for_directory(&dir);
+        let status = status_for_directory_with_open_vino_support(&dir, true);
 
         assert_eq!(status.layout_model, "Available");
         assert_eq!(status.cjk_font, "Available");
@@ -346,7 +489,7 @@ mod tests {
         fs::create_dir_all(&fonts).expect("create fonts dir");
         fs::write(fonts.join("NotoSansSC-Regular.ttf"), b"x").expect("write known CJK font");
 
-        let status = status_for_directory(&dir);
+        let status = status_for_directory_with_open_vino_support(&dir, true);
 
         assert_eq!(status.cjk_font, "Available");
 

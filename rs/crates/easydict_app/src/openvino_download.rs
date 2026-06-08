@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::compat_protocol::SettingsSnapshot;
+use crate::protocol::SettingsSnapshot;
 use crate::resource_download::{
     download_with_retry, try_delete_file, ReqwestResourceDownloadClient, ResourceDownloadClient,
     ResourceDownloadError, ResourceDownloadProgress,

@@ -1,4 +1,3 @@
-use crate::compat_protocol::{GrammarCorrectResultDto, SettingsSnapshot, TranslationResultDto};
 use crate::grammar_correction::{
     build_grammar_correction_user_prompt, grammar_correction_system_prompt,
     parse_grammar_correction, GrammarCorrectionResult,
@@ -7,6 +6,7 @@ use crate::openai_compatible::{
     cleanup_openai_translation_text, OpenAiExecutionError, OpenAiExecutionErrorCode,
     OpenAiTranslationRequest, OPENAI_DEFAULT_TEMPERATURE, OPENAI_TRANSLATION_SYSTEM_PROMPT,
 };
+use crate::protocol::{GrammarCorrectResultDto, SettingsSnapshot, TranslationResultDto};
 use crate::translation_language::TranslationLanguage;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -463,6 +463,7 @@ pub fn translate_custom_streaming_service<C: CustomStreamingHttpClient>(
         timing_ms: None,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     })
 }
 

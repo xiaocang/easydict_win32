@@ -5,23 +5,32 @@ use crate::grammar_correction::{
 use crate::llm_streaming::{parse_openai_sse_chunks, ChatMessage, ChatRole, OpenAiStreamingFormat};
 use crate::translation_language::TranslationLanguage;
 use crate::{
-    compat_protocol::{
+    grammar_correction::GrammarCorrectionResult,
+    protocol::{
         local_ai_provider_modes, GrammarCorrectResultDto, SettingsSnapshot, TranslationResultDto,
     },
-    grammar_correction::GrammarCorrectionResult,
 };
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use base64::{engine::general_purpose, Engine as _};
-use regex::Regex;
+use easydict_foundry_local::{
+    check_foundry_local_runtime_status as check_foundry_local_runtime_status_for_endpoint,
+    prepare_foundry_local_service as prepare_foundry_local_service_for_endpoint,
+};
+pub use easydict_foundry_local::{
+    extract_foundry_local_chat_completions_endpoint,
+    extract_foundry_local_chat_completions_endpoint_from_logs,
+    foundry_local_models_endpoint_from_chat_completions_endpoint,
+    normalize_foundry_local_chat_completions_endpoint, parse_foundry_local_runtime_status,
+    try_resolve_foundry_local_model_id, CommandFoundryLocalEndpointResolver,
+    FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalErrorCode, FoundryLocalModelState,
+    FoundryLocalPrepareOutcome, FoundryLocalRuntimeController, FoundryLocalRuntimeState,
+    FoundryLocalRuntimeStatus, FoundryLocalStatusCheck, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+    FOUNDRY_LOCAL_DEFAULT_MODEL,
+};
 use ring::digest;
 use serde_json::{json, Map, Value};
-use std::env;
 use std::fmt::{self, Write as _};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::Duration;
 
 pub const OPENAI_TRANSLATION_SYSTEM_PROMPT: &str = "You are a translation expert proficient in various languages, focusing solely on translating text without interpretation. You accurately understand the meanings of proper nouns, idioms, metaphors, allusions, and other obscure words in sentences, translating them appropriately based on the context and language environment. The translation should be natural and fluent. Only return the translated text, without including redundant quotes or additional notes.";
 pub const OPENAI_DEFAULT_ENDPOINT: &str = "https://api.openai.com/v1/responses";
@@ -47,18 +56,9 @@ pub const BUILT_IN_AI_ALLOWED_PROXY_MODELS: &[&str] = &[
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
 ];
-pub const FOUNDRY_LOCAL_DEFAULT_MODEL: &str = "qwen2.5-0.5b";
 pub const OPENAI_DEFAULT_TEMPERATURE: f64 = 0.3;
-pub const FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE: &str = "EASYDICT_FOUNDRY_LOCAL_CLI";
 
-const FOUNDRY_LOCAL_STATUS_READY: &str = "FoundryLocal_Status_Ready";
-const FOUNDRY_LOCAL_STATUS_NOT_INSTALLED: &str = "FoundryLocal_Status_NotInstalled";
-const FOUNDRY_LOCAL_STATUS_NOT_RUNNING: &str = "FoundryLocal_Status_NotRunning";
-const FOUNDRY_LOCAL_STATUS_START_FAILED: &str = "FoundryLocal_Status_StartFailed";
-
-const BUILT_IN_AI_ENCRYPTED_SECRETS_JSON: &str = include_str!(
-    "../../../../dotnet/src/Easydict.TranslationService/Resources/EncryptedSecrets.json"
-);
+const BUILT_IN_AI_ENCRYPTED_SECRETS_JSON: &str = include_str!("../resources/EncryptedSecrets.json");
 const BUILT_IN_AI_SECRET_ASSEMBLY_NAME: &str = "Easydict.TranslationService";
 const BUILT_IN_AI_API_KEY_SECRET_NAME: &str = "builtInAIAPIKey";
 const BUILT_IN_AI_ENDPOINT_SECRET_NAME: &str = "builtInAIEndpoint";
@@ -310,70 +310,6 @@ pub struct BuiltInAiDeviceRegistrationHttpResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FoundryLocalPrepareOutcome {
-    pub ready: bool,
-    pub status_message: String,
-    pub endpoint: Option<String>,
-    pub model: String,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FoundryLocalRuntimeState {
-    NotInstalled,
-    NotRunning,
-    Running,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FoundryLocalRuntimeStatus {
-    pub state: FoundryLocalRuntimeState,
-    pub endpoint: Option<String>,
-    pub detail_message: Option<String>,
-}
-
-impl FoundryLocalRuntimeStatus {
-    pub fn new(state: FoundryLocalRuntimeState) -> Self {
-        Self {
-            state,
-            endpoint: None,
-            detail_message: None,
-        }
-    }
-
-    pub fn with_endpoint(state: FoundryLocalRuntimeState, endpoint: impl Into<String>) -> Self {
-        Self {
-            state,
-            endpoint: Some(endpoint.into()),
-            detail_message: None,
-        }
-    }
-
-    pub fn with_detail(state: FoundryLocalRuntimeState, detail: impl Into<String>) -> Self {
-        Self {
-            state,
-            endpoint: None,
-            detail_message: Some(detail.into()),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FoundryLocalModelState {
-    NotCompatible,
-    NeedsPreparation,
-    Ready,
-    Failed,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FoundryLocalStatusCheck {
-    pub state: FoundryLocalModelState,
-    pub resource_key: &'static str,
-    pub detail_message: Option<String>,
-    pub endpoint: Option<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OpenAiPlanError {
     EndpointNotConfigured,
     ApiKeyRequired,
@@ -448,6 +384,20 @@ impl From<OpenAiPlanError> for OpenAiExecutionError {
     }
 }
 
+impl From<FoundryLocalError> for OpenAiExecutionError {
+    fn from(error: FoundryLocalError) -> Self {
+        let code = match error.code {
+            FoundryLocalErrorCode::InvalidResponse => OpenAiExecutionErrorCode::InvalidResponse,
+            FoundryLocalErrorCode::ServiceUnavailable => {
+                OpenAiExecutionErrorCode::ServiceUnavailable
+            }
+            FoundryLocalErrorCode::Timeout => OpenAiExecutionErrorCode::Timeout,
+            FoundryLocalErrorCode::NetworkError => OpenAiExecutionErrorCode::NetworkError,
+        };
+        OpenAiExecutionError::new(code, error.message)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BuiltInAiSecretError {
     InvalidBase64,
@@ -482,273 +432,6 @@ pub trait BuiltInAiDeviceRegistrationHttpClient {
         &mut self,
         request: &BuiltInAiDeviceRegistrationRequestPlan,
     ) -> Result<BuiltInAiDeviceRegistrationHttpResponse, OpenAiExecutionError>;
-}
-
-pub trait FoundryLocalEndpointResolver {
-    fn resolve_chat_completions_endpoint(&mut self)
-        -> Result<Option<String>, OpenAiExecutionError>;
-}
-
-pub trait FoundryLocalRuntimeController: FoundryLocalEndpointResolver {
-    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, OpenAiExecutionError>;
-
-    fn start_service(&mut self) -> Result<(), OpenAiExecutionError>;
-
-    fn load_model(&mut self, model: &str) -> Result<(), OpenAiExecutionError>;
-}
-
-#[derive(Clone, Debug)]
-pub struct CommandFoundryLocalEndpointResolver {
-    executable_name: String,
-    status_command_timeout: Duration,
-    start_command_timeout: Duration,
-    model_load_command_timeout: Duration,
-}
-
-impl Default for CommandFoundryLocalEndpointResolver {
-    fn default() -> Self {
-        let executable_name = env::var(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "foundry".to_string());
-
-        Self {
-            executable_name,
-            status_command_timeout: Duration::from_secs(8),
-            start_command_timeout: Duration::from_secs(15),
-            model_load_command_timeout: Duration::from_secs(180),
-        }
-    }
-}
-
-impl CommandFoundryLocalEndpointResolver {
-    pub fn new(executable_name: impl Into<String>, command_timeout: Duration) -> Self {
-        Self::with_timeouts(
-            executable_name,
-            command_timeout,
-            command_timeout,
-            command_timeout,
-        )
-    }
-
-    pub fn with_timeouts(
-        executable_name: impl Into<String>,
-        status_command_timeout: Duration,
-        start_command_timeout: Duration,
-        model_load_command_timeout: Duration,
-    ) -> Self {
-        Self {
-            executable_name: executable_name.into(),
-            status_command_timeout,
-            start_command_timeout,
-            model_load_command_timeout,
-        }
-    }
-
-    fn run_foundry_command(
-        &self,
-        arguments: &[&str],
-        command_timeout: Duration,
-        require_success: bool,
-    ) -> Result<String, OpenAiExecutionError> {
-        let mut child = Command::new(&self.executable_name)
-            .args(arguments)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| {
-                let message = if error.kind() == std::io::ErrorKind::NotFound {
-                    "Foundry Local CLI is not installed or is not available on PATH.".to_string()
-                } else {
-                    format!("Could not run Foundry Local CLI: {error}")
-                };
-                OpenAiExecutionError::new(OpenAiExecutionErrorCode::ServiceUnavailable, message)
-            })?;
-
-        let deadline = Instant::now() + command_timeout;
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(OpenAiExecutionError::new(
-                        OpenAiExecutionErrorCode::Timeout,
-                        "Foundry Local CLI command timed out",
-                    ));
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(OpenAiExecutionError::new(
-                        OpenAiExecutionErrorCode::NetworkError,
-                        format!("Could not wait for Foundry Local CLI: {error}"),
-                    ));
-                }
-            }
-        }
-
-        let output = child.wait_with_output().map_err(|error| {
-            OpenAiExecutionError::new(
-                OpenAiExecutionErrorCode::NetworkError,
-                format!("Could not read Foundry Local CLI output: {error}"),
-            )
-        })?;
-
-        let mut text = String::new();
-        text.push_str(&String::from_utf8_lossy(&output.stdout));
-        if !output.stderr.is_empty() {
-            if !text.is_empty() {
-                text.push('\n');
-            }
-            text.push_str(&String::from_utf8_lossy(&output.stderr));
-        }
-        if require_success && !output.status.success() {
-            let command = arguments.join(" ");
-            let message = if text.trim().is_empty() {
-                format!("foundry {command} failed")
-            } else {
-                format!("foundry {command} failed: {}", text.trim())
-            };
-            return Err(OpenAiExecutionError::new(
-                OpenAiExecutionErrorCode::ServiceUnavailable,
-                message,
-            ));
-        }
-
-        Ok(text)
-    }
-
-    fn run_status_command(&self, arguments: &[&str]) -> Result<String, OpenAiExecutionError> {
-        self.run_foundry_command(arguments, self.status_command_timeout, false)
-    }
-
-    fn run_foundry_service_start_and_wait(&mut self) -> Result<(), OpenAiExecutionError> {
-        let mut child = Command::new(&self.executable_name)
-            .args(["service", "start"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|error| {
-                let message = if error.kind() == std::io::ErrorKind::NotFound {
-                    "Foundry Local CLI is not installed or is not available on PATH.".to_string()
-                } else {
-                    format!("Could not run Foundry Local CLI: {error}")
-                };
-                OpenAiExecutionError::new(OpenAiExecutionErrorCode::ServiceUnavailable, message)
-            })?;
-
-        let deadline = Instant::now() + self.start_command_timeout;
-        let mut last_status: Option<FoundryLocalRuntimeStatus> = None;
-        loop {
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                let detail = last_status
-                    .and_then(|status| status.detail_message)
-                    .unwrap_or_else(|| "no status reported".to_string());
-                return Err(OpenAiExecutionError::new(
-                    OpenAiExecutionErrorCode::Timeout,
-                    format!("Foundry Local CLI command timed out. Latest status: {detail}"),
-                ));
-            }
-
-            let status = self.get_status()?;
-            if status.state == FoundryLocalRuntimeState::Running {
-                return Ok(());
-            }
-            last_status = Some(status);
-
-            if let Ok(Some(exit_status)) = child.try_wait() {
-                if !exit_status.success() {
-                    let detail = last_status
-                        .as_ref()
-                        .and_then(|status| status.detail_message.as_deref())
-                        .unwrap_or("no status reported");
-                    return Err(OpenAiExecutionError::new(
-                        OpenAiExecutionErrorCode::ServiceUnavailable,
-                        format!(
-                            "foundry service start failed with exit code {}. Latest status: {detail}",
-                            exit_status.code().unwrap_or(-1)
-                        ),
-                    ));
-                }
-            }
-
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            std::thread::sleep(remaining.min(Duration::from_millis(300)));
-        }
-    }
-}
-
-impl FoundryLocalEndpointResolver for CommandFoundryLocalEndpointResolver {
-    fn resolve_chat_completions_endpoint(
-        &mut self,
-    ) -> Result<Option<String>, OpenAiExecutionError> {
-        for arguments in [
-            ["service", "status"].as_slice(),
-            ["service", "status", "--verbose"].as_slice(),
-            ["service", "status", "--json"].as_slice(),
-        ] {
-            let output = self.run_status_command(arguments)?;
-            if let Some(endpoint) = extract_foundry_local_chat_completions_endpoint(&output) {
-                return Ok(Some(endpoint));
-            }
-        }
-
-        for log_dir in foundry_local_default_log_dirs() {
-            if let Some(endpoint) =
-                extract_foundry_local_chat_completions_endpoint_from_logs(log_dir)
-            {
-                return Ok(Some(endpoint));
-            }
-        }
-
-        Ok(None)
-    }
-}
-
-impl FoundryLocalRuntimeController for CommandFoundryLocalEndpointResolver {
-    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, OpenAiExecutionError> {
-        match self.run_status_command(&["service", "status"]) {
-            Ok(output) => Ok(parse_foundry_local_runtime_status(&output)),
-            Err(error)
-                if error.message
-                    == "Foundry Local CLI is not installed or is not available on PATH." =>
-            {
-                Ok(FoundryLocalRuntimeStatus::with_detail(
-                    FoundryLocalRuntimeState::NotInstalled,
-                    error.message,
-                ))
-            }
-            Err(error) => Err(error),
-        }
-    }
-
-    fn start_service(&mut self) -> Result<(), OpenAiExecutionError> {
-        self.run_foundry_service_start_and_wait()
-    }
-
-    fn load_model(&mut self, model: &str) -> Result<(), OpenAiExecutionError> {
-        let model = model.trim();
-        if model.is_empty() {
-            return Err(OpenAiExecutionError::new(
-                OpenAiExecutionErrorCode::InvalidResponse,
-                "Foundry Local model is not configured",
-            ));
-        }
-
-        self.run_foundry_command(
-            &["model", "load", model],
-            self.model_load_command_timeout,
-            true,
-        )?;
-        Ok(())
-    }
 }
 
 pub struct ReqwestOpenAiHttpClient {
@@ -956,23 +639,6 @@ pub fn foundry_local_service_config(
     .with_format_override(OpenAiApiFormat::ChatCompletions)
 }
 
-pub fn foundry_local_models_endpoint_from_chat_completions_endpoint(
-    endpoint: &str,
-) -> Option<String> {
-    let mut url = reqwest::Url::parse(endpoint.trim()).ok()?;
-    let path = url.path().trim_end_matches('/');
-    let suffix = "/chat/completions";
-    if !path.to_ascii_lowercase().ends_with(suffix) {
-        return None;
-    }
-
-    let base_path = &path[..path.len().saturating_sub(suffix.len())];
-    url.set_path(&format!("{base_path}/models"));
-    url.set_query(None);
-    url.set_fragment(None);
-    Some(url.to_string().trim_end_matches('/').to_string())
-}
-
 pub fn build_foundry_local_models_request_plan(
     config: &OpenAiCompatibleConfig,
 ) -> Option<OpenAiHttpGetRequestPlan> {
@@ -981,42 +647,6 @@ pub fn build_foundry_local_models_request_plan(
         endpoint: foundry_local_models_endpoint_from_chat_completions_endpoint(&config.endpoint)?,
         headers: Vec::new(),
     })
-}
-
-pub fn try_resolve_foundry_local_model_id(
-    model_list_json: &str,
-    configured_model: &str,
-) -> Option<String> {
-    let configured_model = configured_model.trim();
-    if configured_model.is_empty() || model_list_json.trim().is_empty() {
-        return None;
-    }
-
-    let root: Value = serde_json::from_str(model_list_json).ok()?;
-    let ids = root
-        .get("data")
-        .and_then(Value::as_array)?
-        .iter()
-        .filter_map(|model| model.get("id").and_then(Value::as_str))
-        .filter_map(|id| normalized_optional(Some(id)))
-        .collect::<Vec<_>>();
-
-    if let Some(exact) = ids
-        .iter()
-        .find(|id| id.eq_ignore_ascii_case(configured_model))
-    {
-        return Some(exact.clone());
-    }
-
-    let alias_prefix = format!("{configured_model}-instruct-");
-    ids.into_iter()
-        .enumerate()
-        .filter(|(_, id)| {
-            id.to_ascii_lowercase()
-                .starts_with(&alias_prefix.to_ascii_lowercase())
-        })
-        .min_by_key(|(index, id)| (foundry_local_model_device_preference(id), *index))
-        .map(|(_, id)| id)
 }
 
 pub fn resolve_foundry_local_model_id_for_config<C: OpenAiHttpClient>(
@@ -1044,195 +674,27 @@ pub fn resolve_foundry_local_model_id_for_config<C: OpenAiHttpClient>(
     resolved
 }
 
-pub fn parse_foundry_local_runtime_status(output: &str) -> FoundryLocalRuntimeStatus {
-    if output.trim().is_empty() {
-        return FoundryLocalRuntimeStatus::new(FoundryLocalRuntimeState::NotRunning);
-    }
-
-    if let Some(endpoint) = extract_foundry_local_chat_completions_endpoint(output) {
-        return FoundryLocalRuntimeStatus::with_endpoint(
-            FoundryLocalRuntimeState::Running,
-            endpoint,
-        );
-    }
-
-    let detail = trim_foundry_local_status_output(output);
-    if contains_foundry_local_missing_cli_status(output) {
-        return FoundryLocalRuntimeStatus {
-            state: FoundryLocalRuntimeState::NotInstalled,
-            endpoint: None,
-            detail_message: detail,
-        };
-    }
-
-    if contains_foundry_local_not_running_status(output) {
-        return FoundryLocalRuntimeStatus {
-            state: FoundryLocalRuntimeState::NotRunning,
-            endpoint: None,
-            detail_message: detail,
-        };
-    }
-
-    if output.to_ascii_lowercase().contains("running") {
-        return FoundryLocalRuntimeStatus {
-            state: FoundryLocalRuntimeState::Running,
-            endpoint: None,
-            detail_message: detail,
-        };
-    }
-
-    FoundryLocalRuntimeStatus {
-        state: FoundryLocalRuntimeState::NotRunning,
-        endpoint: None,
-        detail_message: detail,
-    }
-}
-
 pub fn check_foundry_local_runtime_status<C: FoundryLocalRuntimeController>(
     controller: &mut C,
     settings: &SettingsSnapshot,
 ) -> Result<FoundryLocalStatusCheck, OpenAiExecutionError> {
-    let configured_endpoint = normalized_optional(settings.foundry_local_endpoint.as_deref())
-        .map(|endpoint| normalize_foundry_local_chat_completions_endpoint(&endpoint));
-
-    if let Some(endpoint) = configured_endpoint.as_deref() {
-        if !is_loopback_endpoint(endpoint) {
-            return Ok(FoundryLocalStatusCheck {
-                state: FoundryLocalModelState::Ready,
-                resource_key: FOUNDRY_LOCAL_STATUS_READY,
-                detail_message: None,
-                endpoint: Some(endpoint.to_string()),
-            });
-        }
-    }
-
-    let runtime_status = match controller.get_status() {
-        Ok(status) => status,
-        Err(error) => {
-            return Ok(FoundryLocalStatusCheck {
-                state: FoundryLocalModelState::Failed,
-                resource_key: FOUNDRY_LOCAL_STATUS_START_FAILED,
-                detail_message: Some(error.message),
-                endpoint: None,
-            });
-        }
-    };
-
-    match runtime_status.state {
-        FoundryLocalRuntimeState::NotInstalled => Ok(FoundryLocalStatusCheck {
-            state: FoundryLocalModelState::NotCompatible,
-            resource_key: FOUNDRY_LOCAL_STATUS_NOT_INSTALLED,
-            detail_message: runtime_status.detail_message,
-            endpoint: None,
-        }),
-        FoundryLocalRuntimeState::NotRunning => Ok(FoundryLocalStatusCheck {
-            state: FoundryLocalModelState::NeedsPreparation,
-            resource_key: FOUNDRY_LOCAL_STATUS_NOT_RUNNING,
-            detail_message: runtime_status.detail_message,
-            endpoint: None,
-        }),
-        FoundryLocalRuntimeState::Running => {
-            let endpoint = runtime_status
-                .endpoint
-                .as_deref()
-                .map(normalize_foundry_local_chat_completions_endpoint)
-                .or_else(|| {
-                    controller
-                        .resolve_chat_completions_endpoint()
-                        .ok()
-                        .flatten()
-                        .map(|endpoint| {
-                            normalize_foundry_local_chat_completions_endpoint(&endpoint)
-                        })
-                });
-
-            match endpoint {
-                Some(endpoint) => Ok(FoundryLocalStatusCheck {
-                    state: FoundryLocalModelState::Ready,
-                    resource_key: FOUNDRY_LOCAL_STATUS_READY,
-                    detail_message: runtime_status.detail_message,
-                    endpoint: Some(endpoint),
-                }),
-                None => Ok(FoundryLocalStatusCheck {
-                    state: FoundryLocalModelState::Failed,
-                    resource_key: FOUNDRY_LOCAL_STATUS_START_FAILED,
-                    detail_message: Some(
-                        "Foundry Local service is running but did not report a local endpoint."
-                            .to_string(),
-                    ),
-                    endpoint: None,
-                }),
-            }
-        }
-    }
+    check_foundry_local_runtime_status_for_endpoint(
+        controller,
+        settings.foundry_local_endpoint.as_deref(),
+    )
+    .map_err(OpenAiExecutionError::from)
 }
 
 pub fn prepare_foundry_local_service<C: FoundryLocalRuntimeController>(
     controller: &mut C,
     settings: &SettingsSnapshot,
 ) -> Result<FoundryLocalPrepareOutcome, OpenAiExecutionError> {
-    let model = normalized_optional(settings.foundry_local_model.as_deref())
-        .unwrap_or_else(|| FOUNDRY_LOCAL_DEFAULT_MODEL.to_string());
-    let configured_endpoint = normalized_optional(settings.foundry_local_endpoint.as_deref());
-
-    if let Some(endpoint) = configured_endpoint.as_deref() {
-        let normalized = normalize_foundry_local_chat_completions_endpoint(endpoint);
-        if !is_loopback_endpoint(&normalized) {
-            return Ok(FoundryLocalPrepareOutcome {
-                ready: true,
-                status_message: "Foundry Local is configured with a user-managed endpoint."
-                    .to_string(),
-                endpoint: Some(normalized),
-                model,
-            });
-        }
-    }
-
-    let status = controller.get_status()?;
-    match status.state {
-        FoundryLocalRuntimeState::NotInstalled => {
-            return Ok(FoundryLocalPrepareOutcome {
-                ready: false,
-                status_message: status.detail_message.unwrap_or_else(|| {
-                    "Foundry Local CLI is not installed or is not available on PATH.".to_string()
-                }),
-                endpoint: None,
-                model,
-            });
-        }
-        FoundryLocalRuntimeState::NotRunning => controller.start_service()?,
-        FoundryLocalRuntimeState::Running => {}
-    }
-
-    controller.load_model(&model)?;
-    let runtime_status = controller.get_status()?;
-    let endpoint = if let Some(endpoint) = runtime_status
-        .endpoint
-        .as_deref()
-        .map(normalize_foundry_local_chat_completions_endpoint)
-    {
-        Some(endpoint)
-    } else {
-        controller
-            .resolve_chat_completions_endpoint()?
-            .map(|endpoint| normalize_foundry_local_chat_completions_endpoint(&endpoint))
-    };
-
-    match endpoint {
-        Some(endpoint) => Ok(FoundryLocalPrepareOutcome {
-            ready: true,
-            status_message: format!("Foundry Local is ready at {endpoint}."),
-            endpoint: Some(endpoint),
-            model,
-        }),
-        None => Ok(FoundryLocalPrepareOutcome {
-            ready: false,
-            status_message: "Foundry Local service is running but did not report a local endpoint."
-                .to_string(),
-            endpoint: None,
-            model,
-        }),
-    }
+    prepare_foundry_local_service_for_endpoint(
+        controller,
+        settings.foundry_local_endpoint.as_deref(),
+        settings.foundry_local_model.as_deref(),
+    )
+    .map_err(OpenAiExecutionError::from)
 }
 
 pub fn deepseek_service_config(
@@ -1480,10 +942,10 @@ pub fn openai_compatible_config_for_service(
     }
 }
 
-pub fn resolve_openai_compatible_config_for_service<R: FoundryLocalEndpointResolver>(
+pub fn resolve_openai_compatible_config_for_service<R: FoundryLocalRuntimeController>(
     service_id: &str,
     settings: &SettingsSnapshot,
-    foundry_local_endpoint_resolver: &mut R,
+    foundry_local_controller: &mut R,
 ) -> Result<Option<OpenAiCompatibleConfig>, OpenAiExecutionError> {
     if let Some(config) = openai_compatible_config_for_service(service_id, settings) {
         return Ok(Some(config));
@@ -1495,18 +957,24 @@ pub fn resolve_openai_compatible_config_for_service<R: FoundryLocalEndpointResol
         return Ok(None);
     }
 
-    let endpoint = foundry_local_endpoint_resolver
-        .resolve_chat_completions_endpoint()?
-        .ok_or_else(|| {
-            OpenAiExecutionError::new(
-                OpenAiExecutionErrorCode::ServiceUnavailable,
-                "Foundry Local service is not running or did not report a local endpoint.",
-            )
-        })?;
+    let outcome = prepare_foundry_local_service(foundry_local_controller, settings)?;
+    if !outcome.ready {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            outcome.status_message,
+        ));
+    }
+
+    let endpoint = outcome.endpoint.ok_or_else(|| {
+        OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            "Foundry Local service is ready but did not report a local endpoint.",
+        )
+    })?;
 
     Ok(Some(foundry_local_service_config(
         endpoint,
-        settings.foundry_local_model.as_deref(),
+        Some(&outcome.model),
     )))
 }
 
@@ -1517,89 +985,6 @@ pub fn openai_compatible_service_can_route_natively(
     openai_compatible_config_for_service(service_id, settings).is_some()
         || (service_id == "windows-local-ai"
             && is_foundry_local_provider(settings.local_ai_provider.as_deref()))
-}
-
-pub fn normalize_foundry_local_chat_completions_endpoint(endpoint: &str) -> String {
-    let normalized = endpoint.trim().trim_end_matches('/');
-    if normalized.is_empty() {
-        return String::new();
-    }
-
-    if let Ok(mut url) = reqwest::Url::parse(normalized) {
-        let path = url.path().trim_end_matches('/').to_ascii_lowercase();
-        if path == "/openai/status" || path == "/status" || path.starts_with("/openai/load/") {
-            url.set_path("/v1/chat/completions");
-            url.set_query(None);
-            url.set_fragment(None);
-            return url.to_string().trim_end_matches('/').to_string();
-        }
-    }
-
-    if normalized
-        .to_ascii_lowercase()
-        .ends_with("/chat/completions")
-    {
-        return normalized.to_string();
-    }
-
-    if normalized.to_ascii_lowercase().ends_with("/v1") {
-        return format!("{normalized}/chat/completions");
-    }
-
-    format!("{normalized}/v1/chat/completions")
-}
-
-pub fn extract_foundry_local_chat_completions_endpoint(output: &str) -> Option<String> {
-    let mut candidates = Vec::new();
-    for url in extract_urls(output) {
-        let endpoint = normalize_foundry_local_chat_completions_endpoint(&url);
-        if endpoint
-            .to_ascii_lowercase()
-            .contains("/v1/chat/completions")
-            && !candidates
-                .iter()
-                .any(|candidate: &String| candidate.eq_ignore_ascii_case(&endpoint))
-        {
-            candidates.push(endpoint);
-        }
-    }
-
-    candidates
-        .iter()
-        .find(|endpoint| {
-            endpoint.contains("localhost")
-                || endpoint.contains("127.0.0.1")
-                || endpoint.contains("[::1]")
-        })
-        .cloned()
-        .or_else(|| candidates.into_iter().next())
-}
-
-pub fn extract_foundry_local_chat_completions_endpoint_from_logs(
-    log_dir: impl AsRef<Path>,
-) -> Option<String> {
-    let mut logs = fs::read_dir(log_dir)
-        .ok()?
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let path = entry.path();
-            if !is_foundry_local_log_path(&path) {
-                return None;
-            }
-
-            let modified = entry
-                .metadata()
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(SystemTime::UNIX_EPOCH);
-            Some((path, modified))
-        })
-        .collect::<Vec<_>>();
-
-    logs.sort_by(|(_, left), (_, right)| right.cmp(left));
-    logs.into_iter().find_map(|(path, _)| {
-        let text = fs::read_to_string(path).ok()?;
-        extract_foundry_local_chat_completions_endpoint(&text)
-    })
 }
 
 pub fn build_openai_http_request_plan(
@@ -1723,6 +1108,7 @@ pub fn translate_openai_compatible<C: OpenAiHttpClient>(
         timing_ms: None,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     })
 }
 
@@ -2181,137 +1567,6 @@ fn can_use_configured_foundry_local_endpoint(
         && (is_foundry_local_provider(provider) || is_auto_local_ai_provider(provider))
 }
 
-fn foundry_local_default_log_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
-    for variable in ["USERPROFILE", "HOME"] {
-        if let Some(home) = env::var_os(variable) {
-            let path = PathBuf::from(home);
-            if !path.as_os_str().is_empty()
-                && !dirs.iter().any(|existing: &PathBuf| existing == &path)
-            {
-                dirs.push(path.join(".foundry").join("logs"));
-            }
-        }
-    }
-    dirs
-}
-
-fn contains_foundry_local_not_running_status(output: &str) -> bool {
-    let output = output.to_ascii_lowercase();
-    output.contains("not running")
-        || output.contains("isn't running")
-        || output.contains("is not running")
-}
-
-fn contains_foundry_local_missing_cli_status(output: &str) -> bool {
-    let output = output.to_ascii_lowercase();
-    output.contains("not recognized")
-        || output.contains("command not found")
-        || output.contains("executable file not found")
-}
-
-fn trim_foundry_local_status_output(output: &str) -> Option<String> {
-    let text = output
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(sanitize_foundry_local_status_line)
-        .filter(|line| !line.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string();
-
-    if text.is_empty() {
-        None
-    } else {
-        Some(text.chars().take(512).collect())
-    }
-}
-
-fn sanitize_foundry_local_status_line(line: &str) -> String {
-    const STATUS_LINE_ANCHORS: &[&str] = &[
-        "Model management service",
-        "Foundry Local service",
-        "To start the service",
-    ];
-
-    let text = ansi_escape_regex().replace_all(line, "").trim().to_string();
-    for anchor in STATUS_LINE_ANCHORS {
-        let Some(index) = text.to_ascii_lowercase().find(&anchor.to_ascii_lowercase()) else {
-            continue;
-        };
-        if index > 0 && !contains_ascii_letter_or_digit(&text[..index]) {
-            return text[index..].trim().to_string();
-        }
-    }
-
-    text
-}
-
-fn contains_ascii_letter_or_digit(text: &str) -> bool {
-    text.bytes().any(|byte| byte.is_ascii_alphanumeric())
-}
-
-fn ansi_escape_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r"\x1B\[[0-?]*[ -/]*[@-~]").expect("ANSI escape regex should compile")
-    })
-}
-
-fn is_foundry_local_log_path(path: &Path) -> bool {
-    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    let file_name = file_name.to_ascii_lowercase();
-    file_name.starts_with("foundry") && file_name.ends_with(".log")
-}
-
-fn foundry_local_model_device_preference(model_id: &str) -> usize {
-    let model_id = model_id.to_ascii_lowercase();
-    if model_id.contains("openvino-npu") || model_id.contains("-npu") {
-        return 0;
-    }
-
-    if model_id.contains("openvino-gpu") || model_id.contains("-gpu") {
-        return 1;
-    }
-
-    if model_id.contains("-cpu") {
-        return 2;
-    }
-
-    3
-}
-
-fn extract_urls(text: &str) -> Vec<String> {
-    let mut urls = Vec::new();
-    let mut offset = 0;
-    while let Some(index) = find_next_url_start(&text[offset..]) {
-        let start = offset + index;
-        let rest = &text[start..];
-        let end = rest
-            .find(|ch: char| ch.is_whitespace() || matches!(ch, '"' | '\'' | '<' | '>'))
-            .unwrap_or(rest.len());
-        let url = rest[..end].trim_end_matches(['.', ',', ';', ')', ']']);
-        if !url.is_empty() {
-            urls.push(url.to_string());
-        }
-        offset = start + end.max(1);
-    }
-    urls
-}
-
-fn find_next_url_start(text: &str) -> Option<usize> {
-    match (text.find("http://"), text.find("https://")) {
-        (Some(http), Some(https)) => Some(http.min(https)),
-        (Some(http), None) => Some(http),
-        (None, Some(https)) => Some(https),
-        (None, None) => None,
-    }
-}
-
 fn is_loopback_url(url: &reqwest::Url) -> bool {
     url.host_str()
         .map(|host| {
@@ -2321,13 +1576,6 @@ fn is_loopback_url(url: &reqwest::Url) -> bool {
                 || host.starts_with("127.")
         })
         .unwrap_or(false)
-}
-
-fn is_loopback_endpoint(endpoint: &str) -> bool {
-    reqwest::Url::parse(endpoint)
-        .ok()
-        .as_ref()
-        .is_some_and(is_loopback_url)
 }
 
 fn split_host_port<'a>(authority: &'a str, scheme: &str) -> Option<(&'a str, u16)> {

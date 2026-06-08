@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use crate::compat_protocol::SettingsSnapshot;
+use crate::protocol::SettingsSnapshot;
 
 const DEFAULT_MAX_RETRIES: usize = 3;
 const DEFAULT_RETRY_DELAYS: [Duration; 3] = [

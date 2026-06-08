@@ -1,0 +1,17 @@
+[package]
+name = "easydict_foundry_local"
+edition = "2021"
+license = "GPL-3.0-or-later"
+version = "0.1.0"
+
+[features]
+default = []
+sdk = ["dep:foundry-local-sdk", "dep:tokio"]
+sdk-winml = ["sdk", "foundry-local-sdk/winml"]
+
+[dependencies]
+foundry-local-sdk = { version = "1.2.1", optional = true }
+regex = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["net", "rt-multi-thread", "time"], optional = true }
+url = "2"

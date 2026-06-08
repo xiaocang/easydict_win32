@@ -1,4 +1,4 @@
-use crate::compat_protocol::{GrammarCorrectParams, TranslateParams};
+use crate::protocol::{GrammarCorrectParams, TranslateParams};
 use std::fmt;
 use std::path::PathBuf;
 
@@ -12,7 +12,6 @@ pub struct CliOptions {
     pub services: Vec<String>,
     pub json: bool,
     pub verbose: bool,
-    pub host: WorkerTarget,
 }
 
 impl CliOptions {
@@ -42,13 +41,6 @@ pub enum CliMode {
     Stream,
     Grammar,
     Batch,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WorkerTarget {
-    Auto,
-    AppDir(PathBuf),
-    Program { program: PathBuf, args: Vec<String> },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,9 +96,6 @@ Options:
   --services IDS       Alias for --service with comma-separated ids.
   --json               Emit JSON for translate/grammar, JSON Lines for stream/batch.
   --verbose            Print service/timing metadata to stderr in plain mode.
-  --host PATH          Legacy no-op compatibility option.
-  --host-arg ARG       Legacy no-op argument kept for old command lines.
-  --app-dir PATH       Legacy no-op; retained .NET worker fallback is retired.
   -h, --help           Show this help.
 
 Examples:
@@ -192,15 +181,7 @@ where
         .or_else(|| (!positional.is_empty()).then(|| positional.join(" ")))
         .ok_or(CliParseError::MissingText)?;
 
-    let host = match (host_program, app_dir) {
-        (Some(program), None) => WorkerTarget::Program {
-            program,
-            args: host_args,
-        },
-        (None, Some(app_dir)) => WorkerTarget::AppDir(app_dir),
-        (None, None) => WorkerTarget::Auto,
-        (Some(_), Some(_)) => unreachable!("conflict checked above"),
-    };
+    let _legacy_host_option = (host_program, host_args, app_dir);
 
     Ok(CliOptions {
         mode,
@@ -211,7 +192,6 @@ where
         services,
         json,
         verbose,
-        host,
     })
 }
 
@@ -273,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_stream_with_explicit_host_and_json() {
+    fn accepts_legacy_host_without_exposing_worker_target() {
         let options = parse_args([
             "stream",
             "--json",
@@ -289,13 +269,7 @@ mod tests {
         assert_eq!(options.mode, CliMode::Stream);
         assert!(options.json);
         assert_eq!(options.text, "Hello");
-        assert_eq!(
-            options.host,
-            WorkerTarget::Program {
-                program: PathBuf::from("C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe"),
-                args: vec!["--trace".to_string()]
-            }
-        );
+        assert_eq!(options.services, Vec::<String>::new());
     }
 
     #[test]
@@ -339,6 +313,9 @@ mod tests {
         assert!(usage.contains("grammar"));
         assert!(usage.contains("batch"));
         assert!(usage.contains("--json"));
+        assert!(!usage.contains("--host"));
+        assert!(!usage.contains("--host-arg"));
+        assert!(!usage.contains("--app-dir"));
     }
 
     #[test]

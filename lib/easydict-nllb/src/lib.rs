@@ -370,7 +370,7 @@ pub trait NllbInferenceEngine {
 }
 
 #[cfg(feature = "ort-openvino")]
-pub use ort_engine::OrtNllbInferenceEngine;
+pub use ort_engine::{ensure_ort_runtime_initialized, OrtNllbInferenceEngine};
 
 #[cfg(feature = "ort-openvino")]
 mod ort_engine {
@@ -589,24 +589,26 @@ mod ort_engine {
         source_len: usize,
     }
 
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum OrtRuntimeInitializationAction {
+        InitializeRequested,
+        ReuseExisting,
+    }
+
     pub fn ensure_ort_runtime_initialized(runtime_dir: impl AsRef<Path>) -> Result<(), NllbError> {
         let dll_path = runtime_dir.as_ref().join("onnxruntime.dll");
-        require_file(&dll_path, "ONNX Runtime DLL")?;
 
         let _guard = ORT_RUNTIME_INIT_LOCK
             .lock()
             .map_err(|_| NllbError::new("ONNX Runtime initialization lock is poisoned"))?;
 
-        if let Some(existing) = ORT_RUNTIME_DLL_PATH.get() {
-            if existing == &dll_path {
-                return Ok(());
-            }
-            return Err(NllbError::new(format!(
-                "ONNX Runtime is already initialized from '{}', cannot switch to '{}'",
-                existing.display(),
-                dll_path.display()
-            )));
+        if resolve_ort_runtime_initialization_action(ORT_RUNTIME_DLL_PATH.get(), &dll_path)
+            == OrtRuntimeInitializationAction::ReuseExisting
+        {
+            return Ok(());
         }
+
+        require_file(&dll_path, "ONNX Runtime DLL")?;
 
         let committed = ort::init_from(&dll_path)
             .map_err(map_ort_error("load ONNX Runtime DLL"))?
@@ -623,6 +625,17 @@ mod ort_engine {
             .set(dll_path)
             .map_err(|_| NllbError::new("ONNX Runtime path was initialized concurrently"))?;
         Ok(())
+    }
+
+    fn resolve_ort_runtime_initialization_action(
+        existing: Option<&PathBuf>,
+        _requested: &Path,
+    ) -> OrtRuntimeInitializationAction {
+        if existing.is_some() {
+            return OrtRuntimeInitializationAction::ReuseExisting;
+        }
+
+        OrtRuntimeInitializationAction::InitializeRequested
     }
 
     fn run_encoder_with_session(
@@ -827,6 +840,34 @@ mod ort_engine {
         use super::*;
 
         #[test]
+        fn ort_runtime_initialization_requires_requested_dll_before_first_init() {
+            assert_eq!(
+                resolve_ort_runtime_initialization_action(
+                    None,
+                    Path::new(r"C:\models\onnxruntime.dll")
+                ),
+                OrtRuntimeInitializationAction::InitializeRequested
+            );
+        }
+
+        #[test]
+        fn ort_runtime_initialization_reuses_existing_runtime_for_later_paths() {
+            let existing = PathBuf::from(r"C:\nllb\runtimes\onnxruntime.dll");
+
+            assert_eq!(
+                resolve_ort_runtime_initialization_action(
+                    Some(&existing),
+                    Path::new(r"C:\layout\Models\onnxruntime.dll")
+                ),
+                OrtRuntimeInitializationAction::ReuseExisting
+            );
+            assert_eq!(
+                resolve_ort_runtime_initialization_action(Some(&existing), existing.as_path()),
+                OrtRuntimeInitializationAction::ReuseExisting
+            );
+        }
+
+        #[test]
         fn selects_argmax_from_last_decoder_timestep() {
             let logits = vec![
                 0.1, 4.0, 3.0, 0.0, //
@@ -894,8 +935,8 @@ impl<T: NllbTokenizer, E: NllbInferenceEngine> NllbTranslator<T, E> {
         source_language_name: &str,
         target_language_name: &str,
     ) -> Result<NllbTranslation, NllbError> {
-        let source_flores = source_flores_code_for_dotnet_language_name(source_language_name)?;
-        let target_flores = target_flores_code_for_dotnet_language_name(target_language_name)?;
+        let source_flores = source_flores_code_for_language_name(source_language_name)?;
+        let target_flores = target_flores_code_for_language_name(target_language_name)?;
         let input_ids = self.tokenizer.encode_source(text, source_flores)?;
         let forced_bos = self.tokenizer.language_token_id(target_flores)?;
         let generated = self
@@ -950,17 +991,29 @@ pub fn streaming_decode_delta(previous_decoded_text: &str, decoded_text: &str) -
 pub fn source_flores_code_for_dotnet_language_name(
     language_name: &str,
 ) -> Result<&'static str, NllbError> {
+    source_flores_code_for_language_name(language_name)
+}
+
+pub fn source_flores_code_for_language_name(
+    language_name: &str,
+) -> Result<&'static str, NllbError> {
     if language_name.trim().eq_ignore_ascii_case("auto") {
         return Ok("eng_Latn");
     }
 
-    target_flores_code_for_dotnet_language_name(language_name)
+    target_flores_code_for_language_name(language_name)
 }
 
 pub fn target_flores_code_for_dotnet_language_name(
     language_name: &str,
 ) -> Result<&'static str, NllbError> {
-    flores_code_for_dotnet_language_name(language_name).ok_or_else(|| {
+    target_flores_code_for_language_name(language_name)
+}
+
+pub fn target_flores_code_for_language_name(
+    language_name: &str,
+) -> Result<&'static str, NllbError> {
+    flores_code_for_language_name(language_name).ok_or_else(|| {
         NllbError::new(format!(
             "NLLB-200 does not support language '{}'",
             language_name.trim()
@@ -1081,6 +1134,10 @@ pub fn nllb_language_name_from_code(
 }
 
 pub fn flores_code_for_dotnet_language_name(language_name: &str) -> Option<&'static str> {
+    flores_code_for_language_name(language_name)
+}
+
+pub fn flores_code_for_language_name(language_name: &str) -> Option<&'static str> {
     match normalize_language_name(language_name).as_str() {
         "simplifiedchinese" | "chinesesimplified" => Some("zho_Hans"),
         "traditionalchinese" | "chinesetraditional" => Some("zho_Hant"),
@@ -1217,28 +1274,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_dotnet_language_names_to_flores_codes() {
+    fn maps_easydict_language_names_to_flores_codes() {
         assert_eq!(
-            target_flores_code_for_dotnet_language_name("SimplifiedChinese").unwrap(),
+            target_flores_code_for_language_name("SimplifiedChinese").unwrap(),
             "zho_Hans"
         );
         assert_eq!(
-            target_flores_code_for_dotnet_language_name("Slovak").unwrap(),
+            target_flores_code_for_language_name("Slovak").unwrap(),
             "slk_Latn"
         );
         assert_eq!(
-            target_flores_code_for_dotnet_language_name("Chinese Traditional").unwrap(),
+            target_flores_code_for_language_name("Chinese Traditional").unwrap(),
             "zho_Hant"
         );
         assert_eq!(
-            source_flores_code_for_dotnet_language_name("Auto").unwrap(),
+            source_flores_code_for_language_name("Auto").unwrap(),
             "eng_Latn"
         );
-        assert!(target_flores_code_for_dotnet_language_name("Auto").is_err());
+        assert!(target_flores_code_for_language_name("Auto").is_err());
+        assert_eq!(
+            target_flores_code_for_dotnet_language_name("SimplifiedChinese").unwrap(),
+            target_flores_code_for_language_name("SimplifiedChinese").unwrap()
+        );
     }
 
     #[test]
-    fn resolves_nllb_language_codes_to_dotnet_language_names() {
+    fn resolves_nllb_language_codes_to_easydict_language_names() {
         assert_eq!(nllb_language_name_from_code(None, "Auto"), Some("Auto"));
         assert_eq!(
             nllb_language_name_from_code(Some("zh-Hant"), "English"),

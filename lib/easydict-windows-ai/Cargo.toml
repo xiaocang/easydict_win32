@@ -1,0 +1,19 @@
+[package]
+name = "easydict_windows_ai"
+edition = "2021"
+license = "GPL-3.0-or-later"
+version = "0.1.0"
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+windows-collections = "0.3.2"
+windows-core = "0.62.2"
+windows-future = "0.3.2"
+windows-sys = { version = "0.61.2", features = [
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+] }
+
+[build-dependencies]
+windows-bindgen = "0.66.0"

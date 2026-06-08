@@ -1,8 +1,8 @@
-use crate::compat_protocol::{
+use crate::openai_compatible::{OpenAiExecutionError, OpenAiExecutionErrorCode};
+use crate::protocol::{
     DefinitionDto, PhoneticDto, SettingsSnapshot, SynonymDto, TranslationResultDto, WordFormDto,
     WordResultDto,
 };
-use crate::openai_compatible::{OpenAiExecutionError, OpenAiExecutionErrorCode};
 use crate::translation_cache::is_youdao_word_query;
 use crate::translation_language::TranslationLanguage;
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
@@ -1797,9 +1797,8 @@ pub fn generate_bing_ig() -> Result<String, OpenAiExecutionError> {
 
 // ----------------------------------------------------------------------------
 // Linguee dictionary (keyless public proxy, feature-gated registration).
-// A single GET returns translations with context; this preserves the primary
-// translated text. Linguee's alternative translations are not yet carried
-// across the bridge (see the deferred-alternatives note in refactor-progress.md).
+// A single GET returns translations with context; the first translation is the
+// primary text and subsequent translations are carried as alternatives.
 // ----------------------------------------------------------------------------
 
 pub fn build_linguee_translation_request_plan(
@@ -2174,6 +2173,7 @@ pub fn parse_google_translation_response(
         timing_ms: None,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     })
 }
 
@@ -2224,6 +2224,7 @@ pub fn parse_google_web_translation_response(
         timing_ms: None,
         alternatives: None,
         word_result,
+        raw_html: None,
     })
 }
 
@@ -2596,6 +2597,7 @@ pub fn parse_youdao_openapi_response(
         timing_ms: None,
         alternatives: None,
         word_result,
+        raw_html: None,
     })
 }
 
@@ -2715,6 +2717,7 @@ pub fn parse_youdao_web_dict_response(
         timing_ms: None,
         alternatives: None,
         word_result,
+        raw_html: None,
     })
 }
 
@@ -2969,6 +2972,7 @@ pub fn parse_youdao_web_translate_response(
         timing_ms: None,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     })
 }
 
@@ -3508,6 +3512,7 @@ fn success_result(
         timing_ms: None,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     }
 }
 

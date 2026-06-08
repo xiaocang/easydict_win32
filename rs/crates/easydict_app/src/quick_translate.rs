@@ -1,10 +1,7 @@
+#[cfg(feature = "retained-dotnet-workers")]
 use crate::compat_client::{DirectWorkerFacade, WorkerClientError};
-use crate::compat_protocol::{
-    local_ai_provider_modes, ConfigureParams, DefinitionDto, GrammarCorrectParams,
-    GrammarCorrectResultDto, LocalAiTranslateParams, MdxLookupEntry, MdxLookupParams,
-    MdxLookupResult, PhoneticDto, SettingsSnapshot, SynonymDto, TranslateParams,
-    TranslateStreamResult, TranslationResultDto, WordFormDto, WordResultDto,
-};
+#[cfg(feature = "retained-dotnet-workers")]
+use crate::compat_protocol::{ConfigureParams, LocalAiTranslateParams, TranslateStreamResult};
 use crate::custom_streaming::{
     build_custom_streaming_translation_request_plan, cleanup_custom_streaming_translation_text,
     correct_custom_streaming_grammar, custom_streaming_config_for_service,
@@ -20,16 +17,23 @@ use crate::mdx_native::{
 use crate::openai_compatible::{
     build_openai_translation_request_plan, cleanup_openai_translation_text,
     correct_grammar_openai_compatible, execute_openai_stream_request,
-    openai_compatible_service_can_route_natively, resolve_foundry_local_model_id_for_config,
-    resolve_openai_compatible_config_for_service, translate_openai_compatible,
-    validate_openai_translation_request_for_service, CommandFoundryLocalEndpointResolver,
-    FoundryLocalEndpointResolver, OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiHttpClient,
-    OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
+    openai_compatible_service_can_route_natively, prepare_foundry_local_service,
+    resolve_foundry_local_model_id_for_config, resolve_openai_compatible_config_for_service,
+    translate_openai_compatible, validate_openai_translation_request_for_service,
+    CommandFoundryLocalEndpointResolver, FoundryLocalRuntimeController, OpenAiCompatibleConfig,
+    OpenAiExecutionError, OpenAiHttpClient, OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
 };
 use crate::openvino_download::{
     default_openvino_data_directory, ensure_openvino_runtime_directory_on_path,
 };
+use crate::protocol::{
+    local_ai_provider_modes, DefinitionDto, GrammarCorrectParams, GrammarCorrectResultDto,
+    MdxLookupEntry, MdxLookupParams, MdxLookupResult, PhoneticDto, SettingsSnapshot, SynonymDto,
+    TranslateParams, TranslationResultDto, WordFormDto, WordResultDto,
+};
 use crate::retained_workers::RetainedWorkerPolicy;
+#[cfg(not(feature = "retained-dotnet-workers"))]
+use crate::retained_workers::LOCAL_AI_WORKER_DISABLED_MESSAGE;
 use crate::settings_status::{open_vino_cache_status_for_settings, OpenVinoCacheStatus};
 use crate::state::{
     settings_snapshot, stable_partition_demoted, ConnectionStatus, EasydictUiState,
@@ -47,11 +51,19 @@ use crate::translation_cache::{
 use crate::translation_language::TranslationLanguage;
 use crate::translation_services::find_translation_service_descriptor;
 use easydict_nllb::{
-    nllb_language_name_from_code, source_flores_code_for_dotnet_language_name,
-    target_flores_code_for_dotnet_language_name, HuggingFaceNllbTokenizer, NllbInferenceEngine,
+    nllb_language_name_from_code, source_flores_code_for_language_name,
+    target_flores_code_for_language_name, HuggingFaceNllbTokenizer, NllbInferenceEngine,
     NllbModelPaths, NllbTokenizer, NllbTranslator, OpenVinoDevice, OrtNllbInferenceEngine,
 };
+use easydict_windows_ai::{
+    correct_grammar_stream_with_client, default_windows_ai_language_model_client,
+    translate_stream_with_client, translate_with_client, windows_ai_status,
+    WindowsAiGrammarCorrectionRequest, WindowsAiLanguage, WindowsAiLanguageModelClient,
+    WindowsAiLanguageModelProbe, WindowsAiStatus, WindowsAiTranslationOutcome,
+    WindowsAiTranslationRequest,
+};
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use regex::Regex;
 use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -251,6 +263,7 @@ impl fmt::Display for QuickTranslateBackendError {
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 impl From<WorkerClientError> for QuickTranslateBackendError {
     fn from(error: WorkerClientError) -> Self {
         Self::new(error.to_string())
@@ -383,7 +396,7 @@ fn cached_translation_result_from_dto(
         from_cache: false,
         alternatives: result.alternatives.clone().unwrap_or_default(),
         word_result: result.word_result.as_ref().map(cached_word_result_from_dto),
-        raw_html: None,
+        raw_html: result.raw_html.clone(),
     })
 }
 
@@ -408,6 +421,7 @@ fn cached_translation_result_to_dto(
         timing_ms: Some(result.timing_ms),
         alternatives: (!result.alternatives.is_empty()).then(|| result.alternatives.clone()),
         word_result: result.word_result.as_ref().map(cached_word_result_to_dto),
+        raw_html: result.raw_html.clone(),
     }
 }
 
@@ -697,7 +711,7 @@ impl<C, R> NativeOpenAiQuickTranslateBackend<C, R> {
     }
 }
 
-impl<C: OpenAiHttpClient, R: FoundryLocalEndpointResolver> QuickTranslateBackend
+impl<C: OpenAiHttpClient, R: FoundryLocalRuntimeController> QuickTranslateBackend
     for NativeOpenAiQuickTranslateBackend<C, R>
 {
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
@@ -748,6 +762,7 @@ impl<C: OpenAiHttpClient, R: FoundryLocalEndpointResolver> QuickTranslateBackend
                 timing_ms: None,
                 alternatives: None,
                 word_result: None,
+                raw_html: None,
             },
             chunks,
         })
@@ -778,7 +793,7 @@ impl<C: OpenAiHttpClient, R: FoundryLocalEndpointResolver> QuickTranslateBackend
     }
 }
 
-impl<C, R: FoundryLocalEndpointResolver> NativeOpenAiQuickTranslateBackend<C, R> {
+impl<C, R: FoundryLocalRuntimeController> NativeOpenAiQuickTranslateBackend<C, R> {
     fn openai_translation_request(
         &self,
         params: &TranslateParams,
@@ -842,7 +857,9 @@ impl<C, R: FoundryLocalEndpointResolver> NativeOpenAiQuickTranslateBackend<C, R>
     }
 }
 
-impl<C: OpenAiHttpClient, R: FoundryLocalEndpointResolver> NativeOpenAiQuickTranslateBackend<C, R> {
+impl<C: OpenAiHttpClient, R: FoundryLocalRuntimeController>
+    NativeOpenAiQuickTranslateBackend<C, R>
+{
     fn resolve_foundry_local_model_if_needed(
         &mut self,
         service_id: &str,
@@ -923,6 +940,7 @@ impl<C: CustomStreamingHttpClient> QuickTranslateBackend
                 timing_ms: None,
                 alternatives: None,
                 word_result: None,
+                raw_html: None,
             },
             chunks,
         })
@@ -1198,6 +1216,7 @@ impl<C: BingHttpClient> QuickTranslateBackend for NativeBingQuickTranslateBacken
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 pub struct LocalAiWorkerQuickTranslateBackend {
     facade: DirectWorkerFacade,
     settings: Option<SettingsSnapshot>,
@@ -1261,6 +1280,7 @@ impl<T: NllbTokenizer, E: NllbInferenceEngine> QuickTranslateBackend
                 timing_ms: None,
                 alternatives: None,
                 word_result: None,
+                raw_html: None,
             },
             chunks: translation.chunks,
         })
@@ -1277,6 +1297,7 @@ impl<T: NllbTokenizer, E: NllbInferenceEngine> QuickTranslateBackend
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 impl LocalAiWorkerQuickTranslateBackend {
     pub fn new(facade: DirectWorkerFacade) -> Self {
         Self {
@@ -1296,6 +1317,7 @@ impl LocalAiWorkerQuickTranslateBackend {
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 impl QuickTranslateBackend for LocalAiWorkerQuickTranslateBackend {
     fn configure(&mut self, settings: &SettingsSnapshot) -> Result<(), QuickTranslateBackendError> {
         DirectWorkerFacade::configure(
@@ -1626,12 +1648,12 @@ pub fn run_quick_translate_service<B: QuickTranslateBackend>(
 
 pub fn run_quick_translate_with_current_app_dir(plan: QuickTranslatePlan) -> QuickTranslateOutcome {
     match current_app_dir() {
-        Ok(app_dir) => run_quick_translate_with_packaged_app_dir(plan, app_dir),
+        Ok(app_dir) => run_quick_translate_with_app_dir(plan, app_dir),
         Err(message) => QuickTranslateOutcome::all_failed(&plan, message),
     }
 }
 
-pub fn run_quick_translate_with_packaged_app_dir(
+pub fn run_quick_translate_with_app_dir(
     plan: QuickTranslatePlan,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateOutcome {
@@ -1641,9 +1663,7 @@ pub fn run_quick_translate_with_packaged_app_dir(
         results: plan
             .service_requests()
             .into_iter()
-            .map(|request| {
-                run_quick_translate_service_with_packaged_app_dir(request, &app_dir).outcome
-            })
+            .map(|request| run_quick_translate_service_with_app_dir(request, &app_dir).outcome)
             .collect(),
     }
 }
@@ -1652,42 +1672,110 @@ pub fn run_quick_translate_service_with_current_app_dir(
     request: QuickTranslateServiceRequest,
 ) -> QuickTranslateServiceUpdate {
     match current_app_dir() {
-        Ok(app_dir) => run_quick_translate_service_with_packaged_app_dir(request, app_dir),
+        Ok(app_dir) => run_quick_translate_service_with_app_dir(request, app_dir),
         Err(message) => service_error_update(request, message),
     }
 }
 
-pub fn run_quick_translate_service_with_packaged_app_dir(
+pub fn run_quick_translate_service_with_app_dir(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
-    run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
         app_dir,
         RetainedWorkerPolicy::all_disabled(),
+        &mut windows_ai_client,
+        &mut foundry_resolver,
     )
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
+#[doc(hidden)]
 pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
     worker_policy: RetainedWorkerPolicy,
 ) -> QuickTranslateServiceUpdate {
     let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
-    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver(
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
         app_dir,
-        worker_policy,
+        worker_policy.with_hybrid_runtime_profile_from_environment(),
+        &mut windows_ai_client,
         &mut foundry_resolver,
     )
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
+#[doc(hidden)]
 pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver<
-    R: FoundryLocalEndpointResolver,
+    R: FoundryLocalRuntimeController,
 >(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
     worker_policy: RetainedWorkerPolicy,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
+        request,
+        app_dir,
+        worker_policy.with_hybrid_runtime_profile_from_environment(),
+        &mut windows_ai_client,
+        foundry_resolver,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_quick_translate_service_with_app_dir_and_native_local_ai_probes<
+    P: WindowsAiLanguageModelProbe,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    windows_ai_probe: &mut P,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_probes_internal(
+        request,
+        app_dir,
+        RetainedWorkerPolicy::all_disabled(),
+        windows_ai_probe,
+        foundry_resolver,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_quick_translate_service_with_app_dir_and_native_local_ai_client<
+    C: WindowsAiLanguageModelClient,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
+        request,
+        app_dir,
+        RetainedWorkerPolicy::all_disabled(),
+        windows_ai_client,
+        foundry_resolver,
+    )
+}
+
+fn run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_probes_internal<
+    P: WindowsAiLanguageModelProbe,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    worker_policy: RetainedWorkerPolicy,
+    windows_ai_probe: &mut P,
     foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
     if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
@@ -1697,6 +1785,62 @@ pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_f
     if quick_translate_request_can_route_natively(&request) {
         return run_quick_translate_service_with_native_route(request)
             .expect("native route was checked before dispatch");
+    }
+
+    if let Some(error) = explicit_windows_ai_probe_error_for_request(&request, windows_ai_probe) {
+        return service_error_update(request, error);
+    }
+
+    let _ = auto_windows_ai_native_probe_status(&request, windows_ai_probe);
+
+    if let Some(native_request) =
+        auto_foundry_local_native_probe_request(&request, foundry_resolver)
+    {
+        return run_quick_translate_service_with_native_openai(native_request);
+    }
+
+    if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
+        return run_quick_translate_service_with_native_openvino(native_request);
+    }
+
+    if let Some(error) = local_ai_quick_translate_local_error_for_policy(&request, worker_policy) {
+        return service_error_update(request, error);
+    }
+
+    if request_uses_local_ai_worker_bridge(&request) {
+        return run_quick_translate_service_with_local_ai_bridge(request, app_dir);
+    }
+
+    unsupported_rust_native_route_update(request)
+}
+
+fn run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal<
+    C: WindowsAiLanguageModelClient,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    worker_policy: RetainedWorkerPolicy,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
+        return service_error_update(request, error);
+    }
+
+    if quick_translate_request_can_route_natively(&request) {
+        return run_quick_translate_service_with_native_route(request)
+            .expect("native route was checked before dispatch");
+    }
+
+    if let Some(update) =
+        explicit_windows_ai_client_update_for_request(request.clone(), windows_ai_client)
+    {
+        return update;
+    }
+
+    if let Some(update) = auto_windows_ai_client_update_for_request(&request, windows_ai_client) {
+        return update;
     }
 
     if let Some(native_request) =
@@ -1709,7 +1853,7 @@ pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_f
         return run_quick_translate_service_with_native_openvino(native_request);
     }
 
-    if let Some(error) = local_ai_quick_translate_local_error(&request, worker_policy) {
+    if let Some(error) = local_ai_quick_translate_local_error_for_policy(&request, worker_policy) {
         return service_error_update(request, error);
     }
 
@@ -1727,9 +1871,9 @@ pub fn run_quick_translate_streaming_service_with_current_app_dir(
 
     std::thread::spawn(move || {
         let update = match current_app_dir() {
-            Ok(app_dir) => run_quick_translate_streaming_service_with_packaged_app_dir(
-                request, app_dir, &sender,
-            ),
+            Ok(app_dir) => {
+                run_quick_translate_streaming_service_with_app_dir(request, app_dir, &sender)
+            }
             Err(message) => service_error_update(request, message),
         };
 
@@ -1739,10 +1883,96 @@ pub fn run_quick_translate_streaming_service_with_current_app_dir(
     receiver
 }
 
-fn run_quick_translate_streaming_service_with_packaged_app_dir(
+fn run_quick_translate_streaming_service_with_app_dir(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
+        request,
+        app_dir,
+        sender,
+        RetainedWorkerPolicy::all_disabled(),
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver<
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    sender: &UnboundedSender<Message>,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
+        request,
+        app_dir,
+        sender,
+        RetainedWorkerPolicy::all_disabled(),
+        &mut windows_ai_client,
+        foundry_resolver,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client<
+    C: WindowsAiLanguageModelClient,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    sender: &UnboundedSender<Message>,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
+        request,
+        app_dir,
+        sender,
+        RetainedWorkerPolicy::all_disabled(),
+        windows_ai_client,
+        foundry_resolver,
+    )
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
+#[doc(hidden)]
+pub fn run_quick_translate_streaming_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver<
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    sender: &UnboundedSender<Message>,
+    worker_policy: RetainedWorkerPolicy,
+    foundry_resolver: &mut R,
+) -> QuickTranslateServiceUpdate {
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
+        request,
+        app_dir,
+        sender,
+        worker_policy.with_hybrid_runtime_profile_from_environment(),
+        &mut windows_ai_client,
+        foundry_resolver,
+    )
+}
+
+fn run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal<
+    C: WindowsAiLanguageModelClient,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    sender: &UnboundedSender<Message>,
+    worker_policy: RetainedWorkerPolicy,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
     if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
         return service_error_update(request, error);
@@ -1753,9 +1983,22 @@ fn run_quick_translate_streaming_service_with_packaged_app_dir(
             .expect("native route was checked before dispatch");
     }
 
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    if let Some(update) = explicit_windows_ai_streaming_client_update_for_request(
+        request.clone(),
+        windows_ai_client,
+        sender,
+    ) {
+        return update;
+    }
+
+    if let Some(update) =
+        auto_windows_ai_streaming_client_update_for_request(&request, windows_ai_client, sender)
+    {
+        return update;
+    }
+
     if let Some(native_request) =
-        auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
+        auto_foundry_local_native_probe_request(&request, foundry_resolver)
     {
         return run_quick_translate_streaming_service_with_native_openai(native_request, sender);
     }
@@ -1764,9 +2007,7 @@ fn run_quick_translate_streaming_service_with_packaged_app_dir(
         return run_quick_translate_streaming_service_with_native_openvino(native_request, sender);
     }
 
-    if let Some(error) =
-        local_ai_quick_translate_local_error(&request, RetainedWorkerPolicy::all_disabled())
-    {
+    if let Some(error) = local_ai_quick_translate_local_error_for_policy(&request, worker_policy) {
         return service_error_update(request, error);
     }
 
@@ -1788,39 +2029,154 @@ pub fn quick_translate_request_can_route_natively(request: &QuickTranslateServic
         || request_uses_native_mdx(request)
 }
 
-pub fn auto_foundry_local_native_probe_request<R: FoundryLocalEndpointResolver>(
+pub fn auto_foundry_local_native_probe_request<R: FoundryLocalRuntimeController>(
     request: &QuickTranslateServiceRequest,
-    foundry_local_endpoint_resolver: &mut R,
+    foundry_local_controller: &mut R,
 ) -> Option<QuickTranslateServiceRequest> {
     if !request_should_probe_auto_foundry_local(request) {
         return None;
     }
 
-    let endpoint = foundry_local_endpoint_resolver
-        .resolve_chat_completions_endpoint()
-        .ok()
-        .flatten()?;
+    let outcome =
+        prepare_foundry_local_service(foundry_local_controller, &request.settings).ok()?;
+    if !outcome.ready {
+        return None;
+    }
+
+    let endpoint = outcome.endpoint?;
 
     let mut native_request = request.clone();
     native_request.settings.foundry_local_endpoint = Some(endpoint);
+    native_request.settings.foundry_local_model = Some(outcome.model);
     Some(native_request)
+}
+
+pub fn auto_windows_ai_native_probe_status<P: WindowsAiLanguageModelProbe>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_probe: &mut P,
+) -> Option<WindowsAiStatus> {
+    if !local_ai_request_should_probe_auto_windows_ai(request) {
+        return None;
+    }
+
+    Some(windows_ai_status(windows_ai_probe))
+}
+
+fn explicit_windows_ai_probe_error_for_request<P: WindowsAiLanguageModelProbe>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_probe: &mut P,
+) -> Option<String> {
+    if !local_ai_request_should_probe_explicit_windows_ai(request) {
+        return None;
+    }
+
+    let status = windows_ai_status(windows_ai_probe);
+    Some(format!(
+        "{} Windows Local AI requires a Rust-native Phi Silica generation route.",
+        status.message
+    ))
+}
+
+fn explicit_windows_ai_client_update_for_request<C: WindowsAiLanguageModelClient>(
+    request: QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+) -> Option<QuickTranslateServiceUpdate> {
+    if !local_ai_request_should_probe_explicit_windows_ai(&request) {
+        return None;
+    }
+
+    Some(run_quick_translate_service_with_native_windows_ai_client(
+        request,
+        windows_ai_client,
+    ))
+}
+
+fn auto_windows_ai_client_update_for_request<C: WindowsAiLanguageModelClient>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+) -> Option<QuickTranslateServiceUpdate> {
+    if !local_ai_request_should_probe_auto_windows_ai(request) {
+        return None;
+    }
+
+    let status = windows_ai_status(windows_ai_client);
+    if !matches!(
+        status.ready_state,
+        easydict_windows_ai::WindowsAiReadyState::Ready
+    ) {
+        return None;
+    }
+
+    Some(run_quick_translate_service_with_native_windows_ai_client(
+        request.clone(),
+        windows_ai_client,
+    ))
+}
+
+fn explicit_windows_ai_streaming_client_update_for_request<C: WindowsAiLanguageModelClient>(
+    request: QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    sender: &UnboundedSender<Message>,
+) -> Option<QuickTranslateServiceUpdate> {
+    if !local_ai_request_should_probe_explicit_windows_ai(&request) {
+        return None;
+    }
+
+    Some(
+        run_quick_translate_streaming_service_with_native_windows_ai_client(
+            request,
+            windows_ai_client,
+            sender,
+        ),
+    )
+}
+
+fn auto_windows_ai_streaming_client_update_for_request<C: WindowsAiLanguageModelClient>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    sender: &UnboundedSender<Message>,
+) -> Option<QuickTranslateServiceUpdate> {
+    if !local_ai_request_should_probe_auto_windows_ai(request) {
+        return None;
+    }
+
+    let status = windows_ai_status(windows_ai_client);
+    if !matches!(
+        status.ready_state,
+        easydict_windows_ai::WindowsAiReadyState::Ready
+    ) {
+        return None;
+    }
+
+    Some(
+        run_quick_translate_streaming_service_with_native_windows_ai_client(
+            request.clone(),
+            windows_ai_client,
+            sender,
+        ),
+    )
 }
 
 pub fn auto_openvino_native_fallback_request(
     request: &QuickTranslateServiceRequest,
 ) -> Option<QuickTranslateServiceRequest> {
-    if !request_should_probe_auto_foundry_local(request)
-        || !matches!(
-            request.execution_kind,
-            QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
-        )
-    {
+    if !matches!(
+        local_ai_native_probe_route_decision(request),
+        LocalAiRouteDecision::ProbeWindowsAi | LocalAiRouteDecision::ProbeFoundry
+    ) || !matches!(
+        request.execution_kind,
+        QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
+    ) {
         return None;
     }
 
     let mut native_request = request.clone();
     native_request.settings.local_ai_provider = Some(local_ai_provider_modes::OPENVINO.to_string());
-    request_uses_native_openvino(&native_request).then_some(native_request)
+    matches!(
+        local_ai_native_probe_route_decision(&native_request),
+        LocalAiRouteDecision::NativeOpenVino
+    )
+    .then_some(native_request)
 }
 
 pub fn run_quick_translate_service_with_native_route(
@@ -1896,6 +2252,178 @@ pub fn run_quick_translate_streaming_service_with_native_route(
     }
 
     None
+}
+
+fn run_quick_translate_service_with_native_windows_ai_client<C: WindowsAiLanguageModelClient>(
+    request: QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+) -> QuickTranslateServiceUpdate {
+    let query_id = request.query_id;
+    let outcome = run_windows_ai_client_request(&request, windows_ai_client, None);
+    QuickTranslateServiceUpdate { query_id, outcome }
+}
+
+fn run_quick_translate_streaming_service_with_native_windows_ai_client<
+    C: WindowsAiLanguageModelClient,
+>(
+    request: QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let query_id = request.query_id;
+    let outcome = run_windows_ai_client_request(&request, windows_ai_client, Some(sender));
+    QuickTranslateServiceUpdate { query_id, outcome }
+}
+
+fn run_windows_ai_client_request<C: WindowsAiLanguageModelClient>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    sender: Option<&UnboundedSender<Message>>,
+) -> QuickTranslateServiceOutcome {
+    match request.execution_kind {
+        QuickTranslateExecutionKind::GrammarCorrection => {
+            run_windows_ai_client_grammar_request(request, windows_ai_client)
+        }
+        QuickTranslateExecutionKind::TranslateStream => {
+            run_windows_ai_client_stream_request(request, windows_ai_client, sender)
+        }
+        QuickTranslateExecutionKind::Translate => {
+            run_windows_ai_client_translate_request(request, windows_ai_client)
+        }
+    }
+}
+
+fn run_windows_ai_client_translate_request<C: WindowsAiLanguageModelClient>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+) -> QuickTranslateServiceOutcome {
+    let translation_request = match windows_ai_translation_request_from_params(&request.params) {
+        Ok(request) => request,
+        Err(error) => {
+            return QuickTranslateServiceOutcome {
+                service: request.service.clone(),
+                grammar_result: None,
+                streamed_chunks: Vec::new(),
+                result: Err(error),
+            };
+        }
+    };
+
+    match translate_with_client(windows_ai_client, &translation_request) {
+        Ok(outcome) => QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Ok(windows_ai_translation_outcome_to_dto(
+                &request.params,
+                outcome,
+            )),
+        },
+        Err(error) => QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Err(QuickTranslateBackendError::new(error.to_string())),
+        },
+    }
+}
+
+fn run_windows_ai_client_stream_request<C: WindowsAiLanguageModelClient>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    sender: Option<&UnboundedSender<Message>>,
+) -> QuickTranslateServiceOutcome {
+    let translation_request = match windows_ai_translation_request_from_params(&request.params) {
+        Ok(request) => request,
+        Err(error) => {
+            return QuickTranslateServiceOutcome {
+                service: request.service.clone(),
+                grammar_result: None,
+                streamed_chunks: Vec::new(),
+                result: Err(error),
+            };
+        }
+    };
+
+    match translate_stream_with_client(windows_ai_client, &translation_request) {
+        Ok(streamed) => {
+            if let Some(sender) = sender {
+                for chunk in &streamed.chunks {
+                    let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+                        QuickTranslateStreamChunk {
+                            query_id: request.query_id,
+                            service: request.service.clone(),
+                            text: chunk.clone(),
+                        },
+                    ));
+                }
+            }
+
+            QuickTranslateServiceOutcome {
+                service: request.service.clone(),
+                grammar_result: None,
+                streamed_chunks: streamed.chunks,
+                result: Ok(windows_ai_translation_outcome_to_dto(
+                    &request.params,
+                    streamed.result,
+                )),
+            }
+        }
+        Err(error) => QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Err(QuickTranslateBackendError::new(error.to_string())),
+        },
+    }
+}
+
+fn run_windows_ai_client_grammar_request<C: WindowsAiLanguageModelClient>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+) -> QuickTranslateServiceOutcome {
+    let Some(params) = request.grammar_params.as_ref() else {
+        return QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Err(QuickTranslateBackendError::new(
+                "Grammar correction request is missing grammar parameters",
+            )),
+        };
+    };
+    let grammar_request = match windows_ai_grammar_request_from_params(params) {
+        Ok(request) => request,
+        Err(error) => {
+            return QuickTranslateServiceOutcome {
+                service: request.service.clone(),
+                grammar_result: None,
+                streamed_chunks: Vec::new(),
+                result: Err(error),
+            };
+        }
+    };
+
+    match correct_grammar_stream_with_client(windows_ai_client, &grammar_request) {
+        Ok(chunks) => {
+            let result = windows_ai_grammar_chunks_to_result(params, chunks);
+            QuickTranslateServiceOutcome {
+                service: request.service.clone(),
+                grammar_result: Some(grammar_result_to_preview(&result)),
+                streamed_chunks: Vec::new(),
+                result: Ok(grammar_result_to_translation_result(
+                    &request.service,
+                    result,
+                )),
+            }
+        }
+        Err(error) => QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Err(QuickTranslateBackendError::new(error.to_string())),
+        },
+    }
 }
 
 fn run_quick_translate_service_with_native_openai(
@@ -2169,6 +2697,7 @@ fn run_quick_translate_service_with_native_mdx(
     run_quick_translate_service(&mut backend, &request)
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn run_quick_translate_service_with_local_ai_bridge(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
@@ -2184,6 +2713,16 @@ fn run_quick_translate_service_with_local_ai_bridge(
     }
 }
 
+#[cfg(not(feature = "retained-dotnet-workers"))]
+fn run_quick_translate_service_with_local_ai_bridge(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+) -> QuickTranslateServiceUpdate {
+    let _ = app_dir;
+    service_error_update(request, LOCAL_AI_WORKER_DISABLED_MESSAGE)
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
 fn run_quick_translate_streaming_service_with_local_ai_bridge(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
@@ -2234,6 +2773,16 @@ fn run_quick_translate_streaming_service_with_local_ai_bridge(
         }
         Err(error) => service_error_update(request, error.to_string()),
     }
+}
+
+#[cfg(not(feature = "retained-dotnet-workers"))]
+fn run_quick_translate_streaming_service_with_local_ai_bridge(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    sender: &UnboundedSender<Message>,
+) -> QuickTranslateServiceUpdate {
+    let _ = (app_dir, sender);
+    service_error_update(request, LOCAL_AI_WORKER_DISABLED_MESSAGE)
 }
 
 fn run_quick_translate_streaming_service_with_native_bing(
@@ -2313,7 +2862,141 @@ fn request_uses_native_openvino(request: &QuickTranslateServiceRequest) -> bool 
         && local_ai_quick_translate_native_preflight_error(request).is_none()
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocalAiRouteDecision {
+    NotLocalAi,
+    LocalError(&'static str),
+    NativeFoundry,
+    ProbeWindowsAi,
+    ProbeFoundry,
+    NativeOpenVino,
+    #[cfg(feature = "retained-dotnet-workers")]
+    RetainedWorkerCompat,
+    RustNativeRequired(&'static str),
+}
+
+#[doc(hidden)]
+pub fn local_ai_route_decision(request: &QuickTranslateServiceRequest) -> LocalAiRouteDecision {
+    local_ai_route_decision_with_native_probes(request, RetainedWorkerPolicy::all_disabled(), true)
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
+#[doc(hidden)]
+pub fn local_ai_route_decision_with_worker_policy(
+    request: &QuickTranslateServiceRequest,
+    worker_policy: RetainedWorkerPolicy,
+) -> LocalAiRouteDecision {
+    local_ai_route_decision_with_native_probes(
+        request,
+        worker_policy.with_hybrid_runtime_profile_from_environment(),
+        true,
+    )
+}
+
+fn local_ai_route_decision_with_native_probes(
+    request: &QuickTranslateServiceRequest,
+    worker_policy: RetainedWorkerPolicy,
+    allow_native_probes: bool,
+) -> LocalAiRouteDecision {
+    if request.service.id != "windows-local-ai" {
+        return LocalAiRouteDecision::NotLocalAi;
+    }
+
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(request) {
+        return LocalAiRouteDecision::LocalError(error);
+    }
+
+    if request_uses_native_openai(request) {
+        return LocalAiRouteDecision::NativeFoundry;
+    }
+
+    if allow_native_probes && local_ai_request_should_probe_windows_ai(request) {
+        return LocalAiRouteDecision::ProbeWindowsAi;
+    }
+
+    if allow_native_probes && local_ai_request_should_probe_auto_foundry_local(request) {
+        return LocalAiRouteDecision::ProbeFoundry;
+    }
+
+    if request_uses_native_openvino(request) {
+        return LocalAiRouteDecision::NativeOpenVino;
+    }
+
+    if request_uses_local_ai_worker_bridge(request) {
+        if let Some(error) = worker_policy.local_ai_worker_disabled_message() {
+            return LocalAiRouteDecision::RustNativeRequired(error);
+        }
+
+        #[cfg(feature = "retained-dotnet-workers")]
+        {
+            return LocalAiRouteDecision::RetainedWorkerCompat;
+        }
+
+        #[cfg(not(feature = "retained-dotnet-workers"))]
+        {
+            let _ = worker_policy;
+            return LocalAiRouteDecision::RustNativeRequired(LOCAL_AI_WORKER_DISABLED_MESSAGE);
+        }
+    }
+
+    LocalAiRouteDecision::RustNativeRequired(
+        "Windows Local AI requires a Rust-native route; no native Local AI provider can handle this request.",
+    )
+}
+
 fn request_should_probe_auto_foundry_local(request: &QuickTranslateServiceRequest) -> bool {
+    matches!(
+        local_ai_native_probe_route_decision(request),
+        LocalAiRouteDecision::ProbeWindowsAi | LocalAiRouteDecision::ProbeFoundry
+    )
+}
+
+fn local_ai_native_probe_route_decision(
+    request: &QuickTranslateServiceRequest,
+) -> LocalAiRouteDecision {
+    local_ai_route_decision_with_native_probes(request, RetainedWorkerPolicy::all_disabled(), true)
+}
+
+fn local_ai_request_should_probe_windows_ai(request: &QuickTranslateServiceRequest) -> bool {
+    local_ai_request_should_probe_auto_windows_ai(request)
+        || local_ai_request_should_probe_explicit_windows_ai(request)
+}
+
+fn local_ai_request_should_probe_auto_windows_ai(request: &QuickTranslateServiceRequest) -> bool {
+    if request.service.id != "windows-local-ai"
+        || local_ai_provider_mode(&request.settings) != local_ai_provider_modes::AUTO
+    {
+        return false;
+    }
+
+    matches!(
+        request.execution_kind,
+        QuickTranslateExecutionKind::Translate
+            | QuickTranslateExecutionKind::TranslateStream
+            | QuickTranslateExecutionKind::GrammarCorrection
+    )
+}
+
+fn local_ai_request_should_probe_explicit_windows_ai(
+    request: &QuickTranslateServiceRequest,
+) -> bool {
+    if request.service.id != "windows-local-ai"
+        || local_ai_provider_mode(&request.settings) != local_ai_provider_modes::WINDOWS_AI
+    {
+        return false;
+    }
+
+    matches!(
+        request.execution_kind,
+        QuickTranslateExecutionKind::Translate
+            | QuickTranslateExecutionKind::TranslateStream
+            | QuickTranslateExecutionKind::GrammarCorrection
+    )
+}
+
+fn local_ai_request_should_probe_auto_foundry_local(
+    request: &QuickTranslateServiceRequest,
+) -> bool {
     if request.service.id != "windows-local-ai"
         || local_ai_provider_mode(&request.settings) != local_ai_provider_modes::AUTO
     {
@@ -2352,21 +3035,34 @@ fn request_uses_local_ai_worker_bridge(request: &QuickTranslateServiceRequest) -
         && !request_uses_native_openvino(request)
 }
 
+#[doc(hidden)]
 pub fn local_ai_quick_translate_local_error(
+    request: &QuickTranslateServiceRequest,
+) -> Option<&'static str> {
+    local_ai_quick_translate_local_error_for_policy(request, RetainedWorkerPolicy::all_disabled())
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
+#[doc(hidden)]
+pub fn local_ai_quick_translate_local_error_with_worker_policy(
     request: &QuickTranslateServiceRequest,
     worker_policy: RetainedWorkerPolicy,
 ) -> Option<&'static str> {
-    if let Some(error) = local_ai_quick_translate_native_preflight_error(request) {
-        return Some(error);
-    }
+    local_ai_quick_translate_local_error_for_policy(
+        request,
+        worker_policy.with_hybrid_runtime_profile_from_environment(),
+    )
+}
 
-    if request.service.id != "windows-local-ai" {
-        return None;
+fn local_ai_quick_translate_local_error_for_policy(
+    request: &QuickTranslateServiceRequest,
+    worker_policy: RetainedWorkerPolicy,
+) -> Option<&'static str> {
+    match local_ai_route_decision_with_native_probes(request, worker_policy, false) {
+        LocalAiRouteDecision::LocalError(error)
+        | LocalAiRouteDecision::RustNativeRequired(error) => Some(error),
+        _ => None,
     }
-
-    request_uses_local_ai_worker_bridge(request)
-        .then(|| worker_policy.local_ai_worker_disabled_message())
-        .flatten()
 }
 
 pub fn local_ai_quick_translate_native_preflight_error(
@@ -2381,8 +3077,17 @@ pub fn local_ai_quick_translate_native_preflight_error(
         QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
     ) {
         let provider_mode = local_ai_provider_mode(&request.settings);
-        let to_language = dotnet_language_name_from_code(request.params.to.as_deref(), "English");
-        if dotnet_language_name_is_auto(&to_language) {
+        let Some(from_language) =
+            strict_language_name_from_code(request.params.from.as_deref(), "Auto")
+        else {
+            return Some("No local AI provider supports this language pair");
+        };
+        let Some(to_language) =
+            strict_language_name_from_code(request.params.to.as_deref(), "English")
+        else {
+            return Some("No local AI provider supports this language pair");
+        };
+        if language_name_is_auto(&to_language) {
             return Some("No local AI provider supports this language pair");
         }
 
@@ -2390,16 +3095,6 @@ pub fn local_ai_quick_translate_native_preflight_error(
             return None;
         }
 
-        let Some(from_language) =
-            nllb_language_name_from_code(request.params.from.as_deref(), "Auto")
-        else {
-            return Some("No local AI provider supports this language pair");
-        };
-        let Some(to_language) =
-            nllb_language_name_from_code(request.params.to.as_deref(), "English")
-        else {
-            return Some("No local AI provider supports this language pair");
-        };
         if !openvino_supports_nllb_language_pair(&from_language, &to_language) {
             return Some("No local AI provider supports this language pair");
         }
@@ -2424,11 +3119,11 @@ pub fn local_ai_quick_translate_native_preflight_error(
 }
 
 fn openvino_supports_nllb_language_pair(from_language: &str, to_language: &str) -> bool {
-    source_flores_code_for_dotnet_language_name(from_language).is_ok()
-        && target_flores_code_for_dotnet_language_name(to_language).is_ok()
+    source_flores_code_for_language_name(from_language).is_ok()
+        && target_flores_code_for_language_name(to_language).is_ok()
 }
 
-fn dotnet_language_name_is_auto(language: &str) -> bool {
+fn language_name_is_auto(language: &str) -> bool {
     language.trim().eq_ignore_ascii_case("Auto")
 }
 
@@ -2469,6 +3164,7 @@ fn native_openai_service_name(service_id: &str) -> String {
         .unwrap_or_else(|| service_id.to_string())
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn local_ai_params_from_translate_params(
     params: &TranslateParams,
     settings: &SettingsSnapshot,
@@ -2476,21 +3172,22 @@ fn local_ai_params_from_translate_params(
 ) -> LocalAiTranslateParams {
     LocalAiTranslateParams {
         text: params.text.clone(),
-        from_language: dotnet_language_name_from_code(params.from.as_deref(), "Auto"),
-        to_language: dotnet_language_name_from_code(params.to.as_deref(), "English"),
+        from_language: language_name_from_code(params.from.as_deref(), "Auto"),
+        to_language: language_name_from_code(params.to.as_deref(), "English"),
         provider_mode: local_ai_provider_mode(settings),
         custom_prompt: params.custom_prompt.clone(),
         include_explanations,
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn local_ai_params_from_grammar_params(
     params: &GrammarCorrectParams,
     settings: &SettingsSnapshot,
 ) -> LocalAiTranslateParams {
     LocalAiTranslateParams {
         text: params.text.clone(),
-        from_language: dotnet_language_name_from_code(params.language.as_deref(), "Auto"),
+        from_language: language_name_from_code(params.language.as_deref(), "Auto"),
         to_language: "English".to_string(),
         provider_mode: local_ai_provider_mode(settings),
         custom_prompt: None,
@@ -2498,6 +3195,7 @@ fn local_ai_params_from_grammar_params(
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn local_ai_stream_result_to_quick_translate_result(
     result: TranslateStreamResult,
     chunks: Vec<String>,
@@ -2514,11 +3212,13 @@ fn local_ai_stream_result_to_quick_translate_result(
             timing_ms: None,
             alternatives: None,
             word_result: None,
+            raw_html: None,
         },
         chunks,
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn local_ai_grammar_stream_result_to_grammar_result(
     params: &GrammarCorrectParams,
     result: TranslateStreamResult,
@@ -2536,10 +3236,95 @@ fn local_ai_grammar_stream_result_to_grammar_result(
         raw_text: Some(raw_text),
         service_id: Some("windows-local-ai".to_string()),
         service_name: Some(parsed.service_name),
-        language: params
-            .language
-            .as_deref()
-            .map(dotnet_language_code_from_name),
+        language: params.language.as_deref().map(language_code_from_name),
+        timing_ms: Some(parsed.timing_ms),
+        has_corrections,
+    }
+}
+
+fn windows_ai_translation_request_from_params(
+    params: &TranslateParams,
+) -> Result<WindowsAiTranslationRequest, QuickTranslateBackendError> {
+    Ok(WindowsAiTranslationRequest {
+        text: params.text.clone(),
+        from_language: windows_ai_language_from_code(
+            params.from.as_deref(),
+            WindowsAiLanguage::Auto,
+        )?,
+        to_language: windows_ai_language_from_code(
+            params.to.as_deref(),
+            WindowsAiLanguage::English,
+        )?,
+        custom_prompt: params.custom_prompt.clone(),
+    })
+}
+
+fn windows_ai_grammar_request_from_params(
+    params: &GrammarCorrectParams,
+) -> Result<WindowsAiGrammarCorrectionRequest, QuickTranslateBackendError> {
+    Ok(WindowsAiGrammarCorrectionRequest {
+        text: params.text.clone(),
+        language: windows_ai_language_from_code(
+            params.language.as_deref(),
+            WindowsAiLanguage::Auto,
+        )?,
+        include_explanations: params.include_explanations,
+    })
+}
+
+fn windows_ai_language_from_code(
+    code: Option<&str>,
+    default_language: WindowsAiLanguage,
+) -> Result<WindowsAiLanguage, QuickTranslateBackendError> {
+    let Some(code) = code.map(str::trim).filter(|code| !code.is_empty()) else {
+        return Ok(default_language);
+    };
+
+    WindowsAiLanguage::from_code(code).ok_or_else(|| {
+        QuickTranslateBackendError::new("No local AI provider supports this language pair")
+    })
+}
+
+fn windows_ai_translation_outcome_to_dto(
+    params: &TranslateParams,
+    outcome: WindowsAiTranslationOutcome,
+) -> TranslationResultDto {
+    TranslationResultDto {
+        translated_text: outcome.translated_text,
+        service_id: Some("windows-local-ai".to_string()),
+        service_name: Some(outcome.service_name.to_string()),
+        detected_language: params
+            .from
+            .as_ref()
+            .map(|language| language.trim().to_string())
+            .filter(|language| !language.is_empty())
+            .or_else(|| Some("auto".to_string())),
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result: None,
+        raw_html: None,
+    }
+}
+
+fn windows_ai_grammar_chunks_to_result(
+    params: &GrammarCorrectParams,
+    chunks: Vec<String>,
+) -> GrammarCorrectResultDto {
+    let raw_text = chunks.concat();
+    let service_name = easydict_windows_ai::SERVICE_NAME;
+    let parsed = parse_grammar_correction(&raw_text, &params.text, service_name, 0);
+    let has_corrections = parsed.has_corrections();
+
+    GrammarCorrectResultDto {
+        original_text: parsed.original_text,
+        corrected_text: parsed.corrected_text,
+        explanation: parsed.explanation,
+        raw_text: Some(raw_text),
+        service_id: Some("windows-local-ai".to_string()),
+        service_name: Some(parsed.service_name),
+        language: params.language.clone(),
         timing_ms: Some(parsed.timing_ms),
         has_corrections,
     }
@@ -2563,12 +3348,12 @@ fn local_ai_provider_mode(settings: &SettingsSnapshot) -> String {
     }
 }
 
-fn dotnet_language_name_from_code(code: Option<&str>, default_name: &str) -> String {
-    strict_dotnet_language_name_from_code(code, default_name)
-        .unwrap_or_else(|| default_name.to_string())
+#[cfg(feature = "retained-dotnet-workers")]
+fn language_name_from_code(code: Option<&str>, default_name: &str) -> String {
+    strict_language_name_from_code(code, default_name).unwrap_or_else(|| default_name.to_string())
 }
 
-fn strict_dotnet_language_name_from_code(code: Option<&str>, default_name: &str) -> Option<String> {
+fn strict_language_name_from_code(code: Option<&str>, default_name: &str) -> Option<String> {
     let Some(code) = code.map(str::trim).filter(|code| !code.is_empty()) else {
         return Some(default_name.to_string());
     };
@@ -2673,7 +3458,8 @@ fn strict_dotnet_language_name_from_code(code: Option<&str>, default_name: &str)
     Some(language_name.to_string())
 }
 
-fn dotnet_language_code_from_name(name: &str) -> String {
+#[cfg(feature = "retained-dotnet-workers")]
+fn language_code_from_name(name: &str) -> String {
     match name.trim().to_ascii_lowercase().as_str() {
         "auto" => "auto",
         "simplifiedchinese" | "chinesesimplified" | "zh-cn" | "zh-hans" | "zh" => "zh-CN",
@@ -2869,6 +3655,7 @@ pub fn apply_quick_translate_stream_chunk(
     item.grammar_result = None;
     item.alternatives = None;
     item.word_result = None;
+    item.raw_html = None;
     item.no_result = false;
     item.service_name = chunk.service.name;
     item.status = ResultStatus::Streaming;
@@ -2912,6 +3699,7 @@ fn mark_quick_translate_started(
             result.grammar_result = None;
             result.alternatives = None;
             result.word_result = None;
+            result.raw_html = None;
             result.streamed_chunks.clear();
             result.no_result = false;
             result.status = ResultStatus::Loading;
@@ -2975,6 +3763,8 @@ fn run_service_request<B: QuickTranslateBackend>(
     }
 
     if request.service.id.starts_with("mdx::") {
+        let has_mdd_resources =
+            mdx_service_has_mdd_resources(&request.settings, &request.service.id);
         return match backend.mdx_lookup(&MdxLookupParams {
             dictionary_id: request.service.id.clone(),
             query: request.params.text.clone(),
@@ -2988,6 +3778,7 @@ fn run_service_request<B: QuickTranslateBackend>(
                     &request.service,
                     &request.params.text,
                     result,
+                    has_mdd_resources,
                 )),
             },
             Err(error) => QuickTranslateServiceOutcome {
@@ -3050,6 +3841,7 @@ fn mdx_lookup_result_to_translation_result(
     service: &QuickTranslateService,
     query: &str,
     result: MdxLookupResult,
+    has_mdd_resources: bool,
 ) -> TranslationResultDto {
     if result.entries.is_empty() {
         return TranslationResultDto {
@@ -3062,6 +3854,7 @@ fn mdx_lookup_result_to_translation_result(
             timing_ms: None,
             alternatives: None,
             word_result: None,
+            raw_html: None,
         };
     }
 
@@ -3071,14 +3864,29 @@ fn mdx_lookup_result_to_translation_result(
         .and_then(|entry| entry.dictionary_name.clone())
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| service.name.clone());
+    let translated_text = result
+        .entries
+        .iter()
+        .map(mdx_entry_readable_text)
+        .filter(|text| !text.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let raw_html = has_mdd_resources
+        .then(|| mdx_entries_raw_html(&result.entries))
+        .filter(|html| !html.trim().is_empty());
+    let word_result = (!translated_text.trim().is_empty()).then(|| WordResultDto {
+        phonetics: None,
+        definitions: Some(vec![DefinitionDto {
+            part_of_speech: Some("dictionary".to_string()),
+            meanings: Some(vec![translated_text.clone()]),
+        }]),
+        examples: None,
+        word_forms: None,
+        synonyms: None,
+    });
 
     TranslationResultDto {
-        translated_text: result
-            .entries
-            .iter()
-            .map(mdx_entry_body)
-            .collect::<Vec<_>>()
-            .join("\n\n"),
+        translated_text,
         service_id: Some(service.id.clone()),
         service_name: Some(service_name),
         detected_language: None,
@@ -3086,16 +3894,65 @@ fn mdx_lookup_result_to_translation_result(
         info_message: None,
         timing_ms: None,
         alternatives: None,
-        word_result: None,
+        word_result,
+        raw_html,
     }
 }
 
-fn mdx_entry_body(entry: &MdxLookupEntry) -> String {
-    if entry.key.trim().is_empty() {
-        return entry.html.clone();
-    }
+fn mdx_service_has_mdd_resources(settings: &SettingsSnapshot, service_id: &str) -> bool {
+    settings
+        .imported_mdx_dictionaries
+        .as_ref()
+        .and_then(|dictionaries| {
+            dictionaries
+                .iter()
+                .find(|dictionary| dictionary.service_id.eq_ignore_ascii_case(service_id))
+        })
+        .map(|dictionary| !dictionary.mdd_file_paths.is_empty())
+        .unwrap_or(false)
+}
 
-    format!("{}\n{}", entry.key, entry.html)
+fn mdx_entry_readable_text(entry: &MdxLookupEntry) -> String {
+    html_to_readable_text(&entry.html)
+}
+
+fn html_to_readable_text(html: &str) -> String {
+    let rendered = html2text::from_read(html.as_bytes(), usize::MAX)
+        .unwrap_or_else(|_| fallback_html_to_readable_text(html));
+    normalize_readable_text(&rendered)
+}
+
+fn fallback_html_to_readable_text(html: &str) -> String {
+    let without_scripts = Regex::new("(?is)<script\\b[^>]*>.*?</script>")
+        .map(|regex| regex.replace_all(html, "").into_owned())
+        .unwrap_or_else(|_| html.to_string());
+    let without_scripts = Regex::new("(?is)<style\\b[^>]*>.*?</style>")
+        .map(|regex| regex.replace_all(&without_scripts, "").into_owned())
+        .unwrap_or(without_scripts);
+    let with_breaks = Regex::new("(?i)<\\s*br\\s*/?\\s*>|</\\s*(p|div|li)\\s*>")
+        .map(|regex| regex.replace_all(&without_scripts, "\n").into_owned())
+        .unwrap_or(without_scripts);
+    Regex::new("(?is)<[^>]+>")
+        .map(|regex| regex.replace_all(&with_breaks, "").into_owned())
+        .unwrap_or(with_breaks)
+}
+
+fn normalize_readable_text(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .split('\n')
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn mdx_entries_raw_html(entries: &[MdxLookupEntry]) -> String {
+    entries
+        .iter()
+        .map(|entry| entry.html.trim())
+        .filter(|html| !html.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn grammar_result_to_translation_result(
@@ -3112,6 +3969,7 @@ fn grammar_result_to_translation_result(
         timing_ms: result.timing_ms,
         alternatives: None,
         word_result: None,
+        raw_html: None,
     }
 }
 
@@ -3209,6 +4067,11 @@ fn apply_success(
     } else {
         result.word_result.clone()
     };
+    item.raw_html = if no_result {
+        None
+    } else {
+        result.raw_html.clone()
+    };
     item.streamed_chunks = streamed_chunks;
     item.no_result = no_result;
     item.service_name = result
@@ -3235,6 +4098,7 @@ fn apply_error(
     item.grammar_result = None;
     item.alternatives = None;
     item.word_result = None;
+    item.raw_html = None;
     item.streamed_chunks.clear();
     item.no_result = false;
     item.service_name = service.name.clone();

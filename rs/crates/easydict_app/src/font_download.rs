@@ -2,7 +2,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::compat_protocol::SettingsSnapshot;
+use crate::protocol::SettingsSnapshot;
 use crate::resource_download::{
     download_with_retry, ordered_urls_by_probe, try_delete_file, ReqwestResourceDownloadClient,
     ResourceDownloadClient, ResourceDownloadError, ResourceDownloadProgress,

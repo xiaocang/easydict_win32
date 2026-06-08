@@ -126,7 +126,7 @@ fn build_translation_service_descriptors() -> Vec<TranslationServiceDescriptor> 
             .grammar(),
         TranslationServiceDescriptor::new(
             "zhipu",
-            "Zhipu AI",
+            "Zhipu (智谱)",
             TranslationServiceKind::OpenAiCompatible,
         )
         .unconfigured()

@@ -1,4 +1,4 @@
-use easydict_app::compat_protocol::SettingsSnapshot;
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     apply_deepl_dynamic_spacing, bing_credentials_expired, bing_host, bing_language_code,
     build_bing_translate_request_plan, build_caiyun_translation_request_plan,

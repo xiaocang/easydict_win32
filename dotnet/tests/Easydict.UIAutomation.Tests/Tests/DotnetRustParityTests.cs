@@ -84,6 +84,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 dotnetWindow,
                 step,
                 $"{step.Key}-dotnet-winui-reference");
+            MoveMouseToNeutralPoint();
             rustWindow.SetForeground();
             Thread.Sleep(150);
             var rustPath = CaptureWindowPreferHwnd(

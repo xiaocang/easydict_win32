@@ -4,11 +4,15 @@ pub mod activation;
 pub mod browser_registrar;
 pub mod character_paragraph;
 pub mod cli_translate;
+#[cfg(feature = "retained-dotnet-workers")]
 pub mod compat_client;
+#[cfg(feature = "retained-dotnet-workers")]
 pub mod compat_protocol;
 pub mod content_preservation;
 pub mod credential_protection;
 pub mod custom_streaming;
+pub mod doc_layout_yolo;
+pub mod doc_layout_yolo_onnx;
 pub mod document_layout;
 pub mod font_download;
 pub mod font_metrics;
@@ -36,15 +40,18 @@ pub mod pdf_export_blocks;
 pub mod pdf_formula_adapter;
 pub mod pdf_native_export;
 pub mod pdf_source_extraction;
+pub mod protocol;
+mod protocol_core;
 pub mod quick_translate;
 pub mod resource_download;
-pub mod retained_workers;
+mod retained_workers;
 pub mod screen_capture;
 pub mod settings_migration;
 pub mod settings_status;
 pub mod settings_storage;
 pub mod state;
 pub mod table_structure;
+pub mod table_structure_onnx;
 pub mod text_layout;
 pub mod theme;
 pub mod traditional_http;
@@ -81,6 +88,18 @@ pub use custom_streaming::{
     CustomStreamingHttpClient, CustomStreamingHttpRequestPlan, CustomStreamingServiceConfig,
     DoubaoConfig, GeminiConfig, ReqwestCustomStreamingHttpClient, DOUBAO_DEFAULT_ENDPOINT,
     DOUBAO_DEFAULT_MODEL, GEMINI_API_BASE_URL, GEMINI_DEFAULT_MODEL,
+};
+pub use doc_layout_yolo::{
+    apply_doc_layout_yolo_nms, compute_doc_layout_yolo_iou, doc_layout_yolo_class_to_region,
+    parse_doc_layout_yolo_output, preprocess_doc_layout_yolo_bgra, DocLayoutRegionType,
+    DocLayoutYoloDetection, DocLayoutYoloPreprocessResult, DOC_LAYOUT_YOLO_CLASS_NAMES,
+    DOC_LAYOUT_YOLO_DEFAULT_CONFIDENCE_THRESHOLD, DOC_LAYOUT_YOLO_INPUT_SIZE,
+    DOC_LAYOUT_YOLO_NMS_IOU_THRESHOLD, DOC_LAYOUT_YOLO_NUM_CLASSES, DOC_LAYOUT_YOLO_PADDING_VALUE,
+};
+pub use doc_layout_yolo_onnx::{
+    normalize_doc_layout_yolo_output_shape, parse_doc_layout_yolo_onnx_output,
+    resolve_doc_layout_yolo_input_name, resolve_doc_layout_yolo_output_name,
+    DocLayoutYoloOnnxError, DocLayoutYoloOnnxSession,
 };
 pub use document_layout::{
     build_final_erase_rects_top_left, expand_line_rects_for_cell, expand_line_widths,
@@ -127,13 +146,14 @@ pub use latex_formula::{
 };
 pub use layout_model_download::{
     cleanup_invalid_layout_model_files_for_directory, default_model_cache_dir,
-    delete_all_layout_model_files_for_directory, ensure_layout_model_available,
+    delete_all_layout_model_files_for_directory, ensure_full_layout_model_available,
+    ensure_full_layout_model_available_for_directory, ensure_layout_model_available,
     ensure_layout_model_available_for_directory, ensure_tatr_model_available,
-    ensure_tatr_model_available_for_directory, is_layout_model_ready_for_directory,
-    layout_model_status_for_directory, model_cache_dir, LayoutModelDownloadConfig,
-    LayoutModelDownloadError, LayoutModelPaths, LayoutModelStatus, DOC_LAYOUT_MODEL_FILE_NAME,
-    DOC_LAYOUT_MODEL_URLS, MIN_DOC_LAYOUT_MODEL_FILE_SIZE, MIN_RUNTIME_FILE_SIZE,
-    MIN_TATR_MODEL_FILE_SIZE, MODELS_SUBDIR, ONNX_RUNTIME_FILE_NAME,
+    ensure_tatr_model_available_for_directory, is_full_layout_model_ready_for_directory,
+    is_layout_model_ready_for_directory, layout_model_status_for_directory, model_cache_dir,
+    LayoutModelDownloadConfig, LayoutModelDownloadError, LayoutModelPaths, LayoutModelStatus,
+    DOC_LAYOUT_MODEL_FILE_NAME, DOC_LAYOUT_MODEL_URLS, MIN_DOC_LAYOUT_MODEL_FILE_SIZE,
+    MIN_RUNTIME_FILE_SIZE, MIN_TATR_MODEL_FILE_SIZE, MODELS_SUBDIR, ONNX_RUNTIME_FILE_NAME,
     ONNX_RUNTIME_TEMP_ZIP_FILE_NAME, ONNX_RUNTIME_URLS, ONNX_RUNTIME_ZIP_ENTRY_PATH,
     TATR_MODEL_FILE_NAME, TATR_MODEL_URLS,
 };
@@ -150,17 +170,19 @@ pub use local_dictionary::{
     focus_local_dictionary_suggestions, local_dictionary_query_token,
     local_dictionary_suggestion_request_can_route_natively, move_local_dictionary_suggestion,
     run_delayed_local_dictionary_suggestion_request_with_current_app_dir,
-    run_local_dictionary_suggestion_request,
+    run_local_dictionary_suggestion_request, run_local_dictionary_suggestion_request_with_app_dir,
     run_local_dictionary_suggestion_request_with_current_app_dir,
-    run_local_dictionary_suggestion_request_with_lazy_bridge,
     run_local_dictionary_suggestion_request_with_native_index,
     run_local_dictionary_suggestion_request_with_native_index_root,
-    run_local_dictionary_suggestion_request_with_native_route,
-    run_local_dictionary_suggestion_request_with_packaged_app_dir,
-    run_local_dictionary_suggestion_request_with_routed_backends, LocalDictionarySuggestionBackend,
+    run_local_dictionary_suggestion_request_with_native_route, LocalDictionarySuggestionBackend,
     LocalDictionarySuggestionError, LocalDictionarySuggestionRequest,
     LocalDictionarySuggestionUpdate, NativeMdxLocalDictionarySuggestionBackend,
     LOCAL_DICTIONARY_SUGGESTION_DELAY_MS,
+};
+#[cfg(feature = "retained-dotnet-workers")]
+pub use local_dictionary::{
+    run_local_dictionary_suggestion_request_with_lazy_bridge,
+    run_local_dictionary_suggestion_request_with_routed_backends,
 };
 pub use local_dictionary_index::{
     default_local_dictionary_index_root, escape_data_string, LocalDictionaryIndexDescriptor,
@@ -168,17 +190,19 @@ pub use local_dictionary_index::{
     LocalDictionaryIndexSuggestionItem, CURRENT_INDEX_FORMAT_VERSION, DEFAULT_NORMALIZATION_ID,
     INDEX_FILE_NAME, MANIFEST_FILE_NAME,
 };
+#[cfg(feature = "retained-dotnet-workers")]
+pub use long_document::run_long_document_request_with_packaged_app_dir_and_worker_policy;
 pub use long_document::{
     apply_long_document_outcome, apply_long_document_start_error, begin_long_document_translate,
     build_long_document_request, long_document_request_can_route_natively,
     long_document_service_kind_is_supported, long_document_supported_service_descriptors,
-    run_long_document_request, run_long_document_request_with_native_route,
-    run_long_document_request_with_packaged_app_dir,
-    run_long_document_request_with_packaged_app_dir_and_worker_policy,
-    run_native_text_long_document_request, run_native_text_long_document_request_with_translator,
-    LongDocumentBackend, LongDocumentBackendError, LongDocumentEvent, LongDocumentInput,
-    LongDocumentOutcome, LongDocumentServiceRequest, LongDocumentStartError,
-    NativeLongDocumentTranslator, QuickTranslateNativeLongDocumentTranslator,
+    run_long_document_request, run_long_document_request_with_app_dir,
+    run_long_document_request_with_app_dir_and_native_local_ai_client,
+    run_long_document_request_with_native_route, run_native_text_long_document_request,
+    run_native_text_long_document_request_with_translator, LongDocumentBackend,
+    LongDocumentBackendError, LongDocumentEvent, LongDocumentInput, LongDocumentOutcome,
+    LongDocumentServiceRequest, LongDocumentStartError, NativeLongDocumentTranslator,
+    QuickTranslateNativeLongDocumentTranslator, WindowsAiNativeLongDocumentTranslator,
 };
 pub use long_document_context::{
     apply_preservation_hints, merge_glossaries, merge_page_partials, merge_preservation_hints,
@@ -191,18 +215,18 @@ pub use long_document_export::{
     LongDocumentExportCheckpoint, LongDocumentExportChunkMetadata,
 };
 pub use mdx_native::{
-    detect_mdx_file_encryption_mode, inline_mdd_resources_in_html,
+    detect_mdx_file_encryption_mode, discover_mdd_file_paths, inline_mdd_resources_in_html,
     inline_mdd_resources_in_html_with_factory, mdx_decode_base64_regcode, mdx_decrypt_block,
     mdx_decrypt_regcode_by_device_id, mdx_decrypt_regcode_by_email, mdx_fast_decrypt,
     mdx_ripemd128, mdx_salsa20_8, mime_type_for_mdd_resource_key,
     native_mdx_dictionary_can_route_natively, native_mdx_dictionary_needs_credentials,
-    native_mdx_dictionary_requires_credential_bridge, native_mdx_lookup_can_route,
-    native_mdx_lookup_local_input_error, native_mdx_lookup_needs_credentials,
-    native_mdx_lookup_requires_credential_bridge, native_mdx_service_can_route_natively,
+    native_mdx_lookup_can_route, native_mdx_lookup_local_input_error,
+    native_mdx_lookup_needs_credentials, native_mdx_service_can_route_natively,
     normalize_mdd_resource_key, run_native_mdd_resource_lookup,
     run_native_mdd_resource_lookup_with_factory, run_native_mdx_lookup,
-    run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factory, MdxEncryptionMode,
-    NativeMddResource, NativeMddResourceError, NativeMddResourceReader,
+    run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factories_and_mdd_policy,
+    run_native_mdx_lookup_with_factory, run_native_mdx_lookup_with_factory_and_mdd_policy,
+    MdxEncryptionMode, NativeMddResource, NativeMddResourceError, NativeMddResourceReader,
     NativeMddResourceReaderFactory, NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory,
     NativeMdxLookupError, RsMdictMddReader, RsMdictMddReaderFactory, RsMdictReader,
     RsMdictReaderFactory,
@@ -211,12 +235,14 @@ pub use ocr::{
     apply_ocr_outcome, apply_ocr_start_error, begin_ocr_recognize, bgra_to_base64_bmp,
     bgra_to_base64_jpeg_data_url, build_custom_api_ocr_request, build_ollama_ocr_request,
     group_and_sort_ocr_lines, merge_ocr_lines, merge_ocr_words, merged_ocr_text,
-    parse_ocr_http_response, run_ocr_recognize, run_ocr_recognize_with_current_app_dir,
-    run_ocr_recognize_with_native_provider, run_ocr_recognize_with_packaged_app_dir,
-    NativeOcrBackend, OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig,
-    OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError,
-    OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams, OcrRecognizeRequest,
-    OcrRectDto, OcrResultAction, OcrResultDto, OcrStartError, WindowsNativeOcrRecognizer,
+    parse_ocr_http_response, run_ocr_recognize, run_ocr_recognize_with_app_dir,
+    run_ocr_recognize_with_current_app_dir, run_ocr_recognize_with_native_provider,
+    windows_native_ocr_availability, windows_native_ocr_availability_with_recognizer,
+    NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult,
+    OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
+    OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams,
+    OcrRecognizeRequest, OcrRectDto, OcrResultAction, OcrResultDto, OcrStartError,
+    WindowsNativeOcrRecognizer,
 };
 pub use openai_compatible::{
     build_built_in_ai_device_registration_request_plan, build_foundry_local_models_request_plan,
@@ -247,14 +273,15 @@ pub use openai_compatible::{
     try_resolve_foundry_local_model_id, validate_openai_config, zhipu_service_config,
     BuiltInAiDeviceRegistrationHttpClient, BuiltInAiDeviceRegistrationHttpResponse,
     BuiltInAiDeviceRegistrationRequestPlan, BuiltInAiSecretError,
-    CommandFoundryLocalEndpointResolver, FoundryLocalEndpointResolver, FoundryLocalModelState,
-    FoundryLocalPrepareOutcome, FoundryLocalRuntimeController, FoundryLocalRuntimeState,
-    FoundryLocalRuntimeStatus, FoundryLocalStatusCheck, OllamaModelRefreshOutcome, OpenAiApiFormat,
-    OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
-    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, OpenAiPlanError,
-    OpenAiTranslationRequest, ReqwestOpenAiHttpClient, BUILT_IN_AI_ALLOWED_PROXY_MODELS,
-    BUILT_IN_AI_DEFAULT_MODEL, CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT,
-    DEEPSEEK_DEFAULT_MODEL, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_DEFAULT_MODEL,
+    CommandFoundryLocalEndpointResolver, FoundryLocalEndpointResolver, FoundryLocalError,
+    FoundryLocalErrorCode, FoundryLocalModelState, FoundryLocalPrepareOutcome,
+    FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
+    FoundryLocalStatusCheck, OllamaModelRefreshOutcome, OpenAiApiFormat, OpenAiCompatibleConfig,
+    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan,
+    OpenAiHttpRequestPlan, OpenAiHttpTextResponse, OpenAiPlanError, OpenAiTranslationRequest,
+    ReqwestOpenAiHttpClient, BUILT_IN_AI_ALLOWED_PROXY_MODELS, BUILT_IN_AI_DEFAULT_MODEL,
+    CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL,
+    FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_DEFAULT_MODEL,
     GITHUB_MODELS_DEFAULT_ENDPOINT, GITHUB_MODELS_DEFAULT_MODEL, GROQ_DEFAULT_ENDPOINT,
     GROQ_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT, OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_ENDPOINT,
     OPENAI_DEFAULT_MODEL, OPENAI_DEFAULT_TEMPERATURE, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
@@ -287,41 +314,54 @@ pub use pdf_native_export::{
     export_pdf_with_content_stream_replacement, NativePdfContentStreamExportError,
     NativePdfContentStreamExportFailureKind, NativePdfContentStreamExportSummary,
 };
+#[cfg(feature = "retained-dotnet-workers")]
+pub use quick_translate::LocalAiWorkerQuickTranslateBackend;
 pub use quick_translate::{
     apply_quick_translate_outcome, apply_quick_translate_service_update,
     apply_quick_translate_start_error, apply_quick_translate_start_error_for_surface,
     apply_quick_translate_stream_chunk, auto_foundry_local_native_probe_request,
-    auto_openvino_native_fallback_request, begin_manual_quick_translate_service,
-    begin_manual_quick_translate_service_for_surface, begin_quick_translate,
-    begin_quick_translate_for_surface, begin_retry_quick_translate_service_for_surface,
-    build_quick_translate_plan, build_quick_translate_plan_for_surface,
-    local_ai_quick_translate_local_error, local_ai_quick_translate_native_preflight_error,
+    auto_openvino_native_fallback_request, auto_windows_ai_native_probe_status,
+    begin_manual_quick_translate_service, begin_manual_quick_translate_service_for_surface,
+    begin_quick_translate, begin_quick_translate_for_surface,
+    begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
+    build_quick_translate_plan_for_surface, local_ai_quick_translate_local_error,
+    local_ai_quick_translate_native_preflight_error, local_ai_route_decision,
     quick_translate_request_can_route_natively, quick_translate_service_update_from_cache,
     resolve_auto_target_language, resolve_different_target_language, resolve_quick_query_language,
-    run_quick_translate, run_quick_translate_service,
+    run_quick_translate, run_quick_translate_service, run_quick_translate_service_with_app_dir,
+    run_quick_translate_service_with_app_dir_and_native_local_ai_client,
+    run_quick_translate_service_with_app_dir_and_native_local_ai_probes,
     run_quick_translate_service_with_native_route,
-    run_quick_translate_service_with_packaged_app_dir,
-    run_quick_translate_service_with_packaged_app_dir_and_worker_policy,
-    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
-    store_quick_translate_cache_result, translation_cache_request_for_quick_translate,
-    LocalAiWorkerQuickTranslateBackend, NativeBingQuickTranslateBackend,
-    NativeCustomStreamingQuickTranslateBackend, NativeMdxQuickTranslateBackend,
-    NativeOpenAiQuickTranslateBackend, NativeOpenVinoQuickTranslateBackend,
-    NativeTraditionalHttpQuickTranslateBackend, QuickQueryLanguageResolution, QuickQueryMode,
-    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
-    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
+    run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver,
+    run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client,
+    run_quick_translate_with_app_dir, store_quick_translate_cache_result,
+    translation_cache_request_for_quick_translate, LocalAiRouteDecision,
+    NativeBingQuickTranslateBackend, NativeCustomStreamingQuickTranslateBackend,
+    NativeMdxQuickTranslateBackend, NativeOpenAiQuickTranslateBackend,
+    NativeOpenVinoQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
+    QuickQueryLanguageResolution, QuickQueryMode, QuickTranslateBackend,
+    QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateOutcome,
+    QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface,
+};
+#[cfg(feature = "retained-dotnet-workers")]
+pub use quick_translate::{
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy,
+    run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
+    run_quick_translate_streaming_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver,
 };
 pub use resource_download::{
     download_with_retry, download_with_retry_and_policy, is_file_valid, ordered_urls_by_probe,
     try_delete_file, ReqwestResourceDownloadClient, ResourceDownloadClient, ResourceDownloadError,
     ResourceDownloadProgress, ResourceDownloadRetryPolicy, ResourceProbeResult,
 };
+#[cfg(feature = "retained-dotnet-workers")]
 pub use retained_workers::{
     RetainedWorkerPolicy, DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
-    DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE, LOCAL_AI_WORKER_DISABLED_MESSAGE,
-    LONGDOC_WORKER_DISABLED_MESSAGE, RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+    DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE, GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+    LOCAL_AI_WORKER_DISABLED_MESSAGE, LONGDOC_WORKER_DISABLED_MESSAGE,
+    RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
 };
 pub use screen_capture::{
     detected_windows_from_screen_windows, CaptureInteraction, CaptureInteractionState,
@@ -353,6 +393,11 @@ pub use table_structure::{
     TATR_DUPLICATE_IOU_THRESHOLD, TATR_IMAGE_MEAN, TATR_IMAGE_STD, TATR_LONGEST_EDGE,
     TATR_MAX_CELLS_PER_TABLE, TATR_MIN_CELL_SIDE_PX, TATR_NO_OBJECT_CLASS_INDEX, TATR_NUM_CLASSES,
     TATR_NUM_QUERIES, TATR_SHORTEST_EDGE,
+};
+pub use table_structure_onnx::{
+    clamp_tatr_table_crop, normalize_tatr_logits_shape, normalize_tatr_pred_boxes_shape,
+    parse_tatr_onnx_outputs, resolve_tatr_input_name, resolve_tatr_output_names, TatrOnnxError,
+    TatrOnnxSession, TatrOutputNames, TatrTableCrop,
 };
 pub use text_layout::{
     classify_char, enumerate_graphemes, is_cjk, is_close_punctuation, is_left_sticky,
@@ -435,9 +480,11 @@ pub use ui::{
 };
 pub use vision_layout::{
     build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
-    parse_vision_layout_detection_array, parse_vision_layout_response,
-    vision_layout_region_type_from_str, VisionLayoutDetection, VisionLayoutHttpRequestPlan,
-    VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
+    execute_vision_layout_detection, parse_vision_layout_detection_array,
+    parse_vision_layout_response, vision_layout_region_type_from_str,
+    ReqwestVisionLayoutHttpClient, VisionLayoutDetection, VisionLayoutHttpClient,
+    VisionLayoutHttpRequestPlan, VisionLayoutHttpResponse, VisionLayoutRegionType,
+    VISION_LAYOUT_DETECTION_PROMPT,
 };
 pub use window_options::{
     capture_overlay_window_options, fixed_window_options, main_window_options, mini_window_options,
@@ -595,15 +642,74 @@ impl Application for EasydictApp {
             };
         }
 
+        if let Message::FoundryLocalPrepareFinished(result) = message {
+            let should_persist_endpoint =
+                self.state.settings.foundry_local_endpoint.trim().is_empty()
+                    && result
+                        .as_ref()
+                        .ok()
+                        .and_then(|outcome| outcome.endpoint.as_deref())
+                        .is_some_and(|endpoint| !endpoint.trim().is_empty());
+            let should_persist_model = self.state.settings.foundry_local_model.trim().is_empty()
+                && result
+                    .as_ref()
+                    .ok()
+                    .is_some_and(|outcome| !outcome.model.trim().is_empty());
+
+            self.state
+                .apply(Message::FoundryLocalPrepareFinished(result));
+
+            let mut should_persist = false;
+            if should_persist_endpoint
+                && self.state.saved_settings.foundry_local_endpoint
+                    != self.state.settings.foundry_local_endpoint
+            {
+                self.state.saved_settings.foundry_local_endpoint =
+                    self.state.settings.foundry_local_endpoint.clone();
+                should_persist = true;
+            }
+
+            if should_persist_model
+                && self.state.saved_settings.foundry_local_model
+                    != self.state.settings.foundry_local_model
+            {
+                self.state.saved_settings.foundry_local_model =
+                    self.state.settings.foundry_local_model.clone();
+                should_persist = true;
+            }
+
+            return if should_persist {
+                settings_save_task(self.state.saved_settings.clone())
+            } else {
+                Task::none()
+            };
+        }
+
+        if let Message::WindowsAiPrepareFinished(result) = message {
+            self.state.apply(Message::WindowsAiPrepareFinished(result));
+            return Task::none();
+        }
+
         let should_start_foundry_local_prepare = message == Message::StartFoundryLocal
             || (message == Message::PrepareLocalAiModel
                 && self.state.settings.local_ai_provider
-                    == crate::compat_protocol::local_ai_provider_modes::FOUNDRY_LOCAL);
+                    == crate::protocol::local_ai_provider_modes::FOUNDRY_LOCAL);
         if should_start_foundry_local_prepare {
             self.state.apply(message);
             return foundry_local_prepare_task(crate::state::settings_snapshot(
                 &self.state.settings,
             ));
+        }
+
+        let should_start_windows_ai_prepare = message == Message::PrepareLocalAiModel
+            && matches!(
+                self.state.settings.local_ai_provider.as_str(),
+                crate::protocol::local_ai_provider_modes::AUTO
+                    | crate::protocol::local_ai_provider_modes::WINDOWS_AI
+            );
+        if should_start_windows_ai_prepare {
+            self.state.apply(message);
+            return windows_ai_prepare_task();
         }
 
         if let Message::SelectionTextReady {
@@ -1303,7 +1409,7 @@ pub const TRAY_BROWSER_INSTALL: &str = "browser-install";
 pub const TRAY_BROWSER_UNINSTALL: &str = "browser-uninstall";
 pub const TRAY_EXIT: &str = "exit";
 pub const BROWSER_REGISTRAR_EXE: &str = "easydict_browser_registrar.exe";
-pub const OCR_TRANSLATE_EVENT_NAME: &str = r"Local\Easydict-OcrTranslate";
+pub const OCR_TRANSLATE_EVENT_NAME: &str = r"Local\EasydictRs-OcrTranslate";
 pub const SHELL_OCR_TRANSLATE: &str = "EasydictOCR";
 pub const PROTOCOL_EASYDICT: &str = "easydict";
 
@@ -1434,13 +1540,20 @@ pub fn default_protocol_registrations() -> Vec<ProtocolRegistration> {
 }
 
 pub fn browser_registrar_task(command: &'static str) -> Task<Message> {
-    Task::run_bundled_executable(BROWSER_REGISTRAR_EXE, [command])
+    Task::run_bundled_executable(
+        BROWSER_REGISTRAR_EXE,
+        [
+            command,
+            "--bridge-root-name",
+            browser_registrar::RUST_BRIDGE_ROOT_NAME,
+        ],
+    )
 }
 
 /// Async task that checks on-disk availability of downloadable settings assets
 /// under the conventional Easydict data directory, replacing static
 /// placeholder statuses with real values once it resolves.
-fn settings_runtime_status_task(settings: compat_protocol::SettingsSnapshot) -> Task<Message> {
+fn settings_runtime_status_task(settings: protocol::SettingsSnapshot) -> Task<Message> {
     Task::perform(
         async move { settings_status::load_runtime_status_for_settings(settings) },
         Message::SettingsRuntimeStatusLoaded,
@@ -1510,7 +1623,7 @@ fn built_in_ai_device_registration_task(settings: &SettingsState) -> Task<Messag
     )
 }
 
-fn foundry_local_prepare_task(settings: compat_protocol::SettingsSnapshot) -> Task<Message> {
+fn foundry_local_prepare_task(settings: protocol::SettingsSnapshot) -> Task<Message> {
     Task::perform(
         async move {
             let mut controller = openai_compatible::CommandFoundryLocalEndpointResolver::default();
@@ -1521,7 +1634,18 @@ fn foundry_local_prepare_task(settings: compat_protocol::SettingsSnapshot) -> Ta
     )
 }
 
-fn openvino_download_task(settings: compat_protocol::SettingsSnapshot) -> Task<Message> {
+fn windows_ai_prepare_task() -> Task<Message> {
+    Task::perform(
+        async move {
+            let mut client = easydict_windows_ai::default_windows_ai_language_model_client();
+            easydict_windows_ai::prepare_windows_ai_client(&mut client)
+                .map_err(|error| error.to_string())
+        },
+        Message::WindowsAiPrepareFinished,
+    )
+}
+
+fn openvino_download_task(settings: protocol::SettingsSnapshot) -> Task<Message> {
     Task::perform(
         async move {
             let mut progress = |_progress: resource_download::ResourceDownloadProgress| {};

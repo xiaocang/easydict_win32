@@ -1,11 +1,14 @@
+#![allow(dead_code)]
+
 pub const RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "EASYDICT_RUNTIME_PROFILE";
+pub const GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "RUNTIME_PROFILE";
 pub const DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE: &str = "EASYDICT_DISABLE_LOCALAI_WORKER";
 pub const DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE: &str = "EASYDICT_DISABLE_LONGDOC_WORKER";
 
 pub const LOCAL_AI_WORKER_DISABLED_MESSAGE: &str =
-    "Windows Local AI requires a Rust-native route; retained .NET Local AI workers are disabled.";
+    "Windows Local AI requires a Rust-native route for this request.";
 pub const LONGDOC_WORKER_DISABLED_MESSAGE: &str =
-    "Long Document translation requires a Rust-native route; retained .NET Long Document workers are disabled.";
+    "Long Document translation requires a Rust-native route for this request.";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RetainedWorkerPolicy {
@@ -38,30 +41,28 @@ impl RetainedWorkerPolicy {
         self
     }
 
-    pub fn from_environment() -> Self {
-        match runtime_profile_from_environment() {
-            RuntimeProfile::RustOnly | RuntimeProfile::Unset => return Self::all_disabled(),
-            RuntimeProfile::Hybrid => {}
-        }
-
-        Self {
-            local_ai_worker_enabled: !environment_flag_is_enabled(
-                DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
-            ),
-            longdoc_worker_enabled: !environment_flag_is_enabled(
-                DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE,
-            ),
-        }
+    #[cfg(not(feature = "retained-dotnet-workers"))]
+    pub fn with_hybrid_runtime_profile_from_environment(self) -> Self {
+        let _ = self;
+        Self::all_disabled()
     }
 
-    pub fn hybrid_from_environment() -> Self {
-        if matches!(
-            runtime_profile_from_environment(),
-            RuntimeProfile::RustOnly | RuntimeProfile::Unset
-        ) {
-            return Self::all_disabled();
+    #[cfg(feature = "retained-dotnet-workers")]
+    pub fn with_hybrid_runtime_profile_from_environment(self) -> Self {
+        if runtime_profile_from_environment() == RuntimeProfile::Hybrid {
+            return self;
         }
 
+        Self::all_disabled()
+    }
+
+    #[cfg(not(feature = "retained-dotnet-workers"))]
+    pub fn from_environment() -> Self {
+        Self::all_disabled()
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    pub fn from_environment() -> Self {
         Self {
             local_ai_worker_enabled: !environment_flag_is_enabled(
                 DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
@@ -70,6 +71,25 @@ impl RetainedWorkerPolicy {
                 DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE,
             ),
         }
+        .with_hybrid_runtime_profile_from_environment()
+    }
+
+    #[cfg(not(feature = "retained-dotnet-workers"))]
+    pub fn hybrid_from_environment() -> Self {
+        Self::all_disabled()
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    pub fn hybrid_from_environment() -> Self {
+        Self {
+            local_ai_worker_enabled: !environment_flag_is_enabled(
+                DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
+            ),
+            longdoc_worker_enabled: !environment_flag_is_enabled(
+                DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE,
+            ),
+        }
+        .with_hybrid_runtime_profile_from_environment()
     }
 
     pub fn local_ai_worker_disabled_message(self) -> Option<&'static str> {
@@ -83,10 +103,11 @@ impl RetainedWorkerPolicy {
 
 impl Default for RetainedWorkerPolicy {
     fn default() -> Self {
-        Self::all_enabled()
+        Self::all_disabled()
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RuntimeProfile {
     Unset,
@@ -94,16 +115,37 @@ enum RuntimeProfile {
     Hybrid,
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn runtime_profile_from_environment() -> RuntimeProfile {
-    std::env::var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE)
-        .ok()
-        .map(|value| runtime_profile_from_value(&value))
-        .unwrap_or(RuntimeProfile::Unset)
+    let profiles = [
+        std::env::var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE).ok(),
+        std::env::var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE).ok(),
+    ]
+    .into_iter()
+    .map(|value| value.map(|value| runtime_profile_from_value(&value)))
+    .collect::<Vec<_>>();
+
+    if profiles
+        .iter()
+        .any(|profile| matches!(profile, Some(RuntimeProfile::RustOnly)))
+    {
+        return RuntimeProfile::RustOnly;
+    }
+
+    if profiles
+        .iter()
+        .any(|profile| matches!(profile, Some(RuntimeProfile::Hybrid)))
+    {
+        return RuntimeProfile::Hybrid;
+    }
+
+    RuntimeProfile::Unset
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn runtime_profile_from_value(value: &str) -> RuntimeProfile {
     let normalized = value.trim().to_ascii_lowercase();
-    if matches!(normalized.as_str(), "hybrid" | "dotnet" | "dotnet-hybrid") {
+    if normalized == "hybrid" {
         return RuntimeProfile::Hybrid;
     }
 
@@ -114,12 +156,14 @@ fn runtime_profile_from_value(value: &str) -> RuntimeProfile {
     RuntimeProfile::RustOnly
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn environment_flag_is_enabled(name: &str) -> bool {
     std::env::var(name)
         .ok()
         .is_some_and(|value| matches_truthy(&value))
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn matches_rust_only_profile(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -127,6 +171,7 @@ fn matches_rust_only_profile(value: &str) -> bool {
     )
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn matches_truthy(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -163,6 +208,14 @@ mod tests {
     }
 
     #[test]
+    fn default_policy_is_rust_only_to_avoid_accidental_retained_worker_startup() {
+        assert_eq!(
+            RetainedWorkerPolicy::default(),
+            RetainedWorkerPolicy::all_disabled()
+        );
+    }
+
+    #[test]
     fn rust_only_runtime_profile_disables_all_retained_workers() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();
@@ -184,6 +237,48 @@ mod tests {
     }
 
     #[test]
+    fn generic_rust_only_runtime_profile_disables_all_retained_workers() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+        std::env::set_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");
+
+        let policy = RetainedWorkerPolicy::from_environment();
+
+        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        snapshot.restore();
+    }
+
+    #[test]
+    fn explicit_policy_is_still_rust_only_without_hybrid_runtime_profile() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+
+        let policy =
+            RetainedWorkerPolicy::all_enabled().with_hybrid_runtime_profile_from_environment();
+
+        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        snapshot.restore();
+    }
+
+    #[cfg(not(feature = "retained-dotnet-workers"))]
+    #[test]
+    fn hybrid_runtime_profile_stays_disabled_when_retained_worker_bridge_is_not_compiled() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+        std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+
+        let policy = RetainedWorkerPolicy::from_environment();
+
+        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(RetainedWorkerPolicy::hybrid_from_environment(), policy);
+        snapshot.restore();
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
     fn hybrid_runtime_profile_preserves_individual_disable_flags() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();
@@ -203,8 +298,93 @@ mod tests {
         snapshot.restore();
     }
 
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
+    fn explicit_policy_requires_hybrid_runtime_profile_to_enable_workers() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+
+        for value in ["rust-only", "dotnet", ""] {
+            std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, value);
+
+            let policy =
+                RetainedWorkerPolicy::all_enabled().with_hybrid_runtime_profile_from_environment();
+
+            assert_eq!(
+                policy,
+                RetainedWorkerPolicy::all_disabled(),
+                "{value:?} must not let injected policies enable retained workers"
+            );
+        }
+
+        std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+        assert_eq!(
+            RetainedWorkerPolicy::all_enabled()
+                .without_local_ai_worker()
+                .with_hybrid_runtime_profile_from_environment(),
+            RetainedWorkerPolicy {
+                local_ai_worker_enabled: false,
+                longdoc_worker_enabled: true,
+            }
+        );
+
+        snapshot.restore();
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
+    fn generic_rust_only_profile_overrides_easydict_hybrid_profile() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+        std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+        std::env::set_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");
+
+        let policy = RetainedWorkerPolicy::from_environment();
+
+        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        snapshot.restore();
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
+    fn generic_hybrid_profile_enables_retained_workers_when_feature_is_compiled() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+        std::env::set_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+
+        let policy = RetainedWorkerPolicy::from_environment();
+
+        assert_eq!(policy, RetainedWorkerPolicy::all_enabled());
+        snapshot.restore();
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
+    fn dotnet_named_runtime_profiles_do_not_enable_retained_workers() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+
+        for value in ["dotnet", "dotnet-hybrid"] {
+            std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, value);
+
+            let policy = RetainedWorkerPolicy::from_environment();
+
+            assert_eq!(
+                policy,
+                RetainedWorkerPolicy::all_disabled(),
+                "{value} must not opt the first rs package into retained .NET workers"
+            );
+        }
+        snapshot.restore();
+    }
+
     struct EnvironmentSnapshot {
         runtime_profile: Option<String>,
+        generic_runtime_profile: Option<String>,
         disable_local_ai_worker: Option<String>,
         disable_longdoc_worker: Option<String>,
     }
@@ -213,6 +393,10 @@ mod tests {
         fn capture() -> Self {
             Self {
                 runtime_profile: std::env::var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE).ok(),
+                generic_runtime_profile: std::env::var(
+                    GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+                )
+                .ok(),
                 disable_local_ai_worker: std::env::var(
                     DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
                 )
@@ -224,6 +408,10 @@ mod tests {
 
         fn restore(self) {
             restore_environment_value(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, self.runtime_profile);
+            restore_environment_value(
+                GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+                self.generic_runtime_profile,
+            );
             restore_environment_value(
                 DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
                 self.disable_local_ai_worker,
@@ -237,6 +425,7 @@ mod tests {
 
     fn clear_retained_worker_environment() {
         std::env::remove_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+        std::env::remove_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
         std::env::remove_var(DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE);
         std::env::remove_var(DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE);
     }

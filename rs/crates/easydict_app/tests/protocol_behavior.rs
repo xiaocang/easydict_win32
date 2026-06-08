@@ -1,6 +1,16 @@
-use easydict_app::compat_protocol::*;
+//! Default Rust protocol facade behavior plus retained-feature protocol guards.
+
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::compat_protocol::{
+    deserialize_json_line, serialize_json_line, serialize_json_line_with_newline, worker_events,
+    worker_kinds, worker_methods, CancelRequestParams, CancelRequestResult, ChunkEventData,
+    IpcEvent, IpcRequest, IpcResponse, LocalAiTranslateParams, ReadyEventData, ShutdownResult,
+    TranslateStreamResult, WORKER_PROTOCOL_VERSION_CURRENT,
+};
+use easydict_app::protocol::*;
 
 #[test]
+#[cfg(feature = "retained-dotnet-workers")]
 fn existing_worker_method_names_stay_compatible_with_dotnet_workers() {
     assert_eq!(worker_methods::CONFIGURE, "configure");
     assert_eq!(worker_methods::CANCEL, "cancel");
@@ -25,6 +35,7 @@ fn existing_worker_method_names_stay_compatible_with_dotnet_workers() {
 }
 
 #[test]
+#[cfg(feature = "retained-dotnet-workers")]
 fn ipc_request_response_and_event_use_json_lines_shape() {
     let request = IpcRequest::new(
         "req-1",
@@ -80,6 +91,7 @@ fn ipc_request_response_and_event_use_json_lines_shape() {
 }
 
 #[test]
+#[cfg(feature = "retained-dotnet-workers")]
 fn worker_lifecycle_payloads_use_dotnet_json_shape() {
     let cancel = CancelRequestParams {
         target_request_id: "rust-worker-7".to_string(),
@@ -109,12 +121,13 @@ fn translation_result_dto_roundtrips_alternatives_with_camel_case_field() {
         timing_ms: None,
         alternatives: Some(vec!["Servus".to_string(), "Hallöchen".to_string()]),
         word_result: None,
+        raw_html: None,
     };
 
-    let json = serialize_json_line(&dto).expect("dto serializes");
+    let json = serialize_json(&dto).expect("dto serializes");
     assert!(json.contains("\"alternatives\":[\"Servus\",\"Hallöchen\"]"));
 
-    let back: TranslationResultDto = deserialize_json_line(&json).expect("dto deserializes");
+    let back: TranslationResultDto = deserialize_json(&json).expect("dto deserializes");
     assert_eq!(
         back.alternatives.as_deref(),
         Some(&["Servus".to_string(), "Hallöchen".to_string()][..])
@@ -153,15 +166,16 @@ fn translation_result_dto_roundtrips_word_result_with_camel_case_fields() {
                 words: Some(vec!["salutation".to_string(), "welcome".to_string()]),
             }]),
         }),
+        raw_html: None,
     };
 
-    let json = serialize_json_line(&dto).expect("dto serializes");
+    let json = serialize_json(&dto).expect("dto serializes");
     assert!(json.contains("\"wordResult\""));
     assert!(json.contains("\"audioUrl\""));
     assert!(json.contains("\"partOfSpeech\""));
     assert!(json.contains("\"wordForms\""));
 
-    let back: TranslationResultDto = deserialize_json_line(&json).expect("dto deserializes");
+    let back: TranslationResultDto = deserialize_json(&json).expect("dto deserializes");
     let word_result = back.word_result.expect("word result");
     assert_eq!(
         word_result.phonetics.as_deref().unwrap()[0]
@@ -182,6 +196,32 @@ fn translation_result_dto_roundtrips_word_result_with_camel_case_fields() {
 }
 
 #[test]
+fn translation_result_dto_roundtrips_raw_html_as_optional_camel_case_field() {
+    let dto = TranslationResultDto {
+        translated_text: "fruit".to_string(),
+        service_id: Some("mdx::demo".to_string()),
+        service_name: Some("Demo Dictionary".to_string()),
+        detected_language: None,
+        result_kind: Some("Success".to_string()),
+        info_message: None,
+        timing_ms: None,
+        alternatives: None,
+        word_result: None,
+        raw_html: Some("<div>fruit</div>".to_string()),
+    };
+
+    let json = serialize_json(&dto).expect("dto serializes");
+    assert!(json.contains("\"rawHtml\":\"<div>fruit</div>\""));
+
+    let back: TranslationResultDto = deserialize_json(&json).expect("dto deserializes");
+    assert_eq!(back.raw_html.as_deref(), Some("<div>fruit</div>"));
+
+    let legacy: TranslationResultDto =
+        deserialize_json("{\"translatedText\":\"fruit\"}").expect("legacy dto deserializes");
+    assert_eq!(legacy.raw_html, None);
+}
+
+#[test]
 fn grammar_correct_params_and_result_roundtrip() {
     let params = GrammarCorrectParams {
         text: "I has a apple.".to_string(),
@@ -190,12 +230,11 @@ fn grammar_correct_params_and_result_roundtrip() {
         include_explanations: true,
     };
 
-    let params_json = serialize_json_line(&params).expect("params serializes");
+    let params_json = serialize_json(&params).expect("params serializes");
     assert!(params_json.contains("\"language\":\"en\""));
     assert!(params_json.contains("\"includeExplanations\":true"));
 
-    let parsed: GrammarCorrectParams =
-        deserialize_json_line(&params_json).expect("params deserializes");
+    let parsed: GrammarCorrectParams = deserialize_json(&params_json).expect("params deserializes");
     assert_eq!(
         parsed.services.as_deref(),
         Some(&["openai".to_string()][..])
@@ -212,16 +251,17 @@ fn grammar_correct_params_and_result_roundtrip() {
         timing_ms: Some(42),
         has_corrections: true,
     };
-    let result_json = serialize_json_line(&result).expect("result serializes");
+    let result_json = serialize_json(&result).expect("result serializes");
     assert!(result_json.contains("\"correctedText\":\"I have an apple.\""));
 
     let result: GrammarCorrectResultDto =
-        deserialize_json_line(&result_json).expect("result deserializes");
+        deserialize_json(&result_json).expect("result deserializes");
     assert_eq!(result.corrected_text, "I have an apple.");
     assert!(result.has_corrections);
 }
 
 #[test]
+#[cfg(feature = "retained-dotnet-workers")]
 fn ready_event_roundtrips_with_camel_case_wire_keys() {
     let ready = ReadyEventData {
         worker_kind: worker_kinds::LONGDOC.to_string(),
@@ -243,48 +283,46 @@ fn ready_event_roundtrips_with_camel_case_wire_keys() {
 }
 
 #[test]
-fn configure_params_preserve_dotnet_settings_snapshot_names() {
-    let configure = ConfigureParams {
-        settings: SettingsSnapshot {
-            open_ai_api_key: Some("sk-test".to_string()),
-            open_ai_model: Some("gpt-4o-mini".to_string()),
-            open_ai_temperature: Some(0.3),
-            deep_l_api_key: Some("deepl-key".to_string()),
-            github_models_api_key: Some("gh-key".to_string()),
-            caiyun_token: Some("caiyun-token".to_string()),
-            niu_trans_api_key: Some("niu-key".to_string()),
-            youdao_app_key: Some("youdao-key".to_string()),
-            youdao_app_secret: Some("youdao-secret".to_string()),
-            youdao_use_official_api: Some(true),
-            custom_open_ai_endpoint: Some("https://example.test/v1".to_string()),
-            built_in_ai_api_key: Some("builtin-key".to_string()),
-            foundry_local_endpoint: Some("http://127.0.0.1:5000".to_string()),
-            open_vino_device: Some("CPU".to_string()),
-            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
-            ocr_engine: Some("CustomApi".to_string()),
-            ocr_api_key: Some("ocr-key".to_string()),
-            ocr_endpoint: Some("https://ocr.example.test/v1/responses".to_string()),
-            ocr_model: Some("gpt-vision".to_string()),
-            ocr_system_prompt: Some("Extract text.".to_string()),
-            ocr_language: Some("ja-JP".to_string()),
-            proxy_enabled: Some(true),
-            proxy_uri: Some("http://localhost:7890".to_string()),
-            long_doc_max_concurrency: Some(8),
-            long_doc_enable_document_context_pass: Some(false),
-            imported_mdx_dictionaries: Some(vec![ImportedMdxDictionarySnapshot {
-                service_id: "mdx::demo".to_string(),
-                display_name: "Demo Dictionary".to_string(),
-                file_path: r"C:\Dicts\demo.mdx".to_string(),
-                is_encrypted: false,
-                regcode: None,
-                email: None,
-                mdd_file_paths: vec![r"C:\Dicts\demo.mdd".to_string()],
-            }]),
-            ..SettingsSnapshot::default()
-        },
+fn settings_snapshot_preserves_dotnet_json_names() {
+    let settings = SettingsSnapshot {
+        open_ai_api_key: Some("sk-test".to_string()),
+        open_ai_model: Some("gpt-4o-mini".to_string()),
+        open_ai_temperature: Some(0.3),
+        deep_l_api_key: Some("deepl-key".to_string()),
+        github_models_api_key: Some("gh-key".to_string()),
+        caiyun_token: Some("caiyun-token".to_string()),
+        niu_trans_api_key: Some("niu-key".to_string()),
+        youdao_app_key: Some("youdao-key".to_string()),
+        youdao_app_secret: Some("youdao-secret".to_string()),
+        youdao_use_official_api: Some(true),
+        custom_open_ai_endpoint: Some("https://example.test/v1".to_string()),
+        built_in_ai_api_key: Some("builtin-key".to_string()),
+        foundry_local_endpoint: Some("http://127.0.0.1:5000".to_string()),
+        open_vino_device: Some("CPU".to_string()),
+        local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+        ocr_engine: Some("CustomApi".to_string()),
+        ocr_api_key: Some("ocr-key".to_string()),
+        ocr_endpoint: Some("https://ocr.example.test/v1/responses".to_string()),
+        ocr_model: Some("gpt-vision".to_string()),
+        ocr_system_prompt: Some("Extract text.".to_string()),
+        ocr_language: Some("ja-JP".to_string()),
+        proxy_enabled: Some(true),
+        proxy_uri: Some("http://localhost:7890".to_string()),
+        long_doc_max_concurrency: Some(8),
+        long_doc_enable_document_context_pass: Some(false),
+        imported_mdx_dictionaries: Some(vec![ImportedMdxDictionarySnapshot {
+            service_id: "mdx::demo".to_string(),
+            display_name: "Demo Dictionary".to_string(),
+            file_path: r"C:\Dicts\demo.mdx".to_string(),
+            is_encrypted: false,
+            regcode: None,
+            email: None,
+            mdd_file_paths: vec![r"C:\Dicts\demo.mdd".to_string()],
+        }]),
+        ..SettingsSnapshot::default()
     };
 
-    let json = serialize_json(&configure).expect("configure serializes");
+    let json = serialize_json(&settings).expect("settings snapshot serializes");
     assert!(json.contains("\"openAIApiKey\":\"sk-test\""));
     assert!(json.contains("\"openAIModel\":\"gpt-4o-mini\""));
     assert!(json.contains("\"openAITemperature\":0.3"));
@@ -311,39 +349,29 @@ fn configure_params_preserve_dotnet_settings_snapshot_names() {
     assert!(json.contains("\"mddFilePaths\""));
     assert!(!json.contains("ollamaEndpoint"));
 
-    let back: ConfigureParams = deserialize_json(&json).expect("configure deserializes");
-    assert_eq!(back.settings.open_ai_api_key.as_deref(), Some("sk-test"));
-    assert_eq!(back.settings.open_ai_temperature, Some(0.3));
-    assert_eq!(back.settings.caiyun_token.as_deref(), Some("caiyun-token"));
-    assert_eq!(back.settings.niu_trans_api_key.as_deref(), Some("niu-key"));
-    assert_eq!(back.settings.youdao_app_key.as_deref(), Some("youdao-key"));
+    let back: SettingsSnapshot = deserialize_json(&json).expect("settings snapshot deserializes");
+    assert_eq!(back.open_ai_api_key.as_deref(), Some("sk-test"));
+    assert_eq!(back.open_ai_temperature, Some(0.3));
+    assert_eq!(back.caiyun_token.as_deref(), Some("caiyun-token"));
+    assert_eq!(back.niu_trans_api_key.as_deref(), Some("niu-key"));
+    assert_eq!(back.youdao_app_key.as_deref(), Some("youdao-key"));
+    assert_eq!(back.youdao_app_secret.as_deref(), Some("youdao-secret"));
+    assert_eq!(back.youdao_use_official_api, Some(true));
+    assert_eq!(back.local_ai_provider.as_deref(), Some("Auto"));
+    assert_eq!(back.ocr_engine.as_deref(), Some("CustomApi"));
+    assert_eq!(back.ocr_api_key.as_deref(), Some("ocr-key"));
     assert_eq!(
-        back.settings.youdao_app_secret.as_deref(),
-        Some("youdao-secret")
-    );
-    assert_eq!(back.settings.youdao_use_official_api, Some(true));
-    assert_eq!(back.settings.local_ai_provider.as_deref(), Some("Auto"));
-    assert_eq!(back.settings.ocr_engine.as_deref(), Some("CustomApi"));
-    assert_eq!(back.settings.ocr_api_key.as_deref(), Some("ocr-key"));
-    assert_eq!(
-        back.settings.ocr_endpoint.as_deref(),
+        back.ocr_endpoint.as_deref(),
         Some("https://ocr.example.test/v1/responses")
     );
-    assert_eq!(back.settings.ocr_model.as_deref(), Some("gpt-vision"));
+    assert_eq!(back.ocr_model.as_deref(), Some("gpt-vision"));
+    assert_eq!(back.ocr_system_prompt.as_deref(), Some("Extract text."));
+    assert_eq!(back.ocr_language.as_deref(), Some("ja-JP"));
+    assert_eq!(back.proxy_enabled, Some(true));
+    assert_eq!(back.long_doc_max_concurrency, Some(8));
+    assert_eq!(back.long_doc_enable_document_context_pass, Some(false));
     assert_eq!(
-        back.settings.ocr_system_prompt.as_deref(),
-        Some("Extract text.")
-    );
-    assert_eq!(back.settings.ocr_language.as_deref(), Some("ja-JP"));
-    assert_eq!(back.settings.proxy_enabled, Some(true));
-    assert_eq!(back.settings.long_doc_max_concurrency, Some(8));
-    assert_eq!(
-        back.settings.long_doc_enable_document_context_pass,
-        Some(false)
-    );
-    assert_eq!(
-        back.settings
-            .imported_mdx_dictionaries
+        back.imported_mdx_dictionaries
             .as_ref()
             .and_then(|dictionaries| dictionaries.first())
             .map(|dictionary| dictionary.service_id.as_str()),

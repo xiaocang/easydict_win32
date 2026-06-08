@@ -1,13 +1,13 @@
-use crate::compat_protocol::{MdxLookupParams, MdxLookupResult, SettingsSnapshot};
 use crate::local_dictionary_index::{
     default_local_dictionary_index_root, LocalDictionaryIndexDescriptor,
     LocalDictionaryIndexService, LocalDictionaryIndexSuggestionItem,
 };
 use crate::mdx_native::{
     native_mdx_lookup_can_route, native_mdx_lookup_local_input_error,
-    native_mdx_lookup_needs_credentials, run_native_mdx_lookup_with_factory,
+    native_mdx_lookup_needs_credentials, run_native_mdx_lookup_with_factory_and_mdd_policy,
     NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, RsMdictReaderFactory,
 };
+use crate::protocol::{MdxLookupParams, MdxLookupResult, SettingsSnapshot};
 use crate::state::{
     settings_snapshot, EasydictUiState, ImportedMdxDictionary, LocalDictionarySuggestion,
 };
@@ -110,8 +110,13 @@ impl<F: NativeMdxDictionaryReaderFactory> LocalDictionarySuggestionBackend
             )
         })?;
 
-        run_native_mdx_lookup_with_factory(&mut self.reader_factory, params, settings)
-            .map_err(|error| LocalDictionarySuggestionError::new(error.to_string()))
+        run_native_mdx_lookup_with_factory_and_mdd_policy(
+            &mut self.reader_factory,
+            params,
+            settings,
+            false,
+        )
+        .map_err(|error| LocalDictionarySuggestionError::new(error.to_string()))
     }
 }
 
@@ -224,9 +229,7 @@ pub fn run_local_dictionary_suggestion_request_with_current_app_dir(
     request: LocalDictionarySuggestionRequest,
 ) -> LocalDictionarySuggestionUpdate {
     match current_app_dir() {
-        Ok(app_dir) => {
-            run_local_dictionary_suggestion_request_with_packaged_app_dir(request, app_dir)
-        }
+        Ok(app_dir) => run_local_dictionary_suggestion_request_with_app_dir(request, app_dir),
         Err(message) => LocalDictionarySuggestionUpdate {
             query_id: request.query_id,
             query: request.query,
@@ -245,7 +248,7 @@ pub fn run_delayed_local_dictionary_suggestion_request_with_current_app_dir(
     run_local_dictionary_suggestion_request_with_current_app_dir(request)
 }
 
-pub fn run_local_dictionary_suggestion_request_with_packaged_app_dir(
+pub fn run_local_dictionary_suggestion_request_with_app_dir(
     request: LocalDictionarySuggestionRequest,
     _app_dir: impl AsRef<Path>,
 ) -> LocalDictionarySuggestionUpdate {
@@ -345,6 +348,7 @@ where
     accumulator.finish(request.query_id, request.query)
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 pub fn run_local_dictionary_suggestion_request_with_routed_backends<N, B>(
     native_backend: &mut N,
     bridge_backend: &mut B,
@@ -410,6 +414,7 @@ pub fn local_dictionary_suggestion_request_can_route_natively(
         })
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn local_dictionary_dictionary_can_finish_without_bridge(
     request: &LocalDictionarySuggestionRequest,
     dictionary: &ImportedMdxDictionary,
@@ -428,6 +433,7 @@ fn local_dictionary_dictionary_can_finish_without_bridge(
         || native_mdx_lookup_needs_credentials(&params, &request.settings)
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 pub fn run_local_dictionary_suggestion_request_with_lazy_bridge<N, B, F>(
     native_backend: &mut N,
     bridge_backend_factory: F,
@@ -489,6 +495,7 @@ where
     accumulator.finish(request.query_id, request.query)
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn ensure_local_dictionary_bridge_backend<B, F>(
     bridge_backend: &mut Option<B>,
     bridge_backend_factory: &mut Option<F>,

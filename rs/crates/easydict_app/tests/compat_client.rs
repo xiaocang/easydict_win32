@@ -1,3 +1,5 @@
+#![cfg(feature = "retained-dotnet-workers")]
+
 use easydict_app::compat_client::{
     default_local_ai_worker_path, default_longdoc_worker_path, packaged_worker_command,
     packaged_worker_command_with_openvino_cache_base, DirectWorkerFacade, WorkerClient,
@@ -8,10 +10,16 @@ use easydict_app::compat_protocol::{
     SettingsSnapshot, StatusEventData, TranslateDocumentParams, TranslateParams,
     TranslationResultDto, WORKER_PROTOCOL_VERSION_CURRENT,
 };
+use easydict_app::{
+    GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+};
 use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
 use serde_json::Value;
 use std::ffi::OsString;
 use std::path::Path;
+use std::sync::Mutex;
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 fn mock_jsonl_client() -> WorkerClient {
     WorkerCommand::new("powershell.exe")
@@ -63,6 +71,12 @@ impl EnvVarGuard {
         std::env::set_var(key, value);
         Self { key, previous }
     }
+
+    fn remove(key: &'static str) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::remove_var(key);
+        Self { key, previous }
+    }
 }
 
 impl Drop for EnvVarGuard {
@@ -72,6 +86,21 @@ impl Drop for EnvVarGuard {
         } else {
             std::env::remove_var(self.key);
         }
+    }
+}
+
+fn retained_worker_disabled_error(error: WorkerClientError, expected_prefix: &str) {
+    assert!(
+        !error.is_not_found(),
+        "retained worker guard should run before executable probing"
+    );
+    match error {
+        WorkerClientError::Protocol(message) => {
+            assert!(message.contains(expected_prefix));
+            assert!(message.contains("requires a Rust-native route"));
+            assert!(message.contains("EASYDICT_RUNTIME_PROFILE=hybrid"));
+        }
+        other => panic!("expected retained worker protocol guard, got {other:?}"),
     }
 }
 
@@ -417,6 +446,90 @@ fn packaged_worker_command_sets_shared_worker_environment() {
             .find(|(key, _)| key == "DOTNET_CLI_TELEMETRY_OPTOUT")
             .map(|(_, value)| value.as_str()),
         Some("1")
+    );
+}
+
+#[test]
+fn packaged_worker_command_spawn_requires_hybrid_runtime_profile_before_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let app_dir = Path::new(r"C:\EasydictMissingPortable");
+
+    for (worker_subdir, worker_exe_name, expected_prefix) in [
+        (
+            "longdoc",
+            "Easydict.Workers.LongDoc.exe",
+            "Long Document translation",
+        ),
+        (
+            "localai",
+            "Easydict.Workers.LocalAi.exe",
+            "Windows Local AI",
+        ),
+    ] {
+        let error = match packaged_worker_command(app_dir, worker_subdir, worker_exe_name).spawn() {
+            Ok(_) => panic!("packaged retained worker must require explicit hybrid runtime"),
+            Err(error) => error,
+        };
+
+        retained_worker_disabled_error(error, expected_prefix);
+    }
+}
+
+#[test]
+fn packaged_worker_command_spawn_respects_rust_only_runtime_profile_before_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let app_dir = Path::new(r"C:\EasydictMissingPortable");
+    let error =
+        match packaged_worker_command(app_dir, "longdoc", "Easydict.Workers.LongDoc.exe").spawn() {
+            Ok(_) => panic!("rust-only runtime profile must disable packaged retained workers"),
+            Err(error) => error,
+        };
+
+    retained_worker_disabled_error(error, "Long Document translation");
+}
+
+#[test]
+fn direct_packaged_worker_facade_requires_hybrid_runtime_profile_before_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let app_dir = Path::new(r"C:\EasydictMissingPortable");
+    let longdoc_error = match DirectWorkerFacade::spawn_packaged_longdoc(app_dir) {
+        Ok(_) => panic!("packaged LongDoc facade must require explicit hybrid runtime"),
+        Err(error) => error,
+    };
+    let local_ai_error = match DirectWorkerFacade::spawn_packaged_local_ai(app_dir) {
+        Ok(_) => panic!("packaged LocalAI facade must require explicit hybrid runtime"),
+        Err(error) => error,
+    };
+
+    retained_worker_disabled_error(longdoc_error, "Long Document translation");
+    retained_worker_disabled_error(local_ai_error, "Windows Local AI");
+}
+
+#[test]
+fn packaged_worker_command_allows_hybrid_runtime_profile_to_reach_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let app_dir = Path::new(r"C:\EasydictMissingPortable");
+    let error =
+        match packaged_worker_command(app_dir, "longdoc", "Easydict.Workers.LongDoc.exe").spawn() {
+            Ok(_) => panic!("missing worker executable should still fail at the I/O boundary"),
+            Err(error) => error,
+        };
+
+    assert!(
+        error.is_not_found(),
+        "hybrid retained worker path should proceed to executable probing, got {error:?}"
     );
 }
 

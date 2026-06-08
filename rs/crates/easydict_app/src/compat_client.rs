@@ -8,6 +8,9 @@ use crate::compat_protocol::{
 use crate::openvino_download::{
     openvino_ep_path_injection_enabled, openvino_runtime_path_with_directory,
 };
+use crate::retained_workers::{
+    RetainedWorkerPolicy, LOCAL_AI_WORKER_DISABLED_MESSAGE, LONGDOC_WORKER_DISABLED_MESSAGE,
+};
 use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -22,6 +25,7 @@ pub struct WorkerCommand {
     program: PathBuf,
     args: Vec<String>,
     envs: Vec<(String, String)>,
+    retained_worker_kind: Option<RetainedWorkerKind>,
 }
 
 impl WorkerCommand {
@@ -30,6 +34,7 @@ impl WorkerCommand {
             program: program.into(),
             args: Vec::new(),
             envs: Vec::new(),
+            retained_worker_kind: None,
         }
     }
 
@@ -57,6 +62,60 @@ impl WorkerCommand {
 
     pub fn spawn(self) -> Result<WorkerClient, WorkerClientError> {
         WorkerClient::spawn(self)
+    }
+
+    fn retained_worker(mut self, kind: RetainedWorkerKind) -> Self {
+        self.retained_worker_kind = Some(kind);
+        self
+    }
+
+    fn ensure_retained_worker_is_enabled(&self) -> Result<(), WorkerClientError> {
+        let Some(kind) = self.retained_worker_kind else {
+            return Ok(());
+        };
+
+        let policy = RetainedWorkerPolicy::from_environment();
+        if kind.is_enabled_by(policy) {
+            return Ok(());
+        }
+
+        Err(WorkerClientError::Protocol(kind.disabled_message()))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RetainedWorkerKind {
+    LongDoc,
+    LocalAi,
+}
+
+impl RetainedWorkerKind {
+    fn from_worker_subdir(worker_subdir: &str) -> Option<Self> {
+        if worker_subdir.eq_ignore_ascii_case("longdoc") {
+            return Some(Self::LongDoc);
+        }
+
+        if worker_subdir.eq_ignore_ascii_case("localai") {
+            return Some(Self::LocalAi);
+        }
+
+        None
+    }
+
+    fn is_enabled_by(self, policy: RetainedWorkerPolicy) -> bool {
+        match self {
+            Self::LongDoc => policy.longdoc_worker_enabled,
+            Self::LocalAi => policy.local_ai_worker_enabled,
+        }
+    }
+
+    fn disabled_message(self) -> String {
+        let base = match self {
+            Self::LongDoc => LONGDOC_WORKER_DISABLED_MESSAGE,
+            Self::LocalAi => LOCAL_AI_WORKER_DISABLED_MESSAGE,
+        };
+
+        format!("{base} Set EASYDICT_RUNTIME_PROFILE=hybrid to enable retained .NET workers.")
     }
 }
 
@@ -224,6 +283,8 @@ pub struct WorkerClient {
 
 impl WorkerClient {
     pub fn spawn(command: WorkerCommand) -> Result<Self, WorkerClientError> {
+        command.ensure_retained_worker_is_enabled()?;
+
         let mut process = Command::new(&command.program);
         process
             .args(command.args)
@@ -619,6 +680,10 @@ pub fn packaged_worker_command_with_openvino_cache_base(
                     .to_string(),
             )
             .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1");
+
+    if let Some(kind) = RetainedWorkerKind::from_worker_subdir(worker_subdir) {
+        command = command.retained_worker(kind);
+    }
 
     let dotnet_root = app_dir.join("dotnet");
     if has_bundled_dotnet_runtime(&dotnet_root) {

@@ -183,10 +183,7 @@ const MATH_FUNCTION_NAMES: &[&str] = &[
 ];
 
 pub fn analyze_formula_preservation(context: &BlockContext) -> ProtectionPlan {
-    if context.block_type == SourceBlockType::Formula
-        || context.block_type == SourceBlockType::TableCell
-        || context.is_formula_like
-    {
+    if context.block_type == SourceBlockType::Formula || context.is_formula_like {
         return ProtectionPlan::opaque(format!(
             "BlockType={:?}, IsFormulaLike={}",
             context.block_type, context.is_formula_like

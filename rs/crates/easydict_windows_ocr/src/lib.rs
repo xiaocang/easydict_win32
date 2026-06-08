@@ -44,6 +44,46 @@ impl fmt::Display for WindowsOcrError {
 impl std::error::Error for WindowsOcrError {}
 
 #[cfg(windows)]
+pub fn is_available() -> bool {
+    windows::Media::Ocr::OcrEngine::TryCreateFromUserProfileLanguages().is_ok()
+}
+
+#[cfg(not(windows))]
+pub fn is_available() -> bool {
+    false
+}
+
+#[cfg(windows)]
+pub fn available_languages() -> Result<Vec<WindowsOcrLanguage>, WindowsOcrError> {
+    use windows::Media::Ocr::OcrEngine;
+
+    fn map_winrt_error(error: windows::core::Error) -> WindowsOcrError {
+        WindowsOcrError::new(format!("Windows Native OCR failed: {error}"))
+    }
+
+    fn hstring_to_string(value: windows::core::HSTRING) -> String {
+        value.to_string_lossy()
+    }
+
+    let languages = OcrEngine::AvailableRecognizerLanguages().map_err(map_winrt_error)?;
+    let mut output = Vec::with_capacity(languages.Size().map_err(map_winrt_error)? as usize);
+    for index in 0..languages.Size().map_err(map_winrt_error)? {
+        let language = languages.GetAt(index).map_err(map_winrt_error)?;
+        output.push(WindowsOcrLanguage {
+            tag: hstring_to_string(language.LanguageTag().map_err(map_winrt_error)?),
+            display_name: hstring_to_string(language.DisplayName().map_err(map_winrt_error)?),
+        });
+    }
+
+    Ok(output)
+}
+
+#[cfg(not(windows))]
+pub fn available_languages() -> Result<Vec<WindowsOcrLanguage>, WindowsOcrError> {
+    Ok(Vec::new())
+}
+
+#[cfg(windows)]
 pub fn recognize_bgra_file(
     pixel_data_path: &str,
     pixel_width: u32,
@@ -228,4 +268,29 @@ fn validate_bgra_buffer(bgra: &[u8], width: u32, height: u32) -> Result<(), Wind
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn non_windows_reports_unavailable_with_empty_language_list() {
+        assert!(!is_available());
+        assert_eq!(
+            available_languages().expect("language status should be queryable"),
+            Vec::new()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_available_languages_smoke_has_valid_shape() {
+        let languages = available_languages().expect("Windows OCR language query should not fail");
+        for language in languages {
+            assert!(!language.tag.trim().is_empty());
+            assert!(!language.display_name.trim().is_empty());
+        }
+    }
 }

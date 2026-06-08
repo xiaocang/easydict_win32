@@ -1,7 +1,9 @@
 use easydict_app::{
     build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
-    parse_vision_layout_detection_array, parse_vision_layout_response, OpenAiApiFormat,
-    OpenAiCompatibleConfig, VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
+    execute_vision_layout_detection, parse_vision_layout_detection_array,
+    parse_vision_layout_response, OpenAiApiFormat, OpenAiCompatibleConfig, OpenAiExecutionError,
+    OpenAiExecutionErrorCode, VisionLayoutHttpClient, VisionLayoutHttpRequestPlan,
+    VisionLayoutHttpResponse, VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
 };
 
 #[test]
@@ -245,6 +247,108 @@ fn vision_layout_request_plan_from_bgra_uses_bmp_for_chat_and_jpeg_for_responses
         .as_str()
         .expect("responses image")
         .starts_with("data:image/jpeg;base64,/9j/"));
+}
+
+#[test]
+fn vision_layout_executor_posts_plan_and_parses_success_response() {
+    let config =
+        OpenAiCompatibleConfig::new("https://api.example.test/v1/chat/completions", "gpt-4o")
+            .with_api_key("sk-vision");
+    let mut client = FakeVisionLayoutClient::new(Ok(VisionLayoutHttpResponse {
+        status_code: 200,
+        reason_phrase: "OK".to_string(),
+        body: r#"{
+            "choices": [{
+                "message": {
+                    "content": "[{\"type\":\"table\",\"x\":10,\"y\":20,\"width\":30,\"height\":40,\"confidence\":0.9}]"
+                }
+            }]
+        }"#
+        .to_string(),
+    }));
+
+    let detections = execute_vision_layout_detection(&mut client, &config, &[0, 0, 255, 255], 1, 1)
+        .expect("vision detection");
+
+    assert_eq!(client.requests.len(), 1);
+    assert_eq!(
+        client.requests[0].endpoint,
+        "https://api.example.test/v1/chat/completions"
+    );
+    assert_eq!(
+        authorization_header(&client.requests[0].headers),
+        Some("Bearer sk-vision")
+    );
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].region_type, VisionLayoutRegionType::Table);
+}
+
+#[test]
+fn vision_layout_executor_maps_http_errors() {
+    let config =
+        OpenAiCompatibleConfig::new("https://api.example.test/v1/chat/completions", "gpt-4o")
+            .with_api_key("bad-key");
+    let mut client = FakeVisionLayoutClient::new(Ok(VisionLayoutHttpResponse {
+        status_code: 401,
+        reason_phrase: "Unauthorized".to_string(),
+        body: "invalid key".to_string(),
+    }));
+
+    let error = execute_vision_layout_detection(&mut client, &config, &[0, 0, 255, 255], 1, 1)
+        .expect_err("HTTP error");
+
+    assert_eq!(error.code, OpenAiExecutionErrorCode::InvalidApiKey);
+    assert!(error.message.contains("invalid key"));
+}
+
+#[test]
+fn vision_layout_executor_requires_api_key_unless_config_allows_local_endpoint() {
+    let config =
+        OpenAiCompatibleConfig::new("https://api.example.test/v1/chat/completions", "gpt-4o");
+    let mut client = FakeVisionLayoutClient::new(Ok(VisionLayoutHttpResponse {
+        status_code: 200,
+        reason_phrase: "OK".to_string(),
+        body: "{}".to_string(),
+    }));
+
+    let error = execute_vision_layout_detection(&mut client, &config, &[0, 0, 255, 255], 1, 1)
+        .expect_err("missing key");
+
+    assert_eq!(error.code, OpenAiExecutionErrorCode::InvalidApiKey);
+    assert!(client.requests.is_empty());
+
+    let local_config =
+        OpenAiCompatibleConfig::new("http://localhost:11434/v1/chat/completions", "llava")
+            .without_required_api_key();
+    let result =
+        execute_vision_layout_detection(&mut client, &local_config, &[0, 0, 255, 255], 1, 1)
+            .expect("local endpoint can omit key");
+    assert!(result.is_empty());
+    assert_eq!(authorization_header(&client.requests[0].headers), None);
+}
+
+struct FakeVisionLayoutClient {
+    response: Result<VisionLayoutHttpResponse, OpenAiExecutionError>,
+    requests: Vec<VisionLayoutHttpRequestPlan>,
+}
+
+impl FakeVisionLayoutClient {
+    fn new(response: Result<VisionLayoutHttpResponse, OpenAiExecutionError>) -> Self {
+        Self {
+            response,
+            requests: Vec::new(),
+        }
+    }
+}
+
+impl VisionLayoutHttpClient for FakeVisionLayoutClient {
+    fn post_json(
+        &mut self,
+        request: &VisionLayoutHttpRequestPlan,
+    ) -> Result<VisionLayoutHttpResponse, OpenAiExecutionError> {
+        self.requests.push(request.clone());
+        self.response.clone()
+    }
 }
 
 fn authorization_header(headers: &[(String, String)]) -> Option<&str> {

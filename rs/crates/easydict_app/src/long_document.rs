@@ -1,15 +1,24 @@
+#[cfg(feature = "retained-dotnet-workers")]
 use crate::compat_client::DirectWorkerFacade;
-use crate::compat_protocol::{
-    local_ai_provider_modes, worker_events, BlockTranslatedEventData, ConfigureParams, IpcEvent,
-    ProgressEventData, SettingsSnapshot, StatusEventData, TranslateDocumentParams,
-    TranslateDocumentResult, TranslateParams,
-};
+#[cfg(feature = "retained-dotnet-workers")]
+use crate::compat_protocol::{worker_events, ConfigureParams, IpcEvent};
 use crate::content_preservation::{
     analyze_formula_preservation, protect_formula_block, resolve_formula_fallback,
     restore_formula_block, BlockContext, PreservationMode, ProtectedBlock, ProtectionPlan,
     RestoreOutcome, RestoreStatus, SoftValidationStatus,
 };
+use crate::doc_layout_yolo::{DocLayoutRegionType, DocLayoutYoloDetection};
+use crate::doc_layout_yolo_onnx::DocLayoutYoloOnnxSession;
 use crate::formula_protection::SoftProtectionWrapperKind;
+use crate::layout_model_download::{
+    default_model_cache_dir, ensure_layout_model_available_for_directory,
+    ensure_tatr_model_available_for_directory, LayoutModelDownloadConfig, LayoutModelPaths,
+    DOC_LAYOUT_MODEL_FILE_NAME, ONNX_RUNTIME_FILE_NAME, TATR_MODEL_FILE_NAME,
+};
+use crate::long_document_context::{
+    apply_preservation_hints, merge_page_partials, try_parse_page_partial, DocumentBlockIr,
+    DocumentContext, DocumentIr, PagePartial,
+};
 use crate::long_document_export::{
     build_bilingual_output_path, compose_bilingual_markdown, compose_bilingual_text,
     compose_monolingual_markdown, compose_monolingual_text, LongDocumentExportBlockType,
@@ -19,7 +28,14 @@ use crate::ocr::{
     merged_ocr_text, NativeOcrBackend, OcrBackend, OcrRecognizeParams, OcrResultDto,
     ReqwestOcrHttpClient,
 };
-use crate::openai_compatible::{CommandFoundryLocalEndpointResolver, FoundryLocalEndpointResolver};
+use crate::openai_compatible::{
+    CommandFoundryLocalEndpointResolver, FoundryLocalRuntimeController, OpenAiCompatibleConfig,
+};
+#[cfg(test)]
+use crate::openai_compatible::{
+    FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalRuntimeState,
+    FoundryLocalRuntimeStatus,
+};
 use crate::pdf_content_stream::extract_pdf_literal_strings;
 use crate::pdf_export_blocks::{
     build_pdf_overlay_blocks, PdfExportCheckpoint, PdfExportChunkMetadata, PdfExportSourceBlockType,
@@ -29,16 +45,27 @@ use crate::pdf_native_export::{
 };
 use crate::pdf_source_extraction::{
     block_context_for_pdf_source_block, pdf_export_chunk_metadata_for_source_block,
-    pdf_source_block_id, pdf_source_document_from_text_summary, PdfSourceBlock,
+    pdf_source_block_id, pdf_source_document_from_text_summary,
+    pdf_source_document_with_doc_layout_yolo_detections,
+    pdf_source_document_with_tatr_table_structures, PdfSourceBlock, PdfSourceDocument,
+    PdfSourcePageLayoutDetections, PdfSourcePageTableStructures,
 };
+use crate::protocol::{
+    local_ai_provider_modes, BlockTranslatedEventData, ProgressEventData, SettingsSnapshot,
+    StatusEventData, TranslateDocumentParams, TranslateDocumentResult, TranslateParams,
+};
+#[cfg(test)]
+use crate::quick_translate::auto_windows_ai_native_probe_status;
 use crate::quick_translate::{
     auto_foundry_local_native_probe_request, auto_openvino_native_fallback_request,
-    quick_translate_request_can_route_natively, run_quick_translate_service_with_native_route,
-    QuickQueryMode, QuickTranslateExecutionKind, QuickTranslateService,
-    QuickTranslateServiceRequest,
+    local_ai_quick_translate_native_preflight_error, quick_translate_request_can_route_natively,
+    run_quick_translate_service_with_native_route, QuickQueryMode, QuickTranslateExecutionKind,
+    QuickTranslateService, QuickTranslateServiceRequest,
 };
+use crate::resource_download::ReqwestResourceDownloadClient;
 use crate::retained_workers::RetainedWorkerPolicy;
-use crate::state::{EasydictUiState, TranslationResultPreview};
+use crate::state::{EasydictUiState, SettingsState, TranslationResultPreview};
+use crate::table_structure_onnx::TatrOnnxSession;
 use crate::translation_cache::{
     long_document_source_hash, long_document_translation_cache_path, LongDocumentTranslationCache,
 };
@@ -46,6 +73,10 @@ use crate::translation_language::TranslationLanguage;
 use crate::translation_services::{
     default_translation_service_descriptors, find_translation_service_descriptor,
     TranslationServiceDescriptor, TranslationServiceKind,
+};
+use crate::vision_layout::{
+    execute_vision_layout_detection, ReqwestVisionLayoutHttpClient, VisionLayoutDetection,
+    VisionLayoutRegionType,
 };
 use easydict_pdf_overlay::{
     overlay_pdf_text_blocks, PdfOverlayBlock as NativePdfOverlayBlock, PdfOverlayOptions,
@@ -55,6 +86,14 @@ use easydict_pdf_render::{
     extract_pdf_text_chars, render_pdf_pages_to_bgra_files, PdfTextExtractionOptions,
     PdfToBgraOptions,
 };
+#[cfg(test)]
+use easydict_windows_ai::WindowsAiLanguageModelProbe;
+use easydict_windows_ai::{
+    default_windows_ai_language_model_client, translate_with_client, windows_ai_status,
+    WindowsAiGenerationOptions, WindowsAiLanguage, WindowsAiLanguageModelClient,
+    WindowsAiReadyState, WindowsAiResponseStatus, WindowsAiTranslationRequest,
+};
+#[cfg(feature = "retained-dotnet-workers")]
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -70,6 +109,9 @@ const NO_FILE_SELECTED: &str = "No file selected";
 const MAX_HISTORY_ITEMS: usize = 50;
 const NATIVE_TEXT_CHUNK_CHAR_LIMIT: usize = 2_500;
 const NATIVE_PDF_EMPTY_TEXT_ERROR: &str = "Native PDF text extraction found no selectable text";
+const VISION_LAYOUT_GEMINI_OPENAI_ENDPOINT: &str =
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const VISION_LAYOUT_DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-flash";
 
 pub trait LongDocumentBackend {
     fn configure_longdoc_settings(
@@ -90,6 +132,7 @@ pub trait LongDocumentBackend {
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 impl LongDocumentBackend for DirectWorkerFacade {
     fn configure_longdoc_settings(
         &mut self,
@@ -217,6 +260,80 @@ impl NativeLongDocumentTranslator for QuickTranslateNativeLongDocumentTranslator
     }
 }
 
+#[derive(Clone)]
+pub struct WindowsAiNativeLongDocumentTranslator<C> {
+    client: C,
+}
+
+impl<C> WindowsAiNativeLongDocumentTranslator<C> {
+    pub fn new(client: C) -> Self {
+        Self { client }
+    }
+}
+
+impl<C> NativeLongDocumentTranslator for WindowsAiNativeLongDocumentTranslator<C>
+where
+    C: WindowsAiLanguageModelClient + Clone + Send,
+{
+    fn translate_chunk(
+        &mut self,
+        request: QuickTranslateServiceRequest,
+    ) -> Result<String, LongDocumentBackendError> {
+        if let Some(prompt) = windows_ai_context_generation_prompt(&request.params) {
+            return run_windows_ai_context_generation(&mut self.client, &prompt);
+        }
+
+        let translation_request =
+            windows_ai_translation_request_from_quick_params(&request.params)?;
+        translate_with_client(&mut self.client, &translation_request)
+            .map(|outcome| outcome.translated_text)
+            .map_err(|error| LongDocumentBackendError::new(error.to_string()))
+    }
+}
+
+fn windows_ai_context_generation_prompt(params: &TranslateParams) -> Option<String> {
+    let custom_prompt = params
+        .custom_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|prompt| {
+            prompt.contains("Do NOT translate the document text")
+                || prompt.contains("Merge them into a single 1-3 sentence summary")
+        })?;
+    let text = params.text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    Some(format!("{custom_prompt}\n\n{text}"))
+}
+
+fn run_windows_ai_context_generation<C>(
+    client: &mut C,
+    prompt: &str,
+) -> Result<String, LongDocumentBackendError>
+where
+    C: WindowsAiLanguageModelClient,
+{
+    let status = windows_ai_status(client);
+    if status.ready_state != WindowsAiReadyState::Ready {
+        return Err(LongDocumentBackendError::new(status.message));
+    }
+
+    let response = client
+        .generate(prompt, WindowsAiGenerationOptions::default())
+        .map_err(|error| LongDocumentBackendError::new(error.to_string()))?;
+    if response.status != WindowsAiResponseStatus::Complete {
+        return Err(LongDocumentBackendError::new(
+            response
+                .error_message
+                .unwrap_or_else(|| format!("Phi Silica returned {:?}.", response.status)),
+        ));
+    }
+
+    Ok(response.text.trim().to_string())
+}
+
 pub fn begin_long_document_translate(
     state: &mut EasydictUiState,
 ) -> Result<LongDocumentServiceRequest, LongDocumentStartError> {
@@ -258,6 +375,8 @@ pub fn build_long_document_request(
         .then(|| non_empty(&long_doc.page_range))
         .flatten();
 
+    let (vision_endpoint, vision_api_key, vision_model) =
+        long_document_vision_layout_params(&state.settings);
     let params = TranslateDocumentParams {
         input_path: match &input {
             LongDocumentInput::File(path) => path.clone(),
@@ -272,9 +391,9 @@ pub fn build_long_document_request(
         pdf_export_mode: Some("ContentStreamReplacement".to_string()),
         layout_detection: Some(state.settings.layout_detection_mode.clone()),
         page_range,
-        vision_endpoint: None,
-        vision_api_key: None,
-        vision_model: None,
+        vision_endpoint,
+        vision_api_key,
+        vision_model,
         result_json_path: None,
     };
 
@@ -309,8 +428,10 @@ fn run_long_document_request_with_current_app_dir_and_worker_policy(
     };
 
     let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
-    let request = match try_run_native_text_long_document_request_with_auto_foundry_probe(
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    let request = match try_run_native_text_long_document_request_with_local_ai_client(
         request,
+        &mut windows_ai_client,
         &mut foundry_resolver,
     ) {
         NativeLongDocumentDispatch::Handled(outcome) => return outcome,
@@ -322,7 +443,7 @@ fn run_long_document_request_with_current_app_dir_and_worker_policy(
     }
 
     match current_app_dir() {
-        Ok(app_dir) => run_long_document_request_with_packaged_app_dir_after_native_probe(
+        Ok(app_dir) => run_long_document_request_with_app_dir_after_native_probe(
             request,
             app_dir,
             worker_policy,
@@ -335,37 +456,117 @@ pub fn run_long_document_request_with_native_route<B: LongDocumentBackend>(
     backend: &mut B,
     request: LongDocumentServiceRequest,
 ) -> LongDocumentOutcome {
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_long_document_request_with_native_route_and_local_ai_client(
+        backend,
+        request,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+    )
+}
+
+fn run_long_document_request_with_native_route_and_local_ai_client<
+    B: LongDocumentBackend,
+    C: WindowsAiLanguageModelClient + Clone + Send,
+    R: FoundryLocalRuntimeController,
+>(
+    backend: &mut B,
+    request: LongDocumentServiceRequest,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
+) -> LongDocumentOutcome {
     if let Some(error) = local_long_document_route_preflight_error(&request) {
         return long_document_backend_error_outcome(request, error);
     }
 
-    match try_run_native_text_long_document_request(request) {
-        NativeLongDocumentDispatch::Handled(outcome) => outcome,
-        NativeLongDocumentDispatch::NeedsWorker(request) => {
-            if let Some(error) = local_long_document_worker_preflight_error(
-                &request,
-                RetainedWorkerPolicy::from_environment(),
-            ) {
-                return long_document_backend_error_outcome(request, error);
-            }
+    let request = match try_run_native_text_long_document_request(request) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
 
-            run_long_document_request(backend, request)
-        }
+    let request = match try_run_native_text_long_document_request_with_local_ai_client(
+        request,
+        windows_ai_client,
+        foundry_resolver,
+    ) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
+
+    if let Some(error) =
+        local_long_document_worker_preflight_error(&request, RetainedWorkerPolicy::all_disabled())
+    {
+        return long_document_backend_error_outcome(request, error);
     }
+
+    run_long_document_request(backend, request)
 }
 
-pub fn run_long_document_request_with_packaged_app_dir(
+#[cfg(test)]
+fn run_long_document_request_with_native_route_and_foundry_resolver<
+    B: LongDocumentBackend,
+    P: WindowsAiLanguageModelProbe,
+    R: FoundryLocalRuntimeController,
+>(
+    backend: &mut B,
+    request: LongDocumentServiceRequest,
+    windows_ai_probe: &mut P,
+    foundry_resolver: &mut R,
+) -> LongDocumentOutcome {
+    if let Some(error) = local_long_document_route_preflight_error(&request) {
+        return long_document_backend_error_outcome(request, error);
+    }
+
+    let request = match try_run_native_text_long_document_request(request) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
+
+    let request = match try_run_native_text_long_document_request_with_auto_local_ai_probes(
+        request,
+        windows_ai_probe,
+        foundry_resolver,
+    ) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
+
+    if let Some(error) =
+        local_long_document_worker_preflight_error(&request, RetainedWorkerPolicy::all_disabled())
+    {
+        return long_document_backend_error_outcome(request, error);
+    }
+
+    run_long_document_request(backend, request)
+}
+
+pub fn run_long_document_request_with_app_dir(
     request: LongDocumentServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> LongDocumentOutcome {
-    run_long_document_request_with_packaged_app_dir_and_worker_policy(
+    run_long_document_request_with_app_dir_and_worker_policy_internal(
         request,
         app_dir,
         RetainedWorkerPolicy::all_disabled(),
     )
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
+#[doc(hidden)]
 pub fn run_long_document_request_with_packaged_app_dir_and_worker_policy(
+    request: LongDocumentServiceRequest,
+    app_dir: impl AsRef<Path>,
+    worker_policy: RetainedWorkerPolicy,
+) -> LongDocumentOutcome {
+    run_long_document_request_with_app_dir_and_worker_policy_internal(
+        request,
+        app_dir,
+        worker_policy.with_hybrid_runtime_profile_from_environment(),
+    )
+}
+
+fn run_long_document_request_with_app_dir_and_worker_policy_internal(
     request: LongDocumentServiceRequest,
     app_dir: impl AsRef<Path>,
     worker_policy: RetainedWorkerPolicy,
@@ -380,18 +581,51 @@ pub fn run_long_document_request_with_packaged_app_dir_and_worker_policy(
     };
 
     let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
-    let request = match try_run_native_text_long_document_request_with_auto_foundry_probe(
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    let request = match try_run_native_text_long_document_request_with_local_ai_client(
         request,
+        &mut windows_ai_client,
         &mut foundry_resolver,
     ) {
         NativeLongDocumentDispatch::Handled(outcome) => return outcome,
         NativeLongDocumentDispatch::NeedsWorker(request) => request,
     };
 
-    run_long_document_request_with_packaged_app_dir_after_native_probe(
+    run_long_document_request_with_app_dir_after_native_probe(request, app_dir, worker_policy)
+}
+
+#[doc(hidden)]
+pub fn run_long_document_request_with_app_dir_and_native_local_ai_client<
+    C: WindowsAiLanguageModelClient + Clone + Send,
+    R: FoundryLocalRuntimeController,
+>(
+    request: LongDocumentServiceRequest,
+    app_dir: impl AsRef<Path>,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
+) -> LongDocumentOutcome {
+    if let Some(error) = local_long_document_route_preflight_error(&request) {
+        return long_document_backend_error_outcome(request, error);
+    }
+
+    let request = match try_run_native_text_long_document_request(request) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
+
+    let request = match try_run_native_text_long_document_request_with_local_ai_client(
+        request,
+        windows_ai_client,
+        foundry_resolver,
+    ) {
+        NativeLongDocumentDispatch::Handled(outcome) => return outcome,
+        NativeLongDocumentDispatch::NeedsWorker(request) => request,
+    };
+
+    run_long_document_request_with_app_dir_after_native_probe(
         request,
         app_dir,
-        worker_policy,
+        RetainedWorkerPolicy::all_disabled(),
     )
 }
 
@@ -410,12 +644,14 @@ fn try_run_native_text_long_document_request(
     NativeLongDocumentDispatch::Handled(run_native_text_long_document_request(request))
 }
 
-fn try_run_native_text_long_document_request_with_auto_foundry_probe<R>(
+fn try_run_native_text_long_document_request_with_local_ai_client<C, R>(
     request: LongDocumentServiceRequest,
+    windows_ai_client: &mut C,
     foundry_resolver: &mut R,
 ) -> NativeLongDocumentDispatch
 where
-    R: FoundryLocalEndpointResolver,
+    C: WindowsAiLanguageModelClient + Clone + Send,
+    R: FoundryLocalRuntimeController,
 {
     let Some(probe_request) =
         native_quick_translate_request_for_chunk(&request, "native route probe")
@@ -423,9 +659,70 @@ where
         return NativeLongDocumentDispatch::NeedsWorker(request);
     };
 
+    if local_ai_long_document_request_uses_explicit_windows_ai(&probe_request) {
+        return NativeLongDocumentDispatch::Handled(
+            run_native_text_long_document_request_with_windows_ai_client(
+                request,
+                windows_ai_client,
+            ),
+        );
+    }
+
+    if local_ai_long_document_request_uses_auto_windows_ai(&probe_request) {
+        let status = windows_ai_status(windows_ai_client);
+        if matches!(status.ready_state, WindowsAiReadyState::Ready) {
+            return NativeLongDocumentDispatch::Handled(
+                run_native_text_long_document_request_with_windows_ai_client(
+                    request,
+                    windows_ai_client,
+                ),
+            );
+        }
+    }
+
+    try_run_native_text_long_document_request_with_auto_local_ai_fallbacks(
+        request,
+        &probe_request,
+        foundry_resolver,
+    )
+}
+
+#[cfg(test)]
+fn try_run_native_text_long_document_request_with_auto_local_ai_probes<P, R>(
+    request: LongDocumentServiceRequest,
+    windows_ai_probe: &mut P,
+    foundry_resolver: &mut R,
+) -> NativeLongDocumentDispatch
+where
+    P: WindowsAiLanguageModelProbe,
+    R: FoundryLocalRuntimeController,
+{
+    let Some(probe_request) =
+        native_quick_translate_request_for_chunk(&request, "native route probe")
+    else {
+        return NativeLongDocumentDispatch::NeedsWorker(request);
+    };
+
+    let _ = auto_windows_ai_native_probe_status(&probe_request, windows_ai_probe);
+
+    try_run_native_text_long_document_request_with_auto_local_ai_fallbacks(
+        request,
+        &probe_request,
+        foundry_resolver,
+    )
+}
+
+fn try_run_native_text_long_document_request_with_auto_local_ai_fallbacks<R>(
+    request: LongDocumentServiceRequest,
+    probe_request: &QuickTranslateServiceRequest,
+    foundry_resolver: &mut R,
+) -> NativeLongDocumentDispatch
+where
+    R: FoundryLocalRuntimeController,
+{
     let Some(native_probe_request) =
-        auto_foundry_local_native_probe_request(&probe_request, foundry_resolver)
-            .or_else(|| auto_openvino_native_fallback_request(&probe_request))
+        auto_foundry_local_native_probe_request(probe_request, foundry_resolver)
+            .or_else(|| auto_openvino_native_fallback_request(probe_request))
     else {
         return NativeLongDocumentDispatch::NeedsWorker(request);
     };
@@ -435,7 +732,7 @@ where
     try_run_native_text_long_document_request(native_request)
 }
 
-fn run_long_document_request_with_packaged_app_dir_after_native_probe(
+fn run_long_document_request_with_app_dir_after_native_probe(
     request: LongDocumentServiceRequest,
     app_dir: impl AsRef<Path>,
     worker_policy: RetainedWorkerPolicy,
@@ -444,6 +741,22 @@ fn run_long_document_request_with_packaged_app_dir_after_native_probe(
         return long_document_backend_error_outcome(request, error);
     }
 
+    #[cfg(not(feature = "retained-dotnet-workers"))]
+    {
+        let _ = app_dir;
+        return long_document_backend_error_outcome(
+            request,
+            LongDocumentBackendError::new(
+                RetainedWorkerPolicy::all_disabled()
+                    .longdoc_worker_disabled_message()
+                    .unwrap_or(
+                        "Long Document translation requires a Rust-native route for this request.",
+                    ),
+            ),
+        );
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
     match DirectWorkerFacade::spawn_packaged_longdoc(app_dir) {
         Ok(mut backend) => run_long_document_request(&mut backend, request),
         Err(error) => {
@@ -493,6 +806,17 @@ pub fn run_native_text_long_document_request(
     request: LongDocumentServiceRequest,
 ) -> LongDocumentOutcome {
     let mut translator = QuickTranslateNativeLongDocumentTranslator;
+    run_native_text_long_document_request_with_translator(&mut translator, request)
+}
+
+fn run_native_text_long_document_request_with_windows_ai_client<C>(
+    request: LongDocumentServiceRequest,
+    windows_ai_client: &mut C,
+) -> LongDocumentOutcome
+where
+    C: WindowsAiLanguageModelClient + Clone + Send,
+{
+    let mut translator = WindowsAiNativeLongDocumentTranslator::new(windows_ai_client.clone());
     run_native_text_long_document_request_with_translator(&mut translator, request)
 }
 
@@ -653,6 +977,8 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
     let mut events = vec![LongDocumentEvent::Status(StatusEventData {
         message: "Translating text document natively".to_string(),
     })];
+    let document_context_plan =
+        extract_native_document_context_plan(translator, request, &chunks, &mut events);
     let mut translations = Vec::with_capacity(chunks.len());
     translations.resize_with(chunks.len(), || None);
     let mut failed_chunk_indexes = Vec::new();
@@ -686,7 +1012,9 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
             }));
 
             let preparation = prepare_native_text_chunk_for_translation(request, chunk);
-            if let NativeTextChunkPreparation::PreserveOriginal = preparation {
+            if document_context_plan.should_preserve_chunk(index)
+                || matches!(&preparation, NativeTextChunkPreparation::PreserveOriginal)
+            {
                 events.push(LongDocumentEvent::BlockTranslated(
                     BlockTranslatedEventData {
                         chunk_index: index as u32,
@@ -718,6 +1046,10 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
                 failed_chunk_indexes.push(index as u32);
                 continue;
             };
+            apply_native_text_document_context_prompt(
+                &mut translate_request,
+                document_context_plan.prompt_for_page(chunk.page_number),
+            );
             apply_native_text_formula_prompt(&mut translate_request, protection.as_ref(), 0, false);
 
             let chunk_hash =
@@ -788,22 +1120,27 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
             || "Translation failed for all chunks.".to_string(),
         )))
     } else {
-        export_native_text_document(request, input_kind, &chunks, &translations).map(|export| {
-            TranslateDocumentResult {
-                state: if failed_chunk_indexes.is_empty() {
-                    "Completed".to_string()
-                } else {
-                    "PartiallyCompleted".to_string()
-                },
-                output_path: Some(export.output_path),
-                bilingual_output_path: export.bilingual_output_path,
-                total_chunks,
-                succeeded_chunks,
-                failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
-                    .then(|| failed_chunk_indexes.to_vec()),
-                quality_report: None,
-                result_json_path: None,
-            }
+        export_native_text_document(
+            request,
+            input_kind,
+            &chunks,
+            &translations,
+            &document_context_plan.preserve_chunk_indexes,
+        )
+        .map(|export| TranslateDocumentResult {
+            state: if failed_chunk_indexes.is_empty() {
+                "Completed".to_string()
+            } else {
+                "PartiallyCompleted".to_string()
+            },
+            output_path: Some(export.output_path),
+            bilingual_output_path: export.bilingual_output_path,
+            total_chunks,
+            succeeded_chunks,
+            failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
+                .then(|| failed_chunk_indexes.to_vec()),
+            quality_report: None,
+            result_json_path: None,
         })
     };
 
@@ -926,6 +1263,323 @@ struct NativeTextChunkResult {
 }
 
 const NATIVE_TEXT_MAX_RETRIES_PER_CHUNK: u32 = 1;
+const NATIVE_DOCUMENT_CONTEXT_MAP_PAGE_PROMPT: &str = r#"Do NOT translate the document text. Analyze it and respond with a single JSON object (no prose, no markdown fences) with exactly these three fields:
+
+"summary": a 1-3 sentence overview of this page's content, topic, domain, and terminology style.
+
+"glossary": an object mapping source-language terms to chosen target-language renderings. Include proper nouns, place names, person names, product / model names, and technical terms. Pick ONE consistent rendering per term. Example: {"Transformer": "Transformer", "self-attention": "自注意力"}.
+
+"preservation_hints": an array of verbatim source-text snippets that should NOT be translated in the second pass. Include items like:
+  * tabular data: EVERY header cell and EVERY data row of any table on this page (numeric benchmark tables, hyperparameter tables, model comparison tables — list each cell value as its own entry, and also list the column header row verbatim)
+  * code fragments, command lines, file paths
+  * URLs and email addresses
+  * identifiers, variable names, hyperparameter lists
+  * proper nouns and product names that should stay verbatim
+  * short fragments that look like noise / garbled text
+  * any standalone snippet whose translation would degrade quality
+Each entry must be a verbatim substring of the source so the second pass can match by Contains/Equals. Do not paraphrase. Do not add quote marks. If there are no items in a category, omit them.
+
+Do NOT include section or subsection headings (short standalone lines that label a structural part of the document, typically beginning with a numeric index like "1", "2.3", or with a common part-name word) — those should always be translated.
+
+Return ONLY the JSON object, nothing else."#;
+const NATIVE_DOCUMENT_CONTEXT_REDUCE_SUMMARY_PROMPT: &str = r#"The numbered list below contains partial summaries of consecutive pages of the same document. Merge them into a single 1-3 sentence summary that covers the document as a whole -- its topic, domain, and terminology style. Do not list the pages individually. Respond with the merged summary text only, no JSON, no prose around it."#;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct NativeDocumentContextPlan {
+    context: DocumentContext,
+    glossary_by_page: BTreeMap<u32, Vec<(String, String)>>,
+    preserve_chunk_indexes: BTreeSet<usize>,
+}
+
+impl NativeDocumentContextPlan {
+    fn empty() -> Self {
+        Self::default()
+    }
+
+    fn should_preserve_chunk(&self, index: usize) -> bool {
+        self.preserve_chunk_indexes.contains(&index)
+    }
+
+    fn prompt_for_page(&self, page_number: u32) -> Option<String> {
+        let has_summary = !self.context.summary.trim().is_empty();
+        let glossary = self.glossary_by_page.get(&page_number);
+        let has_glossary = glossary.is_some_and(|items| !items.is_empty());
+        if !has_summary && !has_glossary {
+            return None;
+        }
+
+        let mut parts = Vec::with_capacity(2);
+        if has_summary {
+            parts.push(format!("Document summary: {}", self.context.summary.trim()));
+        }
+        if let Some(glossary) = glossary.filter(|items| !items.is_empty()) {
+            let glossary_lines = glossary
+                .iter()
+                .map(|(source, target)| format!("  {source} -> {target}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            parts.push(format!(
+                "Use these term translations consistently across the document:\n{glossary_lines}"
+            ));
+        }
+
+        Some(parts.join("\n\n"))
+    }
+}
+
+fn extract_native_document_context_plan<T: NativeLongDocumentTranslator>(
+    translator: &mut T,
+    request: &LongDocumentServiceRequest,
+    chunks: &[NativeTextSourceChunk],
+    events: &mut Vec<LongDocumentEvent>,
+) -> NativeDocumentContextPlan {
+    if request
+        .settings
+        .long_doc_enable_document_context_pass
+        .unwrap_or(false)
+        == false
+    {
+        return NativeDocumentContextPlan::empty();
+    }
+
+    let page_batches = native_document_context_page_batches(chunks);
+    if page_batches.is_empty() {
+        return NativeDocumentContextPlan::empty();
+    }
+
+    events.push(LongDocumentEvent::Status(StatusEventData {
+        message: "Analyzing document context natively".to_string(),
+    }));
+
+    let max_concurrency = request
+        .settings
+        .long_doc_max_concurrency
+        .unwrap_or(1)
+        .clamp(1, 16)
+        .max(1) as usize;
+    let partials = translate_native_document_context_pages(
+        translator,
+        request,
+        &page_batches,
+        max_concurrency,
+        events,
+    );
+    let mut context = merge_page_partials(&partials);
+    if context == DocumentContext::empty() {
+        return NativeDocumentContextPlan::empty();
+    }
+    context.summary =
+        reduce_native_document_context_summary(translator, request, &partials, &context.summary);
+
+    let preserve_chunk_indexes = native_document_context_preserve_chunk_indexes(chunks, &context);
+    let glossary_by_page =
+        native_document_context_glossary_by_page(chunks, &context, &preserve_chunk_indexes);
+
+    NativeDocumentContextPlan {
+        context,
+        glossary_by_page,
+        preserve_chunk_indexes,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct NativeDocumentContextPageBatch {
+    page_number: u32,
+    text: String,
+}
+
+fn native_document_context_page_batches(
+    chunks: &[NativeTextSourceChunk],
+) -> Vec<NativeDocumentContextPageBatch> {
+    let mut pages: BTreeMap<u32, Vec<String>> = BTreeMap::new();
+    for chunk in chunks {
+        let text = chunk.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        pages
+            .entry(chunk.page_number)
+            .or_default()
+            .push(text.to_string());
+    }
+
+    pages
+        .into_iter()
+        .filter_map(|(page_number, texts)| {
+            let text = texts.join("\n\n");
+            (!text.trim().is_empty())
+                .then_some(NativeDocumentContextPageBatch { page_number, text })
+        })
+        .collect()
+}
+
+fn translate_native_document_context_pages<T: NativeLongDocumentTranslator>(
+    translator: &T,
+    request: &LongDocumentServiceRequest,
+    page_batches: &[NativeDocumentContextPageBatch],
+    max_concurrency: usize,
+    events: &mut Vec<LongDocumentEvent>,
+) -> Vec<PagePartial> {
+    let mut partials = Vec::with_capacity(page_batches.len());
+    let mut next_index = 0;
+
+    while next_index < page_batches.len() {
+        let batch_start = next_index;
+        let batch_end = page_batches.len().min(batch_start + max_concurrency.max(1));
+        let batch = page_batches[batch_start..batch_end].to_vec();
+        next_index = batch_end;
+
+        let batch_results = std::thread::scope(|scope| {
+            let handles = batch
+                .into_iter()
+                .map(|page| {
+                    let mut worker = translator.clone();
+                    scope.spawn(move || {
+                        translate_native_document_context_page(&mut worker, request, &page)
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap_or_else(|_| PagePartial::failed(0)))
+                .collect::<Vec<_>>()
+        });
+
+        partials.extend(batch_results);
+        events.push(LongDocumentEvent::Progress(ProgressEventData {
+            stage: "DocumentContext".to_string(),
+            current_block: partials.len() as u32,
+            total_blocks: page_batches.len() as u32,
+            current_page: partials
+                .last()
+                .map(|partial| partial.page_number.max(0) as u32)
+                .unwrap_or(0),
+            total_pages: page_batches.len() as u32,
+            percentage: (partials.len() as f64 / page_batches.len() as f64) * 100.0,
+            current_block_preview: None,
+        }));
+    }
+
+    partials
+}
+
+fn translate_native_document_context_page<T: NativeLongDocumentTranslator>(
+    translator: &mut T,
+    request: &LongDocumentServiceRequest,
+    page: &NativeDocumentContextPageBatch,
+) -> PagePartial {
+    let Some(mut context_request) = native_quick_translate_request_for_chunk(request, &page.text)
+    else {
+        return PagePartial::failed(page.page_number as i32);
+    };
+    context_request.params.custom_prompt =
+        Some(NATIVE_DOCUMENT_CONTEXT_MAP_PAGE_PROMPT.to_string());
+
+    match translator.translate_chunk(context_request) {
+        Ok(raw) => try_parse_page_partial(&raw, page.page_number as i32)
+            .unwrap_or_else(|| PagePartial::failed(page.page_number as i32)),
+        Err(_) => PagePartial::failed(page.page_number as i32),
+    }
+}
+
+fn reduce_native_document_context_summary<T: NativeLongDocumentTranslator>(
+    translator: &mut T,
+    request: &LongDocumentServiceRequest,
+    partials: &[PagePartial],
+    fallback_summary: &str,
+) -> String {
+    let summaries = partials
+        .iter()
+        .filter(|partial| !partial.failed)
+        .map(|partial| (partial.page_number, partial.summary.trim()))
+        .filter(|(_, summary)| !summary.is_empty())
+        .collect::<Vec<_>>();
+    if summaries.len() <= 1 {
+        return fallback_summary.trim().to_string();
+    }
+
+    let summary_text = summaries
+        .iter()
+        .map(|(page_number, summary)| format!("Page {page_number}: {summary}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let Some(mut summary_request) =
+        native_quick_translate_request_for_chunk(request, &summary_text)
+    else {
+        return fallback_summary.trim().to_string();
+    };
+    summary_request.params.custom_prompt =
+        Some(NATIVE_DOCUMENT_CONTEXT_REDUCE_SUMMARY_PROMPT.to_string());
+
+    translator
+        .translate_chunk(summary_request)
+        .ok()
+        .map(|summary| summary.trim().to_string())
+        .filter(|summary| !summary.is_empty())
+        .unwrap_or_else(|| fallback_summary.trim().to_string())
+}
+
+fn native_document_context_preserve_chunk_indexes(
+    chunks: &[NativeTextSourceChunk],
+    context: &DocumentContext,
+) -> BTreeSet<usize> {
+    if context.preservation_hints.is_empty() {
+        return BTreeSet::new();
+    }
+
+    let ir = DocumentIr::new(
+        chunks
+            .iter()
+            .map(|chunk| DocumentBlockIr::new(chunk.text.clone()))
+            .collect(),
+    );
+    let rewritten = apply_preservation_hints(&ir, &context.preservation_hints);
+    rewritten
+        .blocks
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, block)| {
+            (block.translation_skipped || block.preserve_original_text_in_pdf_export)
+                .then_some(index)
+        })
+        .collect()
+}
+
+fn native_document_context_glossary_by_page(
+    chunks: &[NativeTextSourceChunk],
+    context: &DocumentContext,
+    preserve_chunk_indexes: &BTreeSet<usize>,
+) -> BTreeMap<u32, Vec<(String, String)>> {
+    if context.glossary.is_empty() {
+        return BTreeMap::new();
+    }
+
+    let mut page_texts: BTreeMap<u32, String> = BTreeMap::new();
+    for (index, chunk) in chunks.iter().enumerate() {
+        if preserve_chunk_indexes.contains(&index) {
+            continue;
+        }
+        let page_text = page_texts.entry(chunk.page_number).or_default();
+        if !page_text.is_empty() {
+            page_text.push('\n');
+        }
+        page_text.push_str(&chunk.text);
+    }
+
+    page_texts
+        .into_iter()
+        .map(|(page_number, page_text)| {
+            let matched = context
+                .glossary
+                .iter()
+                .filter(|(source, _)| !source.is_empty() && page_text.contains(source.as_str()))
+                .map(|(source, target)| (source.clone(), target.clone()))
+                .collect::<Vec<_>>();
+            (page_number, matched)
+        })
+        .collect()
+}
 
 fn prepare_native_text_chunk_for_translation(
     request: &LongDocumentServiceRequest,
@@ -1003,6 +1657,22 @@ fn apply_native_text_formula_prompt(
     request.params.custom_prompt = Some(match request.params.custom_prompt.take() {
         Some(existing) if !existing.trim().is_empty() => format!("{existing}\n{prompt}"),
         _ => prompt,
+    });
+}
+
+fn apply_native_text_document_context_prompt(
+    request: &mut QuickTranslateServiceRequest,
+    context_prompt: Option<String>,
+) {
+    let Some(context_prompt) = context_prompt.filter(|prompt| !prompt.trim().is_empty()) else {
+        return;
+    };
+
+    request.params.custom_prompt = Some(match request.params.custom_prompt.take() {
+        Some(existing) if !existing.trim().is_empty() => {
+            format!("{context_prompt}\n\n{existing}")
+        }
+        _ => context_prompt,
     });
 }
 
@@ -1469,28 +2139,25 @@ fn read_native_text_source_chunks(
             .collect()),
         LongDocumentInput::File(path) => match input_kind {
             NativeTextInputKind::PdfText => {
-                if let Ok(chunks) =
-                    try_read_native_pdf_source_chunks(path, request.params.page_range.as_deref())
-                {
+                validate_native_pdf_input_file(path)?;
+
+                if let Ok(chunks) = try_read_native_pdf_source_chunks(
+                    request,
+                    path,
+                    request.params.page_range.as_deref(),
+                ) {
                     if !chunks.is_empty() {
                         return Ok(chunks);
                     }
                 }
 
-                let text_chunks =
-                    read_native_pdf_text_source_chunks(path, request.params.page_range.as_deref())?;
-                if !text_chunks.is_empty() {
-                    return Ok(text_chunks);
-                }
-
-                match read_native_pdf_ocr_source_chunks(
+                read_native_pdf_text_or_ocr_source_chunks(
                     request,
                     path,
                     request.params.page_range.as_deref(),
-                ) {
-                    Ok(chunks) if !chunks.is_empty() => Ok(chunks),
-                    _ => Ok(text_chunks),
-                }
+                    read_native_pdf_text_source_chunks,
+                    read_native_pdf_ocr_source_chunks,
+                )
             }
             NativeTextInputKind::PlainText | NativeTextInputKind::Markdown => {
                 fs::read_to_string(path)
@@ -1512,12 +2179,64 @@ fn read_native_text_source_chunks(
     }
 }
 
+fn read_native_pdf_text_or_ocr_source_chunks<TR, OR>(
+    request: &LongDocumentServiceRequest,
+    path: &str,
+    page_range: Option<&str>,
+    mut text_reader: TR,
+    mut ocr_reader: OR,
+) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>
+where
+    TR: FnMut(&str, Option<&str>) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>,
+    OR: FnMut(
+        &LongDocumentServiceRequest,
+        &str,
+        Option<&str>,
+    ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>,
+{
+    match text_reader(path, page_range) {
+        Ok(text_chunks) if !text_chunks.is_empty() => Ok(text_chunks),
+        Ok(text_chunks) => match ocr_reader(request, path, page_range) {
+            Ok(ocr_chunks) if !ocr_chunks.is_empty() => Ok(ocr_chunks),
+            Ok(_) => Ok(text_chunks),
+            Err(ocr_error) => Err(native_pdf_empty_text_with_ocr_error(ocr_error)),
+        },
+        Err(text_error) => match ocr_reader(request, path, page_range) {
+            Ok(ocr_chunks) if !ocr_chunks.is_empty() => Ok(ocr_chunks),
+            Ok(_) => Err(text_error),
+            Err(ocr_error) => Err(native_pdf_text_extraction_with_ocr_error(
+                text_error, ocr_error,
+            )),
+        },
+    }
+}
+
+fn native_pdf_text_extraction_with_ocr_error(
+    text_error: LongDocumentBackendError,
+    ocr_error: LongDocumentBackendError,
+) -> LongDocumentBackendError {
+    LongDocumentBackendError::new(format!(
+        "{}; OCR fallback failed: {}",
+        text_error.message, ocr_error.message
+    ))
+}
+
+fn native_pdf_empty_text_with_ocr_error(
+    ocr_error: LongDocumentBackendError,
+) -> LongDocumentBackendError {
+    LongDocumentBackendError::new(format!(
+        "{}; OCR fallback failed: {}",
+        NATIVE_PDF_EMPTY_TEXT_ERROR, ocr_error.message
+    ))
+}
+
 fn try_read_native_pdf_source_chunks(
+    request: &LongDocumentServiceRequest,
     path: &str,
     page_range: Option<&str>,
 ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError> {
     try_read_native_pdf_source_chunks_with_extractor(path, page_range, |options| {
-        read_native_pdf_source_chunks_with_options(options)
+        read_native_pdf_source_chunks_with_options(options, request)
     })
 }
 
@@ -1551,6 +2270,7 @@ where
 
 fn read_native_pdf_source_chunks_with_options(
     options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
 ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError> {
     let input_path = options.input_pdf.display();
     let summary = extract_pdf_text_chars(options).map_err(|error| {
@@ -1559,6 +2279,8 @@ fn read_native_pdf_source_chunks_with_options(
         ))
     })?;
     let document = pdf_source_document_from_text_summary(&summary);
+    let document =
+        try_enrich_native_pdf_source_document_with_doc_layout_yolo(options, request, document);
     Ok(document
         .pages
         .iter()
@@ -1573,6 +2295,539 @@ fn read_native_pdf_source_chunks_with_options(
             NativeTextSourceChunk::from_pdf_block(block, chunk_index, page_block_count)
         })
         .collect())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NativePdfLayoutDetectionMode {
+    Auto,
+    Heuristic,
+    OnnxLocal,
+    VisionLlm,
+}
+
+fn try_enrich_native_pdf_source_document_with_doc_layout_yolo(
+    options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
+    document: PdfSourceDocument,
+) -> PdfSourceDocument {
+    let mode = native_pdf_layout_detection_mode(request);
+    if mode == NativePdfLayoutDetectionMode::VisionLlm {
+        return try_enrich_native_pdf_source_document_with_vision_layout(
+            options, request, document,
+        );
+    }
+
+    let Some(paths) = native_pdf_doc_layout_yolo_paths(request) else {
+        return document;
+    };
+    ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(request);
+    if !paths.native_lib_path.is_file() || !paths.doc_layout_model_path.is_file() {
+        return document;
+    }
+
+    match detect_native_pdf_doc_layout_yolo_pages(options, request, &paths) {
+        Ok(result) if !result.is_empty() => {
+            let document = if result.layouts.is_empty() {
+                document
+            } else {
+                pdf_source_document_with_doc_layout_yolo_detections(&document, &result.layouts)
+            };
+            if result.table_structures.is_empty() {
+                document
+            } else {
+                pdf_source_document_with_tatr_table_structures(&document, &result.table_structures)
+            }
+        }
+        _ => document,
+    }
+}
+
+fn try_enrich_native_pdf_source_document_with_vision_layout(
+    options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
+    document: PdfSourceDocument,
+) -> PdfSourceDocument {
+    let Some(config) = native_pdf_vision_layout_config(request) else {
+        return document;
+    };
+
+    match detect_native_pdf_vision_layout_pages(options, request, &config) {
+        Ok(layouts) if !layouts.is_empty() => {
+            pdf_source_document_with_doc_layout_yolo_detections(&document, &layouts)
+        }
+        _ => document,
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct NativePdfDocLayoutDetectionResult {
+    layouts: Vec<PdfSourcePageLayoutDetections>,
+    table_structures: Vec<PdfSourcePageTableStructures>,
+}
+
+impl NativePdfDocLayoutDetectionResult {
+    fn is_empty(&self) -> bool {
+        self.layouts.is_empty() && self.table_structures.is_empty()
+    }
+}
+
+fn detect_native_pdf_doc_layout_yolo_pages(
+    options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
+    paths: &LayoutModelPaths,
+) -> Result<NativePdfDocLayoutDetectionResult, LongDocumentBackendError> {
+    let output_dir = native_pdf_layout_temp_dir(&options.input_pdf);
+    let result =
+        detect_native_pdf_doc_layout_yolo_pages_in_directory(options, request, paths, &output_dir);
+    let _ = fs::remove_dir_all(&output_dir);
+    result
+}
+
+fn detect_native_pdf_doc_layout_yolo_pages_in_directory(
+    options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
+    paths: &LayoutModelPaths,
+    output_dir: &Path,
+) -> Result<NativePdfDocLayoutDetectionResult, LongDocumentBackendError> {
+    let mut render_options = PdfToBgraOptions::new(&options.input_pdf, output_dir);
+    render_options.page_selection = options.page_selection.clone();
+    render_options.pdfium_dir = options.pdfium_dir.clone();
+    let render_summary = render_pdf_pages_to_bgra_files(&render_options).map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not render PDF pages for DocLayout-YOLO '{}': {error}",
+            options.input_pdf.display()
+        ))
+    })?;
+
+    let runtime_dir = paths.native_lib_path.parent().ok_or_else(|| {
+        LongDocumentBackendError::new(format!(
+            "Could not resolve ONNX Runtime directory from '{}'",
+            paths.native_lib_path.display()
+        ))
+    })?;
+    let mut session =
+        DocLayoutYoloOnnxSession::from_model_paths(runtime_dir, &paths.doc_layout_model_path)
+            .map_err(|error| {
+                LongDocumentBackendError::new(format!("Could not load DocLayout-YOLO: {error}"))
+            })?;
+    let mut tatr_session = None;
+    let mut tatr_unavailable = false;
+
+    let mut layouts = Vec::new();
+    let mut table_structures = Vec::new();
+    for page in render_summary.rendered_pages {
+        let pixel_width = usize::try_from(page.pixel_width).map_err(|_| {
+            LongDocumentBackendError::new(format!(
+                "Rendered page {} width is invalid for DocLayout-YOLO",
+                page.page_number
+            ))
+        })?;
+        let pixel_height = usize::try_from(page.pixel_height).map_err(|_| {
+            LongDocumentBackendError::new(format!(
+                "Rendered page {} height is invalid for DocLayout-YOLO",
+                page.page_number
+            ))
+        })?;
+        let pixels = fs::read(&page.pixel_data_path).map_err(|error| {
+            LongDocumentBackendError::new(format!(
+                "Could not read rendered page {} BGRA data '{}': {error}",
+                page.page_number,
+                page.pixel_data_path.display()
+            ))
+        })?;
+        let detections = session
+            .detect_bgra(&pixels, pixel_width, pixel_height)
+            .map_err(|error| {
+                LongDocumentBackendError::new(format!(
+                    "DocLayout-YOLO detection failed on page {}: {error}",
+                    page.page_number
+                ))
+            })?;
+        let has_table_detection = detections
+            .iter()
+            .any(|detection| detection.region_type == DocLayoutRegionType::Table);
+        if has_table_detection && tatr_session.is_none() && !tatr_unavailable {
+            tatr_session = load_or_ensure_native_pdf_tatr_session(request, runtime_dir, paths)
+                .or_else(|| {
+                    tatr_unavailable = true;
+                    None
+                });
+        }
+        if let Some(tatr_session) = tatr_session.as_mut() {
+            let tables = detections
+                .iter()
+                .filter(|detection| detection.region_type == DocLayoutRegionType::Table)
+                .filter_map(|detection| {
+                    tatr_session
+                        .recognize_bgra(
+                            &pixels,
+                            pixel_width,
+                            pixel_height,
+                            detection.x,
+                            detection.y,
+                            detection.width,
+                            detection.height,
+                        )
+                        .ok()
+                        .flatten()
+                })
+                .collect::<Vec<_>>();
+            if !tables.is_empty() {
+                table_structures.push(PdfSourcePageTableStructures {
+                    page_number: page.page_number,
+                    pixel_width,
+                    pixel_height,
+                    tables,
+                });
+            }
+        }
+        layouts.push(PdfSourcePageLayoutDetections {
+            page_number: page.page_number,
+            pixel_width,
+            pixel_height,
+            detections,
+        });
+    }
+
+    Ok(NativePdfDocLayoutDetectionResult {
+        layouts,
+        table_structures,
+    })
+}
+
+fn detect_native_pdf_vision_layout_pages(
+    options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
+    config: &OpenAiCompatibleConfig,
+) -> Result<Vec<PdfSourcePageLayoutDetections>, LongDocumentBackendError> {
+    let output_dir = native_pdf_layout_temp_dir(&options.input_pdf);
+    let result =
+        detect_native_pdf_vision_layout_pages_in_directory(options, request, config, &output_dir);
+    let _ = fs::remove_dir_all(&output_dir);
+    result
+}
+
+fn detect_native_pdf_vision_layout_pages_in_directory(
+    options: &PdfTextExtractionOptions,
+    request: &LongDocumentServiceRequest,
+    config: &OpenAiCompatibleConfig,
+    output_dir: &Path,
+) -> Result<Vec<PdfSourcePageLayoutDetections>, LongDocumentBackendError> {
+    let mut render_options = PdfToBgraOptions::new(&options.input_pdf, output_dir);
+    render_options.page_selection = options.page_selection.clone();
+    render_options.pdfium_dir = options.pdfium_dir.clone();
+    let render_summary = render_pdf_pages_to_bgra_files(&render_options).map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not render PDF pages for Vision layout '{}': {error}",
+            options.input_pdf.display()
+        ))
+    })?;
+
+    let mut client = ReqwestVisionLayoutHttpClient::from_settings(&request.settings)
+        .map_err(|error| LongDocumentBackendError::new(error.message))?;
+    let mut layouts = Vec::new();
+    for page in render_summary.rendered_pages {
+        let pixel_width = usize::try_from(page.pixel_width).map_err(|_| {
+            LongDocumentBackendError::new(format!(
+                "Rendered page {} width is invalid for Vision layout",
+                page.page_number
+            ))
+        })?;
+        let pixel_height = usize::try_from(page.pixel_height).map_err(|_| {
+            LongDocumentBackendError::new(format!(
+                "Rendered page {} height is invalid for Vision layout",
+                page.page_number
+            ))
+        })?;
+        let pixels = fs::read(&page.pixel_data_path).map_err(|error| {
+            LongDocumentBackendError::new(format!(
+                "Could not read rendered page {} BGRA data '{}': {error}",
+                page.page_number,
+                page.pixel_data_path.display()
+            ))
+        })?;
+        let Ok(detections) = execute_vision_layout_detection(
+            &mut client,
+            config,
+            &pixels,
+            page.pixel_width,
+            page.pixel_height,
+        ) else {
+            continue;
+        };
+        let detections = detections
+            .iter()
+            .filter_map(vision_layout_detection_to_doc_layout_detection)
+            .collect::<Vec<_>>();
+        if !detections.is_empty() {
+            layouts.push(PdfSourcePageLayoutDetections {
+                page_number: page.page_number,
+                pixel_width,
+                pixel_height,
+                detections,
+            });
+        }
+    }
+
+    Ok(layouts)
+}
+
+fn native_pdf_layout_detection_mode(
+    request: &LongDocumentServiceRequest,
+) -> NativePdfLayoutDetectionMode {
+    native_pdf_layout_detection_mode_from_values(
+        request.params.layout_detection.as_deref(),
+        request.settings.layout_detection_mode.as_deref(),
+    )
+}
+
+fn native_pdf_layout_detection_mode_from_values(
+    param_value: Option<&str>,
+    settings_value: Option<&str>,
+) -> NativePdfLayoutDetectionMode {
+    param_value
+        .or(settings_value)
+        .map(parse_native_pdf_layout_detection_mode)
+        .unwrap_or(NativePdfLayoutDetectionMode::Auto)
+}
+
+fn parse_native_pdf_layout_detection_mode(value: &str) -> NativePdfLayoutDetectionMode {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "heuristic" => NativePdfLayoutDetectionMode::Heuristic,
+        "onnx" | "onnxlocal" => NativePdfLayoutDetectionMode::OnnxLocal,
+        "vision" | "visionllm" => NativePdfLayoutDetectionMode::VisionLlm,
+        _ => NativePdfLayoutDetectionMode::Auto,
+    }
+}
+
+fn native_pdf_layout_mode_uses_doc_layout_yolo(mode: NativePdfLayoutDetectionMode) -> bool {
+    matches!(
+        mode,
+        NativePdfLayoutDetectionMode::Auto | NativePdfLayoutDetectionMode::OnnxLocal
+    )
+}
+
+fn native_pdf_tatr_table_structure_enabled(request: &LongDocumentServiceRequest) -> bool {
+    request.settings.enable_tatr_table_structure.unwrap_or(true)
+}
+
+fn ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(request: &LongDocumentServiceRequest) {
+    if !native_pdf_should_ensure_doc_layout_yolo(request) {
+        return;
+    }
+
+    let Some(base) = native_pdf_managed_layout_model_base(request) else {
+        return;
+    };
+    let Ok(mut client) = ReqwestResourceDownloadClient::from_settings(&request.settings) else {
+        return;
+    };
+    let _ = ensure_layout_model_available_for_directory(
+        &mut client,
+        base,
+        &LayoutModelDownloadConfig::default(),
+        &mut |_| {},
+    );
+}
+
+fn load_or_ensure_native_pdf_tatr_session(
+    request: &LongDocumentServiceRequest,
+    runtime_dir: &Path,
+    paths: &LayoutModelPaths,
+) -> Option<TatrOnnxSession> {
+    if !native_pdf_tatr_table_structure_enabled(request) {
+        return None;
+    }
+
+    if !paths.tatr_model_path.is_file() && native_pdf_should_lazy_ensure_tatr(request) {
+        let base = native_pdf_managed_layout_model_base(request)?;
+        let mut client = ReqwestResourceDownloadClient::from_settings(&request.settings).ok()?;
+        let _ = ensure_tatr_model_available_for_directory(
+            &mut client,
+            base,
+            &LayoutModelDownloadConfig::default(),
+            &mut |_| {},
+        )
+        .ok()?;
+    }
+
+    if !paths.tatr_model_path.is_file() {
+        return None;
+    }
+
+    TatrOnnxSession::from_model_paths(runtime_dir, &paths.tatr_model_path).ok()
+}
+
+fn native_pdf_should_ensure_doc_layout_yolo(request: &LongDocumentServiceRequest) -> bool {
+    native_pdf_layout_detection_mode(request) == NativePdfLayoutDetectionMode::OnnxLocal
+        && native_pdf_managed_layout_model_base(request).is_some()
+}
+
+fn native_pdf_should_lazy_ensure_tatr(request: &LongDocumentServiceRequest) -> bool {
+    native_pdf_tatr_table_structure_enabled(request)
+        && native_pdf_layout_mode_uses_doc_layout_yolo(native_pdf_layout_detection_mode(request))
+        && request
+            .settings
+            .tatr_model_path
+            .as_deref()
+            .map(str::trim)
+            .is_none_or(str::is_empty)
+        && native_pdf_managed_layout_model_base(request).is_some()
+}
+
+fn native_pdf_managed_layout_model_base(request: &LongDocumentServiceRequest) -> Option<PathBuf> {
+    if request
+        .settings
+        .doc_layout_yolo_path
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty())
+    {
+        return None;
+    }
+
+    request
+        .settings
+        .cache_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| default_model_cache_dir().parent().map(Path::to_path_buf))
+}
+
+fn native_pdf_vision_layout_config(
+    request: &LongDocumentServiceRequest,
+) -> Option<OpenAiCompatibleConfig> {
+    if native_pdf_layout_detection_mode(request) != NativePdfLayoutDetectionMode::VisionLlm {
+        return None;
+    }
+
+    let endpoint = request.params.vision_endpoint.as_deref()?.trim();
+    let model = request.params.vision_model.as_deref()?.trim();
+    if endpoint.is_empty() || model.is_empty() {
+        return None;
+    }
+
+    let api_key = request
+        .params
+        .vision_api_key
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default();
+    let mut config = OpenAiCompatibleConfig::new(endpoint, model).with_api_key(api_key);
+    if api_key.is_empty() && endpoint_is_local_http(endpoint) {
+        config = config.without_required_api_key();
+    }
+
+    Some(config)
+}
+
+fn endpoint_is_local_http(endpoint: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(endpoint) else {
+        return false;
+    };
+    url.host_str()
+        .is_some_and(|host| matches!(host, "localhost" | "127.0.0.1" | "::1"))
+}
+
+fn vision_layout_detection_to_doc_layout_detection(
+    detection: &VisionLayoutDetection,
+) -> Option<DocLayoutYoloDetection> {
+    let region_type = match detection.region_type {
+        VisionLayoutRegionType::Body => DocLayoutRegionType::Body,
+        VisionLayoutRegionType::Table | VisionLayoutRegionType::TableLike => {
+            DocLayoutRegionType::Table
+        }
+        VisionLayoutRegionType::Figure => DocLayoutRegionType::Figure,
+        VisionLayoutRegionType::Formula => DocLayoutRegionType::Formula,
+        VisionLayoutRegionType::Caption => DocLayoutRegionType::Caption,
+        VisionLayoutRegionType::Title => DocLayoutRegionType::Title,
+        VisionLayoutRegionType::IsolatedFormula => DocLayoutRegionType::IsolatedFormula,
+        VisionLayoutRegionType::Unknown
+        | VisionLayoutRegionType::Header
+        | VisionLayoutRegionType::Footer
+        | VisionLayoutRegionType::LeftColumn
+        | VisionLayoutRegionType::RightColumn => return None,
+    };
+
+    Some(DocLayoutYoloDetection {
+        region_type,
+        confidence: detection.confidence,
+        x: detection.x,
+        y: detection.y,
+        width: detection.width,
+        height: detection.height,
+    })
+}
+
+fn native_pdf_doc_layout_yolo_paths(
+    request: &LongDocumentServiceRequest,
+) -> Option<LayoutModelPaths> {
+    if !native_pdf_layout_mode_uses_doc_layout_yolo(native_pdf_layout_detection_mode(request)) {
+        return None;
+    }
+
+    if let Some(model_path) = request
+        .settings
+        .doc_layout_yolo_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        let models_dir = model_path.parent()?.to_path_buf();
+        let tatr_model_path = request
+            .settings
+            .tatr_model_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| models_dir.join(TATR_MODEL_FILE_NAME));
+        return Some(LayoutModelPaths {
+            native_lib_path: models_dir.join(ONNX_RUNTIME_FILE_NAME),
+            doc_layout_model_path: model_path,
+            tatr_model_path,
+            models_dir,
+        });
+    }
+
+    let Some(cache_dir) = request
+        .settings
+        .cache_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    else {
+        let models_dir = default_model_cache_dir();
+        return Some(LayoutModelPaths {
+            native_lib_path: models_dir.join(ONNX_RUNTIME_FILE_NAME),
+            doc_layout_model_path: models_dir.join(DOC_LAYOUT_MODEL_FILE_NAME),
+            tatr_model_path: models_dir.join(TATR_MODEL_FILE_NAME),
+            models_dir,
+        });
+    };
+
+    Some(LayoutModelPaths::for_base(cache_dir))
+}
+
+fn native_pdf_layout_temp_dir(path: &Path) -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(sanitize_temp_path_component)
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or_else(|| "document".to_string());
+
+    env::temp_dir()
+        .join("easydict-pdf-layout")
+        .join(format!("{}-{stamp}-{stem}", process::id()))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1670,12 +2925,14 @@ where
         })?;
 
         let mut chunks = Vec::new();
+        let preferred_language_tag =
+            document_language_to_ocr_tag(&request.params.from).map(str::to_string);
         for page in pages {
             let params = OcrRecognizeParams {
                 pixel_data_path: page.pixel_data_path.display().to_string(),
                 pixel_width: page.pixel_width,
                 pixel_height: page.pixel_height,
-                preferred_language_tag: None,
+                preferred_language_tag: preferred_language_tag.clone(),
             };
             let result = ocr_backend.recognize(&params).map_err(|error| {
                 LongDocumentBackendError::new(format!(
@@ -1772,6 +3029,7 @@ fn local_long_document_worker_preflight_error(
 ) -> Option<LongDocumentBackendError> {
     local_long_document_file_input_error(request)
         .or_else(|| local_long_document_route_preflight_error(request))
+        .or_else(|| local_long_document_local_ai_native_preflight_error(request))
         .or_else(|| local_long_document_local_ai_worker_bridge_error(request))
         .or_else(|| local_long_document_service_error(request))
         .or_else(|| local_long_document_retained_worker_disabled_error(worker_policy))
@@ -1827,6 +3085,18 @@ fn local_long_document_service_error(
     None
 }
 
+fn local_long_document_local_ai_native_preflight_error(
+    request: &LongDocumentServiceRequest,
+) -> Option<LongDocumentBackendError> {
+    if !is_local_ai_long_document_service_id(&request.params.service_id) {
+        return None;
+    }
+
+    let quick_request = native_quick_translate_request_for_chunk(request, "native route probe")?;
+    local_ai_quick_translate_native_preflight_error(&quick_request)
+        .map(LongDocumentBackendError::new)
+}
+
 fn local_long_document_local_ai_worker_bridge_error(
     request: &LongDocumentServiceRequest,
 ) -> Option<LongDocumentBackendError> {
@@ -1835,7 +3105,7 @@ fn local_long_document_local_ai_worker_bridge_error(
     }
 
     Some(LongDocumentBackendError::new(
-        "Windows Local AI Long Document translation requires a Rust-native route; the selected input or provider would require retained .NET workers.",
+        "Windows Local AI Long Document translation requires a Rust-native route for this request.",
     ))
 }
 
@@ -1900,15 +3170,7 @@ fn read_native_pdf_text_source_chunks(
     path: &str,
     page_range: Option<&str>,
 ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError> {
-    let metadata = fs::metadata(path).map_err(|error| {
-        LongDocumentBackendError::new(format!("Could not read PDF document '{}': {error}", path))
-    })?;
-    if !metadata.is_file() {
-        return Err(LongDocumentBackendError::new(format!(
-            "Could not read PDF document '{}': path is not a file",
-            path
-        )));
-    }
+    validate_native_pdf_input_file(path)?;
 
     let pages = extract_native_pdf_text_by_pages(path)?;
     let selected_indexes = selected_pdf_page_indexes(page_range, pages.len())
@@ -1930,6 +3192,20 @@ fn read_native_pdf_text_source_chunks(
     }
 
     Ok(chunks)
+}
+
+fn validate_native_pdf_input_file(path: &str) -> Result<(), LongDocumentBackendError> {
+    let metadata = fs::metadata(path).map_err(|error| {
+        LongDocumentBackendError::new(format!("Could not read PDF document '{}': {error}", path))
+    })?;
+    if !metadata.is_file() {
+        return Err(LongDocumentBackendError::new(format!(
+            "Could not read PDF document '{}': path is not a file",
+            path
+        )));
+    }
+
+    Ok(())
 }
 
 fn extract_native_pdf_text_by_pages(path: &str) -> Result<Vec<String>, LongDocumentBackendError> {
@@ -2200,13 +3476,17 @@ mod tests {
     fn auto_foundry_local_probe_routes_long_document_to_native_before_worker() {
         let mut resolver =
             TestFoundryEndpointResolver::new(Some("foundry-local-invalid".to_string()));
+        let mut windows_ai_probe =
+            TestWindowsAiProbe::new(WindowsAiReadyState::NotSupportedOnCurrentSystem);
         let request = test_long_document_request_for_windows_local_ai();
 
-        let dispatch = try_run_native_text_long_document_request_with_auto_foundry_probe(
+        let dispatch = try_run_native_text_long_document_request_with_auto_local_ai_probes(
             request,
+            &mut windows_ai_probe,
             &mut resolver,
         );
 
+        assert_eq!(windows_ai_probe.calls, 1);
         assert_eq!(resolver.calls, 1);
         let NativeLongDocumentDispatch::Handled(outcome) = dispatch else {
             panic!("Auto Foundry endpoint discovery should use the native LongDoc route");
@@ -2222,6 +3502,40 @@ mod tests {
         assert!(
             !error.message.contains("retained .NET workers"),
             "native Foundry probe should not report retained worker requirement: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn native_route_helper_uses_auto_foundry_probe_before_worker_backend() {
+        let mut resolver =
+            TestFoundryEndpointResolver::new(Some("foundry-local-invalid".to_string()));
+        let mut windows_ai_probe =
+            TestWindowsAiProbe::new(WindowsAiReadyState::NotSupportedOnCurrentSystem);
+        let request = test_long_document_request_for_windows_local_ai();
+        let mut backend = RecordingLongDocumentBackend::default();
+
+        let outcome = run_long_document_request_with_native_route_and_foundry_resolver(
+            &mut backend,
+            request,
+            &mut windows_ai_probe,
+            &mut resolver,
+        );
+
+        assert_eq!(windows_ai_probe.calls, 1);
+        assert_eq!(resolver.calls, 1);
+        assert_eq!(backend.translate_calls, 0);
+        let error = outcome
+            .result
+            .expect_err("invalid Foundry endpoint should fail in native provider route");
+        assert!(
+            !error.message.contains("Long Document worker"),
+            "native route helper should not start retained LongDoc worker: {}",
+            error.message
+        );
+        assert!(
+            !error.message.contains("retained .NET workers"),
+            "native route helper should not report retained worker requirement: {}",
             error.message
         );
     }
@@ -2260,7 +3574,8 @@ mod tests {
                 ..Default::default()
             }),
         ]);
-        let request = test_pdf_long_document_request(None);
+        let mut request = test_pdf_long_document_request(None);
+        request.params.from = "Japanese".to_string();
 
         let chunks = read_native_pdf_ocr_source_chunks_with_services(
             &request,
@@ -2286,13 +3601,13 @@ mod tests {
                     pixel_data_path: "page-2.bgra".to_string(),
                     pixel_width: 8,
                     pixel_height: 6,
-                    preferred_language_tag: None,
+                    preferred_language_tag: Some("ja-JP".to_string()),
                 },
                 OcrRecognizeParams {
                     pixel_data_path: "page-3.bgra".to_string(),
                     pixel_width: 10,
                     pixel_height: 7,
-                    preferred_language_tag: None,
+                    preferred_language_tag: Some("ja-JP".to_string()),
                 },
             ]
         );
@@ -2304,6 +3619,97 @@ mod tests {
         assert_eq!(chunks[1].text, "Second OCR page");
         assert_eq!(chunks[1].page_number, 3);
         assert_eq!(chunks[1].source_block_id, "pdf-p3-ocr-b2");
+    }
+
+    #[test]
+    fn native_pdf_text_extraction_error_can_fall_back_to_ocr_chunks() {
+        let request = test_pdf_long_document_request(None);
+        let mut text_calls = Vec::new();
+        let mut ocr_calls = Vec::new();
+
+        let chunks = read_native_pdf_text_or_ocr_source_chunks(
+            &request,
+            "scan.pdf",
+            Some("2"),
+            |path, page_range| {
+                text_calls.push((path.to_string(), page_range.map(str::to_string)));
+                Err(LongDocumentBackendError::new(
+                    "Could not extract PDF text 'scan.pdf': broken content stream",
+                ))
+            },
+            |request, path, page_range| {
+                ocr_calls.push((
+                    request.query_id,
+                    path.to_string(),
+                    page_range.map(str::to_string),
+                ));
+                Ok(vec![NativeTextSourceChunk::pdf_ocr(
+                    0,
+                    "Scanned OCR text".to_string(),
+                    2,
+                )])
+            },
+        )
+        .expect("OCR fallback should provide source chunks");
+
+        assert_eq!(
+            text_calls,
+            vec![("scan.pdf".to_string(), Some("2".to_string()))]
+        );
+        assert_eq!(
+            ocr_calls,
+            vec![(
+                request.query_id,
+                "scan.pdf".to_string(),
+                Some("2".to_string())
+            )]
+        );
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].text, "Scanned OCR text");
+        assert_eq!(chunks[0].source_kind, NativeTextSourceKind::PdfOcr);
+        assert_eq!(chunks[0].page_number, 2);
+    }
+
+    #[test]
+    fn native_pdf_text_extraction_error_preserves_ocr_failure_diagnostic() {
+        let request = test_pdf_long_document_request(None);
+
+        let error = read_native_pdf_text_or_ocr_source_chunks(
+            &request,
+            "scan.pdf",
+            None,
+            |_, _| {
+                Err(LongDocumentBackendError::new(
+                    "Could not extract PDF text 'scan.pdf': invalid xref",
+                ))
+            },
+            |_, _, _| {
+                Err(LongDocumentBackendError::new(
+                    "Could not render PDF pages for OCR 'scan.pdf': invalid page tree",
+                ))
+            },
+        )
+        .expect_err("failed text extraction and failed OCR should stay local");
+
+        assert!(error.message.contains("Could not extract PDF text"));
+        assert!(error.message.contains("OCR fallback failed"));
+        assert!(error.message.contains("Could not render PDF pages for OCR"));
+    }
+
+    #[test]
+    fn document_language_to_ocr_tag_maps_known_languages_and_preserves_auto() {
+        assert_eq!(document_language_to_ocr_tag("Auto"), None);
+        assert_eq!(document_language_to_ocr_tag("Japanese"), Some("ja-JP"));
+        assert_eq!(document_language_to_ocr_tag("ja"), Some("ja-JP"));
+        assert_eq!(
+            document_language_to_ocr_tag("SimplifiedChinese"),
+            Some("zh-CN")
+        );
+        assert_eq!(
+            document_language_to_ocr_tag("TraditionalChinese"),
+            Some("zh-TW")
+        );
+        assert_eq!(document_language_to_ocr_tag("unknown"), None);
     }
 
     #[test]
@@ -2338,6 +3744,7 @@ mod tests {
             NativeTextInputKind::PdfText,
             &chunks,
             &translations,
+            &BTreeSet::new(),
         )
         .expect("text export");
 
@@ -2420,9 +3827,15 @@ mod tests {
         }];
         let translations = vec![Some("你好，PDF".to_string())];
 
-        let export = try_export_native_pdf_document(&request, &source_chunks, &translations, "")
-            .expect("CJK overlay PDF export should not fail")
-            .expect("CJK overlay should handle native PDF export");
+        let export = try_export_native_pdf_document(
+            &request,
+            &source_chunks,
+            &translations,
+            "",
+            &BTreeSet::new(),
+        )
+        .expect("CJK overlay PDF export should not fail")
+        .expect("CJK overlay should handle native PDF export");
 
         assert_eq!(export.output_path, output_path.display().to_string());
         assert!(export.bilingual_output_path.is_none());
@@ -2436,6 +3849,97 @@ mod tests {
         let extracted =
             pdf_extract::extract_text(&output_path).expect("overlay text should extract");
         assert!(extracted.contains("你好"));
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_export_overlay_mode_uses_overlay_without_content_stream_match() {
+        let temp_dir = unique_longdoc_test_dir("pdf-explicit-overlay-export");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("paper.pdf");
+        let output_path = temp_dir.join("paper-overlay.pdf");
+        fs::write(
+            &input_path,
+            minimal_longdoc_test_pdf_with_pages(&["Original PDF text"]),
+        )
+        .expect("input pdf");
+
+        let request = LongDocumentServiceRequest {
+            query_id: 94,
+            input: LongDocumentInput::File(input_path.display().to_string()),
+            params: TranslateDocumentParams {
+                input_path: input_path.display().to_string(),
+                output_path: Some(output_path.display().to_string()),
+                input_mode: "Pdf".to_string(),
+                from: "English".to_string(),
+                to: "SimplifiedChinese".to_string(),
+                service_id: "google".to_string(),
+                output_mode: "Monolingual".to_string(),
+                pdf_export_mode: Some("Overlay".to_string()),
+                layout_detection: None,
+                page_range: None,
+                vision_endpoint: None,
+                vision_api_key: None,
+                vision_model: None,
+                result_json_path: None,
+            },
+            settings: SettingsSnapshot {
+                cjk_font_path: Some(test_cjk_font_path().display().to_string()),
+                ..SettingsSnapshot::default()
+            },
+        };
+        let source_chunks = vec![NativeTextSourceChunk {
+            text: "Text that does not exist in the PDF stream".to_string(),
+            fallback_text: None,
+            page_number: 1,
+            source_block_id: "pdf-p1-body-b1".to_string(),
+            source_kind: NativeTextSourceKind::PdfSourceBlock,
+            pdf_context: None,
+            pdf_export_metadata: Some(PdfExportChunkMetadata {
+                chunk_index: 0,
+                page_number: 1,
+                source_block_id: "pdf-p1-body-b1".to_string(),
+                source_block_type: PdfExportSourceBlockType::Paragraph,
+                order_in_page: 0,
+                reading_order_score: 1.0,
+                bounding_box: Some(crate::PdfRect::new(96.0, 684.0, 260.0, 48.0)),
+                text_style: Some(crate::pdf_export_blocks::PdfExportBlockTextStyle {
+                    font_size: 14.0,
+                    line_spacing: 16.0,
+                    rotation_angle: 0.0,
+                }),
+                translation_skipped: false,
+                preserve_original_text_in_pdf_export: false,
+                retry_count: 0,
+                fallback_text: None,
+                detected_font_names: Some(vec!["Helvetica".to_string()]),
+            }),
+        }];
+        let translations = vec![Some("显式 Overlay".to_string())];
+
+        let export = try_export_native_pdf_document(
+            &request,
+            &source_chunks,
+            &translations,
+            "",
+            &BTreeSet::new(),
+        )
+        .expect("explicit overlay PDF export should not fail")
+        .expect("explicit overlay should handle native PDF export");
+
+        assert_eq!(export.output_path, output_path.display().to_string());
+        assert!(export.bilingual_output_path.is_none());
+        assert_eq!(
+            lopdf::Document::load(&output_path)
+                .expect("native overlay PDF output should open")
+                .get_pages()
+                .len(),
+            1
+        );
+        let extracted =
+            pdf_extract::extract_text(&output_path).expect("overlay text should extract");
+        assert!(extracted.contains("显式"));
 
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -2480,8 +3984,14 @@ mod tests {
         )];
         let translations = vec![Some("Translated fallback text".to_string())];
 
-        let export = try_export_native_pdf_document(&request, &source_chunks, &translations, "")
-            .expect("native PDF export failure should fall back to text export");
+        let export = try_export_native_pdf_document(
+            &request,
+            &source_chunks,
+            &translations,
+            "",
+            &BTreeSet::new(),
+        )
+        .expect("native PDF export failure should fall back to text export");
 
         assert!(
             export.is_none(),
@@ -2574,6 +4084,205 @@ mod tests {
         }
     }
 
+    #[test]
+    fn native_pdf_layout_mode_uses_doc_layout_yolo_for_auto_and_onnx_only() {
+        let mut request = test_pdf_long_document_request(None);
+
+        assert_eq!(
+            native_pdf_layout_detection_mode(&request),
+            NativePdfLayoutDetectionMode::Auto
+        );
+        assert!(native_pdf_doc_layout_yolo_paths(&request).is_some());
+
+        request.params.layout_detection = Some("Heuristic".to_string());
+        assert_eq!(
+            native_pdf_layout_detection_mode(&request),
+            NativePdfLayoutDetectionMode::Heuristic
+        );
+        assert!(native_pdf_doc_layout_yolo_paths(&request).is_none());
+
+        request.params.layout_detection = Some("VisionLLM".to_string());
+        assert_eq!(
+            native_pdf_layout_detection_mode(&request),
+            NativePdfLayoutDetectionMode::VisionLlm
+        );
+        assert!(native_pdf_doc_layout_yolo_paths(&request).is_none());
+
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+        assert_eq!(
+            native_pdf_layout_detection_mode(&request),
+            NativePdfLayoutDetectionMode::OnnxLocal
+        );
+        assert!(native_pdf_doc_layout_yolo_paths(&request).is_some());
+    }
+
+    #[test]
+    fn build_long_document_request_populates_gemini_vision_layout_params() {
+        let mut state = EasydictUiState::default();
+        state.long_document.selected_file = "paper.pdf".to_string();
+        state.long_document.target_language = "SimplifiedChinese".to_string();
+        state.settings.layout_detection_mode = "VisionLLM".to_string();
+        state.settings.vision_layout_service = "gemini".to_string();
+        let gemini = state
+            .settings
+            .service_provider_settings
+            .iter_mut()
+            .find(|provider| provider.service_id == "gemini")
+            .expect("gemini provider");
+        gemini.api_key = "gemini-key".to_string();
+        gemini.model = "gemini-2.5-pro".to_string();
+
+        let request = build_long_document_request(&state, 9).expect("long document request");
+
+        assert_eq!(
+            request.params.vision_endpoint.as_deref(),
+            Some(VISION_LAYOUT_GEMINI_OPENAI_ENDPOINT)
+        );
+        assert_eq!(request.params.vision_api_key.as_deref(), Some("gemini-key"));
+        assert_eq!(
+            request.params.vision_model.as_deref(),
+            Some("gemini-2.5-pro")
+        );
+    }
+
+    #[test]
+    fn native_pdf_vision_layout_config_allows_local_endpoint_without_api_key() {
+        let mut request = test_pdf_long_document_request(None);
+        request.params.layout_detection = Some("VisionLLM".to_string());
+        request.params.vision_endpoint =
+            Some("http://localhost:11434/v1/chat/completions".to_string());
+        request.params.vision_model = Some("llava".to_string());
+
+        let config = native_pdf_vision_layout_config(&request).expect("vision config");
+
+        assert!(config.is_configured());
+        assert!(!config.requires_api_key);
+    }
+
+    #[test]
+    fn native_pdf_layout_paths_use_cache_dir_when_no_explicit_model_path() {
+        let temp_dir = unique_longdoc_test_dir("layout-cache-paths");
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+        let actual = native_pdf_doc_layout_yolo_paths(&request).expect("cache paths");
+        let expected = LayoutModelPaths::for_base(&temp_dir);
+
+        assert_eq!(actual.models_dir, expected.models_dir);
+        assert_eq!(actual.native_lib_path, expected.native_lib_path);
+        assert_eq!(actual.doc_layout_model_path, expected.doc_layout_model_path);
+        assert_eq!(actual.tatr_model_path, expected.tatr_model_path);
+    }
+
+    #[test]
+    fn native_pdf_layout_paths_use_explicit_doc_layout_model_directory() {
+        let temp_dir = unique_longdoc_test_dir("layout-explicit-paths");
+        let models_dir = temp_dir.join("models");
+        let doc_layout_path = models_dir.join("custom-doclayout.onnx");
+        let tatr_path = temp_dir.join("table.onnx");
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.doc_layout_yolo_path = Some(doc_layout_path.to_string_lossy().to_string());
+        request.settings.tatr_model_path = Some(tatr_path.to_string_lossy().to_string());
+
+        let actual = native_pdf_doc_layout_yolo_paths(&request).expect("explicit paths");
+
+        assert_eq!(actual.models_dir, models_dir);
+        assert_eq!(
+            actual.native_lib_path,
+            actual.models_dir.join(ONNX_RUNTIME_FILE_NAME)
+        );
+        assert_eq!(actual.doc_layout_model_path, doc_layout_path);
+        assert_eq!(actual.tatr_model_path, tatr_path);
+    }
+
+    #[test]
+    fn native_pdf_tatr_table_structure_defaults_enabled_and_honors_settings_kill_switch() {
+        let mut request = test_pdf_long_document_request(None);
+
+        assert!(native_pdf_tatr_table_structure_enabled(&request));
+
+        request.settings.enable_tatr_table_structure = Some(false);
+        assert!(!native_pdf_tatr_table_structure_enabled(&request));
+
+        request.settings.enable_tatr_table_structure = Some(true);
+        assert!(native_pdf_tatr_table_structure_enabled(&request));
+    }
+
+    #[test]
+    fn native_pdf_doc_layout_ensure_runs_only_for_explicit_managed_onnxlocal() {
+        let temp_dir = unique_longdoc_test_dir("layout-managed-ensure");
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+        assert_eq!(
+            native_pdf_layout_detection_mode(&request),
+            NativePdfLayoutDetectionMode::Auto
+        );
+        assert!(!native_pdf_should_ensure_doc_layout_yolo(&request));
+        assert_eq!(
+            native_pdf_managed_layout_model_base(&request),
+            Some(temp_dir.clone())
+        );
+
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+        assert!(native_pdf_should_ensure_doc_layout_yolo(&request));
+
+        request.settings.doc_layout_yolo_path =
+            Some(temp_dir.join("custom.onnx").display().to_string());
+        assert!(!native_pdf_should_ensure_doc_layout_yolo(&request));
+        assert!(native_pdf_managed_layout_model_base(&request).is_none());
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_tatr_lazy_ensure_uses_managed_cache_and_honors_overrides() {
+        let temp_dir = unique_longdoc_test_dir("layout-tatr-lazy-ensure");
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+        assert!(native_pdf_should_lazy_ensure_tatr(&request));
+
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+        assert!(native_pdf_should_lazy_ensure_tatr(&request));
+
+        request.settings.enable_tatr_table_structure = Some(false);
+        assert!(!native_pdf_should_lazy_ensure_tatr(&request));
+
+        request.settings.enable_tatr_table_structure = Some(true);
+        request.settings.tatr_model_path =
+            Some(temp_dir.join("custom-tatr.onnx").display().to_string());
+        assert!(!native_pdf_should_lazy_ensure_tatr(&request));
+
+        request.settings.tatr_model_path = None;
+        request.settings.doc_layout_yolo_path =
+            Some(temp_dir.join("custom-doclayout.onnx").display().to_string());
+        assert!(!native_pdf_should_lazy_ensure_tatr(&request));
+
+        request.settings.doc_layout_yolo_path = None;
+        request.params.layout_detection = Some("VisionLLM".to_string());
+        assert!(!native_pdf_should_lazy_ensure_tatr(&request));
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_managed_layout_paths_match_download_base() {
+        let temp_dir = unique_longdoc_test_dir("layout-managed-base");
+        let mut request = test_pdf_long_document_request(None);
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+        let base = native_pdf_managed_layout_model_base(&request).expect("managed base");
+        let actual = native_pdf_doc_layout_yolo_paths(&request).expect("layout paths");
+        let expected = LayoutModelPaths::for_base(&base);
+
+        assert_eq!(base, temp_dir);
+        assert_eq!(actual, expected);
+
+        fs::remove_dir_all(&base).ok();
+    }
+
     fn unique_longdoc_test_dir(label: &str) -> PathBuf {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -2664,20 +4373,80 @@ mod tests {
     struct TestFoundryEndpointResolver {
         endpoint: Option<String>,
         calls: usize,
+        status_calls: usize,
+    }
+
+    struct TestWindowsAiProbe {
+        state: WindowsAiReadyState,
+        calls: usize,
     }
 
     impl TestFoundryEndpointResolver {
         fn new(endpoint: Option<String>) -> Self {
-            Self { endpoint, calls: 0 }
+            Self {
+                endpoint,
+                calls: 0,
+                status_calls: 0,
+            }
+        }
+    }
+
+    impl TestWindowsAiProbe {
+        fn new(state: WindowsAiReadyState) -> Self {
+            Self { state, calls: 0 }
         }
     }
 
     impl FoundryLocalEndpointResolver for TestFoundryEndpointResolver {
         fn resolve_chat_completions_endpoint(
             &mut self,
-        ) -> Result<Option<String>, crate::openai_compatible::OpenAiExecutionError> {
+        ) -> Result<Option<String>, FoundryLocalError> {
             self.calls += 1;
             Ok(self.endpoint.clone())
+        }
+    }
+
+    impl FoundryLocalRuntimeController for TestFoundryEndpointResolver {
+        fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
+            self.status_calls += 1;
+            let state = if self.status_calls == 1 {
+                FoundryLocalRuntimeState::NotRunning
+            } else {
+                FoundryLocalRuntimeState::Running
+            };
+            Ok(FoundryLocalRuntimeStatus::new(state))
+        }
+
+        fn start_service(&mut self) -> Result<(), FoundryLocalError> {
+            Ok(())
+        }
+
+        fn load_model(&mut self, _model: &str) -> Result<(), FoundryLocalError> {
+            Ok(())
+        }
+    }
+
+    impl WindowsAiLanguageModelProbe for TestWindowsAiProbe {
+        fn ready_state(&mut self) -> WindowsAiReadyState {
+            self.calls += 1;
+            self.state
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingLongDocumentBackend {
+        translate_calls: usize,
+    }
+
+    impl LongDocumentBackend for RecordingLongDocumentBackend {
+        fn longdoc_translate(
+            &mut self,
+            _params: &TranslateDocumentParams,
+        ) -> Result<TranslateDocumentResult, LongDocumentBackendError> {
+            self.translate_calls += 1;
+            Err(LongDocumentBackendError::new(
+                "recording backend should not translate this request",
+            ))
         }
     }
 
@@ -2802,6 +4571,78 @@ fn split_native_text_document(text: &str, input_kind: NativeTextInputKind) -> Ve
         .collect()
 }
 
+fn local_ai_long_document_request_uses_explicit_windows_ai(
+    request: &QuickTranslateServiceRequest,
+) -> bool {
+    request.service.id == "windows-local-ai"
+        && local_ai_provider_mode_for_long_document(&request.settings)
+            == local_ai_provider_modes::WINDOWS_AI
+        && matches!(
+            request.execution_kind,
+            QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
+        )
+}
+
+fn local_ai_long_document_request_uses_auto_windows_ai(
+    request: &QuickTranslateServiceRequest,
+) -> bool {
+    request.service.id == "windows-local-ai"
+        && local_ai_provider_mode_for_long_document(&request.settings)
+            == local_ai_provider_modes::AUTO
+        && matches!(
+            request.execution_kind,
+            QuickTranslateExecutionKind::Translate | QuickTranslateExecutionKind::TranslateStream
+        )
+}
+
+fn local_ai_provider_mode_for_long_document(settings: &SettingsSnapshot) -> &'static str {
+    match settings
+        .local_ai_provider
+        .as_deref()
+        .unwrap_or(local_ai_provider_modes::AUTO)
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "windowsai" | "windows-ai" | "phi-silica" | "phisilica" => {
+            local_ai_provider_modes::WINDOWS_AI
+        }
+        "foundrylocal" | "foundry-local" => local_ai_provider_modes::FOUNDRY_LOCAL,
+        "openvino" | "open-vino" => local_ai_provider_modes::OPENVINO,
+        _ => local_ai_provider_modes::AUTO,
+    }
+}
+
+fn windows_ai_translation_request_from_quick_params(
+    params: &TranslateParams,
+) -> Result<WindowsAiTranslationRequest, LongDocumentBackendError> {
+    Ok(WindowsAiTranslationRequest {
+        text: params.text.clone(),
+        from_language: windows_ai_language_from_quick_code(
+            params.from.as_deref(),
+            WindowsAiLanguage::Auto,
+        )?,
+        to_language: windows_ai_language_from_quick_code(
+            params.to.as_deref(),
+            WindowsAiLanguage::English,
+        )?,
+        custom_prompt: params.custom_prompt.clone(),
+    })
+}
+
+fn windows_ai_language_from_quick_code(
+    code: Option<&str>,
+    default_language: WindowsAiLanguage,
+) -> Result<WindowsAiLanguage, LongDocumentBackendError> {
+    let Some(code) = code.map(str::trim).filter(|code| !code.is_empty()) else {
+        return Ok(default_language);
+    };
+
+    WindowsAiLanguage::from_code(code).ok_or_else(|| {
+        LongDocumentBackendError::new("No local AI provider supports this language pair")
+    })
+}
+
 fn native_quick_translate_request_for_chunk(
     request: &LongDocumentServiceRequest,
     text: &str,
@@ -2857,6 +4698,15 @@ pub fn long_document_service_kind_is_supported(kind: TranslationServiceKind) -> 
         kind,
         TranslationServiceKind::Dictionary | TranslationServiceKind::ImportedMdx
     )
+}
+
+fn document_language_to_ocr_tag(language: &str) -> Option<&'static str> {
+    let code = document_language_to_quick_code(language);
+    if code.eq_ignore_ascii_case("auto") {
+        return None;
+    }
+
+    Some(TranslationLanguage::from_code(code).to_bcp47())
 }
 
 fn document_language_to_quick_code(language: &str) -> &'static str {
@@ -2957,25 +4807,30 @@ fn export_native_text_document(
     input_kind: NativeTextInputKind,
     source_chunks: &[NativeTextSourceChunk],
     translations: &[Option<String>],
+    preserved_chunk_indexes: &BTreeSet<usize>,
 ) -> Result<NativeTextExport, LongDocumentBackendError> {
     let checkpoint = native_export_checkpoint(input_kind, source_chunks, translations);
     let monolingual = compose_native_monolingual_document(input_kind, &checkpoint);
     let bilingual = compose_native_bilingual_document(input_kind, &checkpoint);
 
     if matches!(input_kind, NativeTextInputKind::PdfText) {
-        if let Some(export) =
-            try_export_native_pdf_document(request, source_chunks, translations, &bilingual)?
-        {
+        if let Some(export) = try_export_native_pdf_document(
+            request,
+            source_chunks,
+            translations,
+            &bilingual,
+            preserved_chunk_indexes,
+        )? {
             return Ok(export);
         }
     }
 
     let output_path = resolve_native_output_path(&request.params, input_kind);
-    ensure_native_output_parent(&output_path)?;
 
     match request.params.output_mode.as_str() {
         "Bilingual" => {
             let bilingual_path = build_bilingual_output_path(&output_path);
+            ensure_native_output_path_can_be_written(&bilingual_path)?;
             fs::write(&bilingual_path, bilingual).map_err(native_write_error)?;
             Ok(NativeTextExport {
                 output_path: bilingual_path.display().to_string(),
@@ -2983,8 +4838,12 @@ fn export_native_text_document(
             })
         }
         "Both" => {
-            fs::write(&output_path, monolingual).map_err(native_write_error)?;
             let bilingual_path = build_bilingual_output_path(&output_path);
+            ensure_native_output_paths_can_be_written([
+                output_path.as_path(),
+                bilingual_path.as_path(),
+            ])?;
+            fs::write(&output_path, monolingual).map_err(native_write_error)?;
             fs::write(&bilingual_path, bilingual).map_err(native_write_error)?;
             Ok(NativeTextExport {
                 output_path: output_path.display().to_string(),
@@ -2992,6 +4851,7 @@ fn export_native_text_document(
             })
         }
         _ => {
+            ensure_native_output_path_can_be_written(&output_path)?;
             fs::write(&output_path, monolingual).map_err(native_write_error)?;
             Ok(NativeTextExport {
                 output_path: output_path.display().to_string(),
@@ -3006,11 +4866,9 @@ fn try_export_native_pdf_document(
     source_chunks: &[NativeTextSourceChunk],
     translations: &[Option<String>],
     bilingual_text: &str,
+    preserved_chunk_indexes: &BTreeSet<usize>,
 ) -> Result<Option<NativeTextExport>, LongDocumentBackendError> {
     if request.params.output_mode == "Bilingual" {
-        return Ok(None);
-    }
-    if !native_pdf_chunks_support_content_stream_export(source_chunks) {
         return Ok(None);
     }
 
@@ -3022,9 +4880,45 @@ fn try_export_native_pdf_document(
         return Ok(None);
     }
 
-    ensure_native_output_parent(&output_path)?;
-    let checkpoint = native_pdf_export_checkpoint(source_chunks, translations);
+    let bilingual_output_path = (request.params.output_mode == "Both")
+        .then(|| native_pdf_bilingual_text_output_path(&output_path));
+    if let Some(bilingual_path) = bilingual_output_path.as_ref() {
+        ensure_native_output_paths_can_be_written([
+            output_path.as_path(),
+            bilingual_path.as_path(),
+        ])?;
+    } else {
+        ensure_native_output_path_can_be_written(&output_path)?;
+    }
+
+    let checkpoint =
+        native_pdf_export_checkpoint(source_chunks, translations, preserved_chunk_indexes);
     let selected_page_numbers = native_pdf_selected_page_numbers(request, source_chunks);
+
+    if native_pdf_export_mode_is_overlay(&request.params) {
+        if export_pdf_with_overlay_text_blocks(
+            request,
+            input_path,
+            &output_path,
+            &checkpoint,
+            selected_page_numbers.as_deref(),
+        )
+        .is_err()
+        {
+            return Ok(None);
+        }
+
+        return Ok(Some(native_pdf_export_result(
+            request,
+            &output_path,
+            bilingual_text,
+        )?));
+    }
+
+    if !native_pdf_chunks_support_content_stream_export(source_chunks) {
+        return Ok(None);
+    }
+
     match export_pdf_with_content_stream_replacement(
         input_path,
         &output_path,
@@ -3050,19 +4944,38 @@ fn try_export_native_pdf_document(
         }
     }
 
+    Ok(Some(native_pdf_export_result(
+        request,
+        &output_path,
+        bilingual_text,
+    )?))
+}
+
+fn native_pdf_export_result(
+    request: &LongDocumentServiceRequest,
+    output_path: &Path,
+    bilingual_text: &str,
+) -> Result<NativeTextExport, LongDocumentBackendError> {
     let bilingual_output_path = if request.params.output_mode == "Both" {
         let bilingual_path = native_pdf_bilingual_text_output_path(&output_path);
-        ensure_native_output_parent(&bilingual_path)?;
+        ensure_native_output_path_can_be_written(&bilingual_path)?;
         fs::write(&bilingual_path, bilingual_text).map_err(native_write_error)?;
         Some(bilingual_path.display().to_string())
     } else {
         None
     };
 
-    Ok(Some(NativeTextExport {
+    Ok(NativeTextExport {
         output_path: output_path.display().to_string(),
         bilingual_output_path,
-    }))
+    })
+}
+
+fn native_pdf_export_mode_is_overlay(params: &TranslateDocumentParams) -> bool {
+    params
+        .pdf_export_mode
+        .as_deref()
+        .is_some_and(|mode| mode.trim().eq_ignore_ascii_case("Overlay"))
 }
 
 fn export_pdf_with_overlay_text_blocks(
@@ -3188,6 +5101,30 @@ fn ensure_native_output_parent(output_path: &Path) -> Result<(), LongDocumentBac
     Ok(())
 }
 
+fn ensure_native_output_path_can_be_written(
+    output_path: &Path,
+) -> Result<(), LongDocumentBackendError> {
+    ensure_native_output_parent(output_path)?;
+    if output_path.is_dir() {
+        return Err(LongDocumentBackendError::new(format!(
+            "Long document output path '{}' is a directory",
+            output_path.display()
+        )));
+    }
+
+    Ok(())
+}
+
+fn ensure_native_output_paths_can_be_written<'a>(
+    output_paths: impl IntoIterator<Item = &'a Path>,
+) -> Result<(), LongDocumentBackendError> {
+    for output_path in output_paths {
+        ensure_native_output_path_can_be_written(output_path)?;
+    }
+
+    Ok(())
+}
+
 fn native_export_checkpoint(
     input_kind: NativeTextInputKind,
     source_chunks: &[NativeTextSourceChunk],
@@ -3224,6 +5161,7 @@ fn native_export_checkpoint(
 fn native_pdf_export_checkpoint(
     source_chunks: &[NativeTextSourceChunk],
     translations: &[Option<String>],
+    preserved_chunk_indexes: &BTreeSet<usize>,
 ) -> PdfExportCheckpoint {
     PdfExportCheckpoint {
         source_chunks: source_chunks
@@ -3233,7 +5171,9 @@ fn native_pdf_export_checkpoint(
         chunk_metadata: source_chunks
             .iter()
             .enumerate()
-            .map(|(index, chunk)| native_pdf_export_chunk_metadata(index, chunk))
+            .map(|(index, chunk)| {
+                native_pdf_export_chunk_metadata(index, chunk, preserved_chunk_indexes)
+            })
             .collect(),
         translated_chunks: translations
             .iter()
@@ -3251,6 +5191,7 @@ fn native_pdf_export_checkpoint(
 fn native_pdf_export_chunk_metadata(
     index: usize,
     chunk: &NativeTextSourceChunk,
+    preserved_chunk_indexes: &BTreeSet<usize>,
 ) -> PdfExportChunkMetadata {
     let mut metadata = chunk
         .pdf_export_metadata
@@ -3259,6 +5200,10 @@ fn native_pdf_export_chunk_metadata(
     metadata.chunk_index = index;
 
     if metadata.source_block_type == PdfExportSourceBlockType::Formula {
+        metadata.translation_skipped = true;
+        metadata.preserve_original_text_in_pdf_export = true;
+    }
+    if preserved_chunk_indexes.contains(&index) {
         metadata.translation_skipped = true;
         metadata.preserve_original_text_in_pdf_export = true;
     }
@@ -3539,6 +5484,7 @@ fn long_document_backend_error_outcome(
     }
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn long_document_events_from_ipc(events: Vec<IpcEvent<Value>>) -> Vec<LongDocumentEvent> {
     events
         .into_iter()
@@ -3546,6 +5492,7 @@ fn long_document_events_from_ipc(events: Vec<IpcEvent<Value>>) -> Vec<LongDocume
         .collect()
 }
 
+#[cfg(feature = "retained-dotnet-workers")]
 fn long_document_event_from_ipc(event: IpcEvent<Value>) -> Option<LongDocumentEvent> {
     let data = event.data?;
 
@@ -3599,6 +5546,55 @@ fn selected_file_path(value: &str) -> Option<String> {
 fn non_empty(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_string())
+}
+
+fn long_document_vision_layout_params(
+    settings: &SettingsState,
+) -> (Option<String>, Option<String>, Option<String>) {
+    if native_pdf_layout_detection_mode_from_values(
+        None,
+        Some(settings.layout_detection_mode.as_str()),
+    ) != NativePdfLayoutDetectionMode::VisionLlm
+    {
+        return (None, None, None);
+    }
+
+    match settings
+        .vision_layout_service
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "openai" => (
+            non_empty(&settings.open_ai_endpoint),
+            non_empty(&settings.open_ai_api_key),
+            non_empty(&settings.open_ai_model),
+        ),
+        "custom-openai" | "customopenai" => {
+            let provider = settings
+                .service_provider_settings
+                .iter()
+                .find(|provider| provider.service_id == "custom-openai");
+            (
+                provider.and_then(|provider| non_empty(&provider.endpoint)),
+                provider.and_then(|provider| non_empty(&provider.api_key)),
+                provider.and_then(|provider| non_empty(&provider.model)),
+            )
+        }
+        _ => {
+            let provider = settings
+                .service_provider_settings
+                .iter()
+                .find(|provider| provider.service_id == "gemini");
+            (
+                Some(VISION_LAYOUT_GEMINI_OPENAI_ENDPOINT.to_string()),
+                provider.and_then(|provider| non_empty(&provider.api_key)),
+                provider
+                    .and_then(|provider| non_empty(&provider.model))
+                    .or_else(|| Some(VISION_LAYOUT_DEFAULT_GEMINI_MODEL.to_string())),
+            )
+        }
+    }
 }
 
 fn long_document_settings_snapshot(state: &EasydictUiState) -> SettingsSnapshot {

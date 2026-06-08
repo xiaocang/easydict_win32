@@ -1,6 +1,10 @@
 use crate::ocr::{bgra_to_base64_bmp, bgra_to_base64_jpeg_data_url, OcrImageEncodeError};
-use crate::openai_compatible::{OpenAiApiFormat, OpenAiCompatibleConfig};
+use crate::openai_compatible::{
+    OpenAiApiFormat, OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiExecutionErrorCode,
+};
+use crate::protocol::SettingsSnapshot;
 use serde_json::{json, Value};
+use std::time::Duration;
 
 pub const VISION_LAYOUT_DETECTION_PROMPT: &str = r#"Analyze this PDF page image and detect all layout regions.
 For each region, identify its type and bounding box coordinates.
@@ -52,6 +56,95 @@ pub struct VisionLayoutHttpRequestPlan {
     pub api_format: OpenAiApiFormat,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VisionLayoutHttpResponse {
+    pub status_code: u16,
+    pub reason_phrase: String,
+    pub body: String,
+}
+
+pub trait VisionLayoutHttpClient {
+    fn post_json(
+        &mut self,
+        request: &VisionLayoutHttpRequestPlan,
+    ) -> Result<VisionLayoutHttpResponse, OpenAiExecutionError>;
+}
+
+pub struct ReqwestVisionLayoutHttpClient {
+    client: reqwest::blocking::Client,
+}
+
+impl ReqwestVisionLayoutHttpClient {
+    pub fn from_settings(settings: &SettingsSnapshot) -> Result<Self, OpenAiExecutionError> {
+        let mut builder = reqwest::blocking::Client::builder().timeout(Duration::from_secs(120));
+
+        if settings.proxy_enabled.unwrap_or(false) {
+            if let Some(proxy_uri) = normalized_optional(settings.proxy_uri.as_deref()) {
+                let proxy = if settings.proxy_bypass_local.unwrap_or(false) {
+                    let proxy_url = reqwest::Url::parse(&proxy_uri).map_err(|error| {
+                        OpenAiExecutionError::new(
+                            OpenAiExecutionErrorCode::InvalidResponse,
+                            format!("Invalid Vision layout proxy URI '{proxy_uri}': {error}"),
+                        )
+                    })?;
+                    reqwest::Proxy::custom(move |url| {
+                        (!is_loopback_url(url)).then(|| proxy_url.clone())
+                    })
+                } else {
+                    reqwest::Proxy::all(&proxy_uri).map_err(|error| {
+                        OpenAiExecutionError::new(
+                            OpenAiExecutionErrorCode::InvalidResponse,
+                            format!("Invalid Vision layout proxy URI '{proxy_uri}': {error}"),
+                        )
+                    })?
+                };
+                builder = builder.proxy(proxy);
+            }
+        }
+
+        let client = builder.build().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Could not create Vision layout HTTP client: {error}"),
+            )
+        })?;
+        Ok(Self { client })
+    }
+}
+
+impl VisionLayoutHttpClient for ReqwestVisionLayoutHttpClient {
+    fn post_json(
+        &mut self,
+        request: &VisionLayoutHttpRequestPlan,
+    ) -> Result<VisionLayoutHttpResponse, OpenAiExecutionError> {
+        let mut builder = self.client.post(&request.endpoint).json(&request.body);
+        for (name, value) in &request.headers {
+            builder = builder.header(name, value);
+        }
+
+        let response = builder.send().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Vision layout HTTP request failed: {error}"),
+            )
+        })?;
+        let status = response.status();
+        let reason_phrase = status.canonical_reason().unwrap_or("Unknown").to_string();
+        let body = response.text().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Could not read Vision layout HTTP response: {error}"),
+            )
+        })?;
+
+        Ok(VisionLayoutHttpResponse {
+            status_code: status.as_u16(),
+            reason_phrase,
+            body,
+        })
+    }
+}
+
 pub fn build_vision_layout_request_plan_from_bgra(
     config: &OpenAiCompatibleConfig,
     bgra: &[u8],
@@ -81,6 +174,39 @@ pub fn build_vision_layout_request_plan(
 ) -> VisionLayoutHttpRequestPlan {
     let api_format = config.resolved_format();
     build_vision_layout_request_plan_with_format(config, api_format, image_data_url)
+}
+
+pub fn execute_vision_layout_detection<C: VisionLayoutHttpClient>(
+    client: &mut C,
+    config: &OpenAiCompatibleConfig,
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<Vec<VisionLayoutDetection>, OpenAiExecutionError> {
+    validate_vision_layout_config(config)?;
+    let plan = build_vision_layout_request_plan_from_bgra(config, bgra, width, height).map_err(
+        |error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::InvalidResponse,
+                format!("Could not encode Vision layout image: {error}"),
+            )
+        },
+    )?;
+    let response = client.post_json(&plan)?;
+    if !(200..=299).contains(&response.status_code) {
+        return Err(vision_layout_error_from_status(
+            response.status_code,
+            &response.reason_phrase,
+            &response.body,
+        ));
+    }
+
+    Ok(parse_vision_layout_response(
+        plan.api_format,
+        &response.body,
+        width,
+        height,
+    ))
 }
 
 pub fn parse_vision_layout_response(
@@ -190,6 +316,50 @@ fn request_headers(config: &OpenAiCompatibleConfig) -> Vec<(String, String)> {
     headers
 }
 
+fn validate_vision_layout_config(
+    config: &OpenAiCompatibleConfig,
+) -> Result<(), OpenAiExecutionError> {
+    if config.endpoint.trim().is_empty() {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            "Vision layout endpoint is not configured.",
+        ));
+    }
+    if config.model.trim().is_empty() {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::ServiceUnavailable,
+            "Vision layout model is not configured.",
+        ));
+    }
+    if config.requires_api_key && config.api_key.trim().is_empty() {
+        return Err(OpenAiExecutionError::new(
+            OpenAiExecutionErrorCode::InvalidApiKey,
+            "Vision layout API key is not configured.",
+        ));
+    }
+
+    Ok(())
+}
+
+fn vision_layout_error_from_status(
+    status_code: u16,
+    reason: &str,
+    body: &str,
+) -> OpenAiExecutionError {
+    let code = match status_code {
+        401 | 403 => OpenAiExecutionErrorCode::InvalidApiKey,
+        408 | 504 => OpenAiExecutionErrorCode::Timeout,
+        429 => OpenAiExecutionErrorCode::RateLimited,
+        500..=599 => OpenAiExecutionErrorCode::ServiceUnavailable,
+        _ => OpenAiExecutionErrorCode::InvalidResponse,
+    };
+    let detail = normalized_optional(Some(body)).unwrap_or_else(|| reason.to_string());
+    OpenAiExecutionError::new(
+        code,
+        format!("Vision layout API error ({status_code}): {detail}"),
+    )
+}
+
 fn extract_vision_layout_response_content(
     api_format: OpenAiApiFormat,
     response_json: &str,
@@ -279,4 +449,16 @@ fn parse_detection_item(
         width: width_pct / 100.0 * image_width,
         height: height_pct / 100.0 * image_height,
     })
+}
+
+fn normalized_optional(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn is_loopback_url(url: &reqwest::Url) -> bool {
+    url.host_str()
+        .is_some_and(|host| matches!(host, "localhost" | "127.0.0.1" | "::1"))
 }

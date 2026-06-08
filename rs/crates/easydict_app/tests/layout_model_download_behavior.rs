@@ -6,7 +6,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use easydict_app::{
     cleanup_invalid_layout_model_files_for_directory, delete_all_layout_model_files_for_directory,
-    ensure_layout_model_available_for_directory, ensure_tatr_model_available_for_directory,
+    ensure_full_layout_model_available_for_directory, ensure_layout_model_available_for_directory,
+    ensure_tatr_model_available_for_directory, is_full_layout_model_ready_for_directory,
     layout_model_status_for_directory, model_cache_dir, LayoutModelDownloadConfig,
     LayoutModelDownloadError, LayoutModelPaths, ResourceDownloadClient, ResourceDownloadError,
     ResourceDownloadProgress, ResourceProbeResult, DOC_LAYOUT_MODEL_FILE_NAME,
@@ -151,6 +152,7 @@ fn layout_model_status_reflects_valid_file_sizes_and_paths() {
     let status = layout_model_status_for_directory(&dir, &config);
 
     assert!(status.is_ready());
+    assert!(status.is_full_layout_ready());
     assert!(status.tatr_model_ready);
     assert_eq!(status.native_library_dir, Some(model_cache_dir(&dir)));
     assert_eq!(status.native_library_path, Some(paths.native_lib_path));
@@ -159,6 +161,28 @@ fn layout_model_status_reflects_valid_file_sizes_and_paths() {
         Some(paths.doc_layout_model_path)
     );
     assert_eq!(status.tatr_model_path, Some(paths.tatr_model_path));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn layout_model_full_ready_requires_runtime_doc_layout_and_tatr_models() {
+    let dir = temp_dir("full-ready");
+    let config = tiny_config();
+    let paths = LayoutModelPaths::for_base(&dir);
+    fs::create_dir_all(&paths.models_dir).expect("create models dir");
+    fs::write(&paths.native_lib_path, b"ort").expect("write runtime");
+    fs::write(&paths.doc_layout_model_path, b"model").expect("write model");
+
+    let status = layout_model_status_for_directory(&dir, &config);
+
+    assert!(status.is_ready());
+    assert!(!status.is_full_layout_ready());
+    assert!(!is_full_layout_model_ready_for_directory(&dir, &config));
+
+    fs::write(&paths.tatr_model_path, b"tatr!").expect("write tatr");
+
+    assert!(is_full_layout_model_ready_for_directory(&dir, &config));
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -271,6 +295,57 @@ fn layout_model_tatr_download_is_separate_and_cleans_invalid_file() {
         vec!["https://fast.example/tatr.onnx"]
     );
     assert_eq!(client.requested_stages, vec!["tatr"]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn layout_model_full_ensure_downloads_runtime_doc_layout_and_tatr_models() {
+    let dir = temp_dir("full-ensure");
+    let config = tiny_config();
+    let runtime_zip = zip_with_entry(&config.runtime_zip_entry_path, b"ort");
+    let mut client = FakeResourceDownloadClient::default()
+        .with_probe("https://slow.example/doclayout.onnx", true, 80)
+        .with_probe("https://fast.example/doclayout.onnx", true, 5)
+        .with_probe("https://slow.example/tatr.onnx", true, 40)
+        .with_probe("https://fast.example/tatr.onnx", true, 4)
+        .with_download("https://runtime.example/ort.zip", runtime_zip)
+        .with_download("https://fast.example/doclayout.onnx", b"model")
+        .with_download("https://fast.example/tatr.onnx", b"tatr!");
+    let mut stages = Vec::new();
+
+    let status = ensure_full_layout_model_available_for_directory(
+        &mut client,
+        &dir,
+        &config,
+        &mut |progress| stages.push(progress.stage),
+    )
+    .expect("full layout model ensure succeeds");
+
+    let paths = LayoutModelPaths::for_base(&dir);
+    assert!(status.is_full_layout_ready());
+    assert_eq!(
+        fs::read(&paths.native_lib_path).expect("read runtime"),
+        b"ort"
+    );
+    assert_eq!(
+        fs::read(&paths.doc_layout_model_path).expect("read doc layout"),
+        b"model"
+    );
+    assert_eq!(
+        fs::read(&paths.tatr_model_path).expect("read tatr"),
+        b"tatr!"
+    );
+    assert_eq!(
+        client.requested_urls,
+        vec![
+            "https://runtime.example/ort.zip",
+            "https://fast.example/doclayout.onnx",
+            "https://fast.example/tatr.onnx"
+        ]
+    );
+    assert_eq!(client.requested_stages, vec!["runtime", "model", "tatr"]);
+    assert_eq!(stages, vec!["runtime", "model", "tatr"]);
 
     let _ = fs::remove_dir_all(&dir);
 }

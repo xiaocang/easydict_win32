@@ -1,14 +1,16 @@
-use easydict_app::compat_protocol::SettingsSnapshot;
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     apply_ocr_outcome, begin_ocr_recognize, bgra_to_base64_bmp, bgra_to_base64_jpeg_data_url,
     build_custom_api_ocr_request, build_ollama_ocr_request, group_and_sort_ocr_lines,
     merge_ocr_lines, merge_ocr_words, merged_ocr_text, parse_ocr_http_response, run_ocr_recognize,
-    run_ocr_recognize_with_packaged_app_dir, CapturePhase, CapturePoint, CaptureRect,
-    DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend, OcrBackend,
-    OcrBackendError, OcrCaptureResult, OcrEngineConfig, OcrEngineKind, OcrHttpClient,
-    OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError, OcrLanguageDto, OcrLineDto,
-    OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
+    run_ocr_recognize_with_app_dir, windows_native_ocr_availability_with_recognizer, CapturePhase,
+    CapturePoint, CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message,
+    NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult,
+    OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
+    OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams,
+    OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
 };
+use serde_json::json;
 use std::{
     collections::VecDeque,
     fs,
@@ -24,7 +26,7 @@ use win_fluent::prelude::{
 };
 
 #[test]
-fn begin_ocr_recognize_builds_compat_request_from_capture() {
+fn begin_ocr_recognize_builds_native_request_from_capture() {
     let mut state = EasydictUiState::default();
 
     let request = begin_ocr_recognize(
@@ -420,7 +422,48 @@ fn native_ocr_backend_runs_windows_native_provider_without_worker() {
 }
 
 #[test]
-fn packaged_app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
+fn windows_native_ocr_availability_maps_languages_without_recognition() {
+    let mut recognizer = RecordingWindowsNativeOcrRecognizer::with_languages([
+        ("en-US", "English"),
+        ("ja-JP", "Japanese"),
+    ]);
+
+    let availability = windows_native_ocr_availability_with_recognizer(&mut recognizer)
+        .expect("Windows OCR availability should be queryable");
+
+    assert_eq!(
+        availability,
+        OcrAvailabilityDto {
+            is_available: true,
+            available_languages: vec![
+                OcrLanguageDto {
+                    tag: "en-US".to_string(),
+                    display_name: "English".to_string(),
+                },
+                OcrLanguageDto {
+                    tag: "ja-JP".to_string(),
+                    display_name: "Japanese".to_string(),
+                },
+            ],
+        }
+    );
+    assert_eq!(recognizer.is_available_calls, 1);
+    assert_eq!(recognizer.available_languages_calls, 1);
+    assert!(recognizer.calls.is_empty());
+    assert_eq!(
+        serde_json::to_value(&availability).expect("availability should serialize"),
+        json!({
+            "isAvailable": true,
+            "availableLanguages": [
+                { "tag": "en-US", "displayName": "English" },
+                { "tag": "ja-JP", "displayName": "Japanese" },
+            ],
+        })
+    );
+}
+
+#[test]
+fn app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
     let (endpoint, server) =
         serve_one_http_response(r#"{ "response": " routed native provider " }"#);
     let path = write_temp_bgra("routed", &[0, 0, 255, 255]);
@@ -442,7 +485,7 @@ fn packaged_app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
         },
     };
 
-    let outcome = run_ocr_recognize_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_ocr_recognize_with_app_dir(request, r"C:\MissingWorkerApp");
     let http_request = server.join().expect("HTTP test server should finish");
 
     fs::remove_file(&path).ok();
@@ -456,7 +499,7 @@ fn packaged_app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
 }
 
 #[test]
-fn packaged_app_dir_runner_uses_native_windows_ocr_without_worker_spawn() {
+fn app_dir_runner_uses_native_windows_ocr_without_legacy_runtime() {
     let request = easydict_app::OcrRecognizeRequest {
         query_id: 11,
         mode: OcrMode::Translate,
@@ -472,7 +515,7 @@ fn packaged_app_dir_runner_uses_native_windows_ocr_without_worker_spawn() {
         },
     };
 
-    let outcome = run_ocr_recognize_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_ocr_recognize_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome.result.unwrap_err().message;
 
     assert!(error.contains("Could not read OCR pixel data"));
@@ -636,7 +679,7 @@ fn merged_ocr_text_prefers_backend_text_and_falls_back_to_sorted_lines() {
 }
 
 #[test]
-fn app_ocr_capture_finished_starts_compat_ocr_task() {
+fn app_ocr_capture_finished_starts_native_ocr_task() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -1096,6 +1139,10 @@ impl OcrHttpClient for RecordingOcrHttpClient {
 struct RecordingWindowsNativeOcrRecognizer {
     calls: Vec<(OcrRecognizeParams, Option<String>)>,
     responses: VecDeque<Result<OcrResultDto, OcrBackendError>>,
+    is_available_calls: usize,
+    available_languages_calls: usize,
+    is_available: bool,
+    available_languages: Vec<OcrLanguageDto>,
 }
 
 impl RecordingWindowsNativeOcrRecognizer {
@@ -1105,11 +1152,38 @@ impl RecordingWindowsNativeOcrRecognizer {
         Self {
             calls: Vec::new(),
             responses: responses.into_iter().collect(),
+            is_available_calls: 0,
+            available_languages_calls: 0,
+            is_available: true,
+            available_languages: Vec::new(),
+        }
+    }
+
+    fn with_languages(languages: impl IntoIterator<Item = (&'static str, &'static str)>) -> Self {
+        Self {
+            available_languages: languages
+                .into_iter()
+                .map(|(tag, display_name)| OcrLanguageDto {
+                    tag: tag.to_string(),
+                    display_name: display_name.to_string(),
+                })
+                .collect(),
+            ..Self::with_responses([])
         }
     }
 }
 
 impl WindowsNativeOcrRecognizer for RecordingWindowsNativeOcrRecognizer {
+    fn is_available(&mut self) -> Result<bool, OcrBackendError> {
+        self.is_available_calls += 1;
+        Ok(self.is_available)
+    }
+
+    fn available_languages(&mut self) -> Result<Vec<OcrLanguageDto>, OcrBackendError> {
+        self.available_languages_calls += 1;
+        Ok(self.available_languages.clone())
+    }
+
     fn recognize(
         &mut self,
         params: &OcrRecognizeParams,

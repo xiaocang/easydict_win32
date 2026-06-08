@@ -2,12 +2,18 @@ use easydict_app::content_preservation::{analyze_formula_preservation, SourceBlo
 use easydict_app::pdf_export_blocks::PdfExportSourceBlockType;
 use easydict_app::pdf_formula_adapter::{char_info_from_pdf_glyph, PdfTextOrientation};
 use easydict_app::pdf_source_extraction::{
-    block_context_for_pdf_source_block, build_pdf_source_layout_profile,
-    calculate_pdf_source_reading_order_score, guess_pdf_source_block_type,
-    infer_pdf_source_region_type, infer_region_info_from_source_block_id,
-    pdf_export_chunk_metadata_for_source_block, pdf_glyph_from_extracted_text_char,
-    pdf_source_page_from_extracted_page, PdfSourceExtractionOptions, PdfSourceLayoutRegion,
-    PdfSourceLayoutRegionSource,
+    apply_doc_layout_yolo_detections_to_pdf_source_page,
+    apply_tatr_table_structures_to_pdf_source_page, block_context_for_pdf_source_block,
+    build_pdf_source_layout_profile, calculate_pdf_source_reading_order_score,
+    guess_pdf_source_block_type, infer_pdf_source_region_type,
+    infer_region_info_from_source_block_id, pdf_export_chunk_metadata_for_source_block,
+    pdf_glyph_from_extracted_text_char, pdf_source_page_from_extracted_page,
+    PdfSourceExtractionOptions, PdfSourceLayoutRegion, PdfSourceLayoutRegionSource,
+    PdfSourcePageLayoutDetections, PdfSourcePageTableStructures,
+};
+use easydict_app::{
+    DocLayoutRegionType, DocLayoutYoloDetection, TableCellBounds, TableElementClass,
+    TableStructure, TableSubDetection,
 };
 use easydict_pdf_render::{
     ExtractedPdfTextChar, ExtractedPdfTextPage, PdfTextBounds, PdfTextMatrix,
@@ -148,6 +154,210 @@ fn pdf_source_extraction_assigns_layout_region_ids_and_table_blocks() {
         PdfSourceLayoutRegion::Footer
     );
     assert_eq!(source_page.blocks[2].source_block_id, "p1-footer-b3");
+}
+
+#[test]
+fn pdf_source_extraction_applies_doc_layout_yolo_table_region_to_blocks() {
+    let mut chars = Vec::new();
+    chars.extend(line_chars("Plain text", 700.0, 100.0, "TimesNewRoman"));
+
+    let source_page =
+        pdf_source_page_from_extracted_page(&page(chars), PdfSourceExtractionOptions::default());
+    assert_eq!(
+        source_page.blocks[0].region_type,
+        PdfSourceLayoutRegion::LeftColumn
+    );
+
+    let layout = PdfSourcePageLayoutDetections {
+        page_number: 1,
+        pixel_width: 2000,
+        pixel_height: 2800,
+        detections: vec![doc_layout_detection(
+            DocLayoutRegionType::Table,
+            0.92,
+            180.0,
+            1320.0,
+            300.0,
+            120.0,
+        )],
+    };
+
+    let updated = apply_doc_layout_yolo_detections_to_pdf_source_page(&source_page, &layout);
+
+    assert_eq!(
+        updated.blocks[0].region_type,
+        PdfSourceLayoutRegion::TableLike
+    );
+    assert_eq!(
+        updated.blocks[0].source_block_type,
+        SourceBlockType::TableCell
+    );
+    assert_eq!(updated.blocks[0].source_block_id, "p1-table-b1");
+}
+
+#[test]
+fn pdf_source_extraction_prefers_smaller_doc_layout_yolo_formula_region() {
+    let mut chars = Vec::new();
+    chars.extend(line_chars("x = y", 700.0, 500.0, "TimesNewRoman"));
+
+    let source_page =
+        pdf_source_page_from_extracted_page(&page(chars), PdfSourceExtractionOptions::default());
+    let layout = PdfSourcePageLayoutDetections {
+        page_number: 1,
+        pixel_width: 2000,
+        pixel_height: 2800,
+        detections: vec![
+            doc_layout_detection(DocLayoutRegionType::Body, 0.90, 900.0, 1200.0, 500.0, 500.0),
+            doc_layout_detection(
+                DocLayoutRegionType::IsolatedFormula,
+                0.93,
+                980.0,
+                1330.0,
+                160.0,
+                100.0,
+            ),
+        ],
+    };
+
+    let updated = apply_doc_layout_yolo_detections_to_pdf_source_page(&source_page, &layout);
+
+    assert_eq!(
+        updated.blocks[0].region_type,
+        PdfSourceLayoutRegion::Formula
+    );
+    assert_eq!(
+        updated.blocks[0].source_block_type,
+        SourceBlockType::Formula
+    );
+    assert_eq!(updated.blocks[0].source_block_id, "p1-formula-b1");
+}
+
+#[test]
+fn pdf_source_extraction_splits_tatr_table_structure_into_cell_blocks() {
+    let mut chars = Vec::new();
+    chars.extend(line_chars("A", 950.0, 120.0, "TimesNewRoman"));
+    chars.extend(line_chars("B", 950.0, 220.0, "TimesNewRoman"));
+    chars.extend(line_chars("C", 850.0, 120.0, "TimesNewRoman"));
+    chars.extend(line_chars("D", 850.0, 220.0, "TimesNewRoman"));
+    chars.extend(line_chars("After", 760.0, 100.0, "TimesNewRoman"));
+
+    let source_page =
+        pdf_source_page_from_extracted_page(&page(chars), PdfSourceExtractionOptions::default());
+    let layout = PdfSourcePageTableStructures {
+        page_number: 1,
+        pixel_width: 2000,
+        pixel_height: 2800,
+        tables: vec![table_structure(
+            200.0,
+            800.0,
+            400.0,
+            400.0,
+            vec![
+                cell(0, 0, 200.0, 800.0, 200.0, 200.0),
+                cell(0, 1, 400.0, 800.0, 200.0, 200.0),
+                cell(1, 0, 200.0, 1000.0, 200.0, 200.0),
+                cell(1, 1, 400.0, 1000.0, 200.0, 200.0),
+            ],
+        )],
+    };
+
+    let updated = apply_tatr_table_structures_to_pdf_source_page(&source_page, &layout);
+
+    assert_eq!(
+        updated
+            .blocks
+            .iter()
+            .map(|block| block.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["A", "B", "C", "D", "After"]
+    );
+    assert!(updated.blocks[..4].iter().all(|block| block.region_type
+        == PdfSourceLayoutRegion::TableLike
+        && block.source_block_type == SourceBlockType::TableCell));
+    assert_eq!(updated.blocks[0].source_block_id, "p1-table-b1");
+    assert_eq!(updated.blocks[3].source_block_id, "p1-table-b4");
+    assert_ne!(
+        updated.blocks[4].region_type,
+        PdfSourceLayoutRegion::TableLike
+    );
+    assert_eq!(updated.blocks[4].source_block_id, "p1-left-b5");
+}
+
+#[test]
+fn pdf_source_extraction_keeps_tatr_table_orphan_text_as_table_cell_block() {
+    let mut chars = Vec::new();
+    chars.extend(line_chars("Left", 950.0, 120.0, "TimesNewRoman"));
+    chars.extend(line_chars("OutsideCell", 950.0, 260.0, "TimesNewRoman"));
+
+    let source_page =
+        pdf_source_page_from_extracted_page(&page(chars), PdfSourceExtractionOptions::default());
+    let layout = PdfSourcePageTableStructures {
+        page_number: 1,
+        pixel_width: 2000,
+        pixel_height: 2800,
+        tables: vec![table_structure(
+            200.0,
+            800.0,
+            500.0,
+            200.0,
+            vec![cell(0, 0, 200.0, 800.0, 120.0, 200.0)],
+        )],
+    };
+
+    let updated = apply_tatr_table_structures_to_pdf_source_page(&source_page, &layout);
+
+    assert_eq!(
+        updated
+            .blocks
+            .iter()
+            .map(|block| block.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Left", "OutsideCell"]
+    );
+    assert!(updated.blocks.iter().all(|block| block.region_type
+        == PdfSourceLayoutRegion::TableLike
+        && block.source_block_type == SourceBlockType::TableCell));
+}
+
+#[test]
+fn pdf_source_extraction_tatr_table_cells_keep_context_without_skipping_text_translation() {
+    let chars = line_chars("Cell text", 950.0, 120.0, "TimesNewRoman");
+    let source_page =
+        pdf_source_page_from_extracted_page(&page(chars), PdfSourceExtractionOptions::default());
+    let layout = PdfSourcePageTableStructures {
+        page_number: 1,
+        pixel_width: 2000,
+        pixel_height: 2800,
+        tables: vec![table_structure(
+            200.0,
+            800.0,
+            260.0,
+            180.0,
+            vec![cell(0, 0, 200.0, 800.0, 260.0, 180.0)],
+        )],
+    };
+
+    let updated = apply_tatr_table_structures_to_pdf_source_page(&source_page, &layout);
+    let block = &updated.blocks[0];
+    let context = block_context_for_pdf_source_block(block, 2);
+    let plan = analyze_formula_preservation(&context);
+    let metadata =
+        pdf_export_chunk_metadata_for_source_block(block, 3, updated.blocks.len(), 1, false);
+
+    assert_eq!(block.text, "Cell text");
+    assert_eq!(block.source_block_type, SourceBlockType::TableCell);
+    assert_eq!(context.block_type, SourceBlockType::TableCell);
+    assert_eq!(context.retry_attempt, 2);
+    assert!(!plan.skip_translation);
+    assert_eq!(
+        metadata.source_block_type,
+        PdfExportSourceBlockType::TableCell
+    );
+    assert_eq!(metadata.source_block_id, "p1-table-b1");
+    assert_eq!(metadata.chunk_index, 3);
+    assert_eq!(metadata.retry_count, 1);
+    assert!(!metadata.translation_skipped);
+    assert!(!metadata.preserve_original_text_in_pdf_export);
 }
 
 #[test]
@@ -533,5 +743,70 @@ fn source_line(
             bottom,
         },
         glyphs: Vec::new(),
+    }
+}
+
+fn doc_layout_detection(
+    region_type: DocLayoutRegionType,
+    confidence: f32,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> DocLayoutYoloDetection {
+    DocLayoutYoloDetection {
+        region_type,
+        confidence,
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+fn table_structure(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    cells: Vec<TableCellBounds>,
+) -> TableStructure {
+    TableStructure {
+        rows: vec![TableSubDetection {
+            class: TableElementClass::Row,
+            confidence: 0.9,
+            x,
+            y,
+            width,
+            height,
+        }],
+        columns: vec![TableSubDetection {
+            class: TableElementClass::Column,
+            confidence: 0.9,
+            x,
+            y,
+            width,
+            height,
+        }],
+        spanning_cells: Vec::new(),
+        cells,
+    }
+}
+
+fn cell(
+    row_index: usize,
+    column_index: usize,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> TableCellBounds {
+    TableCellBounds {
+        row_index,
+        column_index,
+        x,
+        y,
+        width,
+        height,
     }
 }

@@ -1,4 +1,4 @@
-use crate::compat_protocol::SettingsSnapshot;
+use crate::protocol::SettingsSnapshot;
 use crate::quick_translate::QuickTranslateSurface;
 use crate::state::{settings_snapshot, EasydictUiState};
 use image::codecs::jpeg::JpegEncoder;
@@ -209,6 +209,14 @@ pub struct OcrLanguageDto {
     pub display_name: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrAvailabilityDto {
+    pub is_available: bool,
+    #[serde(default)]
+    pub available_languages: Vec<OcrLanguageDto>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct OcrRecognizeRequest {
     pub query_id: u64,
@@ -284,6 +292,10 @@ pub trait OcrHttpClient {
 }
 
 pub trait WindowsNativeOcrRecognizer {
+    fn is_available(&mut self) -> Result<bool, OcrBackendError>;
+
+    fn available_languages(&mut self) -> Result<Vec<OcrLanguageDto>, OcrBackendError>;
+
     fn recognize(
         &mut self,
         params: &OcrRecognizeParams,
@@ -295,6 +307,16 @@ pub trait WindowsNativeOcrRecognizer {
 pub struct SystemWindowsNativeOcrRecognizer;
 
 impl WindowsNativeOcrRecognizer for SystemWindowsNativeOcrRecognizer {
+    fn is_available(&mut self) -> Result<bool, OcrBackendError> {
+        Ok(easydict_windows_ocr::is_available())
+    }
+
+    fn available_languages(&mut self) -> Result<Vec<OcrLanguageDto>, OcrBackendError> {
+        easydict_windows_ocr::available_languages()
+            .map(windows_ocr_languages_to_dtos)
+            .map_err(|error| OcrBackendError::new(error.to_string()))
+    }
+
     fn recognize(
         &mut self,
         params: &OcrRecognizeParams,
@@ -302,6 +324,32 @@ impl WindowsNativeOcrRecognizer for SystemWindowsNativeOcrRecognizer {
     ) -> Result<OcrResultDto, OcrBackendError> {
         recognize_with_system_windows_ocr(params, preferred_language_tag)
     }
+}
+
+pub fn windows_native_ocr_availability() -> Result<OcrAvailabilityDto, OcrBackendError> {
+    let mut recognizer = SystemWindowsNativeOcrRecognizer;
+    windows_native_ocr_availability_with_recognizer(&mut recognizer)
+}
+
+pub fn windows_native_ocr_availability_with_recognizer<W: WindowsNativeOcrRecognizer>(
+    recognizer: &mut W,
+) -> Result<OcrAvailabilityDto, OcrBackendError> {
+    Ok(OcrAvailabilityDto {
+        is_available: recognizer.is_available()?,
+        available_languages: recognizer.available_languages()?,
+    })
+}
+
+fn windows_ocr_languages_to_dtos(
+    languages: Vec<easydict_windows_ocr::WindowsOcrLanguage>,
+) -> Vec<OcrLanguageDto> {
+    languages
+        .into_iter()
+        .map(|language| OcrLanguageDto {
+            tag: language.tag,
+            display_name: language.display_name,
+        })
+        .collect()
 }
 
 pub struct ReqwestOcrHttpClient {
@@ -1035,7 +1083,7 @@ pub fn run_ocr_recognize<B: OcrBackend>(
 
 pub fn run_ocr_recognize_with_current_app_dir(request: OcrRecognizeRequest) -> OcrOutcome {
     match current_app_dir() {
-        Ok(app_dir) => run_ocr_recognize_with_packaged_app_dir(request, app_dir),
+        Ok(app_dir) => run_ocr_recognize_with_app_dir(request, app_dir),
         Err(message) => OcrOutcome {
             query_id: request.query_id,
             mode: request.mode,
@@ -1044,7 +1092,7 @@ pub fn run_ocr_recognize_with_current_app_dir(request: OcrRecognizeRequest) -> O
     }
 }
 
-pub fn run_ocr_recognize_with_packaged_app_dir(
+pub fn run_ocr_recognize_with_app_dir(
     request: OcrRecognizeRequest,
     app_dir: impl AsRef<Path>,
 ) -> OcrOutcome {

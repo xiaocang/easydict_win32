@@ -1,5 +1,6 @@
 use crate::character_paragraph::{strip_subset_prefix, TextMatrix};
 use crate::content_preservation::{BlockContext, SourceBlockType};
+use crate::doc_layout_yolo::{DocLayoutRegionType, DocLayoutYoloDetection};
 use crate::formula_protection::FormulaToken;
 use crate::formula_text_reconstruction::{
     looks_like_formula_continuation_text, previous_line_likely_expects_formula_tail,
@@ -11,6 +12,7 @@ use crate::pdf_formula_adapter::{
     build_formula_aware_pdf_block_text, PdfBlockBounds, PdfBlockFormulaEvidence, PdfGlyph,
     PdfGlyphBounds, PdfTextOrientation,
 };
+use crate::table_structure::{TableCellBounds, TableStructure, TableSubDetection};
 use crate::PdfRect;
 use easydict_pdf_render::{
     ExtractedPdfTextChar, ExtractedPdfTextPage, PdfTextBounds, PdfTextExtractionSummary,
@@ -22,6 +24,8 @@ use std::sync::OnceLock;
 
 const DEFAULT_LINE_BASELINE_TOLERANCE_PT: f64 = 3.0;
 const DEFAULT_BLOCK_GAP_SCALE: f64 = 1.3;
+const DOC_LAYOUT_YOLO_MIN_BLOCK_CONFIDENCE: f32 = 0.3;
+const DOC_LAYOUT_YOLO_MIN_BLOCK_COVERAGE: f64 = 0.25;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PdfSourceLayoutRegion {
@@ -120,6 +124,22 @@ pub struct PdfSourceDocument {
     pub pages: Vec<PdfSourcePage>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PdfSourcePageLayoutDetections {
+    pub page_number: usize,
+    pub pixel_width: usize,
+    pub pixel_height: usize,
+    pub detections: Vec<DocLayoutYoloDetection>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PdfSourcePageTableStructures {
+    pub page_number: usize,
+    pub pixel_width: usize,
+    pub pixel_height: usize,
+    pub tables: Vec<TableStructure>,
+}
+
 pub fn pdf_source_document_from_text_summary(
     summary: &PdfTextExtractionSummary,
 ) -> PdfSourceDocument {
@@ -140,6 +160,158 @@ pub fn pdf_source_document_from_text_summary_with_options(
             .map(|page| pdf_source_page_from_extracted_page(page, options))
             .collect(),
     }
+}
+
+pub fn pdf_source_document_with_doc_layout_yolo_detections(
+    document: &PdfSourceDocument,
+    layouts: &[PdfSourcePageLayoutDetections],
+) -> PdfSourceDocument {
+    PdfSourceDocument {
+        pages: document
+            .pages
+            .iter()
+            .map(|page| {
+                layouts
+                    .iter()
+                    .find(|layout| layout.page_number == page.page_number)
+                    .map(|layout| apply_doc_layout_yolo_detections_to_pdf_source_page(page, layout))
+                    .unwrap_or_else(|| page.clone())
+            })
+            .collect(),
+    }
+}
+
+pub fn pdf_source_document_with_tatr_table_structures(
+    document: &PdfSourceDocument,
+    layouts: &[PdfSourcePageTableStructures],
+) -> PdfSourceDocument {
+    PdfSourceDocument {
+        pages: document
+            .pages
+            .iter()
+            .map(|page| {
+                layouts
+                    .iter()
+                    .find(|layout| layout.page_number == page.page_number)
+                    .map(|layout| apply_tatr_table_structures_to_pdf_source_page(page, layout))
+                    .unwrap_or_else(|| page.clone())
+            })
+            .collect(),
+    }
+}
+
+pub fn apply_doc_layout_yolo_detections_to_pdf_source_page(
+    page: &PdfSourcePage,
+    layout: &PdfSourcePageLayoutDetections,
+) -> PdfSourcePage {
+    if page.blocks.is_empty()
+        || layout.pixel_width == 0
+        || layout.pixel_height == 0
+        || page.width <= 0.0
+        || page.height <= 0.0
+    {
+        return page.clone();
+    }
+
+    let image_scale_x = layout.pixel_width as f64 / page.width;
+    let image_scale_y = layout.pixel_height as f64 / page.height;
+    if image_scale_x <= 0.0 || image_scale_y <= 0.0 {
+        return page.clone();
+    }
+
+    let regions = layout
+        .detections
+        .iter()
+        .filter_map(|detection| {
+            pdf_source_onnx_region_from_detection(
+                detection,
+                image_scale_x,
+                image_scale_y,
+                page.height,
+            )
+        })
+        .collect::<Vec<_>>();
+    if regions.is_empty() {
+        return page.clone();
+    }
+
+    let mut updated = page.clone();
+    updated.blocks = page
+        .blocks
+        .iter()
+        .map(|block| {
+            best_onnx_region_for_pdf_source_block(block, &regions)
+                .map(|region| pdf_source_block_with_onnx_region(block, region))
+                .unwrap_or_else(|| block.clone())
+        })
+        .collect();
+    updated
+}
+
+pub fn apply_tatr_table_structures_to_pdf_source_page(
+    page: &PdfSourcePage,
+    layout: &PdfSourcePageTableStructures,
+) -> PdfSourcePage {
+    if page.lines.is_empty()
+        || layout.tables.is_empty()
+        || layout.pixel_width == 0
+        || layout.pixel_height == 0
+        || page.width <= 0.0
+        || page.height <= 0.0
+    {
+        return page.clone();
+    }
+
+    let image_scale_x = layout.pixel_width as f64 / page.width;
+    let image_scale_y = layout.pixel_height as f64 / page.height;
+    if image_scale_x <= 0.0 || image_scale_y <= 0.0 {
+        return page.clone();
+    }
+
+    let Some(tatr_layout) =
+        pdf_source_tatr_layout_from_structures(layout, image_scale_x, image_scale_y, page.height)
+    else {
+        return page.clone();
+    };
+
+    let table_blocks = build_tatr_table_blocks_for_page(page, &tatr_layout);
+    if table_blocks.iter().all(|blocks| blocks.is_empty()) {
+        return page.clone();
+    }
+
+    let mut rebuilt = Vec::new();
+    let mut inserted = vec![false; table_blocks.len()];
+    for block in &page.blocks {
+        let matching_table = tatr_layout_table_for_block(block, &tatr_layout).filter(|index| {
+            table_blocks
+                .get(*index)
+                .is_some_and(|blocks| !blocks.is_empty())
+        });
+
+        if let Some(table_index) = matching_table {
+            if !inserted[table_index] {
+                rebuilt.extend(table_blocks[table_index].iter().cloned());
+                inserted[table_index] = true;
+            }
+            continue;
+        }
+
+        rebuilt.push(block.clone());
+    }
+
+    for (table_index, blocks) in table_blocks.iter().enumerate() {
+        if !inserted[table_index] {
+            rebuilt.extend(blocks.iter().cloned());
+        }
+    }
+
+    if rebuilt.is_empty() {
+        return page.clone();
+    }
+
+    let mut updated = page.clone();
+    updated.blocks = reindex_pdf_source_blocks(rebuilt);
+    updated
 }
 
 pub fn pdf_source_page_from_extracted_page(
@@ -943,6 +1115,529 @@ pub fn infer_pdf_source_region_type(
     }
 
     PdfSourceLayoutRegion::Body
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PdfSourceOnnxRegion {
+    region_type: PdfSourceLayoutRegion,
+    confidence: f32,
+    bounds: PdfBlockBounds,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct PdfSourceTatrCellRegion {
+    bounds: PdfBlockBounds,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct PdfSourceTatrTableRegion {
+    bounds: PdfBlockBounds,
+    cells: Vec<PdfSourceTatrCellRegion>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct PdfSourceTatrLayout {
+    tables: Vec<PdfSourceTatrTableRegion>,
+}
+
+fn pdf_source_onnx_region_from_detection(
+    detection: &DocLayoutYoloDetection,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfSourceOnnxRegion> {
+    if detection.confidence < DOC_LAYOUT_YOLO_MIN_BLOCK_CONFIDENCE {
+        return None;
+    }
+
+    let region_type = pdf_source_region_from_doc_layout_yolo_region(detection.region_type)?;
+    let bounds = pdf_bounds_from_image_rect(
+        detection.x,
+        detection.y,
+        detection.width,
+        detection.height,
+        image_scale_x,
+        image_scale_y,
+        page_height,
+    )?;
+    Some(PdfSourceOnnxRegion {
+        region_type,
+        confidence: detection.confidence,
+        bounds,
+    })
+}
+
+fn pdf_source_tatr_layout_from_structures(
+    layout: &PdfSourcePageTableStructures,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfSourceTatrLayout> {
+    let tables = layout
+        .tables
+        .iter()
+        .filter_map(|structure| {
+            pdf_source_tatr_table_region_from_structure(
+                structure,
+                image_scale_x,
+                image_scale_y,
+                page_height,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    (!tables.is_empty()).then_some(PdfSourceTatrLayout { tables })
+}
+
+fn pdf_source_tatr_table_region_from_structure(
+    structure: &TableStructure,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfSourceTatrTableRegion> {
+    let cells = structure
+        .cells
+        .iter()
+        .filter_map(|cell| {
+            pdf_bounds_from_table_cell(cell, image_scale_x, image_scale_y, page_height)
+                .map(|bounds| PdfSourceTatrCellRegion { bounds })
+        })
+        .collect::<Vec<_>>();
+    if cells.is_empty() {
+        return None;
+    }
+
+    let table_bounds =
+        table_structure_pdf_bounds(structure, image_scale_x, image_scale_y, page_height)
+            .or_else(|| union_pdf_bounds(cells.iter().map(|cell| cell.bounds)))?;
+
+    Some(PdfSourceTatrTableRegion {
+        bounds: table_bounds,
+        cells,
+    })
+}
+
+fn table_structure_pdf_bounds(
+    structure: &TableStructure,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfBlockBounds> {
+    let row_bounds = structure.rows.iter().filter_map(|detection| {
+        pdf_bounds_from_table_detection(detection, image_scale_x, image_scale_y, page_height)
+    });
+    let column_bounds = structure.columns.iter().filter_map(|detection| {
+        pdf_bounds_from_table_detection(detection, image_scale_x, image_scale_y, page_height)
+    });
+    let cell_bounds = structure.cells.iter().filter_map(|cell| {
+        pdf_bounds_from_table_cell(cell, image_scale_x, image_scale_y, page_height)
+    });
+
+    union_pdf_bounds(row_bounds.chain(column_bounds).chain(cell_bounds))
+}
+
+fn pdf_bounds_from_table_detection(
+    detection: &TableSubDetection,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfBlockBounds> {
+    pdf_bounds_from_image_rect(
+        detection.x,
+        detection.y,
+        detection.width,
+        detection.height,
+        image_scale_x,
+        image_scale_y,
+        page_height,
+    )
+}
+
+fn pdf_bounds_from_table_cell(
+    cell: &TableCellBounds,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfBlockBounds> {
+    pdf_bounds_from_image_rect(
+        cell.x,
+        cell.y,
+        cell.width,
+        cell.height,
+        image_scale_x,
+        image_scale_y,
+        page_height,
+    )
+}
+
+fn pdf_bounds_from_image_rect(
+    image_x: f64,
+    image_y: f64,
+    image_width: f64,
+    image_height: f64,
+    image_scale_x: f64,
+    image_scale_y: f64,
+    page_height: f64,
+) -> Option<PdfBlockBounds> {
+    let x = image_x / image_scale_x;
+    let y = page_height - (image_y + image_height) / image_scale_y;
+    let width = image_width / image_scale_x;
+    let height = image_height / image_scale_y;
+    if !x.is_finite()
+        || !y.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.0
+        || height <= 0.0
+    {
+        return None;
+    }
+
+    Some(PdfBlockBounds::from_lrtb(
+        x.max(0.0),
+        (x + width).max(0.0),
+        (y + height).max(0.0),
+        y.max(0.0),
+    ))
+}
+
+fn build_tatr_table_blocks_for_page(
+    page: &PdfSourcePage,
+    layout: &PdfSourceTatrLayout,
+) -> Vec<Vec<PdfSourceBlock>> {
+    let mut table_cell_lines = layout
+        .tables
+        .iter()
+        .map(|table| vec![Vec::<PdfSourceLine>::new(); table.cells.len()])
+        .collect::<Vec<_>>();
+    let mut table_orphan_lines = vec![Vec::<PdfSourceLine>::new(); layout.tables.len()];
+
+    for line in &page.lines {
+        assign_line_to_tatr_tables(line, layout, &mut table_cell_lines, &mut table_orphan_lines);
+    }
+
+    let layout_profile = build_pdf_source_layout_profile(&page.lines, page.width, page.height);
+    layout
+        .tables
+        .iter()
+        .enumerate()
+        .map(|(table_index, _)| {
+            build_tatr_blocks_for_table(
+                page.page_number,
+                layout_profile,
+                &table_cell_lines[table_index],
+                &table_orphan_lines[table_index],
+            )
+        })
+        .collect()
+}
+
+fn assign_line_to_tatr_tables(
+    line: &PdfSourceLine,
+    layout: &PdfSourceTatrLayout,
+    table_cell_lines: &mut [Vec<Vec<PdfSourceLine>>],
+    table_orphan_lines: &mut [Vec<PdfSourceLine>],
+) {
+    if line.glyphs.is_empty() {
+        let center_x = (line.bounds.left + line.bounds.right) / 2.0;
+        let center_y = (line.bounds.bottom + line.bounds.top) / 2.0;
+        if let Some((table_index, cell_index)) =
+            best_tatr_cell_for_point(layout, center_x, center_y)
+        {
+            table_cell_lines[table_index][cell_index].push(line.clone());
+        } else if let Some(table_index) = best_tatr_table_for_point(layout, center_x, center_y) {
+            table_orphan_lines[table_index].push(line.clone());
+        }
+        return;
+    }
+
+    let mut cell_glyphs = layout
+        .tables
+        .iter()
+        .map(|table| vec![Vec::<PdfGlyph>::new(); table.cells.len()])
+        .collect::<Vec<_>>();
+    let mut orphan_glyphs = vec![Vec::<PdfGlyph>::new(); layout.tables.len()];
+
+    for glyph in &line.glyphs {
+        let center_x = (glyph.bounds.left + glyph.bounds.right) / 2.0;
+        let center_y = (glyph.bounds.bottom + glyph.bounds.top) / 2.0;
+        if let Some((table_index, cell_index)) =
+            best_tatr_cell_for_point(layout, center_x, center_y)
+        {
+            cell_glyphs[table_index][cell_index].push(glyph.clone());
+        } else if let Some(table_index) = best_tatr_table_for_point(layout, center_x, center_y) {
+            orphan_glyphs[table_index].push(glyph.clone());
+        }
+    }
+
+    for (table_index, cells) in cell_glyphs.into_iter().enumerate() {
+        for (cell_index, glyphs) in cells.into_iter().enumerate() {
+            if let Some(cell_line) = pdf_source_line_from_glyphs(line, glyphs) {
+                table_cell_lines[table_index][cell_index].push(cell_line);
+            }
+        }
+    }
+    for (table_index, glyphs) in orphan_glyphs.into_iter().enumerate() {
+        if let Some(orphan_line) = pdf_source_line_from_glyphs(line, glyphs) {
+            table_orphan_lines[table_index].push(orphan_line);
+        }
+    }
+}
+
+fn build_tatr_blocks_for_table(
+    page_number: usize,
+    layout_profile: PdfSourceLayoutProfile,
+    cell_lines: &[Vec<PdfSourceLine>],
+    orphan_lines: &[PdfSourceLine],
+) -> Vec<PdfSourceBlock> {
+    let mut blocks = Vec::new();
+    for lines in cell_lines {
+        if lines.is_empty() {
+            continue;
+        }
+        blocks.push(pdf_source_block_as_tatr_table_cell(build_pdf_source_block(
+            page_number,
+            blocks.len(),
+            lines,
+            layout_profile,
+        )));
+    }
+
+    if !orphan_lines.is_empty() {
+        blocks.push(pdf_source_block_as_tatr_table_cell(build_pdf_source_block(
+            page_number,
+            blocks.len(),
+            orphan_lines,
+            layout_profile,
+        )));
+    }
+
+    blocks
+}
+
+fn pdf_source_block_as_tatr_table_cell(block: PdfSourceBlock) -> PdfSourceBlock {
+    let mut updated = block;
+    updated.region_type = PdfSourceLayoutRegion::TableLike;
+    updated.source_block_type = SourceBlockType::TableCell;
+    updated.source_block_id = build_pdf_source_block_id(
+        updated.page_number,
+        updated.block_index,
+        updated.region_type,
+    );
+    updated
+}
+
+fn pdf_source_line_from_glyphs(
+    source_line: &PdfSourceLine,
+    glyphs: Vec<PdfGlyph>,
+) -> Option<PdfSourceLine> {
+    if glyphs.is_empty() {
+        return None;
+    }
+
+    let bounds = bounds_for_glyphs(&glyphs);
+    let text = glyphs
+        .iter()
+        .map(|glyph| glyph.value.as_str())
+        .collect::<Vec<_>>()
+        .join("");
+    Some(PdfSourceLine {
+        page_number: source_line.page_number,
+        line_index: source_line.line_index,
+        text,
+        bounds,
+        glyphs,
+    })
+}
+
+fn best_tatr_cell_for_point(
+    layout: &PdfSourceTatrLayout,
+    x: f64,
+    y: f64,
+) -> Option<(usize, usize)> {
+    layout
+        .tables
+        .iter()
+        .enumerate()
+        .flat_map(|(table_index, table)| {
+            table
+                .cells
+                .iter()
+                .enumerate()
+                .map(move |(cell_index, cell)| (table_index, cell_index, cell))
+        })
+        .filter(|(_, _, cell)| pdf_bounds_contains_point(cell.bounds, x, y))
+        .min_by(|(_, _, left), (_, _, right)| {
+            pdf_bounds_area(left.bounds).total_cmp(&pdf_bounds_area(right.bounds))
+        })
+        .map(|(table_index, cell_index, _)| (table_index, cell_index))
+}
+
+fn best_tatr_table_for_point(layout: &PdfSourceTatrLayout, x: f64, y: f64) -> Option<usize> {
+    layout
+        .tables
+        .iter()
+        .enumerate()
+        .filter(|(_, table)| pdf_bounds_contains_point(table.bounds, x, y))
+        .min_by(|(_, left), (_, right)| {
+            pdf_bounds_area(left.bounds).total_cmp(&pdf_bounds_area(right.bounds))
+        })
+        .map(|(index, _)| index)
+}
+
+fn tatr_layout_table_for_block(
+    block: &PdfSourceBlock,
+    layout: &PdfSourceTatrLayout,
+) -> Option<usize> {
+    let center_x = (block.bounds.left + block.bounds.right) / 2.0;
+    let center_y = (block.bounds.bottom + block.bounds.top) / 2.0;
+    if let Some(table_index) = best_tatr_table_for_point(layout, center_x, center_y) {
+        return Some(table_index);
+    }
+
+    layout
+        .tables
+        .iter()
+        .enumerate()
+        .filter_map(|(index, table)| {
+            let coverage = pdf_bounds_intersection_area(block.bounds, table.bounds)
+                / pdf_bounds_area(block.bounds).max(1.0);
+            (coverage >= DOC_LAYOUT_YOLO_MIN_BLOCK_COVERAGE).then_some((index, coverage))
+        })
+        .max_by(|(_, left), (_, right)| left.total_cmp(right))
+        .map(|(index, _)| index)
+}
+
+fn union_pdf_bounds(bounds: impl IntoIterator<Item = PdfBlockBounds>) -> Option<PdfBlockBounds> {
+    bounds.into_iter().fold(None, |acc, bounds| {
+        Some(match acc {
+            None => bounds,
+            Some(current) => PdfBlockBounds {
+                left: current.left.min(bounds.left),
+                right: current.right.max(bounds.right),
+                top: current.top.max(bounds.top),
+                bottom: current.bottom.min(bounds.bottom),
+            },
+        })
+    })
+}
+
+fn pdf_source_region_from_doc_layout_yolo_region(
+    region_type: DocLayoutRegionType,
+) -> Option<PdfSourceLayoutRegion> {
+    match region_type {
+        DocLayoutRegionType::Body => Some(PdfSourceLayoutRegion::Body),
+        DocLayoutRegionType::Table | DocLayoutRegionType::TableLike => {
+            Some(PdfSourceLayoutRegion::TableLike)
+        }
+        DocLayoutRegionType::Figure => Some(PdfSourceLayoutRegion::Figure),
+        DocLayoutRegionType::Formula | DocLayoutRegionType::IsolatedFormula => {
+            Some(PdfSourceLayoutRegion::Formula)
+        }
+        DocLayoutRegionType::Caption => Some(PdfSourceLayoutRegion::Caption),
+        DocLayoutRegionType::Title => Some(PdfSourceLayoutRegion::Title),
+        DocLayoutRegionType::Header
+        | DocLayoutRegionType::Footer
+        | DocLayoutRegionType::LeftColumn
+        | DocLayoutRegionType::RightColumn
+        | DocLayoutRegionType::Unknown => None,
+    }
+}
+
+fn best_onnx_region_for_pdf_source_block<'a>(
+    block: &PdfSourceBlock,
+    regions: &'a [PdfSourceOnnxRegion],
+) -> Option<&'a PdfSourceOnnxRegion> {
+    let center_x = (block.bounds.left + block.bounds.right) / 2.0;
+    let center_y = (block.bounds.bottom + block.bounds.top) / 2.0;
+
+    if let Some(region) = regions
+        .iter()
+        .filter(|region| pdf_bounds_contains_point(region.bounds, center_x, center_y))
+        .min_by(|left, right| {
+            pdf_bounds_area(left.bounds)
+                .total_cmp(&pdf_bounds_area(right.bounds))
+                .then_with(|| right.confidence.total_cmp(&left.confidence))
+        })
+    {
+        return Some(region);
+    }
+
+    regions
+        .iter()
+        .filter_map(|region| {
+            let coverage = pdf_bounds_intersection_area(block.bounds, region.bounds)
+                / pdf_bounds_area(block.bounds).max(1.0);
+            (coverage >= DOC_LAYOUT_YOLO_MIN_BLOCK_COVERAGE).then_some((region, coverage))
+        })
+        .max_by(
+            |(left_region, left_coverage), (right_region, right_coverage)| {
+                left_coverage
+                    .total_cmp(right_coverage)
+                    .then_with(|| left_region.confidence.total_cmp(&right_region.confidence))
+            },
+        )
+        .map(|(region, _)| region)
+}
+
+fn pdf_source_block_with_onnx_region(
+    block: &PdfSourceBlock,
+    region: &PdfSourceOnnxRegion,
+) -> PdfSourceBlock {
+    let mut updated = block.clone();
+    updated.region_type = region.region_type;
+    updated.source_block_id =
+        build_pdf_source_block_id(block.page_number, block.block_index, region.region_type);
+    updated.source_block_type = pdf_source_block_type_for_onnx_region(region.region_type, block);
+    updated
+}
+
+fn reindex_pdf_source_blocks(blocks: Vec<PdfSourceBlock>) -> Vec<PdfSourceBlock> {
+    blocks
+        .into_iter()
+        .enumerate()
+        .map(|(block_index, mut block)| {
+            block.block_index = block_index;
+            block.source_block_id =
+                build_pdf_source_block_id(block.page_number, block_index, block.region_type);
+            block
+        })
+        .collect()
+}
+
+fn pdf_source_block_type_for_onnx_region(
+    region_type: PdfSourceLayoutRegion,
+    block: &PdfSourceBlock,
+) -> SourceBlockType {
+    match region_type {
+        PdfSourceLayoutRegion::TableLike => SourceBlockType::TableCell,
+        PdfSourceLayoutRegion::Formula => SourceBlockType::Formula,
+        PdfSourceLayoutRegion::Caption => SourceBlockType::Caption,
+        PdfSourceLayoutRegion::Title => SourceBlockType::Heading,
+        PdfSourceLayoutRegion::Figure => SourceBlockType::Unknown,
+        PdfSourceLayoutRegion::Unknown
+        | PdfSourceLayoutRegion::Body
+        | PdfSourceLayoutRegion::Header
+        | PdfSourceLayoutRegion::Footer
+        | PdfSourceLayoutRegion::LeftColumn
+        | PdfSourceLayoutRegion::RightColumn => block.source_block_type,
+    }
+}
+
+fn pdf_bounds_contains_point(bounds: PdfBlockBounds, x: f64, y: f64) -> bool {
+    x >= bounds.left && x <= bounds.right && y >= bounds.bottom && y <= bounds.top
+}
+
+fn pdf_bounds_intersection_area(left: PdfBlockBounds, right: PdfBlockBounds) -> f64 {
+    let x1 = left.left.max(right.left);
+    let y1 = left.bottom.max(right.bottom);
+    let x2 = left.right.min(right.right);
+    let y2 = left.top.min(right.top);
+    ((x2 - x1).max(0.0)) * ((y2 - y1).max(0.0))
+}
+
+fn pdf_bounds_area(bounds: PdfBlockBounds) -> f64 {
+    ((bounds.right - bounds.left).max(0.0)) * ((bounds.top - bounds.bottom).max(0.0))
 }
 
 fn build_pdf_source_block_id(

@@ -1,8 +1,8 @@
 use crate::long_document::{
     build_long_document_request, long_document_supported_service_descriptors,
-    run_long_document_request_with_current_app_dir,
-    run_long_document_request_with_packaged_app_dir, LongDocumentEvent, LongDocumentOutcome,
+    run_long_document_request_with_current_app_dir, LongDocumentEvent, LongDocumentOutcome,
 };
+use crate::protocol::local_ai_provider_modes;
 use crate::settings_storage::{
     default_settings_storage_path, load_settings_file, SettingsStorageError,
 };
@@ -71,7 +71,7 @@ pub struct LongDocumentCliOptions {
     #[arg(long = "max-concurrency", value_name = "N")]
     max_concurrency: Option<u32>,
 
-    #[arg(long = "app-dir", value_name = "DIR")]
+    #[arg(long = "app-dir", value_name = "DIR", hide = true)]
     app_dir: Option<PathBuf>,
 
     #[arg(short = 'e', long = "env-file", value_name = "FILE")]
@@ -147,6 +147,9 @@ fn run(
 
     let mut state = build_cli_state(&options)?;
     let mut request = build_long_document_request(&state, 1)?;
+    if let Some(cache_dir) = env_value(&["EASYDICT_OPENVINO_CACHE_DIR", "EASYDICT_CACHE_DIR"]) {
+        request.settings.cache_dir = Some(cache_dir);
+    }
 
     if let Some(output) = options.output.as_ref() {
         request.params.output_path = Some(path_string(output));
@@ -167,11 +170,10 @@ fn run(
         request.params.vision_model = Some(model.to_string());
     }
 
-    let outcome = if let Some(app_dir) = options.app_dir.as_ref() {
-        run_long_document_request_with_packaged_app_dir(request, app_dir)
-    } else {
-        run_long_document_request_with_current_app_dir(request)
-    };
+    // Accepted for old scripts; the default rs CLI no longer uses this to select
+    // packaged retained worker paths.
+    let _ = options.app_dir.as_ref();
+    let outcome = run_long_document_request_with_current_app_dir(request);
 
     write_outcome(stdout, stderr, &outcome, options.json)?;
     state.long_document.last_output_path = outcome.result.as_ref().ok().and_then(|result| {
@@ -500,6 +502,23 @@ fn apply_environment_overrides(settings: &mut SettingsState) {
         settings.ollama_model = value;
     }
 
+    if let Some(value) = env_value(&["EASYDICT_LOCAL_AI_PROVIDER", "LOCAL_AI_PROVIDER"]) {
+        settings.local_ai_provider = normalize_local_ai_provider_env(&value);
+    }
+    if let Some(value) = env_value(&["EASYDICT_FOUNDRY_LOCAL_ENDPOINT", "FOUNDRY_LOCAL_ENDPOINT"]) {
+        settings.foundry_local_endpoint = value;
+    }
+    if let Some(value) = env_value(&["EASYDICT_FOUNDRY_LOCAL_MODEL", "FOUNDRY_LOCAL_MODEL"]) {
+        settings.foundry_local_model = value;
+    }
+    if let Some(value) = env_value(&[
+        "EASYDICT_OPENVINO_DEVICE",
+        "EASYDICT_OPEN_VINO_DEVICE",
+        "OPENVINO_DEVICE",
+    ]) {
+        settings.open_vino_device = value;
+    }
+
     apply_provider_env(
         settings,
         "gemini",
@@ -570,6 +589,19 @@ fn apply_provider_env(
     }
     if let Some(value) = env_value(endpoint_aliases) {
         service_provider_mut(settings, service_id).endpoint = value;
+    }
+}
+
+fn normalize_local_ai_provider_env(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "windowsai" | "windows-ai" | "windows_ai" | "phi" | "phi-silica" | "phisilica" => {
+            local_ai_provider_modes::WINDOWS_AI.to_string()
+        }
+        "foundrylocal" | "foundry-local" | "foundry_local" | "local-ai" | "localai" => {
+            local_ai_provider_modes::FOUNDRY_LOCAL.to_string()
+        }
+        "openvino" | "open-vino" | "open_vino" => local_ai_provider_modes::OPENVINO.to_string(),
+        _ => local_ai_provider_modes::AUTO.to_string(),
     }
 }
 

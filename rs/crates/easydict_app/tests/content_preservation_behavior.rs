@@ -73,6 +73,23 @@ fn formula_preservation_analyze_matches_legacy_block_level_heuristics() {
     let normal = analyze_formula_preservation(&BlockContext::paragraph("This is normal text."));
     assert!(!normal.skip_translation);
     assert_eq!(normal.mode, PreservationMode::None);
+
+    let mut text_table_cell = BlockContext::paragraph("Cell text");
+    text_table_cell.block_type = SourceBlockType::TableCell;
+    let text_cell_plan = analyze_formula_preservation(&text_table_cell);
+    assert!(!text_cell_plan.skip_translation);
+    assert_eq!(text_cell_plan.mode, PreservationMode::None);
+
+    let mut numeric_table_cell = BlockContext::paragraph("1.0  2.0  3.0");
+    numeric_table_cell.block_type = SourceBlockType::TableCell;
+    let numeric_cell_plan = analyze_formula_preservation(&numeric_table_cell);
+    assert!(numeric_cell_plan.skip_translation);
+    assert_eq!(numeric_cell_plan.reason.as_deref(), Some("NumericData"));
+
+    let mut formula_like_table_cell = BlockContext::paragraph("x = y");
+    formula_like_table_cell.block_type = SourceBlockType::TableCell;
+    formula_like_table_cell.is_formula_like = true;
+    assert!(analyze_formula_preservation(&formula_like_table_cell).skip_translation);
 }
 
 #[test]

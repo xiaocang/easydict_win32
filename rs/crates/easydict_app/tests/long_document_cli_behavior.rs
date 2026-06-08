@@ -23,16 +23,21 @@ fn help_lists_long_document_options() {
         "--output",
         "--service",
         "--output-mode",
+        "--layout",
+        "--pdf-export-mode",
         "--page",
         "--page-range",
         "--max-concurrency",
-        "--app-dir",
     ] {
         assert!(
             stdout.contains(expected),
             "help should mention {expected}\nstdout:\n{stdout}"
         );
     }
+    assert!(
+        !stdout.contains("--app-dir"),
+        "legacy no-op app-dir should stay hidden from first rs portable help\nstdout:\n{stdout}"
+    );
     assert!(
         stderr(&output).trim().is_empty(),
         "help should not write diagnostics to stderr:\n{}",
@@ -178,6 +183,222 @@ fn page_and_page_range_are_mutually_exclusive() {
     assert!(
         stdout(&output).trim().is_empty(),
         "conflicting page options should not write output"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-appdir-no-worker");
+    let app_dir = work_dir.join("app");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello long document").expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "zh-Hans",
+            "--from",
+            "en",
+            "--service",
+            "windows-local-ai",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("requires a Rust-native route"),
+        "stderr should require a Rust-native LongDoc route:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(".NET workers"),
+        "default CLI error should not mention retired retained runtime:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Long Document worker executable"),
+        "--app-dir must not probe retained LongDoc worker paths:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "LongDoc CLI should not describe a compat host route:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn target_auto_fails_before_native_or_retained_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-target-auto");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello long document").expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "auto",
+            "--from",
+            "en",
+            "--service",
+            "windows-local-ai",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("Long Document target language cannot be Auto"),
+        "stderr should reject target Auto before provider lookup:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Long Document worker"),
+        "target Auto should not probe retained LongDoc workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(".NET workers"),
+        "target Auto should not expose retained .NET worker details:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "target Auto should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn env_overrides_local_ai_provider_and_openvino_cache_dir_for_native_preflight() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-openvino-env");
+    let settings_dir = work_dir.join("settings");
+    let cache_dir = work_dir.join("cache");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::create_dir_all(&cache_dir).expect("cache directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello local OpenVINO long document")
+        .expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "zh-Hans",
+            "--from",
+            "en",
+            "--service",
+            "windows-local-ai",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "openvino")
+        .env("EASYDICT_OPENVINO_CACHE_DIR", &cache_dir)
+        .env("EASYDICT_OPENVINO_DEVICE", "GPU")
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("OpenVINO runtime or NLLB-200 model is not downloaded"),
+        "stderr should report the native OpenVINO download preflight:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("Download model"),
+        "stderr should guide users to download the OpenVINO model:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "OpenVINO env route should not fall back to generic retained worker wording:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Long Document worker"),
+        "OpenVINO env route should not probe retained LongDoc workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "OpenVINO env route should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn env_overrides_foundry_local_endpoint_and_model_before_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-foundry-env");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello Foundry Local long document")
+        .expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "zh-Hans",
+            "--from",
+            "en",
+            "--service",
+            "windows-local-ai",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env("EASYDICT_FOUNDRY_LOCAL_ENDPOINT", "foundry-local-invalid")
+        .env("EASYDICT_FOUNDRY_LOCAL_MODEL", "cli-foundry-model")
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "Foundry env route should enter native LocalAI handling:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Long Document worker"),
+        "Foundry env route should not probe retained LongDoc workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "Foundry env route should not describe a compat host:\n{stderr}"
     );
 
     let _ = fs::remove_dir_all(work_dir);

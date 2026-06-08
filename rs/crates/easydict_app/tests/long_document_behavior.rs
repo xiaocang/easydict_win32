@@ -1,23 +1,41 @@
-use easydict_app::compat_protocol::{
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::long_document::run_long_document_request_with_packaged_app_dir_and_worker_policy;
+use easydict_app::protocol::{
     local_ai_provider_modes, BlockTranslatedEventData, ProgressEventData, SettingsSnapshot,
     StatusEventData, TranslateDocumentParams, TranslateDocumentResult,
 };
+#[cfg(feature = "retained-dotnet-workers")]
+use easydict_app::RetainedWorkerPolicy;
 use easydict_app::{
     apply_long_document_outcome, begin_long_document_translate, build_long_document_request,
     long_document_request_can_route_natively, long_document_source_hash, run_long_document_request,
-    run_long_document_request_with_native_route, run_long_document_request_with_packaged_app_dir,
-    run_long_document_request_with_packaged_app_dir_and_worker_policy,
+    run_long_document_request_with_app_dir,
+    run_long_document_request_with_app_dir_and_native_local_ai_client,
+    run_long_document_request_with_native_route,
     run_native_text_long_document_request_with_translator, AppMode, EasydictApp, EasydictUiState,
-    LongDocumentBackend, LongDocumentBackendError, LongDocumentEvent, LongDocumentInput,
-    LongDocumentOutcome, LongDocumentTranslationCache, Message, NativeLongDocumentTranslator,
-    QuickTranslateServiceRequest, RetainedWorkerPolicy, TRANSLATION_LANGUAGE_IDS,
+    FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalRuntimeController,
+    FoundryLocalRuntimeState, FoundryLocalRuntimeStatus, LongDocumentBackend,
+    LongDocumentBackendError, LongDocumentEvent, LongDocumentInput, LongDocumentOutcome,
+    LongDocumentTranslationCache, Message, NativeLongDocumentTranslator,
+    QuickTranslateServiceRequest, TRANSLATION_LANGUAGE_IDS,
 };
+use easydict_windows_ai::{
+    WindowsAiError, WindowsAiGenerationOptions, WindowsAiLanguageModelClient,
+    WindowsAiLanguageModelProbe, WindowsAiReadyState, WindowsAiResponse,
+};
+use std::collections::VecDeque;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use win_fluent::prelude::{Application, ResultStatus, Task};
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+const RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "EASYDICT_RUNTIME_PROFILE";
+#[cfg(feature = "retained-dotnet-workers")]
+const GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "RUNTIME_PROFILE";
 
 #[test]
 fn long_document_translate_builds_file_request_and_marks_loading() {
@@ -170,6 +188,7 @@ fn long_document_request_maps_all_selectable_targets_to_dotnet_language_names() 
         ("zh-Hant", "TraditionalChinese"),
         ("ja", "Japanese"),
         ("ko", "Korean"),
+        ("zh-classical", "ClassicalChinese"),
         ("en", "English"),
         ("de", "German"),
         ("nl", "Dutch"),
@@ -208,7 +227,6 @@ fn long_document_request_maps_all_selectable_targets_to_dotnet_language_names() 
         ("id", "Indonesian"),
         ("ms", "Malay"),
         ("tl", "Filipino"),
-        ("zh-classical", "ClassicalChinese"),
     ];
 
     assert_eq!(TRANSLATION_LANGUAGE_IDS.len(), expected.len());
@@ -843,6 +861,123 @@ fn native_text_long_document_runner_translates_chunks_and_writes_outputs() {
         event,
         LongDocumentEvent::Status(status)
             if status.message == "Translating text document natively"
+    )));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_long_document_context_pass_injects_prompt() {
+    let temp_dir = unique_temp_dir("longdoc-native-text-context-pass");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let source_text =
+        native_long_text_markers(&["Transformer-intro", "Transformer-middle", "Transformer-end"]);
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                custom_translation_prompt: "Preserve glossary terms.".to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text,
+                input_mode: "plaintext".to_string(),
+                output_mode: "monolingual".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                concurrency: "2".to_string(),
+                two_pass_context: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        23,
+    )
+    .expect("native context request should build");
+    let mut translator = ContextAwareNativeLongDocTranslator::default();
+
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let result = outcome.result.expect("native context run should succeed");
+
+    assert_eq!(result.state, "Completed");
+    assert_eq!(translator.context_calls().len(), 1);
+    let translation_calls = translator.translation_calls();
+    assert_eq!(translation_calls.len(), 3);
+    for call in translation_calls {
+        let prompt = call.params.custom_prompt.unwrap_or_default();
+        assert!(prompt.contains("Document summary: Transformer paper page."));
+        assert!(prompt.contains("Use these term translations consistently across the document:"));
+        assert!(prompt.contains("Transformer -> Transformer"));
+        assert!(prompt.contains("Preserve glossary terms."));
+    }
+
+    let output = fs::read_to_string(result.output_path.expect("output path"))
+        .expect("output should be written");
+    assert!(output.contains("[zh] Transformer-intro"));
+    assert!(output.contains("[zh] Transformer-middle"));
+    assert!(output.contains("[zh] Transformer-end"));
+    assert!(outcome.events.iter().any(|event| matches!(
+        event,
+        LongDocumentEvent::Status(status)
+            if status.message == "Analyzing document context natively"
+    )));
+    assert!(outcome.events.iter().any(|event| matches!(
+        event,
+        LongDocumentEvent::Progress(progress) if progress.stage == "DocumentContext"
+    )));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_long_document_context_pass_preserves_hinted_short_chunk() {
+    let temp_dir = unique_temp_dir("longdoc-native-text-context-preserve");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "BLEU-28.4".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_mode: "monolingual".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                two_pass_context: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        24,
+    )
+    .expect("native context preservation request should build");
+    let mut translator = ContextAwareNativeLongDocTranslator::default();
+
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let result = outcome
+        .result
+        .expect("native context preservation run should succeed");
+
+    assert_eq!(result.state, "Completed");
+    assert_eq!(translator.context_calls().len(), 1);
+    assert_eq!(translator.translation_calls().len(), 0);
+    let output = fs::read_to_string(result.output_path.expect("output path"))
+        .expect("output should be written");
+    assert_eq!(output.trim(), "BLEU-28.4");
+    assert!(outcome.events.iter().any(|event| matches!(
+        event,
+        LongDocumentEvent::BlockTranslated(block)
+            if block.translated_text == "BLEU-28.4" && block.last_error.is_none()
     )));
 
     fs::remove_dir_all(&temp_dir).ok();
@@ -1556,17 +1691,40 @@ fn native_text_long_document_cache_hits_do_not_take_translator_slots() {
         .map(|call| call.params.text)
         .collect::<Vec<_>>();
     assert_eq!(split_chunks.len(), 4);
+    let cached_0_source = split_chunks
+        .iter()
+        .find(|chunk| chunk.contains("cached-0"))
+        .expect("cached-0 source chunk should be recorded")
+        .clone();
+    let cached_2_source = split_chunks
+        .iter()
+        .find(|chunk| chunk.contains("cached-2"))
+        .expect("cached-2 source chunk should be recorded")
+        .clone();
+    let miss_1_source = split_chunks
+        .iter()
+        .find(|chunk| chunk.contains("miss-1"))
+        .expect("miss-1 source chunk should be recorded")
+        .clone();
+    let miss_3_source = split_chunks
+        .iter()
+        .find(|chunk| chunk.contains("miss-3"))
+        .expect("miss-3 source chunk should be recorded")
+        .clone();
 
     let mut cache = LongDocumentTranslationCache::open(temp_dir.join("translation_cache.db"))
         .expect("cache should open");
-    for (index, translated) in [(0, "[cached] cached-0"), (2, "[cached] cached-2")] {
+    for (source, translated) in [
+        (&cached_0_source, "[cached] cached-0"),
+        (&cached_2_source, "[cached] cached-2"),
+    ] {
         cache
             .set(
                 "google",
                 "English",
                 "SimplifiedChinese",
-                &long_document_source_hash(&split_chunks[index]),
-                &split_chunks[index],
+                &long_document_source_hash(source),
+                source,
                 translated,
             )
             .expect("cache entry should be stored");
@@ -1597,8 +1755,8 @@ fn native_text_long_document_cache_hits_do_not_take_translator_slots() {
         .map(|call| call.params.text)
         .collect::<Vec<_>>();
     assert_eq!(called_text.len(), 2);
-    assert!(called_text.contains(&split_chunks[1]));
-    assert!(called_text.contains(&split_chunks[3]));
+    assert!(called_text.contains(&miss_1_source));
+    assert!(called_text.contains(&miss_3_source));
     let output = fs::read_to_string(result.output_path.expect("output path"))
         .expect("output should be written");
     let cached_0 = output.find("[cached] cached-0").expect("cached 0 output");
@@ -2068,11 +2226,7 @@ fn failed_native_pdf_text_extraction_does_not_probe_packaged_longdoc_worker() {
     .expect("native pdf request");
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir_and_worker_policy(
-        request,
-        &temp_dir,
-        RetainedWorkerPolicy::all_enabled(),
-    );
+    let outcome = run_long_document_request_with_app_dir(request, &temp_dir);
     let error = outcome
         .result
         .expect_err("native PDF extraction failure should stay local");
@@ -2086,7 +2240,8 @@ fn failed_native_pdf_text_extraction_does_not_probe_packaged_longdoc_worker() {
 }
 
 #[test]
-fn packaged_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_enable_hybrid() {
+fn app_dir_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_enable_hybrid() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let temp_dir = unique_temp_dir("longdoc-packaged-runner-default-rust-only");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
 
@@ -2111,8 +2266,7 @@ fn packaged_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_ena
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let default_outcome =
-        run_long_document_request_with_packaged_app_dir(request.clone(), &temp_dir);
+    let default_outcome = run_long_document_request_with_app_dir(request.clone(), &temp_dir);
     let default_error = default_outcome
         .result
         .expect_err("default rs runner should keep retained LongDoc disabled");
@@ -2120,22 +2274,118 @@ fn packaged_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_ena
     assert!(default_error
         .message
         .contains("requires a Rust-native route"));
-    assert!(default_error.message.contains(".NET Long Document workers"));
+    assert!(!default_error.message.contains(".NET Long Document workers"));
     assert!(!default_error
         .message
         .contains("Long Document worker executable"));
 
-    let hybrid_outcome = run_long_document_request_with_packaged_app_dir_and_worker_policy(
+    #[cfg(feature = "retained-dotnet-workers")]
+    {
+        let _runtime_profile =
+            EnvironmentVariableGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+        let hybrid_outcome = run_long_document_request_with_packaged_app_dir_and_worker_policy(
+            request,
+            &temp_dir,
+            RetainedWorkerPolicy::all_enabled(),
+        );
+        let hybrid_error = hybrid_outcome
+            .result
+            .expect_err("explicit hybrid policy should not route this request natively");
+
+        assert!(hybrid_error.message.contains("Long Document worker"));
+        assert!(hybrid_error.message.contains("I/O error"));
+    }
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
+#[test]
+fn explicit_longdoc_worker_policy_without_hybrid_runtime_profile_stays_rust_only() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvironmentVariableGuard::remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let _generic_runtime_profile =
+        EnvironmentVariableGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let temp_dir = unique_temp_dir("longdoc-explicit-worker-policy-stays-rust-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A long document that still needs the retained worker.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "google".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        57,
+    )
+    .expect("longdoc request should be built");
+    request.params.input_mode = "Docx".to_string();
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let outcome = run_long_document_request_with_packaged_app_dir_and_worker_policy(
         request,
         &temp_dir,
         RetainedWorkerPolicy::all_enabled(),
     );
-    let hybrid_error = hybrid_outcome
+    let error = outcome
         .result
-        .expect_err("explicit hybrid policy should still expose retained worker compatibility");
+        .expect_err("injected worker policy must still require explicit hybrid runtime");
 
-    assert!(hybrid_error.message.contains("Long Document worker"));
-    assert!(hybrid_error.message.contains("I/O error"));
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET Long Document workers"));
+    assert!(!error.message.contains("Long Document worker executable"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_route_helper_ignores_hybrid_environment_and_keeps_retained_worker_disabled() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile =
+        EnvironmentVariableGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+
+    let temp_dir = unique_temp_dir("longdoc-native-route-hybrid-env-rust-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A long document that should not enter retained workers.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "google".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        55,
+    )
+    .expect("longdoc request should be built");
+    request.params.input_mode = "Docx".to_string();
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let mut backend = RecordingLongDocBackend::ok(result("Completed", None, None));
+    let outcome = run_long_document_request_with_native_route(&mut backend, request);
+    let error = outcome
+        .result
+        .expect_err("native route helper should keep retained LongDoc disabled");
+
+    assert_eq!(backend.calls.len(), 0);
+    assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET Long Document workers"));
+    assert!(!error.message.contains("Long Document worker executable"));
 
     fs::remove_dir_all(&temp_dir).ok();
 }
@@ -2187,7 +2437,7 @@ fn missing_native_pdf_file_does_not_fall_back_to_long_document_backend() {
 }
 
 #[test]
-fn native_text_long_document_packaged_app_dir_runner_does_not_spawn_packaged_worker() {
+fn native_text_long_document_with_app_dir_runner_does_not_spawn_retained_worker() {
     let temp_dir = unique_temp_dir("longdoc-native-missing-host");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
 
@@ -2207,13 +2457,13 @@ fn native_text_long_document_packaged_app_dir_runner_does_not_spawn_packaged_wor
     )
     .expect("native text request");
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome.result.unwrap_err();
 
     assert!(error.message.contains("API key"));
     assert!(
         !error.message.contains("Long Document worker"),
-        "native text longdoc should fail locally before packaged worker fallback: {}",
+        "native text longdoc should fail locally before retained worker fallback: {}",
         error.message
     );
 
@@ -2221,8 +2471,7 @@ fn native_text_long_document_packaged_app_dir_runner_does_not_spawn_packaged_wor
 }
 
 #[test]
-fn native_text_file_long_document_packaged_app_dir_runner_does_not_spawn_worker_when_mode_is_default(
-) {
+fn native_text_file_long_document_with_app_dir_runner_does_not_spawn_worker_when_mode_is_default() {
     let temp_dir = unique_temp_dir("longdoc-native-file-default-mode-missing-host");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("notes.txt");
@@ -2248,7 +2497,7 @@ fn native_text_file_long_document_packaged_app_dir_runner_does_not_spawn_worker_
     assert_eq!(request.params.page_range, None);
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome.result.unwrap_err();
 
     assert!(error.message.contains("API key"));
@@ -2258,7 +2507,7 @@ fn native_text_file_long_document_packaged_app_dir_runner_does_not_spawn_worker_
 }
 
 #[test]
-fn stale_text_page_range_long_document_packaged_app_dir_runner_does_not_spawn_worker() {
+fn stale_text_page_range_long_document_with_app_dir_runner_does_not_spawn_worker() {
     let temp_dir = unique_temp_dir("longdoc-native-text-stale-page-range-no-worker");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("notes.txt");
@@ -2283,7 +2532,7 @@ fn stale_text_page_range_long_document_packaged_app_dir_runner_does_not_spawn_wo
     assert_eq!(request.params.input_mode, "PlainText");
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("native text route should fail at the native provider");
@@ -2299,7 +2548,7 @@ fn stale_text_page_range_long_document_packaged_app_dir_runner_does_not_spawn_wo
 }
 
 #[test]
-fn native_pdf_all_pages_packaged_app_dir_runner_does_not_spawn_worker() {
+fn native_pdf_all_pages_with_app_dir_runner_does_not_spawn_worker() {
     let temp_dir = unique_temp_dir("longdoc-native-pdf-all-pages-no-worker");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("paper.pdf");
@@ -2329,7 +2578,7 @@ fn native_pdf_all_pages_packaged_app_dir_runner_does_not_spawn_worker() {
     assert_eq!(request.params.page_range.as_deref(), Some("all"));
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("native PDF text route should fail at the native provider");
@@ -2345,7 +2594,7 @@ fn native_pdf_all_pages_packaged_app_dir_runner_does_not_spawn_worker() {
 }
 
 #[test]
-fn native_pdf_hex_content_stream_packaged_app_dir_runner_does_not_spawn_worker() {
+fn native_pdf_hex_content_stream_with_app_dir_runner_does_not_spawn_worker() {
     let temp_dir = unique_temp_dir("longdoc-native-pdf-hex-stream-no-worker");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("hex-stream.pdf");
@@ -2378,7 +2627,7 @@ fn native_pdf_hex_content_stream_packaged_app_dir_runner_does_not_spawn_worker()
     assert_eq!(request.params.input_mode, "Pdf");
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("native PDF hex text route should fail at the native provider");
@@ -2394,7 +2643,7 @@ fn native_pdf_hex_content_stream_packaged_app_dir_runner_does_not_spawn_worker()
 }
 
 #[test]
-fn missing_worker_file_long_document_packaged_app_dir_runner_does_not_spawn_worker() {
+fn missing_worker_file_long_document_with_app_dir_runner_does_not_spawn_worker() {
     let temp_dir = unique_temp_dir("longdoc-worker-missing-file-no-host");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("missing.txt");
@@ -2417,7 +2666,7 @@ fn missing_worker_file_long_document_packaged_app_dir_runner_does_not_spawn_work
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("missing input should fail locally before worker startup");
@@ -2458,7 +2707,7 @@ fn invalid_native_output_folder_fails_locally_without_provider_or_worker() {
 
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("invalid output folder should fail before native provider calls");
@@ -2468,6 +2717,103 @@ fn invalid_native_output_folder_fails_locally_without_provider_or_worker() {
         .contains("Could not create long document output folder"));
     assert!(!error.message.contains("API key"));
     assert!(!error.message.contains("Long Document worker"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_both_output_prechecks_bilingual_path_before_writing_monolingual_file() {
+    let temp_dir = unique_temp_dir("longdoc-native-text-both-output-precheck");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let output_path = temp_dir.join("atomic-output.txt");
+    let bilingual_path = temp_dir.join("atomic-output-bilingual.txt");
+    fs::create_dir_all(&bilingual_path).expect("conflicting bilingual directory should exist");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A short document".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_mode: "both".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        76,
+    )
+    .expect("native text output precheck request");
+    request.params.output_path = Some(output_path.display().to_string());
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let error = outcome
+        .result
+        .expect_err("conflicting bilingual path should fail before writing output");
+
+    assert!(error.message.contains("Long document output path"));
+    assert!(error.message.contains("is a directory"));
+    assert!(
+        !output_path.exists(),
+        "monolingual output should not be partially written when bilingual target is invalid"
+    );
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_pdf_both_output_prechecks_bilingual_text_path_before_writing_pdf_file() {
+    let temp_dir = unique_temp_dir("longdoc-native-pdf-both-output-precheck");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let input_path = temp_dir.join("paper.pdf");
+    let output_path = temp_dir.join("paper-result.pdf");
+    let bilingual_path = temp_dir.join("paper-result-bilingual.txt");
+    fs::write(&input_path, minimal_pdf_with_pages(&["Atomic PDF"])).expect("pdf should be written");
+    fs::create_dir_all(&bilingual_path).expect("conflicting bilingual directory should exist");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: input_path.to_string_lossy().to_string(),
+                input_mode: "pdf".to_string(),
+                output_mode: "both".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        77,
+    )
+    .expect("native PDF output precheck request");
+    request.params.output_path = Some(output_path.display().to_string());
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let error = outcome
+        .result
+        .expect_err("conflicting bilingual text path should fail before writing PDF");
+
+    assert!(error.message.contains("Long document output path"));
+    assert!(error.message.contains("is a directory"));
+    assert!(
+        !output_path.exists(),
+        "PDF output should not be partially written when bilingual text target is invalid"
+    );
 
     fs::remove_dir_all(&temp_dir).ok();
 }
@@ -2497,7 +2843,7 @@ fn invalid_worker_output_folder_fails_locally_without_worker_spawn() {
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("invalid output folder should fail before worker startup");
@@ -2535,7 +2881,7 @@ fn native_target_auto_long_document_fails_locally_without_provider_or_worker() {
     assert_eq!(request.params.to, "Auto");
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("target Auto should fail before native provider calls");
@@ -2572,7 +2918,7 @@ fn worker_target_auto_long_document_fails_locally_without_worker_spawn() {
     assert_eq!(request.params.to, "Auto");
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("target Auto should fail before worker startup");
@@ -2606,7 +2952,7 @@ fn stale_dictionary_long_document_service_fails_locally_without_worker_spawn() {
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("dictionary service should fail locally before worker startup");
@@ -2642,7 +2988,7 @@ fn registered_dictionary_long_document_service_fails_locally_without_worker_spaw
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("registered dictionary service should fail locally before worker startup");
@@ -2678,7 +3024,7 @@ fn unknown_long_document_service_fails_locally_without_worker_spawn() {
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("unknown service should fail locally before worker startup");
@@ -2690,7 +3036,10 @@ fn unknown_long_document_service_fails_locally_without_worker_spawn() {
 }
 
 #[test]
-fn local_ai_long_document_worker_route_fails_locally_without_nested_dotnet_workers() {
+fn default_windows_ai_long_document_reports_local_phi_status_without_nested_dotnet_workers() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _winrt_disabled = EnvironmentVariableGuard::set("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1");
+
     let temp_dir = unique_temp_dir("longdoc-local-ai-no-nested-dotnet-workers");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
     let input_path = temp_dir.join("source.txt");
@@ -2703,7 +3052,7 @@ fn local_ai_long_document_worker_route_fails_locally_without_nested_dotnet_worke
     let request = build_long_document_request(
         &EasydictUiState {
             settings: easydict_app::SettingsState {
-                local_ai_provider: local_ai_provider_modes::OPENVINO.to_string(),
+                local_ai_provider: local_ai_provider_modes::WINDOWS_AI.to_string(),
                 ..Default::default()
             },
             long_document: easydict_app::LongDocumentState {
@@ -2713,24 +3062,338 @@ fn local_ai_long_document_worker_route_fails_locally_without_nested_dotnet_worke
                 service: "windows-local-ai".to_string(),
                 source_language: "en".to_string(),
                 target_language: "zh-Hans".to_string(),
+                two_pass_context: false,
                 ..Default::default()
             },
             ..Default::default()
         },
         33,
     )
-    .expect("local AI worker-routed request");
+    .expect("local AI WindowsAI request");
 
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, &temp_dir);
+    let outcome = run_long_document_request_with_app_dir(request, &temp_dir);
     let error = outcome
         .result
-        .expect_err("non-native LocalAI long document should fail before worker startup");
+        .expect_err("disabled WindowsAI WinRT should fail locally before worker startup");
 
-    assert!(error.message.contains("requires a Rust-native route"));
-    assert!(error.message.contains(".NET workers"));
+    assert!(error.message.contains("Phi Silica"));
+    assert!(!error.message.contains(".NET workers"));
     assert!(!error.message.contains("Long Document worker"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn windows_ai_local_ai_long_document_uses_native_client_without_worker() {
+    let temp_dir = unique_temp_dir("longdoc-windows-ai-native-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: local_ai_provider_modes::WINDOWS_AI.to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A WindowsAI document.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                two_pass_context: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        54,
+    )
+    .expect("WindowsAI long document request");
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let mut client = RecordingWindowsAiClient::with_generate_responses(
+        [WindowsAiReadyState::Ready, WindowsAiReadyState::Ready],
+        [Ok(WindowsAiResponse::complete(
+            "WindowsAI translated document",
+        ))],
+    );
+    let mut resolver =
+        RecordingFoundryLocalEndpointResolver::new(Some("foundry-local-invalid".to_string()));
+
+    let outcome = run_long_document_request_with_app_dir_and_native_local_ai_client(
+        request,
+        r"C:\MissingWorkerApp",
+        &mut client,
+        &mut resolver,
+    );
+    let result = outcome
+        .result
+        .expect("WindowsAI native LongDoc should succeed");
+
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(client.ready_state_calls(), 1);
+    let prompts = client.generate_prompts();
+    assert_eq!(prompts.len(), 1);
+    assert!(prompts[0].contains("A WindowsAI document."));
+
+    let output = fs::read_to_string(result.output_path.expect("output path"))
+        .expect("native WindowsAI output");
+    assert!(output.contains("WindowsAI translated document"));
+    assert!(outcome.events.iter().any(|event| matches!(
+        event,
+        LongDocumentEvent::Status(status)
+            if status.message == "Translating text document natively"
+    )));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn windows_ai_long_document_context_pass_uses_raw_generation_before_translation() {
+    let temp_dir = unique_temp_dir("longdoc-windows-ai-context-pass");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: local_ai_provider_modes::WINDOWS_AI.to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "Transformer paper paragraph.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                two_pass_context: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        57,
+    )
+    .expect("WindowsAI context-pass long document request");
+
+    let mut client = RecordingWindowsAiClient::with_generate_responses(
+        [WindowsAiReadyState::Ready, WindowsAiReadyState::Ready],
+        [
+            Ok(WindowsAiResponse::complete(
+                serde_json::json!({
+                    "summary": "Transformer paper page.",
+                    "glossary": {
+                        "Transformer": "Transformer"
+                    },
+                    "preservation_hints": []
+                })
+                .to_string(),
+            )),
+            Ok(WindowsAiResponse::complete(
+                "WindowsAI translated with context",
+            )),
+        ],
+    );
+    let mut resolver =
+        RecordingFoundryLocalEndpointResolver::new(Some("foundry-local-invalid".to_string()));
+
+    let outcome = run_long_document_request_with_app_dir_and_native_local_ai_client(
+        request,
+        r"C:\MissingWorkerApp",
+        &mut client,
+        &mut resolver,
+    );
+    let result = outcome
+        .result
+        .expect("WindowsAI context-pass LongDoc should succeed");
+
+    assert_eq!(resolver.calls(), 0);
+    let prompts = client.generate_prompts();
+    assert_eq!(prompts.len(), 2);
+    assert!(prompts[0].contains("Do NOT translate the document text"));
+    assert!(prompts[0].contains("Transformer paper paragraph."));
+    assert!(
+        !prompts[0].contains("You are a professional translation engine"),
+        "context prompt must be sent as raw generation, not wrapped as translation: {}",
+        prompts[0]
+    );
+    assert!(prompts[1].contains("You are a professional translation engine"));
+    assert!(prompts[1].contains("Document summary: Transformer paper page."));
+    assert!(prompts[1].contains("Transformer -> Transformer"));
+    assert!(prompts[1].contains("Transformer paper paragraph."));
+
+    let output = fs::read_to_string(result.output_path.expect("output path"))
+        .expect("native WindowsAI context output");
+    assert!(output.contains("WindowsAI translated with context"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn auto_windows_ai_ready_routes_long_document_before_foundry_probe() {
+    let temp_dir = unique_temp_dir("longdoc-auto-windows-ai-ready");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: local_ai_provider_modes::AUTO.to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "Auto should prefer ready WindowsAI.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        55,
+    )
+    .expect("Auto local AI long document request");
+
+    let mut client = RecordingWindowsAiClient::with_generate_responses(
+        [WindowsAiReadyState::Ready, WindowsAiReadyState::Ready],
+        [Ok(WindowsAiResponse::complete(
+            "Auto WindowsAI translated document",
+        ))],
+    );
+    let mut resolver =
+        RecordingFoundryLocalEndpointResolver::new(Some("foundry-local-invalid".to_string()));
+
+    let outcome = run_long_document_request_with_app_dir_and_native_local_ai_client(
+        request,
+        r"C:\MissingWorkerApp",
+        &mut client,
+        &mut resolver,
+    );
+    let result = outcome
+        .result
+        .expect("Auto-ready WindowsAI native LongDoc should succeed");
+
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(client.ready_state_calls(), 2);
+    assert_eq!(client.generate_prompts().len(), 1);
+
+    let output = fs::read_to_string(result.output_path.expect("output path"))
+        .expect("native WindowsAI output");
+    assert!(output.contains("Auto WindowsAI translated document"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn auto_windows_ai_not_ready_continues_long_document_foundry_fallback() {
+    let temp_dir = unique_temp_dir("longdoc-auto-windows-ai-not-ready-foundry");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: local_ai_provider_modes::AUTO.to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "Auto should fall back when WindowsAI is not ready.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        56,
+    )
+    .expect("Auto local AI long document request");
+
+    let mut client =
+        RecordingWindowsAiClient::with_generate_responses([WindowsAiReadyState::NotReady], []);
+    let mut resolver =
+        RecordingFoundryLocalEndpointResolver::new(Some("foundry-local-invalid".to_string()));
+
+    let outcome = run_long_document_request_with_app_dir_and_native_local_ai_client(
+        request,
+        r"C:\MissingWorkerApp",
+        &mut client,
+        &mut resolver,
+    );
+    let error = outcome
+        .result
+        .expect_err("invalid Foundry fallback should fail natively");
+
+    assert_eq!(resolver.calls(), 1);
+    assert_eq!(client.ready_state_calls(), 1);
+    assert!(client.generate_prompts().is_empty());
+    assert!(!error.message.contains("Long Document worker"));
+    assert!(!error.message.contains("retained .NET workers"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn openvino_local_ai_long_document_cache_miss_reports_native_download_preflight() {
+    let temp_dir = unique_temp_dir("longdoc-openvino-cache-missing-native-preflight");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mut request = openvino_local_ai_long_document_request(&temp_dir, "en", "zh-Hans", 38);
+    request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let outcome = run_long_document_request_with_app_dir(request, &temp_dir);
+    let error = outcome
+        .result
+        .expect_err("OpenVINO cache miss should fail before retained workers");
+
+    assert!(error
+        .message
+        .contains("OpenVINO runtime or NLLB-200 model is not downloaded"));
+    assert!(error.message.contains("Download model"));
+    assert!(!error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains("Long Document worker"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn openvino_local_ai_long_document_unknown_target_reports_native_language_preflight() {
+    let temp_dir = unique_temp_dir("longdoc-openvino-unknown-target-native-preflight");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mut request = openvino_local_ai_long_document_request(&temp_dir, "en", "zh-Hans", 39);
+    request.params.to = "hr".to_string();
+    request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let outcome = run_long_document_request_with_app_dir(request, &temp_dir);
+    let error = outcome
+        .result
+        .expect_err("unsupported OpenVINO target should fail before retained workers");
+
+    assert!(error
+        .message
+        .contains("No local AI provider supports this language pair"));
+    assert!(!error
+        .message
+        .contains("OpenVINO runtime or NLLB-200 model is not downloaded"));
+    assert!(!error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains("Long Document worker"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
     fs::remove_dir_all(&temp_dir).ok();
 }
@@ -2765,14 +3428,14 @@ fn legacy_local_ai_long_document_service_id_maps_to_native_windows_local_ai_rout
     assert_eq!(request.params.service_id, "windows-local-ai");
     assert!(long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("invalid native endpoint should fail locally");
 
     assert!(
         !error.message.contains("Long Document worker"),
-        "native local AI longdoc should fail locally before packaged worker fallback: {}",
+        "native local AI longdoc should fail locally before retained worker fallback: {}",
         error.message
     );
 
@@ -2807,13 +3470,12 @@ fn stale_foundry_local_long_document_service_id_maps_to_windows_local_ai_route()
     assert_eq!(request.params.service_id, "windows-local-ai");
     assert!(!long_document_request_can_route_natively(&request));
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("non-native stale Foundry Local longdoc should fail before worker startup");
 
-    assert!(error.message.contains("requires a Rust-native route"));
-    assert!(error.message.contains(".NET workers"));
+    assert!(!error.message.contains(".NET workers"));
     assert!(!error.message.contains("Long Document worker"));
 
     fs::remove_dir_all(&temp_dir).ok();
@@ -2845,7 +3507,7 @@ fn direct_stale_foundry_local_long_document_request_fails_before_worker_startup(
     .expect("direct stale foundry request");
     request.params.service_id = "foundry-local".to_string();
 
-    let outcome = run_long_document_request_with_packaged_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_long_document_request_with_app_dir(request, r"C:\MissingWorkerApp");
     let error = outcome
         .result
         .expect_err("direct stale Foundry Local longdoc should fail before worker startup");
@@ -2887,6 +3549,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::Window(_) => "window",
         Task::Platform(_) => "platform",
         Task::ScrollToTop(_) => "scroll_to_top",
+        Task::ScrollTo { .. } => "scroll_to",
         Task::ReadClipboardText(_) => "read_clipboard",
         Task::CaptureScreenRegion { .. } => "capture_screen",
         Task::CaptureScreenWindows { .. } => "capture_screen_windows",
@@ -2958,6 +3621,156 @@ impl LongDocumentBackend for RecordingLongDocBackend {
 }
 
 #[derive(Clone, Default)]
+struct RecordingWindowsAiClient {
+    ready_state_calls: Arc<Mutex<usize>>,
+    states: Arc<Mutex<VecDeque<WindowsAiReadyState>>>,
+    generate_prompts: Arc<Mutex<Vec<String>>>,
+    generate_options: Arc<Mutex<Vec<WindowsAiGenerationOptions>>>,
+    generate_responses: Arc<Mutex<VecDeque<Result<WindowsAiResponse, WindowsAiError>>>>,
+}
+
+impl RecordingWindowsAiClient {
+    fn with_generate_responses(
+        states: impl IntoIterator<Item = WindowsAiReadyState>,
+        generate_responses: impl IntoIterator<Item = Result<WindowsAiResponse, WindowsAiError>>,
+    ) -> Self {
+        Self {
+            ready_state_calls: Arc::new(Mutex::new(0)),
+            states: Arc::new(Mutex::new(states.into_iter().collect())),
+            generate_prompts: Arc::new(Mutex::new(Vec::new())),
+            generate_options: Arc::new(Mutex::new(Vec::new())),
+            generate_responses: Arc::new(Mutex::new(generate_responses.into_iter().collect())),
+        }
+    }
+
+    fn ready_state_calls(&self) -> usize {
+        *self
+            .ready_state_calls
+            .lock()
+            .expect("ready state calls lock")
+    }
+
+    fn generate_prompts(&self) -> Vec<String> {
+        self.generate_prompts
+            .lock()
+            .expect("generate prompts lock")
+            .clone()
+    }
+}
+
+impl WindowsAiLanguageModelProbe for RecordingWindowsAiClient {
+    fn ready_state(&mut self) -> WindowsAiReadyState {
+        *self
+            .ready_state_calls
+            .lock()
+            .expect("ready state calls lock") += 1;
+        self.states
+            .lock()
+            .expect("ready states lock")
+            .pop_front()
+            .unwrap_or(WindowsAiReadyState::NotSupportedOnCurrentSystem)
+    }
+}
+
+impl WindowsAiLanguageModelClient for RecordingWindowsAiClient {
+    fn generate(
+        &mut self,
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+    ) -> Result<WindowsAiResponse, WindowsAiError> {
+        self.generate_prompts
+            .lock()
+            .expect("generate prompts lock")
+            .push(prompt.to_string());
+        self.generate_options
+            .lock()
+            .expect("generate options lock")
+            .push(options);
+        self.generate_responses
+            .lock()
+            .expect("generate responses lock")
+            .pop_front()
+            .unwrap_or_else(|| Ok(WindowsAiResponse::complete(String::new())))
+    }
+
+    fn generate_stream(
+        &mut self,
+        _prompt: &str,
+        _options: WindowsAiGenerationOptions,
+    ) -> Result<Vec<String>, WindowsAiError> {
+        Err(WindowsAiError::new(
+            "recording WindowsAI LongDoc client did not expect streaming",
+        ))
+    }
+
+    fn warm_up(
+        &mut self,
+        _prompt: &str,
+        _options: WindowsAiGenerationOptions,
+    ) -> Result<(), WindowsAiError> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingFoundryLocalEndpointResolver {
+    calls: Arc<Mutex<usize>>,
+    status_calls: Arc<Mutex<usize>>,
+    start_calls: Arc<Mutex<usize>>,
+    load_model_calls: Arc<Mutex<Vec<String>>>,
+    endpoint: Option<String>,
+}
+
+impl RecordingFoundryLocalEndpointResolver {
+    fn new(endpoint: Option<String>) -> Self {
+        Self {
+            calls: Arc::new(Mutex::new(0)),
+            status_calls: Arc::new(Mutex::new(0)),
+            start_calls: Arc::new(Mutex::new(0)),
+            load_model_calls: Arc::new(Mutex::new(Vec::new())),
+            endpoint,
+        }
+    }
+
+    fn calls(&self) -> usize {
+        *self.calls.lock().expect("resolver calls lock")
+    }
+}
+
+impl FoundryLocalEndpointResolver for RecordingFoundryLocalEndpointResolver {
+    fn resolve_chat_completions_endpoint(&mut self) -> Result<Option<String>, FoundryLocalError> {
+        *self.calls.lock().expect("resolver calls lock") += 1;
+        Ok(self.endpoint.clone())
+    }
+}
+
+impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
+    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
+        let mut status_calls = self.status_calls.lock().expect("status calls lock");
+        *status_calls += 1;
+        let state = if *status_calls == 1 {
+            FoundryLocalRuntimeState::NotRunning
+        } else {
+            FoundryLocalRuntimeState::Running
+        };
+        Ok(FoundryLocalRuntimeStatus::new(state))
+    }
+
+    fn start_service(&mut self) -> Result<(), FoundryLocalError> {
+        *self.start_calls.lock().expect("start calls lock") += 1;
+        Ok(())
+    }
+
+    fn load_model(&mut self, model: &str) -> Result<(), FoundryLocalError> {
+        self.load_model_calls
+            .lock()
+            .expect("load model calls lock")
+            .push(model.to_string());
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
 struct RecordingNativeLongDocTranslator {
     calls: Arc<Mutex<Vec<QuickTranslateServiceRequest>>>,
     active_calls: Arc<Mutex<usize>>,
@@ -2974,6 +3787,12 @@ impl NativeLongDocumentTranslator for RecordingNativeLongDocTranslator {
         &mut self,
         request: QuickTranslateServiceRequest,
     ) -> Result<String, LongDocumentBackendError> {
+        if is_native_document_context_request(&request) {
+            return Err(LongDocumentBackendError::new(
+                "recording translator ignores document context probes",
+            ));
+        }
+
         {
             let mut active = self.active_calls.lock().expect("active lock");
             *active += 1;
@@ -3095,6 +3914,72 @@ impl RecordingNativeLongDocTranslator {
 }
 
 #[derive(Clone, Default)]
+struct ContextAwareNativeLongDocTranslator {
+    context_calls: Arc<Mutex<Vec<QuickTranslateServiceRequest>>>,
+    translation_calls: Arc<Mutex<Vec<QuickTranslateServiceRequest>>>,
+}
+
+impl NativeLongDocumentTranslator for ContextAwareNativeLongDocTranslator {
+    fn translate_chunk(
+        &mut self,
+        request: QuickTranslateServiceRequest,
+    ) -> Result<String, LongDocumentBackendError> {
+        if is_native_document_context_map_request(&request) {
+            let preserved = request
+                .params
+                .text
+                .split("\n\n")
+                .find(|chunk| chunk.contains("BLEU-28.4"))
+                .unwrap_or("BLEU-28.4")
+                .trim()
+                .to_string();
+            self.context_calls
+                .lock()
+                .expect("context calls lock")
+                .push(request);
+            return Ok(serde_json::json!({
+                "summary": "Transformer paper page.",
+                "glossary": {
+                    "Transformer": "Transformer"
+                },
+                "preservation_hints": [preserved]
+            })
+            .to_string());
+        }
+
+        if is_native_document_context_reduce_request(&request) {
+            self.context_calls
+                .lock()
+                .expect("context calls lock")
+                .push(request);
+            return Ok("Merged Transformer paper summary.".to_string());
+        }
+
+        self.translation_calls
+            .lock()
+            .expect("translation calls lock")
+            .push(request.clone());
+        Ok(format!("[zh] {}", request.params.text.trim()))
+    }
+}
+
+impl ContextAwareNativeLongDocTranslator {
+    fn context_calls(&self) -> Vec<QuickTranslateServiceRequest> {
+        self.context_calls
+            .lock()
+            .expect("context calls lock")
+            .clone()
+    }
+
+    fn translation_calls(&self) -> Vec<QuickTranslateServiceRequest> {
+        self.translation_calls
+            .lock()
+            .expect("translation calls lock")
+            .clone()
+    }
+}
+
+#[derive(Clone, Default)]
 struct FormulaQualityRetryTranslator {
     calls: Arc<Mutex<Vec<QuickTranslateServiceRequest>>>,
 }
@@ -3104,6 +3989,12 @@ impl NativeLongDocumentTranslator for FormulaQualityRetryTranslator {
         &mut self,
         request: QuickTranslateServiceRequest,
     ) -> Result<String, LongDocumentBackendError> {
+        if is_native_document_context_request(&request) {
+            return Err(LongDocumentBackendError::new(
+                "formula retry translator ignores document context probes",
+            ));
+        }
+
         let call_index = {
             let mut calls = self.calls.lock().expect("calls lock");
             calls.push(request.clone());
@@ -3122,6 +4013,29 @@ impl FormulaQualityRetryTranslator {
     fn calls(&self) -> Vec<QuickTranslateServiceRequest> {
         self.calls.lock().expect("calls lock").clone()
     }
+}
+
+fn is_native_document_context_request(request: &QuickTranslateServiceRequest) -> bool {
+    is_native_document_context_map_request(request)
+        || is_native_document_context_reduce_request(request)
+}
+
+fn is_native_document_context_map_request(request: &QuickTranslateServiceRequest) -> bool {
+    request
+        .params
+        .custom_prompt
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Do NOT translate the document text")
+}
+
+fn is_native_document_context_reduce_request(request: &QuickTranslateServiceRequest) -> bool {
+    request
+        .params
+        .custom_prompt
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Merge them into a single 1-3 sentence summary")
 }
 
 fn native_plaintext_cache_request(
@@ -3187,6 +4101,35 @@ fn native_plaintext_concurrency_request(
     .expect("plain text request should build")
 }
 
+fn openvino_local_ai_long_document_request(
+    temp_dir: &std::path::Path,
+    source_language: &str,
+    target_language: &str,
+    query_id: u64,
+) -> easydict_app::LongDocumentServiceRequest {
+    build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: local_ai_provider_modes::OPENVINO.to_string(),
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A local AI long document chunk.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: source_language.to_string(),
+                target_language: target_language.to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        query_id,
+    )
+    .expect("OpenVINO local AI long document request")
+}
+
 fn native_long_text_markers<S: AsRef<str>>(markers: &[S]) -> String {
     markers
         .iter()
@@ -3205,6 +4148,36 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
     std::env::temp_dir().join(format!("{prefix}-{stamp}"))
+}
+
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    original: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let original = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, original }
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    fn remove(name: &'static str) -> Self {
+        let original = std::env::var(name).ok();
+        std::env::remove_var(name);
+        Self { name, original }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(value) = self.original.as_ref() {
+            std::env::set_var(self.name, value);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
 }
 
 fn minimal_pdf_with_text(text: &str) -> Vec<u8> {

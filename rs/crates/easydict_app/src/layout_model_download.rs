@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::compat_protocol::SettingsSnapshot;
+use crate::protocol::SettingsSnapshot;
 use crate::resource_download::{
     download_with_retry, is_file_valid, ordered_urls_by_probe, try_delete_file,
     ReqwestResourceDownloadClient, ResourceDownloadClient, ResourceDownloadError,
@@ -107,6 +107,10 @@ impl LayoutModelStatus {
     pub fn is_ready(&self) -> bool {
         self.runtime_ready && self.doc_layout_model_ready
     }
+
+    pub fn is_full_layout_ready(&self) -> bool {
+        self.is_ready() && self.tatr_model_ready
+    }
 }
 
 #[derive(Debug)]
@@ -206,6 +210,13 @@ pub fn is_layout_model_ready_for_directory(
     layout_model_status_for_directory(base, config).is_ready()
 }
 
+pub fn is_full_layout_model_ready_for_directory(
+    base: impl AsRef<Path>,
+    config: &LayoutModelDownloadConfig,
+) -> bool {
+    layout_model_status_for_directory(base, config).is_full_layout_ready()
+}
+
 pub fn cleanup_invalid_layout_model_files_for_directory(
     base: impl AsRef<Path>,
     config: &LayoutModelDownloadConfig,
@@ -298,6 +309,18 @@ pub fn ensure_tatr_model_available_for_directory<C: ResourceDownloadClient>(
     Ok(paths.tatr_model_path)
 }
 
+pub fn ensure_full_layout_model_available_for_directory<C: ResourceDownloadClient>(
+    client: &mut C,
+    base: impl AsRef<Path>,
+    config: &LayoutModelDownloadConfig,
+    progress: &mut dyn FnMut(ResourceDownloadProgress),
+) -> Result<LayoutModelStatus, LayoutModelDownloadError> {
+    let base = base.as_ref();
+    ensure_layout_model_available_for_directory(client, base, config, progress)?;
+    ensure_tatr_model_available_for_directory(client, base, config, progress)?;
+    Ok(layout_model_status_for_directory(base, config))
+}
+
 pub fn ensure_layout_model_available(
     settings: &SettingsSnapshot,
     progress: &mut dyn FnMut(ResourceDownloadProgress),
@@ -317,6 +340,19 @@ pub fn ensure_tatr_model_available(
 ) -> Result<PathBuf, LayoutModelDownloadError> {
     let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
     ensure_tatr_model_available_for_directory(
+        &mut client,
+        default_data_directory(),
+        &LayoutModelDownloadConfig::default(),
+        progress,
+    )
+}
+
+pub fn ensure_full_layout_model_available(
+    settings: &SettingsSnapshot,
+    progress: &mut dyn FnMut(ResourceDownloadProgress),
+) -> Result<LayoutModelStatus, LayoutModelDownloadError> {
+    let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
+    ensure_full_layout_model_available_for_directory(
         &mut client,
         default_data_directory(),
         &LayoutModelDownloadConfig::default(),

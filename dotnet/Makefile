@@ -130,6 +130,10 @@ publish: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets; only hybrid is supported for legacy .NET packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true -p:BuildWorkerOutputs=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish
@@ -157,11 +161,15 @@ publish-x64: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets; only hybrid is supported for legacy .NET packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
-	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
+	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64; \
 	else \
@@ -175,6 +183,10 @@ publish-x86: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets; only hybrid is supported for legacy .NET packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86
@@ -185,11 +197,15 @@ publish-arm64: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet publish targets; only hybrid is supported for legacy .NET packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
-	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
+	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64; \
 	else \
@@ -206,11 +222,15 @@ publish-msix-x64: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets; only hybrid is supported for legacy .NET/MSIX packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
-	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
+	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64; \
@@ -226,6 +246,10 @@ publish-msix-x86: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets; only hybrid is supported for legacy .NET/MSIX packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish-msix/x86
@@ -236,11 +260,15 @@ publish-msix-arm64: restore
 		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets for the first rs release."; \
 		echo "Use ../rs/scripts/Package-Portable.ps1 for the rs portable package."; \
 		exit 1; \
+	fi; \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by dotnet MSIX targets; only hybrid is supported for legacy .NET/MSIX packaging."; \
+		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
 	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
-	if [ "$$runtime_profile" != "rust-only" ] && [ "$$runtime_profile" != "rustonly" ]; then \
+	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64; \

@@ -26,7 +26,7 @@ param(
 
     [string]$MsixVersion = "",
 
-    [string]$RuntimeProfile = "Hybrid",
+    [string]$RuntimeProfile = "",
 
     [switch]$VerifyTargetsizeIcons
 )
@@ -49,6 +49,9 @@ if (-not (Test-Path $PublishDir)) {
 }
 if (-not (Test-Path $ManifestPath)) {
     throw "Manifest not found: $ManifestPath"
+}
+if ([string]::IsNullOrWhiteSpace($RuntimeProfile)) {
+    throw "RuntimeProfile must be explicitly set to Hybrid for dotnet/scripts/Package-Msix.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
 }
 if (Test-RustOnlyRuntimeProfile $RuntimeProfile) {
     throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/Package-Msix.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."

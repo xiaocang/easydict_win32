@@ -91,7 +91,7 @@ pub fn accessibility_audit_snapshot<Message>(view: &View<Message>) -> String {
 
 pub fn theme_snapshot(theme: &ThemeTokens) -> String {
     format!(
-        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} selected_surface=#{:02x}{:02x}{:02x} selected_foreground=#{:02x}{:02x}{:02x} selected_border=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_input_surface=#{:02x}{:02x}{:02x} floating_input_border=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
+        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} selected_surface=#{:02x}{:02x}{:02x} selected_foreground=#{:02x}{:02x}{:02x} selected_border=#{:02x}{:02x}{:02x} tile_surface=#{:02x}{:02x}{:02x}{:02x} tile_foreground=#{:02x}{:02x}{:02x} tile_border=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_input_surface=#{:02x}{:02x}{:02x} floating_input_border=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
         theme.mode,
         theme.background.r,
         theme.background.g,
@@ -111,6 +111,16 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.selected_border.r,
         theme.selected_border.g,
         theme.selected_border.b,
+        theme.tile_surface.a,
+        theme.tile_surface.r,
+        theme.tile_surface.g,
+        theme.tile_surface.b,
+        theme.tile_foreground.r,
+        theme.tile_foreground.g,
+        theme.tile_foreground.b,
+        theme.tile_border.r,
+        theme.tile_border.g,
+        theme.tile_border.b,
         theme.input_surface.r,
         theme.input_surface.g,
         theme.input_surface.b,

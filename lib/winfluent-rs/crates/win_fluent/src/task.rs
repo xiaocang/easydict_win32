@@ -19,6 +19,12 @@ pub enum Task<Message> {
     Platform(PlatformCommand),
     /// Snap the scroll view with the given id back to the top (offset 0).
     ScrollToTop(String),
+    /// Snap the scroll view with the given id to a relative offset.
+    ScrollTo {
+        id: String,
+        x: f32,
+        y: f32,
+    },
     ReadClipboardText(Box<dyn Fn(Option<String>) -> Message + Send + 'static>),
     CaptureScreenRegion {
         request: ScreenCaptureRequest,
@@ -87,6 +93,15 @@ impl<Message> Task<Message> {
     /// Snaps the scroll view with the given id back to the top.
     pub fn scroll_to_top(id: impl Into<String>) -> Self {
         Self::ScrollToTop(id.into())
+    }
+
+    /// Snaps the scroll view with the given id to a relative offset.
+    pub fn scroll_to(id: impl Into<String>, x: f32, y: f32) -> Self {
+        Self::ScrollTo {
+            id: id.into(),
+            x: x.clamp(0.0, 1.0),
+            y: y.clamp(0.0, 1.0),
+        }
     }
 
     pub fn clipboard_text(text: impl Into<String>) -> Self {
@@ -227,6 +242,19 @@ mod tests {
         };
 
         assert_eq!(request, ScreenCaptureRequest::virtual_desktop());
+    }
+
+    #[test]
+    fn scroll_to_clamps_relative_offsets() {
+        let task: Task<TestMessage> = Task::scroll_to("MainScrollViewer", -0.25, 1.25);
+
+        let Task::ScrollTo { id, x, y } = task else {
+            panic!("expected scroll task");
+        };
+
+        assert_eq!(id, "MainScrollViewer");
+        assert_eq!(x, 0.0);
+        assert_eq!(y, 1.0);
     }
 
     #[test]

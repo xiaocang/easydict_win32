@@ -332,9 +332,10 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.action.kind()
         ),
         ViewToken::CheckBox(token) => format!(
-            "{:?}|{}|{}|{:?}",
+            "{:?}|{}|italic={}|{}|{:?}",
             token.label,
             token.checked,
+            token.label_italic,
             token.state,
             token.action.kind()
         ),
@@ -411,7 +412,10 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             format!("breakpoint_width={}", token.breakpoint_width)
         }
         ViewToken::Lazy(token) => token.key.clone(),
-        ViewToken::ScrollView(token) => format!("{:?}|{:?}", token.horizontal, token.vertical),
+        ViewToken::ScrollView(token) => format!(
+            "{:?}|{:?}|scrollbars_visible={}",
+            token.horizontal, token.vertical, token.scrollbars_visible
+        ),
         ViewToken::Expander(token) => format!(
             "{:?}|{:?}|expanded={}|action={:?}|{:?}",
             token.title,

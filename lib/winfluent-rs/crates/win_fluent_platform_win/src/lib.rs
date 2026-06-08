@@ -1268,7 +1268,7 @@ mod native {
         EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetParent,
         GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
         GetWindowThreadProcessId, IsWindow, IsWindowVisible, PeekMessageW, SetForegroundWindow,
-        SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, MSG, PM_REMOVE,
+        SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, MSG, PM_REMOVE,
         SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
         SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNORMAL,
         WM_HOTKEY, WM_USER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX,
@@ -1530,10 +1530,6 @@ mod native {
     }
 
     pub fn apply_window_ex_style(hwnd: isize, ex_style: u32) -> Result<(), WindowsPlatformError> {
-        if ex_style == 0 {
-            return Ok(());
-        }
-
         let hwnd = hwnd as HWND;
         if !is_valid_window(hwnd) {
             return Err(WindowsPlatformError::NativeCallFailed {
@@ -1544,11 +1540,12 @@ mod native {
 
         // Safety: hwnd was validated with IsWindow and GWL_EXSTYLE targets the window's extended style.
         let current = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32;
-        let next = current | ex_style;
+        let managed_bits = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
+        let next = (current & !managed_bits) | ex_style;
         if next != current {
             // Safety: SetLastError resets the current thread's Win32 error code before SetWindowLongPtrW.
             unsafe { SetLastError(ERROR_SUCCESS) };
-            // Safety: hwnd was validated and next preserves existing style bits while adding requested ones.
+            // Safety: hwnd was validated and next preserves unmanaged style bits while applying requested win_fluent bits.
             let previous = unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next as isize) };
             // Safety: GetLastError reads the current thread's Win32 error code.
             let error = unsafe { GetLastError() };
@@ -1561,8 +1558,12 @@ mod native {
         }
 
         let mut flags = SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE;
-        let insert_after = if ex_style & WS_EX_TOPMOST != 0 {
+        let was_topmost = current & WS_EX_TOPMOST != 0;
+        let wants_topmost = ex_style & WS_EX_TOPMOST != 0;
+        let insert_after = if wants_topmost {
             HWND_TOPMOST
+        } else if was_topmost {
+            HWND_NOTOPMOST
         } else {
             flags |= SWP_NOZORDER;
             null_mut()

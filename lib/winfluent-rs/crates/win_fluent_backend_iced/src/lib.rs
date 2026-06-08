@@ -49,9 +49,10 @@ use win_fluent::view::{
     CheckBoxToken, CollapseTransition, ComboBoxItem, ExpanderToken, FlyoutButtonToken,
     LayoutDistribution, LayoutKind, LayoutToken, Length, OverlayToken, PointerPosition,
     PointerRegionAction, PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken,
-    ResultItem, ResultListToken, ResultStatus, SettingsRowToken, SliderToken, StatusBadgeToken,
-    TextEditorChrome, TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken,
-    TextStyle, TitleBarToken, View, ViewToken, WrapToken,
+    ResultItem, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowToken, SliderToken,
+    StatusBadgeToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding,
+    TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken, TitleBarToken, View, ViewToken,
+    WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -325,6 +326,10 @@ where
                 iced::advanced::widget::Id::from(id),
                 iced::widget::scrollable::RelativeOffset::START,
             ),
+            FluentTask::ScrollTo { id, x, y } => iced::widget::operation::snap_to(
+                iced::advanced::widget::Id::from(id),
+                iced::widget::scrollable::RelativeOffset { x, y },
+            ),
             FluentTask::ReadClipboardText(map) => {
                 iced::clipboard::read().map(move |text| IcedRuntimeMessage::App(map(text)))
             }
@@ -560,8 +565,8 @@ fn show_window_steps(options: &WindowOptions) -> Vec<ShowWindowStep> {
     steps
 }
 
-fn should_apply_native_options_before_show(options: &WindowOptions) -> bool {
-    options.no_activate || options.skip_taskbar || options.level == WindowLevel::ToolWindow
+fn should_apply_native_options_before_show(_options: &WindowOptions) -> bool {
+    true
 }
 
 fn show_window_task<Message>(
@@ -1366,7 +1371,7 @@ where
                 .into()
         }
         ViewToken::TitleBar(token) => compile_title_bar(token, provider, visual),
-        ViewToken::Text(token) => compile_text(&token.value, token.style, visual),
+        ViewToken::Text(token) => compile_text_token(token, visual),
         ViewToken::Button(token) => {
             let kind = token.kind;
             let state = token.state.clone();
@@ -1374,6 +1379,7 @@ where
                 &token.label,
                 kind,
                 token.icon.as_ref(),
+                token.text_style,
                 visual,
                 state.selected,
             ))
@@ -1395,6 +1401,10 @@ where
                     .width(IcedLength::Fixed(visual.floating_action_button_size))
                     .height(IcedLength::Fixed(visual.floating_action_button_size))
                     .padding(0),
+                ButtonKind::PrimaryRound => control
+                    .width(IcedLength::Fixed(visual.primary_icon_button_size()))
+                    .height(IcedLength::Fixed(visual.primary_icon_button_size()))
+                    .padding(0),
                 ButtonKind::Primary if token.icon.is_some() && token.label.trim().is_empty() => {
                     control
                         .width(IcedLength::Fixed(visual.primary_icon_button_size()))
@@ -1408,7 +1418,7 @@ where
                     .height(IcedLength::Fixed(76.0))
                     .padding([8, 10]),
                 ButtonKind::Subtle => control.padding([6, 10]),
-                ButtonKind::Link => control.padding([2, 0]),
+                ButtonKind::Link => control.padding(0),
                 ButtonKind::Standard => control.padding([6, 12]),
             };
 
@@ -1442,7 +1452,7 @@ where
             let mut control = iced_toggler(token.checked)
                 .label(toggle_switch_label(&token.label, token.checked))
                 .size(20)
-                .spacing(8)
+                .spacing(14)
                 .text_size(visual.body_size)
                 .style({
                     let state = token.state.clone();
@@ -1462,7 +1472,18 @@ where
                 });
             }
 
-            control.into()
+            let control: IcedElement<'a, Message> = control.into();
+            if let Some(header) = token
+                .header
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                iced_column(vec![compile_text(header, TextStyle::Body, visual), control])
+                    .spacing(14)
+                    .into()
+            } else {
+                control
+            }
         }
         ViewToken::Slider(token) => compile_slider(token, visual),
         ViewToken::ComboBox(token) => compile_combo_box(
@@ -1595,7 +1616,12 @@ where
                 .unwrap_or_else(empty);
             let mut scroll = iced_scrollable(iced_container(content).width(IcedLength::Fill))
                 .width(IcedLength::Fill)
-                .height(IcedLength::Fill);
+                .height(IcedLength::Fill)
+                .direction(scroll_direction(
+                    token.horizontal,
+                    token.vertical,
+                    token.scrollbars_visible,
+                ));
             if let Some(id) = &token.id {
                 // Expose the scroll id so `Task::scroll_to_top` can target it.
                 scroll = scroll.id(iced::advanced::widget::Id::from(id.clone()));
@@ -1768,10 +1794,36 @@ where
     Message: Clone + Send + 'static,
 {
     iced_text(value.to_string())
-        .font(text_font(style))
+        .font(text_font_for_value(style, value))
         .size(text_size(style, visual))
         .color(text_color(style, visual))
         .into()
+}
+
+fn compile_text_token<'a, Message>(
+    token: &'a TextToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let text = iced_text(token.value.clone())
+        .font(text_font_for_value(token.style, &token.value))
+        .size(text_size(token.style, visual))
+        .color(text_color(token.style, visual));
+
+    if token.width.is_none() && token.height.is_none() {
+        return text.into();
+    }
+
+    let mut container = iced_container(text);
+    if let Some(width) = token.width {
+        container = container.width(iced_length(width));
+    }
+    if let Some(height) = token.height {
+        container = container.height(iced_length(height));
+    }
+    container.into()
 }
 
 fn compile_slider<'a, Message>(
@@ -2145,6 +2197,8 @@ fn text_editor_key_from_iced(key: &keyboard::Key) -> Option<TextEditorKey> {
     }
 }
 
+static EASYDICT_APP_ICON_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#000000" fill-opacity="0.004" d="M1 0h1v1H1zM14 0h1v1H14zM0 1h1v1H0zM0 14h1v1H0zM1 15h1v1H1z"/><path fill="#000000" fill-opacity="0.008" d="M15 1h1v1H15zM15 14h1v1H15zM14 15h1v1H14z"/><path fill="#000000" fill-opacity="0.020" d="M2 0h1v1H2zM13 0h1v1H13zM0 2h1v1H0zM15 2h1v1H15zM0 13h1v1H0zM2 15h1v1H2z"/><path fill="#000000" fill-opacity="0.024" d="M15 13h1v1H15zM13 15h1v1H13z"/><path fill="#000000" fill-opacity="0.035" d="M3 0h1v1H3zM12 0h1v1H12zM0 3h1v1H0zM15 3h1v1H15zM0 12h1v1H0zM3 15h1v1H3zM12 15h1v1H12z"/><path fill="#000000" fill-opacity="0.039" d="M15 12h1v1H15z"/><path fill="#333333" fill-opacity="0.039" d="M1 1h1v1H1z"/><path fill="#000000" fill-opacity="0.043" d="M4 0h1v1H4zM11 0h1v1H11zM0 4h1v1H0zM15 4h1v1H15zM0 11h1v1H0zM15 11h1v1H15zM4 15h1v1H4zM11 15h1v1H11z"/><path fill="#000000" fill-opacity="0.047" d="M5 0h1v1H5zM6 0h1v1H6zM7 0h1v1H7zM8 0h1v1H8zM9 0h1v1H9zM10 0h1v1H10zM0 5h1v1H0zM15 5h1v1H15zM0 6h1v1H0zM15 6h1v1H15zM0 7h1v1H0zM15 7h1v1H15zM0 8h1v1H0zM15 8h1v1H15zM0 9h1v1H0zM15 9h1v1H15zM0 10h1v1H0zM15 10h1v1H15zM5 15h1v1H5zM6 15h1v1H6zM7 15h1v1H7zM8 15h1v1H8zM9 15h1v1H9zM10 15h1v1H10z"/><path fill="#404040" fill-opacity="0.047" d="M14 1h1v1H14zM1 14h1v1H1z"/><path fill="#3B3B3B" fill-opacity="0.051" d="M14 14h1v1H14z"/><path fill="#D7D7D7" fill-opacity="0.569" d="M2 1h1v1H2zM1 2h1v1H1z"/><path fill="#CECECE" fill-opacity="0.576" d="M1 13h1v1H1zM2 14h1v1H2z"/><path fill="#D4D4D4" fill-opacity="0.584" d="M13 1h1v1H13zM14 2h1v1H14z"/><path fill="#CECECE" fill-opacity="0.588" d="M14 13h1v1H14zM13 14h1v1H13z"/><path fill="#EEEEEE" fill-opacity="0.906" d="M1 12h1v1H1z"/><path fill="#F3F3F3" fill-opacity="0.906" d="M1 3h1v1H1z"/><path fill="#F5F5F5" fill-opacity="0.906" d="M3 1h1v1H3zM12 1h1v1H12z"/><path fill="#ECECEC" fill-opacity="0.910" d="M3 14h1v1H3z"/><path fill="#ECECEC" fill-opacity="0.914" d="M12 14h1v1H12z"/><path fill="#EFEFEF" fill-opacity="0.914" d="M14 12h1v1H14z"/><path fill="#F3F3F3" fill-opacity="0.914" d="M14 3h1v1H14z"/><path fill="#F7F7F7" fill-opacity="0.984" d="M1 11h1v1H1z"/><path fill="#FCFCFC" fill-opacity="0.984" d="M1 4h1v1H1z"/><path fill="#FDFDFD" fill-opacity="0.984" d="M4 1h1v1H4z"/><path fill="#FEFEFE" fill-opacity="0.984" d="M11 1h1v1H11z"/><path fill="#F5F5F5" fill-opacity="0.992" d="M4 14h1v1H4z"/><path fill="#F6F6F6" fill-opacity="0.992" d="M11 14h1v1H11z"/><path fill="#F7F7F7" fill-opacity="0.992" d="M14 11h1v1H14z"/><path fill="#FCFCFC" fill-opacity="0.992" d="M14 4h1v1H14z"/><path fill="#F9F9F9" fill-opacity="0.996" d="M1 10h1v1H1z"/><path fill="#FFFFFF" fill-opacity="0.996" d="M5 1h1v1H5zM10 1h1v1H10z"/><path fill="#000000" d="M3 7h1v1H3zM4 7h1v1H4zM6 7h1v1H6zM7 7h1v1H7zM3 8h1v1H3zM7 8h1v1H7zM3 9h1v1H3zM7 9h1v1H7zM3 10h1v1H3zM5 10h1v1H5zM7 10h1v1H7z"/><path fill="#171717" d="M10 5h1v1H10z"/><path fill="#181818" d="M4 11h1v1H4z"/><path fill="#1B1B1B" d="M6 8h1v1H6zM4 10h1v1H4zM6 10h1v1H6z"/><path fill="#212121" d="M4 8h1v1H4z"/><path fill="#272727" d="M8 8h1v1H8z"/><path fill="#2C2C2C" d="M10 6h1v1H10z"/><path fill="#323232" d="M2 8h1v1H2zM2 9h1v1H2z"/><path fill="#363636" d="M5 7h1v1H5z"/><path fill="#393939" d="M8 9h1v1H8z"/><path fill="#404040" d="M2 7h1v1H2z"/><path fill="#414141" d="M2 10h1v1H2z"/><path fill="#444444" d="M8 7h1v1H8z"/><path fill="#494949" d="M8 10h1v1H8z"/><path fill="#686868" d="M7 6h1v1H7z"/><path fill="#696969" d="M11 5h1v1H11z"/><path fill="#6C6C6C" d="M12 8h1v1H12z"/><path fill="#707070" d="M3 11h1v1H3z"/><path fill="#787878" d="M13 4h1v1H13zM5 9h1v1H5z"/><path fill="#7C7C7C" d="M7 4h1v1H7zM6 9h1v1H6z"/><path fill="#7F7F7F" d="M13 7h1v1H13z"/><path fill="#808080" d="M9 5h1v1H9zM4 9h1v1H4z"/><path fill="#868686" d="M7 5h1v1H7z"/><path fill="#898989" d="M13 6h1v1H13z"/><path fill="#8A8A8A" d="M13 5h1v1H13z"/><path fill="#9D9D9D" d="M10 8h1v1H10z"/><path fill="#A4A4A4" d="M11 8h1v1H11z"/><path fill="#A6A6A6" d="M10 4h1v1H10z"/><path fill="#ACACAC" d="M9 8h1v1H9z"/><path fill="#B4B4B4" d="M5 8h1v1H5z"/><path fill="#B5B5B5" d="M12 9h1v1H12z"/><path fill="#B8B8B8" d="M5 11h1v1H5z"/><path fill="#BCBCBC" d="M8 4h1v1H8zM12 4h1v1H12z"/><path fill="#BDBDBD" d="M9 4h1v1H9zM11 4h1v1H11zM11 7h1v1H11z"/><path fill="#C0C0C0" d="M3 12h1v1H3z"/><path fill="#C1C1C1" d="M4 6h1v1H4zM6 6h1v1H6z"/><path fill="#C2C2C2" d="M3 6h1v1H3zM5 6h1v1H5z"/><path fill="#C3C3C3" d="M9 7h1v1H9zM11 9h1v1H11z"/><path fill="#C6C6C6" d="M6 11h1v1H6z"/><path fill="#C7C7C7" d="M7 11h1v1H7z"/><path fill="#D2D2D2" d="M4 12h1v1H4z"/><path fill="#D8D8D8" d="M11 6h1v1H11z"/><path fill="#DBDBDB" d="M13 8h1v1H13z"/><path fill="#DFDFDF" d="M10 3h1v1H10zM11 3h1v1H11z"/><path fill="#E0E0E0" d="M8 3h1v1H8zM9 3h1v1H9zM12 3h1v1H12z"/><path fill="#E4E4E4" d="M9 6h1v1H9z"/><path fill="#E6E6E6" d="M10 7h1v1H10z"/><path fill="#E8E8E8" d="M2 6h1v1H2z"/><path fill="#E9E9E9" d="M2 11h1v1H2z"/><path fill="#EAEAEA" d="M8 11h1v1H8z"/><path fill="#EDEDED" d="M8 6h1v1H8z"/><path fill="#F3F3F3" d="M12 7h1v1H12z"/><path fill="#F6F6F6" d="M13 3h1v1H13zM5 14h1v1H5zM6 14h1v1H6zM7 14h1v1H7zM9 14h1v1H9z"/><path fill="#F7F7F7" d="M2 12h1v1H2zM5 12h1v1H5zM8 12h1v1H8zM10 12h1v1H10zM11 12h1v1H11zM13 12h1v1H13zM2 13h1v1H2zM3 13h1v1H3zM4 13h1v1H4zM5 13h1v1H5zM6 13h1v1H6zM7 13h1v1H7zM8 13h1v1H8zM9 13h1v1H9zM10 13h1v1H10zM11 13h1v1H11zM12 13h1v1H12zM13 13h1v1H13zM8 14h1v1H8zM10 14h1v1H10z"/><path fill="#F8F8F8" d="M7 3h1v1H7zM9 11h1v1H9zM10 11h1v1H10zM11 11h1v1H11zM12 11h1v1H12zM13 11h1v1H13zM6 12h1v1H6zM7 12h1v1H7zM9 12h1v1H9zM12 12h1v1H12z"/><path fill="#F9F9F9" d="M9 10h1v1H9zM10 10h1v1H10zM11 10h1v1H11zM12 10h1v1H12zM13 10h1v1H13zM14 10h1v1H14z"/><path fill="#FAFAFA" d="M1 8h1v1H1zM14 8h1v1H14zM1 9h1v1H1zM9 9h1v1H9zM10 9h1v1H10zM13 9h1v1H13zM14 9h1v1H14z"/><path fill="#FBFBFB" d="M1 7h1v1H1zM14 7h1v1H14z"/><path fill="#FCFCFC" d="M2 5h1v1H2zM3 5h1v1H3zM4 5h1v1H4zM5 5h1v1H5zM6 5h1v1H6zM14 5h1v1H14zM1 6h1v1H1zM14 6h1v1H14z"/><path fill="#FDFDFD" d="M2 4h1v1H2zM3 4h1v1H3zM5 4h1v1H5zM1 5h1v1H1z"/><path fill="#FEFEFE" d="M6 1h1v1H6zM7 1h1v1H7zM9 1h1v1H9zM2 2h1v1H2zM3 2h1v1H3zM4 2h1v1H4zM5 2h1v1H5zM6 2h1v1H6zM7 2h1v1H7zM9 2h1v1H9zM2 3h1v1H2zM3 3h1v1H3zM4 3h1v1H4zM5 3h1v1H5zM6 3h1v1H6zM4 4h1v1H4zM6 4h1v1H6z"/><path fill="#FFFFFF" d="M8 1h1v1H8zM8 2h1v1H8zM10 2h1v1H10zM11 2h1v1H11zM12 2h1v1H12zM13 2h1v1H13zM8 5h1v1H8zM12 5h1v1H12zM12 6h1v1H12z"/></svg>"##;
+
 fn compile_title_bar<'a, Message, Provider>(
     token: &'a TitleBarToken<Message>,
     provider: Provider,
@@ -2157,13 +2211,13 @@ where
     let mut title_bits: Vec<IcedElement<'a, Message>> = Vec::new();
 
     if let Some(icon) = &token.icon {
-        title_bits.push(icon_element(icon, 16.0, visual.text_primary));
+        title_bits.push(title_bar_icon_element(icon, visual.text_primary));
     }
 
     title_bits.push(
         iced_text(token.title.clone())
-            .font(text_font(TextStyle::BodyStrong))
-            .size(text_size(TextStyle::Body, visual))
+            .font(title_bar_title_font())
+            .size(title_bar_title_size(visual))
             .color(visual.text_primary)
             .into(),
     );
@@ -2322,6 +2376,7 @@ where
         &token.label,
         kind,
         token.icon.as_ref(),
+        None,
         visual,
         false,
     ))
@@ -3121,7 +3176,7 @@ where
         && token.icon.is_none()
         && token.trailing.is_empty();
     let card_padding = if token.kind == CardKind::FloatingInput {
-        6.0
+        10.0
     } else {
         visual.card_padding
     };
@@ -3423,6 +3478,7 @@ where
             "",
             ButtonKind::Icon,
             Some(&icon),
+            None,
             visual,
             false,
         ))
@@ -3601,8 +3657,9 @@ where
 
     if visual.mode != ThemeMode::Minimal {
         if let Some(icon) = &item.icon {
+            let icon_color = service_result_icon_color(icon, primary_color);
             header_left_children.push(
-                iced_container(icon_element(icon, 16.0, primary_color))
+                iced_container(icon_element(icon, 16.0, icon_color))
                     .width(IcedLength::Fixed(22.0))
                     .height(IcedLength::Fixed(visual.result_header_height))
                     .align_y(alignment::Vertical::Center)
@@ -3619,9 +3676,16 @@ where
             .into(),
     );
 
-    if let Some(metadata) = &item.metadata {
+    let header_hint = item
+        .body
+        .trim()
+        .is_empty()
+        .then_some(item.pending_hint.as_deref())
+        .flatten();
+    let header_metadata = item.metadata.as_deref().or(header_hint);
+    if let Some(metadata) = header_metadata {
         header_right_children.push(
-            iced_text(metadata.clone())
+            iced_text(metadata.to_string())
                 .font(text_font(TextStyle::Caption))
                 .size(10.0)
                 .color(secondary_color)
@@ -3770,14 +3834,24 @@ where
     content
 }
 
+fn service_result_icon_color(icon: &win_fluent::IconToken, fallback: Color) -> Color {
+    match icon.name {
+        "service-bing" => Color::from_rgb8(0, 120, 212),
+        "service-local-ai" => Color::from_rgb8(100, 92, 230),
+        "service-mdx" => Color::from_rgb8(35, 134, 54),
+        "service-ai" => Color::from_rgb8(16, 110, 190),
+        _ => fallback,
+    }
+}
+
 struct HoverRevealActions<'a, Message> {
     body: IcedElement<'a, Message>,
     actions: IcedElement<'a, Message>,
     forced_visible: bool,
 }
 
-const HOVER_REVEAL_TRANSITION_MS: u16 = 120;
-const HOVER_REVEAL_SLIDE_DIPS: f32 = 6.0;
+const HOVER_REVEAL_TRANSITION_MS: u16 = 0;
+const HOVER_REVEAL_SLIDE_DIPS: f32 = 0.0;
 const HOVER_REVEAL_INTERACTIVE_PROGRESS: f32 = 0.85;
 
 impl<'a, Message> HoverRevealActions<'a, Message> {
@@ -4164,6 +4238,7 @@ fn push_result_action<'a, Message>(
         label,
         ButtonKind::ResultAction,
         Some(&icon),
+        None,
         visual,
         false,
     ))
@@ -4668,6 +4743,7 @@ where
         &command.label,
         ButtonKind::Standard,
         command.icon.as_ref(),
+        None,
         visual,
         false,
     ))
@@ -4699,6 +4775,7 @@ fn button_content<'a, Message>(
     label: &str,
     kind: ButtonKind,
     icon: Option<&win_fluent::IconToken>,
+    text_style: Option<TextStyle>,
     visual: IcedVisualTheme,
     selected: bool,
 ) -> IcedElement<'a, Message>
@@ -4706,13 +4783,18 @@ where
     Message: Clone + Send + 'static,
 {
     let icon_color = button_foreground_color(kind, visual, selected);
+    let text_style = if kind == ButtonKind::Tile {
+        TextStyle::Caption
+    } else {
+        text_style.unwrap_or(TextStyle::Body)
+    };
 
     match (kind, icon, label.trim().is_empty()) {
         (ButtonKind::Tile, Some(icon), false) => {
             let content = iced_column(vec![
                 icon_element(icon, button_icon_size(kind), icon_color),
                 iced_text(label.to_string())
-                    .font(text_font(TextStyle::Caption))
+                    .font(text_font_for_value(text_style, label))
                     .size(button_text_size(kind, visual))
                     .color(icon_color)
                     .into(),
@@ -4736,8 +4818,8 @@ where
         (_, Some(icon), false) => iced_row(vec![
             icon_element(icon, button_icon_size(kind), icon_color),
             iced_text(label.to_string())
-                .font(text_font(TextStyle::Body))
-                .size(button_text_size(kind, visual))
+                .font(text_font_for_value(text_style, label))
+                .size(text_size(text_style, visual))
                 .color(icon_color)
                 .into(),
         ])
@@ -4745,8 +4827,8 @@ where
         .align_y(alignment::Vertical::Center)
         .into(),
         (_, None, _) => iced_text(label.to_string())
-            .font(text_font(TextStyle::Body))
-            .size(button_text_size(kind, visual))
+            .font(text_font_for_value(text_style, label))
+            .size(text_size(text_style, visual))
             .color(icon_color)
             .into(),
     }
@@ -4754,8 +4836,9 @@ where
 
 fn button_foreground_color(kind: ButtonKind, visual: IcedVisualTheme, selected: bool) -> Color {
     match kind {
-        ButtonKind::Primary => visual.text_on_accent,
+        ButtonKind::Primary | ButtonKind::PrimaryRound => visual.text_on_accent,
         ButtonKind::Tile if selected => visual.selected_foreground,
+        ButtonKind::Tile => visual.tile_foreground,
         ButtonKind::FloatingAction | ButtonKind::Link => visual.accent,
         _ => visual.text_primary,
     }
@@ -4781,6 +4864,25 @@ where
         .into()
 }
 
+fn title_bar_icon_element<'a, Message>(
+    icon: &win_fluent::IconToken,
+    color: Color,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    if icon.name == "app" {
+        return iced::widget::svg(iced::widget::svg::Handle::from_memory(
+            EASYDICT_APP_ICON_SVG,
+        ))
+        .width(IcedLength::Fixed(16.0))
+        .height(IcedLength::Fixed(16.0))
+        .into();
+    }
+
+    icon_element(icon, 16.0, color)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CaptionButtonKind {
     Minimize,
@@ -4791,9 +4893,9 @@ enum CaptionButtonKind {
 impl CaptionButtonKind {
     const fn glyph(self) -> char {
         match self {
-            Self::Minimize => '-',
-            Self::ToggleMaximize => '□',
-            Self::Close => '×',
+            Self::Minimize => '\u{E921}',
+            Self::ToggleMaximize => '\u{E922}',
+            Self::Close => '\u{E8BB}',
         }
     }
 }
@@ -4808,8 +4910,8 @@ where
 {
     let content = iced_container(
         iced_text(kind.glyph().to_string())
-            .font(text_font(TextStyle::Body))
-            .size(18.0)
+            .font(caption_icon_font())
+            .size(10.0)
             .color(visual.text_primary),
     )
     .center_x(IcedLength::Fill)
@@ -4859,7 +4961,7 @@ fn icon_symbol(icon: &win_fluent::IconToken) -> char {
 fn button_text_size(kind: ButtonKind, visual: IcedVisualTheme) -> f32 {
     match kind {
         ButtonKind::Icon | ButtonKind::ResultAction | ButtonKind::FloatingAction => 18.0,
-        ButtonKind::Primary => visual.body_size,
+        ButtonKind::Primary | ButtonKind::PrimaryRound => visual.body_size,
         ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::Chip => {
             visual.body_size
         }
@@ -4871,15 +4973,24 @@ fn button_icon_size(kind: ButtonKind) -> f32 {
     match kind {
         ButtonKind::Icon | ButtonKind::ResultAction => 18.0,
         ButtonKind::FloatingAction => 16.0,
-        ButtonKind::Primary => 20.0,
+        ButtonKind::Primary | ButtonKind::PrimaryRound => 20.0,
         ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::Chip => 16.0,
         ButtonKind::Tile => 22.0,
     }
 }
 
+fn title_bar_title_font() -> Font {
+    text_font(TextStyle::Caption)
+}
+
+fn title_bar_title_size(visual: IcedVisualTheme) -> f32 {
+    text_size(TextStyle::Caption, visual)
+}
+
 fn text_size(style: TextStyle, visual: IcedVisualTheme) -> f32 {
     match style {
         TextStyle::Caption => visual.caption_size,
+        TextStyle::CaptionSmall => 11.0,
         TextStyle::Body => visual.body_size,
         TextStyle::BodyLarge => visual.body_large_size,
         TextStyle::BodyStrong => visual.body_strong_size,
@@ -4894,7 +5005,9 @@ fn text_font(style: TextStyle) -> Font {
         TextStyle::BodyStrong | TextStyle::Subtitle | TextStyle::Title | TextStyle::TitleLarge => {
             font::Weight::Semibold
         }
-        TextStyle::Caption | TextStyle::Body | TextStyle::BodyLarge => font::Weight::Normal,
+        TextStyle::Caption | TextStyle::CaptionSmall | TextStyle::Body | TextStyle::BodyLarge => {
+            font::Weight::Normal
+        }
     };
 
     Font {
@@ -4902,6 +5015,20 @@ fn text_font(style: TextStyle) -> Font {
         weight,
         ..Font::DEFAULT
     }
+}
+
+fn text_font_for_value(style: TextStyle, value: &str) -> Font {
+    let mut font = text_font(style);
+    if contains_cjk(value) {
+        font.family = font::Family::Name("Microsoft YaHei UI");
+        if matches!(
+            style,
+            TextStyle::BodyStrong | TextStyle::Subtitle | TextStyle::Title | TextStyle::TitleLarge
+        ) {
+            font.weight = font::Weight::Medium;
+        }
+    }
+    font
 }
 
 fn icon_font() -> Font {
@@ -4948,6 +5075,45 @@ fn iced_length(length: Length) -> IcedLength {
     }
 }
 
+fn scroll_direction(
+    horizontal: ScrollPolicy,
+    vertical: ScrollPolicy,
+    scrollbars_visible: bool,
+) -> iced::widget::scrollable::Direction {
+    use iced::widget::scrollable::Direction;
+
+    let horizontal_bar = scroll_bar(horizontal, scrollbars_visible);
+    let vertical_bar = scroll_bar(vertical, scrollbars_visible);
+
+    match (horizontal, vertical) {
+        (ScrollPolicy::Never, _) => Direction::Vertical(vertical_bar),
+        (_, ScrollPolicy::Never) => Direction::Horizontal(horizontal_bar),
+        _ => Direction::Both {
+            vertical: vertical_bar,
+            horizontal: horizontal_bar,
+        },
+    }
+}
+
+fn scroll_bar(
+    policy: ScrollPolicy,
+    scrollbars_visible: bool,
+) -> iced::widget::scrollable::Scrollbar {
+    use iced::widget::scrollable::Scrollbar;
+
+    match policy {
+        ScrollPolicy::Always => visible_scrollbar(),
+        ScrollPolicy::Auto if scrollbars_visible => visible_scrollbar(),
+        ScrollPolicy::Auto | ScrollPolicy::Never => Scrollbar::hidden(),
+    }
+}
+
+fn visible_scrollbar() -> iced::widget::scrollable::Scrollbar {
+    use iced::widget::scrollable::Scrollbar;
+
+    Scrollbar::new().width(4).scroller_width(2).margin(1)
+}
+
 fn distribute_children<'a, Message>(
     children: Vec<IcedElement<'a, Message>>,
     kind: LayoutKind,
@@ -4991,6 +5157,9 @@ struct IcedVisualTheme {
     selected_surface: Color,
     selected_foreground: Color,
     selected_border: Color,
+    tile_surface: Color,
+    tile_foreground: Color,
+    tile_border: Color,
     input_surface: Color,
     result_surface: Color,
     result_header: Color,
@@ -5058,6 +5227,9 @@ impl IcedVisualTheme {
             selected_surface: iced_color(theme.selected_surface),
             selected_foreground: iced_color(theme.selected_foreground),
             selected_border: iced_color(theme.selected_border),
+            tile_surface: iced_color(theme.tile_surface),
+            tile_foreground: iced_color(theme.tile_foreground),
+            tile_border: iced_color(theme.tile_border),
             input_surface: iced_color(theme.input_surface),
             result_surface: iced_color(theme.result_surface),
             result_header: iced_color(theme.result_header),
@@ -5125,7 +5297,7 @@ fn page_container_style(visual: IcedVisualTheme) -> iced::widget::container::Sty
 
 fn title_bar_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
     iced::widget::container::Style::default()
-        .background(visual.surface_alt)
+        .background(visual.background)
         .color(visual.text_primary)
 }
 
@@ -5231,6 +5403,8 @@ fn utility_container_style(
         container = container.background(visual.surface);
     } else if style.has("bg-muted") || style.has("bg-surface-alt") {
         container = container.background(visual.surface_alt);
+    } else if style.has("bg-border") {
+        container = container.background(visual.border);
     } else if style.has("bg-accent") {
         container = container.background(visual.accent);
     }
@@ -5440,6 +5614,14 @@ fn button_style_with_state(
                 (Some(visual.accent), visual.text_on_accent, visual.accent)
             }
         },
+        ButtonKind::PrimaryRound => match status {
+            iced::widget::button::Status::Disabled => (
+                Some(visual.surface_alt),
+                visual.text_secondary.scale_alpha(visual.disabled_opacity),
+                visual.border,
+            ),
+            _ => (Some(visual.accent), visual.text_on_accent, visual.accent),
+        },
         ButtonKind::Link => match status {
             iced::widget::button::Status::Hovered => {
                 (Some(visual.button_hover), visual.accent, visual.border)
@@ -5498,6 +5680,16 @@ fn button_style_with_state(
             ),
         },
         ButtonKind::Standard | ButtonKind::Chip | ButtonKind::Tile => match status {
+            iced::widget::button::Status::Hovered if kind == ButtonKind::Tile => (
+                Some(visual.tile_surface),
+                visual.tile_foreground,
+                visual.tile_border,
+            ),
+            iced::widget::button::Status::Pressed if kind == ButtonKind::Tile => (
+                Some(visual.tile_surface),
+                visual.tile_foreground,
+                visual.tile_border,
+            ),
             iced::widget::button::Status::Hovered => (
                 Some(visual.button_hover),
                 visual.text_primary,
@@ -5512,6 +5704,11 @@ fn button_style_with_state(
                 Some(visual.surface_alt),
                 visual.text_secondary.scale_alpha(visual.disabled_opacity),
                 visual.border,
+            ),
+            iced::widget::button::Status::Active if kind == ButtonKind::Tile => (
+                Some(visual.tile_surface),
+                visual.tile_foreground,
+                visual.tile_border,
             ),
             iced::widget::button::Status::Active => {
                 (Some(visual.surface), visual.text_primary, visual.border)
@@ -5530,11 +5727,13 @@ fn button_style_with_state(
             ButtonKind::Icon | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::ResultAction,
             iced::widget::button::Status::Active,
         ) => 0.0,
-        (ButtonKind::Tile, _) if selected || focused => visual.stroke_focus,
+        (ButtonKind::Tile, _) if selected && !focused => visual.stroke_control,
+        (ButtonKind::Tile, _) if focused => visual.stroke_focus,
         _ => visual.stroke_control,
     };
     let border_radius = match kind {
         ButtonKind::Chip => 18.0,
+        ButtonKind::PrimaryRound => visual.primary_icon_button_size() / 2.0,
         ButtonKind::FloatingAction => visual.floating_action_button_size / 2.0,
         _ => visual.radius_control,
     };
@@ -5589,16 +5788,14 @@ fn result_header_button_style(
 ) -> iced::widget::button::Style {
     let background = match status {
         iced::widget::button::Status::Hovered => Some(visual.result_header_hover),
-        iced::widget::button::Status::Pressed => Some(visual.button_pressed),
-        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => {
-            Some(visual.result_header)
-        }
+        iced::widget::button::Status::Pressed => Some(visual.result_header_hover),
+        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => None,
     };
 
     iced::widget::button::Style {
         background: background.map(Background::Color),
         text_color: visual.text_primary,
-        border: Border::default(),
+        border: control_border_with_radius(Color::TRANSPARENT, 0.0, visual.radius_control),
         shadow: Shadow::default(),
         ..iced::widget::button::Style::default()
     }
@@ -5615,7 +5812,7 @@ fn text_input_style(
             control_border(visual, visual.focus, visual.stroke_focus)
         }
         (_, iced::widget::text_input::Status::Hovered) => {
-            control_border(visual, visual.accent, visual.stroke_control)
+            control_border(visual, visual.border, visual.stroke_control)
         }
         (
             _,
@@ -5651,10 +5848,10 @@ fn text_editor_style(
     let border = match (chrome, status) {
         (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (_, iced::widget::text_editor::Status::Focused { .. }) => {
-            control_border(visual, visual.focus, visual.stroke_focus)
+            control_border(visual, visual.border, visual.stroke_control)
         }
         (_, iced::widget::text_editor::Status::Hovered) => {
-            control_border(visual, visual.accent, visual.stroke_control)
+            control_border(visual, visual.border, visual.stroke_control)
         }
         (
             _,
@@ -5705,9 +5902,10 @@ where
 {
     let mut control = iced_checkbox(token.checked)
         .label(token.label.clone())
-        .size(18)
+        .size(20)
         .spacing(8)
         .text_size(visual.body_size)
+        .font(checkbox_label_font(&token.label, token.label_italic))
         .style({
             let state = token.state.clone();
             move |_, status| checkbox_style_with_state(visual, status, &state)
@@ -5723,6 +5921,39 @@ where
     }
 
     control.into()
+}
+
+fn checkbox_label_font(label: &str, label_italic: bool) -> Font {
+    let mut font = text_font_for_value(TextStyle::Body, label);
+    if label_italic && !contains_cjk(label) {
+        font.family = font::Family::Name("Segoe UI");
+    }
+
+    Font {
+        style: if label_italic {
+            font::Style::Italic
+        } else {
+            font::Style::Normal
+        },
+        ..font
+    }
+}
+
+fn contains_cjk(value: &str) -> bool {
+    value.chars().any(|ch| {
+        matches!(
+            ch as u32,
+            0x3400..=0x4DBF
+                | 0x4E00..=0x9FFF
+                | 0xF900..=0xFAFF
+                | 0x20000..=0x2A6DF
+                | 0x2A700..=0x2B73F
+                | 0x2B740..=0x2B81F
+                | 0x2B820..=0x2CEAF
+                | 0x2CEB0..=0x2EBEF
+                | 0x30000..=0x3134F
+        )
+    })
 }
 
 fn checkbox_style_with_state(
@@ -5942,17 +6173,28 @@ fn toggle_switch_style_for_state(
             visual.text_on_accent,
         )
     } else {
-        (
-            if is_pressed {
-                visual.button_pressed
-            } else if is_hovered {
-                visual.button_hover
-            } else {
-                visual.surface
-            },
-            visual.border,
-            visual.text_secondary,
-        )
+        let resting_light = matches!(visual.mode, ThemeMode::Light | ThemeMode::Minimal)
+            && !is_pressed
+            && !is_hovered;
+        if resting_light {
+            (
+                Color::from_rgb8(249, 249, 249),
+                Color::from_rgb8(139, 139, 139),
+                Color::from_rgb8(95, 95, 95),
+            )
+        } else {
+            (
+                if is_pressed {
+                    visual.button_pressed
+                } else if is_hovered {
+                    visual.button_hover
+                } else {
+                    visual.surface
+                },
+                visual.border,
+                visual.text_secondary,
+            )
+        }
     };
 
     iced::widget::toggler::Style {
@@ -5968,7 +6210,7 @@ fn toggle_switch_style_for_state(
             visual.text_primary
         }),
         border_radius: None,
-        padding_ratio: 0.15,
+        padding_ratio: 0.20,
     }
 }
 
@@ -5980,8 +6222,10 @@ fn pick_list_style(
         iced::widget::pick_list::Status::Active => {
             control_border(visual, visual.border, visual.stroke_control)
         }
-        iced::widget::pick_list::Status::Hovered
-        | iced::widget::pick_list::Status::Opened { .. } => {
+        iced::widget::pick_list::Status::Hovered => {
+            control_border(visual, visual.border, visual.stroke_control)
+        }
+        iced::widget::pick_list::Status::Opened { .. } => {
             control_border(visual, visual.focus, visual.stroke_focus)
         }
     };
@@ -6140,7 +6384,7 @@ fn elevation_shadow(visual: IcedVisualTheme, elevation: f32) -> Shadow {
 
 fn text_color(style: TextStyle, visual: IcedVisualTheme) -> Color {
     match style {
-        TextStyle::Caption => visual.text_secondary,
+        TextStyle::Caption | TextStyle::CaptionSmall => visual.text_secondary,
         TextStyle::Body
         | TextStyle::BodyLarge
         | TextStyle::BodyStrong
@@ -6720,6 +6964,45 @@ mod tests {
     }
 
     #[test]
+    fn title_bar_uses_window_background_like_winui_chrome() {
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+        let style = title_bar_container_style(visual);
+
+        assert_eq!(
+            optional_background_color(style.background),
+            iced_color(theme.background)
+        );
+    }
+
+    #[test]
+    fn title_bar_title_uses_native_caption_typography() {
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+        let font = title_bar_title_font();
+
+        assert_eq!(font.weight, font::Weight::Normal);
+        assert_eq!(title_bar_title_size(visual), theme.typography.caption);
+    }
+
+    #[test]
+    fn caption_buttons_use_mdl2_chrome_glyphs() {
+        assert_eq!(CaptionButtonKind::Minimize.glyph(), '\u{E921}');
+        assert_eq!(CaptionButtonKind::ToggleMaximize.glyph(), '\u{E922}');
+        assert_eq!(CaptionButtonKind::Close.glyph(), '\u{E8BB}');
+        assert_eq!(caption_icon_font(), Font::with_name("Segoe MDL2 Assets"));
+    }
+
+    #[test]
+    fn app_icons_use_fluent_font_to_match_winui_font_icon() {
+        assert_eq!(icon_font(), Font::with_name("Segoe Fluent Icons"));
+        assert_eq!(
+            icon_symbol_font('\u{E713}'),
+            Font::with_name("Segoe Fluent Icons")
+        );
+    }
+
+    #[test]
     fn maps_visual_theme_to_iced_page_button_and_input_styles() {
         let theme = ThemeTokens::fluent_light();
         let visual = IcedVisualTheme::from_tokens(&theme);
@@ -6770,6 +7053,24 @@ mod tests {
             iced_color(theme.accent_pressed)
         );
 
+        let primary_round = button_style(
+            visual,
+            ButtonKind::PrimaryRound,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(
+            optional_background_color(primary_round.background),
+            iced_color(theme.accent.base)
+        );
+        assert_eq!(
+            primary_round.text_color,
+            iced_color(theme.accent_foreground)
+        );
+        assert_eq!(
+            primary_round.border.radius.top_left,
+            theme.control.primary_round_button / 2.0
+        );
+
         let focused = text_input_style(
             visual,
             iced::widget::text_input::Status::Focused { is_hovered: false },
@@ -6778,6 +7079,21 @@ mod tests {
         assert_eq!(focused.border.color, iced_color(theme.focus));
         assert_eq!(focused.border.width, theme.stroke.focus);
         assert_eq!(focused.selection, iced_color(theme.accent.light_2));
+
+        let frameless_editor_active = text_editor_style(
+            visual,
+            iced::widget::text_editor::Status::Active,
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(
+            frameless_editor_active.background,
+            Background::Color(iced_color(theme.input_surface))
+        );
+        assert_eq!(
+            frameless_editor_active.border.color,
+            iced_color(theme.border)
+        );
+        assert_eq!(frameless_editor_active.border.width, 0.0);
 
         let frameless_editor = text_editor_style(
             visual,
@@ -6810,6 +7126,10 @@ mod tests {
             iced_color(theme.accent_foreground)
         );
         assert_eq!(toggle_on.background_border_width, theme.stroke.control);
+        assert_eq!(
+            toggle_on.padding_ratio, 0.20,
+            "WinUI ToggleSwitch thumb is closer to 12px inside a 20px track"
+        );
         assert_eq!(toggle_switch_label("On", true), "On");
         assert_eq!(toggle_switch_label("On", false), "Off");
         assert_eq!(toggle_switch_label("Auto", true), "Auto");
@@ -6826,11 +7146,15 @@ mod tests {
         );
         assert_eq!(
             background_color(toggle_off.background),
-            iced_color(theme.surface)
+            iced::Color::from_rgb8(249, 249, 249)
+        );
+        assert_eq!(
+            toggle_off.background_border_color,
+            iced::Color::from_rgb8(139, 139, 139)
         );
         assert_eq!(
             background_color(toggle_off.foreground),
-            iced_color(theme.text_secondary)
+            iced::Color::from_rgb8(95, 95, 95)
         );
 
         let pick_list = pick_list_style(visual, iced::widget::pick_list::Status::Hovered);
@@ -6838,8 +7162,8 @@ mod tests {
             background_color(pick_list.background),
             iced_color(theme.surface)
         );
-        assert_eq!(pick_list.border.color, iced_color(theme.focus));
-        assert_eq!(pick_list.border.width, theme.stroke.focus);
+        assert_eq!(pick_list.border.color, iced_color(theme.border));
+        assert_eq!(pick_list.border.width, theme.stroke.control);
 
         let menu = menu_style(visual);
         assert_eq!(background_color(menu.background), iced_color(theme.surface));
@@ -6855,6 +7179,13 @@ mod tests {
             iced_color(theme.surface)
         );
         assert_eq!(settings_row.border.width, theme.stroke.control);
+
+        let divider = utility_container_style(&FluentStyle::from_classes("bg-border"), visual);
+        assert_eq!(
+            optional_background_color(divider.background),
+            iced_color(theme.border)
+        );
+        assert_eq!(divider.border.width, 0.0);
 
         let result_card = result_card_container_style(visual);
         assert_eq!(
@@ -6903,6 +7234,32 @@ mod tests {
         );
         assert_eq!(standard_pressed.border.color, iced_color(theme.border));
 
+        let tile_hover = button_style(
+            visual,
+            ButtonKind::Tile,
+            iced::widget::button::Status::Hovered,
+        );
+        assert_eq!(
+            optional_background_color(tile_hover.background),
+            iced_color(theme.tile_surface),
+            "WinUI settings tab template keeps unselected tab backgrounds bound to the tab surface while hovered"
+        );
+        assert_eq!(tile_hover.text_color, iced_color(theme.tile_foreground));
+        assert_eq!(tile_hover.border.color, iced_color(theme.tile_border));
+
+        let tile_pressed = button_style(
+            visual,
+            ButtonKind::Tile,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_eq!(
+            optional_background_color(tile_pressed.background),
+            iced_color(theme.tile_surface),
+            "WinUI settings tab template keeps unselected tab backgrounds bound to the tab surface while pressed"
+        );
+        assert_eq!(tile_pressed.text_color, iced_color(theme.tile_foreground));
+        assert_eq!(tile_pressed.border.color, iced_color(theme.tile_border));
+
         let result_header_hover =
             result_header_button_style(visual, iced::widget::button::Status::Hovered);
         assert_eq!(
@@ -6914,7 +7271,7 @@ mod tests {
             result_header_button_style(visual, iced::widget::button::Status::Pressed);
         assert_eq!(
             optional_background_color(result_header_pressed.background),
-            iced_color(theme.button_pressed)
+            iced_color(theme.result_header_hover)
         );
 
         let floating_action_hover = button_style(
@@ -6947,6 +7304,36 @@ mod tests {
             floating_action_pressed.text_color,
             iced_color(theme.accent.base)
                 .scale_alpha(theme.effects.floating_action_pressed_opacity)
+        );
+
+        let primary_round_hover = button_style(
+            visual,
+            ButtonKind::PrimaryRound,
+            iced::widget::button::Status::Hovered,
+        );
+        assert_eq!(
+            optional_background_color(primary_round_hover.background),
+            iced_color(theme.accent.base),
+            "WinUI primary round translate buttons keep the accent fill on hover"
+        );
+        assert_eq!(
+            primary_round_hover.border.color,
+            iced_color(theme.accent.base)
+        );
+
+        let primary_round_pressed = button_style(
+            visual,
+            ButtonKind::PrimaryRound,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_eq!(
+            optional_background_color(primary_round_pressed.background),
+            iced_color(theme.accent.base),
+            "WinUI primary round translate buttons keep the accent fill while pressed"
+        );
+        assert_eq!(
+            primary_round_pressed.text_color,
+            iced_color(theme.accent_foreground)
         );
 
         let focused_standard = button_style_with_state(
@@ -7005,6 +7392,24 @@ mod tests {
     }
 
     #[test]
+    fn auto_scroll_policy_keeps_winui_like_scrollbars_hidden_at_rest() {
+        use iced::widget::scrollable::Scrollbar;
+
+        assert_eq!(scroll_bar(ScrollPolicy::Auto, false), Scrollbar::hidden());
+        assert_eq!(scroll_bar(ScrollPolicy::Never, false), Scrollbar::hidden());
+        assert_eq!(scroll_bar(ScrollPolicy::Always, false), visible_scrollbar());
+    }
+
+    #[test]
+    fn auto_scroll_policy_can_show_winui_like_scrollbars_during_interaction() {
+        use iced::widget::scrollable::Scrollbar;
+
+        assert_eq!(scroll_bar(ScrollPolicy::Auto, true), visible_scrollbar());
+        assert_eq!(scroll_bar(ScrollPolicy::Never, true), Scrollbar::hidden());
+        assert_eq!(scroll_bar(ScrollPolicy::Always, true), visible_scrollbar());
+    }
+
+    #[test]
     fn explicit_button_control_state_overrides_runtime_status_for_previews() {
         let runtime_active = iced::widget::button::Status::Active;
         let runtime_hovered = iced::widget::button::Status::Hovered;
@@ -7050,6 +7455,67 @@ mod tests {
         );
         assert_eq!(text_input.border.color, iced_color(theme.focus));
         assert_eq!(text_input.border.width, theme.stroke.focus);
+
+        let frameless_text_input = text_input_style(
+            visual,
+            text_input_status_with_state(&focused, iced::widget::text_input::Status::Active),
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(frameless_text_input.border.color, iced_color(theme.border));
+        assert_eq!(frameless_text_input.border.width, 0.0);
+
+        let frameless_text_input_hovered = text_input_style(
+            visual,
+            text_input_status_with_state(
+                &ControlState::default().hovered(true),
+                iced::widget::text_input::Status::Active,
+            ),
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(
+            frameless_text_input_hovered.border.color,
+            iced_color(theme.border)
+        );
+        assert_eq!(frameless_text_input_hovered.border.width, 0.0);
+
+        let frameless_text_editor_hovered = text_editor_style(
+            visual,
+            text_editor_status_with_state(
+                &ControlState::default().hovered(true),
+                iced::widget::text_editor::Status::Active,
+            ),
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(
+            frameless_text_editor_hovered.border.color,
+            iced_color(theme.border)
+        );
+        assert_eq!(frameless_text_editor_hovered.border.width, 0.0);
+
+        let frameless_text_editor_focused = text_editor_style(
+            visual,
+            text_editor_status_with_state(
+                &ControlState::default().focused(true),
+                iced::widget::text_editor::Status::Active,
+            ),
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(
+            frameless_text_editor_focused.border.color,
+            iced_color(theme.border)
+        );
+        assert_eq!(frameless_text_editor_focused.border.width, 0.0);
+
+        let frameless_text_input_active = text_input_style(
+            visual,
+            iced::widget::text_input::Status::Active,
+            TextEditorChrome::Frameless,
+        );
+        assert_eq!(
+            frameless_text_input_active.border.color,
+            iced_color(theme.border)
+        );
+        assert_eq!(frameless_text_input_active.border.width, 0.0);
 
         let disabled = ControlState::default().hovered(true).disabled();
         let editor = text_editor_style(
@@ -7146,6 +7612,8 @@ mod tests {
             background_color(combo.background),
             iced_color(theme.button_hover)
         );
+        assert_eq!(combo.border.color, visual.border);
+        assert_eq!(combo.border.width, visual.stroke_control);
 
         let combo_pressed = ControlState::default().hovered(true).pressed(true);
         let combo = pick_list_style_with_state(
@@ -7203,6 +7671,12 @@ mod tests {
         let visual = IcedVisualTheme::from_tokens(&theme);
 
         let hovered = ControlState::default().hovered(true);
+        let active_style = result_header_button_style(visual, iced::widget::button::Status::Active);
+        assert!(
+            active_style.background.is_none(),
+            "resting result rows let the outer result-card border remain visible"
+        );
+
         let hover_style = result_header_button_style(
             visual,
             button_status_with_state(&hovered, iced::widget::button::Status::Active),
@@ -7211,6 +7685,7 @@ mod tests {
             optional_background_color(hover_style.background),
             iced_color(theme.result_header_hover)
         );
+        assert_eq!(hover_style.border.radius.top_left, theme.radius.control);
 
         let pressed = ControlState::default().pressed(true);
         let pressed_style = result_header_button_style(
@@ -7219,7 +7694,27 @@ mod tests {
         );
         assert_eq!(
             optional_background_color(pressed_style.background),
-            iced_color(theme.button_pressed)
+            iced_color(theme.result_header_hover)
+        );
+    }
+
+    #[test]
+    fn service_result_icons_use_service_accent_colors() {
+        let fallback = iced::Color::from_rgb8(1, 2, 3);
+
+        assert_eq!(
+            service_result_icon_color(
+                &win_fluent::IconToken::with_glyph("service-bing", '\u{E774}'),
+                fallback
+            ),
+            iced::Color::from_rgb8(0, 120, 212)
+        );
+        assert_eq!(
+            service_result_icon_color(
+                &win_fluent::IconToken::with_glyph("unknown", '\u{E8D4}'),
+                fallback
+            ),
+            fallback
         );
     }
 
@@ -7249,8 +7744,8 @@ mod tests {
             editor.background,
             Background::Color(iced_color(theme.surface))
         );
-        assert_eq!(editor.border.color, iced_color(theme.focus));
-        assert_eq!(editor.border.width, theme.stroke.focus);
+        assert_eq!(editor.border.color, iced_color(theme.border));
+        assert_eq!(editor.border.width, theme.stroke.control);
 
         let result_card = result_card_container_style(visual);
         assert_eq!(result_card.shadow, Shadow::default());
@@ -7351,12 +7846,15 @@ mod tests {
     }
 
     #[test]
-    fn normal_windows_apply_native_options_after_showing() {
+    fn normal_windows_apply_native_options_before_and_after_showing() {
         let options = WindowOptions::new("main", "Main").size(940.0, 1220.0);
 
         assert_eq!(
             show_window_steps(&options),
             vec![
+                ShowWindowStep::ApplyNativeOptions {
+                    delayed_check: false
+                },
                 ShowWindowStep::ResolvePlacement,
                 ShowWindowStep::ShowWindowed,
                 ShowWindowStep::ApplyNativeOptions {
@@ -7537,6 +8035,10 @@ mod tests {
         assert_eq!(selected.text_color, iced_color(theme.selected_foreground));
         assert_eq!(selected.border.color, iced_color(theme.selected_border));
         assert_eq!(
+            selected.border.width, theme.stroke.control,
+            "WinUI settings tab selected overlay uses a 1px border unless focus is visible"
+        );
+        assert_eq!(
             button_foreground_color(ButtonKind::Tile, visual, true),
             iced_color(theme.selected_foreground),
             "selected tile content should use the same foreground as the selected style"
@@ -7549,11 +8051,43 @@ mod tests {
             false,
             iced::widget::button::Status::Active,
         );
-        assert_ne!(
+        assert_eq!(
             optional_background_color(unselected.background),
-            iced_color(theme.selected_surface),
-            "unselected tile must not paint the selected surface"
+            iced_color(theme.tile_surface),
+            "WinUI settings tab button background uses the unselected tile surface and must not paint the selected surface"
         );
+        assert_eq!(unselected.text_color, iced_color(theme.tile_foreground));
+        assert_eq!(unselected.border.color, iced_color(theme.tile_border));
+
+        let focused_selected = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            true,
+            true,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(focused_selected.border.color, iced_color(theme.focus));
+        assert_eq!(focused_selected.border.width, theme.stroke.focus);
+    }
+
+    #[test]
+    fn checkbox_label_italic_maps_to_iced_font_style() {
+        let normal = checkbox_label_font("OpenAI", false);
+        assert_eq!(normal.style, font::Style::Normal);
+
+        let italic = checkbox_label_font("OpenAI", true);
+        assert_eq!(italic.style, font::Style::Italic);
+        match italic.family {
+            font::Family::Name(name) => assert_eq!(name, "Segoe UI"),
+            family => panic!("unexpected italic latin checkbox family: {family:?}"),
+        }
+
+        let cjk_italic = checkbox_label_font("Zhipu (\u{667a}\u{8c31})", true);
+        assert_eq!(cjk_italic.style, font::Style::Italic);
+        match cjk_italic.family {
+            font::Family::Name(name) => assert_eq!(name, "Microsoft YaHei UI"),
+            family => panic!("unexpected italic cjk checkbox family: {family:?}"),
+        }
     }
 
     #[test]
@@ -7676,13 +8210,7 @@ mod tests {
         let target_visible = state.target_visible(false);
         state.set_target(target_visible, HOVER_REVEAL_TRANSITION_MS);
         assert!(state.drawn(false));
-        assert!(!state.interactive(false));
-        assert!(state.tick(start, HOVER_REVEAL_TRANSITION_MS));
-        assert!(state.tick(
-            start + Duration::from_millis(u64::from(HOVER_REVEAL_TRANSITION_MS / 2)),
-            HOVER_REVEAL_TRANSITION_MS
-        ));
-        assert!(state.progress > 0.0 && state.progress < 1.0);
+        assert!(state.interactive(false));
         assert!(!state.tick(
             start + Duration::from_millis(u64::from(HOVER_REVEAL_TRANSITION_MS)),
             HOVER_REVEAL_TRANSITION_MS
@@ -7694,18 +8222,15 @@ mod tests {
         assert!(state.set_hovered(false));
         let target_visible = state.target_visible(false);
         state.set_target(target_visible, HOVER_REVEAL_TRANSITION_MS);
-        assert!(
-            state.drawn(false),
-            "actions remain drawn while animating out"
-        );
+        assert!(!state.drawn(false));
         assert!(!state.interactive(false));
     }
 
     #[test]
-    fn hover_reveal_motion_slides_actions_in_as_it_becomes_visible() {
-        let mid = hover_reveal_progress(0.0, 1.0, 60.0, HOVER_REVEAL_TRANSITION_MS);
+    fn hover_reveal_motion_matches_instant_winui_visibility_toggle() {
+        let mid = hover_reveal_progress(0.0, 1.0, 0.0, HOVER_REVEAL_TRANSITION_MS);
 
-        assert!(mid > 0.0 && mid < 1.0);
+        assert_eq!(mid, 1.0);
         assert_eq!(
             hover_reveal_progress(
                 0.0,
@@ -7715,8 +8240,8 @@ mod tests {
             ),
             1.0
         );
-        assert_eq!(hover_reveal_slide_offset(0.0), HOVER_REVEAL_SLIDE_DIPS);
-        assert!(hover_reveal_slide_offset(mid) < HOVER_REVEAL_SLIDE_DIPS);
+        assert_eq!(hover_reveal_slide_offset(0.0), 0.0);
+        assert_eq!(hover_reveal_slide_offset(mid), 0.0);
         assert_eq!(hover_reveal_slide_offset(1.0), 0.0);
     }
 

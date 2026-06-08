@@ -100,10 +100,19 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             )
             .property("close", format!("{:?}", token.close_action.kind()))
             .children(token.commands.iter().map(schema_node)),
-        ViewToken::Text(token) => SchemaNode::new("Text", token.id.clone())
-            .property("value", quoted(&token.value))
-            .property("style", format!("{:?}", token.style))
-            .property("selectable", token.selectable.to_string()),
+        ViewToken::Text(token) => {
+            let mut node = SchemaNode::new("Text", token.id.clone())
+                .property("value", quoted(&token.value))
+                .property("style", format!("{:?}", token.style))
+                .property("selectable", token.selectable.to_string());
+            if let Some(width) = token.width {
+                node = node.property("width", optional_length(Some(width)));
+            }
+            if let Some(height) = token.height {
+                node = node.property("height", optional_length(Some(height)));
+            }
+            node
+        }
         ViewToken::Button(token) => SchemaNode::new("Button", token.id.clone())
             .property("label", quoted(&token.label))
             .property("kind", format!("{:?}", token.kind))
@@ -111,6 +120,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("tooltip", optional_string(token.tooltip.as_deref()))
             .property("width", optional_length(token.width))
             .property("height", optional_length(token.height))
+            .property("text_style", optional_text_style(token.text_style))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::FlyoutButton(token) => SchemaNode::new("FlyoutButton", token.id.clone())
@@ -169,11 +179,22 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::ToggleSwitch(token) => SchemaNode::new("ToggleSwitch", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
+            .property("header", optional_string(token.header.as_deref()))
+            .property(
+                "width",
+                toggle_switch_evidence_width(token.header.as_deref(), &token.label),
+            )
+            .property("height", "Fixed(32)")
+            .property(
+                "labeled_height",
+                toggle_switch_labeled_evidence_height(token.header.as_deref()),
+            )
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::CheckBox(token) => SchemaNode::new("CheckBox", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
+            .property("label_italic", token.label_italic.to_string())
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::Slider(token) => SchemaNode::new("Slider", token.id.clone())
@@ -182,6 +203,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("max", format!("{:.2}", token.max))
             .property("step", format!("{:.2}", token.step))
             .property("width", format!("{:?}", token.width))
+            .property("height", "Fixed(32)")
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::ComboBox(token) => SchemaNode::new("ComboBox", token.id.clone())
@@ -189,6 +211,15 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", combo_items(&token.items))
             .property("width", format!("{:?}", token.width))
+            .property(
+                "labeled_width",
+                combo_box_labeled_evidence_width(token.label.as_deref(), token.width),
+            )
+            .property("height", "Fixed(32)")
+            .property(
+                "labeled_height",
+                combo_box_labeled_evidence_height(token.label.as_deref()),
+            )
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::CommandBar(token) => SchemaNode::new("CommandBar", token.id.clone())
@@ -262,6 +293,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::ScrollView(token) => SchemaNode::new("ScrollView", token.id.clone())
             .property("horizontal", format!("{:?}", token.horizontal))
             .property("vertical", format!("{:?}", token.vertical))
+            .property("scrollbars_visible", token.scrollbars_visible.to_string())
             .children(token.content.iter().map(|content| schema_node(content))),
         ViewToken::Expander(token) => {
             let mut node = SchemaNode::new("Expander", token.id.clone())
@@ -534,6 +566,78 @@ fn optional_length(value: Option<crate::view::Length>) -> String {
     value
         .map(|value| format!("{value:?}"))
         .unwrap_or_else(|| "none".to_string())
+}
+
+fn optional_text_style(value: Option<crate::view::TextStyle>) -> String {
+    value
+        .map(|value| format!("{value:?}"))
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn combo_box_labeled_evidence_height(label: Option<&str>) -> &'static str {
+    if label.is_some_and(|value| !value.trim().is_empty()) {
+        "Fixed(64)"
+    } else {
+        "none"
+    }
+}
+
+fn combo_box_labeled_evidence_width(label: Option<&str>, width: crate::view::Length) -> String {
+    if !label.is_some_and(|value| !value.trim().is_empty()) {
+        return "none".to_string();
+    }
+
+    match width {
+        crate::view::Length::Fixed(value) => format!("Fixed({})", value.saturating_add(8)),
+        _ => "none".to_string(),
+    }
+}
+
+fn toggle_switch_labeled_evidence_height(header: Option<&str>) -> &'static str {
+    if header.is_some_and(|value| !value.trim().is_empty()) {
+        "Fixed(63)"
+    } else {
+        "none"
+    }
+}
+
+fn toggle_switch_evidence_width(header: Option<&str>, label: &str) -> String {
+    let header_width = header
+        .map(|value| estimated_text_width_dips(value, 14.0))
+        .unwrap_or(0.0);
+    let content_width = 50.0 + estimated_text_width_dips(label, 14.0);
+    format!("Fixed({:.0})", header_width.max(content_width).ceil())
+}
+
+fn estimated_text_width_dips(value: &str, font_size: f32) -> f32 {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_whitespace() {
+                font_size * 0.32
+            } else if is_wide_text_char(ch) {
+                font_size
+            } else if ch.is_ascii_punctuation() {
+                font_size * 0.36
+            } else {
+                font_size * 0.52
+            }
+        })
+        .sum()
+}
+
+fn is_wide_text_char(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x1100..=0x11FF
+            | 0x2E80..=0xA4CF
+            | 0xAC00..=0xD7AF
+            | 0xF900..=0xFAFF
+            | 0xFE10..=0xFE1F
+            | 0xFE30..=0xFE6F
+            | 0xFF00..=0xFFEF
+            | 0x20000..=0x3FFFD
+    )
 }
 
 fn optional_capture_rect(value: Option<crate::view::CaptureOverlayRect>) -> String {

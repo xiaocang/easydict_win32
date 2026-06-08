@@ -183,6 +183,7 @@ impl Edges {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextStyle {
     Caption,
+    CaptionSmall,
     Body,
     BodyLarge,
     BodyStrong,
@@ -195,6 +196,7 @@ pub enum TextStyle {
 pub enum ButtonKind {
     Standard,
     Primary,
+    PrimaryRound,
     Chip,
     Subtle,
     Link,
@@ -338,6 +340,8 @@ pub struct TextToken {
     pub id: Option<String>,
     pub value: String,
     pub style: TextStyle,
+    pub width: Option<Length>,
+    pub height: Option<Length>,
     pub selectable: bool,
     pub a11y: A11yHint,
 }
@@ -351,6 +355,7 @@ pub struct ButtonToken<Message> {
     pub tooltip: Option<String>,
     pub width: Option<Length>,
     pub height: Option<Length>,
+    pub text_style: Option<TextStyle>,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -487,6 +492,7 @@ pub struct TextEditorToken<Message> {
 #[derive(Clone, Debug)]
 pub struct ToggleSwitchToken<Message> {
     pub id: Option<String>,
+    pub header: Option<String>,
     pub label: String,
     pub checked: bool,
     pub state: ControlState,
@@ -499,6 +505,7 @@ pub struct CheckBoxToken<Message> {
     pub id: Option<String>,
     pub label: String,
     pub checked: bool,
+    pub label_italic: bool,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -723,6 +730,7 @@ pub struct ScrollViewToken<Message> {
     pub content: Option<Box<View<Message>>>,
     pub horizontal: ScrollPolicy,
     pub vertical: ScrollPolicy,
+    pub scrollbars_visible: bool,
     pub a11y: A11yHint,
 }
 
@@ -864,7 +872,7 @@ impl Default for CollapseTransition {
 
 impl CollapseTransition {
     pub const DEFAULT_TRACE_FRAME_MS: f32 = 1000.0 / 60.0;
-    pub const RESULT_BOX_ANIMATION_MS: u16 = 100;
+    pub const RESULT_BOX_ANIMATION_MS: u16 = 0;
     pub const RESULT_BOX_BODY_TRANSLATION_DIP: f32 = 2.0;
 
     pub const fn result_box() -> Self {
@@ -1195,6 +1203,8 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
         id: None,
         value: value.into(),
         style: TextStyle::Body,
+        width: None,
+        height: None,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1323,6 +1333,7 @@ pub fn toggle_switch<Message>(
 ) -> ToggleSwitchBuilder<Message> {
     ToggleSwitchBuilder {
         id: None,
+        header: None,
         label: label.into(),
         checked,
         state: ControlState::default(),
@@ -1336,6 +1347,7 @@ pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBui
         id: None,
         label: label.into(),
         checked,
+        label_italic: false,
         state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
@@ -1498,6 +1510,7 @@ where
         content: Some(Box::new(content.into_view())),
         horizontal: ScrollPolicy::Never,
         vertical: ScrollPolicy::Auto,
+        scrollbars_visible: false,
         a11y: A11yHint::default(),
     }
 }
@@ -1736,6 +1749,7 @@ pub struct ButtonBuilder<Message> {
     tooltip: Option<String>,
     width: Option<Length>,
     height: Option<Length>,
+    text_style: Option<TextStyle>,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -1751,6 +1765,7 @@ impl<Message> ButtonBuilder<Message> {
             tooltip: None,
             width: None,
             height: None,
+            text_style: None,
             state: ControlState::default(),
             action: Action::None,
             a11y: A11yHint::default(),
@@ -1779,6 +1794,11 @@ impl<Message> ButtonBuilder<Message> {
 
     pub fn height(mut self, height: Length) -> Self {
         self.height = Some(height);
+        self
+    }
+
+    pub fn text_style(mut self, style: TextStyle) -> Self {
+        self.text_style = Some(style);
         self
     }
 
@@ -1854,6 +1874,11 @@ impl<Message> ButtonBuilder<Message> {
         self
     }
 
+    pub fn primary_round(mut self) -> Self {
+        self.kind = ButtonKind::PrimaryRound;
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -1875,6 +1900,7 @@ impl<Message> IntoView<Message> for ButtonBuilder<Message> {
             tooltip: self.tooltip,
             width: self.width,
             height: self.height,
+            text_style: self.text_style,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -2381,6 +2407,7 @@ impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
 #[derive(Clone, Debug)]
 pub struct ToggleSwitchBuilder<Message> {
     id: Option<String>,
+    header: Option<String>,
     label: String,
     checked: bool,
     state: ControlState,
@@ -2391,6 +2418,11 @@ pub struct ToggleSwitchBuilder<Message> {
 impl<Message> ToggleSwitchBuilder<Message> {
     pub fn id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(id.into());
+        self
+    }
+
+    pub fn header(mut self, header: impl Into<String>) -> Self {
+        self.header = Some(header.into());
         self
     }
 
@@ -2442,6 +2474,7 @@ impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
     fn into_view(self) -> View<Message> {
         View::new(ViewToken::ToggleSwitch(ToggleSwitchToken {
             id: self.id,
+            header: self.header,
             label: self.label,
             checked: self.checked,
             state: self.state,
@@ -2456,6 +2489,7 @@ pub struct CheckBoxBuilder<Message> {
     id: Option<String>,
     label: String,
     checked: bool,
+    label_italic: bool,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -2497,6 +2531,11 @@ impl<Message> CheckBoxBuilder<Message> {
         self
     }
 
+    pub fn label_italic(mut self, italic: bool) -> Self {
+        self.label_italic = italic;
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -2517,6 +2556,7 @@ impl<Message> IntoView<Message> for CheckBoxBuilder<Message> {
             id: self.id,
             label: self.label,
             checked: self.checked,
+            label_italic: self.label_italic,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -3248,6 +3288,7 @@ pub struct ScrollViewBuilder<Message> {
     content: Option<Box<View<Message>>>,
     horizontal: ScrollPolicy,
     vertical: ScrollPolicy,
+    scrollbars_visible: bool,
     a11y: A11yHint,
 }
 
@@ -3264,6 +3305,11 @@ impl<Message> ScrollViewBuilder<Message> {
 
     pub fn vertical(mut self, policy: ScrollPolicy) -> Self {
         self.vertical = policy;
+        self
+    }
+
+    pub fn scrollbars_visible(mut self, visible: bool) -> Self {
+        self.scrollbars_visible = visible;
         self
     }
 
@@ -3286,6 +3332,7 @@ impl<Message> IntoView<Message> for ScrollViewBuilder<Message> {
             content: self.content,
             horizontal: self.horizontal,
             vertical: self.vertical,
+            scrollbars_visible: self.scrollbars_visible,
             a11y: self.a11y,
         }))
     }
@@ -4028,7 +4075,7 @@ mod tests {
     }
 
     #[test]
-    fn collapse_transition_uses_winui_result_box_motion_defaults() {
+    fn collapse_transition_matches_winui_result_box_visibility_toggle() {
         let transition = CollapseTransition::default();
 
         assert_eq!(
@@ -4037,17 +4084,49 @@ mod tests {
         );
         assert_eq!(
             transition.expand_transition(),
-            Transition::fluent_content(100)
+            Transition::fluent_content(0)
         );
         assert_eq!(
             transition.collapse_transition(),
-            Transition::fluent_content(100)
+            Transition::fluent_content(0)
         );
     }
 
     #[test]
-    fn result_box_trace_exposes_responsive_winui_shape() {
-        let trace = CollapseTransition::default().trace_result_box(
+    fn result_box_default_trace_is_instant_like_winui_visibility() {
+        let expand = CollapseTransition::default().trace_result_box(
+            CollapseTraceDirection::Expand,
+            50.0,
+            30.0,
+            8.0,
+        );
+
+        assert_eq!(expand.len(), 2);
+        assert_trace_monotonic(&expand, true);
+        assert_eq!(expand.first().unwrap().visible_body_height, 50.0);
+        assert_eq!(expand.last().unwrap().visible_body_height, 50.0);
+        assert_eq!(expand.last().unwrap().body_translate_y, 0.0);
+
+        let collapse = CollapseTransition::default().trace_result_box(
+            CollapseTraceDirection::Collapse,
+            50.0,
+            30.0,
+            8.0,
+        );
+
+        assert_eq!(collapse.len(), 2);
+        assert_trace_monotonic(&collapse, false);
+        assert_eq!(collapse.first().unwrap().visible_body_height, 0.0);
+        assert_eq!(collapse.last().unwrap().visible_body_height, 0.0);
+        assert_eq!(
+            collapse.last().unwrap().body_translate_y,
+            -CollapseTransition::RESULT_BOX_BODY_TRANSLATION_DIP
+        );
+    }
+
+    #[test]
+    fn result_box_trace_exposes_responsive_custom_motion_shape() {
+        let trace = CollapseTransition::new(100).trace_result_box(
             CollapseTraceDirection::Expand,
             50.0,
             30.0,
@@ -4076,8 +4155,8 @@ mod tests {
     }
 
     #[test]
-    fn result_box_collapse_trace_moves_related_boxes_without_jumps() {
-        let trace = CollapseTransition::default().trace_result_box(
+    fn result_box_custom_collapse_trace_moves_related_boxes_without_jumps() {
+        let trace = CollapseTransition::new(100).trace_result_box(
             CollapseTraceDirection::Collapse,
             50.0,
             30.0,

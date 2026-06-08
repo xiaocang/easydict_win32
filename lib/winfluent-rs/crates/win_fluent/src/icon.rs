@@ -21,6 +21,10 @@ pub const fn add() -> IconToken {
     IconToken::named("add")
 }
 
+pub const fn app() -> IconToken {
+    IconToken::named("app")
+}
+
 pub const fn camera() -> IconToken {
     IconToken::named("camera")
 }

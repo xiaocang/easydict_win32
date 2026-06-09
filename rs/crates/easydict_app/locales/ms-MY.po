@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: ms-MY\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "Teks Sumber"
+
+msgid "main.source_placeholder"
+msgstr "Masukkan atau tampal teks untuk diterjemah..."
+
+msgid "main.results"
+msgstr "Hasil Terjemahan"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} perkhidmatan selesai"
+
+msgid "status.ready"
+msgstr "Sedia"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "Seret untuk memilih kawasan  |  Dwi-klik untuk memilih tetingkap  |  Tatal untuk menukar  |  Esc untuk keluar"
+
+msgid "main.auto_detect"
+msgstr "Kesan Automatik"
+
+msgid "main.target_zh_hans"
+msgstr "Cina (Ringkas)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "Translate"
+
+msgid "main.settings"
+msgstr "Tetapan"
+
+msgid "settings.title"
+msgstr "Tetapan"
+
+msgid "settings.back"
+msgstr "Kembali"
+
+msgid "settings.save"
+msgstr "Simpan Tetapan"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "OK"
+
+msgid "settings.unsaved.title"
+msgstr "Perubahan Belum Disimpan"
+
+msgid "settings.unsaved.message"
+msgstr "Anda mempunyai perubahan yang belum disimpan. Adakah anda ingin menyimpannya sebelum keluar?"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "Jangan Simpan"
+
+msgid "settings.unsaved.cancel"
+msgstr "Batal"
+
+msgid "settings.tab.general"
+msgstr "Umum"
+
+msgid "settings.tab.services"
+msgstr "Perkhidmatan"
+
+msgid "settings.tab.views"
+msgstr "Paparan"
+
+msgid "settings.tab.hotkeys"
+msgstr "Kekunci Pintas"
+
+msgid "settings.tab.advanced"
+msgstr "Lanjutan"
+
+msgid "settings.tab.language"
+msgstr "Bahasa"
+
+msgid "settings.tab.about"
+msgstr "Perihal"
+
+msgid "settings.services.enabled.title"
+msgstr "Perkhidmatan Diaktifkan"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "Pilih perkhidmatan terjemahan untuk dipaparkan dalam setiap tetingkap. Pelbagai perkhidmatan akan berjalan secara selari."
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "Aktifkan Perkhidmatan Antarabangsa"
+
+msgid "settings.services.international.description"
+msgstr "Sesetengah perkhidmatan (Google, DeepL, OpenAI, Gemini, dll.) memerlukan akses rangkaian antarabangsa dan mungkin tidak tersedia di semua rantau."
+
+msgid "settings.services.configuration.title"
+msgstr "Konfigurasi Perkhidmatan"
+
+msgid "settings.services.configuration.help"
+msgstr "Konfigurasikan kunci API, endpoint dan model untuk setiap perkhidmatan terjemahan."
+
+msgid "settings.services.configuration.description"
+msgstr "Konfigurasikan kunci API, endpoint dan model untuk setiap perkhidmatan terjemahan."
+
+msgid "settings.hotkeys.title"
+msgstr "Kekunci Pintas"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "Papar Tetingkap"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "Terjemah Pilihan"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "Papar Tetingkap Mini"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "Papar Tetingkap Tetap"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "Terjemahan Tangkapan Skrin OCR"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "OCR Senyap"
+
+msgid "settings.hotkeys.note"
+msgstr "Nota: Mulakan semula aplikasi untuk menerapkan perubahan kekunci pintas. Kekunci pintas togol menggunakan kekunci yang sama dengan Shift (cth. Ctrl+Alt+Shift+M)."
+
+msgid "settings.general.behavior"
+msgstr "Tingkah Laku"
+
+msgid "settings.general.app_theme"
+msgstr "Tema Aplikasi"
+
+msgid "settings.general.app_theme.description"
+msgstr "Pilih penampilan Easydict. Pilih Sistem untuk mengikut tema Windows."
+
+msgid "settings.general.theme.system"
+msgstr "Sistem"
+
+msgid "settings.general.theme.light"
+msgstr "Cerah"
+
+msgid "settings.general.theme.dark"
+msgstr "Gelap"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "Kecilkan ke dulang sistem"
+
+msgid "settings.general.start_minimized"
+msgstr "Mulakan dikecilkan ke dulang sistem"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "Pantau papan keratan untuk teks"
+
+msgid "settings.general.mouse_selection"
+msgstr "Terjemah dengan pilihan tetikus (pilih teks → klik ikon terapung)"
+
+msgid "settings.general.excluded_apps"
+msgstr "Aplikasi dikecualikan"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "Nama proses untuk dikecualikan daripada terjemahan pilihan tetikus, dipisahkan dengan koma. Contoh: \"code\" untuk VS Code."
+
+msgid "settings.general.always_on_top"
+msgstr "Sentiasa di atas"
+
+msgid "settings.general.launch_at_startup"
+msgstr "Lancar semasa Windows dimulakan"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "Sembunyikan kamus tanpa hasil"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "Dayakan cadangan input kamus tersuai"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "Eksperimen"
+
+msgid "settings.general.tts.header"
+msgstr "Tetapan Output TTS"
+
+msgid "settings.general.tts.speed"
+msgstr "Kelajuan Bacaan TTS (0.5× – 3.0×)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "Mainkan terjemahan secara automatik"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "Hasil Tetingkap"
+
+msgid "settings.views.description"
+msgstr "Pilih hasil yang muncul di setiap tetingkap dan sama ada setiap hasil dijalankan secara automatik."
+
+msgid "settings.views.main_window"
+msgstr "Tetingkap Utama"
+
+msgid "settings.views.mini_window"
+msgstr "Tetingkap Mini"
+
+msgid "settings.views.fixed_window"
+msgstr "Tetingkap Tetap"
+
+msgid "settings.views.reorder"
+msgstr "Susun Semula"
+
+msgid "settings.views.done"
+msgstr "Selesai"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "Automatik"
+
+msgid "settings.views.manual"
+msgstr "Manual"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "Bahasa"
+
+msgid "settings.language.preferences"
+msgstr "Keutamaan Bahasa"
+
+msgid "settings.language.first"
+msgstr "Bahasa Pertama"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "Bahasa Kedua"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "Pilih bahasa sasaran secara automatik berdasarkan bahasa sumber yang dikesan"
+
+msgid "settings.language.preference_rule.description"
+msgstr "Apabila bahasa yang dikesan sepadan dengan Bahasa Pertama anda, sasaran terjemahan akan menjadi Bahasa Kedua, dan sebaliknya."
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "Pilih bahasa paparan untuk antara muka aplikasi. Perlu dimulakan semula."
+
+msgid "settings.language.translation_languages"
+msgstr "Available Languages"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "Select languages available in source/target pickers. At least 2 required."
+
+msgid "settings.about.title"
+msgstr "Perihal"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "Repositori GitHub"
+
+msgid "settings.about.issue_feedback"
+msgstr "Maklum Balas Isu"
+
+msgid "settings.about.inspired_by"
+msgstr "Diilhamkan oleh"
+
+msgid "settings.about.mac"
+msgstr "Easydict untuk macOS"
+
+msgid "settings.about.license"
+msgstr "Lesen: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "Hidup"
+
+msgid "settings.toggle.off"
+msgstr "Mati"

@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: vi-VN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "Văn bản gốc"
+
+msgid "main.source_placeholder"
+msgstr "Nhập hoặc dán văn bản cần dịch..."
+
+msgid "main.results"
+msgstr "Kết quả dịch"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} dịch vụ đã hoàn thành"
+
+msgid "status.ready"
+msgstr "Sẵn sàng"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "Kéo để chọn vùng  |  Nhấp đúp để chọn cửa sổ  |  Cuộn để chuyển  |  Esc để thoát"
+
+msgid "main.auto_detect"
+msgstr "Tự động phát hiện"
+
+msgid "main.target_zh_hans"
+msgstr "Tiếng Trung (Giản thể)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "Translate"
+
+msgid "main.settings"
+msgstr "Cài đặt"
+
+msgid "settings.title"
+msgstr "Cài đặt"
+
+msgid "settings.back"
+msgstr "Quay lại"
+
+msgid "settings.save"
+msgstr "Lưu cài đặt"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "OK"
+
+msgid "settings.unsaved.title"
+msgstr "Thay đổi chưa lưu"
+
+msgid "settings.unsaved.message"
+msgstr "Bạn có thay đổi chưa lưu. Bạn có muốn lưu trước khi rời đi không?"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "Không lưu"
+
+msgid "settings.unsaved.cancel"
+msgstr "Hủy"
+
+msgid "settings.tab.general"
+msgstr "Chung"
+
+msgid "settings.tab.services"
+msgstr "Dịch vụ"
+
+msgid "settings.tab.views"
+msgstr "Chế độ xem"
+
+msgid "settings.tab.hotkeys"
+msgstr "Phím tắt"
+
+msgid "settings.tab.advanced"
+msgstr "Nâng cao"
+
+msgid "settings.tab.language"
+msgstr "Ngôn ngữ"
+
+msgid "settings.tab.about"
+msgstr "Giới thiệu"
+
+msgid "settings.services.enabled.title"
+msgstr "Dịch vụ đã bật"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "Chọn dịch vụ dịch thuật hiển thị trong mỗi cửa sổ. Nhiều dịch vụ sẽ chạy song song."
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "Bật dịch vụ quốc tế"
+
+msgid "settings.services.international.description"
+msgstr "Một số dịch vụ (Google, DeepL, OpenAI, Gemini, v.v.) cần truy cập mạng quốc tế và có thể không khả dụng ở tất cả các khu vực."
+
+msgid "settings.services.configuration.title"
+msgstr "Cấu hình dịch vụ"
+
+msgid "settings.services.configuration.help"
+msgstr "Cấu hình API key, endpoint và model cho từng dịch vụ dịch thuật."
+
+msgid "settings.services.configuration.description"
+msgstr "Cấu hình API key, endpoint và model cho từng dịch vụ dịch thuật."
+
+msgid "settings.hotkeys.title"
+msgstr "Phím tắt"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "Hiển thị cửa sổ"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "Dịch văn bản đã chọn"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "Hiển thị cửa sổ nhỏ"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "Hiển thị cửa sổ cố định"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "Dịch ảnh chụp màn hình OCR"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "OCR im lặng"
+
+msgid "settings.hotkeys.note"
+msgstr "Lưu ý: Khởi động lại ứng dụng để áp dụng thay đổi phím tắt. Phím tắt chuyển đổi sử dụng cùng phím với Shift (ví dụ: Ctrl+Alt+Shift+M)."
+
+msgid "settings.general.behavior"
+msgstr "Hành vi"
+
+msgid "settings.general.app_theme"
+msgstr "Giao diện ứng dụng"
+
+msgid "settings.general.app_theme.description"
+msgstr "Chọn giao diện cho Easydict. Chọn Hệ thống để theo giao diện Windows."
+
+msgid "settings.general.theme.system"
+msgstr "Hệ thống"
+
+msgid "settings.general.theme.light"
+msgstr "Sáng"
+
+msgid "settings.general.theme.dark"
+msgstr "Tối"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "Thu nhỏ vào khay hệ thống"
+
+msgid "settings.general.start_minimized"
+msgstr "Khởi động thu nhỏ vào khay hệ thống"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "Theo dõi clipboard"
+
+msgid "settings.general.mouse_selection"
+msgstr "Dịch bằng chọn chuột (chọn văn bản → nhấn biểu tượng nổi)"
+
+msgid "settings.general.excluded_apps"
+msgstr "Ứng dụng loại trừ"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "Tên tiến trình cần loại trừ khỏi dịch chọn chuột, phân cách bằng dấu phẩy. Ví dụ: \"code\" cho VS Code."
+
+msgid "settings.general.always_on_top"
+msgstr "Luôn hiển thị trên cùng"
+
+msgid "settings.general.launch_at_startup"
+msgstr "Khởi chạy cùng Windows"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "Ẩn từ điển không có kết quả"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "Bật gợi ý nhập từ điển tùy chỉnh"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "Thử nghiệm"
+
+msgid "settings.general.tts.header"
+msgstr "Cài đặt đầu ra TTS"
+
+msgid "settings.general.tts.speed"
+msgstr "Tốc độ đọc TTS (0,5× – 3,0×)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "Tự động phát bản dịch"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "Kết quả cửa sổ"
+
+msgid "settings.views.description"
+msgstr "Chọn kết quả hiển thị trong mỗi cửa sổ và việc mỗi kết quả có tự truy vấn hay không."
+
+msgid "settings.views.main_window"
+msgstr "Cửa sổ chính"
+
+msgid "settings.views.mini_window"
+msgstr "Cửa sổ nhỏ"
+
+msgid "settings.views.fixed_window"
+msgstr "Cửa sổ cố định"
+
+msgid "settings.views.reorder"
+msgstr "Sắp xếp lại"
+
+msgid "settings.views.done"
+msgstr "Xong"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "Tự động"
+
+msgid "settings.views.manual"
+msgstr "Thủ công"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "Ngôn ngữ"
+
+msgid "settings.language.preferences"
+msgstr "Tùy chọn ngôn ngữ"
+
+msgid "settings.language.first"
+msgstr "Ngôn ngữ thứ nhất"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "Ngôn ngữ thứ hai"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "Tự động chọn ngôn ngữ đích dựa trên ngôn ngữ nguồn phát hiện được"
+
+msgid "settings.language.preference_rule.description"
+msgstr "Khi ngôn ngữ phát hiện trùng với Ngôn ngữ thứ nhất, mục tiêu dịch sẽ là Ngôn ngữ thứ hai và ngược lại."
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "Chọn ngôn ngữ hiển thị cho giao diện ứng dụng. Cần khởi động lại."
+
+msgid "settings.language.translation_languages"
+msgstr "Available Languages"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "Select languages available in source/target pickers. At least 2 required."
+
+msgid "settings.about.title"
+msgstr "Giới thiệu"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "Kho GitHub"
+
+msgid "settings.about.issue_feedback"
+msgstr "Phản hồi lỗi"
+
+msgid "settings.about.inspired_by"
+msgstr "Lấy cảm hứng từ"
+
+msgid "settings.about.mac"
+msgstr "Easydict cho macOS"
+
+msgid "settings.about.license"
+msgstr "Giấy phép: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "Bật"
+
+msgid "settings.toggle.off"
+msgstr "Tắt"

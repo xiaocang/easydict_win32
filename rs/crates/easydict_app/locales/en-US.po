@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: en-US\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "Source Text"
+
+msgid "main.source_placeholder"
+msgstr "Enter or paste text to translate..."
+
+msgid "main.results"
+msgstr "Translation Results"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} service(s) completed"
+
+msgid "status.ready"
+msgstr "Ready"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "Drag to select region  |  Double-click to select window  |  Scroll to switch  |  Esc to exit"
+
+msgid "main.auto_detect"
+msgstr "Auto Detect"
+
+msgid "main.target_zh_hans"
+msgstr "Chinese (Simplified)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "Translate"
+
+msgid "main.settings"
+msgstr "Settings"
+
+msgid "settings.title"
+msgstr "Settings"
+
+msgid "settings.back"
+msgstr "Back"
+
+msgid "settings.save"
+msgstr "Save Settings"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "OK"
+
+msgid "settings.unsaved.title"
+msgstr "Unsaved Settings"
+
+msgid "settings.unsaved.message"
+msgstr "Save your settings changes before leaving?"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "Don't Save"
+
+msgid "settings.unsaved.cancel"
+msgstr "Cancel"
+
+msgid "settings.tab.general"
+msgstr "General"
+
+msgid "settings.tab.services"
+msgstr "Services"
+
+msgid "settings.tab.views"
+msgstr "Views"
+
+msgid "settings.tab.hotkeys"
+msgstr "Hotkeys"
+
+msgid "settings.tab.advanced"
+msgstr "Advanced"
+
+msgid "settings.tab.language"
+msgstr "Language"
+
+msgid "settings.tab.about"
+msgstr "About"
+
+msgid "settings.services.enabled.title"
+msgstr "Enabled Services"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "Select which translation services to display in each window. Multiple services will run in parallel."
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "Enable International Services"
+
+msgid "settings.services.international.description"
+msgstr "Some services (Google, DeepL, OpenAI, Gemini, etc.) require international network access and may be unavailable in some regions."
+
+msgid "settings.services.configuration.title"
+msgstr "Service Configuration"
+
+msgid "settings.services.configuration.help"
+msgstr "Configure API keys, endpoints, and models for each translation service."
+
+msgid "settings.services.configuration.description"
+msgstr "Configure API keys, endpoints, and models for each translation service."
+
+msgid "settings.hotkeys.title"
+msgstr "Hotkeys"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "Show Window"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "Translate Selection"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "Show Mini Window"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "Show Fixed Window"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "OCR Screenshot Translate"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "Silent OCR"
+
+msgid "settings.hotkeys.note"
+msgstr "Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M)."
+
+msgid "settings.general.behavior"
+msgstr "Behavior"
+
+msgid "settings.general.app_theme"
+msgstr "App Theme"
+
+msgid "settings.general.app_theme.description"
+msgstr "Choose how Easydict appears. Select System to follow Windows theme."
+
+msgid "settings.general.theme.system"
+msgstr "System"
+
+msgid "settings.general.theme.light"
+msgstr "Light"
+
+msgid "settings.general.theme.dark"
+msgstr "Dark"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "Minimize to system tray"
+
+msgid "settings.general.start_minimized"
+msgstr "Start minimized to tray"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "Monitor clipboard for text"
+
+msgid "settings.general.mouse_selection"
+msgstr "Mouse selection translate"
+
+msgid "settings.general.excluded_apps"
+msgstr "Excluded apps"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "Process names to exclude from mouse selection translate, separated by commas. Example: \"code\" for VS Code."
+
+msgid "settings.general.always_on_top"
+msgstr "Always on top"
+
+msgid "settings.general.launch_at_startup"
+msgstr "Launch at Windows startup"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "Hide dictionaries with no result"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "Enable custom dictionary input suggestions"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "Experimental"
+
+msgid "settings.general.tts.header"
+msgstr "TTS Output Settings"
+
+msgid "settings.general.tts.speed"
+msgstr "TTS Reading Speed (0.5x - 3.0x)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "Auto play translation"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "Window Results"
+
+msgid "settings.views.description"
+msgstr "Choose which results appear in each window and whether each result queries automatically."
+
+msgid "settings.views.main_window"
+msgstr "Main Window"
+
+msgid "settings.views.mini_window"
+msgstr "Mini Window"
+
+msgid "settings.views.fixed_window"
+msgstr "Fixed Window"
+
+msgid "settings.views.reorder"
+msgstr "Reorder"
+
+msgid "settings.views.done"
+msgstr "Done"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "Auto"
+
+msgid "settings.views.manual"
+msgstr "Manual"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "Language"
+
+msgid "settings.language.preferences"
+msgstr "Language Preferences"
+
+msgid "settings.language.first"
+msgstr "First Language"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "Second Language"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "Automatically select target language based on detected source"
+
+msgid "settings.language.preference_rule.description"
+msgstr "When detected language matches your First Language, translation target will be your Second Language, and vice versa."
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "Select the display language for the application interface. Restart required."
+
+msgid "settings.language.translation_languages"
+msgstr "Available Languages"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "Select languages available in source/target pickers. At least 2 required."
+
+msgid "settings.about.title"
+msgstr "About"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "GitHub Repository"
+
+msgid "settings.about.issue_feedback"
+msgstr "Issue Feedback"
+
+msgid "settings.about.inspired_by"
+msgstr "Inspired by"
+
+msgid "settings.about.mac"
+msgstr "Easydict for macOS"
+
+msgid "settings.about.license"
+msgstr "License: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "On"
+
+msgid "settings.toggle.off"
+msgstr "Off"

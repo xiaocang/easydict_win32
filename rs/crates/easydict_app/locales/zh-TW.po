@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: zh-TW\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "易詞典"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "原文"
+
+msgid "main.source_placeholder"
+msgstr "輸入或貼上要翻譯的文字..."
+
+msgid "main.results"
+msgstr "翻譯結果"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} 個服務已完成"
+
+msgid "status.ready"
+msgstr "已就緒"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出"
+
+msgid "main.auto_detect"
+msgstr "自動偵測"
+
+msgid "main.target_zh_hans"
+msgstr "簡體中文"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "翻譯"
+
+msgid "main.settings"
+msgstr "設定"
+
+msgid "settings.title"
+msgstr "設定"
+
+msgid "settings.back"
+msgstr "返回"
+
+msgid "settings.save"
+msgstr "儲存設定"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "確定"
+
+msgid "settings.unsaved.title"
+msgstr "未儲存的變更"
+
+msgid "settings.unsaved.message"
+msgstr "您有未儲存的變更。是否要在離開前儲存？"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "不儲存"
+
+msgid "settings.unsaved.cancel"
+msgstr "取消"
+
+msgid "settings.tab.general"
+msgstr "一般"
+
+msgid "settings.tab.services"
+msgstr "服務"
+
+msgid "settings.tab.views"
+msgstr "視圖"
+
+msgid "settings.tab.hotkeys"
+msgstr "快速鍵"
+
+msgid "settings.tab.advanced"
+msgstr "進階"
+
+msgid "settings.tab.language"
+msgstr "語言"
+
+msgid "settings.tab.about"
+msgstr "關於"
+
+msgid "settings.services.enabled.title"
+msgstr "已啟用的服務"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "選擇在每個視窗中顯示哪些翻譯服務。多個服務將並行運行。"
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "啟用國際服務"
+
+msgid "settings.services.international.description"
+msgstr "部分服務（Google、DeepL、OpenAI、Gemini 等）需要國際網路存取，可能在部分地區無法使用。"
+
+msgid "settings.services.configuration.title"
+msgstr "服務設定"
+
+msgid "settings.services.configuration.help"
+msgstr "為每個翻譯服務設定 API 金鑰、端點和模型。"
+
+msgid "settings.services.configuration.description"
+msgstr "為每個翻譯服務設定 API 金鑰、端點和模型。"
+
+msgid "settings.hotkeys.title"
+msgstr "快速鍵"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "顯示視窗"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "翻譯選取文字"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "顯示迷你視窗"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "顯示固定視窗"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "OCR 截圖翻譯"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "靜默 OCR"
+
+msgid "settings.hotkeys.note"
+msgstr "注意：重新啟動應用程式以套用快速鍵變更。切換快速鍵使用相同的鍵加 Shift（例如 Ctrl+Alt+Shift+M）。"
+
+msgid "settings.general.behavior"
+msgstr "行為"
+
+msgid "settings.general.app_theme"
+msgstr "應用程式主題"
+
+msgid "settings.general.app_theme.description"
+msgstr "選擇 Easydict 的外觀。選擇「系統」將跟隨 Windows 主題。"
+
+msgid "settings.general.theme.system"
+msgstr "系統"
+
+msgid "settings.general.theme.light"
+msgstr "淺色"
+
+msgid "settings.general.theme.dark"
+msgstr "深色"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "最小化到系統匣"
+
+msgid "settings.general.start_minimized"
+msgstr "啟動後最小化到系統匣"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "監控剪貼簿文字"
+
+msgid "settings.general.mouse_selection"
+msgstr "劃詞翻譯（選取文字 → 點擊浮動圖示）"
+
+msgid "settings.general.excluded_apps"
+msgstr "排除應用"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "排除劃詞翻譯的程序名稱，用逗號分隔。範例：\"code\" 代表 VS Code。"
+
+msgid "settings.general.always_on_top"
+msgstr "始終置頂"
+
+msgid "settings.general.launch_at_startup"
+msgstr "開機自動啟動"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "隱藏無結果的字典"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "啟用自訂字典輸入建議"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "實驗性"
+
+msgid "settings.general.tts.header"
+msgstr "TTS 輸出設定"
+
+msgid "settings.general.tts.speed"
+msgstr "TTS 朗讀速度 (0.5x - 3.0x)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "自動朗讀譯文"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "視窗結果顯示"
+
+msgid "settings.views.description"
+msgstr "選擇每個視窗顯示哪些結果，以及這些結果是否自動查詢。"
+
+msgid "settings.views.main_window"
+msgstr "主視窗"
+
+msgid "settings.views.mini_window"
+msgstr "迷你視窗"
+
+msgid "settings.views.fixed_window"
+msgstr "固定視窗"
+
+msgid "settings.views.reorder"
+msgstr "排序"
+
+msgid "settings.views.done"
+msgstr "完成排序"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "自動"
+
+msgid "settings.views.manual"
+msgstr "手動"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "語言"
+
+msgid "settings.language.preferences"
+msgstr "語言偏好"
+
+msgid "settings.language.first"
+msgstr "第一語言"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "第二語言"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "根據偵測到的來源語言自動選擇目標語言"
+
+msgid "settings.language.preference_rule.description"
+msgstr "當偵測到的語言與您的第一語言匹配時，翻譯目標將是您的第二語言，反之亦然。"
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "選擇應用程式介面的顯示語言。需要重新啟動生效。"
+
+msgid "settings.language.translation_languages"
+msgstr "可用語言"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "選擇在來源語言/目標語言選擇器中可用的語言。至少需要選擇2種語言。"
+
+msgid "settings.about.title"
+msgstr "關於"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "GitHub 儲存庫"
+
+msgid "settings.about.issue_feedback"
+msgstr "問題回饋"
+
+msgid "settings.about.inspired_by"
+msgstr "靈感來自"
+
+msgid "settings.about.mac"
+msgstr "Easydict macOS 版"
+
+msgid "settings.about.license"
+msgstr "授權條款：GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "開"
+
+msgid "settings.toggle.off"
+msgstr "關"

@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: zh-CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "Source Text"
+
+msgid "main.source_placeholder"
+msgstr "输入或粘贴要翻译的文本..."
+
+msgid "main.results"
+msgstr "翻译结果"
+
+msgid "main.result.pending_query"
+msgstr "点击查询"
+
+msgid "main.completed"
+msgstr "已完成 {count} 个服务"
+
+msgid "status.ready"
+msgstr "就绪"
+
+msgid "ocr.capture.title"
+msgstr "OCR 截图"
+
+msgid "ocr.capture.instructions"
+msgstr "拖动选择区域  |  双击选择窗口  |  滚轮切换窗口  |  Esc 退出"
+
+msgid "main.auto_detect"
+msgstr "自动检测"
+
+msgid "main.target_zh_hans"
+msgstr "简体中文"
+
+msgid "main.language_help"
+msgstr "语言帮助"
+
+msgid "main.translate"
+msgstr "翻译"
+
+msgid "main.settings"
+msgstr "设置"
+
+msgid "settings.title"
+msgstr "设置"
+
+msgid "settings.back"
+msgstr "返回"
+
+msgid "settings.save"
+msgstr "保存设置"
+
+msgid "settings.error.title"
+msgstr "设置错误"
+
+msgid "settings.ok"
+msgstr "确定"
+
+msgid "settings.unsaved.title"
+msgstr "未保存的设置"
+
+msgid "settings.unsaved.message"
+msgstr "离开前保存设置更改吗？"
+
+msgid "settings.unsaved.save"
+msgstr "保存"
+
+msgid "settings.unsaved.discard"
+msgstr "不保存"
+
+msgid "settings.unsaved.cancel"
+msgstr "取消"
+
+msgid "settings.tab.general"
+msgstr "常规"
+
+msgid "settings.tab.services"
+msgstr "服务"
+
+msgid "settings.tab.views"
+msgstr "视图"
+
+msgid "settings.tab.hotkeys"
+msgstr "快捷键"
+
+msgid "settings.tab.advanced"
+msgstr "高级"
+
+msgid "settings.tab.language"
+msgstr "语言"
+
+msgid "settings.tab.about"
+msgstr "关于"
+
+msgid "settings.services.enabled.title"
+msgstr "已启用的服务"
+
+msgid "settings.services.enabled.help"
+msgstr "在“视图”页选择服务显示。"
+
+msgid "settings.services.enabled.description"
+msgstr "选择在每个窗口中显示哪些翻译服务。多个服务将并行运行。"
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "启用国际服务"
+
+msgid "settings.services.international.description"
+msgstr "部分服务（Google、DeepL、OpenAI、Gemini 等）需要国际网络访问，可能在部分地区不可用。"
+
+msgid "settings.services.configuration.title"
+msgstr "服务配置"
+
+msgid "settings.services.configuration.help"
+msgstr "配置每个翻译服务的 API 密钥、端点和模型。"
+
+msgid "settings.services.configuration.description"
+msgstr "为每个翻译服务配置 API 密钥、端点和模型。"
+
+msgid "settings.hotkeys.title"
+msgstr "快捷键"
+
+msgid "settings.hotkeys.help"
+msgstr "快捷键更改将在重启后生效"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "显示窗口"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "翻译选中文本"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "显示迷你窗口"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "显示固定窗口"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "OCR 截图翻译"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "静默 OCR"
+
+msgid "settings.hotkeys.note"
+msgstr "注意：重启应用以应用快捷键更改。切换快捷键使用相同的键加 Shift（例如 Ctrl+Alt+Shift+M）。"
+
+msgid "settings.general.behavior"
+msgstr "行为"
+
+msgid "settings.general.app_theme"
+msgstr "应用主题"
+
+msgid "settings.general.app_theme.description"
+msgstr "选择 Easydict 的外观。选择“系统”将跟随 Windows 主题。"
+
+msgid "settings.general.theme.system"
+msgstr "系统"
+
+msgid "settings.general.theme.light"
+msgstr "浅色"
+
+msgid "settings.general.theme.dark"
+msgstr "深色"
+
+msgid "settings.general.theme.minimal"
+msgstr "极简线框"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "最小化到系统托盘"
+
+msgid "settings.general.start_minimized"
+msgstr "启动后最小化到系统托盘"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "监控剪贴板文本"
+
+msgid "settings.general.mouse_selection"
+msgstr "划词翻译（选中文本 → 点击浮动图标）"
+
+msgid "settings.general.excluded_apps"
+msgstr "排除应用"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "排除划词翻译的进程名称，用逗号分隔。示例：\"code\" 代表 VS Code。"
+
+msgid "settings.general.always_on_top"
+msgstr "始终置顶"
+
+msgid "settings.general.launch_at_startup"
+msgstr "开机自启动"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "隐藏无结果的词典"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "启用自定义词典输入建议"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "导入 MDX 词典以启用本地输入建议。"
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "输入时建议本地词典条目。"
+
+msgid "settings.general.experimental"
+msgstr "实验性"
+
+msgid "settings.general.tts.header"
+msgstr "TTS 输出设置"
+
+msgid "settings.general.tts.speed"
+msgstr "TTS 朗读速度 (0.5x - 3.0x)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS 速度"
+
+msgid "settings.general.auto_play_translation"
+msgstr "自动朗读译文"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "翻译完成后朗读译文。"
+
+msgid "settings.views.title"
+msgstr "窗口结果显示"
+
+msgid "settings.views.description"
+msgstr "选择每个窗口显示哪些结果，以及这些结果是否自动查询。"
+
+msgid "settings.views.main_window"
+msgstr "主窗口"
+
+msgid "settings.views.mini_window"
+msgstr "迷你窗口"
+
+msgid "settings.views.fixed_window"
+msgstr "固定窗口"
+
+msgid "settings.views.reorder"
+msgstr "排序"
+
+msgid "settings.views.done"
+msgstr "完成"
+
+msgid "settings.views.enabled"
+msgstr "已启用"
+
+msgid "settings.views.auto"
+msgstr "自动"
+
+msgid "settings.views.manual"
+msgstr "手动"
+
+msgid "settings.views.mini_behavior"
+msgstr "迷你窗口行为"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "焦点移开后自动关闭迷你窗口。"
+
+msgid "settings.views.auto_close"
+msgstr "自动关闭"
+
+msgid "settings.views.fixed_behavior"
+msgstr "固定窗口行为"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "让固定窗口保持在其他窗口之上。"
+
+msgid "settings.language.title"
+msgstr "语言"
+
+msgid "settings.language.preferences"
+msgstr "语言偏好"
+
+msgid "settings.language.first"
+msgstr "第一语言"
+
+msgid "settings.language.first.description"
+msgstr "当检测到的源语言不是第一语言时，优先使用的目标语言。"
+
+msgid "settings.language.second"
+msgstr "第二语言"
+
+msgid "settings.language.second.description"
+msgstr "当检测到的源语言与第一语言相同时，使用的备用目标语言。"
+
+msgid "settings.language.auto_select_target"
+msgstr "自动选择目标语言"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "在手动选择目标语言前，使用第一/第二语言规则。"
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "根据检测到的源语言自动选择目标语言"
+
+msgid "settings.language.preference_rule.description"
+msgstr "当检测到的语言与您的第一语言匹配时，翻译目标将是您的第二语言，反之亦然。"
+
+msgid "settings.language.display"
+msgstr "界面语言"
+
+msgid "settings.language.display.description"
+msgstr "选择应用程序界面的显示语言。需要重启生效。"
+
+msgid "settings.language.translation_languages"
+msgstr "可用语言"
+
+msgid "settings.language.translation_languages.description"
+msgstr "选择主窗口、迷你窗口、固定窗口和长文档选择器中显示的语言。"
+
+msgid "settings.language.available.description"
+msgstr "选择在源语言/目标语言选择器中可用的语言。至少需要选择2种语言。"
+
+msgid "settings.about.title"
+msgstr "关于"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "GitHub Repository"
+
+msgid "settings.about.issue_feedback"
+msgstr "问题反馈"
+
+msgid "settings.about.inspired_by"
+msgstr "Inspired by"
+
+msgid "settings.about.mac"
+msgstr "Easydict for macOS"
+
+msgid "settings.about.license"
+msgstr "License: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "开"
+
+msgid "settings.toggle.off"
+msgstr "关"

@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: ja-JP\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "原文"
+
+msgid "main.source_placeholder"
+msgstr "翻訳するテキストを入力または貼り付け..."
+
+msgid "main.results"
+msgstr "翻訳結果"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} 件のサービスが完了"
+
+msgid "status.ready"
+msgstr "準備完了"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "ドラッグで範囲選択  |  ダブルクリックでウィンドウ選択  |  スクロールで切替  |  Esc で終了"
+
+msgid "main.auto_detect"
+msgstr "自動検出"
+
+msgid "main.target_zh_hans"
+msgstr "中国語（簡体字）"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "翻訳"
+
+msgid "main.settings"
+msgstr "設定"
+
+msgid "settings.title"
+msgstr "設定"
+
+msgid "settings.back"
+msgstr "戻る"
+
+msgid "settings.save"
+msgstr "設定を保存"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "OK"
+
+msgid "settings.unsaved.title"
+msgstr "未保存の変更"
+
+msgid "settings.unsaved.message"
+msgstr "未保存の変更があります。離れる前に保存しますか？"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "保存しない"
+
+msgid "settings.unsaved.cancel"
+msgstr "キャンセル"
+
+msgid "settings.tab.general"
+msgstr "General"
+
+msgid "settings.tab.services"
+msgstr "Services"
+
+msgid "settings.tab.views"
+msgstr "Views"
+
+msgid "settings.tab.hotkeys"
+msgstr "ホットキー"
+
+msgid "settings.tab.advanced"
+msgstr "Advanced"
+
+msgid "settings.tab.language"
+msgstr "Language"
+
+msgid "settings.tab.about"
+msgstr "このアプリについて"
+
+msgid "settings.services.enabled.title"
+msgstr "有効なサービス"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "各ウィンドウに表示する翻訳サービスを選択します。複数のサービスは並行して実行されます。"
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "国際サービスを有効にする"
+
+msgid "settings.services.international.description"
+msgstr "一部のサービス（Google、DeepL、OpenAI、Gemini など）は国際ネットワークアクセスが必要で、地域によっては利用できない場合があります。"
+
+msgid "settings.services.configuration.title"
+msgstr "サービス設定"
+
+msgid "settings.services.configuration.help"
+msgstr "各翻訳サービスのAPIキー、エンドポイント、モデルを設定します。"
+
+msgid "settings.services.configuration.description"
+msgstr "各翻訳サービスのAPIキー、エンドポイント、モデルを設定します。"
+
+msgid "settings.hotkeys.title"
+msgstr "ホットキー"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "ウィンドウを表示"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "選択テキストを翻訳"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "ミニウィンドウを表示"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "固定ウィンドウを表示"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "OCR スクリーンショット翻訳"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "サイレント OCR"
+
+msgid "settings.hotkeys.note"
+msgstr "注意：ホットキーの変更を適用するにはアプリを再起動してください。切り替えホットキーは同じキーにShiftを追加します（例：Ctrl+Alt+Shift+M）。"
+
+msgid "settings.general.behavior"
+msgstr "動作"
+
+msgid "settings.general.app_theme"
+msgstr "アプリのテーマ"
+
+msgid "settings.general.app_theme.description"
+msgstr "Easydictの外観を選択します。「システム」を選択するとWindowsのテーマに従います。"
+
+msgid "settings.general.theme.system"
+msgstr "システム"
+
+msgid "settings.general.theme.light"
+msgstr "ライト"
+
+msgid "settings.general.theme.dark"
+msgstr "ダーク"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "システムトレイに最小化"
+
+msgid "settings.general.start_minimized"
+msgstr "起動時にトレイに最小化"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "クリップボードのテキストを監視"
+
+msgid "settings.general.mouse_selection"
+msgstr "マウス選択翻訳（テキスト選択 → フローティングアイコンをクリック）"
+
+msgid "settings.general.excluded_apps"
+msgstr "除外アプリ"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "マウス選択翻訳から除外するプロセス名をカンマ区切りで入力。例：VS Code は \"code\"。"
+
+msgid "settings.general.always_on_top"
+msgstr "常に最前面"
+
+msgid "settings.general.launch_at_startup"
+msgstr "Windows起動時に起動"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "結果のない辞書を非表示"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "カスタム辞書の入力候補を有効化"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "実験的"
+
+msgid "settings.general.tts.header"
+msgstr "TTS 出力設定"
+
+msgid "settings.general.tts.speed"
+msgstr "TTS 読み上げ速度 (0.5x - 3.0x)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "翻訳結果を自動再生"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "Window Results"
+
+msgid "settings.views.description"
+msgstr "Choose which results appear in each window and whether each result queries automatically."
+
+msgid "settings.views.main_window"
+msgstr "メインウィンドウ"
+
+msgid "settings.views.mini_window"
+msgstr "ミニウィンドウ"
+
+msgid "settings.views.fixed_window"
+msgstr "固定ウィンドウ"
+
+msgid "settings.views.reorder"
+msgstr "並べ替え"
+
+msgid "settings.views.done"
+msgstr "完了"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "自動"
+
+msgid "settings.views.manual"
+msgstr "手動"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "Language"
+
+msgid "settings.language.preferences"
+msgstr "言語設定"
+
+msgid "settings.language.first"
+msgstr "第一言語"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "第二言語"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "検出された原文言語に基づいて翻訳先言語を自動選択"
+
+msgid "settings.language.preference_rule.description"
+msgstr "検出された言語が第一言語と一致する場合、翻訳先は第二言語になります。逆も同様です。"
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "アプリケーションインターフェースの表示言語を選択します。再起動が必要です。"
+
+msgid "settings.language.translation_languages"
+msgstr "使用可能な言語"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "ソース言語/ターゲット言語ピッカーで使用可能な言語を選択してください。最低2つ必要です。"
+
+msgid "settings.about.title"
+msgstr "このアプリについて"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "GitHubリポジトリ"
+
+msgid "settings.about.issue_feedback"
+msgstr "問題のフィードバック"
+
+msgid "settings.about.inspired_by"
+msgstr "インスピレーション元"
+
+msgid "settings.about.mac"
+msgstr "Easydict for macOS"
+
+msgid "settings.about.license"
+msgstr "ライセンス：GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "オン"
+
+msgid "settings.toggle.off"
+msgstr "オフ"

@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: ko-KR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "원문"
+
+msgid "main.source_placeholder"
+msgstr "번역할 텍스트를 입력하거나 붙여넣기..."
+
+msgid "main.results"
+msgstr "번역 결과"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count}개 서비스 완료"
+
+msgid "status.ready"
+msgstr "준비됨"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "드래그하여 영역 선택  |  더블클릭으로 창 선택  |  스크롤로 전환  |  Esc로 종료"
+
+msgid "main.auto_detect"
+msgstr "자동 감지"
+
+msgid "main.target_zh_hans"
+msgstr "중국어(간체)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "번역"
+
+msgid "main.settings"
+msgstr "설정"
+
+msgid "settings.title"
+msgstr "설정"
+
+msgid "settings.back"
+msgstr "뒤로"
+
+msgid "settings.save"
+msgstr "설정 저장"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "확인"
+
+msgid "settings.unsaved.title"
+msgstr "저장되지 않은 변경 사항"
+
+msgid "settings.unsaved.message"
+msgstr "저장되지 않은 변경 사항이 있습니다. 나가기 전에 저장하시겠습니까?"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "저장 안 함"
+
+msgid "settings.unsaved.cancel"
+msgstr "취소"
+
+msgid "settings.tab.general"
+msgstr "General"
+
+msgid "settings.tab.services"
+msgstr "Services"
+
+msgid "settings.tab.views"
+msgstr "Views"
+
+msgid "settings.tab.hotkeys"
+msgstr "단축키"
+
+msgid "settings.tab.advanced"
+msgstr "Advanced"
+
+msgid "settings.tab.language"
+msgstr "Language"
+
+msgid "settings.tab.about"
+msgstr "정보"
+
+msgid "settings.services.enabled.title"
+msgstr "활성화된 서비스"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "각 창에 표시할 번역 서비스를 선택하세요. 여러 서비스가 병렬로 실행됩니다."
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "국제 서비스 활성화"
+
+msgid "settings.services.international.description"
+msgstr "일부 서비스(Google, DeepL, OpenAI, Gemini 등)는 국제 네트워크 접근이 필요하며, 일부 지역에서는 사용할 수 없을 수 있습니다."
+
+msgid "settings.services.configuration.title"
+msgstr "서비스 구성"
+
+msgid "settings.services.configuration.help"
+msgstr "각 번역 서비스에 대한 API 키, 엔드포인트 및 모델을 구성합니다."
+
+msgid "settings.services.configuration.description"
+msgstr "각 번역 서비스에 대한 API 키, 엔드포인트 및 모델을 구성합니다."
+
+msgid "settings.hotkeys.title"
+msgstr "단축키"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "창 표시"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "선택 번역"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "미니 창 표시"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "고정 창 표시"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "OCR 스크린샷 번역"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "무음 OCR"
+
+msgid "settings.hotkeys.note"
+msgstr "참고: 단축키 변경을 적용하려면 앱을 다시 시작하세요. 토글 단축키는 같은 키에 Shift를 추가합니다 (예: Ctrl+Alt+Shift+M)."
+
+msgid "settings.general.behavior"
+msgstr "동작"
+
+msgid "settings.general.app_theme"
+msgstr "앱 테마"
+
+msgid "settings.general.app_theme.description"
+msgstr "Easydict의 외관을 선택합니다. '시스템'을 선택하면 Windows 테마를 따릅니다."
+
+msgid "settings.general.theme.system"
+msgstr "시스템"
+
+msgid "settings.general.theme.light"
+msgstr "라이트"
+
+msgid "settings.general.theme.dark"
+msgstr "다크"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "시스템 트레이로 최소화"
+
+msgid "settings.general.start_minimized"
+msgstr "시작 시 트레이로 최소화"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "클립보드 텍스트 모니터링"
+
+msgid "settings.general.mouse_selection"
+msgstr "마우스 선택 번역 (텍스트 선택 → 플로팅 아이콘 클릭)"
+
+msgid "settings.general.excluded_apps"
+msgstr "제외 앱"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "마우스 선택 번역에서 제외할 프로세스 이름을 쉼표로 구분하여 입력. 예: VS Code는 \"code\"."
+
+msgid "settings.general.always_on_top"
+msgstr "항상 위"
+
+msgid "settings.general.launch_at_startup"
+msgstr "Windows 시작 시 실행"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "결과 없는 사전 숨기기"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "사용자 정의 사전 입력 제안 사용"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "실험적"
+
+msgid "settings.general.tts.header"
+msgstr "TTS 출력 설정"
+
+msgid "settings.general.tts.speed"
+msgstr "TTS 읽기 속도 (0.5x - 3.0x)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "번역 결과 자동 재생"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "Window Results"
+
+msgid "settings.views.description"
+msgstr "Choose which results appear in each window and whether each result queries automatically."
+
+msgid "settings.views.main_window"
+msgstr "메인 창"
+
+msgid "settings.views.mini_window"
+msgstr "미니 창"
+
+msgid "settings.views.fixed_window"
+msgstr "고정 창"
+
+msgid "settings.views.reorder"
+msgstr "순서 변경"
+
+msgid "settings.views.done"
+msgstr "완료"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "자동"
+
+msgid "settings.views.manual"
+msgstr "수동"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "Language"
+
+msgid "settings.language.preferences"
+msgstr "언어 기본 설정"
+
+msgid "settings.language.first"
+msgstr "제1 언어"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "제2 언어"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "감지된 원본 언어에 따라 대상 언어 자동 선택"
+
+msgid "settings.language.preference_rule.description"
+msgstr "감지된 언어가 제1 언어와 일치하면 번역 대상은 제2 언어가 됩니다. 그 반대도 마찬가지입니다."
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "애플리케이션 인터페이스의 표시 언어를 선택합니다. 재시작이 필요합니다."
+
+msgid "settings.language.translation_languages"
+msgstr "사용 가능한 언어"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "소스 언어/대상 언어 선택기에서 사용할 수 있는 언어를 선택하세요. 최소 2개 필요합니다."
+
+msgid "settings.about.title"
+msgstr "정보"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "GitHub 저장소"
+
+msgid "settings.about.issue_feedback"
+msgstr "문제 피드백"
+
+msgid "settings.about.inspired_by"
+msgstr "영감을 받은 곳"
+
+msgid "settings.about.mac"
+msgstr "macOS용 Easydict"
+
+msgid "settings.about.license"
+msgstr "라이선스: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "켜짐"
+
+msgid "settings.toggle.off"
+msgstr "꺼짐"

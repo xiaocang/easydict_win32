@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: th-TH\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "ข้อความต้นฉบับ"
+
+msgid "main.source_placeholder"
+msgstr "พิมพ์หรือวางข้อความที่ต้องการแปล..."
+
+msgid "main.results"
+msgstr "ผลการแปล"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} บริการเสร็จสิ้น"
+
+msgid "status.ready"
+msgstr "พร้อม"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "ลากเพื่อเลือกพื้นที่  |  ดับเบิลคลิกเลือกหน้าต่าง  |  เลื่อนเพื่อสลับ  |  Esc เพื่อออก"
+
+msgid "main.auto_detect"
+msgstr "ตรวจจับอัตโนมัติ"
+
+msgid "main.target_zh_hans"
+msgstr "จีน (ตัวย่อ)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "Translate"
+
+msgid "main.settings"
+msgstr "การตั้งค่า"
+
+msgid "settings.title"
+msgstr "การตั้งค่า"
+
+msgid "settings.back"
+msgstr "ย้อนกลับ"
+
+msgid "settings.save"
+msgstr "บันทึกการตั้งค่า"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "ตกลง"
+
+msgid "settings.unsaved.title"
+msgstr "การเปลี่ยนแปลงที่ยังไม่ได้บันทึก"
+
+msgid "settings.unsaved.message"
+msgstr "คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก คุณต้องการบันทึกก่อนออกหรือไม่?"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "ไม่บันทึก"
+
+msgid "settings.unsaved.cancel"
+msgstr "ยกเลิก"
+
+msgid "settings.tab.general"
+msgstr "ทั่วไป"
+
+msgid "settings.tab.services"
+msgstr "บริการ"
+
+msgid "settings.tab.views"
+msgstr "มุมมอง"
+
+msgid "settings.tab.hotkeys"
+msgstr "คีย์ลัด"
+
+msgid "settings.tab.advanced"
+msgstr "ขั้นสูง"
+
+msgid "settings.tab.language"
+msgstr "ภาษา"
+
+msgid "settings.tab.about"
+msgstr "เกี่ยวกับ"
+
+msgid "settings.services.enabled.title"
+msgstr "บริการที่เปิดใช้งาน"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "เลือกบริการแปลภาษาที่จะแสดงในแต่ละหน้าต่าง บริการหลายรายการจะทำงานพร้อมกัน"
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "เปิดใช้งานบริการสากล"
+
+msgid "settings.services.international.description"
+msgstr "บริการบางอย่าง (Google, DeepL, OpenAI, Gemini ฯลฯ) ต้องการการเข้าถึงเครือข่ายสากลและอาจไม่พร้อมใช้งานในทุกภูมิภาค"
+
+msgid "settings.services.configuration.title"
+msgstr "การกำหนดค่าบริการ"
+
+msgid "settings.services.configuration.help"
+msgstr "กำหนดค่า API key, endpoint และ model สำหรับแต่ละบริการแปลภาษา"
+
+msgid "settings.services.configuration.description"
+msgstr "กำหนดค่า API key, endpoint และ model สำหรับแต่ละบริการแปลภาษา"
+
+msgid "settings.hotkeys.title"
+msgstr "คีย์ลัด"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "แสดงหน้าต่าง"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "แปลข้อความที่เลือก"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "แสดงหน้าต่างขนาดเล็ก"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "แสดงหน้าต่างคงที่"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "แปลภาพหน้าจอ OCR"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "OCR เงียบ"
+
+msgid "settings.hotkeys.note"
+msgstr "หมายเหตุ: รีสตาร์ทแอปเพื่อใช้การเปลี่ยนแปลงคีย์ลัด คีย์ลัดสลับใช้ปุ่มเดียวกันพร้อม Shift (เช่น Ctrl+Alt+Shift+M)"
+
+msgid "settings.general.behavior"
+msgstr "พฤติกรรม"
+
+msgid "settings.general.app_theme"
+msgstr "ธีมแอป"
+
+msgid "settings.general.app_theme.description"
+msgstr "เลือกรูปลักษณ์ของ Easydict เลือกระบบเพื่อใช้ธีม Windows"
+
+msgid "settings.general.theme.system"
+msgstr "ระบบ"
+
+msgid "settings.general.theme.light"
+msgstr "สว่าง"
+
+msgid "settings.general.theme.dark"
+msgstr "มืด"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "ย่อลงในถาดระบบ"
+
+msgid "settings.general.start_minimized"
+msgstr "เริ่มต้นย่อลงในถาดระบบ"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "ตรวจสอบคลิปบอร์ด"
+
+msgid "settings.general.mouse_selection"
+msgstr "แปลด้วยการเลือกเมาส์ (เลือกข้อความ → คลิกไอคอนลอย)"
+
+msgid "settings.general.excluded_apps"
+msgstr "แอปที่ยกเว้น"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "ชื่อโปรเซสที่ต้องการยกเว้นจากการแปลเมื่อเลือกข้อความ คั่นด้วยเครื่องหมายจุลภาค ตัวอย่าง: \"code\" สำหรับ VS Code"
+
+msgid "settings.general.always_on_top"
+msgstr "แสดงด้านบนเสมอ"
+
+msgid "settings.general.launch_at_startup"
+msgstr "เปิดเมื่อเริ่มต้น Windows"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "ซ่อนพจนานุกรมที่ไม่มีผลลัพธ์"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "เปิดใช้คำแนะนำจากพจนานุกรมที่กำหนดเอง"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "ทดลอง"
+
+msgid "settings.general.tts.header"
+msgstr "การตั้งค่าเอาต์พุต TTS"
+
+msgid "settings.general.tts.speed"
+msgstr "ความเร็วในการอ่าน TTS (0.5× – 3.0×)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "เล่นคำแปลอัตโนมัติ"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "ผลลัพธ์ในหน้าต่าง"
+
+msgid "settings.views.description"
+msgstr "เลือกผลลัพธ์ที่จะแสดงในแต่ละหน้าต่างและกำหนดว่าแต่ละผลลัพธ์จะค้นหาโดยอัตโนมัติหรือไม่"
+
+msgid "settings.views.main_window"
+msgstr "หน้าต่างหลัก"
+
+msgid "settings.views.mini_window"
+msgstr "หน้าต่างขนาดเล็ก"
+
+msgid "settings.views.fixed_window"
+msgstr "หน้าต่างคงที่"
+
+msgid "settings.views.reorder"
+msgstr "จัดลำดับ"
+
+msgid "settings.views.done"
+msgstr "เสร็จสิ้น"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "อัตโนมัติ"
+
+msgid "settings.views.manual"
+msgstr "กำหนดเอง"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "ภาษา"
+
+msgid "settings.language.preferences"
+msgstr "การตั้งค่าภาษา"
+
+msgid "settings.language.first"
+msgstr "ภาษาที่หนึ่ง"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "ภาษาที่สอง"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "เลือกภาษาปลายทางอัตโนมัติตามภาษาต้นทางที่ตรวจพบ"
+
+msgid "settings.language.preference_rule.description"
+msgstr "เมื่อภาษาที่ตรวจพบตรงกับภาษาที่หนึ่ง เป้าหมายการแปลจะเป็นภาษาที่สอง และในทางกลับกัน"
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "เลือกภาษาที่แสดงสำหรับอินเทอร์เฟสแอปพลิเคชัน ต้องรีสตาร์ท"
+
+msgid "settings.language.translation_languages"
+msgstr "Available Languages"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "Select languages available in source/target pickers. At least 2 required."
+
+msgid "settings.about.title"
+msgstr "เกี่ยวกับ"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "คลัง GitHub"
+
+msgid "settings.about.issue_feedback"
+msgstr "แจ้งปัญหา"
+
+msgid "settings.about.inspired_by"
+msgstr "ได้แรงบันดาลใจจาก"
+
+msgid "settings.about.mac"
+msgstr "Easydict สำหรับ macOS"
+
+msgid "settings.about.license"
+msgstr "สัญญาอนุญาต: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "เปิด"
+
+msgid "settings.toggle.off"
+msgstr "ปิด"

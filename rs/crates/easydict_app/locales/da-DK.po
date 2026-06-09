@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: da-DK\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "Kildetekst"
+
+msgid "main.source_placeholder"
+msgstr "Indtast eller indsæt tekst til oversættelse..."
+
+msgid "main.results"
+msgstr "Oversættelsesresultater"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "{count} tjeneste(r) fuldført"
+
+msgid "status.ready"
+msgstr "Klar"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "Træk for at vælge område  |  Dobbeltklik for at vælge vindue  |  Rul for at skifte  |  Esc for at afslutte"
+
+msgid "main.auto_detect"
+msgstr "Automatisk registrering"
+
+msgid "main.target_zh_hans"
+msgstr "Kinesisk (forenklet)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "Translate"
+
+msgid "main.settings"
+msgstr "Indstillinger"
+
+msgid "settings.title"
+msgstr "Indstillinger"
+
+msgid "settings.back"
+msgstr "Tilbage"
+
+msgid "settings.save"
+msgstr "Gem indstillinger"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "OK"
+
+msgid "settings.unsaved.title"
+msgstr "Ikke-gemte ændringer"
+
+msgid "settings.unsaved.message"
+msgstr "Du har ikke-gemte ændringer. Vil du gemme dem, inden du forlader?"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "Gem ikke"
+
+msgid "settings.unsaved.cancel"
+msgstr "Annuller"
+
+msgid "settings.tab.general"
+msgstr "Generelt"
+
+msgid "settings.tab.services"
+msgstr "Tjenester"
+
+msgid "settings.tab.views"
+msgstr "Visninger"
+
+msgid "settings.tab.hotkeys"
+msgstr "Genvejstaster"
+
+msgid "settings.tab.advanced"
+msgstr "Avanceret"
+
+msgid "settings.tab.language"
+msgstr "Sprog"
+
+msgid "settings.tab.about"
+msgstr "Om"
+
+msgid "settings.services.enabled.title"
+msgstr "Aktiverede tjenester"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "Vælg hvilke oversættelsestjenester der skal vises i hvert vindue. Flere tjenester kører parallelt."
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "Aktiver internationale tjenester"
+
+msgid "settings.services.international.description"
+msgstr "Nogle tjenester (Google, DeepL, OpenAI, Gemini osv.) kræver international netværksadgang og er muligvis ikke tilgængelige i alle regioner."
+
+msgid "settings.services.configuration.title"
+msgstr "Tjenestekonfiguration"
+
+msgid "settings.services.configuration.help"
+msgstr "Konfigurer API-nøgler, endpoints og modeller for hver oversættelsestjeneste."
+
+msgid "settings.services.configuration.description"
+msgstr "Konfigurer API-nøgler, endpoints og modeller for hver oversættelsestjeneste."
+
+msgid "settings.hotkeys.title"
+msgstr "Genvejstaster"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "Vis vindue"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "Oversæt markering"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "Vis minivindue"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "Vis fast vindue"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "OCR-skærmbilledeoversættelse"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "Lydløs OCR"
+
+msgid "settings.hotkeys.note"
+msgstr "Bemærk: Genstart appen for at anvende genvejstastændringer. Skiftetaster bruger samme tast med Shift (f.eks. Ctrl+Alt+Shift+M)."
+
+msgid "settings.general.behavior"
+msgstr "Adfærd"
+
+msgid "settings.general.app_theme"
+msgstr "App-tema"
+
+msgid "settings.general.app_theme.description"
+msgstr "Vælg udseende for Easydict. Vælg System for at følge Windows-temaet."
+
+msgid "settings.general.theme.system"
+msgstr "System"
+
+msgid "settings.general.theme.light"
+msgstr "Lyst"
+
+msgid "settings.general.theme.dark"
+msgstr "Mørkt"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "Minimer til systembakke"
+
+msgid "settings.general.start_minimized"
+msgstr "Start minimeret i systembakke"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "Overvåg udklipsholder for tekst"
+
+msgid "settings.general.mouse_selection"
+msgstr "Oversæt med musemarkering (vælg tekst → klik svæveikon)"
+
+msgid "settings.general.excluded_apps"
+msgstr "Ekskluderede apps"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "Procesnavne der skal ekskluderes fra musemarkerings-oversættelse, adskilt med kommaer. Eksempel: \"code\" for VS Code."
+
+msgid "settings.general.always_on_top"
+msgstr "Altid øverst"
+
+msgid "settings.general.launch_at_startup"
+msgstr "Start ved Windows-opstart"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "Skjul ordbøger uden resultater"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "Aktivér inputforslag fra brugerdefinerede ordbøger"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "Eksperimentel"
+
+msgid "settings.general.tts.header"
+msgstr "TTS-outputindstillinger"
+
+msgid "settings.general.tts.speed"
+msgstr "TTS-læsehastighed (0,5× – 3,0×)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "Afspil oversættelse automatisk"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "Vinduesresultater"
+
+msgid "settings.views.description"
+msgstr "Vælg hvilke resultater der vises i hvert vindue, og om hvert resultat søges automatisk."
+
+msgid "settings.views.main_window"
+msgstr "Hovedvindue"
+
+msgid "settings.views.mini_window"
+msgstr "Minivindue"
+
+msgid "settings.views.fixed_window"
+msgstr "Fast vindue"
+
+msgid "settings.views.reorder"
+msgstr "Omarranger"
+
+msgid "settings.views.done"
+msgstr "Færdig"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "Automatisk"
+
+msgid "settings.views.manual"
+msgstr "Manuel"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "Sprog"
+
+msgid "settings.language.preferences"
+msgstr "Sprogpræferencer"
+
+msgid "settings.language.first"
+msgstr "Første sprog"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "Andet sprog"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "Vælg automatisk målsprog baseret på registreret kildesprog"
+
+msgid "settings.language.preference_rule.description"
+msgstr "Når det registrerede sprog matcher dit Første sprog, vil oversættelsesmålet være dit Andet sprog og omvendt."
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "Vælg visningssprog for applikationens grænseflade. Genstart påkrævet."
+
+msgid "settings.language.translation_languages"
+msgstr "Available Languages"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "Select languages available in source/target pickers. At least 2 required."
+
+msgid "settings.about.title"
+msgstr "Om"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "GitHub-repository"
+
+msgid "settings.about.issue_feedback"
+msgstr "Rapporter problem"
+
+msgid "settings.about.inspired_by"
+msgstr "Inspireret af"
+
+msgid "settings.about.mac"
+msgstr "Easydict til macOS"
+
+msgid "settings.about.license"
+msgstr "Licens: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "Til"
+
+msgid "settings.toggle.off"
+msgstr "Fra"

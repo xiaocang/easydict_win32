@@ -1,0 +1,361 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: easydict_app\n"
+"Language: ar-SA\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "app.name"
+msgstr "Easydict"
+
+msgid "app.beta"
+msgstr "ᵇᵉᵗᵃ"
+
+msgid "main.source_text"
+msgstr "النص المصدر"
+
+msgid "main.source_placeholder"
+msgstr "أدخل أو الصق النص للترجمة..."
+
+msgid "main.results"
+msgstr "نتائج الترجمة"
+
+msgid "main.result.pending_query"
+msgstr "Click to query this service"
+
+msgid "main.completed"
+msgstr "اكتملت {count} خدمة (خدمات)"
+
+msgid "status.ready"
+msgstr "جاهز"
+
+msgid "ocr.capture.title"
+msgstr "OCR Capture"
+
+msgid "ocr.capture.instructions"
+msgstr "اسحب لتحديد المنطقة  |  انقر مرتين لتحديد النافذة  |  مرر للتبديل  |  Esc للخروج"
+
+msgid "main.auto_detect"
+msgstr "اكتشاف تلقائي"
+
+msgid "main.target_zh_hans"
+msgstr "الصينية (المبسّطة)"
+
+msgid "main.language_help"
+msgstr "Language help"
+
+msgid "main.translate"
+msgstr "Translate"
+
+msgid "main.settings"
+msgstr "الإعدادات"
+
+msgid "settings.title"
+msgstr "الإعدادات"
+
+msgid "settings.back"
+msgstr "رجوع"
+
+msgid "settings.save"
+msgstr "حفظ الإعدادات"
+
+msgid "settings.error.title"
+msgstr "Settings Error"
+
+msgid "settings.ok"
+msgstr "موافق"
+
+msgid "settings.unsaved.title"
+msgstr "تغييرات غير محفوظة"
+
+msgid "settings.unsaved.message"
+msgstr "لديك تغييرات غير محفوظة. هل تريد حفظها قبل المغادرة؟"
+
+msgid "settings.unsaved.save"
+msgstr "Save"
+
+msgid "settings.unsaved.discard"
+msgstr "عدم الحفظ"
+
+msgid "settings.unsaved.cancel"
+msgstr "إلغاء"
+
+msgid "settings.tab.general"
+msgstr "عام"
+
+msgid "settings.tab.services"
+msgstr "الخدمات"
+
+msgid "settings.tab.views"
+msgstr "طرق العرض"
+
+msgid "settings.tab.hotkeys"
+msgstr "اختصارات لوحة المفاتيح"
+
+msgid "settings.tab.advanced"
+msgstr "متقدم"
+
+msgid "settings.tab.language"
+msgstr "اللغة"
+
+msgid "settings.tab.about"
+msgstr "حول"
+
+msgid "settings.services.enabled.title"
+msgstr "الخدمات المفعّلة"
+
+msgid "settings.services.enabled.help"
+msgstr "Choose service visibility in the Views tab."
+
+msgid "settings.services.enabled.description"
+msgstr "اختر خدمات الترجمة التي تريد عرضها في كل نافذة. ستعمل الخدمات المتعددة بشكل متوازٍ."
+
+msgid "settings.services.mdx.import"
+msgstr "Import MDX Dictionary"
+
+msgid "settings.services.mdx.none"
+msgstr "No MDX dictionaries imported"
+
+msgid "settings.services.mdx.one"
+msgstr "1 MDX dictionary imported"
+
+msgid "settings.services.mdx.many"
+msgstr "{count} MDX dictionaries imported"
+
+msgid "settings.services.international.title"
+msgstr "تفعيل الخدمات الدولية"
+
+msgid "settings.services.international.description"
+msgstr "بعض الخدمات (Google وDeepL وOpenAI وGemini وغيرها) تتطلب الوصول إلى الشبكة الدولية وقد لا تكون متاحة في جميع المناطق."
+
+msgid "settings.services.configuration.title"
+msgstr "تكوين الخدمة"
+
+msgid "settings.services.configuration.help"
+msgstr "تكوين مفاتيح API والنقاط الطرفية والنماذج لكل خدمة ترجمة."
+
+msgid "settings.services.configuration.description"
+msgstr "تكوين مفاتيح API والنقاط الطرفية والنماذج لكل خدمة ترجمة."
+
+msgid "settings.hotkeys.title"
+msgstr "اختصارات لوحة المفاتيح"
+
+msgid "settings.hotkeys.help"
+msgstr "Hotkey changes apply after restart"
+
+msgid "settings.hotkeys.show_window.label"
+msgstr "إظهار النافذة"
+
+msgid "settings.hotkeys.translate_selection.label"
+msgstr "ترجمة النص المحدد"
+
+msgid "settings.hotkeys.show_mini.label"
+msgstr "إظهار النافذة المصغّرة"
+
+msgid "settings.hotkeys.show_fixed.label"
+msgstr "إظهار النافذة الثابتة"
+
+msgid "settings.hotkeys.ocr_translate.label"
+msgstr "ترجمة لقطة شاشة OCR"
+
+msgid "settings.hotkeys.silent_ocr.label"
+msgstr "OCR صامت"
+
+msgid "settings.hotkeys.note"
+msgstr "ملاحظة: أعد تشغيل التطبيق لتطبيق تغييرات الاختصارات. اختصارات التبديل تستخدم نفس المفتاح مع Shift (مثل Ctrl+Alt+Shift+M)."
+
+msgid "settings.general.behavior"
+msgstr "السلوك"
+
+msgid "settings.general.app_theme"
+msgstr "سمة التطبيق"
+
+msgid "settings.general.app_theme.description"
+msgstr "اختر مظهر Easydict. اختر النظام لمتابعة سمة Windows."
+
+msgid "settings.general.theme.system"
+msgstr "النظام"
+
+msgid "settings.general.theme.light"
+msgstr "فاتح"
+
+msgid "settings.general.theme.dark"
+msgstr "داكن"
+
+msgid "settings.general.theme.minimal"
+msgstr "Minimal"
+
+msgid "settings.general.minimize_to_tray"
+msgstr "تصغير إلى علبة النظام"
+
+msgid "settings.general.start_minimized"
+msgstr "بدء التشغيل مصغراً في علبة النظام"
+
+msgid "settings.general.monitor_clipboard"
+msgstr "مراقبة الحافظة للنصوص"
+
+msgid "settings.general.mouse_selection"
+msgstr "ترجمة بتحديد الماوس (حدد النص ← انقر على الأيقونة العائمة)"
+
+msgid "settings.general.excluded_apps"
+msgstr "التطبيقات المستثناة"
+
+msgid "settings.general.excluded_apps.description"
+msgstr "أسماء العمليات المراد استثناؤها من ترجمة تحديد الماوس، مفصولة بفواصل. مثال: \"code\" لـ VS Code."
+
+msgid "settings.general.always_on_top"
+msgstr "دائماً في المقدمة"
+
+msgid "settings.general.launch_at_startup"
+msgstr "التشغيل عند بدء Windows"
+
+msgid "settings.general.hide_empty_service_results"
+msgstr "إخفاء القواميس بدون نتائج"
+
+msgid "settings.general.local_dictionary_suggestions"
+msgstr "تمكين اقتراحات إدخال القواميس المخصصة"
+
+msgid "settings.general.local_dictionary_suggestions.empty"
+msgstr "Import an MDX dictionary to enable local input suggestions."
+
+msgid "settings.general.local_dictionary_suggestions.ready"
+msgstr "Suggest local dictionary entries while typing."
+
+msgid "settings.general.experimental"
+msgstr "تجريبي"
+
+msgid "settings.general.tts.header"
+msgstr "إعدادات إخراج TTS"
+
+msgid "settings.general.tts.speed"
+msgstr "سرعة قراءة TTS (0.5× – 3.0×)"
+
+msgid "settings.general.tts.speed.a11y"
+msgstr "TTS speed"
+
+msgid "settings.general.auto_play_translation"
+msgstr "تشغيل الترجمة تلقائياً"
+
+msgid "settings.general.auto_play_translation.description"
+msgstr "Play translated text after a translation finishes."
+
+msgid "settings.views.title"
+msgstr "نتائج النافذة"
+
+msgid "settings.views.description"
+msgstr "اختر النتائج التي تظهر في كل نافذة وما إذا كانت كل نتيجة تستعلم تلقائياً."
+
+msgid "settings.views.main_window"
+msgstr "النافذة الرئيسية"
+
+msgid "settings.views.mini_window"
+msgstr "النافذة المصغّرة"
+
+msgid "settings.views.fixed_window"
+msgstr "النافذة الثابتة"
+
+msgid "settings.views.reorder"
+msgstr "إعادة الترتيب"
+
+msgid "settings.views.done"
+msgstr "تم"
+
+msgid "settings.views.enabled"
+msgstr "enabled"
+
+msgid "settings.views.auto"
+msgstr "تلقائي"
+
+msgid "settings.views.manual"
+msgstr "يدوي"
+
+msgid "settings.views.mini_behavior"
+msgstr "Mini Window behavior"
+
+msgid "settings.views.mini_behavior.description"
+msgstr "Close the Mini window automatically after focus moves away."
+
+msgid "settings.views.auto_close"
+msgstr "Auto close"
+
+msgid "settings.views.fixed_behavior"
+msgstr "Fixed Window behavior"
+
+msgid "settings.views.fixed_behavior.description"
+msgstr "Keep the Fixed window above other windows."
+
+msgid "settings.language.title"
+msgstr "اللغة"
+
+msgid "settings.language.preferences"
+msgstr "تفضيلات اللغة"
+
+msgid "settings.language.first"
+msgstr "اللغة الأولى"
+
+msgid "settings.language.first.description"
+msgstr "Preferred target language when detected source is not the first language."
+
+msgid "settings.language.second"
+msgstr "اللغة الثانية"
+
+msgid "settings.language.second.description"
+msgstr "Fallback target language when detected source matches the first language."
+
+msgid "settings.language.auto_select_target"
+msgstr "Auto-select target language"
+
+msgid "settings.language.auto_select_target.description"
+msgstr "Use the first/second language rule until a target language is chosen manually."
+
+msgid "settings.language.auto_select_target.compact"
+msgstr "تحديد لغة الهدف تلقائياً بناءً على لغة المصدر المكتشفة"
+
+msgid "settings.language.preference_rule.description"
+msgstr "عندما تتطابق اللغة المكتشفة مع لغتك الأولى، سيكون هدف الترجمة هو لغتك الثانية، والعكس صحيح."
+
+msgid "settings.language.display"
+msgstr "Display language"
+
+msgid "settings.language.display.description"
+msgstr "اختر لغة العرض لواجهة التطبيق. يلزم إعادة التشغيل."
+
+msgid "settings.language.translation_languages"
+msgstr "Available Languages"
+
+msgid "settings.language.translation_languages.description"
+msgstr "Choose which languages appear in Main, Mini, Fixed, and Long Document pickers."
+
+msgid "settings.language.available.description"
+msgstr "Select languages available in source/target pickers. At least 2 required."
+
+msgid "settings.about.title"
+msgstr "حول"
+
+msgid "settings.about.app_name"
+msgstr "Easydict for Windows ᵇᵉᵗᵃ"
+
+msgid "settings.about.version"
+msgstr "Version {version}"
+
+msgid "settings.about.github"
+msgstr "مستودع GitHub"
+
+msgid "settings.about.issue_feedback"
+msgstr "الإبلاغ عن مشكلة"
+
+msgid "settings.about.inspired_by"
+msgstr "مستوحى من"
+
+msgid "settings.about.mac"
+msgstr "Easydict لنظام macOS"
+
+msgid "settings.about.license"
+msgstr "الترخيص: GPL-3.0"
+
+msgid "settings.toggle.on"
+msgstr "تشغيل"
+
+msgid "settings.toggle.off"
+msgstr "إيقاف"

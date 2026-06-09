@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "Seret untuk memilih kawasan  |  Dwi-klik untuk memilih tetingkap  |  Tatal untuk menukar  |  Esc untuk keluar"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "Klik kanan atau Esc untuk batal"
+
 msgid "main.auto_detect"
 msgstr "Kesan Automatik"
 

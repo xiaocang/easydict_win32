@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "ドラッグで範囲選択  |  ダブルクリックでウィンドウ選択  |  スクロールで切替  |  Esc で終了"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "右クリックまたは Esc でキャンセル"
+
 msgid "main.auto_detect"
 msgstr "自動検出"
 

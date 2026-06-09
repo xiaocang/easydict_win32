@@ -36,6 +36,9 @@ msgstr "OCR 截图"
 msgid "ocr.capture.instructions"
 msgstr "拖动选择区域  |  双击选择窗口  |  滚轮切换窗口  |  Esc 退出"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "右键或 Esc 取消"
+
 msgid "main.auto_detect"
 msgstr "自动检测"
 

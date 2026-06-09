@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "Ziehen zum Auswählen  |  Doppelklick für Fensterauswahl  |  Scrollen zum Wechseln  |  Esc zum Beenden"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "Rechtsklick oder Esc zum Abbrechen"
+
 msgid "main.auto_detect"
 msgstr "Automatisch erkennen"
 

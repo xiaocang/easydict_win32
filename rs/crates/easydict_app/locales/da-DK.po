@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "Træk for at vælge område  |  Dobbeltklik for at vælge vindue  |  Rul for at skifte  |  Esc for at afslutte"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "Højreklik eller Esc for at annullere"
+
 msgid "main.auto_detect"
 msgstr "Automatisk registrering"
 

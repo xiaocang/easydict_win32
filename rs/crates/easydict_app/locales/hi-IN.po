@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "क्षेत्र चुनने के लिए खींचें  |  विंडो चुनने के लिए डबल-क्लिक  |  स्विच करने के लिए स्क्रॉल  |  बाहर निकलने के लिए Esc"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "रद्द करने के लिए राइट-क्लिक या Esc"
+
 msgid "main.auto_detect"
 msgstr "स्वतः पहचान"
 

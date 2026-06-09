@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "드래그하여 영역 선택  |  더블클릭으로 창 선택  |  스크롤로 전환  |  Esc로 종료"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "우클릭 또는 Esc로 취소"
+
 msgid "main.auto_detect"
 msgstr "자동 감지"
 

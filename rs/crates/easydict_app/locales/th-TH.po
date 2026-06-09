@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "ลากเพื่อเลือกพื้นที่  |  ดับเบิลคลิกเลือกหน้าต่าง  |  เลื่อนเพื่อสลับ  |  Esc เพื่อออก"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "คลิกขวาหรือ Esc เพื่อยกเลิก"
+
 msgid "main.auto_detect"
 msgstr "ตรวจจับอัตโนมัติ"
 

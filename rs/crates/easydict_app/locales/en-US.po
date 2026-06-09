@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "Drag to select region  |  Double-click to select window  |  Scroll to switch  |  Esc to exit"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "Right-click or Esc to cancel"
+
 msgid "main.auto_detect"
 msgstr "Auto Detect"
 

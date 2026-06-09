@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "اسحب لتحديد المنطقة  |  انقر مرتين لتحديد النافذة  |  مرر للتبديل  |  Esc للخروج"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "انقر بزر الماوس الأيمن أو Esc للإلغاء"
+
 msgid "main.auto_detect"
 msgstr "اكتشاف تلقائي"
 

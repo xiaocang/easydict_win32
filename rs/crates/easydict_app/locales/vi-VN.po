@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "Kéo để chọn vùng  |  Nhấp đúp để chọn cửa sổ  |  Cuộn để chuyển  |  Esc để thoát"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "Nhấp phải hoặc Esc để hủy"
+
 msgid "main.auto_detect"
 msgstr "Tự động phát hiện"
 

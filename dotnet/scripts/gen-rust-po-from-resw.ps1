@@ -113,6 +113,8 @@ $supplementalMap = @{
     'settings.general.mouse_selection'          = 'MouseSelectionTranslate'
     'settings.general.auto_play_translation'    = 'AutoPlayTranslation'
     'main.completed'                            = 'ServiceResultsComplete'
+    'ocr.capture.instructions'                  = 'ScreenCaptureTipDetecting'
+    'ocr.capture.instructions.selecting'        = 'ScreenCaptureTipSelecting'
 }
 
 # 2. Build key -> .NET name mapping by en-US value match (+ supplemental).

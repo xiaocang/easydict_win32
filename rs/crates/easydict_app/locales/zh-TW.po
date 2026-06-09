@@ -36,6 +36,9 @@ msgstr "OCR Capture"
 msgid "ocr.capture.instructions"
 msgstr "拖曳選擇區域  |  雙擊選擇視窗  |  滾輪切換視窗  |  Esc 退出"
 
+msgid "ocr.capture.instructions.selecting"
+msgstr "右鍵或 Esc 取消"
+
 msgid "main.auto_detect"
 msgstr "自動偵測"
 

@@ -18,10 +18,11 @@ use iced::advanced::{
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
     button as iced_button, checkbox as iced_checkbox, column as iced_column,
-    container as iced_container, opaque as iced_opaque, pick_list as iced_pick_list,
-    responsive as iced_responsive, row as iced_row, scrollable as iced_scrollable,
-    slider as iced_slider, space as iced_space, stack as iced_stack, text as iced_text,
-    text_editor as iced_text_editor, text_input as iced_text_input, toggler as iced_toggler,
+    container as iced_container, image as iced_image, opaque as iced_opaque,
+    pick_list as iced_pick_list, responsive as iced_responsive, row as iced_row,
+    scrollable as iced_scrollable, slider as iced_slider, space as iced_space, stack as iced_stack,
+    text as iced_text, text_editor as iced_text_editor, text_input as iced_text_input,
+    toggler as iced_toggler,
 };
 use iced::{
     alignment, font, keyboard, window, Background, Border, Color, Element, Event, Font,
@@ -1472,7 +1473,20 @@ where
                 });
             }
 
-            let control: IcedElement<'a, Message> = control.into();
+            let mut control: IcedElement<'a, Message> = control.into();
+            if token.width.is_some() || token.height.is_some() {
+                let mut frame = iced_container(control)
+                    .align_x(alignment::Horizontal::Center)
+                    .align_y(alignment::Vertical::Center);
+                if let Some(width) = token.width {
+                    frame = frame.width(iced_length(width));
+                }
+                if let Some(height) = token.height {
+                    frame = frame.height(iced_length(height));
+                }
+                control = frame.into();
+            }
+
             if let Some(header) = token
                 .header
                 .as_deref()
@@ -2197,7 +2211,7 @@ fn text_editor_key_from_iced(key: &keyboard::Key) -> Option<TextEditorKey> {
     }
 }
 
-static EASYDICT_APP_ICON_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#000000" fill-opacity="0.004" d="M1 0h1v1H1zM14 0h1v1H14zM0 1h1v1H0zM0 14h1v1H0zM1 15h1v1H1z"/><path fill="#000000" fill-opacity="0.008" d="M15 1h1v1H15zM15 14h1v1H15zM14 15h1v1H14z"/><path fill="#000000" fill-opacity="0.020" d="M2 0h1v1H2zM13 0h1v1H13zM0 2h1v1H0zM15 2h1v1H15zM0 13h1v1H0zM2 15h1v1H2z"/><path fill="#000000" fill-opacity="0.024" d="M15 13h1v1H15zM13 15h1v1H13z"/><path fill="#000000" fill-opacity="0.035" d="M3 0h1v1H3zM12 0h1v1H12zM0 3h1v1H0zM15 3h1v1H15zM0 12h1v1H0zM3 15h1v1H3zM12 15h1v1H12z"/><path fill="#000000" fill-opacity="0.039" d="M15 12h1v1H15z"/><path fill="#333333" fill-opacity="0.039" d="M1 1h1v1H1z"/><path fill="#000000" fill-opacity="0.043" d="M4 0h1v1H4zM11 0h1v1H11zM0 4h1v1H0zM15 4h1v1H15zM0 11h1v1H0zM15 11h1v1H15zM4 15h1v1H4zM11 15h1v1H11z"/><path fill="#000000" fill-opacity="0.047" d="M5 0h1v1H5zM6 0h1v1H6zM7 0h1v1H7zM8 0h1v1H8zM9 0h1v1H9zM10 0h1v1H10zM0 5h1v1H0zM15 5h1v1H15zM0 6h1v1H0zM15 6h1v1H15zM0 7h1v1H0zM15 7h1v1H15zM0 8h1v1H0zM15 8h1v1H15zM0 9h1v1H0zM15 9h1v1H15zM0 10h1v1H0zM15 10h1v1H15zM5 15h1v1H5zM6 15h1v1H6zM7 15h1v1H7zM8 15h1v1H8zM9 15h1v1H9zM10 15h1v1H10z"/><path fill="#404040" fill-opacity="0.047" d="M14 1h1v1H14zM1 14h1v1H1z"/><path fill="#3B3B3B" fill-opacity="0.051" d="M14 14h1v1H14z"/><path fill="#D7D7D7" fill-opacity="0.569" d="M2 1h1v1H2zM1 2h1v1H1z"/><path fill="#CECECE" fill-opacity="0.576" d="M1 13h1v1H1zM2 14h1v1H2z"/><path fill="#D4D4D4" fill-opacity="0.584" d="M13 1h1v1H13zM14 2h1v1H14z"/><path fill="#CECECE" fill-opacity="0.588" d="M14 13h1v1H14zM13 14h1v1H13z"/><path fill="#EEEEEE" fill-opacity="0.906" d="M1 12h1v1H1z"/><path fill="#F3F3F3" fill-opacity="0.906" d="M1 3h1v1H1z"/><path fill="#F5F5F5" fill-opacity="0.906" d="M3 1h1v1H3zM12 1h1v1H12z"/><path fill="#ECECEC" fill-opacity="0.910" d="M3 14h1v1H3z"/><path fill="#ECECEC" fill-opacity="0.914" d="M12 14h1v1H12z"/><path fill="#EFEFEF" fill-opacity="0.914" d="M14 12h1v1H14z"/><path fill="#F3F3F3" fill-opacity="0.914" d="M14 3h1v1H14z"/><path fill="#F7F7F7" fill-opacity="0.984" d="M1 11h1v1H1z"/><path fill="#FCFCFC" fill-opacity="0.984" d="M1 4h1v1H1z"/><path fill="#FDFDFD" fill-opacity="0.984" d="M4 1h1v1H4z"/><path fill="#FEFEFE" fill-opacity="0.984" d="M11 1h1v1H11z"/><path fill="#F5F5F5" fill-opacity="0.992" d="M4 14h1v1H4z"/><path fill="#F6F6F6" fill-opacity="0.992" d="M11 14h1v1H11z"/><path fill="#F7F7F7" fill-opacity="0.992" d="M14 11h1v1H14z"/><path fill="#FCFCFC" fill-opacity="0.992" d="M14 4h1v1H14z"/><path fill="#F9F9F9" fill-opacity="0.996" d="M1 10h1v1H1z"/><path fill="#FFFFFF" fill-opacity="0.996" d="M5 1h1v1H5zM10 1h1v1H10z"/><path fill="#000000" d="M3 7h1v1H3zM4 7h1v1H4zM6 7h1v1H6zM7 7h1v1H7zM3 8h1v1H3zM7 8h1v1H7zM3 9h1v1H3zM7 9h1v1H7zM3 10h1v1H3zM5 10h1v1H5zM7 10h1v1H7z"/><path fill="#171717" d="M10 5h1v1H10z"/><path fill="#181818" d="M4 11h1v1H4z"/><path fill="#1B1B1B" d="M6 8h1v1H6zM4 10h1v1H4zM6 10h1v1H6z"/><path fill="#212121" d="M4 8h1v1H4z"/><path fill="#272727" d="M8 8h1v1H8z"/><path fill="#2C2C2C" d="M10 6h1v1H10z"/><path fill="#323232" d="M2 8h1v1H2zM2 9h1v1H2z"/><path fill="#363636" d="M5 7h1v1H5z"/><path fill="#393939" d="M8 9h1v1H8z"/><path fill="#404040" d="M2 7h1v1H2z"/><path fill="#414141" d="M2 10h1v1H2z"/><path fill="#444444" d="M8 7h1v1H8z"/><path fill="#494949" d="M8 10h1v1H8z"/><path fill="#686868" d="M7 6h1v1H7z"/><path fill="#696969" d="M11 5h1v1H11z"/><path fill="#6C6C6C" d="M12 8h1v1H12z"/><path fill="#707070" d="M3 11h1v1H3z"/><path fill="#787878" d="M13 4h1v1H13zM5 9h1v1H5z"/><path fill="#7C7C7C" d="M7 4h1v1H7zM6 9h1v1H6z"/><path fill="#7F7F7F" d="M13 7h1v1H13z"/><path fill="#808080" d="M9 5h1v1H9zM4 9h1v1H4z"/><path fill="#868686" d="M7 5h1v1H7z"/><path fill="#898989" d="M13 6h1v1H13z"/><path fill="#8A8A8A" d="M13 5h1v1H13z"/><path fill="#9D9D9D" d="M10 8h1v1H10z"/><path fill="#A4A4A4" d="M11 8h1v1H11z"/><path fill="#A6A6A6" d="M10 4h1v1H10z"/><path fill="#ACACAC" d="M9 8h1v1H9z"/><path fill="#B4B4B4" d="M5 8h1v1H5z"/><path fill="#B5B5B5" d="M12 9h1v1H12z"/><path fill="#B8B8B8" d="M5 11h1v1H5z"/><path fill="#BCBCBC" d="M8 4h1v1H8zM12 4h1v1H12z"/><path fill="#BDBDBD" d="M9 4h1v1H9zM11 4h1v1H11zM11 7h1v1H11z"/><path fill="#C0C0C0" d="M3 12h1v1H3z"/><path fill="#C1C1C1" d="M4 6h1v1H4zM6 6h1v1H6z"/><path fill="#C2C2C2" d="M3 6h1v1H3zM5 6h1v1H5z"/><path fill="#C3C3C3" d="M9 7h1v1H9zM11 9h1v1H11z"/><path fill="#C6C6C6" d="M6 11h1v1H6z"/><path fill="#C7C7C7" d="M7 11h1v1H7z"/><path fill="#D2D2D2" d="M4 12h1v1H4z"/><path fill="#D8D8D8" d="M11 6h1v1H11z"/><path fill="#DBDBDB" d="M13 8h1v1H13z"/><path fill="#DFDFDF" d="M10 3h1v1H10zM11 3h1v1H11z"/><path fill="#E0E0E0" d="M8 3h1v1H8zM9 3h1v1H9zM12 3h1v1H12z"/><path fill="#E4E4E4" d="M9 6h1v1H9z"/><path fill="#E6E6E6" d="M10 7h1v1H10z"/><path fill="#E8E8E8" d="M2 6h1v1H2z"/><path fill="#E9E9E9" d="M2 11h1v1H2z"/><path fill="#EAEAEA" d="M8 11h1v1H8z"/><path fill="#EDEDED" d="M8 6h1v1H8z"/><path fill="#F3F3F3" d="M12 7h1v1H12z"/><path fill="#F6F6F6" d="M13 3h1v1H13zM5 14h1v1H5zM6 14h1v1H6zM7 14h1v1H7zM9 14h1v1H9z"/><path fill="#F7F7F7" d="M2 12h1v1H2zM5 12h1v1H5zM8 12h1v1H8zM10 12h1v1H10zM11 12h1v1H11zM13 12h1v1H13zM2 13h1v1H2zM3 13h1v1H3zM4 13h1v1H4zM5 13h1v1H5zM6 13h1v1H6zM7 13h1v1H7zM8 13h1v1H8zM9 13h1v1H9zM10 13h1v1H10zM11 13h1v1H11zM12 13h1v1H12zM13 13h1v1H13zM8 14h1v1H8zM10 14h1v1H10z"/><path fill="#F8F8F8" d="M7 3h1v1H7zM9 11h1v1H9zM10 11h1v1H10zM11 11h1v1H11zM12 11h1v1H12zM13 11h1v1H13zM6 12h1v1H6zM7 12h1v1H7zM9 12h1v1H9zM12 12h1v1H12z"/><path fill="#F9F9F9" d="M9 10h1v1H9zM10 10h1v1H10zM11 10h1v1H11zM12 10h1v1H12zM13 10h1v1H13zM14 10h1v1H14z"/><path fill="#FAFAFA" d="M1 8h1v1H1zM14 8h1v1H14zM1 9h1v1H1zM9 9h1v1H9zM10 9h1v1H10zM13 9h1v1H13zM14 9h1v1H14z"/><path fill="#FBFBFB" d="M1 7h1v1H1zM14 7h1v1H14z"/><path fill="#FCFCFC" d="M2 5h1v1H2zM3 5h1v1H3zM4 5h1v1H4zM5 5h1v1H5zM6 5h1v1H6zM14 5h1v1H14zM1 6h1v1H1zM14 6h1v1H14z"/><path fill="#FDFDFD" d="M2 4h1v1H2zM3 4h1v1H3zM5 4h1v1H5zM1 5h1v1H1z"/><path fill="#FEFEFE" d="M6 1h1v1H6zM7 1h1v1H7zM9 1h1v1H9zM2 2h1v1H2zM3 2h1v1H3zM4 2h1v1H4zM5 2h1v1H5zM6 2h1v1H6zM7 2h1v1H7zM9 2h1v1H9zM2 3h1v1H2zM3 3h1v1H3zM4 3h1v1H4zM5 3h1v1H5zM6 3h1v1H6zM4 4h1v1H4zM6 4h1v1H6z"/><path fill="#FFFFFF" d="M8 1h1v1H8zM8 2h1v1H8zM10 2h1v1H10zM11 2h1v1H11zM12 2h1v1H12zM13 2h1v1H13zM8 5h1v1H8zM12 5h1v1H12zM12 6h1v1H12z"/></svg>"##;
+static DEFAULT_APP_ICON_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges"><path fill="#000000" fill-opacity="0.004" d="M1 0h1v1H1zM14 0h1v1H14zM0 1h1v1H0zM0 14h1v1H0zM1 15h1v1H1z"/><path fill="#000000" fill-opacity="0.008" d="M15 1h1v1H15zM15 14h1v1H15zM14 15h1v1H14z"/><path fill="#000000" fill-opacity="0.020" d="M2 0h1v1H2zM13 0h1v1H13zM0 2h1v1H0zM15 2h1v1H15zM0 13h1v1H0zM2 15h1v1H2z"/><path fill="#000000" fill-opacity="0.024" d="M15 13h1v1H15zM13 15h1v1H13z"/><path fill="#000000" fill-opacity="0.035" d="M3 0h1v1H3zM12 0h1v1H12zM0 3h1v1H0zM15 3h1v1H15zM0 12h1v1H0zM3 15h1v1H3zM12 15h1v1H12z"/><path fill="#000000" fill-opacity="0.039" d="M15 12h1v1H15z"/><path fill="#333333" fill-opacity="0.039" d="M1 1h1v1H1z"/><path fill="#000000" fill-opacity="0.043" d="M4 0h1v1H4zM11 0h1v1H11zM0 4h1v1H0zM15 4h1v1H15zM0 11h1v1H0zM15 11h1v1H15zM4 15h1v1H4zM11 15h1v1H11z"/><path fill="#000000" fill-opacity="0.047" d="M5 0h1v1H5zM6 0h1v1H6zM7 0h1v1H7zM8 0h1v1H8zM9 0h1v1H9zM10 0h1v1H10zM0 5h1v1H0zM15 5h1v1H15zM0 6h1v1H0zM15 6h1v1H15zM0 7h1v1H0zM15 7h1v1H15zM0 8h1v1H0zM15 8h1v1H15zM0 9h1v1H0zM15 9h1v1H15zM0 10h1v1H0zM15 10h1v1H15zM5 15h1v1H5zM6 15h1v1H6zM7 15h1v1H7zM8 15h1v1H8zM9 15h1v1H9zM10 15h1v1H10z"/><path fill="#404040" fill-opacity="0.047" d="M14 1h1v1H14zM1 14h1v1H1z"/><path fill="#3B3B3B" fill-opacity="0.051" d="M14 14h1v1H14z"/><path fill="#D7D7D7" fill-opacity="0.569" d="M2 1h1v1H2zM1 2h1v1H1z"/><path fill="#CECECE" fill-opacity="0.576" d="M1 13h1v1H1zM2 14h1v1H2z"/><path fill="#D4D4D4" fill-opacity="0.584" d="M13 1h1v1H13zM14 2h1v1H14z"/><path fill="#CECECE" fill-opacity="0.588" d="M14 13h1v1H14zM13 14h1v1H13z"/><path fill="#EEEEEE" fill-opacity="0.906" d="M1 12h1v1H1z"/><path fill="#F3F3F3" fill-opacity="0.906" d="M1 3h1v1H1z"/><path fill="#F5F5F5" fill-opacity="0.906" d="M3 1h1v1H3zM12 1h1v1H12z"/><path fill="#ECECEC" fill-opacity="0.910" d="M3 14h1v1H3z"/><path fill="#ECECEC" fill-opacity="0.914" d="M12 14h1v1H12z"/><path fill="#EFEFEF" fill-opacity="0.914" d="M14 12h1v1H14z"/><path fill="#F3F3F3" fill-opacity="0.914" d="M14 3h1v1H14z"/><path fill="#F7F7F7" fill-opacity="0.984" d="M1 11h1v1H1z"/><path fill="#FCFCFC" fill-opacity="0.984" d="M1 4h1v1H1z"/><path fill="#FDFDFD" fill-opacity="0.984" d="M4 1h1v1H4z"/><path fill="#FEFEFE" fill-opacity="0.984" d="M11 1h1v1H11z"/><path fill="#F5F5F5" fill-opacity="0.992" d="M4 14h1v1H4z"/><path fill="#F6F6F6" fill-opacity="0.992" d="M11 14h1v1H11z"/><path fill="#F7F7F7" fill-opacity="0.992" d="M14 11h1v1H14z"/><path fill="#FCFCFC" fill-opacity="0.992" d="M14 4h1v1H14z"/><path fill="#F9F9F9" fill-opacity="0.996" d="M1 10h1v1H1z"/><path fill="#FFFFFF" fill-opacity="0.996" d="M5 1h1v1H5zM10 1h1v1H10z"/><path fill="#000000" d="M3 7h1v1H3zM4 7h1v1H4zM6 7h1v1H6zM7 7h1v1H7zM3 8h1v1H3zM7 8h1v1H7zM3 9h1v1H3zM7 9h1v1H7zM3 10h1v1H3zM5 10h1v1H5zM7 10h1v1H7z"/><path fill="#171717" d="M10 5h1v1H10z"/><path fill="#181818" d="M4 11h1v1H4z"/><path fill="#1B1B1B" d="M6 8h1v1H6zM4 10h1v1H4zM6 10h1v1H6z"/><path fill="#212121" d="M4 8h1v1H4z"/><path fill="#272727" d="M8 8h1v1H8z"/><path fill="#2C2C2C" d="M10 6h1v1H10z"/><path fill="#323232" d="M2 8h1v1H2zM2 9h1v1H2z"/><path fill="#363636" d="M5 7h1v1H5z"/><path fill="#393939" d="M8 9h1v1H8z"/><path fill="#404040" d="M2 7h1v1H2z"/><path fill="#414141" d="M2 10h1v1H2z"/><path fill="#444444" d="M8 7h1v1H8z"/><path fill="#494949" d="M8 10h1v1H8z"/><path fill="#686868" d="M7 6h1v1H7z"/><path fill="#696969" d="M11 5h1v1H11z"/><path fill="#6C6C6C" d="M12 8h1v1H12z"/><path fill="#707070" d="M3 11h1v1H3z"/><path fill="#787878" d="M13 4h1v1H13zM5 9h1v1H5z"/><path fill="#7C7C7C" d="M7 4h1v1H7zM6 9h1v1H6z"/><path fill="#7F7F7F" d="M13 7h1v1H13z"/><path fill="#808080" d="M9 5h1v1H9zM4 9h1v1H4z"/><path fill="#868686" d="M7 5h1v1H7z"/><path fill="#898989" d="M13 6h1v1H13z"/><path fill="#8A8A8A" d="M13 5h1v1H13z"/><path fill="#9D9D9D" d="M10 8h1v1H10z"/><path fill="#A4A4A4" d="M11 8h1v1H11z"/><path fill="#A6A6A6" d="M10 4h1v1H10z"/><path fill="#ACACAC" d="M9 8h1v1H9z"/><path fill="#B4B4B4" d="M5 8h1v1H5z"/><path fill="#B5B5B5" d="M12 9h1v1H12z"/><path fill="#B8B8B8" d="M5 11h1v1H5z"/><path fill="#BCBCBC" d="M8 4h1v1H8zM12 4h1v1H12z"/><path fill="#BDBDBD" d="M9 4h1v1H9zM11 4h1v1H11zM11 7h1v1H11z"/><path fill="#C0C0C0" d="M3 12h1v1H3z"/><path fill="#C1C1C1" d="M4 6h1v1H4zM6 6h1v1H6z"/><path fill="#C2C2C2" d="M3 6h1v1H3zM5 6h1v1H5z"/><path fill="#C3C3C3" d="M9 7h1v1H9zM11 9h1v1H11z"/><path fill="#C6C6C6" d="M6 11h1v1H6z"/><path fill="#C7C7C7" d="M7 11h1v1H7z"/><path fill="#D2D2D2" d="M4 12h1v1H4z"/><path fill="#D8D8D8" d="M11 6h1v1H11z"/><path fill="#DBDBDB" d="M13 8h1v1H13z"/><path fill="#DFDFDF" d="M10 3h1v1H10zM11 3h1v1H11z"/><path fill="#E0E0E0" d="M8 3h1v1H8zM9 3h1v1H9zM12 3h1v1H12z"/><path fill="#E4E4E4" d="M9 6h1v1H9z"/><path fill="#E6E6E6" d="M10 7h1v1H10z"/><path fill="#E8E8E8" d="M2 6h1v1H2z"/><path fill="#E9E9E9" d="M2 11h1v1H2z"/><path fill="#EAEAEA" d="M8 11h1v1H8z"/><path fill="#EDEDED" d="M8 6h1v1H8z"/><path fill="#F3F3F3" d="M12 7h1v1H12z"/><path fill="#F6F6F6" d="M13 3h1v1H13zM5 14h1v1H5zM6 14h1v1H6zM7 14h1v1H7zM9 14h1v1H9z"/><path fill="#F7F7F7" d="M2 12h1v1H2zM5 12h1v1H5zM8 12h1v1H8zM10 12h1v1H10zM11 12h1v1H11zM13 12h1v1H13zM2 13h1v1H2zM3 13h1v1H3zM4 13h1v1H4zM5 13h1v1H5zM6 13h1v1H6zM7 13h1v1H7zM8 13h1v1H8zM9 13h1v1H9zM10 13h1v1H10zM11 13h1v1H11zM12 13h1v1H12zM13 13h1v1H13zM8 14h1v1H8zM10 14h1v1H10z"/><path fill="#F8F8F8" d="M7 3h1v1H7zM9 11h1v1H9zM10 11h1v1H10zM11 11h1v1H11zM12 11h1v1H12zM13 11h1v1H13zM6 12h1v1H6zM7 12h1v1H7zM9 12h1v1H9zM12 12h1v1H12z"/><path fill="#F9F9F9" d="M9 10h1v1H9zM10 10h1v1H10zM11 10h1v1H11zM12 10h1v1H12zM13 10h1v1H13zM14 10h1v1H14z"/><path fill="#FAFAFA" d="M1 8h1v1H1zM14 8h1v1H14zM1 9h1v1H1zM9 9h1v1H9zM10 9h1v1H10zM13 9h1v1H13zM14 9h1v1H14z"/><path fill="#FBFBFB" d="M1 7h1v1H1zM14 7h1v1H14z"/><path fill="#FCFCFC" d="M2 5h1v1H2zM3 5h1v1H3zM4 5h1v1H4zM5 5h1v1H5zM6 5h1v1H6zM14 5h1v1H14zM1 6h1v1H1zM14 6h1v1H14z"/><path fill="#FDFDFD" d="M2 4h1v1H2zM3 4h1v1H3zM5 4h1v1H5zM1 5h1v1H1z"/><path fill="#FEFEFE" d="M6 1h1v1H6zM7 1h1v1H7zM9 1h1v1H9zM2 2h1v1H2zM3 2h1v1H3zM4 2h1v1H4zM5 2h1v1H5zM6 2h1v1H6zM7 2h1v1H7zM9 2h1v1H9zM2 3h1v1H2zM3 3h1v1H3zM4 3h1v1H4zM5 3h1v1H5zM6 3h1v1H6zM4 4h1v1H4zM6 4h1v1H6z"/><path fill="#FFFFFF" d="M8 1h1v1H8zM8 2h1v1H8zM10 2h1v1H10zM11 2h1v1H11zM12 2h1v1H12zM13 2h1v1H13zM8 5h1v1H8zM12 5h1v1H12zM12 6h1v1H12z"/></svg>"##;
 
 fn compile_title_bar<'a, Message, Provider>(
     token: &'a TitleBarToken<Message>,
@@ -3448,9 +3462,12 @@ where
     Message: Clone + Send + 'static,
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
-    let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
-    let mut text_column =
-        iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
+    let mut text_column = iced_column(vec![expander_title_content(
+        &token.title,
+        token.icon.as_ref(),
+        visual,
+    )])
+    .spacing(4);
 
     if let Some(description) = &token.description {
         text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
@@ -3657,9 +3674,14 @@ where
 
     if visual.mode != ThemeMode::Minimal {
         if let Some(icon) = &item.icon {
-            let icon_color = service_result_icon_color(icon, primary_color);
+            let icon_content = if let Some(image) = icon.image {
+                service_icon_image_sized(image, 16.0)
+            } else {
+                let icon_color = service_result_icon_color(icon, primary_color);
+                icon_element(icon, 16.0, icon_color)
+            };
             header_left_children.push(
-                iced_container(icon_element(icon, 16.0, icon_color))
+                iced_container(icon_content)
                     .width(IcedLength::Fixed(22.0))
                     .height(IcedLength::Fixed(visual.result_header_height))
                     .align_y(alignment::Vertical::Center)
@@ -3771,9 +3793,7 @@ where
         }
     }
 
-    let mut content = iced_column(vec![header.into()])
-        .width(IcedLength::Fill)
-        .clip(true);
+    let mut content = iced_column(vec![header.into()]).width(IcedLength::Fill);
 
     let body_text = if item.body.trim().is_empty() {
         item.pending_hint.as_deref().unwrap_or_default()
@@ -4771,6 +4791,146 @@ fn label_with_icon(
     }
 }
 
+fn expander_title_content<'a, Message>(
+    title: &str,
+    icon: Option<&win_fluent::IconToken>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let title_text = compile_text(title, TextStyle::BodyStrong, visual);
+    if visual.mode == ThemeMode::Minimal {
+        return title_text;
+    }
+
+    let Some(icon) = icon else {
+        return title_text;
+    };
+
+    iced_row(vec![expander_icon_element(icon, visual), title_text])
+        .spacing(10)
+        .align_y(alignment::Vertical::Center)
+        .into()
+}
+
+fn expander_icon_element<'a, Message>(
+    icon: &win_fluent::IconToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    if let Some(image) = icon.image {
+        return service_icon_image(image);
+    }
+
+    if let Some(color) = service_configuration_icon_color(icon) {
+        return service_icon_badge(icon, color);
+    }
+
+    icon_element(icon, 20.0, visual.text_secondary)
+}
+
+fn service_icon_image<'a, Message>(image: &'static [u8]) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    service_icon_image_sized(image, 20.0)
+}
+
+fn service_icon_image_sized<'a, Message>(
+    image: &'static [u8],
+    size: f32,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    iced_image(iced::widget::image::Handle::from_bytes(image))
+        .width(IcedLength::Fixed(size))
+        .height(IcedLength::Fixed(size))
+        .into()
+}
+
+fn service_icon_badge<'a, Message>(
+    icon: &win_fluent::IconToken,
+    background: Color,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let label = service_icon_badge_label(icon.name).to_string();
+    iced_container(
+        iced_text(label)
+            .font(Font::DEFAULT)
+            .size(8.0)
+            .line_height(1.0)
+            .color(Color::WHITE),
+    )
+    .width(IcedLength::Fixed(20.0))
+    .height(IcedLength::Fixed(20.0))
+    .align_x(alignment::Horizontal::Center)
+    .align_y(alignment::Vertical::Center)
+    .style(move |_| service_icon_badge_style(background))
+    .into()
+}
+
+fn service_icon_badge_style(background: Color) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(background)
+        .color(Color::WHITE)
+        .border(Border::default().rounded(4.0))
+}
+
+fn service_icon_badge_label(name: &str) -> &'static str {
+    match name {
+        "service-deepl" => "D",
+        "service-github" => "GH",
+        "service-ollama" => "O",
+        "service-openai" => "AI",
+        "service-deepseek" => "D",
+        "service-groq" => "G",
+        "service-zhipu" => "Z",
+        "service-gemini" => "G",
+        "service-doubao" => "D",
+        "service-caiyun" => "C",
+        "service-youdao" => "Y",
+        "service-volcano" => "V",
+        "service-mdx" => "M",
+        "service-mdx-encrypted" => "M",
+        "service-windows-local-ai" | "service-local-ai" | "service-ai" => "AI",
+        "service-custom-openai" => "AI",
+        "service-builtin-ai" => "AI",
+        "service-niutrans" => "N",
+        _ => "",
+    }
+}
+
+fn service_configuration_icon_color(icon: &win_fluent::IconToken) -> Option<Color> {
+    match icon.name {
+        "service-deepl" => Some(Color::from_rgb8(17, 35, 55)),
+        "service-windows-local-ai" | "service-local-ai" => Some(Color::from_rgb8(112, 72, 232)),
+        "service-ollama" => Some(Color::from_rgb8(43, 43, 43)),
+        "service-openai" | "service-ai" | "service-custom-openai" => {
+            Some(Color::from_rgb8(16, 163, 127))
+        }
+        "service-deepseek" => Some(Color::from_rgb8(74, 111, 255)),
+        "service-groq" => Some(Color::from_rgb8(242, 78, 48)),
+        "service-zhipu" => Some(Color::from_rgb8(87, 96, 255)),
+        "service-github" => Some(Color::from_rgb8(36, 41, 47)),
+        "service-gemini" => Some(Color::from_rgb8(66, 133, 244)),
+        "service-builtin-ai" => Some(Color::from_rgb8(92, 91, 230)),
+        "service-doubao" => Some(Color::from_rgb8(242, 81, 132)),
+        "service-caiyun" => Some(Color::from_rgb8(43, 129, 255)),
+        "service-niutrans" => Some(Color::from_rgb8(0, 111, 205)),
+        "service-youdao" => Some(Color::from_rgb8(236, 65, 65)),
+        "service-volcano" => Some(Color::from_rgb8(239, 68, 68)),
+        "service-mdx" => Some(Color::from_rgb8(35, 134, 54)),
+        "service-mdx-encrypted" => Some(Color::from_rgb8(116, 74, 22)),
+        _ => None,
+    }
+}
+
 fn button_content<'a, Message>(
     label: &str,
     kind: ButtonKind,
@@ -4872,12 +5032,10 @@ where
     Message: Clone + Send + 'static,
 {
     if icon.name == "app" {
-        return iced::widget::svg(iced::widget::svg::Handle::from_memory(
-            EASYDICT_APP_ICON_SVG,
-        ))
-        .width(IcedLength::Fixed(16.0))
-        .height(IcedLength::Fixed(16.0))
-        .into();
+        return iced::widget::svg(iced::widget::svg::Handle::from_memory(DEFAULT_APP_ICON_SVG))
+            .width(IcedLength::Fixed(16.0))
+            .height(IcedLength::Fixed(16.0))
+            .into();
     }
 
     icon_element(icon, 16.0, color)
@@ -4994,6 +5152,8 @@ fn text_size(style: TextStyle, visual: IcedVisualTheme) -> f32 {
         TextStyle::Body => visual.body_size,
         TextStyle::BodyLarge => visual.body_large_size,
         TextStyle::BodyStrong => visual.body_strong_size,
+        TextStyle::Success => visual.body_strong_size,
+        TextStyle::SectionTitle => 18.0,
         TextStyle::Subtitle => visual.subtitle_size,
         TextStyle::Title => visual.title_size,
         TextStyle::TitleLarge => visual.title_large_size,
@@ -5002,9 +5162,12 @@ fn text_size(style: TextStyle, visual: IcedVisualTheme) -> f32 {
 
 fn text_font(style: TextStyle) -> Font {
     let weight = match style {
-        TextStyle::BodyStrong | TextStyle::Subtitle | TextStyle::Title | TextStyle::TitleLarge => {
-            font::Weight::Semibold
-        }
+        TextStyle::BodyStrong
+        | TextStyle::Success
+        | TextStyle::SectionTitle
+        | TextStyle::Subtitle
+        | TextStyle::Title
+        | TextStyle::TitleLarge => font::Weight::Semibold,
         TextStyle::Caption | TextStyle::CaptionSmall | TextStyle::Body | TextStyle::BodyLarge => {
             font::Weight::Normal
         }
@@ -5023,7 +5186,12 @@ fn text_font_for_value(style: TextStyle, value: &str) -> Font {
         font.family = font::Family::Name("Microsoft YaHei UI");
         if matches!(
             style,
-            TextStyle::BodyStrong | TextStyle::Subtitle | TextStyle::Title | TextStyle::TitleLarge
+            TextStyle::BodyStrong
+                | TextStyle::SectionTitle
+                | TextStyle::Success
+                | TextStyle::Subtitle
+                | TextStyle::Title
+                | TextStyle::TitleLarge
         ) {
             font.weight = font::Weight::Medium;
         }
@@ -6359,7 +6527,9 @@ fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::contain
         .background(visual.result_surface)
         .color(visual.text_primary)
         .border(control_border(visual, visual.border, visual.stroke_control))
-        .shadow(Shadow::default())
+        // Raised service cards, matching the .NET WinUI result rows which float
+        // above the surface with a subtle drop shadow.
+        .shadow(elevation_shadow(visual, 3.0))
 }
 
 fn control_border(visual: IcedVisualTheme, color: Color, width: f32) -> Border {
@@ -6388,9 +6558,11 @@ fn text_color(style: TextStyle, visual: IcedVisualTheme) -> Color {
         TextStyle::Body
         | TextStyle::BodyLarge
         | TextStyle::BodyStrong
+        | TextStyle::SectionTitle
         | TextStyle::Subtitle
         | TextStyle::Title
         | TextStyle::TitleLarge => visual.text_primary,
+        TextStyle::Success => visual.success,
     }
 }
 
@@ -8071,6 +8243,60 @@ mod tests {
     }
 
     #[test]
+    fn tile_interaction_states_match_winui_static_tab_template() {
+        let theme = ThemeTokens::fluent_light();
+        let visual = IcedVisualTheme::from_tokens(&theme);
+
+        let unselected_active = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            false,
+            iced::widget::button::Status::Active,
+        );
+        let unselected_hover = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            false,
+            iced::widget::button::Status::Hovered,
+        );
+        let unselected_pressed = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            false,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_button_style_visual_eq(&unselected_active, &unselected_hover);
+        assert_button_style_visual_eq(&unselected_active, &unselected_pressed);
+
+        let selected_active = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            true,
+            iced::widget::button::Status::Active,
+        );
+        let selected_hover = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            true,
+            iced::widget::button::Status::Hovered,
+        );
+        let selected_pressed = button_style_with_state(
+            visual,
+            ButtonKind::Tile,
+            false,
+            true,
+            iced::widget::button::Status::Pressed,
+        );
+        assert_button_style_visual_eq(&selected_active, &selected_hover);
+        assert_button_style_visual_eq(&selected_active, &selected_pressed);
+    }
+
+    #[test]
     fn checkbox_label_italic_maps_to_iced_font_style() {
         let normal = checkbox_label_font("OpenAI", false);
         assert_eq!(normal.style, font::Style::Normal);
@@ -8281,6 +8507,30 @@ mod tests {
         assert_eq!(chunk_for_wrap(Vec::<i32>::new(), 3), Vec::<Vec<i32>>::new());
         // Zero cap is clamped to 1 (one item per row).
         assert_eq!(chunk_for_wrap(vec![1, 2], 0), vec![vec![1], vec![2]]);
+    }
+
+    fn assert_button_style_visual_eq(
+        left: &iced::widget::button::Style,
+        right: &iced::widget::button::Style,
+    ) {
+        assert_eq!(
+            optional_background_color(left.background),
+            optional_background_color(right.background)
+        );
+        assert_eq!(left.text_color, right.text_color);
+        assert_eq!(left.border.color, right.border.color);
+        assert_eq!(left.border.width, right.border.width);
+        assert_eq!(left.border.radius.top_left, right.border.radius.top_left);
+        assert_eq!(left.border.radius.top_right, right.border.radius.top_right);
+        assert_eq!(
+            left.border.radius.bottom_right,
+            right.border.radius.bottom_right
+        );
+        assert_eq!(
+            left.border.radius.bottom_left,
+            right.border.radius.bottom_left
+        );
+        assert_eq!(left.shadow, right.shadow);
     }
 
     fn optional_background_color(background: Option<Background>) -> iced::Color {

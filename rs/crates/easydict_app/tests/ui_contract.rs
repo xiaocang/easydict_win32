@@ -35,15 +35,15 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert_control_contains(&snapshot, "InputTextBox", "min_height=80");
     assert_control_contains(&snapshot, "InputTextBox", "max_height=96");
     assert_control_contains(&snapshot, "InputTextBox", "chrome=Standard");
-    assert!(snapshot.contains("AdaptiveSwitch breakpoint_width=500"));
+    assert!(snapshot.contains("AdaptiveSwitch breakpoint_width=360"));
     assert!(snapshot.contains("id=\"SourceLangCombo\""));
-    assert_control_contains(&snapshot, "SourceLangCombo", "width=Fill");
+    assert_control_contains(&snapshot, "SourceLangCombo", "width=Fixed(130)");
     assert!(snapshot.contains("id=\"SourceLangComboNarrow\""));
     assert_control_contains(&snapshot, "SourceLangComboNarrow", "width=Fill");
     assert!(snapshot.contains("id=\"SwapLanguageButton\""));
     assert!(snapshot.contains("id=\"SwapLanguageButtonNarrow\""));
     assert!(snapshot.contains("id=\"TargetLangCombo\""));
-    assert_control_contains(&snapshot, "TargetLangCombo", "width=Fill");
+    assert_control_contains(&snapshot, "TargetLangCombo", "width=Fixed(130)");
     assert!(snapshot.contains("id=\"TargetLangComboNarrow\""));
     assert_control_contains(&snapshot, "TargetLangComboNarrow", "width=Fill");
     assert!(snapshot.contains("id=\"TranslateButton\""));
@@ -66,22 +66,13 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert!(snapshot.contains("retry=selection_input"));
     assert!(snapshot.contains("selected=\"auto\""));
     for language in [
-        "ar:\"Arabic\"",
-        "da:\"Danish\"",
         "de:\"German\"",
         "en:\"English\"",
         "es:\"Spanish\"",
         "fr:\"French\"",
-        "hi:\"Hindi\"",
-        "id:\"Indonesian\"",
-        "it:\"Italian\"",
         "ja:\"Japanese\"",
         "ko:\"Korean\"",
-        "ms:\"Malay\"",
-        "th:\"Thai\"",
-        "vi:\"Vietnamese\"",
         "zh-Hans:\"Chinese (Simplified)\"",
-        "zh-Hant:\"Chinese (Traditional)\"",
     ] {
         assert!(
             snapshot.contains(language),
@@ -811,19 +802,88 @@ fn advanced_settings_render_ocr_layout_cache_prompt_and_proxy_controls() {
 }
 
 #[test]
-fn services_settings_deepl_expander_exposes_configuration_controls() {
+fn services_settings_default_view_matches_winui_overview_structure() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::Services;
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
-    assert!(snapshot.contains("id=\"DeepLServiceExpander\""));
-    assert_control_contains(&snapshot, "DeepLServiceExpander", "kind=Expander");
+    assert_control_contains(&snapshot, "settings.services", "spacing=24");
+    assert_control_contains(&snapshot, "EnabledServicesSection", "spacing=12");
+    assert!(snapshot.contains("id=\"EnabledServicesHeaderText\""));
+    assert!(snapshot.contains("id=\"EnabledServicesHelpIcon\""));
+    assert!(snapshot.contains("id=\"EnabledServicesDescriptionText\""));
+    assert!(snapshot.contains("id=\"ImportMdxDictionaryButton\""));
+    assert!(snapshot.contains("id=\"ImportedMdxSummaryText\""));
+    assert!(snapshot.contains("id=\"settings.services.international\""));
+    assert!(snapshot.contains("id=\"ServiceConfigurationSection\""));
+    assert!(snapshot.contains("id=\"ServiceConfigurationHeaderText\""));
+    assert!(snapshot.contains("id=\"ServiceConfigHelpIcon\""));
+    assert!(snapshot.contains("id=\"ServiceConfigurationDescriptionText\""));
+    assert!(!snapshot.contains("id=\"settings.services.enabled_list\""));
+    assert!(!snapshot.contains("Translation services"));
+
+    assert_control_contains(&snapshot, "DeepLServiceExpander", "expanded=false");
+    assert_control_contains(&snapshot, "DeepLServiceExpander", "icon=service-deepl");
+    assert_control_contains(&snapshot, "WindowsLocalAIExpander", "expanded=false");
     assert_control_contains(
         &snapshot,
-        "DeepLServiceExpander",
-        "description=\"Free API mode\"",
+        "WindowsLocalAIExpander",
+        "icon=service-windows-local-ai",
     );
+    assert!(!snapshot.contains("description=\"Free API mode\""));
+    assert!(!snapshot.contains("description=\"Local OpenAI-compatible endpoint\""));
+    assert!(!snapshot.contains("API key required"));
+    assert!(!snapshot.contains("API token required"));
+    assert!(!snapshot.contains("Access Key ID and Secret Access Key required"));
+    assert!(!snapshot.contains("Web dictionary mode"));
+    assert!(!snapshot.contains("Standard API mode"));
+    assert!(!snapshot.contains("Quality-optimized mode"));
+    assert!(!snapshot.contains("No API key required"));
+    assert!(!snapshot.contains("Not tested"));
+    assert!(!snapshot.contains("Not refreshed"));
+    assert!(!snapshot.contains("id=\"DeepLKeyBox\""));
+    assert!(!snapshot.contains("id=\"LocalAIProviderCombo\""));
+
+    let enabled = snapshot
+        .find("id=\"EnabledServicesSection\"")
+        .expect("enabled services section should be present");
+    let configuration = snapshot
+        .find("id=\"ServiceConfigurationSection\"")
+        .expect("service configuration section should be present");
+    let deepl = snapshot
+        .find("id=\"DeepLServiceExpander\"")
+        .expect("DeepL expander should be present");
+    let local_ai = snapshot
+        .find("id=\"WindowsLocalAIExpander\"")
+        .expect("Windows Local AI expander should be present");
+    let ollama = snapshot
+        .find("id=\"OllamaServiceExpander\"")
+        .expect("Ollama expander should be present");
+    let openai = snapshot
+        .find("id=\"OpenAIServiceExpander\"")
+        .expect("OpenAI expander should be present");
+
+    assert!(enabled < configuration);
+    assert!(configuration < deepl);
+    assert!(deepl < local_ai);
+    assert!(local_ai < ollama);
+    assert!(ollama < openai);
+}
+
+#[test]
+fn services_settings_deepl_expander_exposes_configuration_controls() {
+    let mut state = EasydictUiState::default();
+    state.settings.selected_section = easydict_app::SettingsSection::Services;
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        "deepl".to_string(),
+        true,
+    ));
+
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+
+    assert!(snapshot.contains("id=\"DeepLServiceExpander\""));
+    assert_control_contains(&snapshot, "DeepLServiceExpander", "expanded=true");
     assert!(snapshot.contains("id=\"DeepLKeyBox\""));
     assert_control_contains(&snapshot, "DeepLKeyBox", "action=text_input");
     assert!(snapshot.contains("id=\"DeepLKeyRevealButton\""));
@@ -846,11 +906,6 @@ fn services_settings_deepl_expander_exposes_configuration_controls() {
     assert!(state.settings.unsaved_changes);
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
-    assert_control_contains(
-        &snapshot,
-        "DeepLServiceExpander",
-        "description=\"Quality-optimized mode\"",
-    );
     assert_control_contains(&snapshot, "DeepLFreeCheck", "checked=false");
     assert_control_enabled(&snapshot, "DeepLFreeCheck", false);
     assert_control_contains(&snapshot, "DeepLQualityCheck", "checked=true");
@@ -860,6 +915,10 @@ fn services_settings_deepl_expander_exposes_configuration_controls() {
 fn services_settings_local_ai_exposes_provider_configuration() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::Services;
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        "windows-local-ai".to_string(),
+        true,
+    ));
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
@@ -908,7 +967,7 @@ fn services_settings_local_ai_exposes_provider_configuration() {
         assert!(snapshot.contains(&format!("id=\"{id}\"")), "missing {id}");
     }
 
-    assert_control_contains(&snapshot, "WindowsLocalAIExpander", "kind=Expander");
+    assert_control_contains(&snapshot, "WindowsLocalAIExpander", "expanded=true");
     assert_control_contains(&snapshot, "LocalAIProviderCombo", "selected=\"Auto\"");
     assert_control_contains(
         &snapshot,
@@ -1005,6 +1064,12 @@ fn services_settings_local_ai_exposes_provider_configuration() {
 fn services_settings_openai_and_ollama_expose_provider_configuration() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::Services;
+    for service_id in ["ollama", "openai"] {
+        state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+            service_id.to_string(),
+            true,
+        ));
+    }
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
@@ -1014,7 +1079,6 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
         "OllamaModelCombo",
         "RefreshOllamaButton",
         "TestOllamaButton",
-        "OllamaStatusText",
         "OpenAIServiceExpander",
         "OpenAIKeyHeaderText",
         "OpenAIKeyBox",
@@ -1023,7 +1087,6 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
         "OpenAIApiFormatCombo",
         "OpenAIDetectedFormatText",
         "OpenAIModelCombo",
-        "OpenAIStatusText",
         "TestOpenAIButton",
     ] {
         assert!(snapshot.contains(&format!("id=\"{id}\"")), "missing {id}");
@@ -1097,6 +1160,21 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
 fn services_settings_render_llm_provider_configuration_rows() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::Services;
+    for service_id in [
+        "deepseek",
+        "groq",
+        "zhipu",
+        "github",
+        "gemini",
+        "custom-openai",
+        "builtin",
+        "doubao",
+    ] {
+        state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+            service_id.to_string(),
+            true,
+        ));
+    }
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
@@ -1229,24 +1307,27 @@ fn services_settings_render_llm_provider_configuration_rows() {
 fn services_settings_render_traditional_http_provider_configuration() {
     let mut state = EasydictUiState::default();
     state.settings.selected_section = easydict_app::SettingsSection::Services;
+    for service_id in ["caiyun", "niutrans", "youdao", "volcano"] {
+        state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+            service_id.to_string(),
+            true,
+        ));
+    }
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
     for id in [
         "CaiyunServiceExpander",
-        "CaiyunStatusText",
         "CaiyunKeyHeaderText",
         "CaiyunKeyBox",
         "CaiyunKeyRevealButton",
         "TestCaiyunButton",
         "NiuTransServiceExpander",
-        "NiuTransStatusText",
         "NiuTransKeyHeaderText",
         "NiuTransKeyBox",
         "NiuTransKeyRevealButton",
         "TestNiuTransButton",
         "YoudaoServiceExpander",
-        "YoudaoStatusText",
         "YoudaoAppKeyHeaderText",
         "YoudaoAppKeyBox",
         "YoudaoAppKeyRevealButton",
@@ -1321,7 +1402,6 @@ fn services_settings_render_no_config_service_section() {
         "settings.services.free_services",
         "FreeServicesHeaderText",
         "FreeServiceGoogleTranslateRow",
-        "FreeServiceGoogleDictRow",
         "FreeServicesDescriptionText",
     ] {
         assert!(snapshot.contains(&format!("id=\"{id}\"")), "missing {id}");
@@ -1333,7 +1413,8 @@ fn services_settings_render_no_config_service_section() {
         "Free Services (No Configuration Required)",
     );
     assert!(snapshot.contains("Text value=\"Google Translate\""));
-    assert!(snapshot.contains("Text value=\"Google Dict\""));
+    assert!(!snapshot.contains("Text value=\"Google Dict\""));
+    assert!(!snapshot.contains("StatusBadge label=\"Ready\""));
     assert_control_contains(&snapshot, "FreeServicesDescriptionText", "without API keys");
 
     #[cfg(feature = "enable-linguee-service")]
@@ -1704,6 +1785,20 @@ fn services_settings_mdx_import_reflects_imported_dictionaries() {
         "1 MDX dictionary imported",
     );
     assert!(snapshot.contains("id=\"ImportedMdxDictionaryExpander.mdx::demo-dictionary\""));
+    assert_control_contains(
+        &snapshot,
+        "ImportedMdxDictionaryExpander.mdx::demo-dictionary",
+        "description=none",
+    );
+    assert!(!snapshot.contains("mdx::demo-dictionary\" icon=none kind=Expander"));
+    assert!(!snapshot.contains("id=\"MdxFilePathText.mdx::demo-dictionary\""));
+
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        "mdx::demo-dictionary".to_string(),
+        true,
+    ));
+    state.settings.selected_section = easydict_app::SettingsSection::Services;
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert!(snapshot.contains("id=\"MdxFilePathText.mdx::demo-dictionary\""));
     assert!(snapshot.contains("id=\"MdxMddPathsText.mdx::demo-dictionary\""));
 
@@ -1737,6 +1832,23 @@ fn services_settings_mdx_dynamic_config_edits_rescans_and_deletes() {
     state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
     state.settings.selected_section = easydict_app::SettingsSection::Services;
 
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+    assert!(snapshot.contains(&format!(
+        "id=\"ImportedMdxDictionaryExpander.{service_id}\""
+    )));
+    assert_control_contains(
+        &snapshot,
+        &format!("ImportedMdxDictionaryExpander.{service_id}"),
+        "description=none",
+    );
+    assert!(!snapshot.contains(&format!("id=\"MdxEmailBox.{service_id}\"")));
+    assert!(!snapshot.contains(&format!("id=\"MdxRegcodeBox.{service_id}\"")));
+
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        service_id.clone(),
+        true,
+    ));
+    state.settings.selected_section = easydict_app::SettingsSection::Services;
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert!(snapshot.contains(&format!("id=\"MdxEmailBox.{service_id}\"")));
     assert!(snapshot.contains(&format!("id=\"MdxRegcodeBox.{service_id}\"")));
@@ -1858,6 +1970,23 @@ fn services_settings_mdx_record_encrypted_dictionary_keeps_credentials() {
     assert!(state.settings.imported_mdx_dictionaries[0].is_encrypted);
     state.settings.selected_section = easydict_app::SettingsSection::Services;
 
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+    assert!(snapshot.contains(&format!(
+        "id=\"ImportedMdxDictionaryExpander.{service_id}\""
+    )));
+    assert_control_contains(
+        &snapshot,
+        &format!("ImportedMdxDictionaryExpander.{service_id}"),
+        "description=none",
+    );
+    assert!(!snapshot.contains(&format!("id=\"MdxEmailBox.{service_id}\"")));
+    assert!(!snapshot.contains(&format!("id=\"MdxRegcodeBox.{service_id}\"")));
+
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        service_id.clone(),
+        true,
+    ));
+    state.settings.selected_section = easydict_app::SettingsSection::Services;
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert!(snapshot.contains(&format!("id=\"MdxEmailBox.{service_id}\"")));
     assert!(snapshot.contains(&format!("id=\"MdxRegcodeBox.{service_id}\"")));
@@ -2249,14 +2378,38 @@ fn main_window_preview_scenarios_cover_translation_states() {
     );
     assert_control_contains(&initial, "StatusIndicator", "label=\"Ready\"");
     assert_control_contains(&initial, "InputTextBox", "focused=false");
+    assert!(initial.contains("ResultList items=5"));
     assert_control_contains(&initial, "windows-local-ai", "title=\"Windows Local AI\"");
+    assert_control_contains(
+        &initial,
+        "windows-local-ai",
+        "pending_hint=\"Click to query this service\"",
+    );
     assert_control_contains(
         &initial,
         "mdx::collins-cobuild-english-usage",
         "title=\"Collins COBUILD English Usage\"",
     );
-    assert!(!initial.contains("id=\"google\""));
+    assert_control_not_contains(
+        &initial,
+        "mdx::collins-cobuild-english-usage",
+        "pending_hint=\"Click to query this service\"",
+    );
+    assert_control_contains(&initial, "google", "title=\"Google Translate\"");
+    assert_control_not_contains(
+        &initial,
+        "google",
+        "pending_hint=\"Click to query this service\"",
+    );
+    assert_control_contains(&initial, "volcano", "title=\"Volcano\"");
+    assert_control_contains(
+        &initial,
+        "volcano",
+        "pending_hint=\"Click to query this service\"",
+    );
     assert!(!initial.contains("id=\"openai\""));
+    assert!(!initial.contains("service(s) completed"));
+    assert!(!initial.contains("已完成 0 个服务"));
 
     let result_header_hover = win_fluent_testkit::view_snapshot(&main_window_view(
         &EasydictUiState::preview(PreviewScenario::ResultHeaderHover, ThemeMode::Light),
@@ -2362,7 +2515,10 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     assert!(capture.contains("id=\"capture.overlay.layers\""));
     assert!(capture.contains("layers=1"));
     assert_control_contains(&capture, "capture.status_panel", "width=Fixed(460)");
-    assert!(capture.contains("phase=Detecting"));
+    // Phase is asserted structurally via `CaptureOverlay phase="..."` below; the
+    // status panel shows a user-facing instruction bar matching the .NET overlay
+    // instead of debug text.
+    assert!(capture.contains("Drag to select region"));
     assert!(capture.contains("Button label=\"Confirm\""));
     assert!(capture.contains("Button label=\"Cancel\""));
     assert!(capture.contains("id=\"capture.nudge_commands\""));

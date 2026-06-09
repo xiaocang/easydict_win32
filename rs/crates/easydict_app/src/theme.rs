@@ -58,7 +58,9 @@ fn easydict_light() -> ThemeTokens {
         backdrop: BackdropKind::Mica,
         background: Color::rgb(247, 249, 252),
         surface: Color::rgb(255, 255, 255),
-        surface_alt: Color::rgb(241, 244, 248),
+        // Elevated cards (source/results cards) are white like the .NET WinUI app;
+        // the blue-gray tint is reserved for input fields (`input_surface`).
+        surface_alt: Color::rgb(255, 255, 255),
         selected_surface: Color::rgb(234, 243, 255),
         selected_foreground: Color::rgb(23, 78, 139),
         selected_border: Color::rgb(92, 143, 199),

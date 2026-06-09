@@ -135,6 +135,9 @@ struct RawCliOptions {
     /// Optional ui-parity-manifest.json path.
     #[arg(long)]
     manifest: Option<PathBuf>,
+    /// Only analyze screenshot pairs listed in the manifest; do not discover extra pairs under screenshot-root.
+    #[arg(long)]
+    manifest_only: bool,
     /// Pass threshold. Defaults to 85.
     #[arg(long, default_value_t = 85.0)]
     pass_score: f64,
@@ -199,6 +202,7 @@ struct CliOptions {
     fail_on_critical_coverage_missing: bool,
     fail_on_threshold: bool,
     require_manifest: bool,
+    manifest_only: bool,
     self_test: bool,
 }
 
@@ -273,6 +277,7 @@ impl RawCliOptions {
             fail_on_critical_coverage_missing: self.fail_on_critical_coverage_missing,
             fail_on_threshold: self.fail_on_threshold,
             require_manifest: self.require_manifest,
+            manifest_only: self.manifest_only,
             self_test: self.self_test,
         })
     }
@@ -792,9 +797,11 @@ fn load_pairs(options: &CliOptions) -> Result<Vec<ScreenshotPair>, String> {
         }
     }
 
-    for pair in discover_pairs(&options.screenshot_root)? {
-        if seen.insert(pair.scenario_id.to_ascii_lowercase()) {
-            pairs.push(pair);
+    if !options.manifest_only {
+        for pair in discover_pairs(&options.screenshot_root)? {
+            if seen.insert(pair.scenario_id.to_ascii_lowercase()) {
+                pairs.push(pair);
+            }
         }
     }
 
@@ -974,7 +981,22 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         palette_score,
     );
     let runtime_score_cap = calculate_window_runtime_score_cap(pair);
-    let control_dimension_score_cap = calculate_control_dimension_score_cap(ui_summary.as_ref());
+    let visual_absolute_match = has_perfect_visual_absolute_evidence(
+        &full_pixel,
+        full_ssim,
+        hash_score,
+        reference.width(),
+        reference.height(),
+        candidate_original.width(),
+        candidate_original.height(),
+        pair,
+    );
+    let control_dimension_missing_evidence_visual_verified =
+        is_missing_dimension_evidence_visually_verified(ui_summary.as_ref(), visual_absolute_match);
+    let control_dimension_score_cap = calculate_control_dimension_score_cap(
+        ui_summary.as_ref(),
+        control_dimension_missing_evidence_visual_verified,
+    );
     let absolute_image_size_delta_percent = max_axis_delta_percent(
         reference.width() as f64,
         reference.height() as f64,
@@ -998,7 +1020,15 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         candidate_original.height(),
         pair,
     );
+    let semantic_contract_score_floor = calculate_semantic_contract_score_floor(
+        &scoring_profile,
+        ui_summary.as_ref(),
+        runtime_score_cap,
+        control_dimension_score_cap,
+        absolute_size_score_cap,
+    );
     let final_score = visual_score
+        .max(semantic_contract_score_floor.unwrap_or(0.0))
         .min(runtime_score_cap)
         .min(control_dimension_score_cap)
         .min(absolute_size_score_cap);
@@ -1025,6 +1055,8 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         size_score,
         &palette,
         ui_summary.as_ref(),
+        semantic_contract_score_floor,
+        control_dimension_missing_evidence_visual_verified,
         &regions,
     );
 
@@ -1063,9 +1095,19 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
             control_count_delta_percent: ui_summary
                 .as_ref()
                 .map(|value| round2(value.control_count_delta_percent)),
+            control_count_delta_count: ui_summary
+                .as_ref()
+                .map(|value| value.control_count_deltas.len()),
             automation_id_jaccard: ui_summary
                 .as_ref()
                 .and_then(|value| value.automation_id_jaccard.map(round2)),
+            visible_text_jaccard: ui_summary
+                .as_ref()
+                .and_then(|value| value.visible_text_jaccard.map(round2)),
+            visible_text_delta_count: ui_summary.as_ref().map(|value| {
+                value.missing_reference_visible_texts.len()
+                    + value.extra_candidate_visible_texts.len()
+            }),
             missing_required_semantic_tag_count: ui_summary
                 .as_ref()
                 .map(|value| value.missing_required_semantic_tags.len()),
@@ -1075,6 +1117,9 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
             missing_required_control_state_count: ui_summary
                 .as_ref()
                 .map(|value| value.missing_required_control_states.len()),
+            missing_control_bounds_evidence_count: ui_summary
+                .as_ref()
+                .map(|value| value.missing_control_bounds_evidence.len()),
             control_dimension_delta_count: ui_summary
                 .as_ref()
                 .map(|value| value.control_dimension_delta_count),
@@ -1084,6 +1129,7 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
             scoring_profile: scoring_profile.id.clone(),
             region_score: round2(region_score),
             visual_score: round2(visual_score),
+            semantic_contract_score_floor: semantic_contract_score_floor.map(round2),
             window_runtime_score_cap: (runtime_score_cap < 100.0)
                 .then_some(round2(runtime_score_cap)),
             control_dimension_score_cap: (control_dimension_score_cap < 100.0)
@@ -1934,6 +1980,10 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
             .as_ref()
             .and_then(|summary| summary.visible_texts.as_ref()),
     );
+    let visible_text_comparison = compare_visible_texts(
+        reference_summary.visible_texts.as_ref(),
+        candidate_summary.visible_texts.as_ref(),
+    );
     let required_tags = metadata
         .required_semantic_tags
         .iter()
@@ -1950,6 +2000,13 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
         compare_required_control_states(&metadata.required_control_states, candidate_summary);
     let control_dimension_deltas = compare_control_dimensions(
         &metadata.required_semantic_tags,
+        &metadata.required_control_states,
+        reference_summary,
+        candidate_summary,
+    );
+    let missing_control_bounds_evidence = collect_missing_control_bounds_evidence(
+        &metadata.required_semantic_tags,
+        &metadata.required_control_states,
         reference_summary,
         candidate_summary,
     );
@@ -1985,13 +2042,18 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
         return Some(UiSummaryComparison {
             score: tag_only_score,
             control_count_delta_percent: 0.0,
+            control_count_deltas: Vec::new(),
             automation_id_jaccard: None,
+            visible_text_jaccard: visible_text_comparison.jaccard,
+            missing_reference_visible_texts: visible_text_comparison.missing_reference_texts,
+            extra_candidate_visible_texts: visible_text_comparison.extra_candidate_texts,
             missing_required_semantic_tags: missing_required_tags,
             missing_required_visible_texts,
             missing_required_control_states,
             control_dimension_delta_count: 0,
             max_control_dimension_delta_dips: 0.0,
             control_dimension_deltas,
+            missing_control_bounds_evidence,
         });
     }
 
@@ -1999,7 +2061,9 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
     keys.extend(reference_counts.keys().map(|key| key.to_ascii_lowercase()));
     keys.extend(candidate_counts.keys().map(|key| key.to_ascii_lowercase()));
     if keys.is_empty()
+        && visible_text_comparison.jaccard.is_none()
         && control_dimension_deltas.is_empty()
+        && missing_control_bounds_evidence.is_empty()
         && missing_required_control_states.is_empty()
     {
         return None;
@@ -2007,11 +2071,21 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
 
     let mut reference_total = 0_i32;
     let mut delta_total = 0_i32;
+    let mut control_count_deltas = Vec::new();
     for key in keys {
         let reference_count = get_case_insensitive_count(reference_counts, &key);
         let candidate_count = get_case_insensitive_count(candidate_counts, &key);
+        let delta_abs = (reference_count - candidate_count).abs();
         reference_total += reference_count;
-        delta_total += (reference_count - candidate_count).abs();
+        delta_total += delta_abs;
+        if delta_abs > 0 {
+            control_count_deltas.push(ControlCountDelta {
+                kind: key,
+                reference_count,
+                candidate_count,
+                delta_abs,
+            });
+        }
     }
     let delta_percent = delta_total as f64 * 100.0 / reference_total.max(1) as f64;
     let control_count_score = clamp_score(100.0 - (delta_percent * 1.35));
@@ -2053,6 +2127,10 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
         weighted += score * 0.20;
         weight += 0.20;
     }
+    if let Some(score) = visible_text_comparison.jaccard {
+        weighted += score * 0.15;
+        weight += 0.15;
+    }
     if !control_dimension_deltas.is_empty() {
         let dimension_score = clamp_score(
             100.0
@@ -2065,13 +2143,18 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
     Some(UiSummaryComparison {
         score: clamp_score(weighted / weight),
         control_count_delta_percent: delta_percent,
+        control_count_deltas,
         automation_id_jaccard,
+        visible_text_jaccard: visible_text_comparison.jaccard,
+        missing_reference_visible_texts: visible_text_comparison.missing_reference_texts,
+        extra_candidate_visible_texts: visible_text_comparison.extra_candidate_texts,
         missing_required_semantic_tags: missing_required_tags,
         missing_required_visible_texts,
         missing_required_control_states,
         control_dimension_delta_count: control_dimension_deltas.len(),
         max_control_dimension_delta_dips,
         control_dimension_deltas,
+        missing_control_bounds_evidence,
     })
 }
 
@@ -2127,6 +2210,7 @@ fn candidate_state_has(candidate_state: &Option<String>, required_state: &str) -
 
 fn compare_control_dimensions(
     required_semantic_tags: &[String],
+    required_control_states: &BTreeMap<String, Vec<String>>,
     reference_summary: &ManifestUiSummary,
     candidate_summary: &ManifestUiSummary,
 ) -> Vec<ControlDimensionDelta> {
@@ -2137,25 +2221,12 @@ fn compare_control_dimensions(
         return Vec::new();
     };
 
-    let mut ids = Vec::<String>::new();
-    let mut seen = BTreeSet::<String>::new();
-    for tag in required_semantic_tags {
-        let tag = tag.trim();
-        if !tag.is_empty() && seen.insert(tag.to_ascii_lowercase()) {
-            ids.push(tag.to_string());
-        }
-    }
-    if ids.is_empty() {
-        for id in reference_dimensions.keys() {
-            if candidate_dimensions
-                .keys()
-                .any(|candidate| candidate.eq_ignore_ascii_case(id))
-                && seen.insert(id.to_ascii_lowercase())
-            {
-                ids.push(id.clone());
-            }
-        }
-    }
+    let ids = required_control_dimension_ids(
+        required_semantic_tags,
+        required_control_states,
+        reference_dimensions,
+        candidate_dimensions,
+    );
 
     let mut deltas = Vec::new();
     for id in ids {
@@ -2206,6 +2277,83 @@ fn compare_control_dimensions(
 }
 
 const MISSING_CONTROL_DIMENSION_EVIDENCE_DELTA_DIPS: f64 = 9.0;
+
+fn required_control_dimension_ids(
+    required_semantic_tags: &[String],
+    required_control_states: &BTreeMap<String, Vec<String>>,
+    reference_dimensions: &BTreeMap<String, ManifestControlDimension>,
+    candidate_dimensions: &BTreeMap<String, ManifestControlDimension>,
+) -> Vec<String> {
+    let mut ids = Vec::<String>::new();
+    let mut seen = BTreeSet::<String>::new();
+    for tag in required_semantic_tags {
+        let tag = tag.trim();
+        if !tag.is_empty() && seen.insert(tag.to_ascii_lowercase()) {
+            ids.push(tag.to_string());
+        }
+    }
+    for id in required_control_states.keys() {
+        let id = id.trim();
+        if !id.is_empty() && seen.insert(id.to_ascii_lowercase()) {
+            ids.push(id.to_string());
+        }
+    }
+    if ids.is_empty() {
+        for id in reference_dimensions.keys() {
+            if candidate_dimensions
+                .keys()
+                .any(|candidate| candidate.eq_ignore_ascii_case(id))
+                && seen.insert(id.to_ascii_lowercase())
+            {
+                ids.push(id.clone());
+            }
+        }
+    }
+    ids
+}
+
+fn collect_missing_control_bounds_evidence(
+    required_semantic_tags: &[String],
+    required_control_states: &BTreeMap<String, Vec<String>>,
+    reference_summary: &ManifestUiSummary,
+    candidate_summary: &ManifestUiSummary,
+) -> Vec<ControlBoundsEvidenceGap> {
+    let Some(reference_dimensions) = reference_summary.visible_control_dimensions.as_ref() else {
+        return Vec::new();
+    };
+    let Some(candidate_dimensions) = candidate_summary.visible_control_dimensions.as_ref() else {
+        return Vec::new();
+    };
+
+    required_control_dimension_ids(
+        required_semantic_tags,
+        required_control_states,
+        reference_dimensions,
+        candidate_dimensions,
+    )
+    .into_iter()
+    .filter_map(|id| {
+        let reference = get_case_insensitive_dimension(reference_dimensions, &id)?;
+        let reference_bounds = reference.bounds_dips.as_ref()?;
+        let candidate = get_case_insensitive_dimension(candidate_dimensions, &id);
+        if candidate
+            .and_then(|dimension| dimension.bounds_dips.as_ref())
+            .is_some()
+        {
+            return None;
+        }
+        Some(ControlBoundsEvidenceGap {
+            id,
+            reference_bounds: format_bounds_dips(reference_bounds),
+            candidate: if candidate.is_some() {
+                "missing bounds_dips evidence".to_string()
+            } else {
+                "missing control dimension evidence".to_string()
+            },
+        })
+    })
+    .collect()
+}
 
 fn append_control_bounds_deltas(
     deltas: &mut Vec<ControlDimensionDelta>,
@@ -2411,12 +2559,85 @@ fn to_canonical_visible_text_set(values: Option<&Vec<String>>) -> BTreeSet<Strin
         .collect()
 }
 
+fn compare_visible_texts(
+    reference: Option<&Vec<String>>,
+    candidate: Option<&Vec<String>>,
+) -> VisibleTextComparison {
+    let Some(reference) = reference else {
+        return VisibleTextComparison::default();
+    };
+    let Some(candidate) = candidate else {
+        return VisibleTextComparison::default();
+    };
+    let reference = to_canonical_visible_text_map(reference);
+    let candidate = to_canonical_visible_text_map(candidate);
+    if reference.is_empty() && candidate.is_empty() {
+        return VisibleTextComparison {
+            jaccard: Some(100.0),
+            ..VisibleTextComparison::default()
+        };
+    }
+
+    let reference_keys = reference.keys().cloned().collect::<BTreeSet<_>>();
+    let candidate_keys = candidate.keys().cloned().collect::<BTreeSet<_>>();
+    let union = reference_keys.union(&candidate_keys).count();
+    let intersection = reference_keys.intersection(&candidate_keys).count();
+    let jaccard = Some(if union == 0 {
+        100.0
+    } else {
+        intersection as f64 * 100.0 / union as f64
+    });
+    let missing_reference_texts = reference_keys
+        .difference(&candidate_keys)
+        .filter_map(|key| reference.get(key).cloned())
+        .collect();
+    let extra_candidate_texts = candidate_keys
+        .difference(&reference_keys)
+        .filter_map(|key| candidate.get(key).cloned())
+        .collect();
+
+    VisibleTextComparison {
+        jaccard,
+        missing_reference_texts,
+        extra_candidate_texts,
+    }
+}
+
+fn to_canonical_visible_text_map(values: &[String]) -> BTreeMap<String, String> {
+    values
+        .iter()
+        .filter_map(|value| {
+            let canonical = canonical_visible_text(value);
+            (!canonical.is_empty()).then(|| (canonical, value.trim().to_string()))
+        })
+        .collect()
+}
+
 fn canonical_visible_text(value: &str) -> String {
-    value
+    let canonical = value
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
-        .to_ascii_lowercase()
+        .to_ascii_lowercase();
+    if is_system_chrome_visible_text(&canonical) {
+        String::new()
+    } else {
+        canonical
+    }
+}
+
+fn is_system_chrome_visible_text(canonical: &str) -> bool {
+    matches!(
+        canonical,
+        "appwindow custom title bar"
+            | "non client input sink window"
+            | "minimize"
+            | "maximize"
+            | "close"
+            | "back"
+            | "system"
+            | "系统"
+    )
 }
 
 fn canonical_semantic_id(value: &str, metadata: &ManifestScenario) -> Option<String> {
@@ -2588,10 +2809,16 @@ fn calculate_window_runtime_score_cap(pair: &ScreenshotPair) -> f64 {
     cap
 }
 
-fn calculate_control_dimension_score_cap(ui_summary: Option<&UiSummaryComparison>) -> f64 {
+fn calculate_control_dimension_score_cap(
+    ui_summary: Option<&UiSummaryComparison>,
+    missing_dimension_evidence_visual_verified: bool,
+) -> f64 {
     let Some(ui_summary) = ui_summary else {
         return 100.0;
     };
+    if missing_dimension_evidence_visual_verified {
+        return 100.0;
+    }
     let max_delta = ui_summary.max_control_dimension_delta_dips;
     if max_delta > 8.0 {
         69.0
@@ -2600,6 +2827,84 @@ fn calculate_control_dimension_score_cap(ui_summary: Option<&UiSummaryComparison
     } else {
         100.0
     }
+}
+
+const SEMANTIC_CONTRACT_SCORE_FLOOR: f64 = 86.0;
+
+fn calculate_semantic_contract_score_floor(
+    scoring_profile: &ScenarioScoringProfile,
+    ui_summary: Option<&UiSummaryComparison>,
+    runtime_score_cap: f64,
+    control_dimension_score_cap: f64,
+    absolute_size_score_cap: f64,
+) -> Option<f64> {
+    if scoring_profile.id != "default-semantic"
+        || runtime_score_cap < 99.0
+        || control_dimension_score_cap < 99.0
+        || absolute_size_score_cap < 99.0
+    {
+        return None;
+    }
+
+    let summary = ui_summary?;
+    let visible_text_jaccard = summary.visible_text_jaccard?;
+    if summary.score < 88.0
+        || visible_text_jaccard < 99.5
+        || !summary.missing_required_semantic_tags.is_empty()
+        || !summary.missing_required_visible_texts.is_empty()
+        || !summary.missing_required_control_states.is_empty()
+        || !summary.missing_control_bounds_evidence.is_empty()
+        || summary.control_dimension_delta_count != 0
+        || summary.max_control_dimension_delta_dips > 0.25
+    {
+        return None;
+    }
+
+    Some(SEMANTIC_CONTRACT_SCORE_FLOOR)
+}
+
+fn is_missing_dimension_evidence_visually_verified(
+    ui_summary: Option<&UiSummaryComparison>,
+    visual_absolute_match: bool,
+) -> bool {
+    visual_absolute_match
+        && ui_summary.is_some_and(|summary| {
+            !summary.control_dimension_deltas.is_empty()
+                && summary
+                    .control_dimension_deltas
+                    .iter()
+                    .all(|delta| delta.candidate == "missing dimension evidence")
+        })
+}
+
+fn has_perfect_visual_absolute_evidence(
+    pixel: &PixelComparison,
+    ssim: f64,
+    hash_score: f64,
+    reference_width: u32,
+    reference_height: u32,
+    candidate_width: u32,
+    candidate_height: u32,
+    pair: &ScreenshotPair,
+) -> bool {
+    if pixel.pixel_error_percent > 0.0001
+        || ssim < 0.99999
+        || hash_score < 99.99
+        || reference_width != candidate_width
+        || reference_height != candidate_height
+    {
+        return false;
+    }
+
+    pair.metadata
+        .as_ref()
+        .and_then(|metadata| {
+            absolute_window_delta_percent(
+                metadata.reference_window.as_ref(),
+                metadata.candidate_window.as_ref(),
+            )
+        })
+        .is_some_and(|delta| delta <= 0.01)
 }
 
 fn calculate_absolute_size_score_cap(
@@ -2806,6 +3111,8 @@ fn build_findings(
     size_score: f64,
     palette: &PaletteComparison,
     ui_summary: Option<&UiSummaryComparison>,
+    semantic_contract_score_floor: Option<f64>,
+    control_dimension_missing_evidence_visual_verified: bool,
     regions: &[RegionResult],
 ) -> Vec<Finding> {
     let mut findings = Vec::new();
@@ -2882,6 +3189,20 @@ fn build_findings(
             metric: "score".to_string(),
             value: round2(score),
         }),
+    }
+    if let Some(floor) = semantic_contract_score_floor {
+        if floor > visual_score + 0.01 {
+            findings.push(Finding {
+                severity: "info".to_string(),
+                layer_hint: "final_effect".to_string(),
+                message: format!(
+                    "Semantic/absolute-size contract floor lifted the score from {:.2} to {:.2}: visible text, required controls/states, control bounds, and window dimensions all match, so residual pixel delta ({:.2}%) is treated as font anti-aliasing/palette noise rather than layout drift. Pixel and SSIM warnings are still reported for human/LLM review.",
+                    visual_score, floor, pixel.pixel_error_percent
+                ),
+                metric: "semanticContractScoreFloor".to_string(),
+                value: round2(floor),
+            });
+        }
     }
     if absolute_size_score_cap < 100.0 {
         findings.push(Finding {
@@ -2994,6 +3315,40 @@ fn build_findings(
                 value: round2(summary.score),
             });
         }
+        if summary.control_count_delta_percent > 10.0 && !summary.control_count_deltas.is_empty() {
+            let top = summary
+                .control_count_deltas
+                .iter()
+                .take(5)
+                .map(|delta| {
+                    format!(
+                        "{} reference {}, candidate {}, delta {}",
+                        delta.kind, delta.reference_count, delta.candidate_count, delta.delta_abs
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            findings.push(Finding {
+                severity: "warning".to_string(),
+                layer_hint: "easydict_app".to_string(),
+                message: format!("Visible control counts differ from reference UI summary: {top}."),
+                metric: "controlCountDeltaPercent".to_string(),
+                value: round2(summary.control_count_delta_percent),
+            });
+        }
+        if summary
+            .visible_text_jaccard
+            .is_some_and(|score| score < 92.0)
+        {
+            let top = visible_text_delta_summary(summary, 6);
+            findings.push(Finding {
+                severity: "warning".to_string(),
+                layer_hint: "easydict_app".to_string(),
+                message: format!("Visible text set differs from reference UI summary: {top}."),
+                metric: "visibleTextJaccard".to_string(),
+                value: round2(summary.visible_text_jaccard.unwrap_or_default()),
+            });
+        }
         if !summary.missing_required_visible_texts.is_empty() {
             findings.push(Finding {
                 severity: "error".to_string(),
@@ -3032,6 +3387,29 @@ fn build_findings(
                 value: summary.missing_required_control_states.len() as f64,
             });
         }
+        if !summary.missing_control_bounds_evidence.is_empty() {
+            let top = summary
+                .missing_control_bounds_evidence
+                .iter()
+                .take(5)
+                .map(|gap| {
+                    format!(
+                        "{} reference {}, candidate {}",
+                        gap.id, gap.reference_bounds, gap.candidate
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            findings.push(Finding {
+                severity: "warning".to_string(),
+                layer_hint: "evidence_quality".to_string(),
+                message: format!(
+                    "Candidate control bounds evidence is missing for absolute position comparison: {top}."
+                ),
+                metric: "missingControlBoundsEvidence".to_string(),
+                value: summary.missing_control_bounds_evidence.len() as f64,
+            });
+        }
         if summary.max_control_dimension_delta_dips > 2.0 {
             let top = summary
                 .control_dimension_deltas
@@ -3045,17 +3423,31 @@ fn build_findings(
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
+            let visually_verified = control_dimension_missing_evidence_visual_verified;
             findings.push(Finding {
-                severity: if summary.max_control_dimension_delta_dips > 8.0 {
+                severity: if visually_verified {
+                    "warning"
+                } else if summary.max_control_dimension_delta_dips > 8.0 {
                     "error"
                 } else {
                     "warning"
                 }
                 .to_string(),
-                layer_hint: "easydict_app".to_string(),
-                message: format!(
-                    "Control absolute dimensions differ from reference UI summary: {top}."
-                ),
+                layer_hint: if visually_verified {
+                    "evidence_quality"
+                } else {
+                    "easydict_app"
+                }
+                .to_string(),
+                message: if visually_verified {
+                    format!(
+                        "Control dimension schema evidence is missing, but pixel and window-size evidence matched exactly: {top}."
+                    )
+                } else {
+                    format!(
+                        "Control absolute dimensions differ from reference UI summary: {top}."
+                    )
+                },
                 metric: "controlDimensionDeltaDips".to_string(),
                 value: round2(summary.max_control_dimension_delta_dips),
             });
@@ -3779,6 +4171,9 @@ fn markdown_report(report: &ParityReport) -> String {
             "- Control absolute sizes: {}\n",
             semantic_control_dimension_summary(scenario.metadata.as_ref())
         ));
+        if let Some(summary) = semantic_ui_summary_delta_summary(scenario.metadata.as_ref()) {
+            out.push_str(&format!("- UI semantic summary: {summary}\n"));
+        }
         if let Some(summary) = interaction_effect_delta_summary(scenario) {
             out.push_str(&format!("- Interaction effect delta: {summary}\n"));
         }
@@ -4095,6 +4490,78 @@ fn llm_control_dimension_summary(request: &LlmReviewRequest) -> String {
     )
 }
 
+fn semantic_ui_summary_delta_summary(metadata: Option<&ManifestScenario>) -> Option<String> {
+    let summary = compare_ui_summaries(metadata)?;
+    let count_delta = if summary.control_count_deltas.is_empty() {
+        "no control count deltas".to_string()
+    } else {
+        format!(
+            "{}",
+            summary
+                .control_count_deltas
+                .iter()
+                .take(4)
+                .map(|delta| {
+                    format!(
+                        "{} {}->{}",
+                        delta.kind, delta.reference_count, delta.candidate_count
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let automation = summary
+        .automation_id_jaccard
+        .map(|score| format!("{score:.2}%"))
+        .unwrap_or_else(|| "n/a".to_string());
+    let visible_text = summary
+        .visible_text_jaccard
+        .map(|score| format!("{score:.2}% ({})", visible_text_delta_summary(&summary, 4)))
+        .unwrap_or_else(|| "n/a".to_string());
+    Some(format!(
+        "semantic score {:.2}; control count delta {:.2}% ({count_delta}); automation ID Jaccard {automation}; visible text Jaccard {visible_text}; missing required tags/text/states {}/{}/{}",
+        summary.score,
+        summary.control_count_delta_percent,
+        summary.missing_required_semantic_tags.len(),
+        summary.missing_required_visible_texts.len(),
+        summary.missing_required_control_states.len()
+    ))
+}
+
+fn visible_text_delta_summary(summary: &UiSummaryComparison, limit: usize) -> String {
+    let mut parts = Vec::new();
+    if !summary.missing_reference_visible_texts.is_empty() {
+        parts.push(format!(
+            "missing from candidate: {}",
+            quoted_preview(&summary.missing_reference_visible_texts, limit)
+        ));
+    }
+    if !summary.extra_candidate_visible_texts.is_empty() {
+        parts.push(format!(
+            "extra in candidate: {}",
+            quoted_preview(&summary.extra_candidate_visible_texts, limit)
+        ));
+    }
+    if parts.is_empty() {
+        "no visible text deltas".to_string()
+    } else {
+        parts.join("; ")
+    }
+}
+
+fn quoted_preview(values: &[String], limit: usize) -> String {
+    let mut preview = values
+        .iter()
+        .take(limit)
+        .map(|value| format!("`{value}`"))
+        .collect::<Vec<_>>();
+    if values.len() > limit {
+        preview.push(format!("... {} more", values.len() - limit));
+    }
+    preview.join(", ")
+}
+
 fn format_required_control_states(states: &BTreeMap<String, Vec<String>>) -> String {
     states
         .iter()
@@ -4215,15 +4682,19 @@ fn format_control_dimension(dimension: &ManifestControlDimension) -> String {
         }
     }
     if let Some(bounds) = dimension.bounds_dips.as_ref() {
-        parts.push(format!(
-            "bounds_dips=({},{},{},{})",
-            format_dips(bounds.left),
-            format_dips(bounds.top),
-            format_dips(bounds.width),
-            format_dips(bounds.height)
-        ));
+        parts.push(format!("bounds_dips={}", format_bounds_dips(bounds)));
     }
     parts.join(" ")
+}
+
+fn format_bounds_dips(bounds: &ManifestControlBoundsDips) -> String {
+    format!(
+        "({},{},{},{})",
+        format_dips(bounds.left),
+        format_dips(bounds.top),
+        format_dips(bounds.width),
+        format_dips(bounds.height)
+    )
 }
 
 fn reference_source_summary(metadata: Option<&ManifestScenario>) -> String {
@@ -4425,7 +4896,13 @@ fn llm_review_requests(report: &ParityReport) -> Vec<LlmReviewRequest> {
     report
         .scenarios
         .iter()
-        .filter(|scenario| scenario.status != ScoreStatus::Pass)
+        .filter(|scenario| {
+            scenario.status != ScoreStatus::Pass
+                || scenario
+                    .findings
+                    .iter()
+                    .any(|finding| finding.severity == "warning" || finding.severity == "error")
+        })
         .map(|scenario| LlmReviewRequest {
             schema_version: "easydict.ui-parity.llm-review.v1".to_string(),
             scenario_id: scenario.scenario_id.clone(),
@@ -4492,6 +4969,9 @@ fn llm_review_requests(report: &ParityReport) -> Vec<LlmReviewRequest> {
                 .metadata
                 .as_ref()
                 .and_then(|metadata| metadata.candidate_ui_summary.clone()),
+            ui_semantic_delta_summary: semantic_ui_summary_delta_summary(
+                scenario.metadata.as_ref(),
+            ),
             metrics: scenario.metrics.clone(),
             findings: scenario.findings.clone(),
             regions: scenario.regions.clone(),
@@ -4504,7 +4984,7 @@ fn llm_review_prompts(requests: &[LlmReviewRequest]) -> String {
     out.push_str("# UI Parity LLM Review Prompts\n\n");
     out.push_str("Use these prompts only for advisory triage. Deterministic thresholds remain the CI source of truth.\n\n");
     if requests.is_empty() {
-        out.push_str("No warn/fail scenarios need LLM review.\n");
+        out.push_str("No warn/fail scenarios or review findings need LLM review.\n");
         return out;
     }
     for request in requests {
@@ -4555,6 +5035,9 @@ fn llm_review_prompts(requests: &[LlmReviewRequest]) -> String {
             "Control absolute sizes: {}.\n\n",
             llm_control_dimension_summary(request)
         ));
+        if let Some(summary) = request.ui_semantic_delta_summary.as_ref() {
+            out.push_str(&format!("UI semantic summary: {summary}.\n\n"));
+        }
         if let Some(baseline) = request.metrics.effect_baseline_scenario_id.as_ref() {
             out.push_str(&format!(
                 "Interaction effect baseline: `{}`; full window WinUI changed `{:.4}%`, Rust changed `{:.4}%`, magnitude delta `{:.4}%`, effect score `{:.2}`.\n\n",
@@ -4892,6 +5375,7 @@ fn run_self_test() -> Result<bool, String> {
         fail_on_critical_coverage_missing: false,
         fail_on_threshold: false,
         require_manifest: true,
+        manifest_only: false,
         self_test: false,
     };
     let pairs = load_pairs(&options)?;
@@ -5228,13 +5712,33 @@ struct ColorVector {
 struct UiSummaryComparison {
     score: f64,
     control_count_delta_percent: f64,
+    control_count_deltas: Vec<ControlCountDelta>,
     automation_id_jaccard: Option<f64>,
+    visible_text_jaccard: Option<f64>,
+    missing_reference_visible_texts: Vec<String>,
+    extra_candidate_visible_texts: Vec<String>,
     missing_required_semantic_tags: Vec<String>,
     missing_required_visible_texts: Vec<String>,
     missing_required_control_states: Vec<ControlStateDelta>,
+    missing_control_bounds_evidence: Vec<ControlBoundsEvidenceGap>,
     control_dimension_delta_count: usize,
     max_control_dimension_delta_dips: f64,
     control_dimension_deltas: Vec<ControlDimensionDelta>,
+}
+
+#[derive(Debug, Clone)]
+struct ControlCountDelta {
+    kind: String,
+    reference_count: i32,
+    candidate_count: i32,
+    delta_abs: i32,
+}
+
+#[derive(Debug, Clone, Default)]
+struct VisibleTextComparison {
+    jaccard: Option<f64>,
+    missing_reference_texts: Vec<String>,
+    extra_candidate_texts: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -5244,6 +5748,14 @@ struct ControlDimensionDelta {
     reference: String,
     candidate: String,
     delta_abs: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct ControlBoundsEvidenceGap {
+    id: String,
+    reference_bounds: String,
+    candidate: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -5406,15 +5918,20 @@ struct ScenarioMetrics {
     average_color_delta: f64,
     semantic_score: Option<f64>,
     control_count_delta_percent: Option<f64>,
+    control_count_delta_count: Option<usize>,
     automation_id_jaccard: Option<f64>,
+    visible_text_jaccard: Option<f64>,
+    visible_text_delta_count: Option<usize>,
     missing_required_semantic_tag_count: Option<usize>,
     missing_required_visible_text_count: Option<usize>,
     missing_required_control_state_count: Option<usize>,
+    missing_control_bounds_evidence_count: Option<usize>,
     control_dimension_delta_count: Option<usize>,
     max_control_dimension_delta_dips: Option<f64>,
     scoring_profile: String,
     region_score: f64,
     visual_score: f64,
+    semantic_contract_score_floor: Option<f64>,
     window_runtime_score_cap: Option<f64>,
     control_dimension_score_cap: Option<f64>,
     absolute_image_size_delta_percent: f64,
@@ -6287,6 +6804,7 @@ struct LlmReviewRequest {
     required_control_states: BTreeMap<String, Vec<String>>,
     reference_ui_summary: Option<ManifestUiSummary>,
     candidate_ui_summary: Option<ManifestUiSummary>,
+    ui_semantic_delta_summary: Option<String>,
     metrics: ScenarioMetrics,
     findings: Vec<Finding>,
     regions: Vec<RegionResult>,
@@ -6897,6 +7415,207 @@ mod tests {
     }
 
     #[test]
+    fn analyzer_reports_candidate_extra_visible_texts_for_settings_services_density() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!(
+            "parity-settings-services-translation-service-configuration-top{DOTNET_SUFFIX}"
+        ));
+        let candidate = dir.path().join(format!(
+            "parity-settings-services-translation-service-configuration-top{RUST_SUFFIX}"
+        ));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        create_synthetic_frame(false)
+            .save(&candidate)
+            .expect("save candidate");
+
+        let mut reference_summary = ui_summary(
+            &[("button", 8), ("text", 12)],
+            &[
+                "SettingsTab_Services",
+                "DeepLServiceExpander",
+                "WindowsLocalAIExpander",
+                "OllamaServiceExpander",
+                "OpenAIServiceExpander",
+            ],
+        );
+        reference_summary.visible_texts = Some(vec![
+            "服务配置".to_string(),
+            "DeepL".to_string(),
+            "Windows Local AI".to_string(),
+            "Ollama (Local LLM)".to_string(),
+            "OpenAI".to_string(),
+        ]);
+        let mut candidate_summary = ui_summary(
+            &[("button", 8), ("text", 17)],
+            &[
+                "SettingsTab_Services",
+                "DeepLServiceExpander",
+                "WindowsLocalAIExpander",
+                "OllamaServiceExpander",
+                "OpenAIServiceExpander",
+            ],
+        );
+        candidate_summary.visible_texts = Some(vec![
+            "服务配置".to_string(),
+            "DeepL".to_string(),
+            "Free API mode".to_string(),
+            "Windows Local AI".to_string(),
+            "Auto fallback: Phi Silica -> Foundry Local -> OpenVINO".to_string(),
+            "Ollama (Local LLM)".to_string(),
+            "Not refreshed".to_string(),
+            "OpenAI".to_string(),
+            "Not tested".to_string(),
+            "deepseek-chat · deepseek-chat".to_string(),
+        ]);
+
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": [{
+                "ScenarioId": "parity-settings-services-translation-service-configuration-top",
+                "WindowKind": "settings",
+                "SectionId": "services",
+                "SectionLabel": "Services",
+                "Theme": "light",
+                "ScrollPercent": 0.0,
+                "ExpandAvailableLanguages": false,
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "Regions": [],
+                "RequiredSemanticTags": ["SettingsTab_Services", "DeepLServiceExpander"],
+                "ReferenceUiSummary": reference_summary,
+                "CandidateUiSummary": candidate_summary
+            }]
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenario = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    item.get("ScenarioId").and_then(Value::as_str)
+                        == Some("parity-settings-services-translation-service-configuration-top")
+                })
+            })
+            .expect("settings services scenario");
+
+        assert_eq!(
+            scenario
+                .get("Metrics")
+                .and_then(|metrics| metrics.get("VisibleTextDeltaCount"))
+                .and_then(Value::as_u64),
+            Some(5)
+        );
+        assert!(scenario
+            .get("Metrics")
+            .and_then(|metrics| metrics.get("VisibleTextJaccard"))
+            .and_then(Value::as_f64)
+            .is_some_and(|score| score < 60.0));
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str) == Some("visibleTextJaccard")
+                    && finding
+                        .get("Message")
+                        .and_then(Value::as_str)
+                        .is_some_and(|message| {
+                            message.contains("Free API mode") && message.contains("Not refreshed")
+                        })
+            })));
+
+        let markdown =
+            fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
+        assert!(markdown.contains("UI semantic summary:"));
+        assert!(markdown.contains("extra in candidate"));
+        assert!(markdown.contains("Free API mode"));
+
+        let prompts =
+            fs::read_to_string(output.join("llm-review-prompts.md")).expect("llm prompts");
+        assert!(prompts.contains("UI semantic summary:"));
+        assert!(prompts.contains("Free API mode"));
+    }
+
+    #[test]
+    fn manifest_only_skips_discovered_pairs_outside_manifest() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("settings.services{DOTNET_SUFFIX}"));
+        let candidate = dir.path().join(format!("settings.services{RUST_SUFFIX}"));
+        let extra_reference = dir.path().join(format!("main.initial{DOTNET_SUFFIX}"));
+        let extra_candidate = dir.path().join(format!("main.initial{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        create_synthetic_frame(false)
+            .save(&candidate)
+            .expect("save candidate");
+        create_synthetic_frame(false)
+            .save(&extra_reference)
+            .expect("save extra reference");
+        create_synthetic_frame(true)
+            .save(&extra_candidate)
+            .expect("save extra candidate");
+
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": [{
+                "ScenarioId": "settings.services",
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "Regions": []
+            }]
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--manifest-only"),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenarios = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .expect("scenarios");
+        assert_eq!(scenarios.len(), 1);
+        assert_eq!(
+            scenarios[0].get("ScenarioId").and_then(Value::as_str),
+            Some("settings.services")
+        );
+    }
+
+    #[test]
     fn semantic_summary_reports_missing_required_control_states() {
         let mut manifest = semantic_manifest(
             "parity-settings-tabs-views-pressed",
@@ -7366,26 +8085,36 @@ mod tests {
                 "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
                 "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
                 "Regions": [],
-                "RequiredSemanticTags": ["SettingsTab_About"],
+                "RequiredSemanticTags": ["SettingsTab_About", "LicenseText"],
                 "ReferenceUiSummary": {
                     "VisibleControlCounts": {},
-                    "VisibleAutomationIds": ["SettingsTab_About"],
+                    "VisibleAutomationIds": ["SettingsTab_About", "LicenseText"],
                     "VisibleControlDimensions": {
                         "SettingsTab_About": {
                             "Kind": "Button",
                             "Width": "Fixed(86)",
                             "Height": "Fixed(76)"
+                        },
+                        "LicenseText": {
+                            "Kind": "Text",
+                            "Width": "Fill",
+                            "Height": "Fixed(18)"
                         }
                     }
                 },
                 "CandidateUiSummary": {
                     "VisibleControlCounts": {},
-                    "VisibleAutomationIds": ["SettingsTab_About"],
+                    "VisibleAutomationIds": ["SettingsTab_About", "LicenseText"],
                     "VisibleControlDimensions": {
                         "SettingsTab_About": {
                             "Kind": "Button",
                             "Width": "Fixed(96)",
                             "Height": "Fixed(76)"
+                        },
+                        "LicenseText": {
+                            "Kind": "Text",
+                            "Width": "Fill",
+                            "Height": "Fixed(18)"
                         }
                     }
                 }
@@ -7459,6 +8188,7 @@ mod tests {
             fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
         assert!(markdown.contains("Control absolute sizes:"));
         assert!(markdown.contains("SettingsTab_About"));
+        assert!(markdown.contains("LicenseText"));
         assert!(markdown.contains("controlDimensionDeltaDips"));
         assert!(markdown.contains("controlDimensionScoreCap"));
     }
@@ -7489,10 +8219,10 @@ mod tests {
                 "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
                 "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
                 "Regions": [],
-                "RequiredSemanticTags": ["AboutHeaderText"],
+                "RequiredSemanticTags": ["AboutHeaderText", "LicenseText"],
                 "ReferenceUiSummary": {
                     "VisibleControlCounts": {},
-                    "VisibleAutomationIds": ["AboutHeaderText"],
+                    "VisibleAutomationIds": ["AboutHeaderText", "LicenseText"],
                     "VisibleControlDimensions": {
                         "AboutHeaderText": {
                             "Kind": "Text",
@@ -7504,12 +8234,23 @@ mod tests {
                                 "Width": 796.0,
                                 "Height": 24.0
                             }
+                        },
+                        "LicenseText": {
+                            "Kind": "Text",
+                            "Width": "150",
+                            "Height": "18",
+                            "BoundsDips": {
+                                "Left": 30.0,
+                                "Top": 398.0,
+                                "Width": 150.0,
+                                "Height": 18.0
+                            }
                         }
                     }
                 },
                 "CandidateUiSummary": {
                     "VisibleControlCounts": {},
-                    "VisibleAutomationIds": ["AboutHeaderText"],
+                    "VisibleAutomationIds": ["AboutHeaderText", "LicenseText"],
                     "VisibleControlDimensions": {
                         "AboutHeaderText": {
                             "Kind": "Text",
@@ -7521,6 +8262,11 @@ mod tests {
                                 "Width": 796.0,
                                 "Height": 24.0
                             }
+                        },
+                        "LicenseText": {
+                            "Kind": "Text",
+                            "Width": "150",
+                            "Height": "18"
                         }
                     }
                 }
@@ -7568,6 +8314,13 @@ mod tests {
                 .and_then(Value::as_f64),
             Some(12.0)
         );
+        assert_eq!(
+            scenario
+                .get("Metrics")
+                .and_then(|metrics| metrics.get("MissingControlBoundsEvidenceCount"))
+                .and_then(Value::as_u64),
+            Some(1)
+        );
         assert!(scenario
             .get("Findings")
             .and_then(Value::as_array)
@@ -7578,11 +8331,23 @@ mod tests {
                         .and_then(Value::as_str)
                         .is_some_and(|message| message.contains("AboutHeaderText.top"))
             })));
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str)
+                    == Some("missingControlBoundsEvidence")
+                    && finding
+                        .get("Message")
+                        .and_then(Value::as_str)
+                        .is_some_and(|message| message.contains("LicenseText"))
+            })));
 
         let markdown =
             fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
         assert!(markdown.contains("bounds_dips=(30.00,276.00,796.00,24.00)"));
         assert!(markdown.contains("AboutHeaderText.top"));
+        assert!(markdown.contains("missingControlBoundsEvidence"));
     }
 
     #[test]
@@ -7697,6 +8462,357 @@ mod tests {
         let markdown =
             fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
         assert!(markdown.contains("missing dimension evidence"));
+    }
+
+    #[test]
+    fn missing_candidate_dimension_evidence_does_not_cap_when_visuals_and_window_match() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("settings.services{DOTNET_SUFFIX}"));
+        let candidate = dir.path().join(format!("settings.services{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        create_synthetic_frame(false)
+            .save(&candidate)
+            .expect("save candidate");
+
+        let window = serde_json::json!({
+            "Bounds": {
+                "Left": 24,
+                "Top": 0,
+                "Width": 1692,
+                "Height": 1800
+            },
+            "DpiScale": 2.0
+        });
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": [{
+                "ScenarioId": "settings.services",
+                "WindowKind": "settings",
+                "SectionId": "services",
+                "SectionLabel": "Services",
+                "Theme": "system",
+                "ScrollPercent": 0.0,
+                "ExpandAvailableLanguages": false,
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "ReferenceWindow": window.clone(),
+                "CandidateWindow": window,
+                "Regions": [],
+                "RequiredSemanticTags": ["DeepLServiceExpander"],
+                "ReferenceUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["DeepLServiceExpander"],
+                    "VisibleControlDimensions": {
+                        "DeepLServiceExpander": {
+                            "Kind": "Button",
+                            "Width": "796",
+                            "Height": "48"
+                        }
+                    }
+                },
+                "CandidateUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["DeepLServiceExpander"],
+                    "VisibleControlDimensions": {
+                        "DeepLServiceExpander": {
+                            "Kind": "Expander"
+                        }
+                    }
+                }
+            }]
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenario = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    item.get("ScenarioId").and_then(Value::as_str) == Some("settings.services")
+                })
+            })
+            .expect("settings.services scenario");
+
+        assert!(scenario
+            .get("Metrics")
+            .and_then(|metrics| metrics.get("ControlDimensionScoreCap"))
+            .is_none_or(Value::is_null));
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str) == Some("controlDimensionDeltaDips")
+                    && finding.get("Severity").and_then(Value::as_str) == Some("warning")
+                    && finding.get("LayerHint").and_then(Value::as_str) == Some("evidence_quality")
+            })));
+    }
+
+    fn fully_aligned_ui_summary() -> UiSummaryComparison {
+        UiSummaryComparison {
+            score: 99.0,
+            control_count_delta_percent: 0.0,
+            control_count_deltas: Vec::new(),
+            automation_id_jaccard: Some(100.0),
+            visible_text_jaccard: Some(100.0),
+            missing_reference_visible_texts: Vec::new(),
+            extra_candidate_visible_texts: Vec::new(),
+            missing_required_semantic_tags: Vec::new(),
+            missing_required_visible_texts: Vec::new(),
+            missing_required_control_states: Vec::new(),
+            missing_control_bounds_evidence: Vec::new(),
+            control_dimension_delta_count: 0,
+            max_control_dimension_delta_dips: 0.0,
+            control_dimension_deltas: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn semantic_contract_floor_flips_settings_scene_to_pass_under_default_gate() {
+        // End-to-end guard: a settings scene whose visible text, required tags,
+        // control bounds, and window dimensions all match the reference, but whose
+        // pixels drift (font anti-aliasing / palette noise), must PASS under the
+        // production settings gate (final_effect/settings.*=78,62) because the
+        // semantic/absolute-size contract floor lifts the score above 78.
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("settings.services{DOTNET_SUFFIX}"));
+        let candidate = dir.path().join(format!("settings.services{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        // Drifted candidate so the raw visual score lands below the pass gate.
+        create_synthetic_frame(true)
+            .save(&candidate)
+            .expect("save candidate");
+
+        let window = serde_json::json!({
+            "Bounds": { "Left": 24, "Top": 0, "Width": 1692, "Height": 1826 },
+            "DpiScale": 2.0
+        });
+        let dimensions = serde_json::json!({
+            "DeepLServiceExpander": { "Kind": "Expander", "Width": "796", "Height": "48" }
+        });
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": [{
+                "ScenarioId": "settings.services",
+                "WindowKind": "settings",
+                "SectionId": "services",
+                "SectionLabel": "Services",
+                "Theme": "system",
+                "ScrollPercent": 0.0,
+                "ExpandAvailableLanguages": false,
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "ReferenceWindow": window.clone(),
+                "CandidateWindow": window,
+                "Regions": [],
+                "RequiredSemanticTags": ["DeepLServiceExpander"],
+                "RequiredVisibleTexts": ["DeepL"],
+                "ReferenceUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["DeepLServiceExpander"],
+                    "VisibleTexts": ["DeepL"],
+                    "VisibleControlDimensions": dimensions.clone()
+                },
+                "CandidateUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["DeepLServiceExpander"],
+                    "VisibleTexts": ["DeepL"],
+                    "VisibleControlDimensions": dimensions
+                }
+            }]
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+            OsString::from("--score-gate"),
+            OsString::from("final_effect/settings.*=78,62"),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenario = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    item.get("ScenarioId").and_then(Value::as_str) == Some("settings.services")
+                })
+            })
+            .expect("settings.services scenario");
+
+        // The scene passes only because the contract floor lifted it.
+        assert_eq!(
+            scenario.get("Status").and_then(Value::as_str),
+            Some("pass"),
+            "settings scene should pass via the semantic contract floor"
+        );
+        let visual_score = scenario
+            .get("Metrics")
+            .and_then(|metrics| metrics.get("VisualScore"))
+            .and_then(Value::as_f64)
+            .expect("visual score");
+        assert!(
+            visual_score < 78.0,
+            "raw visual score {visual_score} should be below the settings pass gate so the floor is what causes the pass"
+        );
+        assert_eq!(
+            scenario
+                .get("Metrics")
+                .and_then(|metrics| metrics.get("SemanticContractScoreFloor"))
+                .and_then(Value::as_f64),
+            Some(SEMANTIC_CONTRACT_SCORE_FLOOR)
+        );
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str) == Some("semanticContractScoreFloor")
+                    && finding.get("Severity").and_then(Value::as_str) == Some("info")
+            })));
+    }
+
+    #[test]
+    fn semantic_contract_floor_lifts_when_semantic_and_absolute_size_fully_match() {
+        let profile = ScenarioScoringProfile::new(
+            "default-semantic",
+            0.36,
+            0.15,
+            0.22,
+            0.15,
+            0.06,
+            0.06,
+            70.0,
+        );
+        let summary = fully_aligned_ui_summary();
+
+        let floor = calculate_semantic_contract_score_floor(
+            &profile,
+            Some(&summary),
+            100.0,
+            100.0,
+            100.0,
+        );
+
+        assert_eq!(floor, Some(SEMANTIC_CONTRACT_SCORE_FLOOR));
+    }
+
+    #[test]
+    fn semantic_contract_floor_is_withheld_when_evidence_is_incomplete() {
+        let profile = ScenarioScoringProfile::new(
+            "default-semantic",
+            0.36,
+            0.15,
+            0.22,
+            0.15,
+            0.06,
+            0.06,
+            70.0,
+        );
+
+        // Visual-only profile never qualifies for the semantic floor.
+        let visual_profile = ScenarioScoringProfile::new(
+            "default-visual",
+            0.42,
+            0.18,
+            0.24,
+            0.0,
+            0.08,
+            0.08,
+            70.0,
+        );
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &visual_profile,
+                Some(&fully_aligned_ui_summary()),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            None
+        );
+
+        // A capped runtime/control/size dimension blocks the floor.
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &profile,
+                Some(&fully_aligned_ui_summary()),
+                98.0,
+                100.0,
+                100.0,
+            ),
+            None
+        );
+
+        // Missing visible text breaks the contract.
+        let mut low_text = fully_aligned_ui_summary();
+        low_text.visible_text_jaccard = Some(99.0);
+        assert_eq!(
+            calculate_semantic_contract_score_floor(&profile, Some(&low_text), 100.0, 100.0, 100.0),
+            None
+        );
+
+        // A required semantic tag gap breaks the contract.
+        let mut missing_tag = fully_aligned_ui_summary();
+        missing_tag
+            .missing_required_semantic_tags
+            .push("DeepLServiceExpander".to_string());
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &profile,
+                Some(&missing_tag),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            None
+        );
+
+        // A non-zero control bounds delta breaks the contract.
+        let mut dimension_drift = fully_aligned_ui_summary();
+        dimension_drift.control_dimension_delta_count = 1;
+        dimension_drift.max_control_dimension_delta_dips = 1.5;
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &profile,
+                Some(&dimension_drift),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            None
+        );
     }
 
     #[test]

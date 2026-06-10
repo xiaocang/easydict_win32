@@ -352,14 +352,13 @@ pub fn capture_overlay_view_with_state(
         .or(state.selection)
         .map(CaptureRect::normalized);
     let detected = state.detected_region.map(CaptureRect::normalized);
+    // The base is a bare input-capture surface: the .NET overlay paints only
+    // the dim mask here, so no visible content belongs in it.
     let base = pointer_region(
-        column((
-            text("Capture region"),
-            text("Adjust the selected area before OCR or copy."),
-        ))
-        .id("capture.pointer.content")
-        .padding(12)
-        .spacing(8),
+        column((spacer().width(Length::Fill).height(Length::Fill),))
+            .id("capture.pointer.content")
+            .width(Length::Fill)
+            .height(Length::Fill),
     )
     .id("capture.pointer")
     .height(Length::Fill)
@@ -374,11 +373,19 @@ pub fn capture_overlay_view_with_state(
     })
     .on_escape(Message::CaptureEscape);
 
-    let mut layers = overlay(base).id("capture.overlay.layers").layer(
-        OverlayLayer::new(capture_status_panel(state, detected, selection))
+    // Match the WinUI overlay: while detecting/selecting only a centered tip
+    // pill floats over the dim mask (~40% black, MaskAlpha 100); the command
+    // panel with confirm/copy/nudge actions appears once a selection is being
+    // adjusted.
+    let top_layer = if state.phase == CapturePhase::Adjusting {
+        OverlayLayer::new(capture_status_panel(state, selection))
             .align(Alignment::Start, Alignment::Start)
-            .scrim(0.62),
-    );
+    } else {
+        OverlayLayer::new(capture_tip_pill(state)).align(Alignment::Center, Alignment::Start)
+    };
+    let mut layers = overlay(base)
+        .id("capture.overlay.layers")
+        .layer(top_layer.scrim(0.40));
 
     if let Some(rect) = detected {
         layers = layers.layer(
@@ -405,29 +412,43 @@ pub fn capture_overlay_view_with_state(
         .into_view()
 }
 
-fn capture_status_panel(
-    state: &CaptureInteractionState,
-    _detected: Option<CaptureRect>,
-    selection: Option<CaptureRect>,
-) -> View<Message> {
-    let can_confirm = state.phase == CapturePhase::Adjusting
-        && selection.is_some_and(CaptureRect::is_confirmable);
-
-    // Match the .NET overlay, which shows a phase-specific hint: the full
-    // detection guidance while detecting, and a terse cancel hint once a
-    // selection is in progress.
-    let instructions = if state.phase == CapturePhase::Detecting {
+fn capture_tip_pill(state: &CaptureInteractionState) -> View<Message> {
+    // Phase-specific hint matching the .NET overlay tip bar: full detection
+    // guidance while detecting, a terse cancel hint once selecting.
+    let tip = if state.phase == CapturePhase::Detecting {
         tr(
             "ocr.capture.instructions",
             "Drag to select region  |  Double-click to select window  |  Scroll to switch  |  Esc to exit",
         )
     } else {
-        tr("ocr.capture.instructions.selecting", "Right-click or Esc to cancel")
+        tr(
+            "ocr.capture.instructions.selecting",
+            "Right-click or Esc to cancel",
+        )
     };
+
+    column((text(tip),))
+        .id("capture.tip")
+        .padding(8)
+        .margin(Edges {
+            top: 20,
+            right: 0,
+            bottom: 0,
+            left: 0,
+        })
+        .tw("capture-tip rounded-lg")
+        .into_view()
+}
+
+fn capture_status_panel(
+    state: &CaptureInteractionState,
+    selection: Option<CaptureRect>,
+) -> View<Message> {
+    let can_confirm = state.phase == CapturePhase::Adjusting
+        && selection.is_some_and(CaptureRect::is_confirmable);
 
     column((
         text(tr("ocr.capture.title", "OCR Capture")),
-        text(instructions),
         command_bar((
             primary_button("Confirm")
                 .id("capture.confirm")

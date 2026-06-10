@@ -1589,6 +1589,18 @@ where
             iced_container(content).into()
         }
         ViewToken::Layout(token) => {
+            // The capture-tip pill draws white text on a dark chip over the
+            // capture scrim (WinUI overlay tip bar); children inherit the
+            // inverted text palette.
+            let visual = if token.style.has("capture-tip") {
+                IcedVisualTheme {
+                    text_primary: Color::WHITE,
+                    text_secondary: Color::WHITE.scale_alpha(0.85),
+                    ..visual
+                }
+            } else {
+                visual
+            };
             let children = token
                 .children
                 .iter()
@@ -3121,6 +3133,7 @@ where
 
 fn layout_style_needs_container(style: &FluentStyle) -> bool {
     style.has("surface-card")
+        || style.has("capture-tip")
         || style.has_prefix("bg-")
         || style.has("border")
         || style.has_prefix("rounded")
@@ -5568,7 +5581,13 @@ fn utility_container_style(
 ) -> iced::widget::container::Style {
     let mut container = iced::widget::container::Style::default().color(visual.text_primary);
 
-    if style.has("surface-card") {
+    if style.has("capture-tip") {
+        // The WinUI capture overlay tip bar: a dark chip (~78% black) with
+        // white text, floating over the dim mask.
+        container = container
+            .background(Color::BLACK.scale_alpha(0.78))
+            .color(Color::WHITE);
+    } else if style.has("surface-card") {
         container = container.background(visual.surface);
     } else if style.has("bg-app") {
         container = container.background(visual.background);

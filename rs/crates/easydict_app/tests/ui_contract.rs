@@ -2514,17 +2514,14 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     assert!(capture.contains("escape=message"));
     assert!(capture.contains("id=\"capture.overlay.layers\""));
     assert!(capture.contains("layers=1"));
-    assert_control_contains(&capture, "capture.status_panel", "width=Fixed(460)");
-    // Phase is asserted structurally via `CaptureOverlay phase="..."` below; the
-    // status panel shows a user-facing instruction bar matching the .NET overlay
-    // instead of debug text.
+    // While detecting, only the centered tip pill floats over the scrim (the
+    // command panel is reserved for the adjusting phase), matching the .NET
+    // overlay. Phase is asserted structurally via `CaptureOverlay phase="..."`.
+    assert!(capture.contains("id=\"capture.tip\""));
+    assert!(capture.contains("capture-tip"));
     assert!(capture.contains("Drag to select region"));
-    assert!(capture.contains("Button label=\"Confirm\""));
-    assert!(capture.contains("Button label=\"Cancel\""));
-    assert!(capture.contains("id=\"capture.nudge_commands\""));
-    assert_control_contains(&capture, "capture.confirm", "enabled=false");
-    assert_control_contains(&capture, "capture.copy", "enabled=false");
-    assert_control_contains(&capture, "capture.nudge.left", "enabled=false");
+    assert!(!capture.contains("id=\"capture.status_panel\""));
+    assert!(!capture.contains("Button label=\"Confirm\""));
 
     let mut detecting_state = CaptureInteractionState::new();
     detecting_state.detected_region = Some(CaptureRect::new(96, 118, 720, 458));
@@ -2549,9 +2546,11 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     assert!(selected.contains("magnifier_visible=true"));
     assert!(selected.contains("id=\"capture.selection_rect\""));
     assert!(selected.contains("id=\"capture.magnifier\""));
-    assert_control_contains(&selected, "capture.confirm", "enabled=false");
-    assert_control_contains(&selected, "capture.copy", "enabled=false");
-    assert_control_contains(&selected, "capture.nudge.left", "enabled=false");
+    // Selecting still shows the tip pill (with the terse cancel hint), not the
+    // command panel.
+    assert!(selected.contains("id=\"capture.tip\""));
+    assert!(selected.contains("Right-click or Esc to cancel"));
+    assert!(!selected.contains("id=\"capture.status_panel\""));
 
     let mut adjusting_state = CaptureInteractionState::new();
     adjusting_state.set_adjusting_selection(CaptureRect::new(180, 164, 604, 386));

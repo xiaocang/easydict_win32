@@ -1566,7 +1566,7 @@ where
                 TextStyle::Subtitle,
                 visual,
             )])
-            .padding(16)
+            .padding(24)
             .spacing(12);
 
             if let Some(child) = &token.content {
@@ -1586,7 +1586,13 @@ where
                 content = content.push(iced_row(commands).spacing(8));
             }
 
-            iced_container(content).into()
+            // Modal chrome matching the WinUI ContentDialog: a solid surface
+            // card with rounded corners and a deep shadow, width-capped so the
+            // dialog never spans the window.
+            iced_container(content)
+                .max_width(560.0)
+                .style(move |_| dialog_container_style(visual))
+                .into()
         }
         ViewToken::Layout(token) => {
             // The capture-tip pill draws white text on a dark chip over the
@@ -6544,6 +6550,14 @@ fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget
     }
 
     style
+}
+
+fn dialog_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(visual.surface)
+        .color(visual.text_primary)
+        .border(control_border(visual, visual.border, visual.stroke_control))
+        .shadow(elevation_shadow(visual, 16.0))
 }
 
 fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {

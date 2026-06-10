@@ -1071,6 +1071,18 @@ fn resolve_window_placement_with(
         constraint_area.height(),
         options.screen_constraint,
     );
+    // A borderless window sized exactly to the monitor triggers DWM's
+    // fullscreen optimization, which can leave the swapchain unpresented (the
+    // window shows as blank white). Oversize by one DIP after constraining so
+    // the overlay stays visually full-screen while opting out of that path;
+    // the extra row hangs below the monitor edge.
+    let height = if options.placement == WindowPlacement::Monitor
+        && options.frame == WindowFrame::Borderless
+    {
+        height + 1
+    } else {
+        height
+    };
 
     let (x, y) = match options.placement {
         WindowPlacement::Center => (
@@ -3531,6 +3543,42 @@ mod tests {
         assert_eq!(placement.y, 0);
         assert_eq!(placement.width, 1440);
         assert_eq!(placement.height, 900);
+    }
+
+    #[test]
+    fn borderless_monitor_placement_oversizes_height_to_avoid_fullscreen_present_bug() {
+        let options = WindowOptions::new("capture-overlay", "Capture")
+            .size(1920.0, 1080.0)
+            .min_size(1.0, 1.0)
+            .frame(WindowFrame::Borderless)
+            .placement(WindowPlacement::Monitor);
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for_monitor(
+            &options,
+            WindowsPoint { x: 300, y: 200 },
+            WindowsMonitorMetrics::with_monitor_area(
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 2880,
+                    bottom: 1704,
+                },
+                WindowsRect {
+                    left: 0,
+                    top: 0,
+                    right: 2880,
+                    bottom: 1800,
+                },
+                192,
+            ),
+        );
+
+        // One DIP taller than the monitor so DWM does not treat the borderless
+        // overlay as an exclusive fullscreen surface.
+        assert_eq!(placement.width, 1440);
+        assert_eq!(placement.height, 901);
+        assert_eq!(placement.x, 0);
+        assert_eq!(placement.y, 0);
     }
 
     #[test]

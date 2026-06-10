@@ -3749,11 +3749,16 @@ where
     }
 
     if item.toggleable {
+        // Chevron semantics follow the WinUI reference: a pending click-to-query
+        // row points right, a collapsed expander points down, and an expanded
+        // one points up.
         header_right_children.push(
             iced_text(if item.expanded {
-                "\u{E70D}"
-            } else {
+                "\u{E70E}"
+            } else if header_hint.is_some() {
                 "\u{E76C}"
+            } else {
+                "\u{E70D}"
             })
             .font(caption_icon_font())
             .size(12.0)
@@ -7364,7 +7369,8 @@ mod tests {
             optional_background_color(result_card.background),
             iced_color(theme.result_surface)
         );
-        assert_eq!(result_card.shadow, Shadow::default());
+        // Result rows are raised over the surface like the WinUI reference.
+        assert_eq!(result_card.shadow, elevation_shadow(visual, 3.0));
 
         let floating_action = button_style(
             visual,

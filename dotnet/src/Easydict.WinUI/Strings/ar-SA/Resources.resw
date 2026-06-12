@@ -1287,4 +1287,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>تعذّر تسجيل اختصار لوحة المفاتيح</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>تعذّر تسجيل اختصارات لوحة المفاتيح التالية. قد تكون محجوزة بواسطة Windows أو مستخدمة بالفعل من قبل تطبيق آخر. يرجى اختيار مجموعة مختلفة:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>سيتجاوز Win+Space اختصار النظام</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>يُستخدم Win+Space عادةً في Windows لتبديل لغة الإدخال. أثناء تشغيل Easydict، سيؤدي هذا الاختصار إلى تشغيل Easydict ولن يستجيب مبدّل لغة الإدخال في النظام. اختر مجموعة مختلفة إذا أردت الاحتفاظ بسلوك Windows.</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>اختصار غير صالح</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>اختصارات لوحة المفاتيح التالية غير صالحة. استخدم مفتاح تعديل واحدًا أو أكثر (Ctrl، Alt، Shift، Win) مع مفتاح واحد، مثل Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>اختصار غير صالح. مثال: Ctrl+Alt+T</value>
+  </data>
 </root>

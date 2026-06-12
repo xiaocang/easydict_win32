@@ -16,6 +16,8 @@ public static class HotkeyParser
     private const uint MOD_SHIFT = 0x0004;
     private const uint MOD_WIN = 0x0008;
 
+    private const uint VK_SPACE = 0x20;
+
     /// <summary>
     /// Parse a hotkey string into modifiers and virtual key code.
     /// </summary>
@@ -84,6 +86,33 @@ public static class HotkeyParser
         }
 
         return new HotkeyParseResult(true, modifiers, virtualKey);
+    }
+
+    /// <summary>
+    /// True when the string parses to a combination the app can sensibly register
+    /// as a global hotkey: at least one modifier key, or a bare function key
+    /// (F1–F24). A bare letter/digit/named key would hijack normal typing
+    /// system-wide, so it is rejected.
+    /// </summary>
+    public static bool IsValidCombination(string? hotkeyString)
+    {
+        var result = Parse(hotkeyString);
+        if (!result.IsValid)
+            return false;
+
+        const uint VK_F1 = 0x70, VK_F24 = 0x87;
+        return result.Modifiers != 0 || (result.VirtualKey >= VK_F1 && result.VirtualKey <= VK_F24);
+    }
+
+    /// <summary>
+    /// True when the hotkey string parses to exactly Win+Space — the combination
+    /// that is bound via the low-level keyboard hook (see WinSpaceHotkeyHook) and
+    /// overrides the Windows input-language switcher while the app is running.
+    /// </summary>
+    public static bool IsWinSpace(string? hotkeyString)
+    {
+        var result = Parse(hotkeyString);
+        return result.IsValid && result.Modifiers == MOD_WIN && result.VirtualKey == VK_SPACE;
     }
 
     /// <summary>

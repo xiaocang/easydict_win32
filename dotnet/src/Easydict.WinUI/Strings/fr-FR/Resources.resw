@@ -1292,4 +1292,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Impossible d'enregistrer le raccourci</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Les raccourcis suivants n'ont pas pu être enregistrés. Ils sont peut-être réservés par Windows ou déjà utilisés par une autre application. Veuillez choisir une autre combinaison :</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Espace remplace un raccourci système</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Espace est normalement utilisé par Windows pour changer de langue de saisie. Tant qu'Easydict est en cours d'exécution, ce raccourci déclenchera Easydict et le sélecteur de langue du système ne répondra plus. Choisissez une autre combinaison si vous souhaitez conserver le comportement de Windows.</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Raccourci non valide</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Les raccourcis suivants ne sont pas valides. Utilisez une ou plusieurs touches de modification (Ctrl, Alt, Shift, Win) plus une touche, par exemple Ctrl+Alt+T :</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Raccourci non valide. Exemple : Ctrl+Alt+T</value>
+  </data>
 </root>

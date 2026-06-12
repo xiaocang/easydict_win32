@@ -1292,4 +1292,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Tastenkombination konnte nicht registriert werden</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Die folgenden Tastenkombinationen konnten nicht registriert werden. Sie sind möglicherweise von Windows reserviert oder werden bereits von einer anderen Anwendung verwendet. Bitte wählen Sie eine andere Kombination:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Leertaste überschreibt eine Systemtastenkombination</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Leertaste wird normalerweise von Windows zum Wechseln der Eingabesprache verwendet. Solange Easydict läuft, löst diese Tastenkombination Easydict aus und der Eingabesprachen-Umschalter des Systems reagiert nicht mehr. Wählen Sie eine andere Kombination, wenn Sie das Windows-Verhalten beibehalten möchten.</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Ungültige Tastenkombination</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Die folgenden Tastenkombinationen sind ungültig. Verwenden Sie eine oder mehrere Modifikatortasten (Ctrl, Alt, Shift, Win) plus eine Taste, z. B. Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Ungültige Tastenkombination. Beispiel: Ctrl+Alt+T</value>
+  </data>
 </root>

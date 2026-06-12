@@ -875,4 +875,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Tidak Dapat Mendaftarkan Pintasan</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Pintasan berikut tidak dapat didaftarkan. Ia mungkin dikhaskan oleh Windows atau sudah digunakan oleh aplikasi lain. Sila pilih gabungan lain:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space Mengatasi Pintasan Sistem</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space biasanya digunakan oleh Windows untuk menukar bahasa input. Semasa Easydict berjalan, pintasan ini akan mencetuskan Easydict dan penukar bahasa input sistem tidak akan bertindak balas. Pilih gabungan lain jika anda mahu mengekalkan tingkah laku Windows.</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Pintasan Tidak Sah</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Pintasan berikut tidak sah. Gunakan satu atau lebih kekunci pengubah suai (Ctrl, Alt, Shift, Win) berserta satu kekunci, contohnya Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Pintasan tidak sah. Contoh: Ctrl+Alt+T</value>
+  </data>
 </root>

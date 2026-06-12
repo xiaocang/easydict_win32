@@ -223,7 +223,7 @@ public class SettingsPageTests : IDisposable
         Retry.WhileNull(
                 () =>
                 {
-                    var hotkeyBox = FindVisibleByAutomationId(window, "ShowHotkeyBox")?.AsTextBox();
+                    var hotkeyBox = FindVisibleHotkeyTextBox(window, "ShowHotkeyBox");
                     return string.IsNullOrWhiteSpace(hotkeyBox?.Text) ? null : hotkeyBox;
                 },
                 TimeSpan.FromSeconds(5))
@@ -385,6 +385,36 @@ public class SettingsPageTests : IDisposable
             return null;
         }
         catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static TextBox? FindVisibleHotkeyTextBox(Window window, string automationId)
+    {
+        try
+        {
+            var container = FindVisibleByAutomationId(window, automationId);
+            if (container == null)
+                return null;
+
+            var textBoxElement = container.ControlType == ControlType.Edit
+                ? container
+                : container.FindFirstDescendant(cf => cf.ByControlType(ControlType.Edit));
+
+            return textBoxElement != null && IsOnScreenOrUnknown(textBoxElement)
+                ? textBoxElement.AsTextBox()
+                : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+        catch (FlaUI.Core.Exceptions.MethodNotSupportedException)
         {
             return null;
         }

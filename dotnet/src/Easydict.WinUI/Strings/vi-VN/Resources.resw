@@ -1287,4 +1287,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Không thể đăng ký phím tắt</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Không thể đăng ký các phím tắt sau. Chúng có thể được Windows dành riêng hoặc đã được ứng dụng khác sử dụng. Vui lòng chọn tổ hợp khác:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space sẽ ghi đè phím tắt hệ thống</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space thường được Windows dùng để chuyển đổi ngôn ngữ nhập. Khi Easydict đang chạy, phím tắt này sẽ kích hoạt Easydict và trình chuyển đổi ngôn ngữ nhập của hệ thống sẽ không phản hồi. Hãy chọn tổ hợp khác nếu bạn muốn giữ hành vi của Windows.</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Phím tắt không hợp lệ</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Các phím tắt sau không hợp lệ. Hãy dùng một hoặc nhiều phím bổ trợ (Ctrl, Alt, Shift, Win) cùng một phím, ví dụ Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Phím tắt không hợp lệ. Ví dụ: Ctrl+Alt+T</value>
+  </data>
 </root>

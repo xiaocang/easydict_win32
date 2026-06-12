@@ -1233,4 +1233,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>Tidak Dapat Mendaftarkan Pintasan</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>Pintasan berikut tidak dapat didaftarkan. Pintasan ini mungkin dipesan oleh Windows atau sudah digunakan oleh aplikasi lain. Silakan pilih kombinasi lain:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space Menggantikan Pintasan Sistem</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space biasanya digunakan Windows untuk mengganti bahasa input. Selama Easydict berjalan, pintasan ini akan memicu Easydict dan pengalih bahasa input sistem tidak akan merespons. Pilih kombinasi lain jika Anda ingin mempertahankan perilaku Windows.</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Pintasan Tidak Valid</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Pintasan berikut tidak valid. Gunakan satu atau beberapa tombol pengubah (Ctrl, Alt, Shift, Win) ditambah satu tombol, misalnya Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Pintasan tidak valid. Contoh: Ctrl+Alt+T</value>
+  </data>
 </root>

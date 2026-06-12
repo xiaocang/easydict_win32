@@ -1241,4 +1241,25 @@
   </data>
   <data name="VolcanoAccessKeyId" xml:space="preserve"><value>Access Key ID</value></data>
   <data name="VolcanoSecretAccessKey" xml:space="preserve"><value>Secret Access Key</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve">
+    <value>ไม่สามารถลงทะเบียนปุ่มลัดได้</value>
+  </data>
+  <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
+    <value>ไม่สามารถลงทะเบียนปุ่มลัดต่อไปนี้ได้ อาจถูกสงวนไว้โดย Windows หรือถูกใช้งานโดยแอปพลิเคชันอื่นอยู่แล้ว โปรดเลือกชุดปุ่มอื่น:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space จะแทนที่ทางลัดของระบบ</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>โดยปกติ Windows ใช้ Win+Space เพื่อสลับภาษาป้อนข้อมูล ขณะที่ Easydict ทำงาน ปุ่มลัดนี้จะเรียกใช้ Easydict และตัวสลับภาษาของระบบจะไม่ตอบสนอง โปรดเลือกชุดปุ่มอื่นหากต้องการคงการทำงานของ Windows</value>
+  </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>ปุ่มลัดไม่ถูกต้อง</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>ปุ่มลัดต่อไปนี้ไม่ถูกต้อง โปรดใช้ปุ่มปรับแต่งอย่างน้อยหนึ่งปุ่ม (Ctrl, Alt, Shift, Win) ร่วมกับอีกหนึ่งปุ่ม เช่น Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>ปุ่มลัดไม่ถูกต้อง ตัวอย่าง: Ctrl+Alt+T</value>
+  </data>
 </root>

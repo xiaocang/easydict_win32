@@ -4031,6 +4031,10 @@ public sealed partial class SettingsPage : Page
         var originalProxyUri = _settings.ProxyUri;
         var originalProxyBypassLocal = _settings.ProxyBypassLocal;
 
+        // Capture whether any enabled hotkey was already Win+Space, so the
+        // OS-override notice is shown only when the user newly selects it.
+        var hadWinSpaceHotkey = HasEnabledWinSpaceHotkey();
+
         // === Validate all inputs before modifying any settings ===
 
         // Validate language preferences
@@ -4083,6 +4087,32 @@ public sealed partial class SettingsPage : Page
                 await ShowDialogAsync(errorDialog);
                 return false;
             }
+        }
+
+        // Validate hotkey strings — an enabled hotkey that cannot be parsed
+        // (or that has no modifier and is not a function key) would silently
+        // fail to register, so block the save and tell the user.
+        var invalidHotkeys = new List<string>();
+        CollectInvalidHotkey(ShowHotkeyEnabledToggle.IsOn, ShowHotkeyBox.Text, "ShowWindow", invalidHotkeys);
+        CollectInvalidHotkey(TranslateHotkeyEnabledToggle.IsOn, TranslateHotkeyBox.Text, "TranslateSelection", invalidHotkeys);
+        CollectInvalidHotkey(ShowMiniHotkeyEnabledToggle.IsOn, ShowMiniHotkeyBox.Text, "ShowMiniWindow", invalidHotkeys);
+        CollectInvalidHotkey(ShowFixedHotkeyEnabledToggle.IsOn, ShowFixedHotkeyBox.Text, "ShowFixedWindow", invalidHotkeys);
+        CollectInvalidHotkey(OcrTranslateHotkeyEnabledToggle.IsOn, OcrTranslateHotkeyBox.Text, "OcrScreenshotTranslate", invalidHotkeys);
+        CollectInvalidHotkey(SilentOcrHotkeyEnabledToggle.IsOn, SilentOcrHotkeyBox.Text, "SilentOcr", invalidHotkeys);
+
+        if (invalidHotkeys.Count > 0)
+        {
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("InvalidHotkeyTitle"),
+                Content = loc.GetString("InvalidHotkeyMessage")
+                    + "\n\n"
+                    + string.Join("\n", invalidHotkeys),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(errorDialog);
+            return false;
         }
 
         // === All validations passed — apply settings ===
@@ -4285,7 +4315,7 @@ public sealed partial class SettingsPage : Page
 
         // Reload hotkeys immediately
         App.LogToFile("[SettingsPage] Triggering hotkey reload");
-        App.HotkeyService?.ReloadHotkeys();
+        var hotkeyFailures = App.HotkeyService?.ReloadHotkeys();
 
         // Refresh window service results to pick up new EnabledQuery settings
         MiniWindowService.Instance.RefreshServiceResults();
@@ -4320,7 +4350,106 @@ public sealed partial class SettingsPage : Page
         _hasUnsavedChanges = false;
         SaveButton.Visibility = Visibility.Collapsed;
 
+        // Warn the user about any hotkeys that could not be registered
+        // (e.g. reserved by Windows or in use by another app).
+        if (hotkeyFailures is { Count: > 0 })
+        {
+            var lines = hotkeyFailures
+                .Select(f => $"{loc.GetString(f.NameKey)}: {f.HotkeyString}")
+                .Distinct()
+                .ToList();
+
+            var failureDialog = new ContentDialog
+            {
+                Title = loc.GetString("HotkeyRegistrationFailedTitle"),
+                Content = loc.GetString("HotkeyRegistrationFailedMessage")
+                    + "\n\n"
+                    + string.Join("\n", lines),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(failureDialog);
+        }
+
+        // Win+Space is captured via a low-level keyboard hook that overrides the
+        // Windows input-language switcher; notify the user when they first pick it.
+        if (!hadWinSpaceHotkey && HasEnabledWinSpaceHotkey())
+        {
+            var winSpaceDialog = new ContentDialog
+            {
+                Title = loc.GetString("WinSpaceHotkeyWarningTitle"),
+                Content = loc.GetString("WinSpaceHotkeyWarningMessage"),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(winSpaceDialog);
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// Shared handler for all hotkey AutoSuggestBoxes: offers autocomplete while
+    /// typing and validates the text in real time, showing an inline error for
+    /// combinations that could not be registered.
+    /// </summary>
+    private void OnHotkeyBoxTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            sender.ItemsSource = HotkeySuggestionProvider.GetSuggestions(sender.Text);
+        }
+        UpdateHotkeyErrorText(sender);
+    }
+
+    private void UpdateHotkeyErrorText(AutoSuggestBox box)
+    {
+        var errorText = GetHotkeyErrorTextBlock(box);
+        if (errorText is null) return;
+
+        var text = box.Text?.Trim() ?? "";
+        var isInvalid = text.Length > 0 && !HotkeyParser.IsValidCombination(text);
+        if (isInvalid)
+        {
+            errorText.Text = LocalizationService.Instance.GetString("InvalidHotkeyInlineError");
+        }
+        errorText.Visibility = isInvalid ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private TextBlock? GetHotkeyErrorTextBlock(AutoSuggestBox box)
+    {
+        if (ReferenceEquals(box, ShowHotkeyBox)) return ShowHotkeyErrorText;
+        if (ReferenceEquals(box, TranslateHotkeyBox)) return TranslateHotkeyErrorText;
+        if (ReferenceEquals(box, ShowMiniHotkeyBox)) return ShowMiniHotkeyErrorText;
+        if (ReferenceEquals(box, ShowFixedHotkeyBox)) return ShowFixedHotkeyErrorText;
+        if (ReferenceEquals(box, OcrTranslateHotkeyBox)) return OcrTranslateHotkeyErrorText;
+        if (ReferenceEquals(box, SilentOcrHotkeyBox)) return SilentOcrHotkeyErrorText;
+        return null;
+    }
+
+    /// <summary>
+    /// Adds a "label: text" line to <paramref name="invalid"/> when an enabled
+    /// hotkey's text is not a registrable combination.
+    /// </summary>
+    private static void CollectInvalidHotkey(bool enabled, string? text, string nameKey, List<string> invalid)
+    {
+        if (!enabled || HotkeyParser.IsValidCombination(text)) return;
+
+        var label = LocalizationService.Instance.GetString(nameKey);
+        invalid.Add(string.IsNullOrWhiteSpace(text) ? label : $"{label}: {text}");
+    }
+
+    /// <summary>
+    /// True when any enabled hotkey in the saved settings is bound to Win+Space.
+    /// </summary>
+    private bool HasEnabledWinSpaceHotkey()
+    {
+        return (_settings.EnableShowWindowHotkey && HotkeyParser.IsWinSpace(_settings.ShowWindowHotkey))
+            || (_settings.EnableTranslateSelectionHotkey && HotkeyParser.IsWinSpace(_settings.TranslateSelectionHotkey))
+            || (_settings.EnableShowMiniWindowHotkey && HotkeyParser.IsWinSpace(_settings.ShowMiniWindowHotkey))
+            || (_settings.EnableShowFixedWindowHotkey && HotkeyParser.IsWinSpace(_settings.ShowFixedWindowHotkey))
+            || (_settings.EnableOcrTranslateHotkey && HotkeyParser.IsWinSpace(_settings.OcrTranslateHotkey))
+            || (_settings.EnableSilentOcrHotkey && HotkeyParser.IsWinSpace(_settings.SilentOcrHotkey));
     }
 
     private void OnMouseSelectionTranslateToggled(object sender, RoutedEventArgs e)

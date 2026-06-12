@@ -4,6 +4,16 @@ using WinRT.Interop;
 namespace Easydict.WinUI.Services;
 
 /// <summary>
+/// Describes a hotkey that failed to register (e.g. the combination is reserved
+/// by Windows like Win+Space, or already in use by another application).
+/// </summary>
+/// <param name="NameKey">Localization key for the hotkey's friendly name.</param>
+/// <param name="HotkeyString">The hotkey combination as configured, e.g. "Win+Space".</param>
+/// <param name="ErrorCode">The Win32 error code from RegisterHotKey, or 0 when no
+/// Win32 call was involved (e.g. a second slot requesting an already-bound Win+Space).</param>
+public sealed record HotkeyRegistrationFailure(string NameKey, string HotkeyString, int ErrorCode);
+
+/// <summary>
 /// Manages global hotkeys for the application.
 /// Uses Win32 window subclassing to intercept WM_HOTKEY messages.
 /// </summary>
@@ -23,12 +33,23 @@ public sealed class HotkeyService : IDisposable
     private const uint MOD_ALT = 0x0001;
     private const uint MOD_CONTROL = 0x0002;
     private const uint MOD_SHIFT = 0x0004;
+    private const uint MOD_WIN = 0x0008;
     private const uint MOD_NOREPEAT = 0x4000;
+
+    private const uint VK_SPACE = 0x20;
 
     private readonly Window _window;
     private readonly nint _hwnd;
     private volatile bool _isDisposed;
     private volatile bool _isInitialized;
+
+    // Low-level keyboard hook used only to capture Win+Space, which RegisterHotKey
+    // cannot claim because Windows reserves it for the input-language switcher.
+    // Lazily created when a hotkey is configured as Win+Space.
+    private WinSpaceHotkeyHook? _winSpaceHook;
+
+    // True once a hotkey slot has claimed Win+Space during the current registration pass.
+    private bool _winSpaceBound;
 
     // Window subclass delegate - must keep reference to prevent GC
     private delegate nint SubclassProc(nint hWnd, uint uMsg, nint wParam, nint lParam, nuint uIdSubclass, nuint dwRefData);
@@ -81,7 +102,7 @@ public sealed class HotkeyService : IDisposable
         if (_isInitialized) return;
 
         App.LogToFile("[Hotkey] Initializing hotkey service...");
-        
+
         if (_hwnd == IntPtr.Zero)
         {
             App.LogToFile("[Hotkey] ABORTING: Cannot initialize with zero HWND");
@@ -103,12 +124,16 @@ public sealed class HotkeyService : IDisposable
     /// Unregisters all current hotkeys and re-registers them from current settings.
     /// Call this when hotkey settings are changed in the UI.
     /// </summary>
-    public void ReloadHotkeys()
+    /// <returns>
+    /// The list of hotkeys that could not be registered (e.g. reserved by Windows
+    /// or already in use by another application). Empty when everything registered.
+    /// </returns>
+    public IReadOnlyList<HotkeyRegistrationFailure> ReloadHotkeys()
     {
         if (!_isInitialized || _hwnd == IntPtr.Zero)
         {
             App.LogToFile("[Hotkey] Reload requested but service is not initialized or HWND is zero");
-            return;
+            return Array.Empty<HotkeyRegistrationFailure>();
         }
 
         App.LogToFile("[Hotkey] Reloading hotkeys...");
@@ -124,22 +149,30 @@ public sealed class HotkeyService : IDisposable
         UnregisterHotKey(_hwnd, HOTKEY_ID_SILENT_OCR);
 
         // Re-register with current settings
-        RegisterAllHotkeys();
+        var failures = RegisterAllHotkeys();
 
-        App.LogToFile("[Hotkey] Hotkey reload complete.");
+        App.LogToFile($"[Hotkey] Hotkey reload complete. {failures.Count} failure(s).");
+        return failures;
     }
 
     /// <summary>
     /// Register all hotkeys defined in settings.
     /// </summary>
-    private void RegisterAllHotkeys()
+    /// <returns>The list of hotkeys that failed to register.</returns>
+    private List<HotkeyRegistrationFailure> RegisterAllHotkeys()
     {
         var settings = SettingsService.Instance;
+        var failures = new List<HotkeyRegistrationFailure>();
+
+        // Reset Win+Space hook binding for this pass; TryRegister re-binds it if a
+        // slot is still configured as Win+Space.
+        _winSpaceBound = false;
+        _winSpaceHook?.SetHandler(null);
 
         // Register Show Window hotkey (default: Ctrl+Alt+T)
         if (settings.EnableShowWindowHotkey)
         {
-            RegisterHotkeyFromSetting(HOTKEY_ID_SHOW, settings.ShowWindowHotkey, "SHOW");
+            RegisterHotkeyFromSetting(HOTKEY_ID_SHOW, settings.ShowWindowHotkey, "SHOW", "ShowWindow", failures);
         }
         else
         {
@@ -149,7 +182,7 @@ public sealed class HotkeyService : IDisposable
         // Register Translate Selection hotkey (default: Ctrl+Alt+D)
         if (settings.EnableTranslateSelectionHotkey)
         {
-            RegisterHotkeyFromSetting(HOTKEY_ID_TRANSLATE_SELECTION, settings.TranslateSelectionHotkey, "TRANSLATE");
+            RegisterHotkeyFromSetting(HOTKEY_ID_TRANSLATE_SELECTION, settings.TranslateSelectionHotkey, "TRANSLATE", "TranslateSelection", failures);
         }
         else
         {
@@ -162,13 +195,13 @@ public sealed class HotkeyService : IDisposable
             var miniResult = HotkeyParser.Parse(settings.ShowMiniWindowHotkey);
             if (miniResult.IsValid)
             {
-                var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_MINI, miniResult.Modifiers | MOD_NOREPEAT, miniResult.VirtualKey);
-                App.LogToFile($"[Hotkey] RegisterHotKey MINI ({settings.ShowMiniWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+                TryRegister(HOTKEY_ID_SHOW_MINI, miniResult.Modifiers, miniResult.VirtualKey,
+                    "MINI", "ShowMiniWindow", settings.ShowMiniWindowHotkey, failures);
 
                 // Register Toggle Mini hotkey (base + Shift)
                 var toggleMini = HotkeyParser.AddShiftModifier(miniResult);
-                var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_MINI, toggleMini.Modifiers | MOD_NOREPEAT, toggleMini.VirtualKey);
-                App.LogToFile($"[Hotkey] RegisterHotKey TOGGLE_MINI ({settings.ShowMiniWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+                TryRegister(HOTKEY_ID_TOGGLE_MINI, toggleMini.Modifiers, toggleMini.VirtualKey,
+                    "TOGGLE_MINI", "ShowMiniWindow", settings.ShowMiniWindowHotkey + "+Shift", failures);
             }
             else
             {
@@ -186,13 +219,13 @@ public sealed class HotkeyService : IDisposable
             var fixedResult = HotkeyParser.Parse(settings.ShowFixedWindowHotkey);
             if (fixedResult.IsValid)
             {
-                var result = RegisterHotKey(_hwnd, HOTKEY_ID_SHOW_FIXED, fixedResult.Modifiers | MOD_NOREPEAT, fixedResult.VirtualKey);
-                App.LogToFile($"[Hotkey] RegisterHotKey FIXED ({settings.ShowFixedWindowHotkey}): {result}, Error: {Marshal.GetLastWin32Error()}");
+                TryRegister(HOTKEY_ID_SHOW_FIXED, fixedResult.Modifiers, fixedResult.VirtualKey,
+                    "FIXED", "ShowFixedWindow", settings.ShowFixedWindowHotkey, failures);
 
                 // Register Toggle Fixed hotkey (base + Shift)
                 var toggleFixed = HotkeyParser.AddShiftModifier(fixedResult);
-                var toggleResult = RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE_FIXED, toggleFixed.Modifiers | MOD_NOREPEAT, toggleFixed.VirtualKey);
-                App.LogToFile($"[Hotkey] RegisterHotKey TOGGLE_FIXED ({settings.ShowFixedWindowHotkey}+Shift): {toggleResult}, Error: {Marshal.GetLastWin32Error()}");
+                TryRegister(HOTKEY_ID_TOGGLE_FIXED, toggleFixed.Modifiers, toggleFixed.VirtualKey,
+                    "TOGGLE_FIXED", "ShowFixedWindow", settings.ShowFixedWindowHotkey + "+Shift", failures);
             }
             else
             {
@@ -207,7 +240,7 @@ public sealed class HotkeyService : IDisposable
         // Register OCR Translate hotkey (default: Ctrl+Alt+S)
         if (settings.EnableOcrTranslateHotkey)
         {
-            RegisterHotkeyFromSetting(HOTKEY_ID_OCR_TRANSLATE, settings.OcrTranslateHotkey, "OCR_TRANSLATE");
+            RegisterHotkeyFromSetting(HOTKEY_ID_OCR_TRANSLATE, settings.OcrTranslateHotkey, "OCR_TRANSLATE", "OcrScreenshotTranslate", failures);
         }
         else
         {
@@ -217,28 +250,81 @@ public sealed class HotkeyService : IDisposable
         // Register Silent OCR hotkey (default: Ctrl+Alt+Shift+S)
         if (settings.EnableSilentOcrHotkey)
         {
-            RegisterHotkeyFromSetting(HOTKEY_ID_SILENT_OCR, settings.SilentOcrHotkey, "SILENT_OCR");
+            RegisterHotkeyFromSetting(HOTKEY_ID_SILENT_OCR, settings.SilentOcrHotkey, "SILENT_OCR", "SilentOcr", failures);
         }
         else
         {
             App.LogToFile("[Hotkey] SILENT_OCR hotkey skipped (disabled in settings)");
         }
+
+        // No slot uses Win+Space anymore — tear down the keyboard hook so we don't
+        // keep a global hook running needlessly (restores normal Win+Space behavior).
+        if (!_winSpaceBound)
+        {
+            _winSpaceHook?.Uninstall();
+        }
+
+        return failures;
     }
 
     /// <summary>
-    /// Register a hotkey from a settings string.
+    /// Register a hotkey from a settings string, recording any failure.
     /// </summary>
-    private void RegisterHotkeyFromSetting(int hotkeyId, string hotkeyString, string debugName)
+    private void RegisterHotkeyFromSetting(int hotkeyId, string hotkeyString, string debugName, string nameKey, List<HotkeyRegistrationFailure> failures)
     {
         var parseResult = HotkeyParser.Parse(hotkeyString);
         if (parseResult.IsValid)
         {
-            var result = RegisterHotKey(_hwnd, hotkeyId, parseResult.Modifiers | MOD_NOREPEAT, parseResult.VirtualKey);
-            App.LogToFile($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {Marshal.GetLastWin32Error()}");
+            TryRegister(hotkeyId, parseResult.Modifiers, parseResult.VirtualKey, debugName, nameKey, hotkeyString, failures);
         }
         else
         {
             App.LogToFile($"[Hotkey] Failed to parse {debugName} hotkey '{hotkeyString}': {parseResult.ErrorMessage}");
+        }
+    }
+
+    /// <summary>
+    /// Calls RegisterHotKey and records a <see cref="HotkeyRegistrationFailure"/> when it fails.
+    /// A failure typically means the combination is reserved by Windows (e.g. Win+Space)
+    /// or already claimed by another application.
+    /// </summary>
+    private void TryRegister(int hotkeyId, uint modifiers, uint virtualKey, string debugName, string nameKey, string hotkeyString, List<HotkeyRegistrationFailure> failures)
+    {
+        // Win+Space cannot be claimed via RegisterHotKey (Windows reserves it for the
+        // input-language switcher); route it through the low-level keyboard hook.
+        if (modifiers == MOD_WIN && virtualKey == VK_SPACE)
+        {
+            if (_winSpaceBound)
+            {
+                // Another slot already owns Win+Space; only one owner is allowed.
+                App.LogToFile($"[Hotkey] Win+Space already bound; {debugName} ({hotkeyString}) ignored");
+                failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, 0));
+                return;
+            }
+
+            _winSpaceHook ??= new WinSpaceHotkeyHook();
+            _winSpaceHook.SetHandler(() =>
+            {
+                // Mirror the WM_HOTKEY path so the target window can come to the foreground.
+                ForegroundWindowHelper.AllowCurrentProcessToSetForeground("WinSpaceHook");
+                ProcessHotkeyMessage(hotkeyId);
+            });
+            var installed = _winSpaceHook.Install();
+            _winSpaceBound = installed;
+            App.LogToFile($"[Hotkey] {debugName} ({hotkeyString}) bound via low-level keyboard hook: installed={installed}");
+            if (!installed)
+            {
+                failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, Marshal.GetLastWin32Error()));
+            }
+            return;
+        }
+
+        var result = RegisterHotKey(_hwnd, hotkeyId, modifiers | MOD_NOREPEAT, virtualKey);
+        var error = Marshal.GetLastWin32Error();
+        App.LogToFile($"[Hotkey] RegisterHotKey {debugName} ({hotkeyString}): {result}, Error: {error}");
+        if (!result)
+        {
+            failures.Add(new HotkeyRegistrationFailure(nameKey, hotkeyString, error));
         }
     }
 
@@ -316,6 +402,10 @@ public sealed class HotkeyService : IDisposable
             RemoveWindowSubclass(_hwnd, _subclassProc, 1);
             _subclassProc = null;
         }
+
+        // Tear down the Win+Space keyboard hook, if any.
+        _winSpaceHook?.Dispose();
+        _winSpaceHook = null;
 
         System.Diagnostics.Debug.WriteLine("[Hotkey] Hotkey service disposed.");
     }

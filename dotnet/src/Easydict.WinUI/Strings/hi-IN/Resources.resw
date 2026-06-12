@@ -887,4 +887,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>Win+Space आमतौर पर Windows में इनपुट भाषा बदलने के लिए उपयोग होता है। Easydict चलते समय यह हॉटकी Easydict को सक्रिय करेगी और सिस्टम का इनपुट स्विचर प्रतिक्रिया नहीं देगा। यदि आप Windows का व्यवहार बनाए रखना चाहते हैं तो कोई अन्य संयोजन चुनें।</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>अमान्य हॉटकी</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>निम्नलिखित हॉटकी अमान्य हैं। एक या अधिक मॉडिफ़ायर कुंजियों (Ctrl, Alt, Shift, Win) के साथ एक कुंजी का उपयोग करें, जैसे Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>अमान्य हॉटकी। उदाहरण: Ctrl+Alt+T</value>
+  </data>
 </root>

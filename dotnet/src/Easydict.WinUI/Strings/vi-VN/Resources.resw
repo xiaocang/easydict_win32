@@ -1299,4 +1299,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>Win+Space thường được Windows dùng để chuyển đổi ngôn ngữ nhập. Khi Easydict đang chạy, phím tắt này sẽ kích hoạt Easydict và trình chuyển đổi ngôn ngữ nhập của hệ thống sẽ không phản hồi. Hãy chọn tổ hợp khác nếu bạn muốn giữ hành vi của Windows.</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Phím tắt không hợp lệ</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Các phím tắt sau không hợp lệ. Hãy dùng một hoặc nhiều phím bổ trợ (Ctrl, Alt, Shift, Win) cùng một phím, ví dụ Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Phím tắt không hợp lệ. Ví dụ: Ctrl+Alt+T</value>
+  </data>
 </root>

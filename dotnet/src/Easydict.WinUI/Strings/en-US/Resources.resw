@@ -1301,4 +1301,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>Win+Space is normally used by Windows to switch input languages. While Easydict is running, this hotkey will trigger Easydict instead, and the system input switcher will not respond to it. Choose a different combination if you want to keep the Windows behavior.</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Invalid Hotkey</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>The following hotkeys are invalid. Use one or more modifier keys (Ctrl, Alt, Shift, Win) plus a key, for example Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Invalid hotkey. Example: Ctrl+Alt+T</value>
+  </data>
 </root>

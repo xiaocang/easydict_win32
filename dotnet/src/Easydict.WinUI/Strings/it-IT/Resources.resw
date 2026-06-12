@@ -1291,4 +1291,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>Win+Spazio è normalmente usato da Windows per cambiare la lingua di input. Mentre Easydict è in esecuzione, questa scorciatoia attiverà Easydict e il selettore di lingua del sistema non risponderà. Scegli una combinazione diversa se vuoi mantenere il comportamento di Windows.</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>Scorciatoia non valida</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>Le seguenti scorciatoie non sono valide. Usa uno o più tasti modificatori (Ctrl, Alt, Shift, Win) più un tasto, ad esempio Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>Scorciatoia non valida. Esempio: Ctrl+Alt+T</value>
+  </data>
 </root>

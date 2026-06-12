@@ -4089,6 +4089,32 @@ public sealed partial class SettingsPage : Page
             }
         }
 
+        // Validate hotkey strings — an enabled hotkey that cannot be parsed
+        // (or that has no modifier and is not a function key) would silently
+        // fail to register, so block the save and tell the user.
+        var invalidHotkeys = new List<string>();
+        CollectInvalidHotkey(ShowHotkeyEnabledToggle.IsOn, ShowHotkeyBox.Text, "ShowWindow", invalidHotkeys);
+        CollectInvalidHotkey(TranslateHotkeyEnabledToggle.IsOn, TranslateHotkeyBox.Text, "TranslateSelection", invalidHotkeys);
+        CollectInvalidHotkey(ShowMiniHotkeyEnabledToggle.IsOn, ShowMiniHotkeyBox.Text, "ShowMiniWindow", invalidHotkeys);
+        CollectInvalidHotkey(ShowFixedHotkeyEnabledToggle.IsOn, ShowFixedHotkeyBox.Text, "ShowFixedWindow", invalidHotkeys);
+        CollectInvalidHotkey(OcrTranslateHotkeyEnabledToggle.IsOn, OcrTranslateHotkeyBox.Text, "OcrScreenshotTranslate", invalidHotkeys);
+        CollectInvalidHotkey(SilentOcrHotkeyEnabledToggle.IsOn, SilentOcrHotkeyBox.Text, "SilentOcr", invalidHotkeys);
+
+        if (invalidHotkeys.Count > 0)
+        {
+            var errorDialog = new ContentDialog
+            {
+                Title = loc.GetString("InvalidHotkeyTitle"),
+                Content = loc.GetString("InvalidHotkeyMessage")
+                    + "\n\n"
+                    + string.Join("\n", invalidHotkeys),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(errorDialog);
+            return false;
+        }
+
         // === All validations passed — apply settings ===
 
         // Save international services setting
@@ -4360,6 +4386,57 @@ public sealed partial class SettingsPage : Page
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Shared handler for all hotkey AutoSuggestBoxes: offers autocomplete while
+    /// typing and validates the text in real time, showing an inline error for
+    /// combinations that could not be registered.
+    /// </summary>
+    private void OnHotkeyBoxTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            sender.ItemsSource = HotkeySuggestionProvider.GetSuggestions(sender.Text);
+        }
+        UpdateHotkeyErrorText(sender);
+    }
+
+    private void UpdateHotkeyErrorText(AutoSuggestBox box)
+    {
+        var errorText = GetHotkeyErrorTextBlock(box);
+        if (errorText is null) return;
+
+        var text = box.Text?.Trim() ?? "";
+        var isInvalid = text.Length > 0 && !HotkeyParser.IsValidCombination(text);
+        if (isInvalid)
+        {
+            errorText.Text = LocalizationService.Instance.GetString("InvalidHotkeyInlineError");
+        }
+        errorText.Visibility = isInvalid ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private TextBlock? GetHotkeyErrorTextBlock(AutoSuggestBox box)
+    {
+        if (ReferenceEquals(box, ShowHotkeyBox)) return ShowHotkeyErrorText;
+        if (ReferenceEquals(box, TranslateHotkeyBox)) return TranslateHotkeyErrorText;
+        if (ReferenceEquals(box, ShowMiniHotkeyBox)) return ShowMiniHotkeyErrorText;
+        if (ReferenceEquals(box, ShowFixedHotkeyBox)) return ShowFixedHotkeyErrorText;
+        if (ReferenceEquals(box, OcrTranslateHotkeyBox)) return OcrTranslateHotkeyErrorText;
+        if (ReferenceEquals(box, SilentOcrHotkeyBox)) return SilentOcrHotkeyErrorText;
+        return null;
+    }
+
+    /// <summary>
+    /// Adds a "label: text" line to <paramref name="invalid"/> when an enabled
+    /// hotkey's text is not a registrable combination.
+    /// </summary>
+    private static void CollectInvalidHotkey(bool enabled, string? text, string nameKey, List<string> invalid)
+    {
+        if (!enabled || HotkeyParser.IsValidCombination(text)) return;
+
+        var label = LocalizationService.Instance.GetString(nameKey);
+        invalid.Add(string.IsNullOrWhiteSpace(text) ? label : $"{label}: {text}");
     }
 
     /// <summary>

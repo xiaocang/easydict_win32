@@ -1301,4 +1301,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>Win+Space 通常用于 Windows 切换输入语言。Easydict 运行期间，该快捷键将触发 Easydict，系统输入法切换将不再响应。如需保留 Windows 默认行为，请选择其他组合。</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>无效的快捷键</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>以下快捷键无效。请使用一个或多个修饰键（Ctrl、Alt、Shift、Win）加一个按键，例如 Ctrl+Alt+T：</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>快捷键无效，示例：Ctrl+Alt+T</value>
+  </data>
 </root>

@@ -89,6 +89,22 @@ public static class HotkeyParser
     }
 
     /// <summary>
+    /// True when the string parses to a combination the app can sensibly register
+    /// as a global hotkey: at least one modifier key, or a bare function key
+    /// (F1–F24). A bare letter/digit/named key would hijack normal typing
+    /// system-wide, so it is rejected.
+    /// </summary>
+    public static bool IsValidCombination(string? hotkeyString)
+    {
+        var result = Parse(hotkeyString);
+        if (!result.IsValid)
+            return false;
+
+        const uint VK_F1 = 0x70, VK_F24 = 0x87;
+        return result.Modifiers != 0 || (result.VirtualKey >= VK_F1 && result.VirtualKey <= VK_F24);
+    }
+
+    /// <summary>
     /// True when the hotkey string parses to exactly Win+Space — the combination
     /// that is bound via the low-level keyboard hook (see WinSpaceHotkeyHook) and
     /// overrides the Windows input-language switcher while the app is running.

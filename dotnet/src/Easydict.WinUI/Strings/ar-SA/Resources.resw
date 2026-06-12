@@ -1299,4 +1299,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>يُستخدم Win+Space عادةً في Windows لتبديل لغة الإدخال. أثناء تشغيل Easydict، سيؤدي هذا الاختصار إلى تشغيل Easydict ولن يستجيب مبدّل لغة الإدخال في النظام. اختر مجموعة مختلفة إذا أردت الاحتفاظ بسلوك Windows.</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>اختصار غير صالح</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>اختصارات لوحة المفاتيح التالية غير صالحة. استخدم مفتاح تعديل واحدًا أو أكثر (Ctrl، Alt، Shift، Win) مع مفتاح واحد، مثل Ctrl+Alt+T:</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>اختصار غير صالح. مثال: Ctrl+Alt+T</value>
+  </data>
 </root>

@@ -1304,4 +1304,13 @@
   <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
     <value>Win+Space は通常、Windows の入力言語切り替えに使用されます。Easydict の実行中はこのホットキーが Easydict を起動し、システムの入力切り替えは反応しなくなります。Windows の動作を維持したい場合は、別の組み合わせを選択してください。</value>
   </data>
+  <data name="InvalidHotkeyTitle" xml:space="preserve">
+    <value>無効なホットキー</value>
+  </data>
+  <data name="InvalidHotkeyMessage" xml:space="preserve">
+    <value>次のホットキーは無効です。1 つ以上の修飾キー（Ctrl、Alt、Shift、Win）と 1 つのキーを組み合わせてください（例: Ctrl+Alt+T）：</value>
+  </data>
+  <data name="InvalidHotkeyInlineError" xml:space="preserve">
+    <value>ホットキーが無効です。例: Ctrl+Alt+T</value>
+  </data>
 </root>

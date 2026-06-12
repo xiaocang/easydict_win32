@@ -369,6 +369,9 @@ jobs:
         working-directory: dotnet
         env:
           SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/ui-screenshots/${{ matrix.shard.suffix }}
+          # Core & Settings runs the SettingsPage memory probe; WinUI AutoSuggestBox
+          # templates retain more first-use cache on CI than the old TextBox inputs.
+          EASYDICT_UIA_SETTINGS_MEMORY_TOLERANCE_MB: ${{ matrix.shard.name == 'Core & Settings' && '32' || '8' }}
         run: |
           # Create screenshot output directory
           New-Item -ItemType Directory -Force -Path $env:SCREENSHOT_OUTPUT_DIR

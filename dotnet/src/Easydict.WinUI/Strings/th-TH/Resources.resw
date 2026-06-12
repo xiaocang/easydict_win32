@@ -1245,6 +1245,12 @@
     <value>ไม่สามารถลงทะเบียนปุ่มลัดได้</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>ไม่สามารถลงทะเบียนปุ่มลัดต่อไปนี้ได้ อาจถูกสงวนไว้โดย Windows (เช่น Win+Space) หรือถูกใช้งานโดยแอปพลิเคชันอื่นอยู่แล้ว โปรดเลือกชุดปุ่มอื่น:</value>
+    <value>ไม่สามารถลงทะเบียนปุ่มลัดต่อไปนี้ได้ อาจถูกสงวนไว้โดย Windows หรือถูกใช้งานโดยแอปพลิเคชันอื่นอยู่แล้ว โปรดเลือกชุดปุ่มอื่น:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space จะแทนที่ทางลัดของระบบ</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>โดยปกติ Windows ใช้ Win+Space เพื่อสลับภาษาป้อนข้อมูล ขณะที่ Easydict ทำงาน ปุ่มลัดนี้จะเรียกใช้ Easydict และตัวสลับภาษาของระบบจะไม่ตอบสนอง โปรดเลือกชุดปุ่มอื่นหากต้องการคงการทำงานของ Windows</value>
   </data>
 </root>

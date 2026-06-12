@@ -879,6 +879,12 @@
     <value>हॉटकी रजिस्टर नहीं की जा सकी</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>निम्नलिखित हॉटकी रजिस्टर नहीं की जा सकीं। ये Windows द्वारा आरक्षित हो सकती हैं (जैसे Win+Space) या किसी अन्य एप्लिकेशन द्वारा पहले से उपयोग में हो सकती हैं। कृपया कोई दूसरा संयोजन चुनें:</value>
+    <value>निम्नलिखित हॉटकी रजिस्टर नहीं की जा सकीं। ये Windows द्वारा आरक्षित हो सकती हैं या किसी अन्य एप्लिकेशन द्वारा पहले से उपयोग में हो सकती हैं। कृपया कोई दूसरा संयोजन चुनें:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space एक सिस्टम शॉर्टकट को बदल देगा</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space आमतौर पर Windows में इनपुट भाषा बदलने के लिए उपयोग होता है। Easydict चलते समय यह हॉटकी Easydict को सक्रिय करेगी और सिस्टम का इनपुट स्विचर प्रतिक्रिया नहीं देगा। यदि आप Windows का व्यवहार बनाए रखना चाहते हैं तो कोई अन्य संयोजन चुनें।</value>
   </data>
 </root>

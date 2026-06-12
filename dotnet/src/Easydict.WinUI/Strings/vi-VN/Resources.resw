@@ -1291,6 +1291,12 @@
     <value>Không thể đăng ký phím tắt</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>Không thể đăng ký các phím tắt sau. Chúng có thể được Windows dành riêng (như Win+Space) hoặc đã được ứng dụng khác sử dụng. Vui lòng chọn tổ hợp khác:</value>
+    <value>Không thể đăng ký các phím tắt sau. Chúng có thể được Windows dành riêng hoặc đã được ứng dụng khác sử dụng. Vui lòng chọn tổ hợp khác:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space sẽ ghi đè phím tắt hệ thống</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space thường được Windows dùng để chuyển đổi ngôn ngữ nhập. Khi Easydict đang chạy, phím tắt này sẽ kích hoạt Easydict và trình chuyển đổi ngôn ngữ nhập của hệ thống sẽ không phản hồi. Hãy chọn tổ hợp khác nếu bạn muốn giữ hành vi của Windows.</value>
   </data>
 </root>

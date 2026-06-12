@@ -1293,6 +1293,12 @@
     <value>快捷键注册失败</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>以下快捷键无法注册。它们可能被 Windows 系统占用（例如 Win+Space），或已被其他应用程序使用。请尝试其他组合：</value>
+    <value>以下快捷键无法注册。它们可能被 Windows 系统占用，或已被其他应用程序使用。请尝试其他组合：</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space 将覆盖系统快捷键</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space 通常用于 Windows 切换输入语言。Easydict 运行期间，该快捷键将触发 Easydict，系统输入法切换将不再响应。如需保留 Windows 默认行为，请选择其他组合。</value>
   </data>
 </root>

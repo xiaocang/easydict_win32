@@ -1283,6 +1283,12 @@
     <value>Impossibile registrare la scorciatoia</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>Non è stato possibile registrare le seguenti scorciatoie. Potrebbero essere riservate da Windows (come Win+Spazio) o già in uso da un'altra applicazione. Scegli una combinazione diversa:</value>
+    <value>Non è stato possibile registrare le seguenti scorciatoie. Potrebbero essere riservate da Windows o già in uso da un'altra applicazione. Scegli una combinazione diversa:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Spazio sostituisce una scorciatoia di sistema</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Spazio è normalmente usato da Windows per cambiare la lingua di input. Mentre Easydict è in esecuzione, questa scorciatoia attiverà Easydict e il selettore di lingua del sistema non risponderà. Scegli una combinazione diversa se vuoi mantenere il comportamento di Windows.</value>
   </data>
 </root>

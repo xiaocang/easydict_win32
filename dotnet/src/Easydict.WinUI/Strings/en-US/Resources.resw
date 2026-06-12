@@ -1293,6 +1293,12 @@
     <value>Hotkey Could Not Be Registered</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>The following hotkeys could not be registered. They may be reserved by Windows (such as Win+Space) or already in use by another application. Please choose a different combination:</value>
+    <value>The following hotkeys could not be registered. They may be reserved by Windows or already in use by another application. Please choose a different combination:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space Overrides a System Shortcut</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space is normally used by Windows to switch input languages. While Easydict is running, this hotkey will trigger Easydict instead, and the system input switcher will not respond to it. Choose a different combination if you want to keep the Windows behavior.</value>
   </data>
 </root>

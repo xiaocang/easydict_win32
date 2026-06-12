@@ -1296,6 +1296,12 @@
     <value>Impossible d'enregistrer le raccourci</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>Les raccourcis suivants n'ont pas pu être enregistrés. Ils sont peut-être réservés par Windows (comme Win+Espace) ou déjà utilisés par une autre application. Veuillez choisir une autre combinaison :</value>
+    <value>Les raccourcis suivants n'ont pas pu être enregistrés. Ils sont peut-être réservés par Windows ou déjà utilisés par une autre application. Veuillez choisir une autre combinaison :</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Espace remplace un raccourci système</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Espace est normalement utilisé par Windows pour changer de langue de saisie. Tant qu'Easydict est en cours d'exécution, ce raccourci déclenchera Easydict et le sélecteur de langue du système ne répondra plus. Choisissez une autre combinaison si vous souhaitez conserver le comportement de Windows.</value>
   </data>
 </root>

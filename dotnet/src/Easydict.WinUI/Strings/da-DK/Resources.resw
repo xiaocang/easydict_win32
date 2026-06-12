@@ -879,6 +879,12 @@
     <value>Genvejstasten kunne ikke registreres</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>Følgende genvejstaster kunne ikke registreres. De er muligvis reserveret af Windows (såsom Win+Mellemrum) eller allerede i brug af et andet program. Vælg en anden kombination:</value>
+    <value>Følgende genvejstaster kunne ikke registreres. De er muligvis reserveret af Windows eller allerede i brug af et andet program. Vælg en anden kombination:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Mellemrum tilsidesætter en systemgenvej</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Mellemrum bruges normalt af Windows til at skifte inputsprog. Mens Easydict kører, udløser denne genvej Easydict, og systemets sprogskifter reagerer ikke. Vælg en anden kombination, hvis du vil beholde Windows-funktionen.</value>
   </data>
 </root>

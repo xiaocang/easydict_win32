@@ -1296,6 +1296,12 @@
     <value>Tastenkombination konnte nicht registriert werden</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>Die folgenden Tastenkombinationen konnten nicht registriert werden. Sie sind möglicherweise von Windows reserviert (z. B. Win+Leertaste) oder werden bereits von einer anderen Anwendung verwendet. Bitte wählen Sie eine andere Kombination:</value>
+    <value>Die folgenden Tastenkombinationen konnten nicht registriert werden. Sie sind möglicherweise von Windows reserviert oder werden bereits von einer anderen Anwendung verwendet. Bitte wählen Sie eine andere Kombination:</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Leertaste überschreibt eine Systemtastenkombination</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Leertaste wird normalerweise von Windows zum Wechseln der Eingabesprache verwendet. Solange Easydict läuft, löst diese Tastenkombination Easydict aus und der Eingabesprachen-Umschalter des Systems reagiert nicht mehr. Wählen Sie eine andere Kombination, wenn Sie das Windows-Verhalten beibehalten möchten.</value>
   </data>
 </root>

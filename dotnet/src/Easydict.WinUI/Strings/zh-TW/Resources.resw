@@ -1296,6 +1296,12 @@
     <value>快速鍵註冊失敗</value>
   </data>
   <data name="HotkeyRegistrationFailedMessage" xml:space="preserve">
-    <value>下列快速鍵無法註冊。它們可能被 Windows 系統佔用（例如 Win+Space），或已被其他應用程式使用。請嘗試其他組合：</value>
+    <value>下列快速鍵無法註冊。它們可能被 Windows 系統佔用，或已被其他應用程式使用。請嘗試其他組合：</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningTitle" xml:space="preserve">
+    <value>Win+Space 將覆蓋系統快速鍵</value>
+  </data>
+  <data name="WinSpaceHotkeyWarningMessage" xml:space="preserve">
+    <value>Win+Space 通常用於 Windows 切換輸入語言。Easydict 執行期間，該快速鍵將觸發 Easydict，系統輸入法切換將不再回應。如需保留 Windows 預設行為，請選擇其他組合。</value>
   </data>
 </root>

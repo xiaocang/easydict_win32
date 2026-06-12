@@ -4031,6 +4031,10 @@ public sealed partial class SettingsPage : Page
         var originalProxyUri = _settings.ProxyUri;
         var originalProxyBypassLocal = _settings.ProxyBypassLocal;
 
+        // Capture whether any enabled hotkey was already Win+Space, so the
+        // OS-override notice is shown only when the user newly selects it.
+        var hadWinSpaceHotkey = HasEnabledWinSpaceHotkey();
+
         // === Validate all inputs before modifying any settings ===
 
         // Validate language preferences
@@ -4321,7 +4325,7 @@ public sealed partial class SettingsPage : Page
         SaveButton.Visibility = Visibility.Collapsed;
 
         // Warn the user about any hotkeys that could not be registered
-        // (e.g. reserved by Windows like Win+Space, or in use by another app).
+        // (e.g. reserved by Windows or in use by another app).
         if (hotkeyFailures is { Count: > 0 })
         {
             var lines = hotkeyFailures
@@ -4341,7 +4345,34 @@ public sealed partial class SettingsPage : Page
             await ShowDialogAsync(failureDialog);
         }
 
+        // Win+Space is captured via a low-level keyboard hook that overrides the
+        // Windows input-language switcher; notify the user when they first pick it.
+        if (!hadWinSpaceHotkey && HasEnabledWinSpaceHotkey())
+        {
+            var winSpaceDialog = new ContentDialog
+            {
+                Title = loc.GetString("WinSpaceHotkeyWarningTitle"),
+                Content = loc.GetString("WinSpaceHotkeyWarningMessage"),
+                CloseButtonText = loc.GetString("OK"),
+                XamlRoot = this.XamlRoot
+            };
+            await ShowDialogAsync(winSpaceDialog);
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// True when any enabled hotkey in the saved settings is bound to Win+Space.
+    /// </summary>
+    private bool HasEnabledWinSpaceHotkey()
+    {
+        return (_settings.EnableShowWindowHotkey && HotkeyParser.IsWinSpace(_settings.ShowWindowHotkey))
+            || (_settings.EnableTranslateSelectionHotkey && HotkeyParser.IsWinSpace(_settings.TranslateSelectionHotkey))
+            || (_settings.EnableShowMiniWindowHotkey && HotkeyParser.IsWinSpace(_settings.ShowMiniWindowHotkey))
+            || (_settings.EnableShowFixedWindowHotkey && HotkeyParser.IsWinSpace(_settings.ShowFixedWindowHotkey))
+            || (_settings.EnableOcrTranslateHotkey && HotkeyParser.IsWinSpace(_settings.OcrTranslateHotkey))
+            || (_settings.EnableSilentOcrHotkey && HotkeyParser.IsWinSpace(_settings.SilentOcrHotkey));
     }
 
     private void OnMouseSelectionTranslateToggled(object sender, RoutedEventArgs e)

@@ -19,8 +19,8 @@ using TranslationLanguage = Easydict.TranslationService.Models.Language;
 namespace Easydict.WinUI.Views;
 
 /// <summary>
-/// Fixed translation window that stays visible and on top.
-/// Unlike Mini Window, it does not auto-close on focus loss and is always on top.
+/// Fixed translation window that stays visible until hidden.
+/// Unlike Mini Window, it does not auto-close on focus loss; users can toggle always-on-top.
 /// </summary>
 public sealed partial class FixedWindow : Window
 {
@@ -225,7 +225,7 @@ public sealed partial class FixedWindow : Window
     }
 
     /// <summary>
-    /// Configure window to be compact with no title bar buttons, always on top.
+    /// Configure the compact fixed window chrome and apply the saved always-on-top state.
     /// </summary>
     private void ConfigureWindow()
     {

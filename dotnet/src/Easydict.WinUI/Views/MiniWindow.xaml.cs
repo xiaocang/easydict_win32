@@ -191,6 +191,7 @@ public sealed partial class MiniWindow : Window
         ToolTipService.SetToolTip(CloseButton, loc.GetString("Close"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(CloseButton, loc.GetString("Close"));
         if (_compactWindowControls is { } compactControls)
         {
             ToolTipService.SetToolTip(compactControls.CloseButton, loc.GetString("Close"));
@@ -202,8 +203,13 @@ public sealed partial class MiniWindow : Window
         }
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            SourcePlayButton,
+            loc.GetStringOrDefault("PlaySourceTextTooltip", "Play source text"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, loc.GetString("TranslateTooltip"));
     }
 
     private void InitializeCompactWindowControls()
@@ -483,11 +489,11 @@ public sealed partial class MiniWindow : Window
         InputTextBox.PlaceholderText = _currentMode == QueryMode.GrammarCorrection
             ? loc.GetString("InputPlaceholder_Grammar")
             : loc.GetString("InputPlaceholder");
-        ToolTipService.SetToolTip(
-            TranslateButton,
-            _currentMode == QueryMode.GrammarCorrection
-                ? loc.GetString("TranslateButton_Grammar_Tooltip")
-                : loc.GetString("TranslateTooltip"));
+        var translateTooltip = _currentMode == QueryMode.GrammarCorrection
+            ? loc.GetString("TranslateButton_Grammar_Tooltip")
+            : loc.GetString("TranslateTooltip");
+        ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
 
         if (reinitializeServiceResults && previousMode != _currentMode)
         {
@@ -1054,8 +1060,9 @@ public sealed partial class MiniWindow : Window
         _isQuerying = loading;
 
         var loc = LocalizationService.Instance;
-        ToolTipService.SetToolTip(TranslateButton,
-            loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip"));
+        var translateTooltip = loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip");
+        ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
 
         // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
         TranslateIcon.Glyph = loading ? "\uE711" : "\uE8C1";
@@ -2469,8 +2476,7 @@ public sealed partial class MiniWindow : Window
     }
 
     /// <summary>
-    /// Show/hide quick-action buttons per user settings. The source-play button is also
-    /// hidden in Minimal mode regardless of the setting.
+    /// Show/hide quick-action buttons per user settings. Helper actions are hidden in compact chrome.
     /// </summary>
     private void ApplyButtonVisibility()
     {
@@ -2479,7 +2485,7 @@ public sealed partial class MiniWindow : Window
 
         PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
         OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
-        SwapButton.Visibility = settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
+        SwapButton.Visibility = !compact && settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
         SourcePlayButton.Visibility = (!compact && settings.ShowSourcePlayButton)
             ? Visibility.Visible
             : Visibility.Collapsed;

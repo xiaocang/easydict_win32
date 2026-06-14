@@ -169,6 +169,7 @@ public sealed partial class FixedWindow : Window
         ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(CloseButton, loc.GetString("HideWindow"));
         if (_compactWindowControls is { } compactControls)
         {
             ToolTipService.SetToolTip(compactControls.CloseButton, loc.GetString("HideWindow"));
@@ -180,8 +181,10 @@ public sealed partial class FixedWindow : Window
         }
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, loc.GetString("TranslateTooltip"));
     }
 
     private void InitializeCompactWindowControls()
@@ -440,11 +443,11 @@ public sealed partial class FixedWindow : Window
         InputTextBox.PlaceholderText = _currentMode == QueryMode.GrammarCorrection
             ? loc.GetString("InputPlaceholder_Grammar")
             : loc.GetString("InputPlaceholder");
-        ToolTipService.SetToolTip(
-            TranslateButton,
-            _currentMode == QueryMode.GrammarCorrection
-                ? loc.GetString("TranslateButton_Grammar_Tooltip")
-                : loc.GetString("TranslateTooltip"));
+        var translateTooltip = _currentMode == QueryMode.GrammarCorrection
+            ? loc.GetString("TranslateButton_Grammar_Tooltip")
+            : loc.GetString("TranslateTooltip");
+        ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
 
         if (reinitializeServiceResults && previousMode != _currentMode)
         {
@@ -889,8 +892,9 @@ public sealed partial class FixedWindow : Window
         _isQuerying = loading;
 
         var loc = LocalizationService.Instance;
-        ToolTipService.SetToolTip(TranslateButton,
-            loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip"));
+        var translateTooltip = loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip");
+        ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
 
         // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
         TranslateIcon.Glyph = loading ? "\uE711" : "\uE8C1";
@@ -1778,7 +1782,7 @@ public sealed partial class FixedWindow : Window
         var compact = IsCompactChrome;
         PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
         OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
-        SwapButton.Visibility = settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
+        SwapButton.Visibility = !compact && settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)

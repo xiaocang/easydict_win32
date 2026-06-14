@@ -1034,6 +1034,7 @@ namespace Easydict.WinUI.Views
             double normalWidth,
             double normalHeight)
         {
+            AutomationProperties.SetName(button, text);
             if (minimal)
             {
                 button.Content = text;
@@ -1293,7 +1294,14 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SettingsButton, loc.GetString("SettingsTooltip"));
             ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
+            ToolTipService.SetToolTip(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                SourcePlayButton,
+                loc.GetStringOrDefault("PlaySourceTextTooltip", "Play source text"));
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
@@ -1377,8 +1385,8 @@ namespace Easydict.WinUI.Views
 
             if (_currentMode == QueryMode.Translation)
             {
-                var showSwap = SettingsService.Instance.ShowSwapButton;
                 var compact = IsCompactChrome;
+                var showSwap = !compact && SettingsService.Instance.ShowSwapButton;
                 TargetLangCombo.Visibility = Visibility.Visible;
                 SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
                 LangHelpIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
@@ -2006,6 +2014,8 @@ namespace Easydict.WinUI.Views
                 : loc.GetString("TranslateTooltip");
             ToolTipService.SetToolTip(TranslateButton, translateTooltip);
             ToolTipService.SetToolTip(TranslateButtonNarrow, translateTooltip);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButtonNarrow, translateTooltip);
 
             if (reinitializeServiceResults && previousMode != _currentQuickQueryMode)
             {
@@ -4413,9 +4423,9 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Show/hide quick-action buttons per user settings. The source-play button is also
-        /// hidden in Minimal mode, and the swap buttons only show in Translation mode — matching
-        /// the gating applied by ApplyThemeChrome and the mode-switch logic.
+        /// Show/hide quick-action buttons per user settings. Source-play and swap are hidden
+        /// in compact chrome, and swap only shows in Translation mode — matching the gating
+        /// applied by ApplyThemeChrome and the mode-switch logic.
         /// </summary>
         private void ApplyButtonVisibility()
         {
@@ -4427,7 +4437,7 @@ namespace Easydict.WinUI.Views
             SourcePlayButton.Visibility = (!compact && settings.ShowSourcePlayButton)
                 ? Visibility.Visible : Visibility.Collapsed;
 
-            var showSwap = settings.ShowSwapButton && _currentMode == QueryMode.Translation;
+            var showSwap = !compact && settings.ShowSwapButton && _currentMode == QueryMode.Translation;
             SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
             SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
         }

@@ -88,6 +88,7 @@
             <Button
                 x:Name="CloseButton"
                 AutomationProperties.AutomationId="MiniWindowCloseButton"
+                AutomationProperties.Name="Close"
                 Grid.Column="3"
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"
@@ -162,6 +163,7 @@
                         Click="OnSourcePlayClicked"
                         Style="{StaticResource EasydictIconButtonStyle}"
                         ToolTipService.ToolTip="Play source text"
+                        AutomationProperties.Name="Play source text"
                         Width="28"
                         Height="28"
                         Padding="0"
@@ -208,6 +210,7 @@
                 Padding="0"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Swap languages"
+                AutomationProperties.Name="Swap languages"
                 Margin="4,0">
                 <FontIcon Glyph="&#xE8AB;"
                         FontSize="12"
@@ -232,6 +235,7 @@
                 Padding="0"
                 Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                 ToolTipService.ToolTip="Translate"
+                AutomationProperties.Name="Translate"
                 Margin="4,0,0,0">
                 <Grid>
                     <ProgressRing

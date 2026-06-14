@@ -167,6 +167,7 @@
                     Click="OnSettingsClicked"
                     Style="{StaticResource EasydictIconButtonStyle}"
                     ToolTipService.ToolTip="Settings"
+                    AutomationProperties.Name="Settings"
                     VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE713;"
                               FontSize="18"
@@ -253,6 +254,7 @@
                         Click="OnSwapLanguagesClicked"
                         Style="{StaticResource EasydictIconButtonStyle}"
                         ToolTipService.ToolTip="Swap source and target languages"
+                        AutomationProperties.Name="Swap source and target languages"
                         Margin="8,0"
                         VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8AB;"
@@ -288,7 +290,8 @@
                         Click="OnTranslateClicked"
                         Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         VerticalAlignment="Center"
-                        ToolTipService.ToolTip="Translate">
+                        ToolTipService.ToolTip="Translate"
+                        AutomationProperties.Name="Translate">
                         <Grid>
                             <ProgressRing
                                 x:Name="LoadingRing"
@@ -335,6 +338,7 @@
                             Click="OnSwapLanguagesClicked"
                             Style="{StaticResource EasydictIconButtonStyle}"
                             ToolTipService.ToolTip="Swap source and target languages"
+                            AutomationProperties.Name="Swap source and target languages"
                             VerticalAlignment="Center"
                             Margin="4,0">
                             <FontIcon Glyph="&#xE8AB;"
@@ -365,7 +369,8 @@
                         Click="OnTranslateClicked"
                         Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         HorizontalAlignment="Center"
-                        ToolTipService.ToolTip="Translate">
+                        ToolTipService.ToolTip="Translate"
+                        AutomationProperties.Name="Translate">
                         <Grid>
                             <ProgressRing
                                 x:Name="LoadingRingNarrow"
@@ -431,6 +436,7 @@
                                 Click="OnSourcePlayClicked"
                                 Style="{StaticResource EasydictIconButtonStyle}"
                                 ToolTipService.ToolTip="Play source text"
+                                AutomationProperties.Name="Play source text"
                                 Width="24"
                                 Height="24"
                                 HorizontalAlignment="Right"
@@ -786,7 +792,8 @@
                             Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
-                            ToolTipService.ToolTip="Translate">
+                            ToolTipService.ToolTip="Translate"
+                            AutomationProperties.Name="Translate">
                         <FontIcon x:Name="LongDocTranslateIcon"
                                   Glyph="&#xE8C1;"
                                   FontSize="16"

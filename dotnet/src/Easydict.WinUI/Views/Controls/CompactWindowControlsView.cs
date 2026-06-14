@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -9,6 +11,9 @@ namespace Easydict.WinUI.Views.Controls;
 
 internal sealed class CompactWindowControlsView
 {
+    private const string DragIconAppxUri = "ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png";
+    private const string DragIconRelativePath = @"Assets\Square44x44Logo.targetsize-24_altform-unplated.png";
+
     private readonly Border _surface;
     private readonly Border _separator;
     private readonly FontIcon _closeIcon;
@@ -59,7 +64,7 @@ internal sealed class CompactWindowControlsView
 
         DragIsland.Child = new Image
         {
-            Source = new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png")),
+            Source = CreateDragIconSource(),
             Width = 18,
             Height = 18,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -95,6 +100,35 @@ internal sealed class CompactWindowControlsView
         DragIsland.Background = secondarySurfaceBrush;
         CloseButton.Background = transparentBrush;
         _closeIcon.Foreground = textBrush;
+    }
+
+    private static ImageSource CreateDragIconSource()
+    {
+        if (!EasydictConditions.IsPackaged)
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, DragIconRelativePath);
+            if (File.Exists(iconPath))
+            {
+                try
+                {
+                    return new BitmapImage(new Uri(iconPath));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[CompactWindowControls] Failed to load icon from file path: {ex.Message}");
+                }
+            }
+        }
+
+        try
+        {
+            return new BitmapImage(new Uri(DragIconAppxUri));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[CompactWindowControls] Failed to load icon from ms-appx: {ex.Message}");
+            return new BitmapImage();
+        }
     }
 
     private static Button CreateSegmentButton(FontIcon icon)

@@ -2336,8 +2336,8 @@ public sealed partial class MiniWindow : Window
     {
         var compact = IsCompactChrome;
         var showCompactControls = ShouldShowCompactWindowControls;
-        TitleBarRegion.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        TitleBarRegion.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 0, 4);
+        TitleBarRegion.Visibility = showCompactControls ? Visibility.Collapsed : Visibility.Visible;
+        TitleBarRegion.Margin = showCompactControls ? new Thickness(0) : new Thickness(0, 0, 0, 4);
         if (_compactWindowControls is { } compactControls)
         {
             compactControls.Root.Visibility = showCompactControls ? Visibility.Visible : Visibility.Collapsed;

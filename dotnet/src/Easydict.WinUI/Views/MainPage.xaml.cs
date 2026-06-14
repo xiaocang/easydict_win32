@@ -321,6 +321,7 @@ namespace Easydict.WinUI.Views
             {
                 Frame.ForwardStack.Clear();
                 ApplySettings();
+                ApplyAppearance();
                 _deferLoadedThemeChrome = true;
                 QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
                 if (ShouldForceFullGcAfterSettingsReturn())

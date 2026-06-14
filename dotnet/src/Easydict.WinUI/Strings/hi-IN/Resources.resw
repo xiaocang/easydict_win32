@@ -896,4 +896,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>अमान्य हॉटकी। उदाहरण: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR अनुवाद</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>परिणाम फ़ॉन्ट आकार</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>अनुवाद परिणामों के फ़ॉन्ट आकार को समायोजित करें।</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>त्वरित क्रिया बटन</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>OCR बटन दिखाएं</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>पिन बटन दिखाएं</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>प्ले बटन दिखाएं</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>स्वैप बटन दिखाएं</value>
+  </data>
 </root>

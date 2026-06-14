@@ -1308,4 +1308,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Phím tắt không hợp lệ. Ví dụ: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Dịch OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Cỡ chữ kết quả</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Điều chỉnh cỡ chữ của kết quả dịch.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Nút thao tác nhanh</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Hiển thị nút OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Hiển thị nút ghim</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Hiển thị nút phát</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Hiển thị nút hoán đổi</value>
+  </data>
 </root>

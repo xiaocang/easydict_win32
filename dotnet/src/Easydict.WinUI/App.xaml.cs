@@ -824,7 +824,7 @@ namespace Easydict.WinUI
                 return Task.CompletedTask;
             }
 
-            dispatcher.TryEnqueue(async () =>
+            var enqueued = dispatcher.TryEnqueue(async () =>
             {
                 var ocrService = app.EnsureOcrTranslateService();
                 if (ocrService == null)
@@ -842,6 +842,12 @@ namespace Easydict.WinUI
                     System.Diagnostics.Debug.WriteLine($"[App] TriggerOcrTranslateAsync error: {ex.Message}");
                 }
             });
+
+            if (!enqueued)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[App] TriggerOcrTranslateAsync: failed to enqueue OCR action (dispatcher unavailable)");
+            }
 
             return Task.CompletedTask;
         }

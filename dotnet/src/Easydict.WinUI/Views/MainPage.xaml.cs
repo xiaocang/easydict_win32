@@ -1237,6 +1237,8 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
             ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
             ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));

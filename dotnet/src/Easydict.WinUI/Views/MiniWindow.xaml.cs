@@ -185,6 +185,8 @@ public sealed partial class MiniWindow : Window
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
         ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("Close"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));

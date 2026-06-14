@@ -1313,4 +1313,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>잘못된 단축키입니다. 예: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR 번역</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>결과 글꼴 크기</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>번역 결과의 글꼴 크기를 조정합니다.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>빠른 작업 버튼</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>OCR 버튼 표시</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>고정 버튼 표시</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>재생 버튼 표시</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>교체 버튼 표시</value>
+  </data>
 </root>

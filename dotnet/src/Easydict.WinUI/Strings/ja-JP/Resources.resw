@@ -1313,4 +1313,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>ホットキーが無効です。例: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR 翻訳</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>結果のフォントサイズ</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>翻訳結果のフォントサイズを調整します。</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>クイック操作ボタン</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>OCR ボタンを表示</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>固定ボタンを表示</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>再生ボタンを表示</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>入れ替えボタンを表示</value>
+  </data>
 </root>

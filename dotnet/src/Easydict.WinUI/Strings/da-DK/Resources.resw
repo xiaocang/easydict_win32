@@ -896,4 +896,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Ugyldig genvejstast. Eksempel: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR-oversættelse</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Skriftstørrelse for resultater</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Juster skriftstørrelsen for oversættelsesresultater.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Knapper til hurtig handling</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Vis OCR-knap</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Vis fastgør-knap</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Vis afspil-knap</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Vis ombyt-knap</value>
+  </data>
 </root>

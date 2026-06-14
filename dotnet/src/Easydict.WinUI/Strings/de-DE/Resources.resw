@@ -1313,4 +1313,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Ungültige Tastenkombination. Beispiel: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR-Übersetzung</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Schriftgröße der Ergebnisse</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Passen Sie die Schriftgröße der Übersetzungsergebnisse an.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Schaltflächen für Schnellaktionen</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>OCR-Schaltfläche anzeigen</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Anheften-Schaltfläche anzeigen</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Wiedergabe-Schaltfläche anzeigen</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Tausch-Schaltfläche anzeigen</value>
+  </data>
 </root>

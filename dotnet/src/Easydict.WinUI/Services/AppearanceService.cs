@@ -17,9 +17,10 @@ public readonly struct AppearanceSettings
 /// <summary>
 /// Single source of truth for user-adjustable appearance (currently the result
 /// font scale). Mirrors the static-service pattern used by
-/// <see cref="MinimalThemeService"/>: it reads <see cref="SettingsService"/>,
-/// derives effective sizes, and raises <see cref="AppearanceChanged"/> so the
-/// app can re-broadcast to all windows.
+/// <see cref="MinimalThemeService"/>: it reads <see cref="SettingsService"/> and
+/// exposes effective sizes as an on-demand snapshot (<see cref="CurrentSnapshot"/>).
+/// Callers pull the current values after a settings change (via
+/// <c>App.ApplyAppearance()</c>); there is no push/event flow.
 /// </summary>
 internal static class AppearanceService
 {
@@ -52,10 +53,4 @@ internal static class AppearanceService
         ServiceNameFontSize = ServiceNameFontSize,
         StatusFontSize = StatusFontSize,
     };
-
-    /// <summary>Raised when an appearance setting changes and windows must re-apply.</summary>
-    public static event EventHandler? AppearanceChanged;
-
-    /// <summary>Notify listeners that appearance settings changed.</summary>
-    public static void NotifyChanged() => AppearanceChanged?.Invoke(null, EventArgs.Empty);
 }

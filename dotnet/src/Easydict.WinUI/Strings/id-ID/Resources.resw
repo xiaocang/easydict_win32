@@ -1254,4 +1254,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Pintasan tidak valid. Contoh: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Terjemahan OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Ukuran font hasil</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Sesuaikan ukuran font hasil terjemahan.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Tombol aksi cepat</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Tampilkan tombol OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Tampilkan tombol sematkan</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Tampilkan tombol putar</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Tampilkan tombol tukar</value>
+  </data>
 </root>

@@ -1308,4 +1308,28 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>اختصار غير صالح. مثال: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>ترجمة OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>حجم خط النتائج</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>اضبط حجم خط نتائج الترجمة.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>أزرار الإجراءات السريعة</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>إظهار زر OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>إظهار زر التثبيت</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>إظهار زر التشغيل</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>إظهار زر التبديل</value>
+  </data>
 </root>

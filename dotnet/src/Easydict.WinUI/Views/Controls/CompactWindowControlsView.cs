@@ -27,6 +27,7 @@ internal sealed class CompactWindowControlsView
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0),
+            Background = new SolidColorBrush(Colors.Transparent),
             Opacity = 0.52,
             Visibility = Visibility.Collapsed
         };

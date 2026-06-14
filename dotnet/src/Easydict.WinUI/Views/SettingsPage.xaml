@@ -2106,39 +2106,6 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextWrapping="Wrap"/>
 
-                                <!-- Result font size (issue #172) -->
-                                <TextBlock
-                                    x:Name="ResultFontSizeLabel"
-                                    Text="Result font size"
-                                    FontWeight="SemiBold"/>
-                                <Slider
-                                    x:Name="ResultFontScaleSlider"
-                                    Minimum="0.85"
-                                    Maximum="1.4"
-                                    StepFrequency="0.05"
-                                    Width="250"
-                                    HorizontalAlignment="Left"/>
-                                <TextBlock
-                                    x:Name="ResultFontSizeDescriptionText"
-                                    Text="Adjust the font size of translation results."
-                                    FontSize="12"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    TextWrapping="Wrap"/>
-
-                                <!-- Quick-action buttons (issue #172) -->
-                                <TextBlock
-                                    x:Name="QuickActionsHeaderText"
-                                    Text="Quick action buttons"
-                                    FontWeight="SemiBold"/>
-                                <ToggleSwitch x:Name="ShowOcrButtonToggle"
-                                        Header="Show OCR button"/>
-                                <ToggleSwitch x:Name="ShowPinButtonToggle"
-                                        Header="Show pin button"/>
-                                <ToggleSwitch x:Name="ShowSourcePlayButtonToggle"
-                                        Header="Show play button"/>
-                                <ToggleSwitch x:Name="ShowSwapButtonToggle"
-                                        Header="Show swap button"/>
-
                                 <ToggleSwitch x:Name="MinimizeToTrayToggle"
                                         Header="Minimize to system tray"/>
                                 <ToggleSwitch x:Name="MinimizeToTrayOnStartupToggle"
@@ -2194,6 +2161,39 @@
                                            Margin="44,0,0,0"
                                            TextWrapping="Wrap"
                                            Visibility="Collapsed"/>
+
+                                <!-- Result font size (issue #172) -->
+                                <TextBlock
+                                    x:Name="ResultFontSizeLabel"
+                                    Text="Result font size"
+                                    FontWeight="SemiBold"/>
+                                <Slider
+                                    x:Name="ResultFontScaleSlider"
+                                    Minimum="0.85"
+                                    Maximum="1.4"
+                                    StepFrequency="0.05"
+                                    Width="250"
+                                    HorizontalAlignment="Left"/>
+                                <TextBlock
+                                    x:Name="ResultFontSizeDescriptionText"
+                                    Text="Adjust the font size of translation results."
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+
+                                <!-- Quick-action buttons (issue #172) -->
+                                <TextBlock
+                                    x:Name="QuickActionsHeaderText"
+                                    Text="Quick action buttons"
+                                    FontWeight="SemiBold"/>
+                                <ToggleSwitch x:Name="ShowOcrButtonToggle"
+                                        Header="Show OCR button"/>
+                                <ToggleSwitch x:Name="ShowPinButtonToggle"
+                                        Header="Show pin button"/>
+                                <ToggleSwitch x:Name="ShowSourcePlayButtonToggle"
+                                        Header="Show play button"/>
+                                <ToggleSwitch x:Name="ShowSwapButtonToggle"
+                                        Header="Show swap button"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

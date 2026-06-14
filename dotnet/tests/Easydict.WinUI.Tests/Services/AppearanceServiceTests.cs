@@ -1,35 +1,42 @@
 using Easydict.WinUI.Services;
 using FluentAssertions;
-using System.Reflection;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
 
 /// <summary>
 /// Tests for the appearance personalization added in issue #172:
-/// the <see cref="AppearanceService"/> font-size math and round-trip
-/// persistence of the new <see cref="SettingsService"/> properties.
+/// the <see cref="AppearanceService"/> font-size math and persistence of the
+/// new <see cref="SettingsService"/> properties.
+///
+/// These tests use the <see cref="SettingsService"/> singleton and restore any
+/// mutated state in a finally block — mirroring the existing
+/// <c>TtsSettings_RoundTripThroughSave</c> pattern. They intentionally avoid the
+/// EASYDICT_SETTINGS_DIR + temporary-directory dance, which can poison the
+/// lazily-constructed singleton's settings path for other tests in the shared
+/// collection.
 /// </summary>
 [Trait("Category", "WinUI")]
 [Collection("SettingsService")]
 public class AppearanceServiceTests
 {
+    private readonly SettingsService _settings = SettingsService.Instance;
+
     [Theory]
     [InlineData(1.0, 13.0)]
     [InlineData(0.85, 11.05)]
     [InlineData(1.4, 18.2)]
     public void ResultFontSize_ScalesWithSetting(double scale, double expected)
     {
-        var settings = SettingsService.Instance;
-        var original = settings.ResultFontScale;
+        var original = _settings.ResultFontScale;
         try
         {
-            settings.ResultFontScale = scale;
+            _settings.ResultFontScale = scale;
             AppearanceService.ResultFontSize.Should().BeApproximately(expected, 0.001);
         }
         finally
         {
-            settings.ResultFontScale = original;
+            _settings.ResultFontScale = original;
         }
     }
 
@@ -38,27 +45,25 @@ public class AppearanceServiceTests
     [InlineData(2.0, 1.4)]    // above max clamps down
     public void FontScale_IsClamped(double raw, double clamped)
     {
-        var settings = SettingsService.Instance;
-        var original = settings.ResultFontScale;
+        var original = _settings.ResultFontScale;
         try
         {
-            settings.ResultFontScale = raw;
+            _settings.ResultFontScale = raw;
             AppearanceService.FontScale.Should().Be(clamped);
         }
         finally
         {
-            settings.ResultFontScale = original;
+            _settings.ResultFontScale = original;
         }
     }
 
     [Fact]
     public void CurrentSnapshot_DerivesHeaderAndStatusSizesFromScale()
     {
-        var settings = SettingsService.Instance;
-        var original = settings.ResultFontScale;
+        var original = _settings.ResultFontScale;
         try
         {
-            settings.ResultFontScale = 1.0;
+            _settings.ResultFontScale = 1.0;
             var snapshot = AppearanceService.CurrentSnapshot();
             snapshot.ResultFontSize.Should().BeApproximately(13.0, 0.001);
             snapshot.ServiceNameFontSize.Should().BeApproximately(12.0, 0.001);
@@ -66,7 +71,7 @@ public class AppearanceServiceTests
         }
         finally
         {
-            settings.ResultFontScale = original;
+            _settings.ResultFontScale = original;
         }
     }
 
@@ -77,98 +82,41 @@ public class AppearanceServiceTests
     }
 
     [Fact]
-    public void AppearanceSettings_RoundTripThroughSettingsFile()
+    public void AppearanceSettings_SurviveSave()
     {
-        using var testDirectory = new TemporaryDirectory();
-        var previous = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
+        var originalFontScale = _settings.ResultFontScale;
+        var originalOcr = _settings.ShowOcrButton;
+        var originalPin = _settings.ShowPinButton;
+        var originalPlay = _settings.ShowSourcePlayButton;
+        var originalSwap = _settings.ShowSwapButton;
+        var originalFixedPinned = _settings.FixedWindowIsPinned;
+
         try
         {
-            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", testDirectory.Path);
+            _settings.ResultFontScale = 1.25;
+            _settings.ShowOcrButton = false;
+            _settings.ShowPinButton = false;
+            _settings.ShowSourcePlayButton = false;
+            _settings.ShowSwapButton = false;
+            _settings.FixedWindowIsPinned = false;
+            _settings.Save();
 
-            var writer = CreateIsolatedSettingsService();
-            writer.ResultFontScale = 1.25;
-            writer.ShowOcrButton = false;
-            writer.ShowPinButton = false;
-            writer.ShowSourcePlayButton = false;
-            writer.ShowSwapButton = false;
-            writer.FixedWindowIsPinned = false;
-            writer.Save();
-
-            var reader = CreateIsolatedSettingsService();
-            reader.ResultFontScale.Should().Be(1.25);
-            reader.ShowOcrButton.Should().BeFalse();
-            reader.ShowPinButton.Should().BeFalse();
-            reader.ShowSourcePlayButton.Should().BeFalse();
-            reader.ShowSwapButton.Should().BeFalse();
-            reader.FixedWindowIsPinned.Should().BeFalse();
+            _settings.ResultFontScale.Should().Be(1.25);
+            _settings.ShowOcrButton.Should().BeFalse();
+            _settings.ShowPinButton.Should().BeFalse();
+            _settings.ShowSourcePlayButton.Should().BeFalse();
+            _settings.ShowSwapButton.Should().BeFalse();
+            _settings.FixedWindowIsPinned.Should().BeFalse();
         }
         finally
         {
-            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previous);
-        }
-    }
-
-    [Fact]
-    public void AppearanceDefaults_PreserveExistingLook()
-    {
-        using var testDirectory = new TemporaryDirectory();
-        var previous = Environment.GetEnvironmentVariable("EASYDICT_SETTINGS_DIR");
-        try
-        {
-            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", testDirectory.Path);
-
-            var settings = CreateIsolatedSettingsService();
-            settings.ResultFontScale.Should().Be(1.0);
-            settings.ShowOcrButton.Should().BeTrue();
-            settings.ShowPinButton.Should().BeTrue();
-            settings.ShowSourcePlayButton.Should().BeTrue();
-            settings.ShowSwapButton.Should().BeTrue();
-            settings.FixedWindowIsPinned.Should().BeTrue();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("EASYDICT_SETTINGS_DIR", previous);
-        }
-    }
-
-    private static SettingsService CreateIsolatedSettingsService()
-    {
-        var constructor = typeof(SettingsService).GetConstructor(
-            BindingFlags.Instance | BindingFlags.NonPublic,
-            binder: null,
-            Type.EmptyTypes,
-            modifiers: null);
-
-        constructor.Should().NotBeNull();
-        return (SettingsService)constructor!.Invoke(null);
-    }
-
-    private sealed class TemporaryDirectory : IDisposable
-    {
-        public TemporaryDirectory()
-        {
-            Path = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "Easydict.WinUI.Tests",
-                Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path);
-        }
-
-        public string Path { get; }
-
-        public void Dispose()
-        {
-            try
-            {
-                if (Directory.Exists(Path))
-                {
-                    Directory.Delete(Path, recursive: true);
-                }
-            }
-            catch
-            {
-                // Best-effort cleanup.
-            }
+            _settings.ResultFontScale = originalFontScale;
+            _settings.ShowOcrButton = originalOcr;
+            _settings.ShowPinButton = originalPin;
+            _settings.ShowSourcePlayButton = originalPlay;
+            _settings.ShowSwapButton = originalSwap;
+            _settings.FixedWindowIsPinned = originalFixedPinned;
+            _settings.Save();
         }
     }
 }

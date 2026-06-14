@@ -392,7 +392,8 @@ namespace Easydict.WinUI.Views
             var minimal = MinimalThemeService.IsActive;
             ModeEmojiIcon.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
             InputHelpIcon.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-            SourcePlayButton.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
+            SourcePlayButton.Visibility = (!minimal && SettingsService.Instance.ShowSourcePlayButton)
+                ? Visibility.Visible : Visibility.Collapsed;
             ResultsTitleText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
             if (minimal)
             {
@@ -1319,11 +1320,12 @@ namespace Easydict.WinUI.Views
 
             if (_currentMode == QueryMode.Translation)
             {
+                var showSwap = SettingsService.Instance.ShowSwapButton;
                 TargetLangCombo.Visibility = Visibility.Visible;
-                SwapLanguageButton.Visibility = Visibility.Visible;
+                SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
                 LangHelpIcon.Visibility = Visibility.Visible;
                 TargetLangComboNarrow.Visibility = Visibility.Visible;
-                SwapLanguageButtonNarrow.Visibility = Visibility.Visible;
+                SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
                 LangHelpIconNarrow.Visibility = Visibility.Visible;
 
                 InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
@@ -4342,13 +4344,22 @@ namespace Easydict.WinUI.Views
         }
 
         /// <summary>
-        /// Show/hide quick-action buttons per user settings.
+        /// Show/hide quick-action buttons per user settings. The source-play button is also
+        /// hidden in Minimal mode, and the swap buttons only show in Translation mode — matching
+        /// the gating applied by ApplyThemeChrome and the mode-switch logic.
         /// </summary>
         private void ApplyButtonVisibility()
         {
             var settings = SettingsService.Instance;
             PinButton.Visibility = settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
             OcrButton.Visibility = settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+
+            SourcePlayButton.Visibility = (!MinimalThemeService.IsActive && settings.ShowSourcePlayButton)
+                ? Visibility.Visible : Visibility.Collapsed;
+
+            var showSwap = settings.ShowSwapButton && _currentMode == QueryMode.Translation;
+            SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
+            SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private async void OnSettingsClicked(object sender, RoutedEventArgs e)

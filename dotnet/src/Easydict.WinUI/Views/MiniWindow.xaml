@@ -47,6 +47,7 @@
                 Grid.Column="0"
                 Click="OnPinClicked"
                 ToolTipService.ToolTip="Pin window (stay on top)"
+                AutomationProperties.Name="Pin window (stay on top)"
                 Background="Transparent"
                 BorderThickness="0"
                 CornerRadius="{ThemeResource EasydictControlCornerRadius}"

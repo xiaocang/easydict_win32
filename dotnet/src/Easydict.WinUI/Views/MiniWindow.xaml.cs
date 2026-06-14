@@ -146,7 +146,7 @@ public sealed partial class MiniWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
                 "MiniWindow");
             _titleBarHelper.Initialize();
         }
@@ -2345,9 +2345,27 @@ public sealed partial class MiniWindow : Window
             compactControls.RefreshTheme(Content as FrameworkElement);
         }
         TitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        DetectedLangText.Visibility = compact ? Visibility.Collapsed : DetectedLangText.Visibility;
+        if (compact)
+        {
+            DetectedLangText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            RefreshDetectedLanguageChrome();
+        }
         StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         DispatcherQueue.TryEnqueue(() => _titleBarHelper?.UpdateDragRegions());
+    }
+
+    private void RefreshDetectedLanguageChrome()
+    {
+        if (_lastQuickQueryResolution is { } resolution)
+        {
+            UpdateQuickQueryModeStatus(resolution);
+            return;
+        }
+
+        UpdateDetectedLanguageDisplay(_lastDetectedLanguage);
     }
 
     private void OnCompactWindowControlsPointerEntered(object sender, PointerRoutedEventArgs e)

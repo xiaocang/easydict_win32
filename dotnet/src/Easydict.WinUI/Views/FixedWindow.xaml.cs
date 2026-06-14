@@ -124,7 +124,7 @@ public sealed partial class FixedWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
                 "FixedWindow");
             _titleBarHelper.Initialize();
         }
@@ -1646,9 +1646,27 @@ public sealed partial class FixedWindow : Window
             compactControls.RefreshTheme(Content as FrameworkElement);
         }
         TitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        DetectedLangText.Visibility = compact ? Visibility.Collapsed : DetectedLangText.Visibility;
+        if (compact)
+        {
+            DetectedLangText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            RefreshDetectedLanguageChrome();
+        }
         StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         DispatcherQueue.TryEnqueue(() => _titleBarHelper?.UpdateDragRegions());
+    }
+
+    private void RefreshDetectedLanguageChrome()
+    {
+        if (_lastQuickQueryResolution is { } resolution)
+        {
+            UpdateQuickQueryModeStatus(resolution);
+            return;
+        }
+
+        UpdateDetectedLanguageDisplay(_lastDetectedLanguage);
     }
 
     private void OnCompactWindowControlsPointerEntered(object sender, PointerRoutedEventArgs e)

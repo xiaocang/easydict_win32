@@ -404,6 +404,10 @@ namespace Easydict.WinUI.Views
             {
                 DetectedLanguageText.Visibility = Visibility.Collapsed;
             }
+            else
+            {
+                RefreshDetectedLanguageChrome();
+            }
             LangHelpIcon.Visibility = compact || _currentMode != QueryMode.Translation
                 ? Visibility.Collapsed
                 : Visibility.Visible;
@@ -2046,6 +2050,17 @@ namespace Easydict.WinUI.Views
 
             _showingGrammarFallbackNotice = false;
             UpdateDetectedLanguageDisplay(resolution.EffectiveSourceLanguage);
+        }
+
+        private void RefreshDetectedLanguageChrome()
+        {
+            if (_lastQuickQueryResolution is { } resolution)
+            {
+                UpdateQuickQueryModeStatus(resolution);
+                return;
+            }
+
+            UpdateDetectedLanguageDisplay(_lastDetectedLanguage);
         }
 
         private void RefreshQuickQueryModePreview()

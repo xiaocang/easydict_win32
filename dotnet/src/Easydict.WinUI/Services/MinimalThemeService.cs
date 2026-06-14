@@ -186,7 +186,7 @@ internal static class MinimalThemeService
         surface.Padding = ThemeResourceService.GetResourceOrDefault(
             "FloatingWindowContentPadding",
             themeRoot,
-            new Thickness(16));
+            new Thickness(8));
         sourceContainer.Background = ThemeResourceService.GetBrush("TextControlBackground", themeRoot);
         sourceContainer.BorderBrush = ThemeResourceService.GetBrush("TextControlBorderBrush", themeRoot);
         sourceContainer.BorderThickness = new Thickness(1);
@@ -197,11 +197,11 @@ internal static class MinimalThemeService
         sourceContainer.Padding = ThemeResourceService.GetResourceOrDefault(
             "FloatingInputPadding",
             themeRoot,
-            new Thickness(10, 9, 10, 9));
+            new Thickness(6, 4, 6, 4));
         sourceContainer.Margin = ThemeResourceService.GetResourceOrDefault(
             "FloatingInputMargin",
             themeRoot,
-            new Thickness(0, 2, 0, 6));
+            new Thickness(0, 0, 0, 3));
     }
 
     public static void ApplyAccentIconForeground(

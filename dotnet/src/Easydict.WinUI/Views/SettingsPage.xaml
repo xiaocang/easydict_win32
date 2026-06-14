@@ -2162,6 +2162,16 @@
                                            TextWrapping="Wrap"
                                            Visibility="Collapsed"/>
 
+                                <!-- Compact mode (issue #172) -->
+                                <ToggleSwitch x:Name="CompactModeToggle"
+                                        Header="Compact mode"/>
+                                <TextBlock
+                                    x:Name="CompactModeDescriptionText"
+                                    Text="Hide secondary chrome and helper actions for a tighter translation surface."
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap"/>
+
                                 <!-- Result font size (issue #172) -->
                                 <TextBlock
                                     x:Name="ResultFontSizeLabel"

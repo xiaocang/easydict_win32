@@ -1271,6 +1271,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>ปรับขนาดฟอนต์ของผลการแปล</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>โหมดกะทัดรัด</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>ซ่อนชื่อเรื่อง สถานะ ไอคอนช่วยเหลือ และปุ่มลัดเสริม เพื่อให้หน้าต่างแปลภาษากะทัดรัดขึ้น</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>ปุ่มการทำงานด่วน</value>
   </data>

@@ -905,6 +905,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Laraskan saiz fon hasil terjemahan.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Mod padat</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Sembunyikan tajuk, status, ikon bantuan dan tindakan pantas tambahan untuk paparan terjemahan yang lebih padat.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Butang tindakan pantas</value>
   </data>

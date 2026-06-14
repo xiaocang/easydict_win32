@@ -85,6 +85,7 @@ public class AppearanceServiceTests
     public void AppearanceSettings_SurviveSave()
     {
         var originalFontScale = _settings.ResultFontScale;
+        var originalCompactMode = _settings.CompactMode;
         var originalOcr = _settings.ShowOcrButton;
         var originalPin = _settings.ShowPinButton;
         var originalPlay = _settings.ShowSourcePlayButton;
@@ -94,6 +95,7 @@ public class AppearanceServiceTests
         try
         {
             _settings.ResultFontScale = 1.25;
+            _settings.CompactMode = true;
             _settings.ShowOcrButton = false;
             _settings.ShowPinButton = false;
             _settings.ShowSourcePlayButton = false;
@@ -102,6 +104,7 @@ public class AppearanceServiceTests
             _settings.Save();
 
             _settings.ResultFontScale.Should().Be(1.25);
+            _settings.CompactMode.Should().BeTrue();
             _settings.ShowOcrButton.Should().BeFalse();
             _settings.ShowPinButton.Should().BeFalse();
             _settings.ShowSourcePlayButton.Should().BeFalse();
@@ -111,6 +114,7 @@ public class AppearanceServiceTests
         finally
         {
             _settings.ResultFontScale = originalFontScale;
+            _settings.CompactMode = originalCompactMode;
             _settings.ShowOcrButton = originalOcr;
             _settings.ShowPinButton = originalPin;
             _settings.ShowSourcePlayButton = originalPlay;

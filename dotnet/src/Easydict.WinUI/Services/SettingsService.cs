@@ -430,6 +430,9 @@ public sealed class SettingsService
     /// </summary>
     public double ResultFontScale { get; set; } = 1.0;
 
+    /// <summary>Hide secondary chrome and optional helper actions for a tighter translation surface.</summary>
+    public bool CompactMode { get; set; } = false;
+
     /// <summary>Show the OCR quick-action button in the translation windows.</summary>
     public bool ShowOcrButton { get; set; } = true;
 
@@ -790,6 +793,7 @@ public sealed class SettingsService
 
         // Appearance / personalization (issue #172)
         ResultFontScale = GetValue(nameof(ResultFontScale), 1.0);
+        CompactMode = GetValue(nameof(CompactMode), false);
         ShowOcrButton = GetValue(nameof(ShowOcrButton), true);
         ShowPinButton = GetValue(nameof(ShowPinButton), true);
         ShowSourcePlayButton = GetValue(nameof(ShowSourcePlayButton), true);
@@ -1029,6 +1033,7 @@ public sealed class SettingsService
 
         // Appearance / personalization (issue #172)
         _settings[nameof(ResultFontScale)] = ResultFontScale;
+        _settings[nameof(CompactMode)] = CompactMode;
         _settings[nameof(ShowOcrButton)] = ShowOcrButton;
         _settings[nameof(ShowPinButton)] = ShowPinButton;
         _settings[nameof(ShowSourcePlayButton)] = ShowSourcePlayButton;

@@ -49,6 +49,8 @@ public sealed partial class FixedWindow : Window
     private QuickQueryLanguageResolution? _lastQuickQueryResolution;
     private bool _showingGrammarFallbackNotice;
     private TitleBarDragRegionHelper? _titleBarHelper;
+    private CompactWindowControlsView? _compactWindowControls;
+    private WindowDragSession? _compactWindowDragSession;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _resizeThrottleTimer;
     private bool _resizePending;      // resize requested but not yet executed
     private bool _resizeThrottling;   // inside cooldown window
@@ -59,6 +61,7 @@ public sealed partial class FixedWindow : Window
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
     private const int InputFocusMaxAttempts = 10;
+    private const double CompactWindowControlsIdleOpacity = 0.52;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -69,6 +72,7 @@ public sealed partial class FixedWindow : Window
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+        InitializeCompactWindowControls();
 
         // Frame-rate streaming text applicator — see StreamingTextCoalescer.
         _streamingCoalescer = new StreamingTextCoalescer(DispatcherQueue);
@@ -165,10 +169,39 @@ public sealed partial class FixedWindow : Window
         ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
+        if (_compactWindowControls is { } compactControls)
+        {
+            ToolTipService.SetToolTip(compactControls.CloseButton, loc.GetString("HideWindow"));
+            ToolTipService.SetToolTip(compactControls.DragIsland, loc.GetStringOrDefault("DragWindowTooltip", "Drag window"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(compactControls.CloseButton, loc.GetString("HideWindow"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                compactControls.DragIsland,
+                loc.GetStringOrDefault("DragWindowTooltip", "Drag window"));
+        }
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+    }
+
+    private void InitializeCompactWindowControls()
+    {
+        if (WindowSurface.Child is not Grid surfaceGrid)
+        {
+            return;
+        }
+
+        _compactWindowControls = new CompactWindowControlsView();
+        surfaceGrid.Children.Add(_compactWindowControls.Root);
+        _compactWindowControls.Root.PointerEntered += OnCompactWindowControlsPointerEntered;
+        _compactWindowControls.Root.PointerExited += OnCompactWindowControlsPointerExited;
+        _compactWindowControls.DragIsland.PointerPressed += OnCompactDragIslandPointerPressed;
+        _compactWindowControls.DragIsland.PointerMoved += OnCompactDragIslandPointerMoved;
+        _compactWindowControls.DragIsland.PointerReleased += OnCompactDragIslandPointerReleased;
+        _compactWindowControls.DragIsland.PointerCanceled += OnCompactDragIslandPointerCanceled;
+        _compactWindowControls.DragIsland.PointerCaptureLost += OnCompactDragIslandPointerCaptureLost;
+        _compactWindowControls.CloseButton.Click += OnCompactCloseClicked;
+        _compactWindowControls.RefreshTheme(Content as FrameworkElement);
     }
 
     /// <summary>
@@ -229,6 +262,7 @@ public sealed partial class FixedWindow : Window
         // Apply pin state + quick-action button visibility from settings
         UpdatePinState();
         ApplyButtonVisibility();
+        ApplyCompactChromeLayout();
     }
 
     /// <summary>
@@ -442,7 +476,7 @@ public sealed partial class FixedWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionFallbackNotice",
                 "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
-            DetectedLangText.Visibility = Visibility.Visible;
+            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
             RequestResize();
             return;
         }
@@ -452,7 +486,7 @@ public sealed partial class FixedWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionActiveNotice",
                 "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
-            DetectedLangText.Visibility = Visibility.Visible;
+            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
             RequestResize();
             return;
         }
@@ -1523,7 +1557,7 @@ public sealed partial class FixedWindow : Window
             DetectedLangText.Text = string.Format(
                 LocalizationService.Instance.GetString("DetectedLanguage"),
                 displayName);
-            DetectedLangText.Visibility = Visibility.Visible;
+            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {
@@ -1590,8 +1624,131 @@ public sealed partial class FixedWindow : Window
     public void ApplyAppearance()
     {
         ApplyButtonVisibility();
+        ApplyCompactChromeLayout();
         ServiceResultViewHost.RefreshAppearance(_resultControls);
         RequestResize();
+    }
+
+    private bool IsCompactChrome => MinimalThemeService.IsActive || SettingsService.Instance.CompactMode;
+
+    private bool ShouldShowCompactWindowControls => SettingsService.Instance.CompactMode;
+
+    private void ApplyCompactChromeLayout()
+    {
+        var compact = IsCompactChrome;
+        var showCompactControls = ShouldShowCompactWindowControls;
+        TitleBarRegion.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        TitleBarRegion.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 0, 4);
+        if (_compactWindowControls is { } compactControls)
+        {
+            compactControls.Root.Visibility = showCompactControls ? Visibility.Visible : Visibility.Collapsed;
+            compactControls.Root.Opacity = showCompactControls ? CompactWindowControlsIdleOpacity : 0;
+            compactControls.RefreshTheme(Content as FrameworkElement);
+        }
+        TitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        DetectedLangText.Visibility = compact ? Visibility.Collapsed : DetectedLangText.Visibility;
+        StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        DispatcherQueue.TryEnqueue(() => _titleBarHelper?.UpdateDragRegions());
+    }
+
+    private void OnCompactWindowControlsPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (ShouldShowCompactWindowControls)
+        {
+            if (_compactWindowControls is { } compactControls)
+            {
+                compactControls.Root.Opacity = 1;
+            }
+        }
+    }
+
+    private void OnCompactWindowControlsPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (ShouldShowCompactWindowControls)
+        {
+            if (_compactWindowControls is { } compactControls)
+            {
+                compactControls.Root.Opacity = CompactWindowControlsIdleOpacity;
+            }
+        }
+    }
+
+    private void OnCompactDragIslandPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!ShouldShowCompactWindowControls
+            || _compactWindowDragSession is not null
+            || sender is not UIElement dragElement
+            || !WindowDragHelper.TryBeginLeftButtonDrag(this, dragElement, e, out var session))
+        {
+            return;
+        }
+
+        _compactWindowDragSession = session;
+        e.Handled = true;
+    }
+
+    private void OnCompactDragIslandPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_compactWindowDragSession is not { } session
+            || sender is not UIElement dragElement
+            || !WindowDragHelper.IsSessionPointer(session, e))
+        {
+            return;
+        }
+
+        if (WindowDragHelper.TryUpdateLeftButtonDrag(session, dragElement, e))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        EndCompactWindowDrag(dragElement, e, releaseCapture: true);
+    }
+
+    private void OnCompactDragIslandPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement dragElement)
+        {
+            EndCompactWindowDrag(dragElement, e, releaseCapture: true);
+        }
+    }
+
+    private void OnCompactDragIslandPointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement dragElement)
+        {
+            EndCompactWindowDrag(dragElement, e, releaseCapture: true);
+        }
+    }
+
+    private void OnCompactDragIslandPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement dragElement)
+        {
+            EndCompactWindowDrag(dragElement, e, releaseCapture: false);
+        }
+    }
+
+    private void EndCompactWindowDrag(UIElement dragElement, PointerRoutedEventArgs e, bool releaseCapture)
+    {
+        if (_compactWindowDragSession is not { } session
+            || !WindowDragHelper.IsSessionPointer(session, e))
+        {
+            return;
+        }
+
+        _compactWindowDragSession = null;
+        if (releaseCapture)
+        {
+            dragElement.ReleasePointerCapture(e.Pointer);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnCompactCloseClicked(object sender, RoutedEventArgs e)
+    {
+        HideWindow();
     }
 
     /// <summary>
@@ -1600,8 +1757,9 @@ public sealed partial class FixedWindow : Window
     private void ApplyButtonVisibility()
     {
         var settings = SettingsService.Instance;
-        PinButton.Visibility = settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
-        OcrButton.Visibility = settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+        var compact = IsCompactChrome;
+        PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
+        OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
         SwapButton.Visibility = settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -1979,8 +2137,8 @@ public sealed partial class FixedWindow : Window
             SourceTextContainer,
             minimal,
             Content as FrameworkElement);
-        DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
-        StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
+        ApplyButtonVisibility();
+        ApplyCompactChromeLayout();
         var themeRoot = Content as FrameworkElement;
         MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing, themeRoot);
 

@@ -905,6 +905,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Juster skriftstørrelsen for oversættelsesresultater.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Kompakt tilstand</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Skjuler titler, status, hjælpeikoner og ekstra hurtighandlinger for en mere kompakt oversættelsesvisning.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Knapper til hurtig handling</value>
   </data>

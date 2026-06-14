@@ -19,7 +19,7 @@
             BorderBrush="{ThemeResource MainBorderBrush}"
             BorderThickness="0"
             CornerRadius="0"
-            Padding="16">
+            Padding="{ThemeResource FloatingWindowContentPadding}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -60,6 +60,7 @@
             </ToggleButton>
 
             <TextBlock
+                x:Name="TitleText"
                 Grid.Column="1"
                 Text="Quick Translate"
                 FontSize="12"

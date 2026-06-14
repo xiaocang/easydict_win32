@@ -1322,6 +1322,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>번역 결과의 글꼴 크기를 조정합니다.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>간결 모드</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>제목, 상태, 도움말 아이콘, 보조 빠른 동작을 숨겨 번역 화면을 더 간결하게 만듭니다.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>빠른 작업 버튼</value>
   </data>

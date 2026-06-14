@@ -710,6 +710,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>调整翻译结果的字体大小。</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>紧凑模式</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>隐藏标题、状态、提示图标和辅助快捷按钮，让翻译界面更紧凑。</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>快捷操作按钮</value>
   </data>

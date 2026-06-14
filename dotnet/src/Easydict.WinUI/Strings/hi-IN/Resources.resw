@@ -905,6 +905,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>अनुवाद परिणामों के फ़ॉन्ट आकार को समायोजित करें।</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>कॉम्पैक्ट मोड</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>अनुवाद दृश्य को अधिक सघन बनाने के लिए शीर्षक, स्थिति, सहायता आइकन और सहायक त्वरित कार्रवाइयां छिपाएं।</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>त्वरित क्रिया बटन</value>
   </data>

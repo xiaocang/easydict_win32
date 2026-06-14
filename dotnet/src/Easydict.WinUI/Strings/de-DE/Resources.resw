@@ -1322,6 +1322,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Passen Sie die Schriftgröße der Übersetzungsergebnisse an.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Kompaktmodus</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Blendet Titel, Status, Hilfesymbole und zusätzliche Schnellaktionen aus, damit die Übersetzungsansicht kompakter wird.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Schaltflächen für Schnellaktionen</value>
   </data>

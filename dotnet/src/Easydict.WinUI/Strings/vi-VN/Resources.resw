@@ -1317,6 +1317,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Điều chỉnh cỡ chữ của kết quả dịch.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Chế độ thu gọn</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Ẩn tiêu đề, trạng thái, biểu tượng trợ giúp và thao tác nhanh phụ để giao diện dịch gọn hơn.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Nút thao tác nhanh</value>
   </data>

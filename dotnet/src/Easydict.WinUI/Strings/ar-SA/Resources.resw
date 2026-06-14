@@ -1317,6 +1317,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>اضبط حجم خط نتائج الترجمة.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>الوضع المضغوط</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>إخفاء العناوين والحالة وأيقونات المساعدة والإجراءات السريعة الثانوية لجعل واجهة الترجمة أكثر إحكامًا.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>أزرار الإجراءات السريعة</value>
   </data>

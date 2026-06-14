@@ -710,6 +710,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Adjust the font size of translation results.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Compact mode</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Hide titles, status, help icons, and helper quick actions for a tighter translation surface.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Quick action buttons</value>
   </data>

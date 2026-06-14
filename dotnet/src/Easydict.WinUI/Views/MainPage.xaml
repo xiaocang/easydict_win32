@@ -140,8 +140,8 @@
                     BorderThickness="0"
                     CornerRadius="{ThemeResource EasydictControlCornerRadius}"
                     Padding="0"
-                    Width="36"
-                    Height="36"
+                    Width="32"
+                    Height="32"
                     VerticalAlignment="Center">
                     <FontIcon x:Name="PinIcon"
                               Glyph="&#xE718;"
@@ -154,8 +154,8 @@
                     Style="{StaticResource EasydictIconButtonStyle}"
                     ToolTipService.ToolTip="OCR translate"
                     AutomationProperties.Name="OCR translate"
-                    Width="36"
-                    Height="36"
+                    Width="32"
+                    Height="32"
                     VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE722;"
                               FontSize="18"
@@ -400,7 +400,8 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
+                        <Grid x:Name="QuickInputHeaderGrid"
+                              Grid.Row="0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -533,7 +534,8 @@
                 </Border>
 
                 <!-- Footer -->
-                <Grid Grid.Row="3"
+                <Grid x:Name="QuickFooterGrid"
+                      Grid.Row="3"
                       Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

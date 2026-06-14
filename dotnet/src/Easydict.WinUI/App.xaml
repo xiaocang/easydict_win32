@@ -105,8 +105,8 @@
             </Style>
 
             <Style x:Key="EasydictIconButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictBaseButtonStyle}">
-                <Setter Property="Width" Value="36" />
-                <Setter Property="Height" Value="36" />
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
@@ -162,8 +162,8 @@
             </Style>
 
             <Style x:Key="EasydictPrimaryRoundButtonStyle" TargetType="Button" BasedOn="{StaticResource EasydictAccentButtonStyle}">
-                <Setter Property="Width" Value="40" />
-                <Setter Property="Height" Value="40" />
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="36" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictRoundButtonCornerRadius}" />
             </Style>
@@ -175,7 +175,7 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
                 <Setter Property="AcceptsReturn" Value="True" />
                 <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
-                <Setter Property="Padding" Value="8" />
+                <Setter Property="Padding" Value="6" />
                 <Setter Property="CornerRadius" Value="{ThemeResource EasydictControlCornerRadius}" />
                 <Setter Property="MinHeight" Value="80" />
             </Style>

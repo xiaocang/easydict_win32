@@ -1563,6 +1563,8 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.PlaceholderText = loc.GetString("ExcludedAppsPlaceholder");
         MouseSelectionExcludedAppsDescriptionText.Text = loc.GetString("ExcludedAppsDescription");
         AlwaysOnTopToggle.Header = loc.GetString("AlwaysOnTop");
+        CompactModeToggle.Header = loc.GetString("CompactMode");
+        CompactModeDescriptionText.Text = loc.GetString("CompactModeDescription");
         ResultFontSizeLabel.Text = loc.GetString("ResultFontSize");
         ResultFontSizeDescriptionText.Text = loc.GetString("ResultFontSizeDescription");
         QuickActionsHeaderText.Text = loc.GetString("QuickActionsHeader");
@@ -2181,6 +2183,7 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled += OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
+        CompactModeToggle.Toggled += OnSettingChanged;
         ShowOcrButtonToggle.Toggled += OnSettingChanged;
         ShowPinButtonToggle.Toggled += OnSettingChanged;
         ShowSourcePlayButtonToggle.Toggled += OnSettingChanged;
@@ -2289,6 +2292,7 @@ public sealed partial class SettingsPage : Page
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
         EnableLocalDictionarySuggestionsToggle.Toggled -= OnSettingChanged;
         ShowOcrButtonToggle.Toggled -= OnSettingChanged;
+        CompactModeToggle.Toggled -= OnSettingChanged;
         ShowPinButtonToggle.Toggled -= OnSettingChanged;
         ShowSourcePlayButtonToggle.Toggled -= OnSettingChanged;
         ShowSwapButtonToggle.Toggled -= OnSettingChanged;
@@ -2699,6 +2703,7 @@ public sealed partial class SettingsPage : Page
             || HideEmptyServiceResultsToggle.IsOn != _settings.HideEmptyServiceResults
             || EnableLocalDictionarySuggestionsToggle.IsOn != _settings.EnableLocalDictionarySuggestions
             || !SameDouble(ResultFontScaleSlider.Value, _settings.ResultFontScale)
+            || CompactModeToggle.IsOn != _settings.CompactMode
             || ShowOcrButtonToggle.IsOn != _settings.ShowOcrButton
             || ShowPinButtonToggle.IsOn != _settings.ShowPinButton
             || ShowSourcePlayButtonToggle.IsOn != _settings.ShowSourcePlayButton
@@ -2958,6 +2963,7 @@ public sealed partial class SettingsPage : Page
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
             ResultFontScaleSlider.Value = _settings.ResultFontScale;
+            CompactModeToggle.IsOn = _settings.CompactMode;
             ShowOcrButtonToggle.IsOn = _settings.ShowOcrButton;
             ShowPinButtonToggle.IsOn = _settings.ShowPinButton;
             ShowSourcePlayButtonToggle.IsOn = _settings.ShowSourcePlayButton;
@@ -4285,6 +4291,7 @@ public sealed partial class SettingsPage : Page
             .ToList();
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
         _settings.ResultFontScale = ResultFontScaleSlider.Value;
+        _settings.CompactMode = CompactModeToggle.IsOn;
         _settings.ShowOcrButton = ShowOcrButtonToggle.IsOn;
         _settings.ShowPinButton = ShowPinButtonToggle.IsOn;
         _settings.ShowSourcePlayButton = ShowSourcePlayButtonToggle.IsOn;

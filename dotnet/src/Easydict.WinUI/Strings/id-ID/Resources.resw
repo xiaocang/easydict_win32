@@ -1263,6 +1263,12 @@
   <data name="ResultFontSizeDescription" xml:space="preserve">
     <value>Sesuaikan ukuran font hasil terjemahan.</value>
   </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Mode ringkas</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Sembunyikan judul, status, ikon bantuan, dan tindakan cepat tambahan agar tampilan terjemahan lebih ringkas.</value>
+  </data>
   <data name="QuickActionsHeader" xml:space="preserve">
     <value>Tombol aksi cepat</value>
   </data>

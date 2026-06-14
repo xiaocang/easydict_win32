@@ -145,6 +145,14 @@ public sealed class MiniWindowService : IDisposable
     }
 
     /// <summary>
+    /// Re-apply appearance settings (result font size, button visibility) to the mini window.
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        _miniWindow?.ApplyAppearance();
+    }
+
+    /// <summary>
     /// Ensure the mini window instance exists.
     /// </summary>
     private void EnsureWindowCreated()

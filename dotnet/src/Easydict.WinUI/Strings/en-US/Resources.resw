@@ -701,6 +701,30 @@
   <data name="PinWindowTooltip" xml:space="preserve">
     <value>Pin window (stay on top)</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR translate</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Result font size</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Adjust the font size of translation results.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Quick action buttons</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Show OCR button</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Show pin button</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Show play button</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Show swap button</value>
+  </data>
 
   <!-- UI Language -->
   <data name="UILanguage" xml:space="preserve">

@@ -742,6 +742,30 @@
   <data name="PinWindowTooltip" xml:space="preserve">
     <value>釘選視窗（保持在最上層）</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>OCR 翻譯</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>結果字型大小</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>調整翻譯結果的字型大小。</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>快捷操作按鈕</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>顯示 OCR 按鈕</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>顯示釘選按鈕</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>顯示朗讀按鈕</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>顯示交換按鈕</value>
+  </data>
   <data name="Close" xml:space="preserve">
     <value>關閉</value>
   </data>

@@ -280,8 +280,15 @@ namespace Easydict.WinUI.Views
             }
 #endif
 
+            // Apply quick-action button visibility + pin state from settings (issue #172)
+            ApplyButtonVisibility();
+            UpdatePinState();
+
             // Initialize service result controls based on enabled services
             InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
+
+            // Re-apply result font size to any reused result controls (issue #172)
+            ServiceResultViewHost.RefreshAppearance(_resultControls);
 
             SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
             if (_deferLoadedThemeChrome)
@@ -1226,6 +1233,8 @@ namespace Easydict.WinUI.Views
             SyncLocalModelPreparationProgressFromCoordinator();
 
             // Tooltips
+            ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
+            ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
             ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
@@ -4298,6 +4307,48 @@ namespace Easydict.WinUI.Views
             }
 
             await SwitchModeAsync(newMode);
+        }
+
+        private void OnOcrClicked(object sender, RoutedEventArgs e)
+        {
+            _ = App.TriggerOcrTranslateAsync();
+        }
+
+        private void OnPinClicked(object sender, RoutedEventArgs e)
+        {
+            var pinned = !SettingsService.Instance.AlwaysOnTop;
+            SettingsService.Instance.AlwaysOnTop = pinned;
+            SettingsService.Instance.Save();
+            App.ApplyAlwaysOnTop(pinned);
+            UpdatePinState();
+        }
+
+        private void UpdatePinState()
+        {
+            var pinned = SettingsService.Instance.AlwaysOnTop;
+            PinButton.IsChecked = pinned;
+            PinIcon.Glyph = pinned ? "\uE840" : "\uE718"; // Pinned vs Unpinned icon
+        }
+
+        /// <summary>
+        /// Re-apply appearance settings (result font size + quick-action button visibility)
+        /// to the main page. Called from the app-wide appearance broadcast (issue #172).
+        /// </summary>
+        public void ApplyAppearance()
+        {
+            ApplyButtonVisibility();
+            UpdatePinState();
+            ServiceResultViewHost.RefreshAppearance(_resultControls);
+        }
+
+        /// <summary>
+        /// Show/hide quick-action buttons per user settings.
+        /// </summary>
+        private void ApplyButtonVisibility()
+        {
+            var settings = SettingsService.Instance;
+            PinButton.Visibility = settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
+            OcrButton.Visibility = settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private async void OnSettingsClicked(object sender, RoutedEventArgs e)

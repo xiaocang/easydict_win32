@@ -39,6 +39,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <ToggleButton
@@ -68,9 +69,23 @@
                 VerticalAlignment="Center"/>
 
             <Button
+                x:Name="OcrButton"
+                Grid.Column="2"
+                Click="OnOcrClicked"
+                Style="{StaticResource EasydictIconButtonStyle}"
+                ToolTipService.ToolTip="OCR translate"
+                Width="28"
+                Height="28"
+                Padding="0">
+                <FontIcon Glyph="&#xE722;"
+                        FontSize="14"
+                        Foreground="{ThemeResource ButtonForeground}"/>
+            </Button>
+
+            <Button
                 x:Name="CloseButton"
                 AutomationProperties.AutomationId="MiniWindowCloseButton"
-                Grid.Column="2"
+                Grid.Column="3"
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Close"

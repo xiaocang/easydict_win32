@@ -125,18 +125,52 @@
                 </StackPanel>
             </Border>
 
-            <!-- Settings Button -->
-            <Button
-                x:Name="SettingsButton"
+            <!-- Header action buttons -->
+            <StackPanel
                 Grid.Column="3"
-                Click="OnSettingsClicked"
-                Style="{StaticResource EasydictIconButtonStyle}"
-                ToolTipService.ToolTip="Settings"
+                Orientation="Horizontal"
+                Spacing="2"
                 VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE713;"
-                          FontSize="18"
-                          Foreground="{ThemeResource ButtonForeground}"/>
-            </Button>
+                <ToggleButton
+                    x:Name="PinButton"
+                    Click="OnPinClicked"
+                    ToolTipService.ToolTip="Pin window (stay on top)"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                    Padding="0"
+                    Width="36"
+                    Height="36"
+                    VerticalAlignment="Center">
+                    <FontIcon x:Name="PinIcon"
+                              Glyph="&#xE718;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </ToggleButton>
+                <Button
+                    x:Name="OcrButton"
+                    Click="OnOcrClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="OCR translate"
+                    Width="36"
+                    Height="36"
+                    VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE722;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+                <!-- Settings Button -->
+                <Button
+                    x:Name="SettingsButton"
+                    Click="OnSettingsClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="Settings"
+                    VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE713;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Quick Translate Content -->

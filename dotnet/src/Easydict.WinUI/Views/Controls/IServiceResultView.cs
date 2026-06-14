@@ -1,4 +1,5 @@
 using Easydict.TranslationService.Models;
+using Easydict.WinUI.Services;
 using Microsoft.UI.Xaml;
 
 namespace Easydict.WinUI.Views.Controls;
@@ -31,6 +32,14 @@ public interface IServiceResultView
     void RefreshDemotionState();
 
     void RefreshThemeChrome()
+    {
+    }
+
+    /// <summary>
+    /// Apply user-configurable appearance (result font size) to this item.
+    /// Default no-op keeps the interface non-breaking for any other implementers.
+    /// </summary>
+    void ApplyAppearance(AppearanceSettings settings)
     {
     }
 

@@ -109,6 +109,16 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
     /// </summary>
     public void RefreshDemotionState() => QueueUpdateUI();
 
+    public void ApplyAppearance(AppearanceSettings settings)
+    {
+        ServiceNameText.FontSize = settings.ServiceNameFontSize;
+        StatusText.FontSize = settings.StatusFontSize;
+        ResultText.FontSize = settings.ResultFontSize;
+        CorrectedText.FontSize = settings.ResultFontSize;
+        ErrorText.FontSize = settings.ResultFontSize;
+        PendingQueryText.FontSize = settings.ResultFontSize;
+    }
+
     public void RefreshThemeChrome()
     {
         ApplyServiceChromeForCurrentTheme();

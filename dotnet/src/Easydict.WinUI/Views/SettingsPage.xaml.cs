@@ -1563,6 +1563,13 @@ public sealed partial class SettingsPage : Page
         MouseSelectionExcludedAppsBox.PlaceholderText = loc.GetString("ExcludedAppsPlaceholder");
         MouseSelectionExcludedAppsDescriptionText.Text = loc.GetString("ExcludedAppsDescription");
         AlwaysOnTopToggle.Header = loc.GetString("AlwaysOnTop");
+        ResultFontSizeLabel.Text = loc.GetString("ResultFontSize");
+        ResultFontSizeDescriptionText.Text = loc.GetString("ResultFontSizeDescription");
+        QuickActionsHeaderText.Text = loc.GetString("QuickActionsHeader");
+        ShowOcrButtonToggle.Header = loc.GetString("ShowOcrButton");
+        ShowPinButtonToggle.Header = loc.GetString("ShowPinButton");
+        ShowSourcePlayButtonToggle.Header = loc.GetString("ShowSourcePlayButton");
+        ShowSwapButtonToggle.Header = loc.GetString("ShowSwapButton");
         LaunchAtStartupToggle.Header = loc.GetString("LaunchAtStartup");
         HideEmptyServiceResultsToggle.Header = loc.GetString("HideEmptyServiceResults");
         EnableLocalDictionarySuggestionsLabelText.Text = loc.GetString("EnableLocalDictionarySuggestions");
@@ -2174,12 +2181,17 @@ public sealed partial class SettingsPage : Page
         MouseSelectionTranslateToggle.Toggled += OnMouseSelectionTranslateToggled;
         MouseSelectionExcludedAppsBox.TextChanged += OnSettingChanged;
         AlwaysOnTopToggle.Toggled += OnSettingChanged;
+        ShowOcrButtonToggle.Toggled += OnSettingChanged;
+        ShowPinButtonToggle.Toggled += OnSettingChanged;
+        ShowSourcePlayButtonToggle.Toggled += OnSettingChanged;
+        ShowSwapButtonToggle.Toggled += OnSettingChanged;
         LaunchAtStartupToggle.Toggled += OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled += OnSettingChanged;
         EnableLocalDictionarySuggestionsToggle.Toggled += OnSettingChanged;
         ProxyEnabledToggle.Toggled += OnSettingChanged;
         ProxyBypassLocalToggle.Toggled += OnSettingChanged;
         TtsSpeedSlider.ValueChanged += OnSettingChanged;
+        ResultFontScaleSlider.ValueChanged += OnSettingChanged;
         AutoPlayTranslationToggle.Toggled += OnSettingChanged;
 
         // TextBox/PasswordBox changes - existing
@@ -2276,9 +2288,14 @@ public sealed partial class SettingsPage : Page
         LaunchAtStartupToggle.Toggled -= OnSettingChanged;
         HideEmptyServiceResultsToggle.Toggled -= OnSettingChanged;
         EnableLocalDictionarySuggestionsToggle.Toggled -= OnSettingChanged;
+        ShowOcrButtonToggle.Toggled -= OnSettingChanged;
+        ShowPinButtonToggle.Toggled -= OnSettingChanged;
+        ShowSourcePlayButtonToggle.Toggled -= OnSettingChanged;
+        ShowSwapButtonToggle.Toggled -= OnSettingChanged;
         ProxyEnabledToggle.Toggled -= OnSettingChanged;
         ProxyBypassLocalToggle.Toggled -= OnSettingChanged;
         TtsSpeedSlider.ValueChanged -= OnSettingChanged;
+        ResultFontScaleSlider.ValueChanged -= OnSettingChanged;
         AutoPlayTranslationToggle.Toggled -= OnSettingChanged;
 
         DeepLKeyBox.PasswordChanged -= OnSettingChanged;
@@ -2680,7 +2697,12 @@ public sealed partial class SettingsPage : Page
             || !SameDouble(TtsSpeedSlider.Value, _settings.TtsSpeed)
             || AutoPlayTranslationToggle.IsOn != _settings.AutoPlayTranslation
             || HideEmptyServiceResultsToggle.IsOn != _settings.HideEmptyServiceResults
-            || EnableLocalDictionarySuggestionsToggle.IsOn != _settings.EnableLocalDictionarySuggestions;
+            || EnableLocalDictionarySuggestionsToggle.IsOn != _settings.EnableLocalDictionarySuggestions
+            || !SameDouble(ResultFontScaleSlider.Value, _settings.ResultFontScale)
+            || ShowOcrButtonToggle.IsOn != _settings.ShowOcrButton
+            || ShowPinButtonToggle.IsOn != _settings.ShowPinButton
+            || ShowSourcePlayButtonToggle.IsOn != _settings.ShowSourcePlayButton
+            || ShowSwapButtonToggle.IsOn != _settings.ShowSwapButton;
     }
 
     private bool LanguageTabSettingsDifferFromSettings()
@@ -2935,6 +2957,11 @@ public sealed partial class SettingsPage : Page
             MouseSelectionExcludedAppsPanel.Visibility = _settings.MouseSelectionTranslate
                 ? Visibility.Visible : Visibility.Collapsed;
             AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
+            ResultFontScaleSlider.Value = _settings.ResultFontScale;
+            ShowOcrButtonToggle.IsOn = _settings.ShowOcrButton;
+            ShowPinButtonToggle.IsOn = _settings.ShowPinButton;
+            ShowSourcePlayButtonToggle.IsOn = _settings.ShowSourcePlayButton;
+            ShowSwapButtonToggle.IsOn = _settings.ShowSwapButton;
             LaunchAtStartupToggle.IsOn = _settings.LaunchAtStartup;
             HideEmptyServiceResultsToggle.IsOn = _settings.HideEmptyServiceResults;
             EnableLocalDictionarySuggestionsToggle.IsOn = _settings.EnableLocalDictionarySuggestions;
@@ -4257,6 +4284,11 @@ public sealed partial class SettingsPage : Page
             .Where(s => s.Length > 0)
             .ToList();
         _settings.AlwaysOnTop = AlwaysOnTopToggle.IsOn;
+        _settings.ResultFontScale = ResultFontScaleSlider.Value;
+        _settings.ShowOcrButton = ShowOcrButtonToggle.IsOn;
+        _settings.ShowPinButton = ShowPinButtonToggle.IsOn;
+        _settings.ShowSourcePlayButton = ShowSourcePlayButtonToggle.IsOn;
+        _settings.ShowSwapButton = ShowSwapButtonToggle.IsOn;
         _settings.LaunchAtStartup = LaunchAtStartupToggle.IsOn;
         _settings.TtsSpeed = TtsSpeedSlider.Value;
         _settings.AutoPlayTranslation = AutoPlayTranslationToggle.IsOn;
@@ -4341,6 +4373,9 @@ public sealed partial class SettingsPage : Page
 
         // Apply always-on-top setting immediately
         App.ApplyAlwaysOnTop(_settings.AlwaysOnTop);
+
+        // Apply appearance (result font size + button visibility) immediately (issue #172)
+        App.ApplyAppearance();
 
         // Apply clipboard monitoring immediately
         App.ApplyClipboardMonitoring(_settings.ClipboardMonitoring);

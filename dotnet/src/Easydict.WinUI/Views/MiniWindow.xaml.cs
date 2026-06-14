@@ -183,6 +183,7 @@ public sealed partial class MiniWindow : Window
 
         // Tooltips
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
+        ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("Close"));
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
@@ -247,6 +248,9 @@ public sealed partial class MiniWindow : Window
         // Apply pinned state
         _isPinned = _settings.MiniWindowIsPinned;
         UpdatePinState();
+
+        // Apply quick-action button visibility from settings
+        ApplyButtonVisibility();
     }
 
     /// <summary>
@@ -859,7 +863,7 @@ public sealed partial class MiniWindow : Window
             var desiredHeightDips = content.DesiredSize.Height;
 
             // Calculate new height with limits
-            var minHeightPx = DpiHelper.DipsToPhysicalPixels(200, scale);
+            var minHeightPx = DpiHelper.DipsToPhysicalPixels(AppearanceService.MinFloatingWindowHeightDips, scale);
             var desiredHeightPx = DpiHelper.DipsToPhysicalPixels(desiredHeightDips + 16, scale); // +16 for padding
             
             var newHeightPx = Math.Clamp(desiredHeightPx, minHeightPx, maxHeightPx);
@@ -1777,6 +1781,11 @@ public sealed partial class MiniWindow : Window
         HideWindow();
     }
 
+    private void OnOcrClicked(object sender, RoutedEventArgs e)
+    {
+        _ = App.TriggerOcrTranslateAsync();
+    }
+
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
     {
         if (_isQuerying)
@@ -2247,7 +2256,7 @@ public sealed partial class MiniWindow : Window
             SourceTextContainer,
             minimal,
             Content as FrameworkElement);
-        SourcePlayButton.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
+        ApplyButtonVisibility();
         DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
         StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
         var themeRoot = Content as FrameworkElement;
@@ -2270,6 +2279,34 @@ public sealed partial class MiniWindow : Window
         {
             TryApplyMicaBackdrop();
         }
+    }
+
+    /// <summary>
+    /// Re-apply appearance settings (result font size + quick-action button visibility)
+    /// to the mini window. Called from the app-wide appearance broadcast (issue #172).
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        ApplyButtonVisibility();
+        ServiceResultViewHost.RefreshAppearance(_resultControls);
+        RequestResize();
+    }
+
+    /// <summary>
+    /// Show/hide quick-action buttons per user settings. The source-play button is also
+    /// hidden in Minimal mode regardless of the setting.
+    /// </summary>
+    private void ApplyButtonVisibility()
+    {
+        var settings = SettingsService.Instance;
+        var minimal = MinimalThemeService.IsActive;
+
+        PinButton.Visibility = settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
+        OcrButton.Visibility = settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+        SwapButton.Visibility = settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
+        SourcePlayButton.Visibility = (!minimal && settings.ShowSourcePlayButton)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     /// <summary>

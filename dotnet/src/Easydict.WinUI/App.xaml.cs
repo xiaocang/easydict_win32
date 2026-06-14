@@ -811,6 +811,41 @@ namespace Easydict.WinUI
             return _ocrTranslateService;
         }
 
+        /// <summary>
+        /// Public entry point for the OCR quick-action button in the translation windows.
+        /// Runs the capture → OCR → translate flow on the UI thread (issue #172).
+        /// </summary>
+        public static Task TriggerOcrTranslateAsync()
+        {
+            var app = Instance;
+            var dispatcher = app._window?.DispatcherQueue;
+            if (dispatcher == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            dispatcher.TryEnqueue(async () =>
+            {
+                var ocrService = app.EnsureOcrTranslateService();
+                if (ocrService == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[App] OCR service not available for button trigger");
+                    return;
+                }
+
+                try
+                {
+                    await ocrService.OcrTranslateAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] TriggerOcrTranslateAsync error: {ex.Message}");
+                }
+            });
+
+            return Task.CompletedTask;
+        }
+
         private async void OnBrowserSupportAction(string browser, bool isInstall)
         {
             try
@@ -1259,6 +1294,21 @@ namespace Easydict.WinUI
             Instance._popButtonService?.ApplyTheme(elementTheme, forceThemeResourceRefresh);
 
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {theme} (ElementTheme.{elementTheme})");
+        }
+
+        /// <summary>
+        /// Re-apply appearance settings (result font size) and quick-action button
+        /// visibility to all windows. Mirrors the <see cref="ApplyTheme"/> fan-out (issue #172).
+        /// </summary>
+        public static void ApplyAppearance()
+        {
+            if (Instance._window?.Content is Frame frame && frame.Content is MainPage mainPage)
+            {
+                mainPage.ApplyAppearance();
+            }
+
+            MiniWindowService.Instance.ApplyAppearance();
+            FixedWindowService.Instance.ApplyAppearance();
         }
 
         private static bool IsSystemTheme(string? theme) =>

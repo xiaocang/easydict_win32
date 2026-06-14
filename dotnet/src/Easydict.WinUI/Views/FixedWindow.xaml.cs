@@ -38,6 +38,7 @@ public sealed partial class FixedWindow : Window
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
+    private bool _isPinned;
     private bool _isLoaded;
     private bool _isQuerying;
     private volatile bool _isClosing;
@@ -159,6 +160,8 @@ public sealed partial class FixedWindow : Window
         InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
 
         // Tooltips
+        ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
+        ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
@@ -201,7 +204,7 @@ public sealed partial class FixedWindow : Window
             _presenter.IsMaximizable = false;
             _presenter.IsResizable = true;  // Allow resize for auto-height
             _presenter.SetBorderAndTitleBar(true, false); // Border yes, title bar no
-            _presenter.IsAlwaysOnTop = true;  // Fixed window is always on top
+            _presenter.IsAlwaysOnTop = _settings.FixedWindowIsPinned;  // Fixed window topmost (toggleable)
         }
 
         // Extend content into title bar for custom drag area
@@ -220,6 +223,10 @@ public sealed partial class FixedWindow : Window
 
         // Position window
         PositionWindow();
+
+        // Apply pin state + quick-action button visibility from settings
+        UpdatePinState();
+        ApplyButtonVisibility();
     }
 
     /// <summary>
@@ -712,8 +719,8 @@ public sealed partial class FixedWindow : Window
             content.Measure(new Windows.Foundation.Size(currentWidthDips, double.PositiveInfinity));
             var desiredHeight = content.DesiredSize.Height;
 
-            // Calculate new height with limits (200-800 DIPs)
-            var minHeight = DpiHelper.DipsToPhysicalPixels(200, scale);
+            // Calculate new height with limits (min from AppearanceService, max 800 DIPs)
+            var minHeight = DpiHelper.DipsToPhysicalPixels(AppearanceService.MinFloatingWindowHeightDips, scale);
             var maxHeight = DpiHelper.DipsToPhysicalPixels(800, scale);
             var newHeight = DpiHelper.DipsToPhysicalPixels(desiredHeight + 16, scale); // +16 for padding
             newHeight = Math.Clamp(newHeight, minHeight, maxHeight);
@@ -1547,6 +1554,53 @@ public sealed partial class FixedWindow : Window
     private void OnCloseClicked(object sender, RoutedEventArgs e)
     {
         HideWindow();
+    }
+
+    private void OnOcrClicked(object sender, RoutedEventArgs e)
+    {
+        _ = App.TriggerOcrTranslateAsync();
+    }
+
+    private void OnPinClicked(object sender, RoutedEventArgs e)
+    {
+        _isPinned = !_isPinned;
+        _settings.FixedWindowIsPinned = _isPinned;
+        _settings.Save();
+        UpdatePinState();
+    }
+
+    private void UpdatePinState()
+    {
+        _isPinned = _settings.FixedWindowIsPinned;
+        if (_presenter != null)
+        {
+            _presenter.IsAlwaysOnTop = _isPinned;
+        }
+
+        PinButton.IsChecked = _isPinned;
+        PinIcon.Glyph = _isPinned ? "\uE840" : "\uE718"; // Pinned vs Unpinned icon
+    }
+
+    /// <summary>
+    /// Re-apply appearance settings (result font size + quick-action button visibility)
+    /// to the fixed window. Called from the app-wide appearance broadcast (issue #172).
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        ApplyButtonVisibility();
+        ServiceResultViewHost.RefreshAppearance(_resultControls);
+        RequestResize();
+    }
+
+    /// <summary>
+    /// Show/hide quick-action buttons per user settings.
+    /// </summary>
+    private void ApplyButtonVisibility()
+    {
+        var settings = SettingsService.Instance;
+        PinButton.Visibility = settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
+        OcrButton.Visibility = settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+        SwapButton.Visibility = settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)

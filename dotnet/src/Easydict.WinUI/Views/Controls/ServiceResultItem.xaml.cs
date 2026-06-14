@@ -115,8 +115,6 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         StatusText.FontSize = settings.StatusFontSize;
         ResultText.FontSize = settings.ResultFontSize;
         CorrectedText.FontSize = settings.ResultFontSize;
-        ErrorText.FontSize = settings.ResultFontSize;
-        PendingQueryText.FontSize = settings.ResultFontSize;
     }
 
     public void RefreshThemeChrome()

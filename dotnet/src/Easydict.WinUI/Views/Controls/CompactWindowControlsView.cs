@@ -107,7 +107,6 @@ internal sealed class CompactWindowControlsView
             MinWidth = 0,
             MinHeight = 0,
             Padding = new Thickness(0),
-            IsTabStop = false,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch
         };

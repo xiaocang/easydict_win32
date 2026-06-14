@@ -69,8 +69,6 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
         ServiceNameText.FontSize = settings.ServiceNameFontSize;
         StatusText.FontSize = settings.StatusFontSize;
         ResultText.FontSize = settings.ResultFontSize;
-        ErrorText.FontSize = settings.ResultFontSize;
-        PendingQueryText.FontSize = settings.ResultFontSize;
     }
 
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();

@@ -173,8 +173,10 @@ cargo test -p easydict_msix_validate -- --nocapture
 cargo run -p easydict_msix_validate -- path\to\package.msix --runtime-profile hybrid --allow-unsigned
 cargo run -p easydict_msix_validate -- fix-minversion path\to\package.msix
 cargo run -p easydict_msix_validate -- verify-bundle-minversion path\to\bundle.msixbundle
-cargo run -p easydict_msix_validate -- dedupe-worker-shared path\to\publish-dir
 cargo run -p easydict_msix_validate -- prepare-package-inputs --platform x64 --publish-dir path\to\publish-msix --manifest ..\dotnet\src\Easydict.WinUI\Package.appxmanifest --output-manifest $env:TEMP\Package.x64.appxmanifest --msix-version 1.2.3.4 --verify-targetsize-icons
+
+# Hybrid/coexistence-only retained worker maintenance
+cargo run -p easydict_msix_validate -- dedupe-worker-shared path\to\publish-dir --runtime-profile hybrid
 ```
 
 `easydict_msix_validate` owns package identity/min-version/signature checks,

@@ -590,6 +590,8 @@ mod platform {
 mod tests {
     use super::*;
 
+    const REAL_DESKTOP_SMOKE_ENV: &str = "EASYDICT_WINDOWS_SCREEN_CAPTURE_SMOKE";
+
     #[test]
     fn request_region_preserves_rect() {
         let rect = ScreenRect::new(-10, 20, 300, 200);
@@ -607,5 +609,39 @@ mod tests {
             request.excluded_titles,
             ["Easydict Capture".to_string(), "Settings".to_string()]
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_desktop_capture_and_window_snapshot_smoke_when_env_enabled() {
+        if !env_flag_enabled(REAL_DESKTOP_SMOKE_ENV) {
+            eprintln!("skipping real Windows screen-capture smoke; set {REAL_DESKTOP_SMOKE_ENV}=1");
+            return;
+        }
+
+        let capture =
+            capture_screen_region(ScreenCaptureRequest::region(ScreenRect::new(0, 0, 1, 1)))
+                .expect("real one-pixel screen capture should succeed");
+        assert_eq!(capture.pixel_width, 1);
+        assert_eq!(capture.pixel_height, 1);
+        assert_eq!(capture.screen_rect, ScreenRect::new(0, 0, 1, 1));
+        let pixel_data =
+            std::fs::read(&capture.pixel_data_path).expect("capture pixel file should exist");
+        assert_eq!(pixel_data.len(), 4);
+        let _ = std::fs::remove_file(&capture.pixel_data_path);
+
+        let windows = capture_screen_windows(ScreenWindowSnapshotRequest::new())
+            .expect("real window snapshot should enumerate top-level windows");
+        assert!(
+            !windows.is_empty(),
+            "real window snapshot should find at least one visible top-level window"
+        );
+        assert!(windows.iter().all(|window| !window.rect.is_empty()));
+    }
+
+    fn env_flag_enabled(name: &str) -> bool {
+        std::env::var(name)
+            .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(false)
     }
 }

@@ -183,6 +183,15 @@ msgstr "模型"
 msgid "settings.services.local_ai.foundry.config_description"
 msgstr "留空端点可通过 foundry service status 自动发现；如果本地服务使用固定的 OpenAI 兼容端点，也可以手动设置。"
 
+msgid "settings.services.ollama.endpoint_optional"
+msgstr "端点（可选）"
+
+msgid "settings.services.ollama.model"
+msgstr "模型"
+
+msgid "settings.services.ollama.refresh"
+msgstr "刷新"
+
 msgid "settings.hotkeys.title"
 msgstr "快捷键"
 

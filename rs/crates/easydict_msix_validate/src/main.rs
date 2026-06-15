@@ -211,16 +211,63 @@ fn run_verify_bundle_minversion(args: &[String]) -> i32 {
 
 fn run_dedupe_worker_shared(args: &[String]) -> i32 {
     if args.is_empty() || args[0] == "-h" || args[0] == "--help" {
-        print_usage();
-        return 2;
-    }
-    if args.len() > 1 {
-        eprintln!("error: unknown argument: {}", args[1]);
-        print_usage();
+        print_hybrid_usage();
         return 2;
     }
 
-    let publish_dir = PathBuf::from(&args[0]);
+    let mut publish_dir = None;
+    let mut runtime_profile = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--runtime-profile" => {
+                if index + 1 >= args.len() {
+                    eprintln!("error: --runtime-profile requires a value");
+                    print_hybrid_usage();
+                    return 2;
+                }
+                index += 1;
+                let value = args[index].clone();
+                let Some(profile) = PackageRuntimeProfile::parse(&value) else {
+                    eprintln!(
+                        "error: --runtime-profile must be 'hybrid' for dedupe-worker-shared, got '{value}'"
+                    );
+                    print_hybrid_usage();
+                    return 2;
+                };
+                runtime_profile = Some(profile);
+            }
+            "--rust-only" => runtime_profile = Some(PackageRuntimeProfile::RustOnly),
+            unknown if unknown.starts_with('-') => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_hybrid_usage();
+                return 2;
+            }
+            value => {
+                if publish_dir.is_some() {
+                    eprintln!("error: unexpected extra path: {value}");
+                    print_hybrid_usage();
+                    return 2;
+                }
+                publish_dir = Some(PathBuf::from(value));
+            }
+        }
+        index += 1;
+    }
+
+    if runtime_profile != Some(PackageRuntimeProfile::Hybrid) {
+        eprintln!(
+            "error: dedupe-worker-shared is hybrid/coexistence packaging only; pass --runtime-profile hybrid"
+        );
+        return 2;
+    }
+
+    let Some(publish_dir) = publish_dir else {
+        eprintln!("error: dedupe-worker-shared requires <publish-dir>");
+        print_hybrid_usage();
+        return 2;
+    };
+
     match dedupe_worker_shared_files(&publish_dir) {
         Ok(outcome) => {
             match &outcome.status {
@@ -474,32 +521,34 @@ fn bytes_to_mb(bytes: u64) -> f64 {
 }
 
 fn print_usage() {
-    println!(
-        "Usage: easydict_msix_validate <path-to-msix> [--expected-name <name>] [--expected-publisher <publisher>] [--min-version <ver>] [--runtime-profile hybrid|rust-only] [--rust-only] [--allow-unsigned]"
-    );
-    println!(
-        "       easydict_msix_validate fix-minversion <path-to-msix> [--min-version <ver>] [--makeappx <path>]"
-    );
-    println!(
-        "       easydict_msix_validate verify-bundle-minversion <path-to-msixbundle> [--required-min-version <ver>] [--runtime-profile hybrid|rust-only]"
-    );
-    println!("       easydict_msix_validate dedupe-worker-shared <publish-dir>");
-    println!(
-        "       easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons] [--runtime-profile hybrid|rust-only] [--rust-only]"
-    );
-    println!(
-        "  defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}, runtime-profile=rust-only"
-    );
-    println!(
-        "  --runtime-profile hybrid: validate retained worker/coexistence payloads explicitly"
-    );
-    println!(
-        "  --runtime-profile rust-only: reject retained .NET workers and bundled .NET runtime payloads"
-    );
-    println!("  --rust-only: shortcut for --runtime-profile rust-only");
-    println!(
-        "  --allow-unsigned: skip the AppxSignature.p7x check (use for the release workflow which builds unsigned bundles)"
-    );
+    print!("{}", usage_text());
+}
+
+fn print_hybrid_usage() {
+    print!("{}", hybrid_usage_text());
+}
+
+fn usage_text() -> String {
+    format!(
+        "\
+Usage: easydict_msix_validate <path-to-msix> [--expected-name <name>] [--expected-publisher <publisher>] [--min-version <ver>] [--runtime-profile hybrid|rust-only] [--rust-only] [--allow-unsigned]
+       easydict_msix_validate fix-minversion <path-to-msix> [--min-version <ver>] [--makeappx <path>]
+       easydict_msix_validate verify-bundle-minversion <path-to-msixbundle> [--required-min-version <ver>] [--runtime-profile hybrid|rust-only]
+       easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons] [--runtime-profile hybrid|rust-only] [--rust-only]
+  defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}, runtime-profile=rust-only
+  --runtime-profile hybrid: validate retained worker/coexistence payloads explicitly
+  --runtime-profile rust-only: reject retained .NET workers and bundled .NET runtime payloads
+  --rust-only: shortcut for --runtime-profile rust-only
+  --allow-unsigned: skip the AppxSignature.p7x check (use for the release workflow which builds unsigned bundles)
+"
+    )
+}
+
+fn hybrid_usage_text() -> &'static str {
+    "\
+Hybrid/coexistence-only usage:
+       easydict_msix_validate dedupe-worker-shared <publish-dir> --runtime-profile hybrid
+"
 }
 
 #[cfg(test)]
@@ -512,6 +561,57 @@ mod tests {
     use tempfile::Builder;
     use zip::write::FileOptions;
     use zip::ZipWriter;
+
+    #[test]
+    fn default_usage_hides_hybrid_worker_dedupe_command() {
+        let usage = usage_text();
+        assert!(
+            !usage.contains("dedupe-worker-shared"),
+            "default usage should not advertise retained-worker dedupe:\n{usage}"
+        );
+        assert!(
+            hybrid_usage_text().contains("dedupe-worker-shared"),
+            "hybrid-specific help should still document the retained-worker maintenance command"
+        );
+    }
+
+    #[test]
+    fn dedupe_worker_shared_cli_requires_explicit_hybrid_profile() {
+        let temp = Builder::new()
+            .prefix("easydict-msix-cli-dedupe-profile-")
+            .tempdir()
+            .expect("create temp dir");
+        let publish_dir = temp.path().to_string_lossy().into_owned();
+
+        assert_eq!(
+            run(vec![
+                "dedupe-worker-shared".to_string(),
+                publish_dir.clone()
+            ]),
+            2,
+            "dedupe-worker-shared should not run without explicit hybrid profile"
+        );
+        assert_eq!(
+            run(vec![
+                "dedupe-worker-shared".to_string(),
+                publish_dir.clone(),
+                "--runtime-profile".to_string(),
+                "rust-only".to_string(),
+            ]),
+            2,
+            "dedupe-worker-shared should reject rust-only profile"
+        );
+        assert_eq!(
+            run(vec![
+                "dedupe-worker-shared".to_string(),
+                publish_dir,
+                "--runtime-profile".to_string(),
+                "hybrid".to_string(),
+            ]),
+            0,
+            "dedupe-worker-shared remains available for explicit hybrid packaging"
+        );
+    }
 
     #[test]
     fn validate_msix_cli_defaults_to_rust_only_payload_policy() {

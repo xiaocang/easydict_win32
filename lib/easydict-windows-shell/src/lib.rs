@@ -1,6 +1,7 @@
 #![cfg_attr(not(windows), forbid(unsafe_code))]
 
 use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -11,6 +12,7 @@ pub enum WindowsShellError {
     CurrentExecutableHasNoParent,
     ProcessLaunchFailed { executable: PathBuf, error: String },
     ProcessExitedWithFailure { executable: PathBuf, status: String },
+    InvalidBundledExecutableTarget { executable: PathBuf, reason: String },
     NativeCallFailed { operation: &'static str, code: u32 },
 }
 
@@ -40,6 +42,13 @@ impl fmt::Display for WindowsShellError {
                 write!(
                     formatter,
                     "bundled executable {} exited with {status}",
+                    executable.display()
+                )
+            }
+            Self::InvalidBundledExecutableTarget { executable, reason } => {
+                write!(
+                    formatter,
+                    "invalid bundled executable target {}: {reason}",
                     executable.display()
                 )
             }
@@ -82,6 +91,7 @@ pub fn bundled_executable_path_next_to(
 }
 
 fn run_executable(executable: &Path, arguments: &[String]) -> Result<(), WindowsShellError> {
+    validate_bundled_executable_target(executable)?;
     let mut command = Command::new(executable);
     command.args(arguments);
     hide_process_window(&mut command);
@@ -120,7 +130,50 @@ fn validate_bundled_executable_name(executable_name: &str) -> Result<(), Windows
 }
 
 fn bundled_executable_name_is_forbidden(executable_name: &str) -> bool {
-    easydict_runtime_guards::path_component_is_retained_runtime_marker(executable_name)
+    easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(executable_name)
+}
+
+fn validate_bundled_executable_target(executable: &Path) -> Result<(), WindowsShellError> {
+    let metadata = fs::symlink_metadata(executable).map_err(|error| {
+        WindowsShellError::InvalidBundledExecutableTarget {
+            executable: executable.to_path_buf(),
+            reason: error.to_string(),
+        }
+    })?;
+    let file_type = metadata.file_type();
+    if bundled_executable_target_is_unsupported_by_flags(
+        file_type.is_file(),
+        file_type.is_symlink(),
+        bundled_executable_target_is_reparse_point(&metadata),
+    ) {
+        return Err(WindowsShellError::InvalidBundledExecutableTarget {
+            executable: executable.to_path_buf(),
+            reason: "expected a regular non-link executable file".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn bundled_executable_target_is_unsupported_by_flags(
+    is_file: bool,
+    is_symlink: bool,
+    is_reparse_point: bool,
+) -> bool {
+    !is_file || is_symlink || is_reparse_point
+}
+
+#[cfg(windows)]
+fn bundled_executable_target_is_reparse_point(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn bundled_executable_target_is_reparse_point(metadata: &fs::Metadata) -> bool {
+    let _ = metadata;
+    false
 }
 
 fn hide_process_window(command: &mut Command) {
@@ -232,10 +285,16 @@ mod tests {
         for value in [
             "dotnet.exe",
             "dotnet.cmd",
+            "cmd.exe",
+            "cmd.bat",
             "powershell.exe",
             "PowerShell.CMD",
+            "legacy-backend.ps1",
             "pwsh.exe",
             "pwsh.bat",
+            "hostfxr.dll",
+            "System.Private.CoreLib.dll",
+            "Easydict.WinUI.runtimeconfig.json",
             "Easydict.CompatHost.exe",
             "Easydict.NativeBridge.exe",
             "Easydict.Workers.LongDoc.exe",
@@ -261,6 +320,41 @@ mod tests {
             validate_bundled_executable_name(value)
                 .unwrap_or_else(|error| panic!("{value} should be accepted: {error}"));
         }
+    }
+
+    #[test]
+    fn bundled_executable_target_rejects_links_reparse_points_and_non_files() {
+        assert!(!bundled_executable_target_is_unsupported_by_flags(
+            true, false, false
+        ));
+        assert!(bundled_executable_target_is_unsupported_by_flags(
+            false, false, false
+        ));
+        assert!(bundled_executable_target_is_unsupported_by_flags(
+            true, true, false
+        ));
+        assert!(bundled_executable_target_is_unsupported_by_flags(
+            true, false, true
+        ));
+    }
+
+    #[test]
+    fn bundled_executable_target_accepts_regular_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "easydict-windows-shell-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let exe = dir.join("easydict_browser_registrar.exe");
+        std::fs::write(&exe, b"fake rust helper").expect("write helper");
+
+        validate_bundled_executable_target(&exe).expect("regular file should be accepted");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

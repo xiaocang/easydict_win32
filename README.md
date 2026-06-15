@@ -201,12 +201,14 @@ git clone https://github.com/xiaocang/easydict_win32.git
 cd easydict_win32
 
 # Build the default Rust portable package
-.\rs\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release
+cargo run --manifest-path rs\Cargo.toml -p easydict_packager -- pack-rs-portable --workspace rs --platform x64 --configuration Release
 
 # Or run the Rust app directly during development
 cd rs
 cargo run -p easydict_app --bin easydict_preview
 ```
+
+The `.\rs\scripts\Package-Portable.ps1` script remains as a compatibility wrapper around the same Rust packager command.
 
 #### Legacy/Hybrid .NET Build
 

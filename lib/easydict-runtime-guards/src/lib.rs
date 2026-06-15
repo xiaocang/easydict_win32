@@ -252,19 +252,28 @@ pub fn path_entry_is_retained_runtime_payload_marker(path: &str) -> bool {
 }
 
 pub fn command_target_is_retained_runtime_or_script_marker(value: &str) -> bool {
-    let normalized = value.trim().trim_matches('"').replace('\\', "/");
+    let normalized = value.trim().replace('\\', "/");
     let lower = normalized.to_ascii_lowercase();
     if lower.is_empty() {
         return false;
     }
 
-    let executable_leaf = lower
-        .rsplit('/')
-        .next()
-        .unwrap_or(lower.as_str())
-        .split_whitespace()
-        .next()
-        .unwrap_or("");
+    let command_head = command_target_head_token(&lower);
+    let command_head_leaf = command_path_leaf(command_head);
+    if path_component_is_retained_runtime_marker(command_head_leaf)
+        || retained_runtime_payload_file_name_is_forbidden(command_head_leaf)
+        || command_leaf_is_retained_script_marker(command_head_leaf)
+    {
+        return true;
+    }
+
+    let executable_leaf = command_path_leaf(
+        lower
+            .trim_matches('"')
+            .rsplit('/')
+            .next()
+            .unwrap_or(lower.as_str()),
+    );
 
     if path_component_is_retained_runtime_marker(executable_leaf)
         || retained_runtime_payload_file_name_is_forbidden(executable_leaf)
@@ -279,6 +288,30 @@ pub fn command_target_is_retained_runtime_or_script_marker(value: &str) -> bool 
             .filter(|component| !component.is_empty())
             .any(path_component_is_retained_runtime_marker)
         || lower.contains(".ps1")
+}
+
+fn command_target_head_token(value: &str) -> &str {
+    let trimmed = value.trim();
+    let Some(after_quote) = trimmed.strip_prefix('"') else {
+        return trimmed.split_whitespace().next().unwrap_or("");
+    };
+
+    after_quote
+        .split_once('"')
+        .map(|(head, _)| head)
+        .unwrap_or(after_quote)
+}
+
+fn command_path_leaf(value: &str) -> &str {
+    value
+        .trim_matches('"')
+        .rsplit('/')
+        .next()
+        .unwrap_or(value)
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .trim_matches('"')
 }
 
 fn path_entry_contains_retained_runtime_layout(components: &[String]) -> bool {
@@ -308,7 +341,15 @@ fn retained_runtime_payload_file_name_is_forbidden(file_name: &str) -> bool {
 }
 
 fn command_leaf_is_retained_script_marker(file_name: &str) -> bool {
-    file_name.ends_with(".ps1")
+    let value = file_name.to_ascii_lowercase();
+    let executable_stem = value
+        .strip_suffix(".exe")
+        .or_else(|| value.strip_suffix(".cmd"))
+        .or_else(|| value.strip_suffix(".bat"))
+        .or_else(|| value.strip_suffix(".com"))
+        .unwrap_or(&value);
+
+    executable_stem == "cmd" || value.ends_with(".ps1")
 }
 
 fn forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
@@ -754,6 +795,9 @@ mod tests {
             "dotnet.exe",
             "dotnet.cmd",
             r"C:\Program Files\dotnet\dotnet.exe",
+            "cmd /c dotnet.exe",
+            "cmd.exe /c powershell.exe",
+            r"C:\Windows\System32\cmd.exe /c C:\Easydict\dotnet\dotnet.exe",
             "powershell -NoProfile",
             "pwsh.cmd",
             r"C:\Easydict\workers\localai\Easydict.Workers.LocalAi.exe",
@@ -775,6 +819,7 @@ mod tests {
         for target in [
             "foundry",
             "foundry.exe",
+            "foundry.cmd",
             r"C:\Program Files\Microsoft Foundry Local\foundry.exe",
             "/usr/local/bin/foundry",
         ] {

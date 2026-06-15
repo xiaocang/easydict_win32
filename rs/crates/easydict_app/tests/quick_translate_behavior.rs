@@ -105,6 +105,7 @@ use win_fluent::prelude::{
     Application, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand, PlatformEvent, ResultStatus,
     RuntimePlan, Subscription, SubscriptionKind, Task, WindowCommand, WindowEvent, WindowId,
 };
+use win_fluent_platform_win::{WindowsPlatformAdapter, WindowsTrayItemKind};
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -5421,7 +5422,7 @@ fn saving_monitor_clipboard_setting_starts_and_stops_rust_owned_monitor() {
     app.update(Message::ToggleMonitorClipboard(false));
     let stop_task = app.update(Message::SaveSettingsChanges);
 
-    assert_eq!(task_kind(&stop_task), "none");
+    assert!(!contains_stream_task(&stop_task));
     assert!(!easydict_app::clipboard::clipboard_monitor_is_running());
 }
 
@@ -5447,7 +5448,7 @@ fn saving_mouse_selection_setting_starts_and_stops_rust_owned_hook_stream() {
     app.update(Message::ToggleMouseSelectionTranslate(false));
     let stop_task = app.update(Message::SaveSettingsChanges);
 
-    assert_eq!(task_kind(&stop_task), "none");
+    assert!(!contains_stream_task(&stop_task));
     assert!(!easydict_app::mouse_selection::mouse_selection_hook_is_running());
 }
 
@@ -5955,6 +5956,20 @@ fn startup_protocol_registration_uses_rust_owned_desktop_integration_helper() {
 }
 
 #[test]
+fn launch_at_startup_registration_uses_rust_owned_desktop_integration_helper() {
+    let app_source = include_str!("../src/lib.rs");
+    let desktop_source = include_str!("../src/desktop_integration.rs");
+
+    assert!(app_source.contains("fn startup_registration_task(enabled: bool)"));
+    assert!(app_source.contains("desktop_integration::set_startup_enabled(enabled)"));
+    assert!(desktop_source.contains("startup_registration_plan"));
+    assert!(
+        !app_source.contains("Task::register_startup"),
+        "startup registration should not route through WinFluent platform commands"
+    );
+}
+
+#[test]
 fn browser_support_and_external_links_use_rust_owned_desktop_shell_helper() {
     let app_source = include_str!("../src/lib.rs");
 
@@ -6113,6 +6128,42 @@ fn selected_mdx_dictionary_auto_discovers_companion_mdd_files() {
         .imported_mdx_dictionaries
         .expect("imported MDX dictionaries should be in settings snapshot");
     assert_eq!(imported[0].mdd_file_paths, dictionary.mdd_file_paths);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn rescan_mdx_mdd_files_preserves_saved_extra_mdd_paths() {
+    let temp_dir = unique_temp_dir("easydict-mdd-rescan-preserve-extra");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mdx_path = temp_dir.join("Oxford.mdx");
+    let mdd_path = temp_dir.join("Oxford.mdd");
+    let later_numbered_mdd = temp_dir.join("Oxford.1.mdd");
+    let saved_extra_mdd = temp_dir.join("Shared Assets.mdd");
+    fs::write(&mdx_path, b"mdx").expect("MDX file should be created");
+    fs::write(&mdd_path, b"mdd").expect("MDD file should be created");
+    fs::write(&saved_extra_mdd, b"shared").expect("extra MDD file should be created");
+
+    let mut state = EasydictUiState::default();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
+    let service_id = state.settings.imported_mdx_dictionaries[0]
+        .service_id
+        .clone();
+    state.settings.imported_mdx_dictionaries[0]
+        .mdd_file_paths
+        .push(path_string(&saved_extra_mdd));
+
+    fs::write(&later_numbered_mdd, b"mdd1").expect("numbered MDD file should be created");
+    state.apply(Message::RescanMdxMddFiles(service_id));
+
+    assert_eq!(
+        state.settings.imported_mdx_dictionaries[0].mdd_file_paths,
+        vec![
+            path_string(&mdd_path),
+            path_string(&saved_extra_mdd),
+            path_string(&later_numbered_mdd),
+        ]
+    );
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -8540,7 +8591,7 @@ fn default_hotkey_subscriptions_cover_migration_contract() {
         .expect("silent OCR hotkey");
     assert!(silent.modifiers.contains(&HotkeyModifier::Shift));
     assert!(contains_tray_subscription(&app.subscription()));
-    assert!(contains_named_event_subscription(&app.subscription()));
+    assert!(!contains_named_event_subscription(&app.subscription()));
     assert!(contains_main_window_subscription(&app.subscription()));
 }
 
@@ -8778,6 +8829,51 @@ fn tray_browser_support_menu_reflects_installation_status() {
 }
 
 #[test]
+fn tray_menu_projects_to_windows_native_plan() {
+    let menu = default_tray_menu();
+    let plan = WindowsPlatformAdapter::plan_tray(&menu).expect("native tray plan");
+
+    assert_eq!(plan.tooltip, menu.tooltip);
+    assert_eq!(plan.item_count, 15);
+
+    let show_main = tray_plan_item(&plan.items, TRAY_SHOW_MAIN).expect("show main command");
+    assert_eq!(plan.default_command_id, Some(show_main.command_id));
+    assert_eq!(show_main.kind, WindowsTrayItemKind::Command);
+    assert_eq!(show_main.label, "Show Easydict");
+    assert!(show_main.enabled);
+
+    let browser = tray_plan_item(&plan.items, "browser-support").expect("browser submenu");
+    assert_eq!(browser.kind, WindowsTrayItemKind::Submenu);
+    assert_eq!(browser.children.len(), 5);
+
+    let chrome = tray_plan_item(&browser.children, "browser-chrome").expect("chrome submenu");
+    assert_eq!(chrome.kind, WindowsTrayItemKind::Submenu);
+    assert_eq!(chrome.children[0].id, TRAY_BROWSER_INSTALL_CHROME);
+    assert!(chrome.children[0].enabled);
+    assert_eq!(chrome.children[1].id, TRAY_BROWSER_UNINSTALL_CHROME);
+    assert!(!chrome.children[1].enabled);
+
+    let firefox = tray_plan_item(&browser.children, "browser-firefox").expect("firefox submenu");
+    assert_eq!(firefox.kind, WindowsTrayItemKind::Submenu);
+    assert_eq!(firefox.children[0].id, TRAY_BROWSER_INSTALL_FIREFOX);
+    assert!(firefox.children[0].enabled);
+    assert_eq!(firefox.children[1].id, TRAY_BROWSER_UNINSTALL_FIREFOX);
+    assert!(!firefox.children[1].enabled);
+
+    let separator_count = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == WindowsTrayItemKind::Separator)
+        .count();
+    assert_eq!(separator_count, 2);
+    assert!(
+        tray_plan_item(&plan.items, TRAY_EXIT)
+            .expect("exit command")
+            .enabled
+    );
+}
+
+#[test]
 fn tray_commands_route_to_existing_desktop_actions() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
@@ -8787,6 +8883,10 @@ fn tray_commands_route_to_existing_desktop_actions() {
     assert!(contains_window_command(&show, |command| matches!(
         command,
         WindowCommand::Show(id) if id.as_str() == "main"
+    )));
+    assert!(contains_window_command(&show, |command| matches!(
+        command,
+        WindowCommand::Focus(id) if id.as_str() == "main"
     )));
 
     let clipboard = app.update(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string()));
@@ -8865,6 +8965,10 @@ fn tray_commands_route_to_existing_desktop_actions() {
         command,
         WindowCommand::Show(id) if id.as_str() == "main"
     )));
+    assert!(contains_window_command(&settings, |command| matches!(
+        command,
+        WindowCommand::Focus(id) if id.as_str() == "main"
+    )));
     assert!(contains_future_task(&settings));
 
     let exit = app.update(Message::TrayCommand(TRAY_EXIT.to_string()));
@@ -8920,7 +9024,13 @@ fn shell_and_protocol_entries_cover_ocr_activation_contract() {
     let app = EasydictApp {
         state: EasydictUiState::default(),
     };
-    assert_eq!(app.named_events()[0].name, named_events[0].name);
+    assert!(app.named_events().is_empty());
+    let app_source = include_str!("../src/lib.rs");
+    assert!(app_source.contains("named_event::named_event_stream"));
+    assert!(
+        !app_source.contains("Subscription::named_event"),
+        "OCR named-event receiving should be owned by easydict_app::named_event, not WinFluent subscription"
+    );
     assert!(app.shell_verbs().is_empty());
     let app_protocols = app.protocol_registrations();
     assert_eq!(app_protocols.len(), protocols.len());
@@ -9042,7 +9152,7 @@ fn runtime_plan_captures_desktop_integration_entries() {
     let plan = RuntimePlan::<EasydictApp>::new(EasydictUiState::default());
 
     assert!(plan.desktop_integration.has_entries());
-    assert_eq!(plan.desktop_integration.entry_count(), 3);
+    assert_eq!(plan.desktop_integration.entry_count(), 2);
     assert_eq!(
         plan.desktop_integration
             .tray_menu
@@ -9051,11 +9161,8 @@ fn runtime_plan_captures_desktop_integration_entries() {
             .tooltip,
         "Easydict - Dictionary & Translation"
     );
+    assert!(plan.desktop_integration.named_events.is_empty());
     assert!(plan.desktop_integration.shell_verbs.is_empty());
-    assert_eq!(
-        plan.desktop_integration.named_events[0].name,
-        OCR_TRANSLATE_EVENT_NAME
-    );
     assert_eq!(
         plan.desktop_integration.protocol_registrations[0].scheme,
         PROTOCOL_EASYDICT
@@ -9064,7 +9171,7 @@ fn runtime_plan_captures_desktop_integration_entries() {
     let mut enabled = EasydictUiState::default();
     enabled.settings.shell_context_menu = true;
     let plan = RuntimePlan::<EasydictApp>::new(enabled);
-    assert_eq!(plan.desktop_integration.entry_count(), 4);
+    assert_eq!(plan.desktop_integration.entry_count(), 3);
     assert_eq!(
         plan.desktop_integration.shell_verbs[0].id,
         SHELL_OCR_TRANSLATE
@@ -9121,6 +9228,24 @@ fn floating_window_show_hotkeys_keep_explicit_show_semantics() {
     assert!(contains_window_command(&fixed_task, |command| matches!(
         command,
         WindowCommand::Show(id) if id.as_str() == "fixed"
+    )));
+}
+
+#[test]
+fn show_main_hotkey_restores_and_focuses_main_window() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let task = app.update(Message::HotkeyTriggered(HOTKEY_SHOW_MAIN.to_string()));
+
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Show(id) if id.as_str() == "main"
+    )));
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Focus(id) if id.as_str() == "main"
     )));
 }
 
@@ -9325,6 +9450,22 @@ fn settings_changes_prompt_on_back_and_save_discard_cancel_are_stateful() {
 }
 
 #[test]
+fn saving_launch_at_startup_setting_schedules_windows_startup_registration() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    easydict_app::clipboard::stop_clipboard_monitor();
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::OpenSettings);
+    app.update(Message::ToggleLaunchAtStartup(true));
+    let save_task = app.update(Message::SaveSettingsChanges);
+
+    assert!(app.state.saved_settings.launch_at_startup);
+    assert!(contains_future_task(&save_task));
+}
+
+#[test]
 fn views_settings_save_updates_surface_service_order_and_enabled_query() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
@@ -9423,6 +9564,10 @@ fn tray_clipboard_text_received_restores_main_window_before_translating() {
     assert!(contains_window_command(&task, |command| matches!(
         command,
         WindowCommand::Show(id) if id.as_str() == "main"
+    )));
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Focus(id) if id.as_str() == "main"
     )));
     assert!(contains_future_task(&task));
 }
@@ -10961,6 +11106,19 @@ fn browser_registrar_arguments(command: &str, browser: Option<&str>) -> Vec<Stri
         _ => {}
     }
     arguments
+}
+
+fn tray_plan_item<'a>(
+    items: &'a [win_fluent_platform_win::WindowsTrayItemPlan],
+    id: &str,
+) -> Option<&'a win_fluent_platform_win::WindowsTrayItemPlan> {
+    items.iter().find_map(|item| {
+        if item.id == id {
+            Some(item)
+        } else {
+            tray_plan_item(&item.children, id)
+        }
+    })
 }
 
 fn contains_read_clipboard_task(task: &Task<Message>) -> bool {

@@ -183,6 +183,15 @@ msgstr "Model"
 msgid "settings.services.local_ai.foundry.config_description"
 msgstr "Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint."
 
+msgid "settings.services.ollama.endpoint_optional"
+msgstr "Endpoint (Optional)"
+
+msgid "settings.services.ollama.model"
+msgstr "Model"
+
+msgid "settings.services.ollama.refresh"
+msgstr "Refresh"
+
 msgid "settings.hotkeys.title"
 msgstr "Hotkeys"
 

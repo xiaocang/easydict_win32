@@ -81,6 +81,19 @@ impl DesktopProtocolRegistrationPlan {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DesktopStartupRegistrationPlan {
+    pub registry_key_path: String,
+    pub value_name: String,
+    pub command_arguments: Vec<String>,
+}
+
+impl DesktopStartupRegistrationPlan {
+    pub fn command_line(&self, executable_path: &str) -> String {
+        windows_command_line(executable_path, &self.command_arguments, false)
+    }
+}
+
 pub fn shell_verb_plan(verb: &DesktopShellVerb) -> Option<DesktopShellVerbPlan> {
     let registry_key_paths = shell_verb_registry_key_paths(verb);
     if registry_key_paths.is_empty() {
@@ -116,6 +129,14 @@ pub fn protocol_registration_plan(
     }
 }
 
+pub fn startup_registration_plan() -> DesktopStartupRegistrationPlan {
+    DesktopStartupRegistrationPlan {
+        registry_key_path: r"Software\Microsoft\Windows\CurrentVersion\Run".to_string(),
+        value_name: "Easydict".to_string(),
+        command_arguments: Vec::new(),
+    }
+}
+
 pub fn register_shell_verb(verb: DesktopShellVerb) -> Result<(), String> {
     let Some(plan) = shell_verb_plan(&verb) else {
         return Ok(());
@@ -140,6 +161,16 @@ pub fn register_protocol(protocol: DesktopProtocolRegistration) -> Result<(), St
 pub fn unregister_protocol(protocol: DesktopProtocolRegistration) -> Result<(), String> {
     let plan = protocol_registration_plan(&protocol);
     unregister_protocol_plan(&plan)
+}
+
+pub fn set_startup_enabled(enabled: bool) -> Result<(), String> {
+    let plan = startup_registration_plan();
+    if enabled {
+        let executable_path = current_executable_path_string()?;
+        register_startup_with_executable_path(&plan, &executable_path)
+    } else {
+        unregister_startup_plan(&plan)
+    }
 }
 
 pub fn register_shell_verb_with_executable_path(
@@ -186,6 +217,21 @@ pub fn unregister_protocol_plan(plan: &DesktopProtocolRegistrationPlan) -> Resul
     delete_registry_tree(&plan.registry_key_path)
 }
 
+pub fn register_startup_with_executable_path(
+    plan: &DesktopStartupRegistrationPlan,
+    executable_path: &str,
+) -> Result<(), String> {
+    write_registry_string(
+        &plan.registry_key_path,
+        Some(&plan.value_name),
+        &plan.command_line(executable_path),
+    )
+}
+
+pub fn unregister_startup_plan(plan: &DesktopStartupRegistrationPlan) -> Result<(), String> {
+    delete_registry_value(&plan.registry_key_path, Some(&plan.value_name))
+}
+
 fn shell_verb_registry_key_paths(verb: &DesktopShellVerb) -> Vec<String> {
     let mut paths = Vec::new();
 
@@ -220,6 +266,11 @@ fn write_registry_string(
 
 fn delete_registry_tree(key_path: &str) -> Result<(), String> {
     easydict_windows_registry::delete_current_user_tree(key_path).map_err(|error| error.to_string())
+}
+
+fn delete_registry_value(key_path: &str, value_name: Option<&str>) -> Result<(), String> {
+    easydict_windows_registry::delete_current_user_value(key_path, value_name)
+        .map_err(|error| error.to_string())
 }
 
 fn windows_command_line(
@@ -297,6 +348,21 @@ mod tests {
         assert_eq!(
             plan.command_line(r"C:\Program Files\Easydict\Easydict.Rust.exe"),
             r#""C:\Program Files\Easydict\Easydict.Rust.exe" "%1""#
+        );
+    }
+
+    #[test]
+    fn startup_registration_plan_matches_winui_run_key_contract() {
+        let plan = startup_registration_plan();
+
+        assert_eq!(
+            plan.registry_key_path,
+            r"Software\Microsoft\Windows\CurrentVersion\Run"
+        );
+        assert_eq!(plan.value_name, "Easydict");
+        assert_eq!(
+            plan.command_line(r"C:\Program Files\Easydict\Easydict.exe"),
+            r#""C:\Program Files\Easydict\Easydict.exe""#
         );
     }
 

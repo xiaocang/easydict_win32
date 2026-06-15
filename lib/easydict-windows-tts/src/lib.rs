@@ -39,19 +39,24 @@ impl std::error::Error for WindowsTtsError {}
 mod platform {
     use super::WindowsTtsError;
     use std::ffi::c_void;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::mpsc;
     use windows::core::{PCWSTR, PWSTR};
-    use windows::Win32::Foundation::{RPC_E_CHANGED_MODE, S_OK};
+    use windows::Win32::Foundation::{RPC_E_CHANGED_MODE, S_OK, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows::Win32::Globalization::LocaleNameToLCID;
     use windows::Win32::Media::Speech::{
         ISpObjectToken, ISpObjectTokenCategory, ISpVoice, SpObjectTokenCategory, SpVoice,
-        SPF_IS_NOT_XML,
+        SPF_ASYNC, SPF_IS_NOT_XML, SPF_PURGEBEFORESPEAK,
     };
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
         COINIT_APARTMENTTHREADED,
     };
+    use windows::Win32::System::Threading::WaitForSingleObject;
 
     const SAPI_VOICES_CATEGORY: &str = r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices";
+    const SPEECH_WAIT_POLL_MS: u32 = 50;
+    static SPEECH_GENERATION: AtomicU64 = AtomicU64::new(0);
 
     struct ComApartment {
         should_uninitialize: bool,
@@ -85,7 +90,53 @@ mod platform {
         }
     }
 
-    pub fn speak_text(text: &str, language: Option<&str>) -> Result<(), WindowsTtsError> {
+    struct SpeechSession {
+        voice: ISpVoice,
+        generation: u64,
+        _com: ComApartment,
+    }
+
+    impl SpeechSession {
+        fn wait_until_done(self) {
+            let complete_event = unsafe { self.voice.SpeakCompleteEvent() };
+            if complete_event.is_invalid() {
+                let _ = unsafe { self.voice.WaitUntilDone(u32::MAX) };
+                return;
+            }
+
+            loop {
+                match unsafe { WaitForSingleObject(complete_event, SPEECH_WAIT_POLL_MS) } {
+                    WAIT_OBJECT_0 => break,
+                    WAIT_TIMEOUT => {
+                        if speech_is_cancelled(self.generation) {
+                            let _ = self.purge_pending_speech();
+                            break;
+                        }
+                    }
+                    _ => {
+                        let _ = unsafe { self.voice.WaitUntilDone(0) };
+                        break;
+                    }
+                }
+            }
+        }
+
+        fn purge_pending_speech(&self) -> Result<(), WindowsTtsError> {
+            let empty = wide_null("");
+            let flags = (SPF_PURGEBEFORESPEAK.0 | SPF_ASYNC.0 | SPF_IS_NOT_XML.0) as u32;
+            unsafe {
+                self.voice
+                    .Speak(PCWSTR(empty.as_ptr()), flags, None)
+                    .map_err(|error| sapi_error("ISpVoice::Speak(purge)", error))
+            }
+        }
+    }
+
+    pub fn speak_text(
+        text: &str,
+        language: Option<&str>,
+        speaking_rate: f64,
+    ) -> Result<(), WindowsTtsError> {
         let text = text.trim();
         if text.is_empty() {
             return Ok(());
@@ -95,21 +146,46 @@ mod platform {
         let language = language
             .and_then(normalize_language_tag)
             .filter(|value| !value.eq_ignore_ascii_case("auto"));
+        let sapi_rate = sapi_rate_for_speaking_rate(speaking_rate);
+        let generation = next_speech_generation();
 
+        let (startup_tx, startup_rx) = mpsc::channel();
         std::thread::Builder::new()
             .name("easydict-windows-tts".to_string())
             .spawn(move || {
-                let _ = speak_text_on_current_thread(&text, language.as_deref());
+                let startup = start_speech_on_current_thread(
+                    &text,
+                    language.as_deref(),
+                    sapi_rate,
+                    generation,
+                );
+                match startup {
+                    Ok(session) => {
+                        let _ = startup_tx.send(Ok(()));
+                        session.wait_until_done();
+                    }
+                    Err(error) => {
+                        let _ = startup_tx.send(Err(error));
+                    }
+                }
             })
-            .map(|_| ())
-            .map_err(|error| WindowsTtsError::ThreadSpawnFailed(error.to_string()))
+            .map_err(|error| WindowsTtsError::ThreadSpawnFailed(error.to_string()))?;
+
+        startup_rx.recv().unwrap_or_else(|error| {
+            Err(WindowsTtsError::SapiFailed {
+                operation: "Windows TTS startup",
+                message: error.to_string(),
+            })
+        })
     }
 
-    fn speak_text_on_current_thread(
+    fn start_speech_on_current_thread(
         text: &str,
         language: Option<&str>,
-    ) -> Result<(), WindowsTtsError> {
-        let _com = ComApartment::initialize()?;
+        sapi_rate: i32,
+        generation: u64,
+    ) -> Result<SpeechSession, WindowsTtsError> {
+        let com = ComApartment::initialize()?;
         let voice: ISpVoice = unsafe {
             CoCreateInstance(&SpVoice, None, CLSCTX_INPROC_SERVER)
                 .map_err(|error| sapi_error("CoCreateInstance(SpVoice)", error))?
@@ -125,12 +201,25 @@ mod platform {
             }
         }
 
-        let text = wide_null(text);
         unsafe {
             voice
-                .Speak(PCWSTR(text.as_ptr()), SPF_IS_NOT_XML.0 as u32, None)
-                .map_err(|error| sapi_error("ISpVoice::Speak", error))
+                .SetRate(sapi_rate)
+                .map_err(|error| sapi_error("ISpVoice::SetRate", error))?;
         }
+
+        let text = wide_null(text);
+        let flags = (SPF_IS_NOT_XML.0 | SPF_ASYNC.0) as u32;
+        unsafe {
+            voice
+                .Speak(PCWSTR(text.as_ptr()), flags, None)
+                .map_err(|error| sapi_error("ISpVoice::Speak", error))?;
+        };
+
+        Ok(SpeechSession {
+            voice,
+            generation,
+            _com: com,
+        })
     }
 
     fn find_voice_for_language(language: &str) -> Result<Option<ISpObjectToken>, WindowsTtsError> {
@@ -267,25 +356,67 @@ mod platform {
         }
         u32::from_str_radix(value, 16).ok()
     }
+
+    pub(super) fn clamp_speaking_rate(value: f64) -> f64 {
+        if value.is_finite() {
+            value.clamp(0.5, 3.0)
+        } else {
+            1.0
+        }
+    }
+
+    pub(super) fn sapi_rate_for_speaking_rate(value: f64) -> i32 {
+        let value = clamp_speaking_rate(value);
+        let rate = if value <= 1.0 {
+            (value - 1.0) * 20.0
+        } else {
+            (value - 1.0) * 5.0
+        };
+
+        (rate.round() as i32).clamp(-10, 10)
+    }
+
+    pub(super) fn next_speech_generation() -> u64 {
+        SPEECH_GENERATION.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    pub(super) fn speech_is_cancelled(generation: u64) -> bool {
+        SPEECH_GENERATION.load(Ordering::Acquire) != generation
+    }
 }
 
 #[cfg(not(windows))]
 mod platform {
     use super::WindowsTtsError;
 
-    pub fn speak_text(_text: &str, _language: Option<&str>) -> Result<(), WindowsTtsError> {
+    pub fn speak_text(
+        _text: &str,
+        _language: Option<&str>,
+        _speaking_rate: f64,
+    ) -> Result<(), WindowsTtsError> {
         Err(WindowsTtsError::UnsupportedPlatform)
     }
 }
 
 pub fn speak_text(text: &str, language: Option<&str>) -> Result<(), WindowsTtsError> {
-    platform::speak_text(text, language)
+    speak_text_with_rate(text, language, 1.0)
+}
+
+pub fn speak_text_with_rate(
+    text: &str,
+    language: Option<&str>,
+    speaking_rate: f64,
+) -> Result<(), WindowsTtsError> {
+    platform::speak_text(text, language, speaking_rate)
 }
 
 #[cfg(test)]
 mod tests {
     #[cfg(windows)]
-    use super::platform::{normalize_language_tag, sapi_language_attribute_matches};
+    use super::platform::{
+        clamp_speaking_rate, next_speech_generation, normalize_language_tag,
+        sapi_language_attribute_matches, sapi_rate_for_speaking_rate, speech_is_cancelled,
+    };
     #[cfg(not(windows))]
     use super::*;
 
@@ -313,5 +444,42 @@ mod tests {
         assert!(sapi_language_attribute_matches("40c", 0x000c));
         assert!(sapi_language_attribute_matches("0x0804", 0x0004));
         assert!(!sapi_language_attribute_matches("411", 0x0409));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn speaking_rate_maps_to_sapi_rate_adjustment() {
+        assert_eq!(clamp_speaking_rate(f64::NAN), 1.0);
+        assert_eq!(sapi_rate_for_speaking_rate(0.1), -10);
+        assert_eq!(sapi_rate_for_speaking_rate(0.5), -10);
+        assert_eq!(sapi_rate_for_speaking_rate(0.75), -5);
+        assert_eq!(sapi_rate_for_speaking_rate(1.0), 0);
+        assert_eq!(sapi_rate_for_speaking_rate(1.5), 3);
+        assert_eq!(sapi_rate_for_speaking_rate(2.0), 5);
+        assert_eq!(sapi_rate_for_speaking_rate(3.0), 10);
+        assert_eq!(sapi_rate_for_speaking_rate(9.0), 10);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn newer_speech_generation_cancels_previous_session() {
+        let first = next_speech_generation();
+        assert!(!speech_is_cancelled(first));
+
+        let second = next_speech_generation();
+        assert!(speech_is_cancelled(first));
+        assert!(!speech_is_cancelled(second));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn real_sapi_smoke_speaks_when_enabled() {
+        if std::env::var("EASYDICT_WINDOWS_TTS_SMOKE").ok().as_deref() != Some("1") {
+            eprintln!("skipping real SAPI smoke; set EASYDICT_WINDOWS_TTS_SMOKE=1 to enable");
+            return;
+        }
+
+        super::speak_text_with_rate("Easydict text to speech smoke test.", Some("en-US"), 1.0)
+            .expect("SAPI should accept a short speech request");
     }
 }

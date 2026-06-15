@@ -36,6 +36,7 @@ pub mod long_document_context;
 pub mod long_document_export;
 pub mod mdx_native;
 pub mod mouse_selection;
+pub mod named_event;
 pub mod native_bridge;
 pub mod ocr;
 pub mod openai_compatible;
@@ -580,6 +581,7 @@ impl Application for EasydictApp {
         let built_in_ai_registration_task = built_in_ai_device_registration_task(&flags.settings);
         let clipboard_monitor_task = clipboard_monitor_task_for_settings(&flags.settings);
         let mouse_selection_hook_task = mouse_selection_hook_task_for_settings(&flags.settings);
+        let named_event_task = named_event_listener_task();
         let protocol_registration_task = protocol_registration_task();
         (
             Self { state: flags },
@@ -588,6 +590,7 @@ impl Application for EasydictApp {
                 built_in_ai_registration_task,
                 clipboard_monitor_task,
                 mouse_selection_hook_task,
+                named_event_task,
                 protocol_registration_task,
             ]),
         )
@@ -1029,6 +1032,7 @@ impl Application for EasydictApp {
             message,
             Message::SaveSettingsChanges | Message::DiscardSettingsChanges
         );
+        let should_sync_startup_registration = message == Message::SaveSettingsChanges;
 
         if !matches!(
             message,
@@ -1038,10 +1042,16 @@ impl Application for EasydictApp {
         }
 
         if should_sync_background_hooks {
+            let startup_registration = if should_sync_startup_registration {
+                startup_registration_task(self.state.settings.launch_at_startup)
+            } else {
+                Task::none()
+            };
             Task::batch([
                 task,
                 clipboard_monitor_task_for_settings(&self.state.settings),
                 mouse_selection_hook_task_for_settings(&self.state.settings),
+                startup_registration,
             ])
         } else {
             task
@@ -1061,14 +1071,6 @@ impl Application for EasydictApp {
             hotkeys_for_settings(&self.state.settings)
                 .into_iter()
                 .map(|hotkey| Subscription::hotkey(hotkey, Message::HotkeyTriggered))
-                .chain(default_named_events().into_iter().filter_map(|event| {
-                    let message = event.action.press()?;
-                    Some(Subscription::named_event(
-                        event.name,
-                        event.auto_reset,
-                        move |_| message.clone(),
-                    ))
-                }))
                 .chain([
                     Subscription::tray(Message::TrayCommand),
                     Subscription::window(WindowId::new("main"), Message::WindowEvent),
@@ -1084,7 +1086,7 @@ impl Application for EasydictApp {
     }
 
     fn named_events(&self) -> Vec<NamedEventRegistration<Self::Message>> {
-        default_named_events()
+        Vec::new()
     }
 
     fn shell_verbs(&self) -> Vec<ShellVerb> {
@@ -1242,7 +1244,7 @@ impl EasydictApp {
 
     fn hotkey_task(&mut self, id: &str) -> Task<Message> {
         match id {
-            HOTKEY_SHOW_MAIN => Task::window(WindowCommand::Show(WindowId::new("main"))),
+            HOTKEY_SHOW_MAIN => show_and_focus_main_window_task(),
             HOTKEY_TRANSLATE_CLIPBOARD => Task::batch([
                 capture_text_insertion_target_task(),
                 selected_text_capture_task(),
@@ -1550,7 +1552,7 @@ impl EasydictApp {
             TRAY_OPEN_SETTINGS => {
                 self.state.apply(Message::OpenSettings);
                 Task::batch([
-                    Task::window(WindowCommand::Show(WindowId::new("main"))),
+                    show_and_focus_main_window_task(),
                     settings_runtime_status_task(crate::state::settings_snapshot(
                         &self.state.settings,
                     )),
@@ -1592,7 +1594,7 @@ impl EasydictApp {
         };
         self.state.source_text = text;
 
-        let show_main = Task::window(WindowCommand::Show(WindowId::new("main")));
+        let show_main = show_and_focus_main_window_task();
         match quick_translate::begin_quick_translate(&mut self.state) {
             Ok(plan) => Task::batch([
                 show_main,
@@ -1604,6 +1606,13 @@ impl EasydictApp {
             }
         }
     }
+}
+
+fn show_and_focus_main_window_task() -> Task<Message> {
+    Task::batch([
+        Task::window(WindowCommand::Show(WindowId::new("main"))),
+        Task::window(WindowCommand::Focus(WindowId::new("main"))),
+    ])
 }
 
 pub fn screen_capture_request_from_selection(
@@ -2104,12 +2113,29 @@ fn unregister_shell_verb_task(verb: desktop_integration::DesktopShellVerb) -> Ta
     )
 }
 
+fn named_event_listener_task() -> Task<Message> {
+    Task::stream(named_event::named_event_stream(
+        OCR_TRANSLATE_EVENT_NAME,
+        true,
+        Message::HotkeyTriggered(HOTKEY_OCR_TRANSLATE.to_string()),
+    ))
+}
+
 fn protocol_registration_task() -> Task<Message> {
     Task::perform(
         async move {
             for protocol in default_desktop_protocol_registrations() {
                 let _ = desktop_integration::register_protocol(protocol);
             }
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn startup_registration_task(enabled: bool) -> Task<Message> {
+    Task::perform(
+        async move {
+            let _ = desktop_integration::set_startup_enabled(enabled);
         },
         |_| Message::Noop,
     )
@@ -2267,14 +2293,15 @@ fn clipboard_write_task(text: String) -> Task<Message> {
     )
 }
 
-fn speak_text_task(text: String, language: Option<String>) -> Task<Message> {
+fn speak_text_task(text: String, language: Option<String>, tts_speed: String) -> Task<Message> {
     if text.trim().is_empty() {
         return Task::none();
     }
 
     Task::perform(
         async move {
-            let _ = tts::speak_text(text, language);
+            let speaking_rate = tts::parse_speaking_rate(&tts_speed);
+            let _ = tts::speak_text(text, language, speaking_rate);
         },
         |_| Message::Noop,
     )
@@ -2509,13 +2536,14 @@ fn result_action_task_for_message(
     };
 
     state.last_result_action = Some(intent.clone());
-    Some(result_action_task(intent))
+    let tts_speed = state.settings.tts_speed.clone();
+    Some(result_action_task(intent, tts_speed))
 }
 
-fn result_action_task(intent: ResultActionIntent) -> Task<Message> {
+fn result_action_task(intent: ResultActionIntent, tts_speed: String) -> Task<Message> {
     match intent.kind {
         ResultActionKind::Copy => clipboard_write_task(intent.text),
-        ResultActionKind::Speak => speak_text_task(intent.text, Some(intent.language)),
+        ResultActionKind::Speak => speak_text_task(intent.text, Some(intent.language), tts_speed),
         ResultActionKind::Replace => insert_text_task(intent.text),
     }
 }
@@ -2546,7 +2574,11 @@ fn auto_play_translation_task(
         return Task::none();
     }
 
-    speak_text_task(text.to_string(), Some(target_language))
+    speak_text_task(
+        text.to_string(),
+        Some(target_language),
+        state.settings.tts_speed.clone(),
+    )
 }
 
 fn auto_play_query_context(state: &EasydictUiState, query_id: u64) -> Option<(usize, String)> {

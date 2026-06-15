@@ -2198,14 +2198,16 @@ fn settings_services_content(state: &SettingsState, locale: &str) -> View<Messag
         ),
         deepl_service_expander(state),
         local_ai_service_expander(state),
-        ollama_service_expander(state),
+        ollama_service_expander(state, locale),
         open_ai_service_expander(state),
     ];
-    service_configuration_children.extend(
-        llm_provider_descriptors()
-            .iter()
-            .map(|descriptor| llm_provider_service_expander(state, descriptor)),
-    );
+    service_configuration_children.extend(llm_provider_descriptors().iter().map(|descriptor| {
+        if descriptor.service_id == "builtin" {
+            builtin_ai_service_expander(state, descriptor)
+        } else {
+            llm_provider_service_expander(state, descriptor)
+        }
+    }));
     service_configuration_children.extend(traditional_http_service_expanders(state));
     service_configuration_children.push(imported_mdx_config_panel(state));
     service_configuration_children.push(no_config_services_section());
@@ -2377,9 +2379,9 @@ fn service_expander(
         let status_view = if service_id == "windows-local-ai" {
             sized_styled_text_id(
                 status_id,
-                status,
+                status.clone(),
                 status_style,
-                Length::Fixed(20),
+                Length::Fixed(local_ai_header_status_width(&status)),
                 Length::Fixed(19),
             )
         } else {
@@ -2392,6 +2394,10 @@ fn service_expander(
 }
 
 fn settings_service_expander_header_state(state: &SettingsState, service_id: &str) -> ControlState {
+    if let Some(control_state) = state.service_expander_states.get(service_id) {
+        return control_state.clone();
+    }
+
     match service_id {
         "deepl" => state.deepl_service_expander_state.clone(),
         _ => ControlState::default(),
@@ -2548,6 +2554,14 @@ fn local_ai_header_status_is_ready(status: &str) -> bool {
         || normalized.contains(" is ready")
         || normalized.contains(" model ready")
         || normalized.contains("status_ready")
+}
+
+fn local_ai_header_status_width(status: &str) -> u16 {
+    if status.trim() == "✓" {
+        14
+    } else {
+        20
+    }
 }
 
 fn settings_field_stack(
@@ -3093,7 +3107,7 @@ fn local_ai_provider_items() -> [ComboBoxItem; 4] {
     ]
 }
 
-fn ollama_service_expander(state: &SettingsState) -> View<Message> {
+fn ollama_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
     service_expander(
         state,
         "ollama",
@@ -3107,24 +3121,42 @@ fn ollama_service_expander(state: &SettingsState) -> View<Message> {
             fixed_width_field(
                 "OllamaEndpointField",
                 450,
-                text_editor(state.ollama_endpoint.clone())
-                    .id("OllamaEndpointBox")
-                    .placeholder("http://localhost:11434/v1/chat/completions")
-                    .max_height(36)
-                    .on_input(Message::OllamaEndpointChanged),
+                column((
+                    styled_text_id(
+                        "OllamaEndpointHeaderText",
+                        tr_locale(
+                            locale,
+                            "settings.services.ollama.endpoint_optional",
+                            "Endpoint (Optional)",
+                        ),
+                        TextStyle::Body,
+                    ),
+                    text_editor(state.ollama_endpoint.clone())
+                        .id("OllamaEndpointBox")
+                        .placeholder("http://localhost:11434/v1/chat/completions")
+                        .max_height(36)
+                        .on_input(Message::OllamaEndpointChanged),
+                ))
+                .id("OllamaEndpointStack")
+                .spacing(4)
+                .width(Length::Fill),
             ),
             row((
                 combo_box(ollama_model_items())
                     .id("OllamaModelCombo")
-                    .label("Model")
+                    .label(tr_locale(locale, "settings.services.ollama.model", "Model"))
                     .width(Length::Fixed(200))
                     .selected(state.ollama_model.as_str())
                     .on_change(Message::OllamaModelChanged),
-                button("Refresh")
-                    .id("RefreshOllamaButton")
-                    .height(Length::Fixed(32))
-                    .on_press(Message::RefreshOllamaModels),
-                button("Test")
+                button(tr_locale(
+                    locale,
+                    "settings.services.ollama.refresh",
+                    "Refresh",
+                ))
+                .id("RefreshOllamaButton")
+                .height(Length::Fixed(32))
+                .on_press(Message::RefreshOllamaModels),
+                button(tr_locale(locale, "settings.services.test", "Test"))
                     .id("TestOllamaButton")
                     .height(Length::Fixed(29))
                     .on_press(Message::TestOllama),
@@ -3316,6 +3348,105 @@ fn llm_provider_service_expander(
         format!("settings.services.{}.content", descriptor.service_id),
         content,
     )
+}
+
+fn builtin_ai_service_expander(
+    state: &SettingsState,
+    descriptor: &LlmProviderDescriptor,
+) -> View<Message> {
+    let setting = service_provider_setting(state, descriptor);
+    let content = vec![
+        builtin_ai_hint_bar(),
+        combo_box(provider_model_items(descriptor))
+            .id(descriptor.model_box_id)
+            .label("Model")
+            .width(Length::Fixed(provider_model_width(descriptor)))
+            .selected(setting.model.as_str())
+            .on_change({
+                let service_id = descriptor.service_id.to_string();
+                move |value| {
+                    Message::ServiceProviderSettingChanged(
+                        service_id.clone(),
+                        ServiceProviderField::Model,
+                        value,
+                    )
+                }
+            })
+            .into_view(),
+        secret_field_stack(
+            format!("{}Field", descriptor.key_box_id),
+            350,
+            styled_text_id(
+                descriptor.key_header_id,
+                descriptor.key_label,
+                TextStyle::Body,
+            ),
+            text_editor(setting.api_key.clone())
+                .id(descriptor.key_box_id)
+                .placeholder(descriptor.key_placeholder)
+                .max_height(36)
+                .on_input({
+                    let service_id = descriptor.service_id.to_string();
+                    move |value| {
+                        Message::ServiceProviderSettingChanged(
+                            service_id.clone(),
+                            ServiceProviderField::ApiKey,
+                            value,
+                        )
+                    }
+                })
+                .into_view(),
+            descriptor.key_reveal_id,
+            "Reveal secret",
+        ),
+        styled_text_id(
+            "BuiltInDescriptionText",
+            descriptor.description,
+            TextStyle::Caption,
+        ),
+        button("Test")
+            .id(descriptor.test_button_id)
+            .height(Length::Fixed(29))
+            .on_press(Message::TestServiceProvider(
+                descriptor.service_id.to_string(),
+            ))
+            .into_view(),
+    ];
+
+    service_expander(
+        state,
+        descriptor.service_id,
+        service_configuration_expanded(state, descriptor.service_id),
+        descriptor.expander_id,
+        descriptor.title,
+        descriptor.status_id,
+        setting.status,
+        "settings.services.builtin.content",
+        content,
+    )
+}
+
+fn builtin_ai_hint_bar() -> View<Message> {
+    row((
+        styled_text_id("BuiltInAIHintIcon", "i", TextStyle::BodyStrong),
+        column((
+            styled_text_id("BuiltInAIHintTitleText", "Hint", TextStyle::BodyStrong),
+            styled_text_id(
+                "BuiltInAIHintMessageText",
+                "The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key.",
+                TextStyle::Caption,
+            ),
+        ))
+        .id("BuiltInAIHintText")
+        .spacing(2)
+        .width(Length::Fill)
+        .into_view()
+    ))
+    .id("BuiltInAIHintBar")
+    .spacing(12)
+    .align(Alignment::Center)
+    .width(Length::Fill)
+    .into_view()
 }
 
 fn service_provider_setting(
@@ -5305,7 +5436,7 @@ fn llm_provider_descriptors() -> [LlmProviderDescriptor; 8] {
             endpoint_placeholder: "",
             model_box_id: "BuiltInModelCombo",
             test_button_id: "TestBuiltInButton",
-            description: "Uses GLM or Groq free models; provide your own key for stable use.",
+            description: "Uses GLM (Zhipu AI) or Groq free models. You can provide your own API key from open.bigmodel.cn (GLM) or console.groq.com (Groq).",
             default_endpoint: "",
             default_model: "glm-4-flash-250414",
             model_options: &[

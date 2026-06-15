@@ -164,8 +164,8 @@ mod platform {
         IUIAutomationTextPattern2, IUIAutomationTextRange, UIA_TextPattern2Id, UIA_TextPatternId,
     };
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetDoubleClickTime, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
-        VIRTUAL_KEY, VK_C, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
+        GetDoubleClickTime, SendInput, SetFocus, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+        KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_C, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetAncestor, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
@@ -665,12 +665,30 @@ mod platform {
         let target_thread_id = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut process_id)) };
         // Safety: GetCurrentThreadId has no preconditions.
         let current_thread_id = unsafe { GetCurrentThreadId() };
-        let mut attached = false;
+        // Safety: reads foreground window without taking ownership.
+        let foreground_hwnd = unsafe { GetForegroundWindow() };
+        let foreground_thread_id = if is_valid_window(foreground_hwnd) {
+            // Safety: foreground_hwnd was validated above; process id is not needed here.
+            unsafe { GetWindowThreadProcessId(foreground_hwnd, None) }
+        } else {
+            0
+        };
+        let mut attached_target = false;
+        let mut attached_foreground = false;
 
         if target_thread_id != 0 && target_thread_id != current_thread_id {
             // Safety: thread ids come from Win32 APIs; detach is attempted before returning.
-            attached =
+            attached_target =
                 unsafe { AttachThreadInput(current_thread_id, target_thread_id, true) }.as_bool();
+        }
+        if foreground_thread_id != 0
+            && foreground_thread_id != current_thread_id
+            && foreground_thread_id != target_thread_id
+        {
+            // Safety: thread ids come from Win32 APIs; detach is attempted before returning.
+            attached_foreground =
+                unsafe { AttachThreadInput(current_thread_id, foreground_thread_id, true) }
+                    .as_bool();
         }
 
         let result = (|| {
@@ -684,11 +702,20 @@ mod platform {
             if unsafe { GetForegroundWindow() } != hwnd {
                 return Err(WindowsTextSelectionError::InvalidWindow);
             }
+            if target_thread_id == current_thread_id {
+                // Same-thread smoke/helper windows need an explicit focus restore after
+                // foreground activation; external app windows keep their own focused child.
+                let _ = unsafe { SetFocus(Some(hwnd)) };
+            }
 
             send_ctrl_hotkey(key, extra_info)
         })();
 
-        if attached {
+        if attached_foreground {
+            // Safety: reverses a successful AttachThreadInput call above.
+            let _ = unsafe { AttachThreadInput(current_thread_id, foreground_thread_id, false) };
+        }
+        if attached_target {
             // Safety: reverses a successful AttachThreadInput call above.
             let _ = unsafe { AttachThreadInput(current_thread_id, target_thread_id, false) };
         }
@@ -773,10 +800,7 @@ mod platform {
         let end = units.iter().position(|unit| *unit == 0).unwrap_or(unit_len);
         let text = String::from_utf16_lossy(&units[..end]);
 
-        // Safety: balanced with GlobalLock above.
-        if unsafe { GlobalUnlock(handle) }.is_err() {
-            return Err(last_error("GlobalUnlock"));
-        }
+        global_unlock(handle)?;
 
         Ok(text)
     }
@@ -803,14 +827,30 @@ mod platform {
             std::ptr::copy_nonoverlapping(units.as_ptr(), locked as *mut u16, units.len());
         }
 
-        // Safety: balanced with GlobalLock above.
-        if unsafe { GlobalUnlock(handle) }.is_err() {
+        if let Err(error) = global_unlock(handle) {
             // Safety: ownership has not been transferred.
             let _ = unsafe { GlobalFree(Some(handle)) };
-            return Err(last_error("GlobalUnlock"));
+            return Err(error);
         }
 
         Ok(handle)
+    }
+
+    fn global_unlock(handle: HGLOBAL) -> Result<(), WindowsTextSelectionError> {
+        // GlobalUnlock returns zero both on failure and when the lock count reaches zero.
+        // GetLastError distinguishes those cases; NO_ERROR means the unlock succeeded.
+        unsafe { SetLastError(WIN32_ERROR(0)) };
+        if unsafe { GlobalUnlock(handle) }.is_err() {
+            let code = unsafe { GetLastError() };
+            if code.0 != 0 {
+                return Err(WindowsTextSelectionError::NativeCallFailed {
+                    operation: "GlobalUnlock",
+                    code: code.0 as i32,
+                });
+            }
+        }
+
+        Ok(())
     }
 
     fn keyboard_input(key: VIRTUAL_KEY, key_up: bool, extra_info: isize) -> INPUT {
@@ -1203,6 +1243,86 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn real_notepad_uia_smoke_reads_selection_when_enabled() {
+        if !windows_uia_text_selection_smoke_enabled() {
+            return;
+        }
+
+        let _guard = WINDOWS_SMOKE_LOCK.lock().expect("smoke lock");
+        let mut notepad = NotepadFileSmokeProcess::start("easydict-uia-smoke")
+            .expect("notepad UIA smoke should start");
+
+        let hwnd = notepad
+            .wait_for_window(std::time::Duration::from_secs(5))
+            .expect("notepad UIA smoke should find its document window");
+        focus_smoke_window(hwnd);
+        send_ctrl_a_to_smoke_window(hwnd);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let selected = selected_text_via_uia_with_timeout(DEFAULT_UIA_EXECUTION_TIMEOUT_MS)
+            .expect("UIA should read the Notepad selection");
+        assert_eq!(selected.as_deref(), Some("easydict-uia-smoke"));
+
+        notepad.close_without_prompt(hwnd);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_low_level_input_hook_smoke_when_enabled() {
+        if !windows_mouse_selection_hook_smoke_enabled() {
+            return;
+        }
+
+        let _guard = WINDOWS_SMOKE_LOCK.lock().expect("smoke lock");
+        let hook = start_low_level_input_hook().expect("low-level input hook should install");
+        let mouse_extra_info = unique_smoke_extra_info(0x01);
+        let keyboard_extra_info = unique_smoke_extra_info(0x02);
+
+        send_smoke_mouse_move(mouse_extra_info);
+        send_smoke_f24_key(keyboard_extra_info);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let mut saw_mouse = false;
+        let mut saw_keyboard = false;
+        while !(saw_mouse && saw_keyboard) {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                break;
+            }
+
+            let remaining = deadline.saturating_duration_since(now);
+            match hook.events().recv_timeout(remaining) {
+                Ok(LowLevelInputHookEvent::Mouse(event)) => {
+                    if event.extra_info == mouse_extra_info {
+                        saw_mouse =
+                            event.message == windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
+                    }
+                }
+                Ok(LowLevelInputHookEvent::Keyboard(event)) => {
+                    if event.extra_info == keyboard_extra_info {
+                        saw_keyboard = event.virtual_key == 0x87
+                            && matches!(
+                                event.message,
+                                windows::Win32::UI::WindowsAndMessaging::WM_KEYDOWN
+                                    | windows::Win32::UI::WindowsAndMessaging::WM_KEYUP
+                            );
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    panic!("low-level input hook channel disconnected")
+                }
+            }
+        }
+
+        assert!(saw_mouse, "low-level mouse hook should receive SendInput");
+        assert!(
+            saw_keyboard,
+            "low-level keyboard hook should receive SendInput"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn real_edit_control_smoke_copies_selection_and_inserts_text_when_enabled() {
         if !windows_text_selection_smoke_enabled() {
             return;
@@ -1214,8 +1334,8 @@ mod tests {
         window.focus();
         window.select_range(6, 10);
 
-        focus_window_and_send_ctrl_c(window.parent_hwnd.0 as isize, 0)
-            .expect("copy selected smoke text");
+        focus_window_and_send_ctrl_c(window.hwnd.0 as isize, 0).expect("copy selected smoke text");
+        pump_test_window_messages(std::time::Duration::from_millis(250));
         std::thread::sleep(std::time::Duration::from_millis(150));
         let selected = clipboard_text_snapshot().expect("clipboard should contain smoke text");
         assert_eq!(selected.text.as_deref(), Some("beta"));
@@ -1224,8 +1344,84 @@ mod tests {
             foreground_text_insertion_target().expect("smoke edit control should be foreground");
         insert_text_into_target(&target, "delta", 0).expect("insert into smoke edit control");
 
+        pump_test_window_messages(std::time::Duration::from_millis(250));
         std::thread::sleep(std::time::Duration::from_millis(150));
         assert_eq!(window.text(), "alpha delta gamma");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_notepad_smoke_inserts_text_when_enabled() {
+        if !windows_notepad_text_insertion_smoke_enabled() {
+            return;
+        }
+
+        let _guard = WINDOWS_SMOKE_LOCK.lock().expect("smoke lock");
+        let _clipboard_guard = ClipboardRestoreGuard::capture();
+        let mut notepad = NotepadSmokeProcess::start().expect("notepad smoke should start Notepad");
+
+        let hwnd = notepad
+            .wait_for_window(std::time::Duration::from_secs(5))
+            .expect("notepad smoke should find Notepad window");
+        focus_smoke_window(hwnd);
+        let target =
+            foreground_text_insertion_target().expect("notepad should be insertion foreground");
+
+        insert_text_into_target(&target, "easydict-notepad-smoke", 0).expect("insert into Notepad");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        send_ctrl_a_to_smoke_window(hwnd);
+        focus_window_and_send_ctrl_c(hwnd.0 as isize, 0).expect("copy Notepad text");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let copied = clipboard_text_snapshot().expect("clipboard should contain Notepad text");
+        assert_eq!(copied.text.as_deref(), Some("easydict-notepad-smoke"));
+
+        notepad.close_without_prompt(hwnd);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_vscode_smoke_inserts_text_when_enabled() {
+        if !windows_vscode_text_insertion_smoke_enabled() {
+            return;
+        }
+
+        let _guard = WINDOWS_SMOKE_LOCK.lock().expect("smoke lock");
+        let _clipboard_guard = ClipboardRestoreGuard::capture();
+        let mut vscode =
+            VsCodeSmokeWorkspace::start().expect("VS Code insertion smoke should start");
+
+        let hwnd = vscode
+            .wait_for_window(std::time::Duration::from_secs(20))
+            .expect("VS Code insertion smoke should find its document window");
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        focus_smoke_window(hwnd);
+        send_ctrl_key_to_smoke_window(hwnd, 0x31);
+        click_vscode_editor_first_line(hwnd);
+        send_ctrl_key_to_smoke_window(hwnd, 0x31);
+        let target = foreground_text_insertion_target()
+            .expect("VS Code document window should be insertion foreground");
+
+        insert_text_into_target(&target, "easydict-vscode-smoke", 0).expect("insert into VS Code");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        set_clipboard_text("easydict-vscode-sentinel").expect("set VS Code smoke sentinel");
+        send_ctrl_a_to_smoke_window(hwnd);
+        focus_window_and_send_ctrl_c(hwnd.0 as isize, 0).expect("copy VS Code editor text");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let copied = clipboard_text_snapshot().expect("VS Code editor text should copy");
+        assert!(
+            copied
+                .text
+                .as_deref()
+                .is_some_and(|text| text.contains("easydict-vscode-smoke")),
+            "VS Code editor should contain inserted text, copied {:?}",
+            copied.text
+        );
+
+        send_ctrl_key_to_foreground(0x53);
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        vscode.close_without_prompt(hwnd);
     }
 
     #[cfg(windows)]
@@ -1244,7 +1440,11 @@ mod tests {
     #[cfg(windows)]
     impl Drop for ClipboardRestoreGuard {
         fn drop(&mut self) {
-            match self.0.as_ref().and_then(|snapshot| snapshot.text.as_deref()) {
+            match self
+                .0
+                .as_ref()
+                .and_then(|snapshot| snapshot.text.as_deref())
+            {
                 Some(text) => {
                     let _ = set_clipboard_text(text);
                 }
@@ -1268,9 +1468,158 @@ mod tests {
     }
 
     #[cfg(windows)]
+    fn windows_uia_text_selection_smoke_enabled() -> bool {
+        std::env::var("EASYDICT_WINDOWS_UIA_TEXT_SELECTION_SMOKE")
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(windows)]
+    fn windows_notepad_text_insertion_smoke_enabled() -> bool {
+        std::env::var("EASYDICT_WINDOWS_TEXT_INSERTION_NOTEPAD_SMOKE")
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(windows)]
+    fn windows_vscode_text_insertion_smoke_enabled() -> bool {
+        std::env::var("EASYDICT_WINDOWS_TEXT_INSERTION_VSCODE_SMOKE")
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(windows)]
+    fn windows_mouse_selection_hook_smoke_enabled() -> bool {
+        std::env::var("EASYDICT_WINDOWS_MOUSE_SELECTION_HOOK_SMOKE")
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(windows)]
+    fn unique_smoke_extra_info(tag: isize) -> isize {
+        let pid = isize::try_from(std::process::id() & 0x0fff).unwrap_or_default();
+        0x0455_0000isize | (pid << 4) | tag
+    }
+
+    #[cfg(windows)]
+    fn send_smoke_mouse_move(extra_info: isize) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_MOVE, MOUSEINPUT,
+        };
+
+        let input = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx: 1,
+                    dy: 0,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE,
+                    time: 0,
+                    dwExtraInfo: extra_info as usize,
+                },
+            },
+        };
+
+        let sent = unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) };
+        assert_eq!(sent, 1, "SendInput should inject a smoke mouse move");
+    }
+
+    #[cfg(windows)]
+    fn send_smoke_f24_key(extra_info: isize) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
+        };
+
+        let virtual_key_f24 = VIRTUAL_KEY(0x87);
+        let inputs = [
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: virtual_key_f24,
+                        wScan: 0,
+                        dwFlags: Default::default(),
+                        time: 0,
+                        dwExtraInfo: extra_info as usize,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: virtual_key_f24,
+                        wScan: 0,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: extra_info as usize,
+                    },
+                },
+            },
+        ];
+
+        let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+        assert_eq!(
+            sent,
+            inputs.len() as u32,
+            "SendInput should inject a smoke keyboard event"
+        );
+    }
+
+    #[cfg(windows)]
+    fn pump_test_window_messages(duration: std::time::Duration) {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
+        };
+
+        let deadline = std::time::Instant::now() + duration;
+        while std::time::Instant::now() < deadline {
+            let mut dispatched = false;
+            loop {
+                let mut message = MSG::default();
+                let has_message =
+                    unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool();
+                if !has_message {
+                    break;
+                }
+
+                dispatched = true;
+                unsafe {
+                    let _ = TranslateMessage(&message);
+                    let _ = DispatchMessageW(&message);
+                }
+            }
+
+            if !dispatched {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+    }
+
+    #[cfg(windows)]
     struct TestEditWindow {
-        parent_hwnd: windows::Win32::Foundation::HWND,
-        edit_hwnd: windows::Win32::Foundation::HWND,
+        hwnd: windows::Win32::Foundation::HWND,
     }
 
     #[cfg(windows)]
@@ -1279,42 +1628,22 @@ mod tests {
             use windows::core::PCWSTR;
             use windows::Win32::UI::WindowsAndMessaging::{
                 CreateWindowExW, ShowWindow, ES_LEFT, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE,
-                WS_CHILD, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+                WS_OVERLAPPEDWINDOW, WS_VISIBLE,
             };
 
-            let parent_class_name = wide_null("STATIC");
-            let parent_title = wide_null("Easydict Text Selection Smoke");
-            let parent_hwnd = unsafe {
-                CreateWindowExW(
-                    WINDOW_EX_STYLE::default(),
-                    PCWSTR(parent_class_name.as_ptr()),
-                    PCWSTR(parent_title.as_ptr()),
-                    WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                    64,
-                    64,
-                    520,
-                    160,
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-            }
-            .expect("create smoke parent window");
-
-            let edit_class_name = wide_null("EDIT");
+            let class_name = wide_null("EDIT");
             let title = wide_null(text);
-            let edit_hwnd = unsafe {
+            let hwnd = unsafe {
                 CreateWindowExW(
                     WINDOW_EX_STYLE::default(),
-                    PCWSTR(edit_class_name.as_ptr()),
+                    PCWSTR(class_name.as_ptr()),
                     PCWSTR(title.as_ptr()),
-                    WS_CHILD | WS_VISIBLE | WINDOW_STYLE(ES_LEFT as u32),
-                    16,
-                    24,
+                    WS_OVERLAPPEDWINDOW | WS_VISIBLE | WINDOW_STYLE(ES_LEFT as u32),
+                    64,
+                    64,
                     480,
-                    32,
-                    Some(parent_hwnd),
+                    120,
+                    None,
                     None,
                     None,
                     None,
@@ -1322,13 +1651,10 @@ mod tests {
             }
             .expect("create smoke edit control");
             unsafe {
-                let _ = ShowWindow(parent_hwnd, SW_SHOW);
+                let _ = ShowWindow(hwnd, SW_SHOW);
             }
 
-            Self {
-                parent_hwnd,
-                edit_hwnd,
-            }
+            Self { hwnd }
         }
 
         fn focus(&self) {
@@ -1336,10 +1662,10 @@ mod tests {
             use windows::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
 
             unsafe {
-                let _ = BringWindowToTop(self.parent_hwnd);
-                let _ = SetForegroundWindow(self.parent_hwnd);
-                let _ = SetActiveWindow(self.parent_hwnd);
-                let _ = SetFocus(Some(self.edit_hwnd));
+                let _ = BringWindowToTop(self.hwnd);
+                let _ = SetForegroundWindow(self.hwnd);
+                let _ = SetActiveWindow(self.hwnd);
+                let _ = SetFocus(Some(self.hwnd));
             }
             std::thread::sleep(std::time::Duration::from_millis(150));
         }
@@ -1352,7 +1678,7 @@ mod tests {
 
             unsafe {
                 let _ = SendMessageW(
-                    self.edit_hwnd,
+                    self.hwnd,
                     EM_SETSEL,
                     Some(WPARAM(start)),
                     Some(LPARAM(end as isize)),
@@ -1364,9 +1690,9 @@ mod tests {
         fn text(&self) -> String {
             use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextLengthW, GetWindowTextW};
 
-            let length = unsafe { GetWindowTextLengthW(self.edit_hwnd) };
+            let length = unsafe { GetWindowTextLengthW(self.hwnd) };
             let mut buffer = vec![0u16; length as usize + 1];
-            let copied = unsafe { GetWindowTextW(self.edit_hwnd, &mut buffer) };
+            let copied = unsafe { GetWindowTextW(self.hwnd, &mut buffer) };
             String::from_utf16_lossy(&buffer[..copied as usize])
         }
     }
@@ -1375,7 +1701,7 @@ mod tests {
     impl Drop for TestEditWindow {
         fn drop(&mut self) {
             unsafe {
-                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(self.parent_hwnd);
+                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(self.hwnd);
             }
         }
     }
@@ -1383,5 +1709,444 @@ mod tests {
     #[cfg(windows)]
     fn wide_null(value: &str) -> Vec<u16> {
         value.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    #[cfg(windows)]
+    struct NotepadFileSmokeProcess {
+        child: std::process::Child,
+        file_path: std::path::PathBuf,
+        title_fragment: String,
+        closed: bool,
+    }
+
+    #[cfg(windows)]
+    impl NotepadFileSmokeProcess {
+        fn start(text: &str) -> std::io::Result<Self> {
+            let file_path = std::env::temp_dir().join(format!(
+                "easydict-uia-smoke-{}-{:?}.txt",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            std::fs::write(&file_path, text)?;
+            let title_fragment = file_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("easydict-uia-smoke")
+                .to_string();
+            let child = std::process::Command::new("notepad.exe")
+                .arg(&file_path)
+                .spawn()?;
+            Ok(Self {
+                child,
+                file_path,
+                title_fragment,
+                closed: false,
+            })
+        }
+
+        fn wait_for_window(
+            &mut self,
+            timeout: std::time::Duration,
+        ) -> Option<windows::Win32::Foundation::HWND> {
+            let deadline = std::time::Instant::now() + timeout;
+            while std::time::Instant::now() < deadline {
+                if let Some(hwnd) = find_top_level_window_by_title_fragment(&self.title_fragment) {
+                    return Some(hwnd);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            None
+        }
+
+        fn close_without_prompt(&mut self, hwnd: windows::Win32::Foundation::HWND) {
+            close_smoke_window(hwnd);
+            self.closed = true;
+            let _ = self.child.try_wait();
+            let _ = std::fs::remove_file(&self.file_path);
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for NotepadFileSmokeProcess {
+        fn drop(&mut self) {
+            if !self.closed {
+                if let Some(hwnd) = find_top_level_window_by_title_fragment(&self.title_fragment) {
+                    close_smoke_window(hwnd);
+                }
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                let _ = std::fs::remove_file(&self.file_path);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    struct VsCodeSmokeWorkspace {
+        root_dir: std::path::PathBuf,
+        title_fragment: String,
+        closed: bool,
+    }
+
+    #[cfg(windows)]
+    impl VsCodeSmokeWorkspace {
+        fn start() -> std::io::Result<Self> {
+            let code_command = vscode_command_path()?;
+            let root_dir = std::env::temp_dir().join(format!(
+                "easydict-vscode-smoke-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            std::fs::create_dir_all(&root_dir)?;
+            let file_path = root_dir.join("easydict-vscode-smoke.txt");
+            std::fs::write(&file_path, "")?;
+            let title_fragment = file_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("easydict-vscode-smoke.txt")
+                .to_string();
+
+            let mut command = std::process::Command::new(code_command);
+            command
+                .arg("--new-window")
+                .arg("--disable-extensions")
+                .arg("--goto")
+                .arg(format!("{}:1:1", file_path.display()));
+            let _ = command.spawn()?;
+
+            Ok(Self {
+                root_dir,
+                title_fragment,
+                closed: false,
+            })
+        }
+
+        fn wait_for_window(
+            &mut self,
+            timeout: std::time::Duration,
+        ) -> Option<windows::Win32::Foundation::HWND> {
+            let deadline = std::time::Instant::now() + timeout;
+            while std::time::Instant::now() < deadline {
+                if let Some(hwnd) = find_top_level_window_by_title_fragment(&self.title_fragment) {
+                    return Some(hwnd);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            None
+        }
+
+        fn close_without_prompt(&mut self, hwnd: windows::Win32::Foundation::HWND) {
+            close_smoke_window(hwnd);
+            self.closed = true;
+            let _ = std::fs::remove_dir_all(&self.root_dir);
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for VsCodeSmokeWorkspace {
+        fn drop(&mut self) {
+            if !self.closed {
+                if let Some(hwnd) = find_top_level_window_by_title_fragment(&self.title_fragment) {
+                    close_smoke_window(hwnd);
+                }
+                let _ = std::fs::remove_dir_all(&self.root_dir);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn vscode_command_path() -> std::io::Result<std::path::PathBuf> {
+        if let Some(path) = std::env::var_os("EASYDICT_WINDOWS_TEXT_INSERTION_VSCODE_CODE") {
+            return Ok(std::path::PathBuf::from(path));
+        }
+
+        let path = std::process::Command::new("where.exe")
+            .arg("code.cmd")
+            .output()
+            .and_then(|output| {
+                if output.status.success() {
+                    Ok(output)
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "code.cmd was not found on PATH",
+                    ))
+                }
+            })?;
+        let stdout = String::from_utf8_lossy(&path.stdout);
+        stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(std::path::PathBuf::from)
+            .next()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "where.exe returned no code.cmd path",
+                )
+            })
+    }
+
+    #[cfg(windows)]
+    struct NotepadSmokeProcess {
+        child: std::process::Child,
+        closed: bool,
+    }
+
+    #[cfg(windows)]
+    impl NotepadSmokeProcess {
+        fn start() -> std::io::Result<Self> {
+            let child = std::process::Command::new("notepad.exe").spawn()?;
+            Ok(Self {
+                child,
+                closed: false,
+            })
+        }
+
+        fn wait_for_window(
+            &mut self,
+            timeout: std::time::Duration,
+        ) -> Option<windows::Win32::Foundation::HWND> {
+            let deadline = std::time::Instant::now() + timeout;
+            while std::time::Instant::now() < deadline {
+                if let Some(hwnd) = find_top_level_window_for_process(self.child.id()) {
+                    return Some(hwnd);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            None
+        }
+
+        fn close_without_prompt(&mut self, hwnd: windows::Win32::Foundation::HWND) {
+            let _ = hwnd;
+            let _ = self.child.kill();
+            self.closed = true;
+            let _ = self.child.wait();
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for NotepadSmokeProcess {
+        fn drop(&mut self) {
+            if !self.closed {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn find_top_level_window_for_process(
+        process_id: u32,
+    ) -> Option<windows::Win32::Foundation::HWND> {
+        use windows::core::BOOL;
+        use windows::Win32::Foundation::{HWND, LPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+        };
+
+        unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let state = &mut *(lparam.0 as *mut FindWindowState);
+            let mut window_process_id = 0u32;
+            unsafe {
+                GetWindowThreadProcessId(hwnd, Some(&mut window_process_id));
+            }
+            if window_process_id == state.process_id && unsafe { IsWindowVisible(hwnd) }.as_bool() {
+                state.hwnd = Some(hwnd);
+                return BOOL(0);
+            }
+            BOOL(1)
+        }
+
+        struct FindWindowState {
+            process_id: u32,
+            hwnd: Option<windows::Win32::Foundation::HWND>,
+        }
+
+        let mut state = FindWindowState {
+            process_id,
+            hwnd: None,
+        };
+        let _ = unsafe { EnumWindows(Some(enum_proc), LPARAM(&mut state as *mut _ as isize)) };
+        state.hwnd
+    }
+
+    #[cfg(windows)]
+    fn find_top_level_window_by_title_fragment(
+        fragment: &str,
+    ) -> Option<windows::Win32::Foundation::HWND> {
+        use windows::core::BOOL;
+        use windows::Win32::Foundation::{HWND, LPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
+        };
+
+        unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let state = &mut *(lparam.0 as *mut FindWindowByTitleState);
+            if unsafe { IsWindowVisible(hwnd) }.as_bool() {
+                let length = unsafe { GetWindowTextLengthW(hwnd) };
+                if length > 0 {
+                    let mut buffer = vec![0u16; length as usize + 1];
+                    let copied = unsafe { GetWindowTextW(hwnd, &mut buffer) };
+                    let title = String::from_utf16_lossy(&buffer[..copied as usize]);
+                    if title.contains(&state.fragment) {
+                        state.hwnd = Some(hwnd);
+                        return BOOL(0);
+                    }
+                }
+            }
+            BOOL(1)
+        }
+
+        struct FindWindowByTitleState {
+            fragment: String,
+            hwnd: Option<windows::Win32::Foundation::HWND>,
+        }
+
+        let mut state = FindWindowByTitleState {
+            fragment: fragment.to_string(),
+            hwnd: None,
+        };
+        let _ = unsafe { EnumWindows(Some(enum_proc), LPARAM(&mut state as *mut _ as isize)) };
+        state.hwnd
+    }
+
+    #[cfg(windows)]
+    fn close_smoke_window(hwnd: windows::Win32::Foundation::HWND) {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+        unsafe {
+            let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+
+    #[cfg(windows)]
+    fn focus_smoke_window(hwnd: windows::Win32::Foundation::HWND) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
+        use windows::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
+
+        unsafe {
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = SetActiveWindow(hwnd);
+            let _ = SetFocus(Some(hwnd));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+
+    #[cfg(windows)]
+    fn click_vscode_editor_first_line(hwnd: windows::Win32::Foundation::HWND) {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+            MOUSEINPUT,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, SetCursorPos};
+
+        let mut rect = RECT::default();
+        let ok = unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok();
+        assert!(ok, "smoke window rect should be available");
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+        let x = rect.left + (width / 3).max(280);
+        let y = rect.top + (height / 4).max(220);
+        unsafe {
+            let _ = SetCursorPos(x, y);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let inputs = [
+            INPUT {
+                r#type: INPUT_MOUSE,
+                Anonymous: INPUT_0 {
+                    mi: MOUSEINPUT {
+                        dx: 0,
+                        dy: 0,
+                        mouseData: 0,
+                        dwFlags: MOUSEEVENTF_LEFTDOWN,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_MOUSE,
+                Anonymous: INPUT_0 {
+                    mi: MOUSEINPUT {
+                        dx: 0,
+                        dy: 0,
+                        mouseData: 0,
+                        dwFlags: MOUSEEVENTF_LEFTUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+        ];
+        let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+        assert_eq!(
+            sent,
+            inputs.len() as u32,
+            "smoke click should reach the editor"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+
+    #[cfg(windows)]
+    fn send_ctrl_a_to_smoke_window(hwnd: windows::Win32::Foundation::HWND) {
+        send_ctrl_key_to_smoke_window(hwnd, 0x41);
+    }
+
+    #[cfg(windows)]
+    fn send_ctrl_key_to_smoke_window(hwnd: windows::Win32::Foundation::HWND, virtual_key: u16) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL,
+        };
+
+        focus_smoke_window(hwnd);
+        send_key_to_foreground(VK_CONTROL, 0);
+        send_key_to_foreground(VIRTUAL_KEY(virtual_key), 0);
+        send_key_to_foreground(VIRTUAL_KEY(virtual_key), KEYEVENTF_KEYUP.0);
+        send_key_to_foreground(VIRTUAL_KEY(VK_CONTROL.0), KEYEVENTF_KEYUP.0);
+    }
+
+    #[cfg(windows)]
+    fn send_ctrl_key_to_foreground(virtual_key: u16) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL,
+        };
+
+        send_key_to_foreground(VK_CONTROL, 0);
+        send_key_to_foreground(VIRTUAL_KEY(virtual_key), 0);
+        send_key_to_foreground(VIRTUAL_KEY(virtual_key), KEYEVENTF_KEYUP.0);
+        send_key_to_foreground(VIRTUAL_KEY(VK_CONTROL.0), KEYEVENTF_KEYUP.0);
+    }
+
+    #[cfg(windows)]
+    fn send_key_to_foreground(
+        key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY,
+        flags: u32,
+    ) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+        };
+
+        let input = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: key,
+                    wScan: 0,
+                    dwFlags: windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(flags),
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        unsafe {
+            let _ = SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
+        }
     }
 }

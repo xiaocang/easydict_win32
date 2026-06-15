@@ -99,6 +99,175 @@ function Join-Environment {
     return $merged
 }
 
+function New-SettingsServiceConfigurationDescriptor {
+    param(
+        [string]$ScenarioSlug,
+        [string]$ServiceId,
+        [string]$RustExpanderId,
+        [string]$DotnetExpandElement,
+        [double]$ScrollPercent = 0,
+        [string]$RustLocalAiProvider = "",
+        [bool]$DotnetReferenceExpected = $true
+    )
+
+    $scrollSuffix = if ($ScrollPercent -le 0) {
+        "top"
+    } else {
+        "scroll-{0}-percent" -f [int]$ScrollPercent
+    }
+
+    [pscustomobject]@{
+        ScenarioId = "parity-settings-services-$ScenarioSlug-expanded-$scrollSuffix"
+        ScenarioSlug = $ScenarioSlug
+        ServiceId = $ServiceId
+        RustExpanderId = $RustExpanderId
+        DotnetExpandElement = $DotnetExpandElement
+        ScrollPercent = [double]$ScrollPercent
+        RustLocalAiProvider = $RustLocalAiProvider
+        DotnetReferenceExpected = [bool]$DotnetReferenceExpected
+    }
+}
+
+function Get-SettingsServiceConfigurationDescriptors {
+    @(
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "deepl" -ServiceId "deepl" -RustExpanderId "DeepLServiceExpander" -DotnetExpandElement "DeepLServiceExpander"
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "local-ai" -ServiceId "windows-local-ai" -RustExpanderId "WindowsLocalAIExpander" -DotnetExpandElement "WindowsLocalAIExpander" -RustLocalAiProvider "FoundryLocal"
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "ollama" -ServiceId "ollama" -RustExpanderId "OllamaServiceExpander" -DotnetExpandElement "Ollama (Local LLM)"
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "openai" -ServiceId "openai" -RustExpanderId "OpenAIServiceExpander" -DotnetExpandElement "OpenAI" -ScrollPercent 15
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "deepseek" -ServiceId "deepseek" -RustExpanderId "DeepSeekServiceExpander" -DotnetExpandElement "DeepSeek" -ScrollPercent 25
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "groq" -ServiceId "groq" -RustExpanderId "GroqServiceExpander" -DotnetExpandElement "Groq" -ScrollPercent 35
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "zhipu" -ServiceId "zhipu" -RustExpanderId "ZhipuServiceExpander" -DotnetExpandElement "Zhipu (智谱)" -ScrollPercent 45
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "github-models" -ServiceId "github" -RustExpanderId "GitHubModelsServiceExpander" -DotnetExpandElement "GitHub Models" -ScrollPercent 55
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "gemini" -ServiceId "gemini" -RustExpanderId "GeminiServiceExpander" -DotnetExpandElement "Gemini" -ScrollPercent 60
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "custom-openai" -ServiceId "custom-openai" -RustExpanderId "CustomOpenAIServiceExpander" -DotnetExpandElement "Custom OpenAI Compatible" -ScrollPercent 70
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "builtin-ai" -ServiceId "builtin" -RustExpanderId "BuiltInAIServiceExpander" -DotnetExpandElement "Built-in AI" -ScrollPercent 75
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "doubao" -ServiceId "doubao" -RustExpanderId "DoubaoServiceExpander" -DotnetExpandElement "Doubao (豆包)" -ScrollPercent 80
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "caiyun" -ServiceId "caiyun" -RustExpanderId "CaiyunServiceExpander" -DotnetExpandElement "Caiyun (彩云小译)" -ScrollPercent 88
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "niutrans" -ServiceId "niutrans" -RustExpanderId "NiuTransServiceExpander" -DotnetExpandElement "NiuTrans (小牛翻译)" -ScrollPercent 94
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "youdao" -ServiceId "youdao" -RustExpanderId "YoudaoServiceExpander" -DotnetExpandElement "Youdao (有道翻译)" -ScrollPercent 100
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "volcano" -ServiceId "volcano" -RustExpanderId "VolcanoServiceExpander" -DotnetExpandElement "" -ScrollPercent 100 -DotnetReferenceExpected $false
+    )
+}
+
+function Get-SettingsServiceConfigurationDescriptor {
+    param(
+        [string]$ScenarioIdOrServiceId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScenarioIdOrServiceId)) {
+        return $null
+    }
+
+    $normalized = $ScenarioIdOrServiceId.Trim().ToLowerInvariant()
+    $normalized = $normalized -replace '-bar-(hover|pressed)$', ''
+    return Get-SettingsServiceConfigurationDescriptors |
+        Where-Object {
+            $_.ScenarioId.ToLowerInvariant() -eq $normalized -or
+            $_.ServiceId.ToLowerInvariant() -eq $normalized -or
+            $_.RustExpanderId.ToLowerInvariant() -eq $normalized -or
+            $_.ScenarioSlug.ToLowerInvariant() -eq $normalized
+        } |
+        Select-Object -First 1
+}
+
+function Get-SettingsServiceExpandedAutomationIds {
+    param(
+        [string]$ServiceId
+    )
+
+    switch ($ServiceId.Trim().ToLowerInvariant()) {
+        "deepl" {
+            return @(
+                "DeepLKeyHeaderText",
+                "DeepLKeyBox",
+                "DeepLKeyRevealButton",
+                "DeepLFreeCheck",
+                "DeepLQualityCheck",
+                "DeepLDescriptionText",
+                "TestDeepLButton"
+            )
+        }
+        "windows-local-ai" {
+            return @(
+                "WindowsLocalAIStatusBadge",
+                "WindowsLocalAITitleText",
+                "LocalAIProviderLabelText",
+                "LocalAIProviderCombo",
+                "WindowsLocalAIDescriptionText",
+                "WindowsLocalAIConfigPanel",
+                "WindowsLocalAISectionTitleText",
+                "WindowsLocalAISectionRatingText",
+                "WindowsLocalAIStatusBar",
+                "WindowsLocalAIPrepareButton",
+                "FoundryLocalConfigPanel",
+                "FoundryLocalTitleText",
+                "FoundryLocalRatingText",
+                "FoundryLocalEndpointLabelText",
+                "FoundryLocalEndpointBox",
+                "FoundryLocalModelLabelText",
+                "FoundryLocalModelBox",
+                "FoundryLocalStatusBar",
+                "FoundryLocalStartButton",
+                "FoundryLocalInstallLink",
+                "FoundryLocalDocsLink",
+                "FoundryLocalDescriptionText",
+                "OpenVinoConfigPanel",
+                "OpenVinoTitleText",
+                "OpenVinoRatingText",
+                "OpenVinoStatusBadge",
+                "OpenVinoStatusBar",
+                "OpenVinoDownloadButton",
+                "OpenVinoDescriptionText"
+            )
+        }
+        "ollama" {
+            return @("OllamaEndpointBox", "OllamaModelCombo", "RefreshOllamaButton", "TestOllamaButton")
+        }
+        "openai" {
+            return @("OpenAIKeyHeaderText", "OpenAIKeyBox", "OpenAIKeyRevealButton", "OpenAIEndpointBox", "OpenAIApiFormatCombo", "OpenAIDetectedFormatText", "OpenAIModelCombo", "TestOpenAIButton")
+        }
+        "deepseek" {
+            return @("DeepSeekKeyHeaderText", "DeepSeekKeyBox", "DeepSeekKeyRevealButton", "DeepSeekModelCombo", "TestDeepSeekButton")
+        }
+        "groq" {
+            return @("GroqKeyHeaderText", "GroqKeyBox", "GroqKeyRevealButton", "GroqModelCombo", "TestGroqButton")
+        }
+        "zhipu" {
+            return @("ZhipuKeyHeaderText", "ZhipuKeyBox", "ZhipuKeyRevealButton", "ZhipuModelCombo", "TestZhipuButton")
+        }
+        "github" {
+            return @("GitHubModelsTokenHeaderText", "GitHubModelsTokenBox", "GitHubModelsTokenRevealButton", "GitHubModelsModelCombo", "TestGitHubModelsButton")
+        }
+        "gemini" {
+            return @("GeminiKeyHeaderText", "GeminiKeyBox", "GeminiKeyRevealButton", "GeminiModelCombo", "TestGeminiButton")
+        }
+        "custom-openai" {
+            return @("CustomOpenAIKeyHeaderText", "CustomOpenAIKeyBox", "CustomOpenAIKeyRevealButton", "CustomOpenAIEndpointBox", "CustomOpenAIModelBox", "TestCustomOpenAIButton")
+        }
+        "builtin" {
+            return @("BuiltInApiKeyHeaderText", "BuiltInApiKeyBox", "BuiltInApiKeyRevealButton", "BuiltInModelCombo", "TestBuiltInButton")
+        }
+        "doubao" {
+            return @("DoubaoKeyHeaderText", "DoubaoKeyBox", "DoubaoKeyRevealButton", "DoubaoEndpointBox", "DoubaoModelBox", "TestDoubaoButton")
+        }
+        "caiyun" {
+            return @("CaiyunKeyHeaderText", "CaiyunKeyBox", "CaiyunKeyRevealButton", "TestCaiyunButton")
+        }
+        "niutrans" {
+            return @("NiuTransKeyHeaderText", "NiuTransKeyBox", "NiuTransKeyRevealButton", "TestNiuTransButton")
+        }
+        "youdao" {
+            return @("YoudaoAppKeyHeaderText", "YoudaoAppKeyBox", "YoudaoAppKeyRevealButton", "YoudaoAppSecretHeaderText", "YoudaoAppSecretBox", "YoudaoAppSecretRevealButton", "YoudaoUseOfficialApiToggle")
+        }
+        "volcano" {
+            return @("VolcanoAccessKeyIdHeaderText", "VolcanoAccessKeyIdBox", "VolcanoAccessKeyIdRevealButton", "VolcanoSecretAccessKeyHeaderText", "VolcanoSecretAccessKeyBox", "VolcanoSecretAccessKeyRevealButton", "TestVolcanoButton")
+        }
+        default {
+            return @()
+        }
+    }
+}
+
 function Invoke-WithPreviewEnvironment {
     param(
         [hashtable]$Environment,
@@ -201,6 +370,44 @@ function Get-ReferenceSourceKind {
     }
 
     return "fallback-curated"
+}
+
+function Test-ScenarioRequiresPreferredReference {
+    param(
+        [string]$ScenarioId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScenarioId)) {
+        return $false
+    }
+
+    return $ScenarioId.Trim().ToLowerInvariant() -in @(
+        "effects.overlay-fade"
+    )
+}
+
+function Test-ReferenceManifestEntryMatchesScenarioState {
+    param(
+        [string]$ScenarioId,
+        $ReferenceEntry
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScenarioId)) {
+        return $true
+    }
+
+    $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    if ($normalized -ne "effects.overlay-fade") {
+        return $true
+    }
+
+    if ($null -eq $ReferenceEntry -or
+        $null -eq $ReferenceEntry.ReferenceUiSummary -or
+        $null -eq $ReferenceEntry.ReferenceUiSummary.PSObject.Properties["VisibleTexts"]) {
+        return $false
+    }
+
+    return @($ReferenceEntry.ReferenceUiSummary.VisibleTexts) -contains "Switching mode"
 }
 
 function Find-ReferenceManifestEntry {
@@ -356,7 +563,7 @@ function New-ExpectedWindowDips {
     }
 
     switch ($normalized) {
-        "settings" { return [pscustomobject]@{ Width = 846.0; Height = 913.0 } }
+        "settings" { return [pscustomobject]@{ Width = 846.0; Height = 900.0 } }
         "mini" { return [pscustomobject]@{ Width = 320.0; Height = 200.0 } }
         "fixed" { return [pscustomobject]@{ Width = 320.0; Height = 280.0 } }
         "popbutton" { return [pscustomobject]@{ Width = 30.0; Height = 30.0 } }
@@ -570,8 +777,14 @@ function Set-UiSummaryControlDimension {
     }
 
     $dimensions = Get-UiSummaryControlDimensionsMap -UiSummary $UiSummary
+    if ($dimensions.Contains($Id)) {
+        $dimensions.Remove($Id)
+    }
     $dimensions[$Id] = [pscustomobject]$Dimension
-    $UiSummary | Add-Member -NotePropertyName "VisibleControlDimensions" -NotePropertyValue $dimensions -Force
+    if ($UiSummary.PSObject.Properties["VisibleControlDimensions"]) {
+        $UiSummary.PSObject.Properties.Remove("VisibleControlDimensions")
+    }
+    $UiSummary | Add-Member -NotePropertyName "VisibleControlDimensions" -NotePropertyValue ([pscustomobject]$dimensions)
     Add-UiSummaryAutomationId -UiSummary $UiSummary -Id $Id
 }
 
@@ -614,12 +827,16 @@ function Add-SettingsServicesTopCandidateDimensions {
         ""
     }
 
+    $descriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $ScenarioId
     $servicesScenarios = @(
-        "parity-settings-services-translation-service-configuration-top",
-        "parity-settings-services-deepl-expanded-top",
-        "parity-settings-services-local-ai-expanded-top"
+        @("parity-settings-services-translation-service-configuration-top") +
+        @((Get-SettingsServiceConfigurationDescriptors).ScenarioId)
     )
-    if ($section -ne "services" -or $ScenarioId -notin $servicesScenarios) {
+    if ($section -ne "services" -or ($ScenarioId -notin $servicesScenarios -and $null -eq $descriptor)) {
+        return $CandidateUiSummary
+    }
+
+    if ($null -ne $descriptor -and [double]$descriptor.ScrollPercent -gt 0) {
         return $CandidateUiSummary
     }
 
@@ -649,7 +866,7 @@ function Add-SettingsServicesTopCandidateDimensions {
                 @("TestDeepLButton", "Button", 49, 752, 46, 29),
                 @("WindowsLocalAIExpander", "Button", 32, 818, 796, 48),
                 @("WindowsLocalAITitleText", "Text", 79, 833, 113, 19),
-                @("WindowsLocalAIStatusBadge", "Text", 745, 833, 20, 19)
+                @("WindowsLocalAIStatusBadge", "Text", 745, 833, 14, 19)
             ) | ForEach-Object { $topControls.Add($_) | Out-Null }
         }
         "parity-settings-services-local-ai-expanded-top" {
@@ -657,7 +874,7 @@ function Add-SettingsServicesTopCandidateDimensions {
                 @("DeepLServiceExpander", "Button", 32, 497, 796, 48),
                 @("WindowsLocalAIExpander", "Button", 32, 557, 796, 331),
                 @("WindowsLocalAITitleText", "Text", 79, 572, 113, 19),
-                @("WindowsLocalAIStatusBadge", "Text", 745, 572, 20, 19),
+                @("WindowsLocalAIStatusBadge", "Text", 745, 572, 14, 19),
                 @("LocalAIProviderLabelText", "Text", 49, 629, 520, 19),
                 @("LocalAIProviderCombo", "ComboBox", 45, 650, 520, 40),
                 @("WindowsLocalAIDescriptionText", "Text", 49, 706, 762, 16),
@@ -672,7 +889,7 @@ function Add-SettingsServicesTopCandidateDimensions {
                 @("DeepLServiceExpander", "Button", 32, 497, 796, 48),
                 @("WindowsLocalAIExpander", "Button", 32, 557, 796, 48),
                 @("WindowsLocalAITitleText", "Text", 79, 572, 113, 19),
-                @("WindowsLocalAIStatusBadge", "Text", 745, 572, 20, 19)
+                @("WindowsLocalAIStatusBadge", "Text", 742, 572, 20, 19)
             ) | ForEach-Object { $topControls.Add($_) | Out-Null }
         }
     }
@@ -726,6 +943,8 @@ function Add-SettingsReferenceUiSummaryDimensions {
             height = "Fixed(76)"
         }
     }
+
+    $ReferenceUiSummary = Add-SettingsServicesTopCandidateDimensions -CandidateUiSummary $ReferenceUiSummary -ScenarioId $ScenarioId -SectionId $SectionId
 
     return $ReferenceUiSummary
 }
@@ -876,9 +1095,8 @@ function Add-RustSchemaControlDimensions {
 
 function Get-SettingsServicesViewportScenarioIds {
     @(
-        "parity-settings-services-translation-service-configuration-top",
-        "parity-settings-services-deepl-expanded-top",
-        "parity-settings-services-local-ai-expanded-top"
+        @("parity-settings-services-translation-service-configuration-top") +
+        @((Get-SettingsServiceConfigurationDescriptors).ScenarioId)
     )
 }
 
@@ -892,7 +1110,8 @@ function Test-SettingsServicesViewportScenario {
     }
 
     $normalized = $ScenarioId.Trim().ToLowerInvariant()
-    return $normalized -in (Get-SettingsServicesViewportScenarioIds)
+    return $normalized -in (Get-SettingsServicesViewportScenarioIds) -or
+        $null -ne (Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $normalized)
 }
 
 function Get-SettingsServicesViewportAutomationIds {
@@ -911,6 +1130,12 @@ function Get-SettingsServicesViewportAutomationIds {
         "ServiceConfigurationHeaderText",
         "ServiceConfigurationDescriptionText"
     )
+
+    $descriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $ScenarioId
+    if ($null -ne $descriptor) {
+        $ids = @($common + @($descriptor.RustExpanderId) + @(Get-SettingsServiceExpandedAutomationIds -ServiceId $descriptor.ServiceId))
+        return @($ids | Select-Object -Unique)
+    }
 
     switch ($ScenarioId.Trim().ToLowerInvariant()) {
         "parity-settings-services-deepl-expanded-top" {
@@ -963,6 +1188,11 @@ function Get-SettingsServicesViewportLineIds {
     $ids = New-Object System.Collections.Generic.List[string]
     $ids.AddRange([string[]](Get-SettingsServicesViewportAutomationIds -ScenarioId $ScenarioId))
 
+    $descriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $ScenarioId
+    if ($null -ne $descriptor) {
+        $ids.AddRange([string[]]@(Get-SettingsServiceExpandedAutomationIds -ServiceId $descriptor.ServiceId))
+    }
+
     if ($normalized -eq "parity-settings-services-translation-service-configuration-top") {
         $ids.AddRange([string[]]@(
             "OllamaServiceExpander",
@@ -988,13 +1218,7 @@ function Test-SettingsServicesTopExpanderId {
     )
 
     return $Id -in @(
-        "DeepLServiceExpander",
-        "WindowsLocalAIExpander",
-        "OllamaServiceExpander",
-        "OpenAIServiceExpander",
-        "DeepSeekServiceExpander",
-        "GroqServiceExpander",
-        "ZhipuServiceExpander"
+        (Get-SettingsServiceConfigurationDescriptors).RustExpanderId
     )
 }
 
@@ -1652,19 +1876,35 @@ $scenarioDefinitions = @(
         EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
         EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
     })
-    New-MatrixScenario -Id "parity-settings-services-deepl-expanded-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_WINDOW = "settings"
-        EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
-        EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
-        EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = "deepl"
-    })
-    New-MatrixScenario -Id "parity-settings-services-local-ai-expanded-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_WINDOW = "settings"
-        EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
-        EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
-        EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = "windows-local-ai"
-        EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER = "FoundryLocal"
-    })
+    foreach ($serviceDescriptor in Get-SettingsServiceConfigurationDescriptors) {
+        $serviceEnvironment = @{
+            EASYDICT_PREVIEW_WINDOW = "settings"
+            EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
+            EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
+            EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = $serviceDescriptor.ServiceId
+            EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS = "Ready"
+        }
+        if ([double]$serviceDescriptor.ScrollPercent -gt 0) {
+            $serviceEnvironment["EASYDICT_PREVIEW_SCROLL_PERCENT"] = ([double]$serviceDescriptor.ScrollPercent).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+            $serviceEnvironment["EASYDICT_PREVIEW_SCROLL_TARGET"] = "MainScrollViewer"
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$serviceDescriptor.RustLocalAiProvider)) {
+            $serviceEnvironment["EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER"] = $serviceDescriptor.RustLocalAiProvider
+        }
+
+        New-MatrixScenario -Id $serviceDescriptor.ScenarioId -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain $serviceEnvironment)
+
+        foreach ($interactionCase in @(
+            @{ State = "hovered"; Suffix = "hover" },
+            @{ State = "pressed"; Suffix = "pressed" }
+        )) {
+            $stateEnvironment = Join-Environment $serviceEnvironment @{
+                EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_ID = $serviceDescriptor.ServiceId
+                EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATE = $interactionCase.State
+            }
+            New-MatrixScenario -Id "$($serviceDescriptor.ScenarioId)-bar-$($interactionCase.Suffix)" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain $stateEnvironment)
+        }
+    }
     New-MatrixScenario -Id "parity-settings-views-window-results-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "views"
@@ -1902,6 +2142,22 @@ foreach ($definition in $selectedScenarios) {
     $referenceCopied = $false
     $referencePath = $null
     $reference = Find-ReferenceScreenshot -Root $ReferenceRoot -ScenarioId $definition.Id -ExcludeRoot $OutputRoot
+    $referenceEntry = $null
+    if ($null -ne $reference) {
+        $candidateReferenceSourceKind = Get-ReferenceSourceKind -ReferenceFile $reference
+        if ((Test-ScenarioRequiresPreferredReference -ScenarioId $definition.Id) -and
+            $candidateReferenceSourceKind -ne "preferred-dotnet-rust-parity") {
+            Write-Warning "Ignoring $candidateReferenceSourceKind reference for $($definition.Id): this scenario requires a manifest-backed .NET WinUI reference captured in the matching overlay state."
+            $reference = $null
+        } else {
+            $referenceEntry = Find-ReferenceManifestEntry -ReferenceFile $reference -ScenarioId $definition.Id
+            if (-not (Test-ReferenceManifestEntryMatchesScenarioState -ScenarioId $definition.Id -ReferenceEntry $referenceEntry)) {
+                Write-Warning "Ignoring reference for $($definition.Id): manifest UI summary does not show the expected overlay/fade state."
+                $reference = $null
+                $referenceEntry = $null
+            }
+        }
+    }
     if ($null -ne $reference) {
         $referenceSourceKind = Get-ReferenceSourceKind -ReferenceFile $reference
         $referenceSourceIsFallback = -not ($referenceSourceKind -eq "preferred-dotnet-rust-parity")
@@ -1909,7 +2165,6 @@ foreach ($definition in $selectedScenarios) {
         Copy-Item -LiteralPath $reference.FullName -Destination $referencePath -Force
         $referenceCopied = $true
 
-        $referenceEntry = Find-ReferenceManifestEntry -ReferenceFile $reference -ScenarioId $definition.Id
         $referenceWindow = if ($null -ne $referenceEntry) { $referenceEntry.ReferenceWindow } else { $null }
         $regions = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.Regions) { $referenceEntry.Regions })
         $summarySectionId = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionId)) {
@@ -2011,6 +2266,11 @@ $candidateAuditEntries = @($results | ForEach-Object {
         DeltaPercent = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.DeltaPercent } else { $null }
         MonitorWorkAreaDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.MonitorWorkAreaDips } else { $null }
         ExpectedLargerThanWorkArea = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.ExpectedLargerThanWorkArea } else { $null }
+        ContentCheck = if ($null -ne $_.metadata -and (Test-Path -LiteralPath $_.metadata)) {
+            (Get-Content -LiteralPath $_.metadata -Raw | ConvertFrom-Json).contentCheck
+        } else {
+            $null
+        }
         WindowSizeAudit = $_.windowSizeAudit
     }
 })
@@ -2030,28 +2290,45 @@ $candidateAuditMarkdown.Add("# UI Candidate Window Audit") | Out-Null
 $candidateAuditMarkdown.Add("") | Out-Null
 $candidateAuditMarkdown.Add("Generated: ``$candidateAuditGeneratedAtUtc``") | Out-Null
 $candidateAuditMarkdown.Add("") | Out-Null
-$candidateAuditMarkdown.Add("| Scenario | Reference | Fit | Expected target | Actual candidate | Delta | Work area |") | Out-Null
-$candidateAuditMarkdown.Add("| --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+$candidateAuditMarkdown.Add("| Scenario | Reference | Fit | Content check | Expected target | Actual candidate | Delta | Work area |") | Out-Null
+$candidateAuditMarkdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
 foreach ($entry in $candidateAuditEntries) {
     $reference = if ($entry.HasReference) { "yes ($($entry.ReferenceSourceKind))" } else { "no" }
-    $candidateAuditMarkdown.Add("| ``$($entry.ScenarioId)`` | $reference | $(Format-WindowAuditFitStatus -Audit $entry.WindowSizeAudit) | $(Format-DipSize -Size $entry.ExpectedWindowDips) | $(Format-WindowAuditActualSize -Audit $entry.WindowSizeAudit) | $(Format-WindowAuditDelta -Audit $entry.WindowSizeAudit) | $(Format-WindowAuditWorkArea -Audit $entry.WindowSizeAudit) |") | Out-Null
+    $contentCheck = if ($null -ne $entry.ContentCheck -and $null -ne $entry.ContentCheck.result) {
+        "attempts=$($entry.ContentCheck.attempts), blank=$($entry.ContentCheck.result.isLikelyBlank)"
+    } else {
+        "n/a"
+    }
+    $candidateAuditMarkdown.Add("| ``$($entry.ScenarioId)`` | $reference | $(Format-WindowAuditFitStatus -Audit $entry.WindowSizeAudit) | $contentCheck | $(Format-DipSize -Size $entry.ExpectedWindowDips) | $(Format-WindowAuditActualSize -Audit $entry.WindowSizeAudit) | $(Format-WindowAuditDelta -Audit $entry.WindowSizeAudit) | $(Format-WindowAuditWorkArea -Audit $entry.WindowSizeAudit) |") | Out-Null
 }
 $candidateAuditMarkdown | Set-Content -LiteralPath $candidateAuditMarkdownPath -Encoding utf8
 
 $candidateOnlyEntries = @($results |
     Where-Object { -not [bool]$_.referenceCopied } |
     ForEach-Object {
+        $descriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $_.scenarioId
+        $dotnetReferenceExpected = $null -eq $descriptor -or [bool]$descriptor.DotnetReferenceExpected
+        $expectedReferenceScreenshot = if ($dotnetReferenceExpected) {
+            "$($_.scenarioId)-dotnet-winui-reference.png"
+        } else {
+            "n/a (.NET WinUI has no matching service expander)"
+        }
+        $nextEvidence = if ($dotnetReferenceExpected) {
+            "Capture matching .NET WinUI reference named '$($_.scenarioId)-dotnet-winui-reference.png' with the same UI language, DPI, and work area."
+        } else {
+            "Keep as Rust-only evidence or decide whether this service should exist in the .NET parity surface."
+        }
         [pscustomobject]@{
             ScenarioId = $_.scenarioId
             Group = $_.group
             CandidateScreenshot = if ([string]::IsNullOrWhiteSpace([string]$_.candidateScreenshot)) { $null } else { Split-Path -Leaf $_.candidateScreenshot }
             CandidateSchema = if ([string]::IsNullOrWhiteSpace([string]$_.schema)) { $null } else { Split-Path -Leaf $_.schema }
-            ExpectedReferenceScreenshot = "$($_.scenarioId)-dotnet-winui-reference.png"
+            ExpectedReferenceScreenshot = $expectedReferenceScreenshot
             ExpectedWindowDips = $_.expectedWindowDips
             ActualWindowDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.ActualWindowDips } else { $null }
             DeltaDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.DeltaDips } else { $null }
             Fit = Format-WindowAuditFitStatus -Audit $_.windowSizeAudit
-            NextEvidence = "Capture matching .NET WinUI reference named '$($_.scenarioId)-dotnet-winui-reference.png' with the same UI language, DPI, and work area."
+            NextEvidence = $nextEvidence
         }
     })
 

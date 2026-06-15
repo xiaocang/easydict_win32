@@ -868,6 +868,8 @@ fn services_settings_default_view_matches_winui_overview_structure() {
     );
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "⚠");
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "style=Warning");
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "width=Fixed(20)");
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "height=Fixed(19)");
     assert!(!snapshot.contains("description=\"Free API mode\""));
     assert!(!snapshot.contains("description=\"Local OpenAI-compatible endpoint\""));
     assert!(!snapshot.contains("API key required"));
@@ -947,6 +949,48 @@ fn services_settings_default_view_matches_winui_overview_structure() {
         &deepl_hover_snapshot,
         "DeepLServiceExpander",
         "pressed=false",
+    );
+
+    let mut ollama_pressed_state = state.clone();
+    ollama_pressed_state
+        .settings
+        .service_expander_states
+        .insert(
+            "ollama".to_string(),
+            ControlState::default().hovered(true).pressed(true),
+        );
+    let ollama_pressed_snapshot =
+        win_fluent_testkit::view_snapshot(&settings_view(&ollama_pressed_state.settings));
+    assert_control_contains(
+        &ollama_pressed_snapshot,
+        "OllamaServiceExpander",
+        "hovered=true",
+    );
+    assert_control_contains(
+        &ollama_pressed_snapshot,
+        "OllamaServiceExpander",
+        "pressed=true",
+    );
+
+    let mut local_ai_ready_state = state.clone();
+    local_ai_ready_state.settings.local_ai_status = "Ready".to_string();
+    let local_ai_ready_snapshot =
+        win_fluent_testkit::view_snapshot(&settings_view(&local_ai_ready_state.settings));
+    assert_control_contains(&local_ai_ready_snapshot, "WindowsLocalAIStatusBadge", "✓");
+    assert_control_contains(
+        &local_ai_ready_snapshot,
+        "WindowsLocalAIStatusBadge",
+        "style=Success",
+    );
+    assert_control_contains(
+        &local_ai_ready_snapshot,
+        "WindowsLocalAIStatusBadge",
+        "width=Fixed(14)",
+    );
+    assert_control_contains(
+        &local_ai_ready_snapshot,
+        "WindowsLocalAIStatusBadge",
+        "height=Fixed(19)",
     );
 }
 
@@ -1208,6 +1252,7 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
 
     for id in [
         "OllamaServiceExpander",
+        "OllamaEndpointHeaderText",
         "OllamaEndpointBox",
         "OllamaModelCombo",
         "RefreshOllamaButton",
@@ -1237,6 +1282,7 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
     assert_control_contains(&snapshot, "OpenAIModelCombo", "selected=\"gpt-5.4-mini\"");
     assert_control_contains(&snapshot, "TestOpenAIButton", "height=Fixed(29)");
     assert_control_contains(&snapshot, "OllamaEndpointBox", "action=text_input");
+    assert_control_contains(&snapshot, "OllamaEndpointHeaderText", "Endpoint");
     assert_control_contains(&snapshot, "OllamaModelCombo", "selected=\"llama3.2\"");
     assert_control_contains(&snapshot, "TestOllamaButton", "height=Fixed(29)");
 
@@ -1342,8 +1388,11 @@ fn services_settings_render_llm_provider_configuration_rows() {
         "CustomOpenAIKeyBox",
         "CustomOpenAIModelBox",
         "BuiltInAIServiceExpander",
+        "BuiltInAIHintBar",
+        "BuiltInAIHintMessageText",
         "BuiltInApiKeyBox",
         "BuiltInModelCombo",
+        "BuiltInDescriptionText",
         "DoubaoServiceExpander",
         "DoubaoEndpointBox",
         "DoubaoKeyBox",
@@ -1362,6 +1411,8 @@ fn services_settings_render_llm_provider_configuration_rows() {
         "DoubaoModelBox",
         "selected=\"doubao-seed-translation-250915\"",
     );
+    assert_control_contains(&snapshot, "BuiltInAIHintMessageText", "limited free quota");
+    assert_control_contains(&snapshot, "BuiltInDescriptionText", "open.bigmodel.cn");
 
     state.apply(easydict_app::Message::ServiceProviderSettingChanged(
         "deepseek".to_string(),
@@ -2884,7 +2935,7 @@ fn settings_window_matches_winui_reference_size_contract() {
     let options = settings_window_options();
     assert_eq!(options.id.as_str(), "settings");
     assert_eq!(options.width, 846.0);
-    assert_eq!(options.height, 913.0);
+    assert_eq!(options.height, 900.0);
     assert_eq!(options.min_width, Some(760.0));
     assert_eq!(options.min_height, Some(620.0));
     assert_eq!(options.frame, WindowFrame::Borderless);

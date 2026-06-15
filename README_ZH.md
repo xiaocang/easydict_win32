@@ -199,12 +199,14 @@ git clone https://github.com/xiaocang/easydict_win32.git
 cd easydict_win32
 
 # 构建默认 Rust 便携包
-.\rs\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release
+cargo run --manifest-path rs\Cargo.toml -p easydict_packager -- pack-rs-portable --workspace rs --platform x64 --configuration Release
 
 # 或在开发时直接运行 Rust app
 cd rs
 cargo run -p easydict_app --bin easydict_preview
 ```
+
+`.\rs\scripts\Package-Portable.ps1` 脚本仍作为同一 Rust packager 命令的兼容 wrapper 保留。
 
 #### Legacy/Hybrid .NET 构建
 

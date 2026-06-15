@@ -1576,10 +1576,10 @@ public sealed class DotnetRustParityTests : IDisposable
         var expander = ScrollHelper.ScrollToFind(
                 scrollViewer,
                 80,
-                () => FindVisibleByAutomationIdOrName(window, automationId),
+                () => FindVisibleExpandableByAutomationIdOrName(window, automationId),
                 message => _output.WriteLine($"[{step.Key}][dotnet] {message}"))
             ?? Retry.WhileNull(
-                    () => FindVisibleByAutomationIdOrName(window, automationId),
+                    () => FindVisibleExpandableByAutomationIdOrName(window, automationId),
                     TimeSpan.FromSeconds(5))
                 .Result;
         expander.Should().NotBeNull($"{automationId} should be visible before expanding");
@@ -1610,28 +1610,106 @@ public sealed class DotnetRustParityTests : IDisposable
             return;
         }
 
+        var serviceExpanders = new[]
+        {
+            "DeepLServiceExpander",
+            "WindowsLocalAIExpander",
+            "Ollama (Local LLM)",
+            "OllamaServiceExpander",
+            "OpenAI",
+            "OpenAIServiceExpander",
+            "DeepSeek",
+            "DeepSeekServiceExpander",
+            "Groq",
+            "GroqServiceExpander",
+            "Zhipu (智谱)",
+            "ZhipuServiceExpander",
+            "GitHub Models",
+            "Gemini",
+            "Custom OpenAI Compatible",
+            "Built-in AI",
+            "Doubao (豆包)",
+            "Caiyun (彩云小译)",
+            "NiuTrans (小牛翻译)",
+            "Youdao (有道翻译)"
+        };
+
+        foreach (var scrollPercent in new[] { 0d, 35d, 70d, 100d })
+        {
+            ScrollHelper.ScrollToPercent(
+                scrollViewer,
+                scrollPercent,
+                message => _output.WriteLine($"[{step.Key}][dotnet] {message}"));
+
+            CollapseVisibleExpandedControls(window, step, scrollPercent);
+
+            foreach (var automationId in serviceExpanders)
+            {
+                var expander = FindVisibleByAutomationIdOrName(window, automationId);
+                var expandPattern = expander?.Patterns.ExpandCollapse.PatternOrDefault;
+                if (expandPattern?.ExpandCollapseState.Value == ExpandCollapseState.Expanded)
+                {
+                    expandPattern.Collapse();
+                    Thread.Sleep(120);
+                }
+            }
+        }
+
         ScrollHelper.ScrollToPercent(
             scrollViewer,
             0,
             message => _output.WriteLine($"[{step.Key}][dotnet] {message}"));
+    }
 
-        foreach (var automationId in new[]
-                 {
-                     "DeepLServiceExpander",
-                     "WindowsLocalAIExpander",
-                     "OllamaServiceExpander",
-                     "OpenAIServiceExpander",
-                     "DeepSeekServiceExpander",
-                     "GroqServiceExpander"
-                 })
+    private void CollapseVisibleExpandedControls(
+        Window window,
+        SettingsParityCaptureStep step,
+        double scrollPercent)
+    {
+        for (var pass = 1; pass <= 3; pass++)
         {
-            var expander = FindVisibleByAutomationIdOrName(window, automationId);
-            var expandPattern = expander?.Patterns.ExpandCollapse.PatternOrDefault;
-            if (expandPattern?.ExpandCollapseState.Value == ExpandCollapseState.Expanded)
+            var collapsed = 0;
+            IReadOnlyList<AutomationElement> elements;
+            try
             {
-                expandPattern.Collapse();
-                Thread.Sleep(120);
+                elements = window
+                    .FindAllDescendants()
+                    .Where(IsOnScreenOrUnknown)
+                    .ToArray();
             }
+            catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+            {
+                return;
+            }
+
+            foreach (var element in elements)
+            {
+                try
+                {
+                    var expandPattern = element.Patterns.ExpandCollapse.PatternOrDefault;
+                    if (expandPattern?.ExpandCollapseState.Value != ExpandCollapseState.Expanded)
+                    {
+                        continue;
+                    }
+
+                    expandPattern.Collapse();
+                    collapsed++;
+                    Thread.Sleep(80);
+                }
+                catch (Exception ex) when (ex is COMException or ElementNotAvailableException or InvalidOperationException or PropertyNotSupportedException or TimeoutException)
+                {
+                    // Some WinUI automation peers disappear while their parent expander collapses.
+                }
+            }
+
+            if (collapsed == 0)
+            {
+                return;
+            }
+
+            _output.WriteLine(
+                $"[{step.Key}][dotnet] Collapsed {collapsed} visible expanded controls at {scrollPercent.ToString(CultureInfo.InvariantCulture)}% (pass {pass}).");
+            Thread.Sleep(180);
         }
     }
 
@@ -2202,6 +2280,58 @@ public sealed class DotnetRustParityTests : IDisposable
             : null;
     }
 
+    private static AutomationElement? FindVisibleExpandableByAutomationIdOrName(Window window, string automationIdOrName)
+    {
+        try
+        {
+            foreach (var element in window.FindAllDescendants().Where(IsOnScreenOrUnknown))
+            {
+                var expandPattern = element.Patterns.ExpandCollapse.PatternOrDefault;
+                if (expandPattern == null)
+                {
+                    continue;
+                }
+
+                if (ElementMatchesAutomationIdOrName(element, automationIdOrName) ||
+                    VisibleDescendantMatchesAutomationIdOrName(element, automationIdOrName))
+                {
+                    return element;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return FindVisibleByAutomationIdOrName(window, automationIdOrName);
+        }
+
+        return FindVisibleByAutomationIdOrName(window, automationIdOrName);
+    }
+
+    private static bool VisibleDescendantMatchesAutomationIdOrName(
+        AutomationElement element,
+        string automationIdOrName)
+    {
+        try
+        {
+            return element
+                .FindAllDescendants()
+                .Where(IsOnScreenOrUnknown)
+                .Any(descendant => ElementMatchesAutomationIdOrName(descendant, automationIdOrName));
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ElementMatchesAutomationIdOrName(
+        AutomationElement element,
+        string automationIdOrName)
+    {
+        return string.Equals(SafeElementAutomationId(element), automationIdOrName, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(SafeElementName(element), automationIdOrName, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AutomationElement? FindVisibleByAutomationId(Window window, string automationId)
     {
         try
@@ -2768,11 +2898,130 @@ public sealed class DotnetRustParityTests : IDisposable
                 ]);
             }
         }
+        else if (!string.IsNullOrWhiteSpace(step.RustExpandedServiceConfigurations))
+        {
+            tags.AddRange(ExpandedServiceConfigurationSemanticTags(step.RustExpandedServiceConfigurations));
+        }
 
         return tags
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<string> ExpandedServiceConfigurationSemanticTags(string serviceId)
+    {
+        return serviceId.Trim().ToLowerInvariant() switch
+        {
+            "ollama" =>
+            [
+                "OllamaServiceExpander",
+                "OllamaEndpointBox",
+                "OllamaModelCombo",
+                "RefreshOllamaButton",
+                "TestOllamaButton"
+            ],
+            "openai" =>
+            [
+                "OpenAIServiceExpander",
+                "OpenAIKeyBox",
+                "OpenAIKeyRevealButton",
+                "OpenAIEndpointBox",
+                "OpenAIApiFormatCombo",
+                "OpenAIModelCombo",
+                "TestOpenAIButton"
+            ],
+            "deepseek" =>
+            [
+                "DeepSeekServiceExpander",
+                "DeepSeekKeyBox",
+                "DeepSeekKeyRevealButton",
+                "DeepSeekModelCombo",
+                "TestDeepSeekButton"
+            ],
+            "groq" =>
+            [
+                "GroqServiceExpander",
+                "GroqKeyBox",
+                "GroqKeyRevealButton",
+                "GroqModelCombo",
+                "TestGroqButton"
+            ],
+            "zhipu" =>
+            [
+                "ZhipuServiceExpander",
+                "ZhipuKeyBox",
+                "ZhipuKeyRevealButton",
+                "ZhipuModelCombo",
+                "TestZhipuButton"
+            ],
+            "github" =>
+            [
+                "GitHubModelsServiceExpander",
+                "GitHubModelsTokenBox",
+                "GitHubModelsTokenRevealButton",
+                "GitHubModelsModelCombo",
+                "TestGitHubModelsButton"
+            ],
+            "gemini" =>
+            [
+                "GeminiServiceExpander",
+                "GeminiKeyBox",
+                "GeminiKeyRevealButton",
+                "GeminiModelCombo",
+                "TestGeminiButton"
+            ],
+            "custom-openai" =>
+            [
+                "CustomOpenAIServiceExpander",
+                "CustomOpenAIKeyBox",
+                "CustomOpenAIKeyRevealButton",
+                "CustomOpenAIEndpointBox",
+                "CustomOpenAIModelBox",
+                "TestCustomOpenAIButton"
+            ],
+            "builtin" =>
+            [
+                "BuiltInAIServiceExpander",
+                "BuiltInApiKeyBox",
+                "BuiltInApiKeyRevealButton",
+                "BuiltInModelCombo",
+                "TestBuiltInButton"
+            ],
+            "doubao" =>
+            [
+                "DoubaoServiceExpander",
+                "DoubaoKeyBox",
+                "DoubaoKeyRevealButton",
+                "DoubaoEndpointBox",
+                "DoubaoModelBox",
+                "TestDoubaoButton"
+            ],
+            "caiyun" =>
+            [
+                "CaiyunServiceExpander",
+                "CaiyunKeyBox",
+                "CaiyunKeyRevealButton",
+                "TestCaiyunButton"
+            ],
+            "niutrans" =>
+            [
+                "NiuTransServiceExpander",
+                "NiuTransKeyBox",
+                "NiuTransKeyRevealButton",
+                "TestNiuTransButton"
+            ],
+            "youdao" =>
+            [
+                "YoudaoServiceExpander",
+                "YoudaoAppKeyBox",
+                "YoudaoAppKeyRevealButton",
+                "YoudaoAppSecretBox",
+                "YoudaoAppSecretRevealButton",
+                "YoudaoUseOfficialApiToggle"
+            ],
+            _ => []
+        };
     }
 
     private static IReadOnlyList<string> AdditionalRequiredSettingsSemanticTags(
@@ -3835,7 +4084,8 @@ public sealed class DotnetRustParityTests : IDisposable
             if (kind == "Expander")
             {
                 return !string.IsNullOrWhiteSpace(automationId) &&
-                    IsServiceExpanderInTopViewport(automationId);
+                    (IsServiceExpanderInTopViewport(automationId) ||
+                        IsExpandedServiceExpander(automationId));
             }
 
             if (string.IsNullOrWhiteSpace(automationId))
@@ -3857,13 +4107,8 @@ public sealed class DotnetRustParityTests : IDisposable
         }
 
         private static bool IsServicesReferenceAutomationId(string automationId) =>
-            automationId is "DeepLServiceExpander" or
-                "OllamaServiceExpander" or
-                "OpenAIServiceExpander" or
-                "DeepSeekServiceExpander" or
-                "GroqServiceExpander" or
-                "ZhipuServiceExpander" or
-                "EnabledServicesDescriptionText" or
+            IsKnownServiceExpander(automationId) ||
+            automationId is "EnabledServicesDescriptionText" or
                 "EnabledServicesHeaderText" or
                 "EnableInternationalServicesDescriptionText" or
                 "EnableInternationalServicesHeaderText" or
@@ -3872,7 +4117,6 @@ public sealed class DotnetRustParityTests : IDisposable
                 "ImportMdxDictionaryButton" or
                 "ServiceConfigurationDescriptionText" or
                 "ServiceConfigurationHeaderText" or
-                "WindowsLocalAIExpander" or
                 "WindowsLocalAIStatusBadge" or
                 "WindowsLocalAITitleText";
 
@@ -3922,12 +4166,155 @@ public sealed class DotnetRustParityTests : IDisposable
                 return true;
             }
 
+            foreach (var serviceId in ExpandedServiceIds())
+            {
+                if (ExpandedServiceConfigurationAutomationIds(serviceId)
+                    .Contains(automationId, StringComparer.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
             return false;
         }
 
-        private bool HasExpandedService(string serviceId) =>
+        private bool IsExpandedServiceExpander(string automationId) =>
+            ExpandedServiceIds()
+                .Select(ServiceExpanderAutomationId)
+                .Any(id => id.Equals(automationId, StringComparison.OrdinalIgnoreCase));
+
+        private IEnumerable<string> ExpandedServiceIds() =>
             _servicesExpandedServiceConfigurations
-                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        private static IReadOnlyList<string> ExpandedServiceConfigurationAutomationIds(string serviceId)
+        {
+            return serviceId.Trim().ToLowerInvariant() switch
+            {
+                "ollama" =>
+                [
+                    "OllamaEndpointBox",
+                    "OllamaModelCombo",
+                    "RefreshOllamaButton",
+                    "TestOllamaButton"
+                ],
+                "openai" =>
+                [
+                    "OpenAIKeyHeaderText",
+                    "OpenAIKeyBox",
+                    "OpenAIKeyRevealButton",
+                    "OpenAIEndpointBox",
+                    "OpenAIApiFormatCombo",
+                    "OpenAIDetectedFormatText",
+                    "OpenAIModelCombo",
+                    "TestOpenAIButton"
+                ],
+                "deepseek" =>
+                [
+                    "DeepSeekKeyHeaderText",
+                    "DeepSeekKeyBox",
+                    "DeepSeekKeyRevealButton",
+                    "DeepSeekModelCombo",
+                    "TestDeepSeekButton"
+                ],
+                "groq" =>
+                [
+                    "GroqKeyHeaderText",
+                    "GroqKeyBox",
+                    "GroqKeyRevealButton",
+                    "GroqModelCombo",
+                    "TestGroqButton"
+                ],
+                "zhipu" =>
+                [
+                    "ZhipuKeyHeaderText",
+                    "ZhipuKeyBox",
+                    "ZhipuKeyRevealButton",
+                    "ZhipuModelCombo",
+                    "TestZhipuButton"
+                ],
+                "github" =>
+                [
+                    "GitHubModelsTokenHeaderText",
+                    "GitHubModelsTokenBox",
+                    "GitHubModelsTokenRevealButton",
+                    "GitHubModelsModelCombo",
+                    "TestGitHubModelsButton"
+                ],
+                "gemini" =>
+                [
+                    "GeminiKeyHeaderText",
+                    "GeminiKeyBox",
+                    "GeminiKeyRevealButton",
+                    "GeminiModelCombo",
+                    "TestGeminiButton"
+                ],
+                "custom-openai" =>
+                [
+                    "CustomOpenAIKeyHeaderText",
+                    "CustomOpenAIKeyBox",
+                    "CustomOpenAIKeyRevealButton",
+                    "CustomOpenAIEndpointBox",
+                    "CustomOpenAIModelBox",
+                    "TestCustomOpenAIButton"
+                ],
+                "builtin" =>
+                [
+                    "BuiltInApiKeyHeaderText",
+                    "BuiltInApiKeyBox",
+                    "BuiltInApiKeyRevealButton",
+                    "BuiltInModelCombo",
+                    "TestBuiltInButton"
+                ],
+                "doubao" =>
+                [
+                    "DoubaoKeyHeaderText",
+                    "DoubaoKeyBox",
+                    "DoubaoKeyRevealButton",
+                    "DoubaoEndpointBox",
+                    "DoubaoModelBox",
+                    "TestDoubaoButton"
+                ],
+                "caiyun" =>
+                [
+                    "CaiyunKeyHeaderText",
+                    "CaiyunKeyBox",
+                    "CaiyunKeyRevealButton",
+                    "TestCaiyunButton"
+                ],
+                "niutrans" =>
+                [
+                    "NiuTransKeyHeaderText",
+                    "NiuTransKeyBox",
+                    "NiuTransKeyRevealButton",
+                    "TestNiuTransButton"
+                ],
+                "youdao" =>
+                [
+                    "YoudaoAppKeyHeaderText",
+                    "YoudaoAppKeyBox",
+                    "YoudaoAppKeyRevealButton",
+                    "YoudaoAppSecretHeaderText",
+                    "YoudaoAppSecretBox",
+                    "YoudaoAppSecretRevealButton",
+                    "YoudaoUseOfficialApiToggle"
+                ],
+                "volcano" =>
+                [
+                    "VolcanoAccessKeyIdHeaderText",
+                    "VolcanoAccessKeyIdBox",
+                    "VolcanoAccessKeyIdRevealButton",
+                    "VolcanoSecretAccessKeyHeaderText",
+                    "VolcanoSecretAccessKeyBox",
+                    "VolcanoSecretAccessKeyRevealButton",
+                    "TestVolcanoButton"
+                ],
+                _ => []
+            };
+        }
+
+        private bool HasExpandedService(string serviceId) =>
+            ExpandedServiceIds()
                 .Any(value => value.Equals(serviceId, StringComparison.OrdinalIgnoreCase));
 
         private static int ServicesExpanderViewportIndex(string automationId) =>
@@ -3940,7 +4327,41 @@ public sealed class DotnetRustParityTests : IDisposable
                 "DeepSeekServiceExpander" => 4,
                 "GroqServiceExpander" => 5,
                 "ZhipuServiceExpander" => 6,
+                "GitHubModelsServiceExpander" => 7,
+                "GeminiServiceExpander" => 8,
+                "CustomOpenAIServiceExpander" => 9,
+                "BuiltInAIServiceExpander" => 10,
+                "DoubaoServiceExpander" => 11,
+                "CaiyunServiceExpander" => 12,
+                "NiuTransServiceExpander" => 13,
+                "YoudaoServiceExpander" => 14,
+                "VolcanoServiceExpander" => 15,
                 _ => -1
+            };
+
+        private static bool IsKnownServiceExpander(string automationId) =>
+            ServicesExpanderViewportIndex(automationId) >= 0;
+
+        private static string ServiceExpanderAutomationId(string serviceId) =>
+            serviceId.Trim().ToLowerInvariant() switch
+            {
+                "deepl" => "DeepLServiceExpander",
+                "windows-local-ai" => "WindowsLocalAIExpander",
+                "ollama" => "OllamaServiceExpander",
+                "openai" => "OpenAIServiceExpander",
+                "deepseek" => "DeepSeekServiceExpander",
+                "groq" => "GroqServiceExpander",
+                "zhipu" => "ZhipuServiceExpander",
+                "github" => "GitHubModelsServiceExpander",
+                "gemini" => "GeminiServiceExpander",
+                "custom-openai" => "CustomOpenAIServiceExpander",
+                "builtin" => "BuiltInAIServiceExpander",
+                "doubao" => "DoubaoServiceExpander",
+                "caiyun" => "CaiyunServiceExpander",
+                "niutrans" => "NiuTransServiceExpander",
+                "youdao" => "YoudaoServiceExpander",
+                "volcano" => "VolcanoServiceExpander",
+                _ => string.Empty
             };
 
         private static bool IsMainServiceEnabledId(string? automationId) =>
@@ -4129,6 +4550,8 @@ public sealed class DotnetRustParityTests : IDisposable
         settings["MouseSelectionTranslate"] = true;
         settings["MouseSelectionExcludedApps"] = new[] { "code" };
         settings["EnableInternationalServices"] = true;
+        settings["OllamaEndpoint"] = "http://localhost:11434/v1/chat/completions";
+        settings["OllamaModel"] = "llama3.2";
         settings["WindowWidthDips"] = 846.0;
         settings["WindowHeightDips"] = 913.0;
 
@@ -4371,6 +4794,84 @@ public sealed class DotnetRustParityTests : IDisposable
                 DotnetExpandElement: "WindowsLocalAIExpander",
                 RustExpandedServiceConfigurations: "windows-local-ai",
                 RustLocalAiProvider: "FoundryLocal"),
+            new(
+                "parity-settings-services-ollama-expanded-top",
+                SettingsParitySection.Services,
+                0,
+                DotnetExpandElement: "Ollama (Local LLM)",
+                RustExpandedServiceConfigurations: "ollama"),
+            new(
+                "parity-settings-services-openai-expanded-scroll-15-percent",
+                SettingsParitySection.Services,
+                15,
+                DotnetExpandElement: "OpenAI",
+                RustExpandedServiceConfigurations: "openai"),
+            new(
+                "parity-settings-services-deepseek-expanded-scroll-25-percent",
+                SettingsParitySection.Services,
+                25,
+                DotnetExpandElement: "DeepSeek",
+                RustExpandedServiceConfigurations: "deepseek"),
+            new(
+                "parity-settings-services-groq-expanded-scroll-35-percent",
+                SettingsParitySection.Services,
+                35,
+                DotnetExpandElement: "Groq",
+                RustExpandedServiceConfigurations: "groq"),
+            new(
+                "parity-settings-services-zhipu-expanded-scroll-45-percent",
+                SettingsParitySection.Services,
+                45,
+                DotnetExpandElement: "Zhipu (智谱)",
+                RustExpandedServiceConfigurations: "zhipu"),
+            new(
+                "parity-settings-services-github-models-expanded-scroll-55-percent",
+                SettingsParitySection.Services,
+                55,
+                DotnetExpandElement: "GitHub Models",
+                RustExpandedServiceConfigurations: "github"),
+            new(
+                "parity-settings-services-gemini-expanded-scroll-60-percent",
+                SettingsParitySection.Services,
+                60,
+                DotnetExpandElement: "Gemini",
+                RustExpandedServiceConfigurations: "gemini"),
+            new(
+                "parity-settings-services-custom-openai-expanded-scroll-70-percent",
+                SettingsParitySection.Services,
+                70,
+                DotnetExpandElement: "Custom OpenAI Compatible",
+                RustExpandedServiceConfigurations: "custom-openai"),
+            new(
+                "parity-settings-services-builtin-ai-expanded-scroll-75-percent",
+                SettingsParitySection.Services,
+                75,
+                DotnetExpandElement: "Built-in AI",
+                RustExpandedServiceConfigurations: "builtin"),
+            new(
+                "parity-settings-services-doubao-expanded-scroll-80-percent",
+                SettingsParitySection.Services,
+                80,
+                DotnetExpandElement: "Doubao (豆包)",
+                RustExpandedServiceConfigurations: "doubao"),
+            new(
+                "parity-settings-services-caiyun-expanded-scroll-88-percent",
+                SettingsParitySection.Services,
+                88,
+                DotnetExpandElement: "Caiyun (彩云小译)",
+                RustExpandedServiceConfigurations: "caiyun"),
+            new(
+                "parity-settings-services-niutrans-expanded-scroll-94-percent",
+                SettingsParitySection.Services,
+                94,
+                DotnetExpandElement: "NiuTrans (小牛翻译)",
+                RustExpandedServiceConfigurations: "niutrans"),
+            new(
+                "parity-settings-services-youdao-expanded-scroll-100-percent",
+                SettingsParitySection.Services,
+                100,
+                DotnetExpandElement: "Youdao (有道翻译)",
+                RustExpandedServiceConfigurations: "youdao"),
             new("parity-settings-views-window-results-top", SettingsParitySection.Views, 0),
             new("parity-settings-hotkeys-shortcut-inputs-top", SettingsParitySection.Hotkeys, 0),
             new("parity-settings-advanced-ocr-layout-top", SettingsParitySection.Advanced, 0),
@@ -4679,6 +5180,10 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS"] =
                     step.RustExpandedServiceConfigurations;
+                if (string.Equals(step.RustExpandedServiceConfigurations, "ollama", StringComparison.OrdinalIgnoreCase))
+                {
+                    startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_OLLAMA_MODEL_EMPTY"] = "1";
+                }
             }
             if (!string.IsNullOrWhiteSpace(step.RustLocalAiProvider))
             {
@@ -4720,6 +5225,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 "EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE",
                 "EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE",
                 "EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS",
+                "EASYDICT_PREVIEW_SETTINGS_OLLAMA_MODEL_EMPTY",
                 "EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER",
                 "EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED",
                 "EASYDICT_PREVIEW_SCROLL_PERCENT",

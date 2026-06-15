@@ -299,6 +299,9 @@ fn clear_clipboard_monitor_if_current(running: &Arc<AtomicBool>) {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    static REAL_CLIPBOARD_SMOKE_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn maps_unsupported_platform_error_without_winfluent_dependency() {
         let error = ClipboardError::from(
@@ -384,5 +387,102 @@ mod tests {
 
         drop(stream);
         assert!(!clipboard_monitor_is_running());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_clipboard_monitor_smoke_when_enabled() {
+        if !windows_clipboard_monitor_smoke_enabled() {
+            return;
+        }
+
+        let _guard = REAL_CLIPBOARD_SMOKE_LOCK
+            .lock()
+            .expect("real clipboard smoke lock");
+        let original = easydict_windows_text_selection::clipboard_text_snapshot().ok();
+        stop_clipboard_monitor();
+        *self_written_clipboard_text_slot()
+            .lock()
+            .expect("self-written clipboard mutex poisoned") = None;
+
+        let seed = format!("easydict-clipboard-monitor-seed-{}", std::process::id());
+        easydict_windows_text_selection::set_clipboard_text(&seed).expect("seed clipboard");
+
+        let mut stream =
+            clipboard_monitor_stream_with_interval(Duration::from_millis(25), |text| text)
+                .expect("real clipboard monitor should start");
+        assert!(clipboard_monitor_is_running());
+        if let Some(startup_message) =
+            poll_stream_until_message(&mut stream, Duration::from_millis(150))
+        {
+            assert_eq!(
+                startup_message, seed,
+                "startup monitor race should only be allowed to emit the seed clipboard text"
+            );
+        }
+
+        let external = format!("easydict-clipboard-monitor-external-{}", std::process::id());
+        easydict_windows_text_selection::set_clipboard_text(&external)
+            .expect("write external clipboard text");
+        assert_eq!(
+            poll_stream_until_message(&mut stream, Duration::from_secs(3)).as_deref(),
+            Some(external.as_str())
+        );
+
+        let self_written = format!("easydict-clipboard-monitor-self-{}", std::process::id());
+        write_clipboard_text(&self_written).expect("write self clipboard text");
+        assert_eq!(
+            poll_stream_until_message(&mut stream, Duration::from_millis(250)),
+            None,
+            "monitor should suppress app-written clipboard text once"
+        );
+
+        drop(stream);
+        assert!(!clipboard_monitor_is_running());
+        restore_clipboard_after_smoke(original.as_ref());
+    }
+
+    #[cfg(windows)]
+    fn windows_clipboard_monitor_smoke_enabled() -> bool {
+        std::env::var("EASYDICT_WINDOWS_CLIPBOARD_MONITOR_SMOKE")
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(windows)]
+    fn poll_stream_until_message(
+        stream: &mut ClipboardMonitorStream<String>,
+        timeout: Duration,
+    ) -> Option<String> {
+        let deadline = std::time::Instant::now() + timeout;
+        let waker = std::task::Waker::noop();
+        let mut context = Context::from_waker(waker);
+        while std::time::Instant::now() < deadline {
+            match Pin::new(&mut *stream).poll_next(&mut context) {
+                Poll::Ready(Some(message)) => return Some(message),
+                Poll::Ready(None) => return None,
+                Poll::Pending => std::thread::sleep(Duration::from_millis(10)),
+            }
+        }
+        None
+    }
+
+    #[cfg(windows)]
+    fn restore_clipboard_after_smoke(
+        original: Option<&easydict_windows_text_selection::ClipboardTextSnapshot>,
+    ) {
+        match original.and_then(|snapshot| snapshot.text.as_deref()) {
+            Some(text) => {
+                let _ = easydict_windows_text_selection::set_clipboard_text(text);
+            }
+            None => {
+                let _ = easydict_windows_text_selection::clear_clipboard();
+            }
+        }
     }
 }

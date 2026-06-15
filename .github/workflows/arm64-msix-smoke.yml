@@ -181,7 +181,8 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/Dedupe-WorkerSharedFiles.ps1 `
-            -PublishDir ./publish-msix/arm64
+            -PublishDir ./publish-msix/arm64 `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}"
 
       - name: Bundle .NET 8 Runtime (arm64)
         if: env.RETAINED_WORKERS_ENABLED == 'true'

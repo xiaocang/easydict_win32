@@ -59,6 +59,13 @@ pub fn delete_current_user_tree(key_path: &str) -> Result<(), WindowsRegistryErr
     platform::delete_current_user_tree(key_path)
 }
 
+pub fn delete_current_user_value(
+    key_path: &str,
+    value_name: Option<&str>,
+) -> Result<(), WindowsRegistryError> {
+    platform::delete_current_user_value(key_path, value_name)
+}
+
 #[cfg(windows)]
 mod platform {
     use super::WindowsRegistryError;
@@ -66,9 +73,9 @@ mod platform {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WIN32_ERROR};
     use windows::Win32::System::Registry::{
-        RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegOpenKeyExW,
-        RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE,
-        REG_OPEN_CREATE_OPTIONS, REG_SZ, REG_VALUE_TYPE,
+        RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW,
+        RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
+        KEY_SET_VALUE, REG_OPEN_CREATE_OPTIONS, REG_SZ, REG_VALUE_TYPE,
     };
 
     pub fn write_current_user_default_string(
@@ -134,6 +141,26 @@ mod platform {
         }
 
         Err(win32_error("RegDeleteTreeW", result))
+    }
+
+    pub fn delete_current_user_value(
+        key_path: &str,
+        value_name: Option<&str>,
+    ) -> Result<(), WindowsRegistryError> {
+        let Some(key) = open_current_user_key_for_set_value(key_path)? else {
+            return Ok(());
+        };
+        let wide_value_name = value_name.map(wide_null);
+        let value_name_ptr = wide_value_name
+            .as_ref()
+            .map_or(PCWSTR::null(), |value| PCWSTR(value.as_ptr()));
+
+        let result = unsafe { RegDeleteValueW(key.raw(), value_name_ptr) };
+        if result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND {
+            return Ok(());
+        }
+
+        Err(win32_error("RegDeleteValueW", result))
     }
 
     fn read_registry_value_string(
@@ -254,6 +281,30 @@ mod platform {
         Ok(Some(RegistryKey(key)))
     }
 
+    fn open_current_user_key_for_set_value(
+        key_path: &str,
+    ) -> Result<Option<RegistryKey>, WindowsRegistryError> {
+        let wide_path = wide_null(key_path);
+        let mut key = HKEY(null_mut());
+        let result = unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(wide_path.as_ptr()),
+                None,
+                KEY_SET_VALUE,
+                &mut key,
+            )
+        };
+        if result == ERROR_FILE_NOT_FOUND {
+            return Ok(None);
+        }
+        if result != ERROR_SUCCESS {
+            return Err(win32_error("RegOpenKeyExW", result));
+        }
+
+        Ok(Some(RegistryKey(key)))
+    }
+
     fn wide_null(value: &str) -> Vec<u16> {
         value.encode_utf16().chain(std::iter::once(0)).collect()
     }
@@ -303,6 +354,13 @@ mod platform {
     }
 
     pub fn delete_current_user_tree(_key_path: &str) -> Result<(), WindowsRegistryError> {
+        Err(WindowsRegistryError::UnsupportedPlatform)
+    }
+
+    pub fn delete_current_user_value(
+        _key_path: &str,
+        _value_name: Option<&str>,
+    ) -> Result<(), WindowsRegistryError> {
         Err(WindowsRegistryError::UnsupportedPlatform)
     }
 }
@@ -371,6 +429,31 @@ mod tests {
                 .expect("deleted child read should succeed"),
             None
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn current_user_named_string_delete_value_roundtrip() {
+        let key_path = unique_test_key_path("delete-value");
+        delete_current_user_tree(&key_path).expect("pre-test cleanup should succeed");
+
+        write_current_user_string_value(&key_path, Some("Easydict"), r#""C:\Demo\easydict.exe""#)
+            .expect("named value should be written");
+        assert_eq!(
+            read_current_user_string_value(&key_path, Some("Easydict"))
+                .expect("named read should succeed"),
+            Some(r#""C:\Demo\easydict.exe""#.to_string())
+        );
+
+        delete_current_user_value(&key_path, Some("Easydict"))
+            .expect("named value delete should succeed");
+        assert_eq!(
+            read_current_user_string_value(&key_path, Some("Easydict"))
+                .expect("deleted value read should succeed"),
+            None
+        );
+
+        delete_current_user_tree(&key_path).expect("tree cleanup should succeed");
     }
 
     #[cfg(windows)]

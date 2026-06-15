@@ -679,6 +679,11 @@ public sealed class WorkerPackagingTests
         winuiProject.Should().NotContain("workers\\ocr");
         dedupeScript.Should().Contain("dedupe-worker-shared");
         dedupeScript.Should().Contain("easydict_msix_validate");
+        dedupeScript.Should().Contain("[string]$RuntimeProfile = \"\"");
+        dedupeScript.Should().Contain("RuntimeProfile must be explicitly set to Hybrid");
+        dedupeScript.Should().Contain("function Test-RustOnlyRuntimeProfile");
+        dedupeScript.Should().Contain("function Test-HybridRuntimeProfile");
+        dedupeScript.Should().Contain("--runtime-profile hybrid");
         msixValidator.Should().Contain("WORKER_SHARED_DIRS");
         msixValidator.Should().Contain("const WORKER_SHARED_DIRS: &[&str] = &[\"longdoc\", \"localai\"];");
         msixValidator.Should().Contain("const RUST_ONLY_FORBIDDEN_PREFIXES: &[&str] = &[\"workers/\", \"dotnet/\"];");
@@ -713,6 +718,8 @@ public sealed class WorkerPackagingTests
         makefile.Should().NotContain("winapp package ./publish-msix/x64");
         makefile.Should().NotContain("<Identity[^>]* Version=");
         makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1");
+        makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64 -RuntimeProfile \"$$runtime_profile\"");
+        makefile.Should().Contain("Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64 -RuntimeProfile \"$$runtime_profile\"");
         makefile.Should().Contain("Worker settings default");
         makefile.Should().NotContain("UseLocalAiWorker default false");
     }
@@ -1000,7 +1007,8 @@ public sealed class WorkerPackagingTests
         arm64SmokeWorkflow.Should().Contain("if: env.RETAINED_WORKERS_ENABLED == 'true'");
         arm64SmokeWorkflow.Should().NotContain("          - rust-only");
         arm64SmokeWorkflow.Should().Contain("runtime_profile:");
-        arm64SmokeWorkflow.Should().Contain("RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}");
+        arm64SmokeWorkflow.Should().Contain("RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}");
+        arm64SmokeWorkflow.Should().NotContain("github.event.inputs.runtime_profile || 'hybrid'");
         workflow.Should().Contain("-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}");
         workflow.Should().Contain("-RuntimeProfile \"${{ env.RUNTIME_PROFILE }}\"");
         arm64SmokeWorkflow.Should().Contain("-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}");
@@ -1130,6 +1138,9 @@ public sealed class WorkerPackagingTests
 
         script.Should().Contain("cargo run --manifest-path $cargoManifest -p easydict_msix_validate");
         script.Should().Contain("dedupe-worker-shared");
+        script.Should().Contain("--runtime-profile hybrid");
+        script.Should().Contain("RuntimeProfile must be explicitly set to Hybrid");
+        script.Should().Contain("Retained worker shared-file dedupe is legacy/hybrid packaging only");
         script.Should().NotContain("Get-FileHash");
         script.Should().NotContain("Remove-Item");
         msixValidator.Should().Contain("dedupe_worker_shared_files");

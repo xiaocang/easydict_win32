@@ -1298,7 +1298,9 @@ dependencies = [
  "unicode-normalization",
  "unicode-segmentation",
  "win_fluent",
+ "win_fluent_platform_win",
  "win_fluent_testkit",
+ "windows 0.62.2",
  "zip 8.6.0",
 ]
 

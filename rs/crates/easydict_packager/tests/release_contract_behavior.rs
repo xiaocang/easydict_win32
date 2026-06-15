@@ -15,6 +15,7 @@ static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 fn rs_portable_release_path_forces_rust_only_runtime_profile() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_job = text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
     let portable_script = read_text(&root.join("rs/scripts/Package-Portable.ps1"));
 
     assert_contains(
@@ -38,9 +39,19 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
         "rs portable workflow job should force generic runtime profile",
     );
     assert_contains(
-        &workflow,
+        publish_job,
+        "cargo run --manifest-path Cargo.toml -p easydict_packager --",
+        "workflow should invoke the Rust packager directly for rs portable packaging",
+    );
+    assert_contains(
+        publish_job,
+        "pack-rs-portable",
+        "workflow should run the Rust portable packager subcommand directly",
+    );
+    assert_not_contains(
+        publish_job,
         "Package-Portable.ps1",
-        "workflow should use the Rust portable packaging shim",
+        "workflow default rs portable path should not require the compatibility PowerShell shim",
     );
     assert_contains(
         &workflow,
@@ -363,8 +374,18 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
     );
     assert_contains(
         publish_job,
+        "cargo run --manifest-path Cargo.toml -p easydict_packager --",
+        "rs portable packaging should invoke the Rust packager directly",
+    );
+    assert_contains(
+        publish_job,
+        "pack-rs-portable",
+        "rs portable packaging should use the Rust portable subcommand",
+    );
+    assert_not_contains(
+        publish_job,
         "Package-Portable.ps1",
-        "rs portable packaging should delegate to the Rust portable shim",
+        "rs portable release job should not route the default package through the compatibility shim",
     );
     assert_contains(
         publish_job,
@@ -469,6 +490,39 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
             );
         }
     }
+}
+
+#[test]
+fn rs_portable_release_zip_has_size_budget_gate() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_job = text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+    let validation_step = text_between(
+        publish_job,
+        "      - name: Validate Rust portable ZIP",
+        "      - name: Upload Rust portable ZIP as artifact",
+    );
+
+    assert_contains(
+        validation_step,
+        "$zipSize = (Get-Item $zipPath).Length",
+        "rs portable release should measure the validated ZIP size",
+    );
+    assert_contains(
+        validation_step,
+        "Rust portable ZIP size:",
+        "rs portable release should log the ZIP size for release diagnostics",
+    );
+    assert_contains(
+        validation_step,
+        "400000000",
+        "rs portable release should keep the same 400 MB package budget gate as the bundle job",
+    );
+    assert_contains(
+        validation_step,
+        "Rust portable ZIP is over the 400 MB budget",
+        "rs portable release should fail clearly when the ZIP exceeds the budget",
+    );
 }
 
 #[test]
@@ -605,16 +659,20 @@ fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
 fn root_readmes_build_from_source_default_to_rs_portable_before_legacy_dotnet() {
     let root = repo_root();
 
-    for (relative_path, build_heading, legacy_heading) in [
+    let direct_packager_command = r"cargo run --manifest-path rs\Cargo.toml -p easydict_packager -- pack-rs-portable --workspace rs --platform x64 --configuration Release";
+
+    for (relative_path, build_heading, legacy_heading, compatibility_notice) in [
         (
             "README.md",
             "### Build from Source",
             "#### Legacy/Hybrid .NET Build",
+            "compatibility wrapper",
         ),
         (
             "README_ZH.md",
             "### 从源码构建",
             "#### Legacy/Hybrid .NET 构建",
+            "兼容 wrapper",
         ),
     ] {
         let text = read_text(&root.join(relative_path));
@@ -625,10 +683,20 @@ fn root_readmes_build_from_source_default_to_rs_portable_before_legacy_dotnet() 
             .find(legacy_heading)
             .unwrap_or_else(|| panic!("{relative_path} should keep a legacy .NET build section"));
         let portable_command_index = text[build_index..]
+            .find(direct_packager_command)
+            .map(|offset| build_index + offset)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{relative_path} should build the rs portable package by default through the Rust packager"
+                )
+            });
+        let shim_index = text[build_index..legacy_index]
             .find(r".\rs\scripts\Package-Portable.ps1")
             .map(|offset| build_index + offset)
             .unwrap_or_else(|| {
-                panic!("{relative_path} should build the rs portable package by default")
+                panic!(
+                    "{relative_path} should keep the Package-Portable compatibility shim mention"
+                )
             });
         let cargo_run_index = text[build_index..]
             .find("cargo run -p easydict_app --bin easydict_preview")
@@ -650,11 +718,20 @@ fn root_readmes_build_from_source_default_to_rs_portable_before_legacy_dotnet() 
             "{relative_path} should show packaging before development run",
         );
         assert!(
+            portable_command_index < shim_index,
+            "{relative_path} should mention the PowerShell shim only after the direct Rust packager command",
+        );
+        assert!(
             cargo_run_index < legacy_index && legacy_index < dotnet_build_index,
             "{relative_path} should place dotnet build commands only under the legacy/hybrid subsection",
         );
 
         let default_build_section = &text[build_index..legacy_index];
+        assert_contains(
+            default_build_section,
+            compatibility_notice,
+            &format!("{relative_path} should describe Package-Portable.ps1 as compatibility-only"),
+        );
         assert_not_contains(
             default_build_section,
             "dotnet build",
@@ -2843,6 +2920,7 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         "dotnet/scripts/publish.ps1",
         "dotnet/scripts/package-and-install.ps1",
         "dotnet/scripts/Package-Msix.ps1",
+        "dotnet/scripts/Dedupe-WorkerSharedFiles.ps1",
         "dotnet/scripts/Build-Installer.ps1",
     ] {
         let text = read_text(&root.join(relative_path));
@@ -2902,6 +2980,7 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
 
     for shim_name in [
         "Package-Msix.ps1",
+        "Dedupe-WorkerSharedFiles.ps1",
         "Build-Installer.ps1",
         "Extract-DotnetRuntime.ps1",
     ] {
@@ -3376,6 +3455,7 @@ fn msix_maintenance_powershell_shims_delegate_to_rust_cli() {
         powershell_script_command(&root.join("dotnet/scripts/Dedupe-WorkerSharedFiles.ps1"))
             .arg("-PublishDir")
             .arg(&publish_dir)
+            .args(["-RuntimeProfile", "Hybrid"])
             .output()
             .expect("run Dedupe-WorkerSharedFiles shim");
     assert!(
@@ -3400,6 +3480,7 @@ fn msix_maintenance_powershell_shims_delegate_to_rust_cli() {
         "--min-version 10.0.19041.0",
         "dedupe-worker-shared",
         publish_dir.display().to_string().as_str(),
+        "--runtime-profile hybrid",
     ] {
         assert_contains(
             &record,

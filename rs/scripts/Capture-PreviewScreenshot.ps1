@@ -5,7 +5,10 @@ param(
     [switch]$StartIfMissing,
     [switch]$StartNewInstance,
     [string]$Executable,
-    [int]$SettlingMilliseconds = 900
+    [int]$SettlingMilliseconds = 900,
+    [int]$ContentCheckRetries = 8,
+    [int]$ContentCheckDelayMilliseconds = 350,
+    [switch]$AllowLikelyBlankCapture
 )
 
 Set-StrictMode -Version Latest
@@ -307,6 +310,97 @@ function Save-ScreenRegionPng($path, [int]$x, [int]$y, [int]$width, [int]$height
     }
 }
 
+function Measure-ImageContent($path) {
+    $bitmap = [System.Drawing.Bitmap]::FromFile($path)
+    try {
+        $sampleLeft = if ($bitmap.Width -gt 160) { 12 } else { 0 }
+        $sampleTop = if ($bitmap.Height -gt 220) { 72 } else { 0 }
+        $sampleRight = if ($bitmap.Width -gt 160) { $bitmap.Width - 12 } else { $bitmap.Width }
+        $sampleBottom = if ($bitmap.Height -gt 220) { $bitmap.Height - 12 } else { $bitmap.Height }
+        $sampleWidth = [Math]::Max(1, $sampleRight - $sampleLeft)
+        $sampleHeight = [Math]::Max(1, $sampleBottom - $sampleTop)
+        $sampleColumns = [Math]::Min(96, [Math]::Max(1, $sampleWidth))
+        $sampleRows = [Math]::Min(72, [Math]::Max(1, $sampleHeight))
+        $stepX = [Math]::Max(1, [int][Math]::Floor($sampleWidth / $sampleColumns))
+        $stepY = [Math]::Max(1, [int][Math]::Floor($sampleHeight / $sampleRows))
+
+        [long]$count = 0
+        [double]$lumaSum = 0
+        [double]$lumaSquaredSum = 0
+        [int]$nearWhite = 0
+        [int]$nearBlack = 0
+        [int]$minR = 255
+        [int]$minG = 255
+        [int]$minB = 255
+        [int]$maxR = 0
+        [int]$maxG = 0
+        [int]$maxB = 0
+
+        for ($y = $sampleTop; $y -lt $sampleBottom; $y += $stepY) {
+            for ($x = $sampleLeft; $x -lt $sampleRight; $x += $stepX) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                $r = [int]$pixel.R
+                $g = [int]$pixel.G
+                $b = [int]$pixel.B
+                $luma = (0.2126 * $r) + (0.7152 * $g) + (0.0722 * $b)
+
+                $count++
+                $lumaSum += $luma
+                $lumaSquaredSum += ($luma * $luma)
+                if ($r -ge 245 -and $g -ge 245 -and $b -ge 245) {
+                    $nearWhite++
+                }
+                if ($r -le 10 -and $g -le 10 -and $b -le 10) {
+                    $nearBlack++
+                }
+                $minR = [Math]::Min($minR, $r)
+                $minG = [Math]::Min($minG, $g)
+                $minB = [Math]::Min($minB, $b)
+                $maxR = [Math]::Max($maxR, $r)
+                $maxG = [Math]::Max($maxG, $g)
+                $maxB = [Math]::Max($maxB, $b)
+            }
+        }
+
+        $mean = if ($count -eq 0) { 0.0 } else { $lumaSum / $count }
+        $variance = if ($count -eq 0) {
+            0.0
+        } else {
+            [Math]::Max(0.0, ($lumaSquaredSum / $count) - ($mean * $mean))
+        }
+        $stddev = [Math]::Sqrt($variance)
+        $colorSpread = [Math]::Max(
+            [Math]::Max($maxR - $minR, $maxG - $minG),
+            $maxB - $minB)
+        $nearWhiteRatio = if ($count -eq 0) { 0.0 } else { [double]$nearWhite / [double]$count }
+        $nearBlackRatio = if ($count -eq 0) { 0.0 } else { [double]$nearBlack / [double]$count }
+        $likelyBlank = (
+            ($nearWhiteRatio -ge 0.985 -and $stddev -le 4.0 -and $colorSpread -le 12) -or
+            ($nearBlackRatio -ge 0.985 -and $stddev -le 4.0 -and $colorSpread -le 12)
+        )
+
+        [pscustomobject]@{
+            isLikelyBlank = [bool]$likelyBlank
+            sampleBounds = [pscustomobject]@{
+                left = $sampleLeft
+                top = $sampleTop
+                width = $sampleWidth
+                height = $sampleHeight
+            }
+            sampleCount = [int]$count
+            nearWhiteRatio = [Math]::Round($nearWhiteRatio, 5)
+            nearBlackRatio = [Math]::Round($nearBlackRatio, 5)
+            lumaMean = [Math]::Round($mean, 3)
+            lumaStdDev = [Math]::Round($stddev, 3)
+            colorSpread = [int]$colorSpread
+            minRgb = @($minR, $minG, $minB)
+            maxRgb = @($maxR, $maxG, $maxB)
+        }
+    } finally {
+        $bitmap.Dispose()
+    }
+}
+
 Enable-PerMonitorDpiAwareness
 
 $hwnd = Get-PreviewWindowHandle
@@ -325,33 +419,55 @@ $restorePreviewZOrder = $true
 $null = [Win32DpiCapture]::SetForegroundWindow($hwnd)
 Start-Sleep -Milliseconds ([Math]::Max(0, $SettlingMilliseconds))
 
+$captureAttempt = 0
+$contentCheck = $null
+$windowPath = $null
+$desktopPath = $null
+$metadataPath = $null
+
 try {
-    $rect = Get-WindowRectPhysical $hwnd
-    $windowWidth = $rect.Right - $rect.Left
-    $windowHeight = $rect.Bottom - $rect.Top
-
-    $monitor = [Win32DpiCapture]::MonitorFromWindow($hwnd, 2)
-    $monitorInfo = New-Object Win32DpiCapture+MONITORINFO
-    $monitorInfo.cbSize = [Runtime.InteropServices.Marshal]::SizeOf([type][Win32DpiCapture+MONITORINFO])
-    $null = [Win32DpiCapture]::GetMonitorInfo($monitor, [ref]$monitorInfo)
-
-    $dpiX = [uint32]96
-    $dpiY = [uint32]96
-    $dpiResult = [Win32DpiCapture]::GetDpiForMonitor($monitor, 0, [ref]$dpiX, [ref]$dpiY)
-    if ($dpiResult -lt 0 -or $dpiX -eq 0) {
-        $dpiX = [Win32DpiCapture]::GetDpiForWindow($hwnd)
-        $dpiY = $dpiX
-    }
-
-    $scale = [double]$dpiX / 96.0
-    $virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $base = "main-window-preview-dpi-$timestamp"
     $windowPath = Join-Path $OutputDir "$base.window.png"
     $desktopPath = Join-Path $OutputDir "$base.desktop.png"
     $metadataPath = Join-Path $OutputDir "$base.metadata.json"
 
-    Save-ScreenRegionPng $windowPath $rect.Left $rect.Top $windowWidth $windowHeight
+    $maxAttempts = [Math]::Max(1, $ContentCheckRetries + 1)
+    for ($captureAttempt = 1; $captureAttempt -le $maxAttempts; $captureAttempt++) {
+        $rect = Get-WindowRectPhysical $hwnd
+        $windowWidth = $rect.Right - $rect.Left
+        $windowHeight = $rect.Bottom - $rect.Top
+
+        $monitor = [Win32DpiCapture]::MonitorFromWindow($hwnd, 2)
+        $monitorInfo = New-Object Win32DpiCapture+MONITORINFO
+        $monitorInfo.cbSize = [Runtime.InteropServices.Marshal]::SizeOf([type][Win32DpiCapture+MONITORINFO])
+        $null = [Win32DpiCapture]::GetMonitorInfo($monitor, [ref]$monitorInfo)
+
+        $dpiX = [uint32]96
+        $dpiY = [uint32]96
+        $dpiResult = [Win32DpiCapture]::GetDpiForMonitor($monitor, 0, [ref]$dpiX, [ref]$dpiY)
+        if ($dpiResult -lt 0 -or $dpiX -eq 0) {
+            $dpiX = [Win32DpiCapture]::GetDpiForWindow($hwnd)
+            $dpiY = $dpiX
+        }
+
+        $scale = [double]$dpiX / 96.0
+        $virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
+
+        Save-ScreenRegionPng $windowPath $rect.Left $rect.Top $windowWidth $windowHeight
+        $contentCheck = Measure-ImageContent $windowPath
+        if (-not $contentCheck.isLikelyBlank -or $AllowLikelyBlankCapture) {
+            break
+        }
+        if ($captureAttempt -lt $maxAttempts) {
+            Start-Sleep -Milliseconds ([Math]::Max(0, $ContentCheckDelayMilliseconds))
+        }
+    }
+
+    if ($null -ne $contentCheck -and $contentCheck.isLikelyBlank -and -not $AllowLikelyBlankCapture) {
+        throw "Captured preview window is likely blank after $captureAttempt attempt(s): $windowPath"
+    }
+
     Save-ScreenRegionPng $desktopPath $virtual.Left $virtual.Top $virtual.Width $virtual.Height
 } finally {
     if ($restorePreviewZOrder) {
@@ -402,6 +518,13 @@ $metadata = [ordered]@{
         processId = if ($null -ne $script:CapturedPreviewWindow) { [int]$script:CapturedPreviewWindow.ProcessId } else { $null }
         title = if ($null -ne $script:CapturedPreviewWindow) { $script:CapturedPreviewWindow.Title } else { $null }
         startedNewInstance = [bool]$StartNewInstance
+    }
+    contentCheck = [ordered]@{
+        enabled = -not [bool]$AllowLikelyBlankCapture
+        attempts = [int]$captureAttempt
+        retryLimit = [int]$ContentCheckRetries
+        delayMilliseconds = [int]$ContentCheckDelayMilliseconds
+        result = $contentCheck
     }
     output = [ordered]@{
         window = $windowPath

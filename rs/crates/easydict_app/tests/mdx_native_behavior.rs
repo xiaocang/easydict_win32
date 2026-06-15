@@ -675,6 +675,50 @@ fn native_mdd_resource_lookup_reads_record_encrypted_mdd_with_dictionary_credent
 }
 
 #[test]
+fn native_mdx_lookup_inlines_real_corpus_mdd_from_env() {
+    let Some(mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
+        return;
+    };
+    let Some(mdd_path) = real_corpus_path("RS_MDICT_TEST_MDD") else {
+        return;
+    };
+    let query = std::env::var("RS_MDICT_TEST_QUERY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "ability".to_string());
+    let encryption_mode =
+        detect_mdx_file_encryption_mode(&mdx_path).expect("real MDX header should be readable");
+
+    let mut dictionary = mdx_dictionary(encryption_mode != MdxEncryptionMode::None, []);
+    dictionary.service_id = "mdx::real-corpus".to_string();
+    dictionary.display_name = "Real Corpus".to_string();
+    dictionary.file_path = mdx_path;
+    dictionary.mdd_file_paths = vec![mdd_path];
+    let settings = mdx_settings_with_dictionary(dictionary);
+
+    let result = run_native_mdx_lookup(
+        &MdxLookupParams {
+            dictionary_id: "mdx::real-corpus".to_string(),
+            query: query.clone(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("real MDX/MDD lookup should stay on the Rust-native route");
+
+    assert_eq!(result.entries.len(), 1);
+    assert_eq!(
+        result.entries[0].key.to_ascii_lowercase(),
+        query.to_ascii_lowercase()
+    );
+    assert!(result.mdd_resources_inlined);
+    let html = &result.entries[0].html;
+    assert!(html.contains("data:text/css;base64,"));
+    assert!(!html.contains(r#"href="cceu.css""#));
+    assert!(!html.contains(r#"href='cceu.css'"#));
+}
+
+#[test]
 fn native_mdx_lookup_inlines_first_hit_from_real_multi_mdd_fixtures() {
     let temp_dir = unique_temp_dir("easydict-native-mdd-real-first-hit-inline");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -1275,6 +1319,16 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
             .as_nanos()
     ));
     path
+}
+
+fn real_corpus_path(env_name: &str) -> Option<String> {
+    match std::env::var(env_name) {
+        Ok(path) if !path.trim().is_empty() => Some(path),
+        _ => {
+            eprintln!("Skipping real-corpus test; set {env_name} to a local MDX/MDD file path");
+            None
+        }
+    }
 }
 
 fn path_string(path: &Path) -> String {

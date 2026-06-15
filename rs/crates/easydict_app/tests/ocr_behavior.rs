@@ -1332,7 +1332,7 @@ fn ocr_translate_outcome_uses_sorted_line_text_when_result_text_is_empty() {
 }
 
 #[test]
-fn silent_ocr_outcome_writes_text_to_clipboard() {
+fn silent_ocr_outcome_uses_rust_clipboard_task() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };

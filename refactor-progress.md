@@ -21,6 +21,337 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-13: Moved OCR named-event receiving to a Rust-owned stream
+
+- Followed the parallel desktop-boundary audit: the NativeBridge binary already signals `Local\EasydictRs-OcrTranslate` through `lib/easydict-windows-ipc`, but the app still received that event through WinFluent's named-event subscription/runtime adapter.
+- Added `NamedEventListener` to `lib/easydict-windows-ipc`, wrapping create/wait/auto-reset named-event behavior next to the existing signal helper.
+- Added `easydict_app::named_event`, an app-owned `Task::stream(...)` source that listens for the rs OCR event and emits the same OCR hotkey message. `EasydictApp::subscription()` no longer declares `Subscription::named_event`, and `RuntimePlan` no longer carries named-event desktop integration entries.
+- Kept tray, hotkey, shell verb, and protocol surfaces unchanged in this slice. Shell/protocol registration still uses the existing Rust-owned `desktop_integration` tasks.
+- Updated the stale `.NET` WorkerPackaging test oracle for ARM64 smoke so it expects a blank default `runtime_profile` instead of implicit `hybrid`.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-ipc/Cargo.toml named_event -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior default_hotkey_subscriptions_cover_migration_contract -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior shell_and_protocol_entries_cover_ocr_activation_contract -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior runtime_plan_captures_desktop_integration_entries -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced preview_app_forwards_desktop_runtime_surfaces_from_easydict_app -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced preview_runtime_plan_captures_inner_desktop_integration_entries -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_binary_signals_ocr_translate_event_through_real_binary -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior arm64_msix_smoke_requires_explicit_hybrid_runtime_profile -- --nocapture`
+- `rustfmt --edition 2021 --check lib/easydict-windows-ipc/src/lib.rs rs/crates/easydict_app/src/named_event.rs rs/crates/easydict_app/src/lib.rs rs/crates/easydict_app/tests/quick_translate_behavior.rs rs/crates/easydict_preview_iced/src/main.rs`
+- `dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~WorkerPackagingTests --logger "console;verbosity=minimal" -m:1 -p:UseSharedCompilation=false` did not reach the filtered tests because the unrelated WinUI test project currently fails to compile in long-document/layout tests.
+
+## 2026-06-13: Reconfirmed Silent OCR clipboard boundary
+
+- Audited the Silent OCR completion path after a search hit on `PlatformCommand::WriteClipboardText`. The hit was a negative regression assertion, not production code: `OcrResultAction::CopyText` now flows through `clipboard_write_task(...)`, which calls `easydict_app::clipboard::write_clipboard_text(...)` on a Rust-owned future.
+- No new dependency was added. This keeps the earlier clipboard reuse decision: explicit copy/read paths and monitoring reuse the existing `lib/easydict-windows-text-selection` Win32 helper instead of adding a second clipboard backend such as `clipboard-win` or `arboard`.
+- Renamed the Silent OCR regression to `silent_ocr_outcome_uses_rust_clipboard_task` so future `WriteClipboardText` searches read as a retired-command boundary check.
+- Narrowed the clipboard-monitor and mouse-selection stop assertions to the actual background-stream contract. `SaveSettingsChanges` may also schedule a startup-registration future, so the tests now require no monitor/hook stream and verify the Rust singleton has stopped instead of requiring the entire save task to be `none`.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior silent_ocr_outcome_uses_rust_clipboard_task -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior clipboard -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior saving_mouse_selection_setting_starts_and_stops_rust_owned_hook_stream -- --exact --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/ocr_behavior.rs`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/quick_translate_behavior.rs`
+
+## 2026-06-13: Added a real clipboard monitor smoke
+
+- Continued the clipboard migration without adding a dependency. The monitor still reuses `lib/easydict-windows-text-selection` for Win32 clipboard sequence/snapshot access instead of introducing a second clipboard backend.
+- Added `EASYDICT_WINDOWS_CLIPBOARD_MONITOR_SMOKE=1` coverage in `easydict_app::clipboard`: the test starts the real app-owned monitor stream, writes external clipboard text through the Windows helper, verifies the stream emits it, then writes via `write_clipboard_text(...)` and verifies that app self-written text is suppressed once.
+- The smoke restores the original clipboard after running and remains skipped by default.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app clipboard::tests::real_clipboard_monitor_smoke_when_enabled --lib -- --exact --nocapture`
+- `$env:EASYDICT_WINDOWS_CLIPBOARD_MONITOR_SMOKE='1'; cargo test --manifest-path rs/Cargo.toml -p easydict_app clipboard::tests::real_clipboard_monitor_smoke_when_enabled --lib -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app clipboard --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior monitor_clipboard -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior clipboard_monitor -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/clipboard.rs`
+
+## 2026-06-13: Added a real VS Code text insertion smoke
+
+- Continued the core input/replace path without changing production dependencies. No new library was needed; the smoke reuses the existing `lib/easydict-windows-text-selection` Win32 clipboard/focus/SendInput boundary.
+- Added `EASYDICT_WINDOWS_TEXT_INSERTION_VSCODE_SMOKE=1` coverage that opens a unique temporary file in a new VS Code window, focuses the Monaco editor, captures the foreground insertion target, inserts text through `insert_text_into_target(...)`, then overwrites the clipboard with a sentinel and uses Ctrl+A/C to prove the editor itself contains the inserted text.
+- This complements the Notepad insertion smoke with a real Electron/Monaco editor target. It remains opt-in because it requires VS Code on PATH and an interactive desktop.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml tests::real_vscode_smoke_inserts_text_when_enabled -- --exact --nocapture`
+- `$env:EASYDICT_WINDOWS_TEXT_INSERTION_VSCODE_SMOKE='1'; cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml tests::real_vscode_smoke_inserts_text_when_enabled -- --exact --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app text_insertion --lib -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-text-selection/Cargo.toml --check`
+
+## 2026-06-13: Added a real terminal no-Ctrl+C TextSelection smoke
+
+- Closed the other core TextSelection evidence gap with an env-gated Windows smoke. Production dependencies did not change; `easydict_app` only gained a Windows `dev-dependency` on the already-used Microsoft `windows` crate for test-only console/window APIs.
+- Added `EASYDICT_WINDOWS_TERMINAL_TEXT_SELECTION_SMOKE=1` coverage in `text_selection_behavior`: the parent test copies the current test binary to a temporary `pwsh.exe`, launches it in a new console, focuses that console HWND, and calls the real `capture_native_selected_text()` path.
+- The helper child installs a console Ctrl handler and stays alive until a stop marker is written. The parent asserts capture returns no text, the helper remains alive, and no Ctrl+C/SIGINT marker is written, proving the real foreground HWND/PID/process-name route stays UIA-only for terminal-like targets instead of entering clipboard fallback.
+- This is intentionally narrower than a full Windows Terminal/PowerShell E2E; it is the stable regression guard for the dangerous behavior: sending Ctrl+C into a terminal.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior terminal_text_selection_does_not_send_ctrl_c_to_console_when_enabled -- --exact --nocapture`
+- `$env:EASYDICT_WINDOWS_TERMINAL_TEXT_SELECTION_SMOKE='1'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior terminal_text_selection_does_not_send_ctrl_c_to_console_when_enabled -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/text_selection_behavior.rs`
+
+## 2026-06-13: Added a real Notepad UIA provider smoke for TextSelection
+
+- Continued the core selected-text migration without adding a dependency. The Windows selection backend stays in `lib/easydict-windows-text-selection` on Microsoft's official `windows` crate; this slice adds real-provider evidence rather than another wrapper.
+- Added an `EASYDICT_WINDOWS_UIA_TEXT_SELECTION_SMOKE=1` gated smoke that opens a unique temporary text file in Notepad, finds that document window by title instead of process id to handle modern single-instance Notepad, selects all text, and verifies `selected_text_via_uia_with_timeout(...)` reads the selection through UIA TextPattern.
+- The smoke closes only the unique document window and removes the temporary file. Default test runs keep it skipped, so regular CI does not launch Notepad.
+- A parallel read-only audit confirmed the remaining terminal-safe gap is still real-process evidence, not planner logic: the planner already keeps terminal targets UIA-only, but a future env-gated console helper smoke should prove no `Ctrl+C` / SIGINT is delivered to a live console.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml tests::real_notepad_uia_smoke_reads_selection_when_enabled -- --exact --nocapture`
+- `$env:EASYDICT_WINDOWS_UIA_TEXT_SELECTION_SMOKE='1'; cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml tests::real_notepad_uia_smoke_reads_selection_when_enabled -- --exact --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-text-selection/Cargo.toml --check`
+
+## 2026-06-13: Added real NativeBridge OCR named-event E2E coverage
+
+- Used a parallel worker for the independent NativeBridge slice while the main thread handled MouseSelection. No new runtime dependency was added; the test support stays in `lib/easydict-windows-ipc` behind a `test-support` feature.
+- Exposed a Windows-only `TestNamedEvent` helper for tests, with reset/drain/wait support around the same named-event primitive the app uses.
+- Added a Windows-only app behavior test that spawns the real `easydict-native-bridge.exe`, writes a native-messaging OCR action frame, verifies the success response, and proves the rs-specific `Local\EasydictRs-OcrTranslate` event is signaled. This closes the gap between prior source assertions and the actual binary/event path.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_binary_signals_ocr_translate_event_through_real_binary -- --exact --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-ipc/Cargo.toml tests::signal_named_event_sets_existing_event -- --exact --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-ipc/Cargo.toml --check`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/native_bridge_behavior.rs`
+
+## 2026-06-13: Added a real low-level mouse-selection hook smoke
+
+- Continued the core MouseSelection migration without adding another dependency. The Windows input boundary stays in `lib/easydict-windows-text-selection` on Microsoft's official `windows` crate, because this route needs direct `WH_MOUSE_LL` / `WH_KEYBOARD_LL` message-loop ownership rather than a higher-level automation library.
+- Added an `EASYDICT_WINDOWS_MOUSE_SELECTION_HOOK_SMOKE=1` gated smoke test that installs the real low-level mouse and keyboard hooks, injects benign `SendInput` events with unique `dwExtraInfo`, and verifies the hook channel receives both raw event types. Regular test runs keep the smoke skipped.
+- Re-ran the app-side MouseSelection behavior tests to confirm the real hook boundary still feeds the existing Rust state machine and Quick Translate capture task mapping.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml tests::real_low_level_input_hook_smoke_when_enabled -- --exact --nocapture`
+- `$env:EASYDICT_WINDOWS_MOUSE_SELECTION_HOOK_SMOKE='1'; cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml tests::real_low_level_input_hook_smoke_when_enabled -- --exact --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mouse_selection_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior mouse_selection -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-text-selection/Cargo.toml --check`
+
+## 2026-06-13: Added a Rust portable ZIP size gate
+
+- Added a first-release rs portable size budget check to the `publish-rs-portable` release job. After `validate-rs-portable` succeeds, the workflow now logs the ZIP size and fails if the artifact is 400 MB or larger.
+- Added release-contract coverage so this gate stays attached to the default rs portable release path, not only the hybrid MSIX bundle path.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_zip_has_size_budget_gate -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts -- --exact --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+
+## 2026-06-13: Added a real Windows screen-capture smoke
+
+- Rechecked screenshot library options before changing this slice. `windows-capture` / `scap` are better fits for continuous Windows Graphics Capture/video pipelines, while `screenshots` is a broader cross-platform wrapper. The OCR capture path only needs one-shot BGRA region capture and window enumeration, so the existing lib-owned Microsoft `windows` crate wrapper remains the smallest and most controllable route.
+- Added an opt-in real desktop smoke to `lib/easydict-windows-screen-capture`. With `EASYDICT_WINDOWS_SCREEN_CAPTURE_SMOKE=1`, it captures a 1x1 BGRA pixel through the same `BitBlt` / `GetDIBits` path, verifies the 4-byte pixel file and screen rect, then enumerates visible top-level windows through the same `EnumWindows` path.
+- The smoke skips by default when the env var is unset, so normal CI/developer tests do not require an interactive desktop.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-screen-capture/Cargo.toml -- --nocapture`
+- `$env:EASYDICT_WINDOWS_SCREEN_CAPTURE_SMOKE='1'; cargo test --manifest-path lib/easydict-windows-screen-capture/Cargo.toml real_desktop_capture_and_window_snapshot_smoke_when_env_enabled -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test screen_capture_behavior -- --nocapture`
+
+## 2026-06-13: Verified Collins COBUILD real MDX/MDD corpus
+
+- Used the local Collins COBUILD English Usage MDX/MDD files through `RS_MDICT_TEST_MDX` / `RS_MDICT_TEST_MDD`, without hard-coding the user-machine path into the repository or adding a dependency.
+- Confirmed the real `.mdd` opens through `lib/rs-mdict` as `Encrypted=2` / key-info-only and exposes `\cceu.css`; raw lookup returns the CSS bytes and MIME inference reports `text/css`.
+- Added an app-level env-gated real-corpus test that runs `run_native_mdx_lookup` against the real MDX and companion MDD. The `ability` entry's `<link href="cceu.css">` is rewritten to `data:text/css;base64,...`, proving the product route, not only the parser, handles this real dictionary pair.
+- Updated the `lib/rs-mdict` real-corpus integration tests so lookup/contains/fetch/fuzzy assertions use env-configurable corpus queries. The defaults now match this Collins Usage dictionary (`ability`, `about`, `apply`, `aply -> apply`) instead of assuming demo entries like `hello`, `world`, and `apple`.
+- Tightened the MDX MDD rescan path so newly discovered same-stem/numbered companions are appended without dropping already saved extra MDD paths.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test mdd -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test test_mdx_load -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test test_mdx_info -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test test_mdx_keywords_sample -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `cargo run --manifest-path lib/rs-mdict/Cargo.toml --bin mdict-cli -- <Collins MDX> lookup ability`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior rescan_mdx_mdd_files_preserves_saved_extra_mdd_paths -- --nocapture`
+
+## 2026-06-13: Hid retained worker dedupe behind explicit hybrid profile
+
+- Continued the packaging/tooling boundary cleanup after a read-only subagent audit. No new dependency was added; the existing Rust `easydict_msix_validate` dedupe logic remains the implementation.
+- `easydict_msix_validate dedupe-worker-shared` is no longer listed in default usage, and the command now fails before reading the publish directory unless the caller passes `--runtime-profile hybrid`.
+- `dotnet/scripts/Dedupe-WorkerSharedFiles.ps1` now requires `-RuntimeProfile Hybrid`, rejects omitted/rust-only profiles locally, and forwards `--runtime-profile hybrid` to the Rust CLI. Release workflow, ARM64 smoke, `dotnet/Makefile`, and `package-and-install.ps1` now pass that explicit profile from their already hybrid-gated paths.
+- `rs/README.md` moved the dedupe example under a hybrid/coexistence-only note, so default MSIX validator smoke checks do not advertise retained worker maintenance.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior msix_maintenance_powershell_shims_delegate_to_rust_cli -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile -- --exact --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_msix_validate --check`
+
+## 2026-06-13: Demoted Package-Portable.ps1 from the default rs portable path
+
+- Continued tightening the first rs portable release boundary without adding a dependency. `rs/scripts/Package-Portable.ps1` remains tested as a compatibility wrapper, but the recommended/default source-build and release workflow path now calls `easydict_packager pack-rs-portable` directly.
+- Root README/README_ZH now show `cargo run --manifest-path rs\Cargo.toml -p easydict_packager -- pack-rs-portable --workspace rs ...` as the default portable build command, followed only by a compatibility note for the PowerShell shim.
+- `.github/workflows/release-publish.yml` now builds rs portable ZIPs with `cargo run --manifest-path Cargo.toml -p easydict_packager -- pack-rs-portable --workspace . ...` from the Rust workspace instead of invoking `./scripts/Package-Portable.ps1`.
+- Updated release-contract coverage so default docs/workflow must prefer the direct Rust packager command, while the PowerShell shim-specific tests still prove it forces/restores rust-only runtime profile env when used explicitly.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_path_forces_rust_only_runtime_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior root_readmes_build_from_source_default_to_rs_portable_before_legacy_dotnet -- --exact --nocapture`
+
+## 2026-06-13: Re-verified Rust-native MDD resource support
+
+- Confirmed the MDD path is core-complete for the first rs portable target without adding another dependency: the in-tree `lib/rs-mdict` reader handles plain and zlib MDD resources, record-encrypted resources through a caller-provided key-header transform, header-aware resource-key lookup, cross-record raw bytes, and resource MIME metadata.
+- Confirmed the product route supplies that transform from the app-side MDX dictionary snapshot when credentials are present, then uses the same Rust-native MDD readers for companion discovery, first-hit resource lookup, HTML `data:` URL inlining, and Quick Translate `rawHtml` gating.
+- `Mdd::new()` remains a low-level parser constructor; encrypted companion resources in the app route through `RsMdictMddReaderFactory`, so the credential algorithm stays in `easydict_app::mdx_native` next to MDX credential derivation.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --lib mdd -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --lib record -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --lib normalize_mdict_key_for_lookup_applies_strip_and_case_flags -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+
+## 2026-06-13: Blocked cmd.exe shell trampolines in runtime command guards
+
+- Continued the default rs external-process boundary hardening after a read-only subagent audit. No new dependency was added; this stays in the shared `lib/easydict-runtime-guards` classifier used by Foundry Local CLI overrides and bundled helper launch guards.
+- `command_target_is_retained_runtime_or_script_marker(...)` now parses the command head before path normalization, so `cmd /c dotnet.exe`, `cmd.exe /c powershell.exe`, and quoted `C:\Windows\System32\cmd.exe ...` are rejected before any spawn attempt. Legitimate native shims such as `foundry.cmd` remain allowed.
+- Added CLI coverage proving `EASYDICT_FOUNDRY_LOCAL_CLI="cmd /c dotnet.exe"` fails locally in the default `windows-local-ai` CLI route without falling through to retained worker/CompatHost probing.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml command_target_classifier -- --nocapture`
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml cli_executable_override_rejects_retained_dotnet_runtime_commands -- --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml bundled_executable_name_rejects_retained_runtime_and_script_helpers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test cli_translate_behavior auto_local_ai_cli_rejects_foundry_cli_override_targeting_cmd_trampoline_before_spawn -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --exact --nocapture`
+- `cargo fmt --manifest-path lib/easydict-runtime-guards/Cargo.toml --check`
+- `cargo fmt --manifest-path lib/easydict-foundry-local/Cargo.toml --check`
+- `cargo fmt --manifest-path lib/easydict-windows-shell/Cargo.toml --check`
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test cli_translate_behavior foundry_cli_override_targeting -- --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml bundled_executable_name -- --nocapture`
+
+## 2026-06-13: Added an opt-in Notepad text insertion smoke
+
+- Continued the TextInsertion verification gap without touching UI or WinFluent. No new dependency was added; the smoke uses the existing `lib/easydict-windows-text-selection` Win32 foreground/clipboard/SendInput helpers.
+- Added an `EASYDICT_WINDOWS_TEXT_INSERTION_NOTEPAD_SMOKE=1` gated smoke test that launches Notepad, captures the real foreground insertion target, inserts text through the same clipboard + `Ctrl+V` path, then verifies the result with `Ctrl+A` / `Ctrl+C`. The test restores the previous clipboard and kills the smoke Notepad process instead of relying on localized save prompts.
+- Regular test runs keep this smoke skipped, so CI stays non-interactive while Windows manual/E2E runs have a concrete Notepad verification entry.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-text-selection/Cargo.toml --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app text_insertion --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Rejected linked bundled helper targets before launch
+
+- Continued the default external-process boundary hardening in `lib/easydict-windows-shell`. No new library was added; the crate only needs `std::fs::symlink_metadata` plus the existing Windows file-attribute check for reparse points.
+- `run_bundled_executable(...)` now validates the resolved helper target before `Command::new(...)`: the target must be a regular non-link file, and symlinks, Windows reparse points, directories, missing paths, and other non-file targets fail locally.
+- This complements the earlier helper-name guard and mirrors the rs portable packaging policy at runtime for Browser Support helper launches.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-shell/Cargo.toml --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior browser_support -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Reused runtime guards for bundled helper launches
+
+- Followed the subagent audit on the next non-UI runtime boundary. No new dependency was needed: `lib/easydict-windows-shell` already depends on `lib/easydict-runtime-guards`, and the shared command-target classifier is the right policy owner.
+- Tightened bundled helper validation from the narrower retained path-component check to `command_target_is_retained_runtime_or_script_marker(...)`. This keeps `easydict_browser_registrar.exe` and other Rust helper names allowed, while also rejecting `.ps1`, `hostfxr.dll`, `System.Private.CoreLib.dll`, `*.runtimeconfig.json`, and other retained runtime/script targets before `Command::new(...)`.
+- This closes a default rs runtime launch surface used by Browser Support install/uninstall without reintroducing WinFluent `Task::RunBundledExecutable` or legacy helper aliases.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml bundled_executable_name -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-shell/Cargo.toml --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Matched TTS restart semantics with SAPI purge
+
+- Rechecked the native API before adding another dependency. Microsoft SAPI already documents async `ISpVoice::Speak` plus `SPF_PURGEBEFORESPEAK` for interrupting current output, so the existing `windows` crate wrapper remains the best fit.
+- `lib/easydict-windows-tts` now assigns each speech request a generation. Starting a newer request marks older playback sessions stale; older worker threads poll the SAPI completion event and purge their own voice with `SPF_PURGEBEFORESPEAK` before exiting.
+- This keeps the app-facing TTS task fire-and-forget, while moving closer to the .NET service behavior where `SpeakAsync` stops any current playback before starting the next item.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-tts/Cargo.toml -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-tts/Cargo.toml --check`
+- `rustfmt --edition 2021 --check lib/easydict-windows-tts/src/lib.rs rs/crates/easydict_app/src/tts.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app tts --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior speak -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Wired Rust-native TTS speed into SAPI playback
+
+- Rechecked the TTS backend choice before changing code. No new third-party dependency is needed: the existing `lib/easydict-windows-tts` wrapper can use Microsoft's official `windows` crate and SAPI `ISpVoice::SetRate`, while avoiding the old WinFluent PowerShell / `System.Speech` path.
+- `easydict_app::tts` now parses the active settings `TtsSpeed` value with the same effective bounds as the .NET service (`0.5..3.0`), and both result Speak actions and `AutoPlayTranslation` pass that speed into the Rust-owned TTS task.
+- `lib/easydict-windows-tts` maps the clamped speaking-rate multiplier to SAPI's `-10..10` rate adjustment before scheduling async playback, so speed, language voice selection, startup error reporting, and background playback are all handled in the Rust-native library boundary.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-tts/Cargo.toml -- --nocapture`
+- `rustfmt --edition 2021 --check lib/easydict-windows-tts/src/lib.rs rs/crates/easydict_app/src/tts.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app tts --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior speak -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check` remains blocked by unrelated parallel formatting changes in `rs/crates/easydict_app/src/ui.rs`, `tests/quick_translate_behavior.rs`, and `tests/ui_contract.rs`.
+
+## 2026-06-13: Hardened Rust-native Windows TTS startup reporting
+
+- Rechecked reusable Rust TTS options before changing code. The broad `tts` crate remains more abstraction than the first rs portable needs, while `sapi-lite` wraps only part of SAPI; the existing in-tree wrapper under `lib/easydict-windows-tts` stays on Microsoft's official `windows` crate for direct SAPI access.
+- The Windows TTS helper now starts SAPI playback on a background thread but waits for a startup handshake before returning. COM initialization, SAPI voice setup, language-specific voice enumeration, and `ISpVoice::Speak` scheduling failures are no longer swallowed by the helper thread.
+- Switched the SAPI call to async speak and keep the voice alive on the worker thread with `WaitUntilDone`, so app-side Speak actions still do not wait for the full audio playback.
+- Added an opt-in `EASYDICT_WINDOWS_TTS_SMOKE=1` real SAPI smoke test for manual Windows verification; regular test runs skip it.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-tts/Cargo.toml -- --nocapture`
+- `cargo fmt --manifest-path lib/easydict-windows-tts/Cargo.toml --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app tts --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior speak -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check` remains blocked by unrelated parallel UI formatting in `rs/crates/easydict_app/tests/ui_contract.rs`.
+
+## 2026-06-13: Added a real Win32 text selection/insertion smoke and fixed clipboard unlock semantics
+
+- No new dependency was added. The Windows backend continues to use the official `windows` crate inside `lib/easydict-windows-text-selection`.
+- Added an `EASYDICT_WINDOWS_TEXT_SELECTION_SMOKE=1` gated smoke test that creates a temporary Win32 `EDIT` control, selects text, exercises the real foreground + `Ctrl+C` clipboard fallback, then captures the foreground target and inserts replacement text via the real clipboard + `Ctrl+V` path. The smoke restores the user's clipboard afterward.
+- The smoke exposed a real Win32 edge case in our clipboard helper: `GlobalUnlock` returns zero when the lock count reaches zero and only indicates failure if `GetLastError()` is non-zero. The wrapper now handles that documented NO_ERROR success case for both clipboard reads and writes.
+- The same pass made foreground activation more robust by attaching to the current foreground thread before `SetForegroundWindow`, while preserving external app child focus and only restoring direct focus for same-thread helper/smoke windows.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml -- --nocapture`
+- `$env:EASYDICT_WINDOWS_TEXT_SELECTION_SMOKE='1'; cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml real_edit_control_smoke -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app text_insertion --lib -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
 ## 2026-06-13: Wired Rust Mouse Selection into the default app runtime
 
 - No new dependency was needed. The existing `lib/easydict-windows-text-selection` low-level hook wrapper now feeds an app-owned Rust stream, keeping unsafe Win32 hook code under `lib/`.
@@ -459,7 +790,7 @@ Validation:
 - `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior clipboard -- --nocapture`
 - `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_update_result_actions_emit_rust_owned_side_effect_tasks -- --nocapture`
 - `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior tray_commands_route_to_existing_desktop_actions -- --nocapture`
-- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior silent_ocr_outcome_writes_text_to_clipboard -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior silent_ocr_outcome_uses_rust_clipboard_task -- --nocapture`
 
 ## 2026-06-13: Reconfirmed Rust MDD support for the core MDX route
 

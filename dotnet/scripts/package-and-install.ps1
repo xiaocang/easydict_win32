@@ -112,7 +112,9 @@ try {
             -p:WindowsAppSDKSelfContained=false
         if ($LASTEXITCODE -ne 0) { throw "LocalAI worker publish failed" }
 
-        & "$scriptDir/Dedupe-WorkerSharedFiles.ps1" -PublishDir $publishDir
+        & "$scriptDir/Dedupe-WorkerSharedFiles.ps1" `
+            -PublishDir $publishDir `
+            -RuntimeProfile $RuntimeProfile
         & "$scriptDir/Extract-DotnetRuntime.ps1" `
             -Rid "win-$Platform" `
             -OutputDir "$publishDir/dotnet" `

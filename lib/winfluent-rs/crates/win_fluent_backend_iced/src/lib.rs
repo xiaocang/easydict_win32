@@ -3757,14 +3757,19 @@ where
         text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
     }
 
-    let mut trailing = iced_row(Vec::new()).spacing(8);
+    let has_expander_toggle = token.action.kind() == ActionKind::BoolInput;
+    let mut trailing = iced_row(Vec::new()).spacing(expander_header_trailing_spacing(
+        !token.trailing.is_empty(),
+        has_expander_toggle,
+    ));
     for child in &token.trailing {
         trailing = trailing.push(compile_view_with_text_editors_and_visual(
             child, provider, visual,
         ));
     }
 
-    if token.action.kind() == ActionKind::BoolInput {
+    let mut toggle_message = None;
+    if has_expander_toggle {
         let icon = win_fluent::IconToken::with_glyph(
             "expander-chevron",
             if token.expanded {
@@ -3775,29 +3780,16 @@ where
         );
         let action = token.action.clone();
         let next_expanded = !token.expanded;
-        let expand_button = iced_button(button_content(
-            "",
-            ButtonKind::Icon,
-            Some(&icon),
-            None,
-            visual,
-            false,
-        ))
-        .width(IcedLength::Fixed(32.0))
-        .height(IcedLength::Fixed(32.0))
-        .padding(0)
-        .style(move |_, status| button_style(visual, ButtonKind::Icon, status))
-        .on_press(
+        toggle_message = Some(
             action
                 .input_bool(next_expanded)
                 .expect("expander action must produce a message"),
         );
-        trailing = trailing.push(expand_button);
+        trailing = trailing.push(expander_chevron_element(&icon, visual));
     }
 
-    let has_header_controls =
-        !token.trailing.is_empty() || token.action.kind() == ActionKind::BoolInput;
-    let header = if has_header_controls {
+    let has_header_controls = !token.trailing.is_empty() || has_expander_toggle;
+    let header_content: IcedElement<'a, Message> = if has_header_controls {
         iced_row(vec![
             text_column.width(IcedLength::Fill).into(),
             trailing.into(),
@@ -3805,18 +3797,36 @@ where
         .spacing(12)
         .width(IcedLength::Fill)
         .align_y(alignment::Vertical::Center)
+        .into()
     } else {
         iced_row(vec![text_column.width(IcedLength::Fill).into()])
             .spacing(12)
             .width(IcedLength::Fill)
             .align_y(alignment::Vertical::Center)
+            .into()
     };
 
-    let header = iced_container(header)
-        .padding([8, 16])
-        .width(IcedLength::Fill);
+    let header_state = token.header_state.clone();
+    let header: IcedElement<'a, Message> = if let Some(message) = toggle_message {
+        iced_button(header_content)
+            .padding([8, 16])
+            .width(IcedLength::Fill)
+            .style(move |_, status| {
+                expander_header_button_style(
+                    visual,
+                    button_status_with_state(&header_state, status),
+                )
+            })
+            .on_press(message)
+            .into()
+    } else {
+        iced_container(header_content)
+            .padding([8, 16])
+            .width(IcedLength::Fill)
+            .into()
+    };
 
-    let mut layout = iced_column(vec![header.into()])
+    let mut layout = iced_column(vec![header])
         .spacing(0)
         .width(IcedLength::Fill);
 
@@ -3846,6 +3856,54 @@ where
         .width(IcedLength::Fill)
         .style(move |_| expander_container_style_with_state(visual, &token.header_state))
         .into()
+}
+
+fn expander_chevron_element<'a, Message>(
+    icon: &win_fluent::IconToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    iced_container(icon_element(
+        icon,
+        button_icon_size(ButtonKind::Icon),
+        visual.text_primary,
+    ))
+    .width(IcedLength::Fixed(32.0))
+    .height(IcedLength::Fixed(32.0))
+    .align_x(alignment::Horizontal::Center)
+    .align_y(alignment::Vertical::Center)
+    .into()
+}
+
+fn expander_header_button_style(
+    visual: IcedVisualTheme,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
+    let background = match status {
+        iced::widget::button::Status::Hovered => visual.button_hover,
+        iced::widget::button::Status::Pressed => visual.button_pressed,
+        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => {
+            expander_background_color(visual)
+        }
+    };
+
+    iced::widget::button::Style {
+        background: Some(Background::Color(background)),
+        text_color: visual.text_primary,
+        border: control_border_with_radius(Color::TRANSPARENT, 0.0, visual.radius_control),
+        shadow: Shadow::default(),
+        ..iced::widget::button::Style::default()
+    }
+}
+
+fn expander_header_trailing_spacing(has_trailing: bool, has_toggle: bool) -> u32 {
+    if has_trailing && has_toggle {
+        20
+    } else {
+        8
+    }
 }
 
 fn compile_settings_row<'a, Message, Provider>(
@@ -5553,6 +5611,10 @@ fn text_font_for_value(style: TextStyle, value: &str) -> Font {
         font.family = icon_font().family;
         return font;
     }
+    if is_status_symbol_text(value) {
+        font.family = font::Family::Name("Segoe UI Emoji");
+        return font;
+    }
     if contains_cjk(value) {
         font.family = font::Family::Name("Microsoft YaHei UI");
         if matches!(
@@ -5577,6 +5639,10 @@ fn is_private_use_icon_text(value: &str) -> bool {
         && trimmed
             .chars()
             .all(|ch| ('\u{E000}'..='\u{F8FF}').contains(&ch))
+}
+
+fn is_status_symbol_text(value: &str) -> bool {
+    matches!(value.trim(), "✓" | "✔" | "⚠")
 }
 
 fn icon_font() -> Font {
@@ -6908,9 +6974,19 @@ fn expander_container_style_with_state(
     };
 
     iced::widget::container::Style::default()
-        .background(expander_background_color(visual))
+        .background(expander_background_color_with_state(visual, state))
         .color(visual.text_primary)
         .border(control_border(visual, border_color, visual.stroke_control))
+}
+
+fn expander_background_color_with_state(visual: IcedVisualTheme, state: &ControlState) -> Color {
+    if state.pressed {
+        visual.button_pressed
+    } else if state.hovered {
+        visual.button_hover
+    } else {
+        expander_background_color(visual)
+    }
 }
 
 fn expander_background_color(visual: IcedVisualTheme) -> Color {
@@ -6922,11 +6998,7 @@ fn expander_background_color(visual: IcedVisualTheme) -> Color {
 }
 
 fn expander_border_color(visual: IcedVisualTheme) -> Color {
-    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
-        visual.border
-    } else {
-        Color::from_rgb8(232, 234, 237)
-    }
+    visual.border
 }
 
 fn is_light_surface(color: Color) -> bool {
@@ -7944,6 +8016,31 @@ mod tests {
     }
 
     #[test]
+    fn status_symbols_use_windows_emoji_font_for_winui_badges() {
+        let warning_font = text_font_for_value(TextStyle::Warning, "⚠");
+        assert_eq!(
+            warning_font.family,
+            Font::with_name("Segoe UI Emoji").family
+        );
+        assert_eq!(warning_font.weight, font::Weight::Semibold);
+
+        let success_font = text_font_for_value(TextStyle::Success, "✓");
+        assert_eq!(
+            success_font.family,
+            Font::with_name("Segoe UI Emoji").family
+        );
+        assert_eq!(success_font.weight, font::Weight::Semibold);
+    }
+
+    #[test]
+    fn expander_status_spacing_matches_winui_header_grid() {
+        assert_eq!(expander_header_trailing_spacing(false, false), 8);
+        assert_eq!(expander_header_trailing_spacing(false, true), 8);
+        assert_eq!(expander_header_trailing_spacing(true, false), 8);
+        assert_eq!(expander_header_trailing_spacing(true, true), 20);
+    }
+
+    #[test]
     fn maps_visual_theme_to_iced_page_button_and_input_styles() {
         let theme = ThemeTokens::fluent_light();
         let visual = IcedVisualTheme::from_tokens(&theme);
@@ -8130,19 +8227,29 @@ mod tests {
             optional_background_color(expander_active.background),
             iced::Color::from_rgb8(253, 253, 254)
         );
-        assert_eq!(
-            expander_active.border.color,
-            iced::Color::from_rgb8(232, 234, 237)
-        );
+        assert_eq!(expander_active.border.color, iced_color(theme.border));
         assert_eq!(expander_active.border.width, theme.stroke.control);
         assert_eq!(
             optional_background_color(expander_hover.background),
-            optional_background_color(expander_active.background)
+            iced_color(theme.button_hover)
         );
         assert_eq!(
             optional_background_color(expander_pressed.background),
-            optional_background_color(expander_active.background)
+            iced_color(theme.button_pressed)
         );
+        let expander_header_hover =
+            expander_header_button_style(visual, iced::widget::button::Status::Hovered);
+        let expander_header_pressed =
+            expander_header_button_style(visual, iced::widget::button::Status::Pressed);
+        assert_eq!(
+            optional_background_color(expander_header_hover.background),
+            iced_color(theme.button_hover)
+        );
+        assert_eq!(
+            optional_background_color(expander_header_pressed.background),
+            iced_color(theme.button_pressed)
+        );
+        assert_eq!(expander_header_hover.border.width, 0.0);
         let expander_content = expander_content_container_style(visual);
         assert_eq!(
             optional_background_color(expander_content.background),
@@ -8151,7 +8258,7 @@ mod tests {
         let expander_content_divider = expander_content_divider_style(visual);
         assert_eq!(
             optional_background_color(expander_content_divider.background),
-            iced::Color::from_rgb8(232, 234, 237)
+            iced_color(theme.border)
         );
 
         let divider = utility_container_style(&FluentStyle::from_classes("bg-border"), visual);

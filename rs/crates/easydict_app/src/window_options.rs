@@ -29,7 +29,7 @@ pub fn main_window_options_for_settings(settings: &SettingsState) -> WindowOptio
 
 pub fn settings_window_options() -> WindowOptions {
     WindowOptions::new("settings", "Easydict Settings")
-        .size(846.0, 913.0)
+        .size(846.0, 900.0)
         .min_size(760.0, 620.0)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)

@@ -1,14 +1,19 @@
 use easydict_app::mouse_selection::EASYDICT_SYNTHETIC_KEY;
 use easydict_app::text_selection::{
-    build_text_selection_plan, clipboard_restore_required, finalize_text_selection_attempts,
-    is_electron_process_name, is_terminal_process_name, normalize_process_name,
-    synthetic_ctrl_c_input_plan, AttemptOutcome, ClipWaitResult, ClipWaitState, ClipboardProbe,
-    ClipboardSelectionResult, TextSelectionAttempt, TextSelectionAttemptResult,
-    TextSelectionBackend, TextSelectionBackendError, TextSelectionFinalOutcome, TextSelectionPlan,
-    TextSelectionSuppressionTracker, TextSelectionTarget, ELECTRON_CLIPBOARD_TIMEOUT_MS,
-    NON_TEXT_FAILURE_THRESHOLD, STANDARD_CLIPBOARD_TIMEOUT_MS, SUPPRESSION_WINDOW_MS, VK_C,
-    VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    build_text_selection_plan, capture_native_selected_text, clipboard_restore_required,
+    finalize_text_selection_attempts, is_electron_process_name, is_terminal_process_name,
+    normalize_process_name, synthetic_ctrl_c_input_plan, AttemptOutcome, ClipWaitResult,
+    ClipWaitState, ClipboardProbe, ClipboardSelectionResult, TextSelectionAttempt,
+    TextSelectionAttemptResult, TextSelectionBackend, TextSelectionBackendError,
+    TextSelectionFinalOutcome, TextSelectionPlan, TextSelectionSuppressionTracker,
+    TextSelectionTarget, ELECTRON_CLIPBOARD_TIMEOUT_MS, NON_TEXT_FAILURE_THRESHOLD,
+    STANDARD_CLIPBOARD_TIMEOUT_MS, SUPPRESSION_WINDOW_MS, VK_C, VK_CONTROL, VK_LWIN, VK_MENU,
+    VK_RWIN, VK_SHIFT,
 };
+
+#[cfg(windows)]
+static TERMINAL_SMOKE_CTRL_EVENT_MARKER: std::sync::OnceLock<std::path::PathBuf> =
+    std::sync::OnceLock::new();
 
 #[test]
 fn process_name_normalization_matches_dotnet_terminal_aliases() {
@@ -489,6 +494,119 @@ fn capture_backend_keeps_terminal_uia_only_without_clipboard_fallback() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn terminal_text_selection_does_not_send_ctrl_c_to_console_when_enabled() {
+    if !windows_terminal_text_selection_smoke_enabled() {
+        return;
+    }
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "easydict-terminal-selection-smoke-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::create_dir_all(&temp_dir).expect("terminal smoke temp dir");
+    let helper_exe = temp_dir.join("pwsh.exe");
+    std::fs::copy(
+        std::env::current_exe().expect("current test exe"),
+        &helper_exe,
+    )
+    .expect("copy terminal smoke helper");
+
+    let ready_marker = temp_dir.join("ready.txt");
+    let hwnd_marker = temp_dir.join("hwnd.txt");
+    let ctrl_event_marker = temp_dir.join("ctrl-event.txt");
+    let stop_marker = temp_dir.join("stop.txt");
+
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    let mut command = std::process::Command::new(&helper_exe);
+    command
+        .arg("--exact")
+        .arg("terminal_text_selection_console_helper_child")
+        .arg("--ignored")
+        .arg("--nocapture")
+        .env("EASYDICT_WINDOWS_TERMINAL_TEXT_SELECTION_SMOKE_CHILD", "1")
+        .env("EASYDICT_TERMINAL_SMOKE_READY", &ready_marker)
+        .env("EASYDICT_TERMINAL_SMOKE_HWND", &hwnd_marker)
+        .env("EASYDICT_TERMINAL_SMOKE_CTRL_EVENT", &ctrl_event_marker)
+        .env("EASYDICT_TERMINAL_SMOKE_STOP", &stop_marker);
+
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(CREATE_NEW_CONSOLE);
+    let child = command.spawn().expect("terminal smoke helper should start");
+    let mut helper = TerminalSmokeChild::new(child, stop_marker, temp_dir);
+
+    assert!(
+        wait_for_file(&ready_marker, std::time::Duration::from_secs(5)),
+        "terminal smoke helper should become ready"
+    );
+    let hwnd = wait_for_hwnd_marker(&hwnd_marker, std::time::Duration::from_secs(5))
+        .expect("terminal smoke helper should publish console HWND");
+    focus_terminal_smoke_window(hwnd);
+
+    let selected = capture_native_selected_text();
+    assert!(
+        selected.is_none(),
+        "terminal smoke does not need selected text, but must not use clipboard fallback"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    assert!(
+        !ctrl_event_marker.exists(),
+        "terminal smoke helper should not receive Ctrl+C/SIGINT"
+    );
+    assert!(
+        helper.is_running(),
+        "terminal smoke helper should still be running after capture"
+    );
+
+    helper.shutdown();
+}
+
+#[cfg(windows)]
+#[ignore = "spawned as a helper by terminal_text_selection_does_not_send_ctrl_c_to_console_when_enabled"]
+#[test]
+fn terminal_text_selection_console_helper_child() {
+    if std::env::var("EASYDICT_WINDOWS_TERMINAL_TEXT_SELECTION_SMOKE_CHILD").as_deref() != Ok("1") {
+        return;
+    }
+
+    let ready_marker = std::path::PathBuf::from(
+        std::env::var_os("EASYDICT_TERMINAL_SMOKE_READY").expect("ready marker env"),
+    );
+    let hwnd_marker = std::path::PathBuf::from(
+        std::env::var_os("EASYDICT_TERMINAL_SMOKE_HWND").expect("hwnd marker env"),
+    );
+    let ctrl_event_marker = std::path::PathBuf::from(
+        std::env::var_os("EASYDICT_TERMINAL_SMOKE_CTRL_EVENT").expect("ctrl marker env"),
+    );
+    let stop_marker = std::path::PathBuf::from(
+        std::env::var_os("EASYDICT_TERMINAL_SMOKE_STOP").expect("stop marker env"),
+    );
+
+    let _ = TERMINAL_SMOKE_CTRL_EVENT_MARKER.set(ctrl_event_marker);
+    unsafe {
+        windows::Win32::System::Console::SetConsoleCtrlHandler(
+            Some(terminal_smoke_ctrl_handler),
+            true,
+        )
+        .expect("terminal smoke Ctrl handler should install");
+    }
+
+    let hwnd = unsafe { windows::Win32::System::Console::GetConsoleWindow() };
+    std::fs::write(&hwnd_marker, format!("{}", hwnd.0 as isize)).expect("write HWND marker");
+    std::fs::write(&ready_marker, b"ready").expect("write ready marker");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while std::time::Instant::now() < deadline {
+        if stop_marker.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 #[test]
 fn capture_backend_records_non_text_clipboard_suppression_for_regular_apps() {
     let mut suppression = TextSelectionSuppressionTracker::new();
@@ -518,6 +636,130 @@ fn capture_backend_records_non_text_clipboard_suppression_for_regular_apps() {
         false,
         false
     ));
+}
+
+#[cfg(windows)]
+fn windows_terminal_text_selection_smoke_enabled() -> bool {
+    std::env::var("EASYDICT_WINDOWS_TERMINAL_TEXT_SELECTION_SMOKE")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn wait_for_file(path: &std::path::Path, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if path.exists() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    false
+}
+
+#[cfg(windows)]
+fn wait_for_hwnd_marker(path: &std::path::Path, timeout: std::time::Duration) -> Option<isize> {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if let Ok(value) = std::fs::read_to_string(path) {
+            if let Ok(hwnd) = value.trim().parse::<isize>() {
+                if hwnd != 0 {
+                    return Some(hwnd);
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    None
+}
+
+#[cfg(windows)]
+fn focus_terminal_smoke_window(hwnd: isize) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+
+    let hwnd = HWND(hwnd as *mut std::ffi::c_void);
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_RESTORE);
+        let _ = BringWindowToTop(hwnd);
+        let _ = SetForegroundWindow(hwnd);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn terminal_smoke_ctrl_handler(ctrl_type: u32) -> windows::core::BOOL {
+    if ctrl_type == windows::Win32::System::Console::CTRL_C_EVENT {
+        if let Some(path) = TERMINAL_SMOKE_CTRL_EVENT_MARKER.get() {
+            let _ = std::fs::write(path, b"ctrl-c");
+        }
+        return windows::core::BOOL(1);
+    }
+
+    windows::core::BOOL(0)
+}
+
+#[cfg(windows)]
+struct TerminalSmokeChild {
+    child: std::process::Child,
+    stop_marker: std::path::PathBuf,
+    temp_dir: std::path::PathBuf,
+    shutdown: bool,
+}
+
+#[cfg(windows)]
+impl TerminalSmokeChild {
+    fn new(
+        child: std::process::Child,
+        stop_marker: std::path::PathBuf,
+        temp_dir: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            child,
+            stop_marker,
+            temp_dir,
+            shutdown: false,
+        }
+    }
+
+    fn is_running(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+
+    fn shutdown(&mut self) {
+        if self.shutdown {
+            return;
+        }
+
+        let _ = std::fs::write(&self.stop_marker, b"stop");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while std::time::Instant::now() < deadline {
+            if !self.is_running() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        if self.is_running() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+        let _ = std::fs::remove_dir_all(&self.temp_dir);
+        self.shutdown = true;
+    }
+}
+
+#[cfg(windows)]
+impl Drop for TerminalSmokeChild {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

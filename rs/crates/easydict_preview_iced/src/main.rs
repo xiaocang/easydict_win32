@@ -97,7 +97,7 @@ fn preview_window_options() -> WindowOptions {
 
     let settings_preview = preview_settings_open();
     let (default_width, default_height) = if settings_preview {
-        (846.0, 913.0)
+        (846.0, 900.0)
     } else {
         (
             MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
@@ -375,7 +375,7 @@ mod tests {
 
         assert_eq!(options.id.as_str(), "settings");
         assert_eq!(options.width, 846.0);
-        assert_eq!(options.height, 913.0);
+        assert_eq!(options.height, 900.0);
         assert_eq!(options.min_width, Some(760.0));
         assert_eq!(options.min_height, Some(620.0));
     }
@@ -454,7 +454,7 @@ mod tests {
         let (app, _) = PreviewApp::new(state);
 
         assert!(app.tray_menu().is_some());
-        assert_eq!(app.named_events().len(), 1);
+        assert!(app.named_events().is_empty());
         assert_eq!(app.shell_verbs().len(), 1);
         assert_eq!(app.protocol_registrations().len(), 1);
         assert!(matches!(app.subscription(), Subscription::Batch(_)));
@@ -470,7 +470,7 @@ mod tests {
         let plan = RuntimePlan::<PreviewApp>::new(state);
 
         assert!(plan.desktop_integration.has_entries());
-        assert_eq!(plan.desktop_integration.named_events.len(), 1);
+        assert!(plan.desktop_integration.named_events.is_empty());
         assert_eq!(plan.desktop_integration.shell_verbs.len(), 1);
         assert_eq!(plan.desktop_integration.protocol_registrations.len(), 1);
     }

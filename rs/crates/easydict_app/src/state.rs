@@ -997,6 +997,7 @@ pub struct SettingsState {
     pub import_mdx_button_state: ControlState,
     pub international_services_toggle_state: ControlState,
     pub deepl_service_expander_state: ControlState,
+    pub service_expander_states: HashMap<String, ControlState>,
     pub auto_select_target_language: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
@@ -1123,6 +1124,7 @@ impl Default for SettingsState {
             import_mdx_button_state: ControlState::default(),
             international_services_toggle_state: ControlState::default(),
             deepl_service_expander_state: ControlState::default(),
+            service_expander_states: HashMap::new(),
             auto_select_target_language: true,
             minimize_to_tray: true,
             start_minimized: false,
@@ -1597,6 +1599,13 @@ impl EasydictUiState {
             apply_preview_imported_mdx_dictionary(&mut state.settings);
             settings_seed_changed = true;
         }
+        if std::env::var("EASYDICT_PREVIEW_SETTINGS_OLLAMA_MODEL_EMPTY")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.settings.ollama_model.clear();
+            settings_seed_changed = true;
+        }
         if settings_seed_changed {
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
@@ -1654,7 +1663,32 @@ impl EasydictUiState {
                 preview_control_state_from_id(&value);
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE") {
-            state.settings.deepl_service_expander_state = preview_control_state_from_id(&value);
+            let control_state = preview_control_state_from_id(&value);
+            state.settings.deepl_service_expander_state = control_state.clone();
+            state
+                .settings
+                .service_expander_states
+                .insert("deepl".to_string(), control_state);
+        }
+        if let (Ok(service_id), Ok(value)) = (
+            std::env::var("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_ID"),
+            std::env::var("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATE"),
+        ) {
+            let service_id = service_id.trim();
+            if !service_id.is_empty() {
+                state.settings.service_expander_states.insert(
+                    service_id.to_string(),
+                    preview_control_state_from_id(&value),
+                );
+            }
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATES") {
+            for (service_id, state_id) in preview_service_expander_state_pairs(&value) {
+                state.settings.service_expander_states.insert(
+                    service_id.to_string(),
+                    preview_control_state_from_id(state_id),
+                );
+            }
         }
         if let Ok(value) =
             std::env::var("EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS")
@@ -1682,6 +1716,12 @@ impl EasydictUiState {
             state.settings.local_ai_provider = provider;
             state.settings.local_ai_status =
                 local_ai_provider_status(&state.settings.local_ai_provider).to_string();
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS") {
+            let value = value.trim();
+            if !value.is_empty() {
+                state.settings.local_ai_status = value.to_string();
+            }
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_CAPTURE_OVERLAY_STATE") {
             apply_capture_overlay_preview(&mut state, &value);
@@ -3763,13 +3803,27 @@ fn rescan_mdx_mdd_files(settings: &mut SettingsState, service_id: &str) -> bool 
         return false;
     };
 
-    let discovered = discover_mdd_file_paths(&dictionary.file_path);
-    if dictionary.mdd_file_paths == discovered {
+    let mut merged = dictionary.mdd_file_paths.clone();
+    for discovered in discover_mdd_file_paths(&dictionary.file_path) {
+        let discovered_key = mdx_mdd_path_key(&discovered);
+        if !merged
+            .iter()
+            .any(|existing| mdx_mdd_path_key(existing) == discovered_key)
+        {
+            merged.push(discovered);
+        }
+    }
+
+    if dictionary.mdd_file_paths == merged {
         return false;
     }
 
-    dictionary.mdd_file_paths = discovered;
+    dictionary.mdd_file_paths = merged;
     true
+}
+
+fn mdx_mdd_path_key(path: &str) -> String {
+    path.trim().to_ascii_lowercase()
 }
 
 fn remove_mdx_dictionary(state: &mut EasydictUiState, service_id: &str) -> bool {
@@ -4205,6 +4259,17 @@ pub fn preview_control_state_from_id(value: &str) -> ControlState {
         "disabled" => ControlState::default().disabled(),
         _ => ControlState::default(),
     }
+}
+
+fn preview_service_expander_state_pairs(value: &str) -> impl Iterator<Item = (&str, &str)> {
+    value.split(',').filter_map(|entry| {
+        let (service_id, state_id) = entry.split_once('=').or_else(|| entry.split_once(':'))?;
+        let service_id = service_id.trim();
+        if service_id.is_empty() {
+            return None;
+        }
+        Some((service_id, state_id.trim()))
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

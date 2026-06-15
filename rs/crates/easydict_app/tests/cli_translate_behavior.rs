@@ -3410,6 +3410,48 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_dotnet_cmd_before_sp
 }
 
 #[test]
+fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_cmd_trampoline_before_spawn() {
+    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-cmd-trampoline-app");
+    let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-cmd-trampoline-settings");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, "cmd /c dotnet.exe")
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("retained runtime/worker"),
+        "cmd trampoline should be rejected by the retained runtime guard:\n{stderr}"
+    );
+    assert!(stderr.contains("cmd /c dotnet.exe"));
+    assert!(!stderr.contains("Local AI worker executable not found"));
+    assert!(!stderr.to_ascii_lowercase().contains("compat host"));
+
+    let _ = fs::remove_dir_all(app_dir);
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
 fn local_ai_cli_env_overrides_provider_and_openvino_cache_dir_before_worker_lookup() {
     let work_dir = unique_temp_dir("easydict-cli-openvino-env");
     let settings_dir = work_dir.join("settings");

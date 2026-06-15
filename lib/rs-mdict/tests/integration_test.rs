@@ -7,6 +7,17 @@ use rust_mdict::{Mdd, Mdx};
 
 const MDX_ENV: &str = "RS_MDICT_TEST_MDX";
 const MDD_ENV: &str = "RS_MDICT_TEST_MDD";
+const QUERY_ENV: &str = "RS_MDICT_TEST_QUERY";
+const SECOND_QUERY_ENV: &str = "RS_MDICT_TEST_SECOND_QUERY";
+const THIRD_QUERY_ENV: &str = "RS_MDICT_TEST_THIRD_QUERY";
+const FUZZY_QUERY_ENV: &str = "RS_MDICT_TEST_FUZZY_QUERY";
+const FUZZY_EXPECTED_ENV: &str = "RS_MDICT_TEST_FUZZY_EXPECTED";
+
+const DEFAULT_QUERY: &str = "ability";
+const DEFAULT_SECOND_QUERY: &str = "about";
+const DEFAULT_THIRD_QUERY: &str = "apply";
+const DEFAULT_FUZZY_QUERY: &str = "aply";
+const DEFAULT_FUZZY_EXPECTED: &str = "apply";
 
 fn corpus_path(env_name: &str) -> Option<String> {
     match std::env::var(env_name) {
@@ -16,6 +27,33 @@ fn corpus_path(env_name: &str) -> Option<String> {
             None
         }
     }
+}
+
+fn corpus_value(env_name: &str, default_value: &str) -> String {
+    std::env::var(env_name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default_value.to_string())
+}
+
+fn primary_query() -> String {
+    corpus_value(QUERY_ENV, DEFAULT_QUERY)
+}
+
+fn second_query() -> String {
+    corpus_value(SECOND_QUERY_ENV, DEFAULT_SECOND_QUERY)
+}
+
+fn third_query() -> String {
+    corpus_value(THIRD_QUERY_ENV, DEFAULT_THIRD_QUERY)
+}
+
+fn fuzzy_query() -> String {
+    corpus_value(FUZZY_QUERY_ENV, DEFAULT_FUZZY_QUERY)
+}
+
+fn fuzzy_expected() -> String {
+    corpus_value(FUZZY_EXPECTED_ENV, DEFAULT_FUZZY_EXPECTED)
 }
 
 fn open_mdx() -> Option<Mdx> {
@@ -68,14 +106,15 @@ fn test_mdx_info() {
 }
 
 #[test]
-fn test_mdx_lookup_hello() {
+fn test_mdx_lookup_primary_query() {
     let Some(mut mdx) = open_mdx() else { return };
+    let query = primary_query();
 
-    let result = mdx.lookup("hello");
-    assert!(result.is_some(), "Word 'hello' not found");
+    let result = mdx.lookup(&query);
+    assert!(result.is_some(), "Word '{query}' not found");
 
     let result = result.unwrap();
-    println!("=== Lookup 'hello' ===");
+    println!("=== Lookup '{query}' ===");
     println!("Key: {}", result.key_text);
     println!("Definition length: {} chars", result.definition.len());
     println!(
@@ -85,27 +124,29 @@ fn test_mdx_lookup_hello() {
 }
 
 #[test]
-fn test_mdx_lookup_world() {
+fn test_mdx_lookup_second_query() {
     let Some(mut mdx) = open_mdx() else { return };
+    let query = second_query();
 
-    let result = mdx.lookup("world");
-    assert!(result.is_some(), "Word 'world' not found");
+    let result = mdx.lookup(&query);
+    assert!(result.is_some(), "Word '{query}' not found");
 
     let result = result.unwrap();
-    println!("=== Lookup 'world' ===");
+    println!("=== Lookup '{query}' ===");
     println!("Key: {}", result.key_text);
     println!("Definition length: {} chars", result.definition.len());
 }
 
 #[test]
-fn test_mdx_lookup_apple() {
+fn test_mdx_lookup_third_query() {
     let Some(mut mdx) = open_mdx() else { return };
+    let query = third_query();
 
-    let result = mdx.lookup("apple");
-    assert!(result.is_some(), "Word 'apple' not found");
+    let result = mdx.lookup(&query);
+    assert!(result.is_some(), "Word '{query}' not found");
 
     let result = result.unwrap();
-    println!("=== Lookup 'apple' ===");
+    println!("=== Lookup '{query}' ===");
     println!("Key: {}", result.key_text);
     println!("Definition length: {} chars", result.definition.len());
 }
@@ -158,10 +199,13 @@ fn test_mdx_suggest() {
 #[test]
 fn test_mdx_contains() {
     let Some(mdx) = open_mdx() else { return };
+    let primary = primary_query();
+    let second = second_query();
+    let third = third_query();
 
-    assert!(mdx.contains("hello"), "'hello' should exist");
-    assert!(mdx.contains("world"), "'world' should exist");
-    assert!(mdx.contains("apple"), "'apple' should exist");
+    assert!(mdx.contains(&primary), "'{primary}' should exist");
+    assert!(mdx.contains(&second), "'{second}' should exist");
+    assert!(mdx.contains(&third), "'{third}' should exist");
     assert!(
         !mdx.contains("xyznonexistent123"),
         "Random word should not exist"
@@ -353,11 +397,12 @@ fn test_mdd_contains() {
 #[test]
 fn test_mdx_associate() {
     let Some(mdx) = open_mdx() else { return };
+    let query = third_query();
 
-    // Get associated keywords for "apple"
-    let associated = mdx.associate("apple");
+    // Get associated keywords for a corpus-specific query.
+    let associated = mdx.associate(&query);
 
-    println!("=== Associate 'apple' ===");
+    println!("=== Associate '{query}' ===");
     println!(
         "Found {} associated words in the same key block",
         associated.len()
@@ -388,13 +433,14 @@ fn test_mdx_associate() {
 #[test]
 fn test_mdx_lookup_keyword() {
     let Some(mdx) = open_mdx() else { return };
+    let query = primary_query();
 
-    // Lookup keyword item for "hello"
-    let keyword = mdx.lookup_keyword("hello");
+    // Lookup keyword item for a corpus-specific query.
+    let keyword = mdx.lookup_keyword(&query);
 
-    println!("=== Lookup keyword 'hello' ===");
+    println!("=== Lookup keyword '{query}' ===");
 
-    assert!(keyword.is_some(), "Keyword 'hello' should exist");
+    assert!(keyword.is_some(), "Keyword '{query}' should exist");
 
     let keyword = keyword.unwrap();
     println!("Key text: {}", keyword.key_text);
@@ -402,23 +448,24 @@ fn test_mdx_lookup_keyword() {
     println!("Record start offset: {}", keyword.record_start_offset);
     println!("Record end offset: {}", keyword.record_end_offset);
 
-    assert_eq!(keyword.key_text.to_lowercase(), "hello");
+    assert_eq!(keyword.key_text.to_lowercase(), query.to_lowercase());
 }
 
 #[test]
 fn test_mdx_fetch() {
     let Some(mut mdx) = open_mdx() else { return };
+    let query = second_query();
 
     // First lookup the keyword
-    let keyword = mdx.lookup_keyword("world").cloned();
-    assert!(keyword.is_some(), "Keyword 'world' should exist");
+    let keyword = mdx.lookup_keyword(&query).cloned();
+    assert!(keyword.is_some(), "Keyword '{query}' should exist");
 
     let keyword = keyword.unwrap();
 
     // Then fetch the definition using the keyword item
     let result = mdx.fetch(&keyword);
 
-    println!("=== Fetch definition for 'world' ===");
+    println!("=== Fetch definition for '{query}' ===");
 
     assert!(result.is_some(), "Should be able to fetch definition");
 
@@ -456,11 +503,13 @@ fn test_mdx_keyword_list() {
 #[test]
 fn test_mdx_fuzzy_search() {
     let Some(mdx) = open_mdx() else { return };
+    let query = fuzzy_query();
+    let expected = fuzzy_expected();
 
-    // Fuzzy search for "aple" (misspelled "apple")
-    let fuzzy_results = mdx.fuzzy_search("aple", 5, 2);
+    // Fuzzy search for a corpus-specific misspelling.
+    let fuzzy_results = mdx.fuzzy_search(&query, 5, 2);
 
-    println!("=== Fuzzy search 'aple' (max 5 results, max distance 2) ===");
+    println!("=== Fuzzy search '{query}' (max 5 results, max distance 2) ===");
     println!("Found {} fuzzy matches", fuzzy_results.len());
 
     for fw in fuzzy_results.iter() {
@@ -470,12 +519,12 @@ fn test_mdx_fuzzy_search() {
         );
     }
 
-    // Should find "apple" with edit distance 1
+    // Should find the expected corpus entry.
     assert!(
         fuzzy_results
             .iter()
-            .any(|fw| fw.item.key_text.to_lowercase() == "apple"),
-        "Should find 'apple' as a fuzzy match for 'aple'"
+            .any(|fw| fw.item.key_text.to_lowercase() == expected.to_lowercase()),
+        "Should find '{expected}' as a fuzzy match for '{query}'"
     );
 }
 

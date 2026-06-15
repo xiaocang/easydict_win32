@@ -2,6 +2,8 @@ use std::io::Cursor;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+#[cfg(windows)]
+use std::time::Duration;
 
 use easydict_app::native_bridge::{
     encode_native_message, parse_native_action, run_native_bridge, BridgeResponse,
@@ -169,6 +171,54 @@ fn native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_sign
             "native bridge binary should not expose legacy host marker {forbidden}:\n{combined}"
         );
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn native_bridge_binary_signals_ocr_translate_event_through_real_binary() {
+    let event =
+        easydict_windows_ipc::test_support::TestNamedEvent::create(OCR_TRANSLATE_EVENT_NAME)
+            .expect("OCR translate named event should be created");
+    event.drain().expect("OCR translate event should drain");
+
+    let input = encode_native_message(&serde_json::json!({ "action": OCR_TRANSLATE_ACTION }))
+        .expect("input frame");
+    let bridge_bin = native_bridge_binary_path();
+    let mut child = Command::new(bridge_bin)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("native bridge binary should spawn");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin should be piped")
+        .write_all(&input)
+        .expect("native bridge input should be written");
+
+    let signaled = event
+        .wait_signaled(Duration::from_secs(5))
+        .expect("OCR translate event wait should succeed");
+    let output = child
+        .wait_with_output()
+        .expect("native bridge binary should exit");
+
+    assert!(
+        output.status.success(),
+        "native bridge binary should handle OCR action locally\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        decode_single_response(&output.stdout),
+        BridgeResponse::new(true, OCR_TRANSLATE_ACTION)
+    );
+    assert!(
+        signaled,
+        "{} should be signaled by the real native bridge binary",
+        event.name()
+    );
 }
 
 fn native_bridge_binary_path() -> PathBuf {

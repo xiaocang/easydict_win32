@@ -1359,6 +1359,8 @@ mod tests {
             "dotnet.exe",
             "dotnet.cmd",
             "dotnet.bat",
+            "cmd.exe",
+            "cmd /c dotnet.exe",
             r"C:\Program Files\dotnet\dotnet.exe",
             "pwsh",
             "pwsh.cmd",

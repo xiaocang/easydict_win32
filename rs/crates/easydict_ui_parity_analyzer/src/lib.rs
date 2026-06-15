@@ -1046,6 +1046,7 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
     let semantic_contract_score_floor = calculate_semantic_contract_score_floor(
         &scoring_profile,
         ui_summary.as_ref(),
+        pair.metadata.as_ref(),
         runtime_score_cap,
         control_dimension_score_cap,
         absolute_size_score_cap,
@@ -2975,6 +2976,7 @@ const SEMANTIC_CONTRACT_SCORE_FLOOR: f64 = 86.0;
 fn calculate_semantic_contract_score_floor(
     scoring_profile: &ScenarioScoringProfile,
     ui_summary: Option<&UiSummaryComparison>,
+    metadata: Option<&ManifestScenario>,
     runtime_score_cap: f64,
     control_dimension_score_cap: f64,
     absolute_size_score_cap: f64,
@@ -2986,6 +2988,10 @@ fn calculate_semantic_contract_score_floor(
         || control_dimension_score_cap < 99.0
         || absolute_size_score_cap < 99.0
     {
+        return None;
+    }
+
+    if has_work_area_limited_window_target(metadata) {
         return None;
     }
 
@@ -3003,6 +3009,18 @@ fn calculate_semantic_contract_score_floor(
     }
 
     Some(SEMANTIC_CONTRACT_SCORE_FLOOR)
+}
+
+fn has_work_area_limited_window_target(metadata: Option<&ManifestScenario>) -> bool {
+    metadata.is_some_and(|metadata| {
+        [WindowAuditSide::Reference, WindowAuditSide::Candidate]
+            .into_iter()
+            .any(|side| {
+                window_size_audit(metadata, side)
+                    .and_then(|audit| audit.expected_larger_than_work_area)
+                    .unwrap_or(false)
+            })
+    })
 }
 
 fn is_missing_dimension_evidence_visually_verified(
@@ -8947,8 +8965,14 @@ mod tests {
         );
         let summary = fully_aligned_ui_summary();
 
-        let floor =
-            calculate_semantic_contract_score_floor(&profile, Some(&summary), 100.0, 100.0, 100.0);
+        let floor = calculate_semantic_contract_score_floor(
+            &profile,
+            Some(&summary),
+            None,
+            100.0,
+            100.0,
+            100.0,
+        );
 
         assert_eq!(floor, Some(SEMANTIC_CONTRACT_SCORE_FLOOR));
 
@@ -8960,6 +8984,7 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &profile,
                 Some(&dpi_rounding),
+                None,
                 100.0,
                 100.0,
                 100.0,
@@ -8981,11 +9006,69 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &animation_profile,
                 Some(&fully_aligned_ui_summary()),
+                None,
                 100.0,
                 100.0,
                 100.0,
             ),
             Some(SEMANTIC_CONTRACT_SCORE_FLOOR)
+        );
+    }
+
+    #[test]
+    fn semantic_contract_floor_is_withheld_when_window_target_is_work_area_limited() {
+        let profile = ScenarioScoringProfile::new(
+            "default-semantic",
+            0.36,
+            0.15,
+            0.22,
+            0.15,
+            0.06,
+            0.06,
+            70.0,
+        );
+        let summary = fully_aligned_ui_summary();
+        let mut manifest = semantic_manifest(
+            "settings.services",
+            "settings",
+            &["DeepLServiceExpander"],
+            ui_summary(&[("button", 1)], &["DeepLServiceExpander"]),
+            ui_summary(&[("button", 1)], &["DeepLServiceExpander"]),
+        );
+        manifest.candidate_window_size_audit = Some(ManifestWindowSizeAudit {
+            expected_window_dips: Some(ManifestDipSize {
+                width: 846.0,
+                height: 900.0,
+            }),
+            actual_window_dips: Some(ManifestDipSize {
+                width: 846.0,
+                height: 852.0,
+            }),
+            delta_dips: Some(ManifestDipSize {
+                width: 0.0,
+                height: -48.0,
+            }),
+            delta_percent: Some(ManifestDipSize {
+                width: 0.0,
+                height: -5.33,
+            }),
+            monitor_work_area_dips: Some(ManifestDipSize {
+                width: 1440.0,
+                height: 852.0,
+            }),
+            expected_larger_than_work_area: Some(true),
+        });
+
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &profile,
+                Some(&summary),
+                Some(&manifest),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            None
         );
     }
 
@@ -9009,6 +9092,7 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &visual_profile,
                 Some(&fully_aligned_ui_summary()),
+                None,
                 100.0,
                 100.0,
                 100.0,
@@ -9030,6 +9114,7 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &interaction_effects_profile,
                 Some(&fully_aligned_ui_summary()),
+                None,
                 100.0,
                 100.0,
                 100.0,
@@ -9042,6 +9127,7 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &profile,
                 Some(&fully_aligned_ui_summary()),
+                None,
                 98.0,
                 100.0,
                 100.0,
@@ -9053,7 +9139,14 @@ mod tests {
         let mut low_text = fully_aligned_ui_summary();
         low_text.visible_text_jaccard = Some(99.0);
         assert_eq!(
-            calculate_semantic_contract_score_floor(&profile, Some(&low_text), 100.0, 100.0, 100.0),
+            calculate_semantic_contract_score_floor(
+                &profile,
+                Some(&low_text),
+                None,
+                100.0,
+                100.0,
+                100.0,
+            ),
             None
         );
 
@@ -9066,6 +9159,7 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &profile,
                 Some(&missing_tag),
+                None,
                 100.0,
                 100.0,
                 100.0,
@@ -9081,6 +9175,7 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &profile,
                 Some(&dimension_drift),
+                None,
                 100.0,
                 100.0,
                 100.0,
@@ -9175,8 +9270,8 @@ mod tests {
             360,
             FilterType::Lanczos3,
         )
-            .save(&candidate)
-            .expect("save candidate");
+        .save(&candidate)
+        .expect("save candidate");
 
         let manifest_path = dir.path().join("ui-parity-manifest.json");
         let manifest = serde_json::json!({

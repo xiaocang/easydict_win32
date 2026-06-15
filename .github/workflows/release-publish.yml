@@ -319,7 +319,8 @@ jobs:
         working-directory: dotnet
         run: |
           ./scripts/Dedupe-WorkerSharedFiles.ps1 `
-            -PublishDir ./publish-msix/${{ matrix.platform }}
+            -PublishDir ./publish-msix/${{ matrix.platform }} `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}"
 
       - name: Bundle .NET 8 Runtime (MSIX)
         if: env.RETAINED_WORKERS_ENABLED == 'true'
@@ -513,18 +514,26 @@ jobs:
         shell: pwsh
         working-directory: rs
         run: |
-          ./scripts/Package-Portable.ps1 `
-            -Platform ${{ matrix.platform }} `
-            -Configuration Release `
-            -PackageVersion "${{ github.ref_name }}"
+          cargo run --manifest-path Cargo.toml -p easydict_packager -- `
+            pack-rs-portable `
+            --workspace . `
+            --platform ${{ matrix.platform }} `
+            --configuration Release `
+            --package-version "${{ github.ref_name }}"
 
       - name: Validate Rust portable ZIP
         shell: pwsh
         working-directory: rs
         run: |
+          $zipPath = "dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip"
           cargo run --manifest-path Cargo.toml -p easydict_packager -- `
             validate-rs-portable `
-            --package "dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip"
+            --package $zipPath
+          $zipSize = (Get-Item $zipPath).Length
+          Write-Host "Rust portable ZIP size: $([math]::Round($zipSize / 1000000, 2)) MB ($zipSize bytes)"
+          if ($zipSize -ge 400000000) {
+            throw "Rust portable ZIP is over the 400 MB budget: $zipSize bytes"
+          }
 
       - name: Upload Rust portable ZIP as artifact
         uses: actions/upload-artifact@v4

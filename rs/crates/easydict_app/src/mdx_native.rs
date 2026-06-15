@@ -771,6 +771,11 @@ pub fn inline_mdd_resources_in_html_with_factory<F: NativeMddResourceReaderFacto
 }
 
 pub fn normalize_mdd_resource_key(resource_key: &str) -> Result<String, NativeMddResourceError> {
+    let decoded_reference = decode_html_entities(resource_key);
+    let resource_key = trim_wrapping_resource_quotes(decoded_reference.trim());
+    let resource_key = strip_query_and_fragment(resource_key);
+    let resource_key = percent_decode_ascii(resource_key);
+    let resource_key = strip_leading_dot_relative_segments(resource_key.trim_start_matches('/'));
     let normalized = rust_mdict::normalize_mdd_resource_key(resource_key);
     if normalized.is_empty() {
         return Err(NativeMddResourceError::new(

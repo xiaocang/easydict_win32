@@ -575,6 +575,44 @@ fn long_document_file_selection_updates_path_mode_and_output_folder() {
 }
 
 #[test]
+fn long_document_file_dialog_error_surfaces_last_error_and_success_clears_dialog_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::LongDocumentFileDialogFinished(Err(
+        "Windows dialogs are only available on Windows".to_string(),
+    )));
+    assert_eq!(state.long_document.status_text, "File dialog failed");
+    assert_eq!(
+        state.long_document.last_error.as_deref(),
+        Some("File dialog failed: Windows dialogs are only available on Windows")
+    );
+
+    state.apply(Message::LongDocumentFileDialogFinished(Ok(None)));
+    assert_eq!(state.long_document.last_error, None);
+
+    state.long_document.last_error = Some("provider failed".to_string());
+    state.apply(Message::LongDocumentOutputFolderDialogFinished(Ok(None)));
+    assert_eq!(
+        state.long_document.last_error.as_deref(),
+        Some("provider failed"),
+        "dialog cancellation should not clear unrelated LongDoc errors"
+    );
+
+    state.apply(Message::LongDocumentOutputFolderDialogFinished(Err(
+        "IFileDialog::Show failed with native error -1".to_string(),
+    )));
+    assert_eq!(
+        state.long_document.last_error.as_deref(),
+        Some("File dialog failed: IFileDialog::Show failed with native error -1")
+    );
+    state.apply(Message::LongDocumentOutputFolderDialogFinished(Ok(Some(
+        r"D:\Translated".to_string(),
+    ))));
+    assert_eq!(state.long_document.output_folder, r"D:\Translated");
+    assert_eq!(state.long_document.last_error, None);
+}
+
+#[test]
 fn long_document_settings_are_locked_while_translating() {
     let mut state = EasydictUiState::default();
     state.long_document.is_translating = true;

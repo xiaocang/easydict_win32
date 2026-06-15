@@ -92,6 +92,8 @@ const DEFAULT_OLLAMA_OCR_ENDPOINT: &str = "http://localhost:11434/api/generate";
 const DEFAULT_OLLAMA_OCR_MODEL: &str = "glm-ocr";
 const DEFAULT_CUSTOM_OCR_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_CUSTOM_OCR_MODEL: &str = "gpt-5.4-mini";
+const FILE_DIALOG_ERROR_PREFIX: &str = "File dialog failed: ";
+const CAPTURE_WINDOW_SNAPSHOT_ERROR_PREFIX: &str = "Screen window snapshot failed: ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AppMode {
@@ -1939,14 +1941,29 @@ impl EasydictUiState {
                     self.long_document.page_range = value;
                 }
             }
+            Message::LongDocumentFileDialogFinished(result) => {
+                if !self.long_document.is_translating {
+                    apply_long_document_file_dialog_result(self, result);
+                }
+            }
             Message::LongDocumentFileSelected(path) => {
                 if !self.long_document.is_translating {
                     apply_long_document_file_selection(self, path);
                 }
             }
+            Message::LongDocumentOutputFolderDialogFinished(result) => {
+                if !self.long_document.is_translating {
+                    apply_long_document_output_folder_dialog_result(self, result);
+                }
+            }
             Message::LongDocumentOutputFolderSelected(path) => {
                 if !self.long_document.is_translating {
                     apply_long_document_output_folder_selection(self, path);
+                }
+            }
+            Message::MdxDictionaryDialogFinished(result) => {
+                if apply_mdx_dictionary_dialog_result(self, result) {
+                    mark_settings_changed(&mut self.settings);
                 }
             }
             Message::MdxDictionarySelected(path) => {
@@ -2019,16 +2036,54 @@ impl EasydictUiState {
                 }
                 self.settings.settings_runtime.resolve(Ok(status));
             }
-            Message::DesktopIntegrationActionFinished(result) => {
-                if let Err(error) = result {
-                    self.settings.save_error_message = Some(error.clone());
+            Message::SettingsSaveFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Settings save failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
                 }
-            }
-            Message::DesktopShellActionFinished(result) => {
-                if let Err(error) = result {
-                    self.settings.save_error_message = Some(error.clone());
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Settings save failed: {error}"));
                 }
-            }
+            },
+            Message::DesktopIntegrationActionFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Desktop integration failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Desktop integration failed: {error}"));
+                }
+            },
+            Message::DesktopShellActionFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Desktop shell failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Desktop shell failed: {error}"));
+                }
+            },
             Message::SpeakResultFinished(result) => match result {
                 Ok(()) => {
                     if self
@@ -2045,6 +2100,68 @@ impl EasydictUiState {
                         Some(format!("Text to speech failed: {error}"));
                 }
             },
+            Message::ClipboardOperationFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Clipboard operation failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Clipboard operation failed: {error}"));
+                }
+            },
+            Message::TextInsertionFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Text insertion failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Text insertion failed: {error}"));
+                }
+            },
+            Message::TextSelectionCaptureFinished(result) => match result {
+                Ok(_) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Text selection failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Text selection failed: {error}"));
+                }
+            },
+            Message::ClipboardMonitorFailed(error) => {
+                self.settings.save_error_message =
+                    Some(format!("Clipboard monitor failed: {error}"));
+            }
+            Message::ClipboardMonitorRecovered => {
+                if self
+                    .settings
+                    .save_error_message
+                    .as_deref()
+                    .is_some_and(|message| message.starts_with("Clipboard monitor failed: "))
+                {
+                    self.settings.save_error_message = None;
+                }
+            }
             Message::BuiltInAiDeviceRegistrationFinished(result) => {
                 if let Ok(Some(token)) = result {
                     if !token.trim().is_empty() {
@@ -2710,6 +2827,9 @@ impl EasydictUiState {
                 self.capture_selection =
                     selection.map(crate::screen_capture::CaptureRect::normalized);
             }
+            Message::CaptureWindowsSnapshotFinished(result) => {
+                apply_capture_windows_snapshot_result(self, result);
+            }
             Message::CaptureWindowsChanged(windows) => {
                 self.capture_window_detector =
                     crate::screen_capture::WindowDetector::from_windows(windows);
@@ -2747,10 +2867,12 @@ impl EasydictUiState {
             | Message::TrayCommand(_)
             | Message::ClipboardTextReceived(_)
             | Message::TrayClipboardTextReceived(_)
+            | Message::TrayClipboardReadFinished(_)
             | Message::MouseSelectionInputHookEvent(_)
             | Message::MouseSelectionPendingMultiClickElapsed(_)
             | Message::OcrCaptureFinished(_)
             | Message::SilentOcrCaptureFinished(_)
+            | Message::OcrCaptureFailed { .. }
             | Message::OcrCaptureCancelled(_)
             | Message::Translate
             | Message::CaptureMouseMoved(_)
@@ -3112,6 +3234,66 @@ fn apply_long_document_file_selection(state: &mut EasydictUiState, path: Option<
     state.long_document.progress_percentage = None;
     state.long_document.progress_detail = None;
     state.long_document.last_translated_block = None;
+}
+
+fn apply_capture_windows_snapshot_result(
+    state: &mut EasydictUiState,
+    result: Result<Vec<crate::screen_capture::DetectedWindow>, String>,
+) {
+    match result {
+        Ok(windows) => {
+            if state
+                .last_ocr_error
+                .as_deref()
+                .is_some_and(|message| message.starts_with(CAPTURE_WINDOW_SNAPSHOT_ERROR_PREFIX))
+            {
+                state.last_ocr_error = None;
+            }
+            state.capture_window_detector =
+                crate::screen_capture::WindowDetector::from_windows(windows);
+        }
+        Err(error) => {
+            state.last_ocr_error = Some(format!("{CAPTURE_WINDOW_SNAPSHOT_ERROR_PREFIX}{error}"));
+        }
+    }
+}
+
+fn apply_long_document_file_dialog_result(
+    state: &mut EasydictUiState,
+    result: Result<Option<String>, String>,
+) {
+    apply_long_document_dialog_result(state, result, apply_long_document_file_selection);
+}
+
+fn apply_long_document_output_folder_dialog_result(
+    state: &mut EasydictUiState,
+    result: Result<Option<String>, String>,
+) {
+    apply_long_document_dialog_result(state, result, apply_long_document_output_folder_selection);
+}
+
+fn apply_long_document_dialog_result(
+    state: &mut EasydictUiState,
+    result: Result<Option<String>, String>,
+    apply_selection: fn(&mut EasydictUiState, Option<String>),
+) {
+    match result {
+        Ok(path) => {
+            if state
+                .long_document
+                .last_error
+                .as_deref()
+                .is_some_and(|message| message.starts_with(FILE_DIALOG_ERROR_PREFIX))
+            {
+                state.long_document.last_error = None;
+            }
+            apply_selection(state, path);
+        }
+        Err(error) => {
+            state.long_document.status_text = "File dialog failed".to_string();
+            state.long_document.last_error = Some(format!("{FILE_DIALOG_ERROR_PREFIX}{error}"));
+        }
+    }
 }
 
 fn apply_long_document_output_folder_selection(state: &mut EasydictUiState, path: Option<String>) {
@@ -3814,6 +3996,29 @@ fn move_window_service(
     true
 }
 
+fn apply_mdx_dictionary_dialog_result(
+    state: &mut EasydictUiState,
+    result: Result<Option<String>, String>,
+) -> bool {
+    match result {
+        Ok(path) => {
+            if state
+                .settings
+                .save_error_message
+                .as_deref()
+                .is_some_and(|message| message.starts_with(FILE_DIALOG_ERROR_PREFIX))
+            {
+                state.settings.save_error_message = None;
+            }
+            apply_mdx_dictionary_selection(state, path)
+        }
+        Err(error) => {
+            state.settings.save_error_message = Some(format!("{FILE_DIALOG_ERROR_PREFIX}{error}"));
+            false
+        }
+    }
+}
+
 fn apply_mdx_dictionary_selection(state: &mut EasydictUiState, path: Option<String>) -> bool {
     let Some(path) = path
         .map(|path| path.trim().to_string())
@@ -4426,8 +4631,11 @@ pub enum Message {
     LongDocumentOutputModeChanged(String),
     LongDocumentConcurrencyChanged(String),
     LongDocumentPageRangeChanged(String),
+    LongDocumentFileDialogFinished(Result<Option<String>, String>),
     LongDocumentFileSelected(Option<String>),
+    LongDocumentOutputFolderDialogFinished(Result<Option<String>, String>),
     LongDocumentOutputFolderSelected(Option<String>),
+    MdxDictionaryDialogFinished(Result<Option<String>, String>),
     MdxDictionarySelected(Option<String>),
     SettingsSectionChanged(String),
     DesktopShellActionFinished(Result<(), String>),
@@ -4545,9 +4753,14 @@ pub enum Message {
     LongDocumentFinished(crate::long_document::LongDocumentOutcome),
     OcrCaptureFinished(crate::ocr::OcrCaptureResult),
     SilentOcrCaptureFinished(crate::ocr::OcrCaptureResult),
+    OcrCaptureFailed {
+        mode: crate::ocr::OcrMode,
+        error: String,
+    },
     OcrCaptureCancelled(crate::ocr::OcrMode),
     OcrRecognizeFinished(crate::ocr::OcrOutcome),
     CaptureSelectionChanged(Option<crate::screen_capture::CaptureRect>),
+    CaptureWindowsSnapshotFinished(Result<Vec<crate::screen_capture::DetectedWindow>, String>),
     CaptureWindowsChanged(Vec<crate::screen_capture::DetectedWindow>),
     CaptureMouseMoved(crate::screen_capture::CapturePoint),
     CaptureLeftButtonDown(crate::screen_capture::CapturePoint),
@@ -4568,6 +4781,11 @@ pub enum Message {
     WindowEvent(WindowEvent),
     ClipboardTextReceived(Option<String>),
     TrayClipboardTextReceived(Option<String>),
+    TrayClipboardReadFinished(Result<Option<String>, String>),
+    ClipboardMonitorFailed(String),
+    ClipboardMonitorRecovered,
+    TextSelectionCaptureFinished(Result<Option<String>, String>),
+    TextInsertionFinished(Result<(), String>),
     Translate,
     CopyResult,
     CopyResultIn(QuickTranslateSurface, String),
@@ -4578,11 +4796,13 @@ pub enum Message {
     SpeakResult,
     SpeakResultIn(QuickTranslateSurface, String),
     SpeakResultFinished(Result<(), String>),
+    ClipboardOperationFinished(Result<(), String>),
     OpenSettings,
     /// Result of the async settings runtime-status check (model/font on-disk
     /// availability), used to settle the `settings_runtime` [`Loadable`] and
     /// populate the displayed statuses.
     SettingsRuntimeStatusLoaded(crate::settings_status::SettingsRuntimeStatus),
+    SettingsSaveFinished(Result<(), String>),
     BuiltInAiDeviceRegistrationFinished(Result<Option<String>, String>),
     Back,
     SaveSettingsChanges,

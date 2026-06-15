@@ -5328,7 +5328,154 @@ fn app_update_result_actions_emit_rust_owned_side_effect_tasks() {
         "google".to_string(),
     ));
     assert_eq!(task_kind(&replace), "future");
-    assert_eq!(ready_future_message(replace), Message::Noop);
+    assert!(matches!(
+        ready_future_message(replace),
+        Message::TextInsertionFinished(_)
+    ));
+}
+
+#[test]
+fn text_insertion_error_surfaces_settings_error_and_success_clears_text_insertion_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::TextInsertionFinished(Err(
+        "target is unavailable".to_string()
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Text insertion failed: target is unavailable")
+    );
+
+    state.apply(Message::TextInsertionFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::TextInsertionFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful text insertion should only clear a previous text insertion error"
+    );
+}
+
+#[test]
+fn text_selection_capture_error_surfaces_settings_error_and_success_clears_text_selection_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::TextSelectionCaptureFinished(Err(
+        "UIA provider unavailable".to_string(),
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Text selection failed: UIA provider unavailable")
+    );
+
+    state.apply(Message::TextSelectionCaptureFinished(Ok(None)));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::TextSelectionCaptureFinished(Ok(Some(
+        "selected".to_string(),
+    ))));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful text selection should only clear a previous text selection error"
+    );
+}
+
+#[test]
+fn text_insertion_actions_surface_rust_owned_helper_errors() {
+    let app_source = include_str!("../src/lib.rs");
+
+    assert!(app_source.contains("Message::TextInsertionFinished"));
+    assert!(app_source.contains("text_insertion::capture_text_insertion_target()"));
+    assert!(app_source.contains("text_insertion::insert_text_into_captured_target(text)"));
+    assert!(
+        !app_source.contains("let _ = text_insertion::capture_text_insertion_target"),
+        "text insertion capture errors should be surfaced instead of ignored"
+    );
+    assert!(
+        !app_source.contains("let _ = text_insertion::insert_text_into_captured_target"),
+        "text insertion replace errors should be surfaced instead of ignored"
+    );
+    assert!(
+        !app_source.contains("PlatformCommand::CaptureTextInsertionTarget"),
+        "default app text insertion capture should not route through WinFluent platform commands"
+    );
+    assert!(
+        !app_source.contains("PlatformCommand::InsertText"),
+        "default app text insertion replace should not route through WinFluent platform commands"
+    );
+}
+
+#[test]
+fn selected_text_capture_task_surfaces_backend_errors_and_success_translates() {
+    let app_source = include_str!("../src/lib.rs");
+    assert!(app_source.contains("Message::TextSelectionCaptureFinished"));
+    assert!(app_source.contains("capture_native_selected_text_after_hotkey_delay_result()"));
+    assert!(
+        !app_source.contains(
+            "async move { text_selection::capture_native_selected_text_after_hotkey_delay() }"
+        ),
+        "default app selected-text capture should use the diagnostic Result API"
+    );
+
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let failed = app.update(Message::TextSelectionCaptureFinished(Err(
+        "clipboard is locked".to_string(),
+    )));
+    assert_eq!(task_kind(&failed), "none");
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Text selection failed: clipboard is locked")
+    );
+
+    let success = app.update(Message::TextSelectionCaptureFinished(Ok(Some(
+        "selected text".to_string(),
+    ))));
+    assert_eq!(app.state.source_text, "selected text");
+    assert_eq!(app.state.settings.save_error_message, None);
+    assert!(contains_future_task(&success) || contains_stream_task(&success));
+}
+
+#[test]
+fn settings_save_error_surfaces_settings_error_and_success_clears_settings_save_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::SettingsSaveFinished(Err(
+        "access denied".to_string()
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Settings save failed: access denied")
+    );
+
+    state.apply(Message::SettingsSaveFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::SettingsSaveFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful settings save should only clear a previous settings save error"
+    );
+}
+
+#[test]
+fn settings_save_task_surfaces_persistence_errors() {
+    let app_source = include_str!("../src/lib.rs");
+
+    assert!(app_source.contains("Message::SettingsSaveFinished"));
+    assert!(app_source.contains("settings_storage::save_settings_file(path, &settings)"));
+    assert!(
+        !app_source.contains("let _ = settings_storage::save_settings_file"),
+        "settings persistence errors should be surfaced instead of ignored"
+    );
 }
 
 #[test]
@@ -5356,11 +5503,69 @@ fn speak_result_error_surfaces_settings_error_and_success_clears_tts_error() {
 }
 
 #[test]
+fn clipboard_operation_error_surfaces_settings_error_and_success_clears_clipboard_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::ClipboardOperationFinished(Err(
+        "clipboard is locked".to_string(),
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: clipboard is locked")
+    );
+
+    state.apply(Message::ClipboardOperationFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("desktop shell failed".to_string());
+    state.apply(Message::ClipboardOperationFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("desktop shell failed"),
+        "successful clipboard completion should only clear a previous clipboard error"
+    );
+}
+
+#[test]
+fn clipboard_monitor_error_surfaces_settings_error_and_text_recovery_clears_only_monitor_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::ClipboardMonitorFailed(
+        "clipboard locked".to_string(),
+    ));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard monitor failed: clipboard locked")
+    );
+
+    state.apply(Message::ClipboardMonitorRecovered);
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("desktop shell failed".to_string());
+    state.apply(Message::ClipboardMonitorRecovered);
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("desktop shell failed"),
+        "monitor recovery should only clear a previous monitor error"
+    );
+}
+
+#[test]
 fn explicit_clipboard_actions_use_rust_owned_helper_tasks() {
     let app_source = include_str!("../src/lib.rs");
 
     assert!(app_source.contains("clipboard::read_clipboard_text"));
     assert!(app_source.contains("clipboard::write_clipboard_text"));
+    assert!(app_source.contains("Message::TrayClipboardReadFinished"));
+    assert!(app_source.contains("Message::ClipboardOperationFinished"));
+    assert!(
+        !app_source.contains("clipboard::read_clipboard_text().ok().flatten()"),
+        "explicit clipboard read errors should be surfaced instead of flattened into no text"
+    );
+    assert!(
+        !app_source.contains("let _ = clipboard::write_clipboard_text"),
+        "explicit clipboard write errors should be surfaced instead of ignored"
+    );
     assert!(
         !app_source.contains("Task::read_clipboard_text"),
         "explicit clipboard reads should not route through WinFluent runtime clipboard tasks"
@@ -5374,8 +5579,15 @@ fn explicit_clipboard_actions_use_rust_owned_helper_tasks() {
 #[test]
 fn monitor_clipboard_uses_app_owned_stream_not_winfluent_clipboard_subscription() {
     let app_source = include_str!("../src/lib.rs");
+    let clipboard_source = include_str!("../src/clipboard.rs");
 
-    assert!(app_source.contains("clipboard::clipboard_monitor_stream"));
+    assert!(app_source.contains("clipboard::clipboard_monitor_event_stream"));
+    assert!(app_source.contains("Message::ClipboardMonitorFailed"));
+    assert!(clipboard_source.contains("ClipboardMonitorEvent::Error"));
+    assert!(
+        !clipboard_source.contains("Err(_) => continue"),
+        "clipboard monitor backend errors should emit a diagnostic event instead of being silently skipped"
+    );
     assert!(
         !app_source.contains("Subscription::clipboard"),
         "clipboard monitoring should not route through WinFluent Clipboard subscription while that backend is a no-op"
@@ -5597,7 +5809,7 @@ fn mouse_selection_capture_result_maps_to_existing_pop_button_message() {
     let request = mouse_selection_capture_request(400, 240, 7);
 
     let message =
-        mouse_selection_capture_result_message(request, Some("  selected text  ".to_string()));
+        mouse_selection_capture_result_message(request, Ok(Some("  selected text  ".to_string())));
     match message {
         Message::SelectionTextReady {
             text,
@@ -5614,12 +5826,19 @@ fn mouse_selection_capture_result_maps_to_existing_pop_button_message() {
     }
 
     assert_eq!(
-        mouse_selection_capture_result_message(request, Some("   ".to_string())),
-        Message::Noop
+        mouse_selection_capture_result_message(request, Ok(Some("   ".to_string()))),
+        Message::TextSelectionCaptureFinished(Ok(None))
     );
     assert_eq!(
-        mouse_selection_capture_result_message(request, None),
-        Message::Noop
+        mouse_selection_capture_result_message(request, Ok(None)),
+        Message::TextSelectionCaptureFinished(Ok(None))
+    );
+    assert_eq!(
+        mouse_selection_capture_result_message(
+            request,
+            Err("UIA provider unavailable".to_string())
+        ),
+        Message::TextSelectionCaptureFinished(Err("UIA provider unavailable".to_string()))
     );
 }
 
@@ -6084,7 +6303,7 @@ fn browser_support_messages_run_bundled_registrar_commands() {
 }
 
 #[test]
-fn desktop_shell_action_errors_update_settings_error_state() {
+fn desktop_shell_action_error_surfaces_settings_error_and_success_clears_shell_error() {
     let mut state = EasydictUiState::default();
 
     state.apply(Message::DesktopShellActionFinished(Err(
@@ -6093,7 +6312,18 @@ fn desktop_shell_action_errors_update_settings_error_state() {
 
     assert_eq!(
         state.settings.save_error_message.as_deref(),
-        Some("invalid URL target: file:///C:/Payload/legacy-backend.ps1")
+        Some("Desktop shell failed: invalid URL target: file:///C:/Payload/legacy-backend.ps1")
+    );
+
+    state.apply(Message::DesktopShellActionFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::DesktopShellActionFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful desktop shell completion should only clear a previous shell error"
     );
 }
 
@@ -6149,7 +6379,7 @@ fn browser_support_status_errors_update_browser_support_state() {
 }
 
 #[test]
-fn desktop_integration_action_errors_update_settings_error_state() {
+fn desktop_integration_action_error_surfaces_settings_error_and_success_clears_integration_error() {
     let mut state = EasydictUiState::default();
 
     state.apply(Message::DesktopIntegrationActionFinished(Err(
@@ -6158,7 +6388,20 @@ fn desktop_integration_action_errors_update_settings_error_state() {
 
     assert_eq!(
         state.settings.save_error_message.as_deref(),
-        Some("desktop integration command target is a retained runtime")
+        Some(
+            "Desktop integration failed: desktop integration command target is a retained runtime"
+        )
+    );
+
+    state.apply(Message::DesktopIntegrationActionFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::DesktopIntegrationActionFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful desktop integration completion should only clear a previous integration error"
     );
 }
 
@@ -6186,12 +6429,44 @@ fn app_update_routes_file_dialogs_to_rust_owned_helpers() {
         "app update should route folder selection through the app-owned dialog helper"
     );
     assert!(
+        app_root.contains("file_dialog::open_file_dialog_result(options)"),
+        "file dialog tasks should preserve backend errors as Result completions"
+    );
+    assert!(
+        app_root.contains("file_dialog::open_folder_dialog_result(options)"),
+        "folder dialog tasks should preserve backend errors as Result completions"
+    );
+    assert!(
         !app_root.contains("Task::open_file_dialog("),
         "default app update must not emit WinFluent open-file dialog tasks backed by PowerShell/System.Windows.Forms"
     );
     assert!(
         !app_root.contains("Task::open_folder_dialog("),
         "default app update must not emit WinFluent open-folder dialog tasks backed by PowerShell/System.Windows.Forms"
+    );
+}
+
+#[test]
+fn mdx_dictionary_dialog_error_surfaces_settings_error_and_success_clears_dialog_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::MdxDictionaryDialogFinished(Err(
+        "Windows dialogs are only available on Windows".to_string(),
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("File dialog failed: Windows dialogs are only available on Windows")
+    );
+
+    state.apply(Message::MdxDictionaryDialogFinished(Ok(None)));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::MdxDictionaryDialogFinished(Ok(None)));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "dialog cancellation should not clear unrelated settings errors"
     );
 }
 
@@ -9996,11 +10271,20 @@ fn clipboard_text_received_starts_quick_translate_from_clipboard_text() {
         state: EasydictUiState::default(),
     };
 
+    app.update(Message::ClipboardMonitorFailed(
+        "clipboard locked".to_string(),
+    ));
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Clipboard monitor failed: clipboard locked")
+    );
+
     let task = app.update(Message::ClipboardTextReceived(Some(
         "Hello from clipboard".to_string(),
     )));
 
     assert_eq!(app.state.source_text, "Hello from clipboard");
+    assert_eq!(app.state.settings.save_error_message, None);
     assert!(app.state.is_translating);
     assert_eq!(app.state.active_query_id, Some(1));
     assert_eq!(app.state.active_query_service_count, 3);
@@ -10031,6 +10315,41 @@ fn tray_clipboard_text_received_restores_main_window_before_translating() {
     assert!(contains_window_command(&task, |command| matches!(
         command,
         WindowCommand::Focus(id) if id.as_str() == "main"
+    )));
+    assert!(contains_future_task(&task));
+}
+
+#[test]
+fn tray_clipboard_read_finished_surfaces_errors_and_routes_success() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let error = app.update(Message::TrayClipboardReadFinished(Err(
+        "clipboard unavailable".to_string(),
+    )));
+    assert_eq!(task_kind(&error), "none");
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: clipboard unavailable")
+    );
+
+    let empty = app.update(Message::TrayClipboardReadFinished(Ok(Some(
+        "  ".to_string(),
+    ))));
+    assert_eq!(task_kind(&empty), "none");
+    assert_eq!(app.state.settings.save_error_message, None);
+    assert!(!app.state.is_translating);
+
+    let task = app.update(Message::TrayClipboardReadFinished(Ok(Some(
+        "Hello from tray read".to_string(),
+    ))));
+
+    assert_eq!(app.state.source_text, "Hello from tray read");
+    assert!(app.state.is_translating);
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Show(id) if id.as_str() == "main"
     )));
     assert!(contains_future_task(&task));
 }

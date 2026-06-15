@@ -29,7 +29,8 @@ use crate::ocr::{
     ReqwestOcrHttpClient,
 };
 use crate::openai_compatible::{
-    default_foundry_local_runtime_controller, FoundryLocalRuntimeController, OpenAiCompatibleConfig,
+    default_foundry_local_runtime_controller, FoundryLocalRuntimeController,
+    OpenAiCompatibleConfig, OpenAiExecutionError,
 };
 #[cfg(test)]
 use crate::openai_compatible::{
@@ -2830,7 +2831,7 @@ fn read_native_pdf_source_chunks_with_options(
     })?;
     let document = pdf_source_document_from_text_summary(&summary);
     let document =
-        try_enrich_native_pdf_source_document_with_doc_layout_yolo(options, request, document);
+        try_enrich_native_pdf_source_document_with_doc_layout_yolo(options, request, document)?;
     Ok(document
         .pages
         .iter()
@@ -2859,7 +2860,7 @@ fn try_enrich_native_pdf_source_document_with_doc_layout_yolo(
     options: &PdfTextExtractionOptions,
     request: &LongDocumentServiceRequest,
     document: PdfSourceDocument,
-) -> PdfSourceDocument {
+) -> Result<PdfSourceDocument, LongDocumentBackendError> {
     let mode = native_pdf_layout_detection_mode(request);
     if mode == NativePdfLayoutDetectionMode::VisionLlm {
         return try_enrich_native_pdf_source_document_with_vision_layout(
@@ -2868,14 +2869,22 @@ fn try_enrich_native_pdf_source_document_with_doc_layout_yolo(
     }
 
     let Some(paths) = native_pdf_doc_layout_yolo_paths(request) else {
-        return document;
+        return Ok(document);
     };
-    ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(request);
+    ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(request)?;
     if !paths.native_lib_path.is_file() || !paths.doc_layout_model_path.is_file() {
-        return document;
+        if mode == NativePdfLayoutDetectionMode::OnnxLocal {
+            return Err(LongDocumentBackendError::new(format!(
+                "DocLayout-YOLO local model is not available: missing '{}' or '{}'",
+                paths.native_lib_path.display(),
+                paths.doc_layout_model_path.display()
+            )));
+        }
+
+        return Ok(document);
     }
 
-    match detect_native_pdf_doc_layout_yolo_pages(options, request, &paths) {
+    let document = match detect_native_pdf_doc_layout_yolo_pages(options, request, &paths) {
         Ok(result) if !result.is_empty() => {
             let document = if result.layouts.is_empty() {
                 document
@@ -2888,24 +2897,61 @@ fn try_enrich_native_pdf_source_document_with_doc_layout_yolo(
                 pdf_source_document_with_tatr_table_structures(&document, &result.table_structures)
             }
         }
-        _ => document,
+        Ok(_) => document,
+        Err(error) if mode == NativePdfLayoutDetectionMode::OnnxLocal => return Err(error),
+        Err(_) => document,
+    };
+
+    Ok(document)
+}
+
+fn ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(
+    request: &LongDocumentServiceRequest,
+) -> Result<(), LongDocumentBackendError> {
+    if !native_pdf_should_ensure_doc_layout_yolo(request) {
+        return Ok(());
     }
+
+    let Some(base) = native_pdf_managed_layout_model_base(request) else {
+        return Ok(());
+    };
+    let mut client =
+        ReqwestResourceDownloadClient::from_settings(&request.settings).map_err(|error| {
+            LongDocumentBackendError::new(format!(
+                "Could not prepare DocLayout-YOLO download client: {error}"
+            ))
+        })?;
+
+    ensure_layout_model_available_for_directory(
+        &mut client,
+        base,
+        &LayoutModelDownloadConfig::default(),
+        &mut |_| {},
+    )
+    .map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not ensure DocLayout-YOLO local model: {error}"
+        ))
+    })?;
+
+    Ok(())
 }
 
 fn try_enrich_native_pdf_source_document_with_vision_layout(
     options: &PdfTextExtractionOptions,
     request: &LongDocumentServiceRequest,
     document: PdfSourceDocument,
-) -> PdfSourceDocument {
-    let Some(config) = native_pdf_vision_layout_config(request) else {
-        return document;
+) -> Result<PdfSourceDocument, LongDocumentBackendError> {
+    let Some(config) = native_pdf_vision_layout_config(request)? else {
+        return Ok(document);
     };
 
     match detect_native_pdf_vision_layout_pages(options, request, &config) {
-        Ok(layouts) if !layouts.is_empty() => {
-            pdf_source_document_with_doc_layout_yolo_detections(&document, &layouts)
-        }
-        _ => document,
+        Ok(layouts) if !layouts.is_empty() => Ok(
+            pdf_source_document_with_doc_layout_yolo_detections(&document, &layouts),
+        ),
+        Ok(_) => Ok(document),
+        Err(error) => Err(error),
     }
 }
 
@@ -2997,11 +3043,12 @@ fn detect_native_pdf_doc_layout_yolo_pages_in_directory(
             .iter()
             .any(|detection| detection.region_type == DocLayoutRegionType::Table);
         if has_table_detection && tatr_session.is_none() && !tatr_unavailable {
-            tatr_session = load_or_ensure_native_pdf_tatr_session(request, runtime_dir, paths)
-                .or_else(|| {
+            match load_or_ensure_native_pdf_tatr_session(request, runtime_dir, paths)? {
+                Some(session) => tatr_session = Some(session),
+                None => {
                     tatr_unavailable = true;
-                    None
-                });
+                }
+            }
         }
         if let Some(tatr_session) = tatr_session.as_mut() {
             let tables = detections
@@ -3096,15 +3143,14 @@ fn detect_native_pdf_vision_layout_pages_in_directory(
                 page.pixel_data_path.display()
             ))
         })?;
-        let Ok(detections) = execute_vision_layout_detection(
+        let detections = execute_vision_layout_detection(
             &mut client,
             config,
             &pixels,
             page.pixel_width,
             page.pixel_height,
-        ) else {
-            continue;
-        };
+        )
+        .map_err(|error| vision_layout_page_backend_error(page.page_number, error))?;
         let detections = detections
             .iter()
             .filter_map(vision_layout_detection_to_doc_layout_detection)
@@ -3120,6 +3166,16 @@ fn detect_native_pdf_vision_layout_pages_in_directory(
     }
 
     Ok(layouts)
+}
+
+fn vision_layout_page_backend_error(
+    page_number: usize,
+    error: OpenAiExecutionError,
+) -> LongDocumentBackendError {
+    LongDocumentBackendError::new(format!(
+        "Vision layout detection failed on page {page_number}: {}",
+        error.message
+    ))
 }
 
 fn native_pdf_layout_detection_mode(
@@ -3161,51 +3217,61 @@ fn native_pdf_tatr_table_structure_enabled(request: &LongDocumentServiceRequest)
     request.settings.enable_tatr_table_structure.unwrap_or(true)
 }
 
-fn ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(request: &LongDocumentServiceRequest) {
-    if !native_pdf_should_ensure_doc_layout_yolo(request) {
-        return;
-    }
-
-    let Some(base) = native_pdf_managed_layout_model_base(request) else {
-        return;
-    };
-    let Ok(mut client) = ReqwestResourceDownloadClient::from_settings(&request.settings) else {
-        return;
-    };
-    let _ = ensure_layout_model_available_for_directory(
-        &mut client,
-        base,
-        &LayoutModelDownloadConfig::default(),
-        &mut |_| {},
-    );
-}
-
 fn load_or_ensure_native_pdf_tatr_session(
     request: &LongDocumentServiceRequest,
     runtime_dir: &Path,
     paths: &LayoutModelPaths,
-) -> Option<TatrOnnxSession> {
+) -> Result<Option<TatrOnnxSession>, LongDocumentBackendError> {
     if !native_pdf_tatr_table_structure_enabled(request) {
-        return None;
+        return Ok(None);
     }
 
+    let fatal_setup_errors = native_pdf_tatr_setup_errors_are_fatal(request);
     if !paths.tatr_model_path.is_file() && native_pdf_should_lazy_ensure_tatr(request) {
-        let base = native_pdf_managed_layout_model_base(request)?;
-        let mut client = ReqwestResourceDownloadClient::from_settings(&request.settings).ok()?;
-        let _ = ensure_tatr_model_available_for_directory(
+        let Some(base) = native_pdf_managed_layout_model_base(request) else {
+            return Ok(None);
+        };
+        let mut client = match ReqwestResourceDownloadClient::from_settings(&request.settings) {
+            Ok(client) => client,
+            Err(error) if fatal_setup_errors => {
+                return Err(LongDocumentBackendError::new(format!(
+                    "Could not prepare TATR download client: {error}"
+                )));
+            }
+            Err(_) => return Ok(None),
+        };
+        if let Err(error) = ensure_tatr_model_available_for_directory(
             &mut client,
             base,
             &LayoutModelDownloadConfig::default(),
             &mut |_| {},
-        )
-        .ok()?;
+        ) {
+            if fatal_setup_errors {
+                return Err(LongDocumentBackendError::new(format!(
+                    "Could not ensure TATR local model: {error}"
+                )));
+            }
+            return Ok(None);
+        }
     }
 
     if !paths.tatr_model_path.is_file() {
-        return None;
+        if fatal_setup_errors {
+            return Err(LongDocumentBackendError::new(format!(
+                "TATR local model is not available: missing '{}'",
+                paths.tatr_model_path.display()
+            )));
+        }
+        return Ok(None);
     }
 
-    TatrOnnxSession::from_model_paths(runtime_dir, &paths.tatr_model_path).ok()
+    match TatrOnnxSession::from_model_paths(runtime_dir, &paths.tatr_model_path) {
+        Ok(session) => Ok(Some(session)),
+        Err(error) if fatal_setup_errors => Err(LongDocumentBackendError::new(format!(
+            "Could not load TATR table structure model: {error}"
+        ))),
+        Err(_) => Ok(None),
+    }
 }
 
 fn native_pdf_should_ensure_doc_layout_yolo(request: &LongDocumentServiceRequest) -> bool {
@@ -3223,6 +3289,10 @@ fn native_pdf_should_lazy_ensure_tatr(request: &LongDocumentServiceRequest) -> b
             .map(str::trim)
             .is_none_or(str::is_empty)
         && native_pdf_managed_layout_model_base(request).is_some()
+}
+
+fn native_pdf_tatr_setup_errors_are_fatal(request: &LongDocumentServiceRequest) -> bool {
+    native_pdf_layout_detection_mode(request) == NativePdfLayoutDetectionMode::OnnxLocal
 }
 
 fn native_pdf_managed_layout_model_base(request: &LongDocumentServiceRequest) -> Option<PathBuf> {
@@ -3244,17 +3314,27 @@ fn native_pdf_managed_layout_model_base(request: &LongDocumentServiceRequest) ->
 
 fn native_pdf_vision_layout_config(
     request: &LongDocumentServiceRequest,
-) -> Option<OpenAiCompatibleConfig> {
+) -> Result<Option<OpenAiCompatibleConfig>, LongDocumentBackendError> {
     if native_pdf_layout_detection_mode(request) != NativePdfLayoutDetectionMode::VisionLlm {
-        return None;
+        return Ok(None);
     }
 
-    let endpoint = request.params.vision_endpoint.as_deref()?.trim();
-    let model = request.params.vision_model.as_deref()?.trim();
-    if endpoint.is_empty() || model.is_empty() {
-        return None;
-    }
-
+    let endpoint = request
+        .params
+        .vision_endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            LongDocumentBackendError::new("Vision layout endpoint is not configured.")
+        })?;
+    let model = request
+        .params
+        .vision_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| LongDocumentBackendError::new("Vision layout model is not configured."))?;
     let api_key = request
         .params
         .vision_api_key
@@ -3264,9 +3344,13 @@ fn native_pdf_vision_layout_config(
     let mut config = OpenAiCompatibleConfig::new(endpoint, model).with_api_key(api_key);
     if api_key.is_empty() && endpoint_is_local_http(endpoint) {
         config = config.without_required_api_key();
+    } else if config.requires_api_key && api_key.is_empty() {
+        return Err(LongDocumentBackendError::new(
+            "Vision layout API key is not configured.",
+        ));
     }
 
-    Some(config)
+    Ok(Some(config))
 }
 
 fn endpoint_is_local_http(endpoint: &str) -> bool {
@@ -5417,10 +5501,63 @@ mod tests {
             Some("http://localhost:11434/v1/chat/completions".to_string());
         request.params.vision_model = Some("llava".to_string());
 
-        let config = native_pdf_vision_layout_config(&request).expect("vision config");
+        let config = native_pdf_vision_layout_config(&request)
+            .expect("vision config result")
+            .expect("vision config");
 
         assert!(config.is_configured());
         assert!(!config.requires_api_key);
+    }
+
+    #[test]
+    fn explicit_vision_layout_config_surfaces_missing_required_settings() {
+        let mut request = test_pdf_long_document_request(None);
+
+        assert_eq!(
+            native_pdf_vision_layout_config(&request)
+                .expect("auto layout config result")
+                .as_ref(),
+            None
+        );
+
+        request.params.layout_detection = Some("VisionLLM".to_string());
+        let error = native_pdf_vision_layout_config(&request)
+            .expect_err("explicit VisionLLM should require an endpoint");
+        assert_eq!(error.message, "Vision layout endpoint is not configured.");
+
+        request.params.vision_endpoint =
+            Some("https://api.openai.com/v1/chat/completions".to_string());
+        let error = native_pdf_vision_layout_config(&request)
+            .expect_err("explicit VisionLLM should require a model");
+        assert_eq!(error.message, "Vision layout model is not configured.");
+
+        request.params.vision_model = Some("gpt-4o-mini".to_string());
+        let error = native_pdf_vision_layout_config(&request)
+            .expect_err("remote VisionLLM should require an API key");
+        assert_eq!(error.message, "Vision layout API key is not configured.");
+
+        request.params.vision_api_key = Some("vision-key".to_string());
+        let config = native_pdf_vision_layout_config(&request)
+            .expect("configured VisionLLM result")
+            .expect("configured VisionLLM config");
+        assert!(config.is_configured());
+        assert!(config.requires_api_key);
+    }
+
+    #[test]
+    fn vision_layout_backend_errors_preserve_page_number_and_provider_message() {
+        let error = vision_layout_page_backend_error(
+            7,
+            OpenAiExecutionError::new(
+                crate::openai_compatible::OpenAiExecutionErrorCode::InvalidResponse,
+                "Vision layout API error (500): upstream failed",
+            ),
+        );
+
+        assert_eq!(
+            error.message,
+            "Vision layout detection failed on page 7: Vision layout API error (500): upstream failed"
+        );
     }
 
     #[test]
@@ -5495,6 +5632,92 @@ mod tests {
             Some(temp_dir.join("custom.onnx").display().to_string());
         assert!(!native_pdf_should_ensure_doc_layout_yolo(&request));
         assert!(native_pdf_managed_layout_model_base(&request).is_none());
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn explicit_managed_onnx_layout_ensure_surfaces_download_client_errors() {
+        let temp_dir = unique_longdoc_test_dir("layout-managed-ensure-error");
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+        request.settings.proxy_enabled = Some(true);
+        request.settings.proxy_uri = Some("http://[invalid-proxy".to_string());
+
+        assert!(
+            ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(&request).is_ok(),
+            "Auto layout mode should not attempt a lazy DocLayout-YOLO download"
+        );
+
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+        let error = ensure_native_pdf_doc_layout_yolo_if_explicitly_requested(&request)
+            .expect_err("explicit OnnxLocal layout should surface download setup errors");
+
+        assert!(
+            error
+                .message
+                .contains("Could not prepare DocLayout-YOLO download client"),
+            "unexpected error: {}",
+            error.message
+        );
+        assert!(
+            error
+                .message
+                .contains("Invalid resource download proxy URI"),
+            "unexpected error: {}",
+            error.message
+        );
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn auto_tatr_lazy_ensure_keeps_download_client_errors_best_effort() {
+        let temp_dir = unique_longdoc_test_dir("layout-tatr-auto-client-error");
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+        request.settings.proxy_enabled = Some(true);
+        request.settings.proxy_uri = Some("http://[invalid-proxy".to_string());
+
+        let paths = LayoutModelPaths::for_base(&temp_dir);
+        let runtime_dir = paths.native_lib_path.parent().expect("runtime dir");
+        let session = load_or_ensure_native_pdf_tatr_session(&request, runtime_dir, &paths)
+            .expect("Auto TATR setup should stay best-effort");
+
+        assert!(session.is_none());
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn explicit_managed_onnx_tatr_lazy_ensure_surfaces_download_client_errors() {
+        let temp_dir = unique_longdoc_test_dir("layout-tatr-managed-ensure-error");
+        let mut request = test_pdf_long_document_request(None);
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+        request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+        request.settings.proxy_enabled = Some(true);
+        request.settings.proxy_uri = Some("http://[invalid-proxy".to_string());
+
+        let paths = LayoutModelPaths::for_base(&temp_dir);
+        let runtime_dir = paths.native_lib_path.parent().expect("runtime dir");
+        let error = load_or_ensure_native_pdf_tatr_session(&request, runtime_dir, &paths)
+            .err()
+            .expect("explicit OnnxLocal TATR setup should surface download setup errors");
+
+        assert!(
+            error
+                .message
+                .contains("Could not prepare TATR download client"),
+            "unexpected error: {}",
+            error.message
+        );
+        assert!(
+            error
+                .message
+                .contains("Invalid resource download proxy URI"),
+            "unexpected error: {}",
+            error.message
+        );
 
         fs::remove_dir_all(&temp_dir).ok();
     }

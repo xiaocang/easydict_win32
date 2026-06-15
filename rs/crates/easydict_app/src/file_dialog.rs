@@ -56,22 +56,32 @@ where
 }
 
 pub fn open_file_dialog(options: AppOpenFileDialogOptions) -> Option<String> {
+    open_file_dialog_result(options).ok().flatten()
+}
+
+pub fn open_file_dialog_result(
+    options: AppOpenFileDialogOptions,
+) -> Result<Option<String>, String> {
     easydict_windows_dialogs::open_file_dialog(OpenFileDialogOptions {
         title: options.title,
         filters: options.filters,
         initial_directory: options.initial_directory,
     })
-    .ok()
-    .flatten()
+    .map_err(|error| error.to_string())
 }
 
 pub fn open_folder_dialog(options: AppOpenFolderDialogOptions) -> Option<String> {
+    open_folder_dialog_result(options).ok().flatten()
+}
+
+pub fn open_folder_dialog_result(
+    options: AppOpenFolderDialogOptions,
+) -> Result<Option<String>, String> {
     easydict_windows_dialogs::open_folder_dialog(OpenFolderDialogOptions {
         title: options.title,
         initial_directory: options.initial_directory,
     })
-    .ok()
-    .flatten()
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -97,5 +107,16 @@ mod tests {
 
         assert_eq!(options.title, "Select output folder");
         assert_eq!(options.initial_directory.as_deref(), Some(r"C:\Docs"));
+    }
+
+    #[test]
+    fn dialog_result_api_preserves_backend_error_path() {
+        let source = include_str!("file_dialog.rs");
+
+        assert!(source.contains("pub fn open_file_dialog_result("));
+        assert!(source.contains("pub fn open_folder_dialog_result("));
+        assert!(source.contains(".map_err(|error| error.to_string())"));
+        assert!(source.contains("open_file_dialog_result(options).ok().flatten()"));
+        assert!(source.contains("open_folder_dialog_result(options).ok().flatten()"));
     }
 }

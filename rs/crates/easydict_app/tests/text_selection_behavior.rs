@@ -2,13 +2,13 @@ use easydict_app::mouse_selection::EASYDICT_SYNTHETIC_KEY;
 use easydict_app::text_selection::{
     build_text_selection_plan, capture_native_selected_text, clipboard_restore_required,
     finalize_text_selection_attempts, is_electron_process_name, is_terminal_process_name,
-    normalize_process_name, synthetic_ctrl_c_input_plan, AttemptOutcome, ClipWaitResult,
-    ClipWaitState, ClipboardProbe, ClipboardSelectionResult, TextSelectionAttempt,
-    TextSelectionAttemptResult, TextSelectionBackend, TextSelectionBackendError,
-    TextSelectionFinalOutcome, TextSelectionPlan, TextSelectionSuppressionTracker,
-    TextSelectionTarget, ELECTRON_CLIPBOARD_TIMEOUT_MS, NON_TEXT_FAILURE_THRESHOLD,
-    STANDARD_CLIPBOARD_TIMEOUT_MS, SUPPRESSION_WINDOW_MS, VK_C, VK_CONTROL, VK_LWIN, VK_MENU,
-    VK_RWIN, VK_SHIFT,
+    normalize_process_name, selected_text_from_capture_result, synthetic_ctrl_c_input_plan,
+    AttemptOutcome, ClipWaitResult, ClipWaitState, ClipboardProbe, ClipboardSelectionResult,
+    TextSelectionAttempt, TextSelectionAttemptResult, TextSelectionBackend,
+    TextSelectionBackendError, TextSelectionFinalOutcome, TextSelectionPlan,
+    TextSelectionSuppressionTracker, TextSelectionTarget, ELECTRON_CLIPBOARD_TIMEOUT_MS,
+    NON_TEXT_FAILURE_THRESHOLD, STANDARD_CLIPBOARD_TIMEOUT_MS, SUPPRESSION_WINDOW_MS, VK_C,
+    VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 
 #[cfg(windows)]
@@ -395,6 +395,21 @@ fn attempt_reducer_has_no_clipboard_outcome_for_terminal_uia_only_miss() {
 }
 
 #[test]
+fn attempt_reducer_does_not_treat_backend_errors_as_clipboard_suppression_outcomes() {
+    assert_eq!(
+        finalize_text_selection_attempts(&[TextSelectionAttemptResult {
+            attempt: TextSelectionAttempt::Clipboard {
+                timeout_ms: STANDARD_CLIPBOARD_TIMEOUT_MS,
+            },
+            outcome: AttemptOutcome::BackendError("clipboard access denied".to_string()),
+        }]),
+        TextSelectionFinalOutcome::NoSelection {
+            record_clipboard_outcome: None,
+        }
+    );
+}
+
+#[test]
 fn capture_backend_uses_desktop_uia_then_clipboard_and_records_success() {
     let mut backend = FakeTextSelectionBackend::new()
         .with_uia(None)
@@ -434,6 +449,92 @@ fn capture_backend_uses_desktop_uia_then_clipboard_and_records_success() {
                 outcome: AttemptOutcome::Success,
             },
         ]
+    );
+    assert!(!suppression.is_suppressed("notepad", 1_001, false, false));
+}
+
+#[test]
+fn capture_backend_preserves_uia_error_diagnostic_and_continues_to_clipboard() {
+    let mut backend = FakeTextSelectionBackend::new()
+        .with_uia_error("UIA provider unavailable")
+        .with_clipboard(ClipboardSelectionResult {
+            text: Some("clipboard fallback".to_string()),
+            outcome: ClipWaitResult::Success,
+        });
+    let mut suppression = TextSelectionSuppressionTracker::new();
+    let target = TextSelectionTarget::new(Some("notepad"), Some(100), 42);
+
+    let result = easydict_app::text_selection::capture_text_selection_with_backend(
+        &target,
+        &mut suppression,
+        1_000,
+        &mut backend,
+    );
+
+    assert_eq!(result.text.as_deref(), Some("clipboard fallback"));
+    assert_eq!(
+        selected_text_from_capture_result(&result)
+            .expect("clipboard fallback should be selected")
+            .as_deref(),
+        Some("clipboard fallback")
+    );
+    assert_eq!(
+        result.attempts,
+        vec![
+            TextSelectionAttemptResult {
+                attempt: TextSelectionAttempt::Uia,
+                outcome: AttemptOutcome::BackendError("UIA provider unavailable".to_string()),
+            },
+            TextSelectionAttemptResult {
+                attempt: TextSelectionAttempt::Clipboard {
+                    timeout_ms: STANDARD_CLIPBOARD_TIMEOUT_MS,
+                },
+                outcome: AttemptOutcome::Success,
+            },
+        ]
+    );
+    assert!(!suppression.is_suppressed("notepad", 1_001, false, false));
+}
+
+#[test]
+fn capture_backend_preserves_clipboard_error_without_suppression() {
+    let mut backend = FakeTextSelectionBackend::new()
+        .with_uia(None)
+        .with_clipboard_error("clipboard is locked");
+    let mut suppression = TextSelectionSuppressionTracker::new();
+    let target = TextSelectionTarget::new(Some("notepad"), Some(100), 42);
+
+    let result = easydict_app::text_selection::capture_text_selection_with_backend(
+        &target,
+        &mut suppression,
+        1_000,
+        &mut backend,
+    );
+
+    assert_eq!(result.text, None);
+    let error = selected_text_from_capture_result(&result)
+        .expect_err("clipboard backend error should surface when no attempt succeeds");
+    assert_eq!(error.message, "clipboard is locked");
+    assert_eq!(
+        result.attempts,
+        vec![
+            TextSelectionAttemptResult {
+                attempt: TextSelectionAttempt::Uia,
+                outcome: AttemptOutcome::NotAttempted,
+            },
+            TextSelectionAttemptResult {
+                attempt: TextSelectionAttempt::Clipboard {
+                    timeout_ms: STANDARD_CLIPBOARD_TIMEOUT_MS,
+                },
+                outcome: AttemptOutcome::BackendError("clipboard is locked".to_string()),
+            },
+        ]
+    );
+    assert_eq!(
+        result.final_outcome,
+        TextSelectionFinalOutcome::NoSelection {
+            record_clipboard_outcome: None,
+        }
     );
     assert!(!suppression.is_suppressed("notepad", 1_001, false, false));
 }
@@ -790,8 +891,8 @@ enum BackendCall {
 #[derive(Default)]
 struct FakeTextSelectionBackend {
     calls: Vec<BackendCall>,
-    uia_results: Vec<Option<String>>,
-    clipboard_results: Vec<ClipboardSelectionResult>,
+    uia_results: Vec<Result<Option<String>, TextSelectionBackendError>>,
+    clipboard_results: Vec<Result<ClipboardSelectionResult, TextSelectionBackendError>>,
 }
 
 impl FakeTextSelectionBackend {
@@ -801,12 +902,24 @@ impl FakeTextSelectionBackend {
 
     fn with_uia(mut self, text: Option<&str>) -> Self {
         self.uia_results
-            .push(text.map(std::string::ToString::to_string));
+            .push(Ok(text.map(std::string::ToString::to_string)));
+        self
+    }
+
+    fn with_uia_error(mut self, message: &str) -> Self {
+        self.uia_results
+            .push(Err(TextSelectionBackendError::new(message)));
         self
     }
 
     fn with_clipboard(mut self, result: ClipboardSelectionResult) -> Self {
-        self.clipboard_results.push(result);
+        self.clipboard_results.push(Ok(result));
+        self
+    }
+
+    fn with_clipboard_error(mut self, message: &str) -> Self {
+        self.clipboard_results
+            .push(Err(TextSelectionBackendError::new(message)));
         self
     }
 }
@@ -814,7 +927,7 @@ impl FakeTextSelectionBackend {
 impl TextSelectionBackend for FakeTextSelectionBackend {
     fn selected_text_via_uia(&mut self) -> Result<Option<String>, TextSelectionBackendError> {
         self.calls.push(BackendCall::Uia);
-        Ok(self.uia_results.remove(0))
+        self.uia_results.remove(0)
     }
 
     fn selected_text_via_clipboard(
@@ -822,6 +935,6 @@ impl TextSelectionBackend for FakeTextSelectionBackend {
         timeout_ms: u64,
     ) -> Result<ClipboardSelectionResult, TextSelectionBackendError> {
         self.calls.push(BackendCall::Clipboard(timeout_ms));
-        Ok(self.clipboard_results.remove(0))
+        self.clipboard_results.remove(0)
     }
 }

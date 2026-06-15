@@ -48,19 +48,28 @@ pub struct ClipboardMonitorSnapshot {
     pub text: Option<String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ClipboardMonitorEvent {
+    Text(String),
+    Error(ClipboardError),
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ClipboardMonitorState {
     last_sequence_number: Option<u32>,
     last_text: Option<String>,
+    last_error: Option<ClipboardError>,
 }
 
 impl ClipboardMonitorState {
     pub fn seed(&mut self, snapshot: ClipboardMonitorSnapshot) {
         self.last_sequence_number = Some(snapshot.sequence_number);
         self.last_text = normalize_clipboard_monitor_text(snapshot.text);
+        self.last_error = None;
     }
 
     pub fn observe(&mut self, snapshot: ClipboardMonitorSnapshot) -> Option<String> {
+        self.last_error = None;
         if self.last_sequence_number == Some(snapshot.sequence_number) {
             return None;
         }
@@ -78,12 +87,32 @@ impl ClipboardMonitorState {
 
         Some(text)
     }
+
+    fn observe_poll_result(
+        &mut self,
+        result: Result<ClipboardMonitorSnapshot, ClipboardError>,
+    ) -> ClipboardMonitorPollOutcome {
+        match result {
+            Ok(snapshot) => self
+                .observe(snapshot)
+                .map(ClipboardMonitorPollOutcome::Text)
+                .unwrap_or(ClipboardMonitorPollOutcome::None),
+            Err(ClipboardError::UnsupportedPlatform) => ClipboardMonitorPollOutcome::Stop,
+            Err(error) if self.last_error.as_ref() == Some(&error) => {
+                ClipboardMonitorPollOutcome::None
+            }
+            Err(error) => {
+                self.last_error = Some(error.clone());
+                ClipboardMonitorPollOutcome::Error(error)
+            }
+        }
+    }
 }
 
 pub struct ClipboardMonitorStream<Message> {
     running: Arc<AtomicBool>,
     poll_interval: Duration,
-    map: Option<Box<dyn Fn(String) -> Message + Send + 'static>>,
+    map: Option<Box<dyn Fn(ClipboardMonitorEvent) -> Option<Message> + Send + 'static>>,
     receiver: Option<UnboundedReceiver<Message>>,
 }
 
@@ -150,6 +179,38 @@ pub fn clipboard_monitor_stream_with_interval<Message>(
 where
     Message: Send + 'static,
 {
+    clipboard_monitor_stream_with_event_filter(poll_interval, move |event| match event {
+        ClipboardMonitorEvent::Text(text) => Some(map(text)),
+        ClipboardMonitorEvent::Error(_) => None,
+    })
+}
+
+pub fn clipboard_monitor_event_stream<Message>(
+    map: impl Fn(ClipboardMonitorEvent) -> Message + Send + 'static,
+) -> Option<ClipboardMonitorStream<Message>>
+where
+    Message: Send + 'static,
+{
+    clipboard_monitor_event_stream_with_interval(CLIPBOARD_MONITOR_POLL_INTERVAL, map)
+}
+
+pub fn clipboard_monitor_event_stream_with_interval<Message>(
+    poll_interval: Duration,
+    map: impl Fn(ClipboardMonitorEvent) -> Message + Send + 'static,
+) -> Option<ClipboardMonitorStream<Message>>
+where
+    Message: Send + 'static,
+{
+    clipboard_monitor_stream_with_event_filter(poll_interval, move |event| Some(map(event)))
+}
+
+fn clipboard_monitor_stream_with_event_filter<Message>(
+    poll_interval: Duration,
+    map: impl Fn(ClipboardMonitorEvent) -> Option<Message> + Send + 'static,
+) -> Option<ClipboardMonitorStream<Message>>
+where
+    Message: Send + 'static,
+{
     let mut slot = clipboard_monitor_slot()
         .lock()
         .expect("clipboard monitor mutex poisoned");
@@ -202,7 +263,7 @@ fn run_clipboard_monitor_loop<Message>(
     running: Arc<AtomicBool>,
     poll_interval: Duration,
     sender: UnboundedSender<Message>,
-    map: Box<dyn Fn(String) -> Message + Send + 'static>,
+    map: Box<dyn Fn(ClipboardMonitorEvent) -> Option<Message> + Send + 'static>,
 ) where
     Message: Send + 'static,
 {
@@ -217,19 +278,19 @@ fn run_clipboard_monitor_loop<Message>(
             break;
         }
 
-        let snapshot = match current_clipboard_monitor_snapshot() {
-            Ok(snapshot) => snapshot,
-            Err(ClipboardError::UnsupportedPlatform) => break,
-            Err(_) => continue,
-        };
-
-        let Some(text) = state.observe(snapshot) else {
-            continue;
+        let event = match state.observe_poll_result(current_clipboard_monitor_snapshot()) {
+            ClipboardMonitorPollOutcome::None => continue,
+            ClipboardMonitorPollOutcome::Stop => break,
+            ClipboardMonitorPollOutcome::Text(text) => ClipboardMonitorEvent::Text(text),
+            ClipboardMonitorPollOutcome::Error(error) => ClipboardMonitorEvent::Error(error),
         };
         if !running.load(Ordering::SeqCst) {
             break;
         }
-        if sender.unbounded_send(map(text)).is_err() {
+        let Some(message) = map(event) else {
+            continue;
+        };
+        if sender.unbounded_send(message).is_err() {
             break;
         }
     }
@@ -250,6 +311,14 @@ fn current_clipboard_monitor_snapshot() -> Result<ClipboardMonitorSnapshot, Clip
 fn normalize_clipboard_monitor_text(text: Option<String>) -> Option<String> {
     text.map(|text| text.trim().to_string())
         .filter(|text| !text.is_empty())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ClipboardMonitorPollOutcome {
+    None,
+    Text(String),
+    Error(ClipboardError),
+    Stop,
 }
 
 fn remember_self_written_clipboard_text(text: &str) {
@@ -371,6 +440,47 @@ mod tests {
                 text: Some("copied result again".to_string()),
             }),
             Some("copied result again".to_string())
+        );
+    }
+
+    #[test]
+    fn monitor_state_reports_distinct_backend_errors_once_and_recovers_on_success() {
+        let mut state = ClipboardMonitorState::default();
+
+        assert_eq!(
+            state.observe_poll_result(Err(ClipboardError::Backend("clipboard locked".to_string()))),
+            ClipboardMonitorPollOutcome::Error(ClipboardError::Backend(
+                "clipboard locked".to_string()
+            ))
+        );
+        assert_eq!(
+            state.observe_poll_result(Err(ClipboardError::Backend("clipboard locked".to_string()))),
+            ClipboardMonitorPollOutcome::None,
+            "repeating the same monitor error should not spam the app"
+        );
+        assert_eq!(
+            state.observe_poll_result(Err(ClipboardError::Backend("access denied".to_string()))),
+            ClipboardMonitorPollOutcome::Error(ClipboardError::Backend(
+                "access denied".to_string()
+            ))
+        );
+        assert_eq!(
+            state.observe_poll_result(Ok(ClipboardMonitorSnapshot {
+                sequence_number: 1,
+                text: Some(" recovered ".to_string()),
+            })),
+            ClipboardMonitorPollOutcome::Text("recovered".to_string())
+        );
+        assert_eq!(
+            state.observe_poll_result(Err(ClipboardError::Backend("access denied".to_string()))),
+            ClipboardMonitorPollOutcome::Error(ClipboardError::Backend(
+                "access denied".to_string()
+            )),
+            "a later successful read should clear the last-error suppression"
+        );
+        assert_eq!(
+            state.observe_poll_result(Err(ClipboardError::UnsupportedPlatform)),
+            ClipboardMonitorPollOutcome::Stop
         );
     }
 

@@ -675,6 +675,75 @@ fn native_mdd_resource_lookup_reads_record_encrypted_mdd_with_dictionary_credent
 }
 
 #[test]
+fn native_mdd_resource_lookup_reads_real_corpus_resource_inventory_from_env() {
+    let Some(mdd_path) = real_corpus_path("RS_MDICT_TEST_MDD") else {
+        return;
+    };
+
+    let mut mdd = rust_mdict::Mdd::new(&mdd_path).expect("real corpus MDD should open natively");
+    let resource_keys = mdd
+        .resource_keys()
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    assert_eq!(mdd.resource_count(), resource_keys.len());
+    assert_eq!(
+        resource_keys,
+        vec![r"\cceu.css".to_string()],
+        "Collins COBUILD English Usage MDD should currently expose only its stylesheet resource"
+    );
+
+    let css = mdd
+        .locate_resource_result("cceu.css")
+        .expect("real corpus CSS lookup should not fail")
+        .expect("real corpus CSS resource should exist");
+    assert_eq!(css.key, r"\cceu.css");
+    assert_eq!(css.extension, "css");
+    assert_eq!(css.mime_type, "text/css");
+    let css_text = String::from_utf8(css.data.clone()).expect("real corpus CSS should be UTF-8");
+    assert!(css_text.contains("box-sizing"));
+
+    let mut dictionary = mdx_dictionary(false, []);
+    dictionary.mdd_file_paths = vec![mdd_path];
+    for resource_key in [
+        "cceu.css",
+        "/cceu.css",
+        r"\cceu.css",
+        "./cceu.css",
+        r".\cceu.css",
+    ] {
+        let app_resource = run_native_mdd_resource_lookup(&dictionary, resource_key)
+            .unwrap_or_else(|error| panic!("app MDD facade should read {resource_key}: {error}"))
+            .unwrap_or_else(|| panic!("app MDD facade should find {resource_key}"));
+        assert_eq!(app_resource.key, r"\cceu.css", "{resource_key}");
+        assert_eq!(app_resource.mime_type, "text/css", "{resource_key}");
+        assert_eq!(app_resource.data, css.data, "{resource_key}");
+    }
+
+    for key in resource_keys.iter().filter(|key| {
+        key.ends_with(".png")
+            || key.ends_with(".jpg")
+            || key.ends_with(".jpeg")
+            || key.ends_with(".gif")
+            || key.ends_with(".mp3")
+            || key.ends_with(".wav")
+            || key.ends_with(".ogg")
+    }) {
+        let resource = mdd
+            .locate_resource_result(key)
+            .expect("real corpus media resource lookup should not fail")
+            .expect("listed real corpus media resource should exist");
+        assert!(!resource.data.is_empty());
+        assert!(
+            resource.mime_type.starts_with("image/") || resource.mime_type.starts_with("audio/"),
+            "media key {key} should resolve to an image/audio MIME type, got {}",
+            resource.mime_type
+        );
+    }
+}
+
+#[test]
 fn native_mdx_lookup_inlines_real_corpus_mdd_from_env() {
     let Some(mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
         return;
@@ -716,6 +785,69 @@ fn native_mdx_lookup_inlines_real_corpus_mdd_from_env() {
     assert!(html.contains("data:text/css;base64,"));
     assert!(!html.contains(r#"href="cceu.css""#));
     assert!(!html.contains(r#"href='cceu.css'"#));
+}
+
+#[test]
+fn native_mdx_lookup_inlines_real_corpus_mdd_after_portable_copy_from_env() {
+    let Some(source_mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
+        return;
+    };
+    let Some(source_mdd_path) = real_corpus_path("RS_MDICT_TEST_MDD") else {
+        return;
+    };
+    let query = std::env::var("RS_MDICT_TEST_QUERY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "ability".to_string());
+
+    let portable_root = unique_temp_dir("easydict-real-corpus-portable-mdx");
+    let dictionaries_dir = portable_root.join("dictionaries").join("collins");
+    fs::create_dir_all(&dictionaries_dir).expect("portable dictionary directory should be created");
+    let copied_mdx_path = dictionaries_dir.join("Collins COBUILD English Usage.mdx");
+    let copied_mdd_path = dictionaries_dir.join("Collins COBUILD English Usage.mdd");
+    fs::copy(&source_mdx_path, &copied_mdx_path).expect("real corpus MDX should copy");
+    fs::copy(&source_mdd_path, &copied_mdd_path).expect("real corpus MDD should copy");
+
+    let discovered_mdds = discover_mdd_file_paths(&path_string(&copied_mdx_path));
+    assert_eq!(discovered_mdds, vec![path_string(&copied_mdd_path)]);
+
+    let encryption_mode = detect_mdx_file_encryption_mode(&path_string(&copied_mdx_path))
+        .expect("portable-copied real MDX header should be readable");
+    let mut dictionary = mdx_dictionary(encryption_mode != MdxEncryptionMode::None, []);
+    dictionary.service_id = "mdx::real-corpus-portable-copy".to_string();
+    dictionary.display_name = "Real Corpus Portable Copy".to_string();
+    dictionary.file_path = path_string(&copied_mdx_path);
+    dictionary.mdd_file_paths = discovered_mdds;
+    let settings = mdx_settings_with_dictionary(dictionary);
+
+    let result = run_native_mdx_lookup(
+        &MdxLookupParams {
+            dictionary_id: "mdx::real-corpus-portable-copy".to_string(),
+            query: query.clone(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("portable-copied real MDX/MDD lookup should stay Rust-native");
+
+    assert_eq!(result.entries.len(), 1);
+    assert_eq!(
+        result.entries[0].key.to_ascii_lowercase(),
+        query.to_ascii_lowercase()
+    );
+    assert!(result.mdd_resources_inlined);
+    let html = &result.entries[0].html;
+    assert!(html.contains("data:text/css;base64,"));
+    assert!(!html.contains(r#"href="cceu.css""#));
+    assert!(!html.contains(r#"href='cceu.css'"#));
+    for forbidden in ["CompatHost", ".NET", "Easydict.Workers"] {
+        assert!(
+            !html.contains(forbidden),
+            "portable-copied real corpus route should not mention retained marker {forbidden}: {html}"
+        );
+    }
+
+    fs::remove_dir_all(&portable_root).expect("portable real-corpus temp dir should be removed");
 }
 
 #[test]
@@ -1165,6 +1297,18 @@ fn mdd_resource_key_and_mime_helpers_match_dictionary_resource_contract() {
     assert_eq!(
         normalize_mdd_resource_key(r"\audio\hello.mp3").unwrap(),
         r"\audio\hello.mp3"
+    );
+    assert_eq!(
+        normalize_mdd_resource_key("./styles/dict.css").unwrap(),
+        r"\styles\dict.css"
+    );
+    assert_eq!(
+        normalize_mdd_resource_key(r".\styles\dict.css?cache=1#top").unwrap(),
+        r"\styles\dict.css"
+    );
+    assert_eq!(
+        normalize_mdd_resource_key("images%2Flogo.png").unwrap(),
+        r"\images\logo.png"
     );
     assert!(normalize_mdd_resource_key("  ").is_err());
 

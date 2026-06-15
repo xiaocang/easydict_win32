@@ -2529,10 +2529,12 @@ where
     if let Some(icon) = &token.icon {
         children.push(icon_element(icon, 12.0, visual.text_on_accent));
     } else {
+        // .NET renders an 8x8 DIP Ellipse dot; the bullet glyph fills ~0.6em, so a
+        // 13px font size yields an ~8px visual diameter to match the WinUI status pill.
         children.push(
             iced_text("●")
                 .font(text_font(TextStyle::Caption))
-                .size(8.0)
+                .size(13.0)
                 .color(visual.text_on_accent)
                 .into(),
         );
@@ -2548,11 +2550,10 @@ where
 
     iced_container(
         iced_row(children)
-            .spacing(8)
+            .spacing(6)
             .align_y(alignment::Vertical::Center),
     )
-    .height(IcedLength::Fixed(visual.control_height))
-    .padding([0, 10])
+    .padding([6, 12])
     .align_y(alignment::Vertical::Center)
     .style(move |_| status_badge_container_style(visual, severity))
     .into()
@@ -5935,7 +5936,8 @@ fn status_badge_container_style(
         .background(background)
         .color(visual.text_on_accent)
         .border(Border {
-            radius: (visual.control_height / 2.0).into(),
+            // .NET StatusIndicator uses EasydictStatusCornerRadius = 12 DIP.
+            radius: 12.0.into(),
             ..Border::default()
         })
 }

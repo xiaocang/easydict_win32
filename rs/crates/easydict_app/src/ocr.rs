@@ -651,19 +651,22 @@ pub fn build_custom_api_ocr_request(
     }
 }
 
-pub fn parse_ocr_http_response(parser: OcrHttpResponseParser, json_text: &str) -> OcrResultDto {
+pub fn parse_ocr_http_response(
+    parser: OcrHttpResponseParser,
+    json_text: &str,
+) -> Result<OcrResultDto, OcrBackendError> {
     let text = match parser {
         OcrHttpResponseParser::OllamaGenerate => parse_ollama_response_text(json_text),
         OcrHttpResponseParser::ChatCompletions => parse_chat_completions_response_text(json_text),
         OcrHttpResponseParser::Responses => parse_responses_response_text(json_text),
-    };
+    }?;
 
-    OcrResultDto {
+    Ok(OcrResultDto {
         text,
         lines: Vec::new(),
         text_angle: None,
         detected_language: None,
-    }
+    })
 }
 
 pub fn bgra_to_base64_bmp(
@@ -720,7 +723,7 @@ fn recognize_with_native_provider<C: OcrHttpClient, W: WindowsNativeOcrRecognize
     };
 
     let json = http_client.post_json(&plan)?;
-    Ok(parse_ocr_http_response(plan.response_parser, &json))
+    parse_ocr_http_response(plan.response_parser, &json)
 }
 
 fn non_auto_language(value: &str) -> Option<&str> {
@@ -830,23 +833,25 @@ fn uses_responses_endpoint(endpoint: &str) -> bool {
         .ends_with("/responses")
 }
 
-fn parse_ollama_response_text(json_text: &str) -> String {
-    let Ok(value) = serde_json::from_str::<Value>(json_text) else {
-        return String::new();
-    };
+fn parse_ocr_http_json(json_text: &str) -> Result<Value, OcrBackendError> {
+    serde_json::from_str::<Value>(json_text).map_err(|error| {
+        OcrBackendError::new(format!("Could not parse OCR HTTP response: {error}"))
+    })
+}
+
+fn parse_ollama_response_text(json_text: &str) -> Result<String, OcrBackendError> {
+    let value = parse_ocr_http_json(json_text)?;
 
     value
         .get("response")
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+        .ok_or_else(|| OcrBackendError::new("OCR HTTP response missing Ollama response text"))
+        .map(str::trim)
+        .map(str::to_string)
 }
 
-fn parse_chat_completions_response_text(json_text: &str) -> String {
-    let Ok(value) = serde_json::from_str::<Value>(json_text) else {
-        return String::new();
-    };
+fn parse_chat_completions_response_text(json_text: &str) -> Result<String, OcrBackendError> {
+    let value = parse_ocr_http_json(json_text)?;
 
     value
         .get("choices")
@@ -855,25 +860,27 @@ fn parse_chat_completions_response_text(json_text: &str) -> String {
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"))
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+        .ok_or_else(|| {
+            OcrBackendError::new("OCR HTTP response missing chat completion message content")
+        })
+        .map(str::trim)
+        .map(str::to_string)
 }
 
-fn parse_responses_response_text(json_text: &str) -> String {
-    let Ok(value) = serde_json::from_str::<Value>(json_text) else {
-        return String::new();
-    };
+fn parse_responses_response_text(json_text: &str) -> Result<String, OcrBackendError> {
+    let value = parse_ocr_http_json(json_text)?;
 
     if let Some(output_text) = value.get("output_text").and_then(Value::as_str) {
-        return output_text.trim().to_string();
+        return Ok(output_text.trim().to_string());
     }
 
-    let mut text = String::new();
-    let Some(output) = value.get("output").and_then(Value::as_array) else {
-        return text;
-    };
+    let output = value
+        .get("output")
+        .and_then(Value::as_array)
+        .ok_or_else(|| OcrBackendError::new("OCR HTTP response missing Responses output text"))?;
 
+    let mut text = String::new();
+    let mut saw_text = false;
     for output_item in output {
         let Some(content) = output_item.get("content").and_then(Value::as_array) else {
             continue;
@@ -881,12 +888,19 @@ fn parse_responses_response_text(json_text: &str) -> String {
 
         for content_item in content {
             if let Some(chunk) = content_item.get("text").and_then(Value::as_str) {
+                saw_text = true;
                 text.push_str(chunk);
             }
         }
     }
 
-    text.trim().to_string()
+    if !saw_text {
+        return Err(OcrBackendError::new(
+            "OCR HTTP response missing Responses output text",
+        ));
+    }
+
+    Ok(text.trim().to_string())
 }
 
 fn bgra_to_bmp_bytes(bgra: &[u8], width: u32, height: u32) -> Result<Vec<u8>, OcrImageEncodeError> {
@@ -1049,6 +1063,14 @@ pub fn apply_ocr_start_error(state: &mut EasydictUiState, error: OcrStartError) 
     state.active_ocr_mode = None;
     state.ocr_status_text = error.to_string();
     state.last_ocr_error = Some(error.to_string());
+}
+
+pub fn apply_ocr_capture_error(state: &mut EasydictUiState, mode: OcrMode, error: String) {
+    state.pending_ocr_mode = None;
+    state.active_ocr_query_id = None;
+    state.active_ocr_mode = None;
+    state.ocr_status_text = format!("{} capture failed: {error}", mode.label());
+    state.last_ocr_error = Some(error);
 }
 
 pub fn run_ocr_recognize<B: OcrBackend>(

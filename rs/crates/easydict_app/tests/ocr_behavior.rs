@@ -231,12 +231,13 @@ fn custom_api_ocr_request_uses_chat_or_responses_shape() {
 }
 
 #[test]
-fn ocr_http_response_parsers_extract_text_without_panicking_on_malformed_json() {
+fn ocr_http_response_parsers_extract_text_and_allow_empty_text_fields() {
     assert_eq!(
         parse_ocr_http_response(
             OcrHttpResponseParser::OllamaGenerate,
             r#"{ "response": " recognized " }"#
         )
+        .expect("Ollama response should parse")
         .text,
         "recognized"
     );
@@ -245,6 +246,7 @@ fn ocr_http_response_parsers_extract_text_without_panicking_on_malformed_json() 
             OcrHttpResponseParser::ChatCompletions,
             r#"{ "choices": [{ "message": { "content": " text " } }] }"#
         )
+        .expect("Chat Completions response should parse")
         .text,
         "text"
     );
@@ -253,6 +255,7 @@ fn ocr_http_response_parsers_extract_text_without_panicking_on_malformed_json() 
             OcrHttpResponseParser::Responses,
             r#"{ "output_text": " direct " }"#
         )
+        .expect("Responses output_text should parse")
         .text,
         "direct"
     );
@@ -261,13 +264,54 @@ fn ocr_http_response_parsers_extract_text_without_panicking_on_malformed_json() 
             OcrHttpResponseParser::Responses,
             r#"{ "output": [{ "content": [{ "text": " first " }, { "text": " second " }] }] }"#
         )
+        .expect("Responses output array should parse")
         .text,
         "first  second"
     );
     assert_eq!(
-        parse_ocr_http_response(OcrHttpResponseParser::OllamaGenerate, "{nope").text,
+        parse_ocr_http_response(
+            OcrHttpResponseParser::OllamaGenerate,
+            r#"{ "response": " " }"#
+        )
+        .expect("present empty text should remain a valid empty OCR result")
+        .text,
         ""
     );
+}
+
+#[test]
+fn ocr_http_response_parsers_surface_malformed_json_and_missing_text_fields() {
+    let malformed = parse_ocr_http_response(OcrHttpResponseParser::OllamaGenerate, "{nope")
+        .expect_err("malformed OCR provider JSON should be visible");
+    assert!(malformed
+        .message
+        .contains("Could not parse OCR HTTP response"));
+
+    for (parser, json, expected) in [
+        (
+            OcrHttpResponseParser::OllamaGenerate,
+            r#"{ "done": true }"#,
+            "missing Ollama response text",
+        ),
+        (
+            OcrHttpResponseParser::ChatCompletions,
+            r#"{ "choices": [{ "message": { "role": "assistant" } }] }"#,
+            "missing chat completion message content",
+        ),
+        (
+            OcrHttpResponseParser::Responses,
+            r#"{ "output": [{ "content": [{ "type": "output_text" }] }] }"#,
+            "missing Responses output text",
+        ),
+    ] {
+        let error = parse_ocr_http_response(parser, json)
+            .expect_err("missing OCR text field should be visible");
+        assert!(
+            error.message.contains(expected),
+            "expected {expected:?} in {:?}",
+            error.message
+        );
+    }
 }
 
 #[test]
@@ -407,6 +451,73 @@ fn native_ocr_backend_runs_custom_api_provider_from_bgra_file() {
         .as_str()
         .expect("image data URL")
         .starts_with("data:image/jpeg;base64,/9j/"));
+}
+
+#[test]
+fn ocr_http_provider_malformed_json_surfaces_backend_error() {
+    let path = write_temp_bgra("ollama-malformed", &[0, 0, 255, 255]);
+    let mut backend = NativeOcrBackend::new(RecordingOcrHttpClient::with_responses([Ok(
+        "{nope".to_string()
+    )]));
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 10,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: path.to_string_lossy().into_owned(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("Ollama".to_string()),
+            ocr_endpoint: Some("http://localhost:11434/api/generate".to_string()),
+            ocr_model: Some("glm-ocr".to_string()),
+            ocr_system_prompt: Some("Only OCR.".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize(&mut backend, &request);
+
+    fs::remove_file(&path).ok();
+    let error = outcome
+        .result
+        .expect_err("malformed provider JSON should fail OCR backend");
+    assert!(error.message.contains("Could not parse OCR HTTP response"));
+}
+
+#[test]
+fn ocr_http_provider_missing_expected_text_surfaces_backend_error() {
+    let path = write_temp_bgra("custom-missing-text", &[0, 0, 255, 255]);
+    let mut backend = NativeOcrBackend::new(RecordingOcrHttpClient::with_responses([Ok(
+        r#"{ "output": [{ "content": [{ "type": "output_text" }] }] }"#.to_string(),
+    )]));
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 11,
+        mode: OcrMode::SilentClipboard,
+        params: OcrRecognizeParams {
+            pixel_data_path: path.to_string_lossy().into_owned(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("CustomApi".to_string()),
+            ocr_api_key: Some("sk-native".to_string()),
+            ocr_endpoint: Some("https://api.example.test/v1/responses".to_string()),
+            ocr_model: Some("gpt-vision".to_string()),
+            ocr_system_prompt: Some("Only OCR.".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize(&mut backend, &request);
+
+    fs::remove_file(&path).ok();
+    let error = outcome
+        .result
+        .expect_err("missing provider text field should fail OCR backend");
+    assert!(error.message.contains("missing Responses output text"));
 }
 
 #[test]
@@ -951,6 +1062,44 @@ fn app_ocr_capture_finished_starts_native_ocr_task() {
 }
 
 #[test]
+fn app_ocr_capture_failure_surfaces_native_screen_capture_error() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.update(Message::HotkeyTriggered(
+        easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
+    ));
+    app.update(Message::CaptureLeftButtonDown(CapturePoint::new(10, 10)));
+    app.update(Message::CaptureMouseMoved(CapturePoint::new(40, 40)));
+    app.update(Message::CaptureSelectionChanged(Some(CaptureRect::new(
+        10, 10, 40, 40,
+    ))));
+
+    let task = app.update(Message::OcrCaptureFailed {
+        mode: OcrMode::Translate,
+        error: "invalid screen capture request: region width overflow".to_string(),
+    });
+
+    assert_eq!(app.state.pending_ocr_mode, None);
+    assert_eq!(app.state.active_ocr_query_id, None);
+    assert_eq!(app.state.active_ocr_mode, None);
+    assert_eq!(app.state.capture_selection, None);
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Detecting);
+    assert_eq!(
+        app.state.ocr_status_text,
+        "OCR Translate capture failed: invalid screen capture request: region width overflow"
+    );
+    assert_eq!(
+        app.state.last_ocr_error.as_deref(),
+        Some("invalid screen capture request: region width overflow")
+    );
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Hide(id) if id.as_str() == "capture-overlay"
+    )));
+}
+
+#[test]
 fn capture_overlay_confirm_without_selection_waits_for_region() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
@@ -982,14 +1131,14 @@ fn ocr_hotkey_captures_window_snapshot_for_double_click_detection() {
     )));
 
     assert!(contains_future_task(&task));
-    app.update(Message::CaptureWindowsChanged(
+    app.update(Message::CaptureWindowsSnapshotFinished(Ok(
         easydict_app::detected_windows_from_screen_windows(vec![
             ScreenWindowSnapshot::new(1, None, ScreenWindowRect::new(0, 0, 500, 400))
                 .class_name("Top"),
             ScreenWindowSnapshot::new(2, Some(1), ScreenWindowRect::new(40, 30, 160, 120))
                 .class_name("Child"),
         ]),
-    ));
+    )));
 
     assert_eq!(
         app.state
@@ -1003,6 +1152,56 @@ fn ocr_hotkey_captures_window_snapshot_for_double_click_detection() {
             .find_region_at_point(CapturePoint::new(60, 50), 1),
         Some(CaptureRect::new(0, 0, 500, 400))
     );
+}
+
+#[test]
+fn capture_window_snapshot_failure_preserves_manual_region_capture() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::HotkeyTriggered(
+        easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
+    ));
+    let task = app.update(Message::CaptureWindowsSnapshotFinished(Err(
+        "EnumWindows failed with native error 5".to_string(),
+    )));
+
+    assert!(matches!(task, Task::None));
+    assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::Translate));
+    assert_eq!(
+        app.state.ocr_status_text,
+        "Select a region for OCR Translate"
+    );
+    assert_eq!(
+        app.state.last_ocr_error.as_deref(),
+        Some("Screen window snapshot failed: EnumWindows failed with native error 5")
+    );
+    assert_eq!(
+        app.state
+            .capture_window_detector
+            .find_region_at_point(CapturePoint::new(60, 50), 0),
+        None
+    );
+
+    app.update(Message::CaptureLeftButtonDown(CapturePoint::new(10, 10)));
+    app.update(Message::CaptureMouseMoved(CapturePoint::new(40, 40)));
+    app.update(Message::CaptureLeftButtonUp(CapturePoint::new(40, 40)));
+
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Adjusting);
+    assert_eq!(
+        app.state.capture_selection,
+        Some(CaptureRect::new(10, 10, 40, 40))
+    );
+
+    app.update(Message::CaptureWindowsSnapshotFinished(Ok(
+        easydict_app::detected_windows_from_screen_windows(vec![ScreenWindowSnapshot::new(
+            1,
+            None,
+            ScreenWindowRect::new(0, 0, 500, 400),
+        )]),
+    )));
+    assert_eq!(app.state.last_ocr_error, None);
 }
 
 #[test]
@@ -1185,8 +1384,8 @@ fn app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface()
     let state_source = include_str!("../src/state.rs");
     let app_manifest = include_str!("../Cargo.toml");
 
-    assert!(app_source.contains("screen_capture_native::capture_screen_region_task"));
-    assert!(app_source.contains("screen_capture_native::capture_screen_windows_task"));
+    assert!(app_source.contains("screen_capture_native::capture_screen_region_result_task"));
+    assert!(app_source.contains("screen_capture_native::capture_screen_windows_result_task"));
     assert!(
         app_manifest.contains("easydict_windows_screen_capture"),
         "default app should depend on the lib-owned Rust-native screen capture helper"

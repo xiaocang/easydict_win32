@@ -21,6 +21,231 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-15: Preserved OCR window-snapshot backend diagnostics
+
+- Rechecked the OCR window snapshot boundary before changing behavior. The app already uses local `lib/easydict-windows-screen-capture`, which exposes `Result<Vec<ScreenWindow>, WindowsScreenCaptureError>` for `EnumWindows` / child-window enumeration; no new dependency was added.
+- Default OCR hotkey startup now uses `screen_capture_native::capture_screen_windows_result_task(...)` and maps failures to `CaptureWindowsSnapshotFinished(Err(...))` instead of flattening backend errors into an empty window tree.
+- A window-snapshot failure records `Screen window snapshot failed: ...` in `last_ocr_error` while preserving the capture overlay and manual drag selection path, so failed auto window detection does not block OCR capture.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\ocr_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior capture_window_snapshot_failure_preserves_manual_region_capture -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior ocr_hotkey_captures_window_snapshot_for_double_click_detection -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface -- --nocapture`
+
+## 2026-06-14: Preserved file-dialog backend diagnostics
+
+- Rechecked the file dialog replacement boundary before changing behavior. The app already uses local `lib/easydict-windows-dialogs`, which wraps native COM `IFileOpenDialog` through the Microsoft `windows` crate and returns `Result<Option<String>, WindowsDialogError>`; no new dependency was added.
+- Added Result-shaped app file/folder dialog facade calls while keeping older `Option` wrappers as compatibility shells.
+- Default LongDoc browse and MDX import tasks now preserve backend failures instead of flattening them into cancellation: LongDoc dialog failures update `long_document.last_error`, MDX import dialog failures update the settings error channel, and `Ok(None)` remains a user cancellation.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\file_dialog.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs rs\crates\easydict_app\tests\long_document_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib file_dialog::tests::dialog_result_api_preserves_backend_error_path -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior mdx_dictionary_dialog_error_surfaces_settings_error_and_success_clears_dialog_error -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test long_document_behavior long_document_file_dialog_error_surfaces_last_error_and_success_clears_dialog_error -- --nocapture`
+
+## 2026-06-14: Preserved OCR screen-capture backend diagnostics
+
+- Rechecked the OCR capture replacement boundary before changing behavior. The app already uses the local Rust-owned `lib/easydict-windows-screen-capture` helper, which exposes structured `Result<..., WindowsScreenCaptureError>` for GDI capture and window snapshots; no new dependency was added.
+- Added Result-shaped `screen_capture_native` facade/task helpers while keeping the older `Option` wrappers as compatibility shells.
+- Default OCR region confirmation now maps native capture failures into `OcrCaptureFailed { mode, error }`, resets pending capture state, hides the overlay, and preserves the backend message in `last_ocr_error` / `ocr_status_text` instead of treating backend failure as user cancellation.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\screen_capture_native.rs rs\crates\easydict_app\src\ocr.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\ocr_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib screen_capture_native::tests::capture_region_result_preserves_native_error_diagnostics -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior app_ocr_capture_failure_surfaces_native_screen_capture_error -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface -- --nocapture`
+
+## 2026-06-14: Hardened Collins MDD real-corpus resource path regression
+
+- Rechecked the MDX/MDD replacement boundary before changing tests. The app already routes through the local `lib/rs-mdict` fork, which exposes MDX lookup, MDD raw resource lookup, MIME inference, key-info encryption, and app-level `run_native_mdd_resource_lookup(...)`; no new dependency was added.
+- Tightened the Collins COBUILD English Usage real-corpus MDD test so it asserts the known local corpus exposes exactly one resource, `\cceu.css`, and that app-level MDD lookup resolves `cceu.css`, `/cceu.css`, `\cceu.css`, `./cceu.css`, and `.\cceu.css` to the same UTF-8 CSS bytes.
+- This keeps the real-corpus gate env-driven via `RS_MDICT_TEST_MDX` / `RS_MDICT_TEST_MDD`; default test runs still skip it when the files are not available.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\mdx_native.rs rs\crates\easydict_app\tests\mdx_native_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior mdd_resource_key_and_mime_helpers_match_dictionary_resource_contract -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior real_corpus -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus -- --nocapture`
+
+## 2026-06-14: Scoped desktop shell and integration diagnostics
+
+- Kept this slice on the existing Rust-owned `desktop_shell` / `desktop_integration` helpers backed by `lib/easydict-windows-shell` and `lib/easydict-windows-registry`. No new dependency was needed; the gap was reducer-level diagnostic attribution.
+- Desktop integration failures now surface as `Desktop integration failed: ...`; desktop shell failures now surface as `Desktop shell failed: ...`.
+- Successful desktop integration or shell completions now clear only their own previous settings error prefix, preserving clipboard/TTS/settings/text-selection diagnostics from other subsystems.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_shell_action -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_integration_action -- --nocapture`
+
+## 2026-06-14: Surfaced explicit TATR layout setup failures
+
+- Rechecked the existing Rust TATR route before changing behavior. `ort` remains the right fit for the current dynamic ONNX Runtime DLL path, and Microsoft Table Transformer/TATR remains the MIT-licensed model family for table structure recognition. No new dependency was added; the gap was error propagation in the existing Rust-owned setup path.
+- Tightened native selectable-PDF TATR setup so explicit `OnnxLocal` returns `LongDocumentBackendError` when the TATR download client cannot be prepared, lazy ensure fails, the model is still missing, or the TATR ONNX session cannot be loaded.
+- Preserved `Auto` behavior: TATR setup remains best-effort, so a failed optional TATR prepare step does not discard existing DocLayout source blocks.
+
+References checked:
+
+- `https://docs.rs/ort`
+- `https://huggingface.co/microsoft/table-transformer-structure-recognition`
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\long_document.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib tatr_lazy_ensure -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib explicit_managed_onnx_layout_ensure_surfaces_download_client_errors -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib native_pdf_tatr -- --nocapture`
+
+## 2026-06-14: Surfaced selected-text capture backend diagnostics
+
+- Kept the selected-text path on the existing Rust-owned `lib/easydict-windows-text-selection` backend. No new dependency was added: the gap was app-level propagation of already-preserved UIA/clipboard diagnostics.
+- Added a diagnostic selected-text capture API that returns `Result<Option<String>, TextSelectionBackendError>`. Backend errors now surface only when no selection attempt succeeds; UIA errors followed by a successful clipboard fallback still translate normally.
+- Changed default Translate Selection and PopButton capture tasks to use the Result API. Backend failures now update settings diagnostics as `Text selection failed: ...`; successful/empty captures clear only a previous text-selection error and do not disturb clipboard/TTS/settings errors.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\text_selection.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\text_selection_behavior.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test text_selection_behavior capture_backend_preserves -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior text_selection_capture -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior selected_text_capture_task -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior mouse_selection_capture_result_maps_to_existing_pop_button_message -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+
+## 2026-06-14: Surfaced explicit VisionLLM layout configuration failures
+
+- Kept this slice inside the existing Rust `vision_layout` / OpenAI-compatible request path. No new dependency was added: the remaining gap was local configuration validation, not a missing protocol or layout library.
+- Tightened explicit `VisionLLM` selectable-PDF layout enrichment so missing endpoint, missing model, and missing API key for non-local endpoints return `LongDocumentBackendError` before rendering pages or falling back to heuristic chunks.
+- Preserved the local-endpoint exception: loopback Vision layout endpoints can still run without an API key.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\long_document.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib explicit_vision_layout_config_surfaces_missing_required_settings -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib native_pdf_vision_layout_config_allows_local_endpoint_without_api_key -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib vision_layout_backend_errors_preserve_page_number_and_provider_message -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib vision_layout -- --nocapture`
+
+## 2026-06-14: Surfaced explicit LongDoc ONNX layout ensure failures
+
+- Rechecked ONNX/runtime reuse before changing the PDF layout path. `ort` remains the right fit for the current dynamic ONNX Runtime DLL route already isolated in `doc_layout_yolo_onnx`, while `tract-onnx` remains a future pure-Rust candidate that still needs DocLayout-YOLO/TATR operator validation before replacing ONNX Runtime. No new dependency was added.
+- Tightened the native selectable-PDF layout enrichment path so explicit `OnnxLocal` with a managed cache returns a `LongDocumentBackendError` when the DocLayout-YOLO download client or ensure step fails, or when the required runtime/model files are still missing after ensure.
+- Tightened explicit `VisionLLM` layout execution the same way: once a Vision layout provider is configured, HTTP/provider errors from `execute_vision_layout_detection(...)` now return a page-numbered `LongDocumentBackendError` instead of silently skipping that page and producing heuristic chunks.
+- Auto layout mode remains best-effort: it still uses existing ready files and otherwise keeps heuristic source blocks without attempting a lazy download.
+- Added unit coverage proving Auto does not hit the lazy download path with an invalid proxy, while explicit `OnnxLocal` surfaces the download-client error, and Vision layout backend errors preserve the page number plus provider message.
+
+References checked:
+
+- `https://docs.rs/ort`
+- `https://docs.rs/crate/tract-onnx/latest`
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\long_document.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib explicit_managed_onnx_layout_ensure_surfaces_download_client_errors -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib native_pdf_doc_layout_ensure_runs_only_for_explicit_managed_onnxlocal -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib vision_layout_backend_errors_preserve_page_number_and_provider_message -- --nocapture`
+
+## 2026-06-14: Surfaced settings persistence failures
+
+- Rechecked reusable Rust configuration helpers before changing the save path. `confy` is useful for serde-backed app config files, `figment` is strong for layered/provenance-aware configuration, and `directories` owns platform config/data directory discovery, but Easydict already has app-specific `settings_storage` for schema migration, rs-specific `%LOCALAPPDATA%\EasydictRs` storage, credential normalization, and MDX/MDD discovery, so no new dependency was added.
+- Changed the Rust settings save future from a fire-and-forget `Noop` task into `SettingsSaveFinished(Result<(), String>)`.
+- Settings persistence failures now surface as `Settings save failed: ...`; a later successful settings save clears only a previous settings-save error and leaves clipboard/TTS/text-insertion/desktop errors intact.
+- Added static coverage against reintroducing `let _ = settings_storage::save_settings_file(...)` in the default app path.
+
+References checked:
+
+- `https://docs.rs/confy`
+- `https://docs.rs/figment/latest/figment/`
+- `https://docs.rs/directories/latest/directories/struct.ProjectDirs.html`
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior settings_save -- --nocapture`
+
+## 2026-06-14: Surfaced TextInsertion capture and replace failures
+
+- Rechecked reusable Rust input-simulation options before changing TextInsertion. `enigo` and `rdev` can simulate keyboard/mouse input, but this app needs the existing HWND capture, foreground validation, clipboard write/restore, and `Ctrl+V` SendInput semantics in `lib/easydict-windows-text-selection`, so no new dependency was added.
+- Changed Rust-owned text insertion side-effect tasks from fire-and-forget `Noop` futures into `TextInsertionFinished(Result<(), String>)` completions for both source target capture and Replace-result insertion.
+- TextInsertion failures now surface as `Text insertion failed: ...`; a later successful capture/insert clears only a previous text-insertion error and leaves clipboard/TTS/desktop errors intact.
+- Added static coverage against reintroducing `let _ = text_insertion::...` or WinFluent `PlatformCommand::CaptureTextInsertionTarget` / `InsertText` as the default app path.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior text_insertion -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior result_action -- --nocapture`
+
+## 2026-06-14: Surfaced clipboard monitor backend diagnostics
+
+- Rechecked Rust clipboard options before changing the monitor path. `clipboard-win`, `arboard`, and `copypasta` are viable general clipboard crates, but the app already relies on `lib/easydict-windows-text-selection` for Win32 clipboard sequence snapshots, restore semantics, and self-written-text suppression, so no new dependency was added.
+- Added a typed `ClipboardMonitorEvent` stream while keeping the old text-only wrapper for callers that do not need diagnostics.
+- The monitor loop now emits distinct backend errors once instead of silently continuing forever. Unsupported platforms still stop the monitor without surfacing a Windows-only warning in non-Windows test runs.
+- App state now records monitor failures as `Clipboard monitor failed: ...`; a later monitored text event clears only that monitor-specific error and leaves unrelated settings errors intact.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\clipboard.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app clipboard::tests::monitor_state_reports_distinct_backend_errors_once_and_recovers_on_success --lib -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior clipboard -- --nocapture`
+
+## 2026-06-14: Hardened Collins MDX/MDD real-corpus resource coverage
+
+- Rechecked reusable Rust MDX/MDD options (`readmdict`, `mdict-rs`, `libmdx`) before expanding coverage; kept the existing vendored `lib/rs-mdict` route because it already owns the app-facing MDX/MDD lookup, encrypted MDD handling, resource inventory, MIME inference, and companion-resource integration needed here.
+- Added an env-gated Collins real-corpus MDD inventory test. With `RS_MDICT_TEST_MDD` pointing at `Collins COBUILD English Usage.mdd`, the test opens the corpus through `rust_mdict::Mdd`, confirms the current resource inventory includes `\cceu.css`, validates it as `text/css`, and then verifies the app facade `run_native_mdd_resource_lookup(...)` returns the same resource bytes.
+- Added a portable-copy real-corpus regression. With `RS_MDICT_TEST_MDX` and `RS_MDICT_TEST_MDD`, the test copies the Collins MDX/MDD pair into a temporary portable-like dictionary directory, lets `discover_mdd_file_paths(...)` find the companion MDD, and verifies Rust-native MDX lookup inlines CSS without retained worker/CompatHost markers.
+- No new third-party library was added. The real Collins MDD currently contains only CSS, so image/audio/media path behavior remains covered by synthetic real-MDD fixtures.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\mdx_native_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior real_corpus -- --nocapture` with `RS_MDICT_TEST_MDX` and `RS_MDICT_TEST_MDD`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `cargo test --manifest-path lib\rs-mdict\Cargo.toml mdd -- --nocapture`
+
+## 2026-06-14: Surfaced explicit clipboard operation failures
+
+- Tightened explicit Rust-owned clipboard actions so tray `Translate Clipboard` read failures and result/Silent OCR copy write failures return typed completion messages instead of being silently flattened to `None` or `Noop`.
+- Clipboard failures now update the existing settings error channel as `Clipboard operation failed: ...`; a later successful clipboard operation clears only a previous clipboard error and leaves unrelated settings errors intact.
+- No new third-party library was needed. This keeps the earlier clipboard decision: explicit read/write and monitoring continue to reuse `lib/easydict-windows-text-selection` for Win32 clipboard sequence/snapshot/write semantics instead of adding `clipboard-win` or `arboard`.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior clipboard -- --nocapture`
+
+## 2026-06-14: Preserved TextSelection backend error diagnostics
+
+- Tightened the Rust-native selected-text capture reducer so UIA and clipboard backend failures are recorded as `AttemptOutcome::BackendError(...)` instead of being flattened into a UIA miss or clipboard timeout.
+- Backend errors still produce the same no-selection user behavior, but they no longer feed adaptive clipboard suppression. A locked clipboard or unavailable UIA provider therefore remains diagnosable without accidentally suppressing future capture attempts for that process.
+- No new third-party library was needed. This slice preserves diagnostics around the existing `lib/easydict-windows-text-selection` backend rather than replacing the already-migrated Win32/UIA helper.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\text_selection.rs rs\crates\easydict_app\tests\text_selection_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test text_selection_behavior capture_backend_preserves -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+
+## 2026-06-14: Surfaced OCR HTTP provider parse failures as backend errors
+
+- Tightened the Rust-native OCR HTTP/VLM path so malformed JSON or missing protocol text fields from Ollama, Chat Completions, or Responses providers return `OcrBackendError` instead of being treated as a normal empty OCR result.
+- Present-but-empty text fields still remain valid empty OCR results, so genuine “no text” responses continue to flow to the existing no-text UI state.
+- No new third-party library was needed. This stays inside the existing `serde_json` parser and app-owned OCR backend.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\ocr.rs rs\crates\easydict_app\tests\ocr_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior ocr_http_response_parsers -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior ocr_http_provider_malformed_json_surfaces_backend_error -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior ocr_http_provider_missing_expected_text_surfaces_backend_error -- --exact --nocapture`
+
 ## 2026-06-14: Kept Store listing workflow metadata-only
 
 - Added a release-contract regression that scans `.github/workflows/store-listings.yml` under the `rs_portable_release` filter.
@@ -303,7 +528,7 @@ Validation:
 
 - `rustfmt --edition 2021 --config skip_children=true --check rs/crates/easydict_app/src/lib.rs rs/crates/easydict_app/src/state.rs rs/crates/easydict_app/src/desktop_shell.rs rs/crates/easydict_app/tests/quick_translate_behavior.rs`
 - `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior browser_support_and_external_links_use_rust_owned_desktop_shell_helper -- --exact --nocapture`
-- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_shell_action_errors_update_settings_error_state -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_shell_action_error_surfaces_settings_error_and_success_clears_shell_error -- --exact --nocapture`
 
 ## 2026-06-14: Surfaced desktop integration failures in settings state
 
@@ -317,7 +542,7 @@ Validation:
 - `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior shell_context_menu_registration_uses_rust_owned_desktop_integration_helper -- --exact --nocapture`
 - `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior startup_protocol_registration_uses_rust_owned_desktop_integration_helper -- --exact --nocapture`
 - `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior launch_at_startup_registration_uses_rust_owned_desktop_integration_helper -- --exact --nocapture`
-- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_integration_action_errors_update_settings_error_state -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_integration_action_error_surfaces_settings_error_and_success_clears_integration_error -- --exact --nocapture`
 - `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior shell_context_menu_toggle_emits_registration_commands_and_updates_setting -- --exact --nocapture`
 
 ## 2026-06-14: Surfaced browser registrar helper failures in app state

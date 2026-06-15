@@ -659,11 +659,44 @@ impl Application for EasydictApp {
             return self.tray_task(id);
         }
 
+        if let Message::TrayClipboardReadFinished(result) = message {
+            return match result {
+                Ok(text) => {
+                    self.state
+                        .apply(Message::ClipboardOperationFinished(Ok(())));
+                    self.translate_tray_clipboard_text(text)
+                }
+                Err(error) => {
+                    self.state
+                        .apply(Message::ClipboardOperationFinished(Err(error)));
+                    Task::none()
+                }
+            };
+        }
+
         if let Message::TrayClipboardTextReceived(text) = message {
             return self.translate_tray_clipboard_text(text);
         }
 
+        if let Message::TextSelectionCaptureFinished(result) = message {
+            let selected_text = result
+                .as_ref()
+                .ok()
+                .and_then(|text| text.as_ref())
+                .filter(|text| !text.trim().is_empty())
+                .cloned();
+            self.state
+                .apply(Message::TextSelectionCaptureFinished(result));
+            return match selected_text {
+                Some(text) => self.translate_clipboard_text(Some(text)),
+                None => Task::none(),
+            };
+        }
+
         if let Message::ClipboardTextReceived(text) = message {
+            if text.as_ref().is_some_and(|value| !value.trim().is_empty()) {
+                self.state.apply(Message::ClipboardMonitorRecovered);
+            }
             return self.translate_clipboard_text(text);
         }
 
@@ -718,6 +751,13 @@ impl Application for EasydictApp {
 
         if let Message::SilentOcrCaptureFinished(capture) = message {
             return self.start_ocr_recognize(ocr::OcrMode::SilentClipboard, capture);
+        }
+
+        if let Message::OcrCaptureFailed { mode, error } = message {
+            ocr::apply_ocr_capture_error(&mut self.state, mode, error);
+            self.state.capture_interaction = CaptureInteractionState::new();
+            self.state.capture_selection = None;
+            return Task::window(WindowCommand::Hide(WindowId::new("capture-overlay")));
         }
 
         if let Message::OcrCaptureCancelled(mode) = message {
@@ -849,7 +889,7 @@ impl Application for EasydictApp {
         {
             return open_file_dialog_task(
                 long_document_file_dialog_options(&self.state),
-                Message::LongDocumentFileSelected,
+                Message::LongDocumentFileDialogFinished,
             );
         }
 
@@ -860,14 +900,14 @@ impl Application for EasydictApp {
         {
             return open_folder_dialog_task(
                 long_document_output_folder_dialog_options(&self.state),
-                Message::LongDocumentOutputFolderSelected,
+                Message::LongDocumentOutputFolderDialogFinished,
             );
         }
 
         if message == Message::ImportMdxDictionary {
             return open_file_dialog_task(
                 mdx_dictionary_file_dialog_options(),
-                Message::MdxDictionarySelected,
+                Message::MdxDictionaryDialogFinished,
             );
         }
 
@@ -1187,6 +1227,8 @@ impl EasydictApp {
             return Task::none();
         }
 
+        self.state
+            .apply(Message::TextSelectionCaptureFinished(Ok(None)));
         self.state.pop_button.generation = generation;
         let text = text.trim().to_string();
         if text.is_empty() {
@@ -1370,15 +1412,17 @@ impl EasydictApp {
         self.state.pending_ocr_mode = Some(mode);
         self.state.ocr_status_text = format!("{} capture requested", mode.label());
         self.state.capture_selection = None;
-        screen_capture_native::capture_screen_region_task(request, move |capture| match capture {
-            Some(capture) => {
-                let capture = ocr::OcrCaptureResult::from(capture);
-                match mode {
-                    ocr::OcrMode::Translate => Message::OcrCaptureFinished(capture),
-                    ocr::OcrMode::SilentClipboard => Message::SilentOcrCaptureFinished(capture),
+        screen_capture_native::capture_screen_region_result_task(request, move |capture| {
+            match capture {
+                Ok(capture) => {
+                    let capture = ocr::OcrCaptureResult::from(capture);
+                    match mode {
+                        ocr::OcrMode::Translate => Message::OcrCaptureFinished(capture),
+                        ocr::OcrMode::SilentClipboard => Message::SilentOcrCaptureFinished(capture),
+                    }
                 }
+                Err(error) => Message::OcrCaptureFailed { mode, error },
             }
-            None => Message::OcrCaptureCancelled(mode),
         })
     }
 
@@ -1665,10 +1709,14 @@ pub fn screen_capture_request_from_selection(
 }
 
 fn capture_screen_window_snapshot_task() -> Task<Message> {
-    screen_capture_native::capture_screen_windows_task(
+    screen_capture_native::capture_screen_windows_result_task(
         easydict_windows_screen_capture::ScreenWindowSnapshotRequest::new()
             .exclude_title("Easydict Capture"),
-        |windows| Message::CaptureWindowsChanged(detected_windows_from_screen_windows(windows)),
+        |result| {
+            Message::CaptureWindowsSnapshotFinished(
+                result.map(detected_windows_from_screen_windows),
+            )
+        },
     )
 }
 
@@ -2221,9 +2269,9 @@ fn settings_save_task(settings: SettingsState) -> Task<Message> {
     Task::perform(
         async move {
             let path = settings_storage::default_settings_storage_path();
-            let _ = settings_storage::save_settings_file(path, &settings);
+            settings_storage::save_settings_file(path, &settings).map_err(|error| error.to_string())
         },
-        |_| Message::Noop,
+        Message::SettingsSaveFinished,
     )
 }
 
@@ -2239,20 +2287,22 @@ fn pop_button_auto_dismiss_task(generation: u64) -> Task<Message> {
 
 fn selected_text_capture_task() -> Task<Message> {
     Task::perform(
-        async move { text_selection::capture_native_selected_text_after_hotkey_delay() },
-        |text| match text {
-            Some(text) if !text.trim().is_empty() => Message::ClipboardTextReceived(Some(text)),
-            _ => Message::Noop,
+        async move {
+            text_selection::capture_native_selected_text_after_hotkey_delay_result()
+                .map_err(|error| error.to_string())
         },
+        Message::TextSelectionCaptureFinished,
     )
 }
 
 fn capture_text_insertion_target_task() -> Task<Message> {
     Task::perform(
         async move {
-            let _ = text_insertion::capture_text_insertion_target();
+            text_insertion::capture_text_insertion_target()
+                .map(|_| ())
+                .map_err(|error| error.to_string())
         },
-        |_| Message::Noop,
+        Message::TextInsertionFinished,
     )
 }
 
@@ -2263,16 +2313,18 @@ fn insert_text_task(text: String) -> Task<Message> {
 
     Task::perform(
         async move {
-            let _ = text_insertion::insert_text_into_captured_target(text);
+            text_insertion::insert_text_into_captured_target(text)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
         },
-        |_| Message::Noop,
+        Message::TextInsertionFinished,
     )
 }
 
 fn tray_clipboard_read_task() -> Task<Message> {
     Task::perform(
-        async move { clipboard::read_clipboard_text().ok().flatten() },
-        Message::TrayClipboardTextReceived,
+        async move { clipboard::read_clipboard_text().map_err(|error| error.to_string()) },
+        Message::TrayClipboardReadFinished,
     )
 }
 
@@ -2282,9 +2334,14 @@ fn clipboard_monitor_task_for_settings(settings: &SettingsState) -> Task<Message
         return Task::none();
     }
 
-    clipboard::clipboard_monitor_stream(|text| Message::ClipboardTextReceived(Some(text)))
-        .map(Task::stream)
-        .unwrap_or_else(Task::none)
+    clipboard::clipboard_monitor_event_stream(|event| match event {
+        clipboard::ClipboardMonitorEvent::Text(text) => Message::ClipboardTextReceived(Some(text)),
+        clipboard::ClipboardMonitorEvent::Error(error) => {
+            Message::ClipboardMonitorFailed(error.to_string())
+        }
+    })
+    .map(Task::stream)
+    .unwrap_or_else(Task::none)
 }
 
 fn mouse_selection_hook_task_for_settings(settings: &SettingsState) -> Task<Message> {
@@ -2300,10 +2357,8 @@ fn mouse_selection_hook_task_for_settings(settings: &SettingsState) -> Task<Mess
 
 fn clipboard_write_task(text: String) -> Task<Message> {
     Task::perform(
-        async move {
-            let _ = clipboard::write_clipboard_text(text);
-        },
-        |_| Message::Noop,
+        async move { clipboard::write_clipboard_text(text).map_err(|error| error.to_string()) },
+        Message::ClipboardOperationFinished,
     )
 }
 
@@ -2325,10 +2380,15 @@ fn speak_text_task(text: String, language: Option<String>, tts_speed: String) ->
 
 pub fn mouse_selection_capture_result_message(
     request: MouseSelectionCaptureRequest,
-    text: Option<String>,
+    result: Result<Option<String>, String>,
 ) -> Message {
+    let text = match result {
+        Ok(text) => text,
+        Err(error) => return Message::TextSelectionCaptureFinished(Err(error)),
+    };
+
     let Some(text) = text.filter(|text| !text.trim().is_empty()) else {
-        return Message::Noop;
+        return Message::TextSelectionCaptureFinished(Ok(None));
     };
 
     let ready = request.selection_text_ready(text);
@@ -2342,7 +2402,10 @@ pub fn mouse_selection_capture_result_message(
 
 pub fn mouse_selection_capture_task(request: MouseSelectionCaptureRequest) -> Task<Message> {
     Task::perform(
-        async move { text_selection::capture_native_selected_text_after_hotkey_delay() },
+        async move {
+            text_selection::capture_native_selected_text_after_hotkey_delay_result()
+                .map_err(|error| error.to_string())
+        },
         move |text| mouse_selection_capture_result_message(request, text),
     )
 }
@@ -2698,16 +2761,22 @@ fn local_dictionary_suggestion_task(
 
 fn open_file_dialog_task(
     options: file_dialog::AppOpenFileDialogOptions,
-    map: fn(Option<String>) -> Message,
+    map: fn(Result<Option<String>, String>) -> Message,
 ) -> Task<Message> {
-    Task::perform(async move { file_dialog::open_file_dialog(options) }, map)
+    Task::perform(
+        async move { file_dialog::open_file_dialog_result(options) },
+        map,
+    )
 }
 
 fn open_folder_dialog_task(
     options: file_dialog::AppOpenFolderDialogOptions,
-    map: fn(Option<String>) -> Message,
+    map: fn(Result<Option<String>, String>) -> Message,
 ) -> Task<Message> {
-    Task::perform(async move { file_dialog::open_folder_dialog(options) }, map)
+    Task::perform(
+        async move { file_dialog::open_folder_dialog_result(options) },
+        map,
+    )
 }
 
 fn long_document_file_dialog_options(

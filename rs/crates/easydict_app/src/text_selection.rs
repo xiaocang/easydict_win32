@@ -260,14 +260,15 @@ pub struct SyntheticKeyInput {
     pub extra_info: isize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AttemptOutcome {
     NotAttempted,
     Success,
     NoText(ClipWaitResult),
+    BackendError(String),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextSelectionAttemptResult {
     pub attempt: TextSelectionAttempt,
     pub outcome: AttemptOutcome,
@@ -457,7 +458,8 @@ pub fn capture_text_selection_with_backend<B: TextSelectionBackend>(
                     selected_text = Some(text);
                     AttemptOutcome::Success
                 }
-                Ok(_) | Err(_) => AttemptOutcome::NotAttempted,
+                Ok(_) => AttemptOutcome::NotAttempted,
+                Err(error) => AttemptOutcome::BackendError(error.to_string()),
             },
             TextSelectionAttempt::Clipboard { timeout_ms } => {
                 match backend.selected_text_via_clipboard(*timeout_ms) {
@@ -469,17 +471,18 @@ pub fn capture_text_selection_with_backend<B: TextSelectionBackend>(
                             AttemptOutcome::NoText(result.outcome)
                         }
                     }
-                    Err(_) => AttemptOutcome::NoText(ClipWaitResult::Timeout),
+                    Err(error) => AttemptOutcome::BackendError(error.to_string()),
                 }
             }
         };
 
+        let success = matches!(outcome, AttemptOutcome::Success);
         attempt_results.push(TextSelectionAttemptResult {
             attempt: *attempt,
             outcome,
         });
 
-        if outcome == AttemptOutcome::Success {
+        if success {
             break;
         }
     }
@@ -507,13 +510,17 @@ pub fn capture_text_selection_with_backend<B: TextSelectionBackend>(
     }
 }
 
-pub fn capture_native_selected_text_after_hotkey_delay() -> Option<String> {
+pub fn capture_native_selected_text_after_hotkey_delay_result(
+) -> Result<Option<String>, TextSelectionBackendError> {
     thread::sleep(Duration::from_millis(TRANSLATE_SELECTION_HOTKEY_DELAY_MS));
-    capture_native_selected_text()
+    capture_native_selected_text_result()
 }
 
-pub fn capture_native_selected_text() -> Option<String> {
-    let foreground = easydict_windows_text_selection::foreground_text_selection_target().ok()?;
+pub fn capture_native_selected_text_result() -> Result<Option<String>, TextSelectionBackendError> {
+    let Some(foreground) = easydict_windows_text_selection::foreground_text_selection_target().ok()
+    else {
+        return Ok(None);
+    };
     let process_name = easydict_windows_text_selection::process_name_for_id(foreground.process_id)
         .ok()
         .flatten();
@@ -532,7 +539,42 @@ pub fn capture_native_selected_text() -> Option<String> {
 
     let result =
         capture_text_selection_with_backend(&target, &mut suppression, now_ticks, &mut backend);
-    result.text.filter(|text| !text.trim().is_empty())
+    selected_text_from_capture_result(&result)
+}
+
+pub fn capture_native_selected_text_after_hotkey_delay() -> Option<String> {
+    match capture_native_selected_text_after_hotkey_delay_result() {
+        Ok(text) => text,
+        Err(_) => None,
+    }
+}
+
+pub fn capture_native_selected_text() -> Option<String> {
+    match capture_native_selected_text_result() {
+        Ok(text) => text,
+        Err(_) => None,
+    }
+}
+
+pub fn selected_text_from_capture_result(
+    result: &TextSelectionCaptureResult,
+) -> Result<Option<String>, TextSelectionBackendError> {
+    if let Some(text) = result.text.as_ref().filter(|text| !text.trim().is_empty()) {
+        return Ok(Some(text.clone()));
+    }
+
+    if let Some(message) = first_backend_error_message(&result.attempts) {
+        return Err(TextSelectionBackendError::new(message));
+    }
+
+    Ok(None)
+}
+
+fn first_backend_error_message(attempts: &[TextSelectionAttemptResult]) -> Option<&str> {
+    attempts.iter().find_map(|result| match &result.outcome {
+        AttemptOutcome::BackendError(message) => Some(message.as_str()),
+        _ => None,
+    })
 }
 
 pub fn clipboard_restore_required(

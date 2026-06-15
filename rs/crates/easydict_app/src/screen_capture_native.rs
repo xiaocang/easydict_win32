@@ -13,6 +13,16 @@ where
     Task::perform(async move { capture_screen_region(request) }, map)
 }
 
+pub fn capture_screen_region_result_task<Message>(
+    request: native::ScreenCaptureRequest,
+    map: impl FnOnce(Result<native::ScreenCaptureResult, String>) -> Message + Send + 'static,
+) -> Task<Message>
+where
+    Message: Send + 'static,
+{
+    Task::perform(async move { capture_screen_region_result(request) }, map)
+}
+
 pub fn capture_screen_windows_task<Message>(
     request: native::ScreenWindowSnapshotRequest,
     map: impl FnOnce(Vec<ScreenWindowSnapshot>) -> Message + Send + 'static,
@@ -23,18 +33,40 @@ where
     Task::perform(async move { capture_screen_windows(request) }, map)
 }
 
+pub fn capture_screen_windows_result_task<Message>(
+    request: native::ScreenWindowSnapshotRequest,
+    map: impl FnOnce(Result<Vec<ScreenWindowSnapshot>, String>) -> Message + Send + 'static,
+) -> Task<Message>
+where
+    Message: Send + 'static,
+{
+    Task::perform(async move { capture_screen_windows_result(request) }, map)
+}
+
 pub fn capture_screen_region(
     request: native::ScreenCaptureRequest,
 ) -> Option<native::ScreenCaptureResult> {
-    native::capture_screen_region(request).ok()
+    capture_screen_region_result(request).ok()
+}
+
+pub fn capture_screen_region_result(
+    request: native::ScreenCaptureRequest,
+) -> Result<native::ScreenCaptureResult, String> {
+    native::capture_screen_region(request).map_err(|error| error.to_string())
 }
 
 pub fn capture_screen_windows(
     request: native::ScreenWindowSnapshotRequest,
 ) -> Vec<ScreenWindowSnapshot> {
+    capture_screen_windows_result(request).unwrap_or_default()
+}
+
+pub fn capture_screen_windows_result(
+    request: native::ScreenWindowSnapshotRequest,
+) -> Result<Vec<ScreenWindowSnapshot>, String> {
     native::capture_screen_windows(request)
         .map(|windows| windows.into_iter().map(from_native_window).collect())
-        .unwrap_or_default()
+        .map_err(|error| error.to_string())
 }
 
 fn from_native_window(window: native::ScreenWindow) -> ScreenWindowSnapshot {
@@ -63,6 +95,21 @@ mod tests {
             request.region,
             Some(native::ScreenRect::new(-10, 20, 300, 200))
         );
+    }
+
+    #[test]
+    fn capture_region_result_preserves_native_error_diagnostics() {
+        let request = native::ScreenCaptureRequest::region(native::ScreenRect::new(1, 2, 0, 5));
+
+        let error = capture_screen_region_result(request)
+            .expect_err("invalid capture request should return diagnostics");
+
+        assert!(
+            error.contains("invalid screen capture request")
+                || error.contains("only available on Windows"),
+            "{error}"
+        );
+        assert_eq!(capture_screen_region(request), None);
     }
 
     #[test]

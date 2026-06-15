@@ -21,6 +21,152 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Closed LocalAI CLI stream/grammar app-dir stale-payload gaps
+
+- A read-only CLI audit confirmed the remaining easy LocalAI no-runtime gap was `windows-local-ai` with `stream --app-dir` and `grammar --app-dir`; `translate --app-dir`, `batch --app-dir`, and `stream --host` were already covered.
+- Added stale-payload regressions for both modes using an app dir that contains `workers/localai`, `Easydict.CompatHost.exe`, `dotnet/dotnet.exe`, `hostfxr.dll`, and CoreLib markers.
+- Both tests prove `--app-dir` remains a legacy no-op for rs CLI routing: the commands fail before emitting stdout, require a Rust-native LocalAI route, and do not mention retained worker, CompatHost, dotnet, or hostfxr payloads.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_stream_cli_app_dir_no_longer_enables_retained_worker_fallback -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_grammar_cli_app_dir_no_longer_enables_retained_worker_fallback -- --exact --nocapture`
+
+## 2026-06-12: Covered LongDoc LocalAI native route matrix before worker fallback
+
+- Parallel subagent review pointed at LongDoc LocalAI routing as the next core guard after MDD and runtime-profile work. A separate library audit did not find a higher-quality replacement dependency for this slice; the existing Rust-native WindowsAI, Foundry Local, OpenVINO/NLLB, and `rs-mdict` libraries remain the right ownership boundaries.
+- Added `local_ai_long_document_route_matrix_stays_native_before_worker_fallback`, which runs LongDoc LocalAI with stale `workers/longdoc`, `workers/localai`, `Easydict.CompatHost.exe`, `dotnet/dotnet.exe`, `hostfxr.dll`, and CoreLib markers in `app_dir`.
+- The matrix covers explicit WindowsAI, Auto with ready WindowsAI, Auto falling through to native Foundry probing, explicit FoundryLocal configured endpoint, and OpenVINO cache preflight. Each path either succeeds through an injected Rust-native client or fails on a native/preflight boundary without retained worker, CompatHost, or dotnet wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_behavior local_ai_long_document_route_matrix_stays_native_before_worker_fallback -- --exact --nocapture`
+
+## 2026-06-12: Forced LongDoc PowerShell shim children to Rust-only profile
+
+- A read-only subagent audit found no remaining executable dotnet/CompatHost/worker launch path in `scripts/translate-long-doc.ps1`; the remaining risk was inherited parent environment such as `EASYDICT_RUNTIME_PROFILE=hybrid`.
+- `scripts/translate-long-doc.ps1` now wraps both packaged helper and `-UseCargo` invocations with temporary `EASYDICT_RUNTIME_PROFILE=rust-only` and `RUNTIME_PROFILE=rust-only`, then restores the caller environment in `finally`.
+- The retired `-UseDotnetLegacy` compatibility switch is hidden from normal PowerShell help/completion while still failing locally before any helper starts. The rs README now documents only the Rust helper/Cargo development modes and clarifies that `-AppDir` only locates `easydict_long_doc.exe`.
+- `release_contract_behavior` now runs fake helper/cargo paths with parent profiles set to `hybrid` and proves the child process receives `rust-only`.
+
+Validation:
+
+- `cd rs; cargo fmt -p easydict_packager -- --check`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc -- --nocapture`
+- PowerShell parser check for `scripts/translate-long-doc.ps1`
+- `git diff --check -- scripts/translate-long-doc.ps1 rs/README.md migration-list.md refactor-progress.md rs/crates/easydict_packager/tests/release_contract_behavior.rs`
+
+## 2026-06-12: Aligned Makefile MSIX validators with Rust-only default profile
+
+- A read-only subagent audit found `validate-msix` already omitted `--runtime-profile` when `RUNTIME_PROFILE` was empty, while `msix-x64`, `msix-x86`, and `msix-arm64` still passed `--runtime-profile "$(RUNTIME_PROFILE)"` to the Rust validator.
+- The three MSIX package targets now normalize `RUNTIME_PROFILE` and pass `--runtime-profile "$runtime_profile"` only when the caller provided a value. When it is empty, they call `easydict_msix_validate -- <msix> --allow-unsigned`, preserving the validator's Rust-only default.
+- Extended `release_contract_behavior` so the Makefile contract covers the post-package validators as well as `validate-msix`.
+
+Validation:
+
+- `cd rs; cargo fmt -p easydict_packager -- --check`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile -- --exact --nocapture`
+
+## 2026-06-12: Hardened LongDoc CLI app-dir no-op against stale payloads
+
+- Rechecked the LongDoc native output preflight first; the multi-output and result JSON sidecar failure boundary was already implemented and covered, so this slice focused on the still-useful CLI app-dir runtime guard.
+- `app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup` now builds an app dir containing stale `workers/longdoc`, `workers/localai`, `Easydict.CompatHost.exe`, `dotnet/dotnet.exe`, `hostfxr.dll`, and CoreLib markers. The default `easydict_long_doc --service windows-local-ai --app-dir` path still fails on the Rust-native LocalAI boundary without worker/CompatHost/dotnet wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture`
+
+## 2026-06-12: Validated sign-and-install before local MSIX install
+
+- A parallel worker handled this packaging slice. No new dependency was needed; the existing Rust `easydict_msix_validate` CLI already owns MSIX payload policy.
+- `dotnet/scripts/sign-and-install.ps1` now accepts `-RuntimeProfile`, signs first, then runs `cargo run --manifest-path rs/Cargo.toml -p easydict_msix_validate -- <PackagePath>` before uninstalling or calling `Add-AppxPackage`. Empty/default/rust-only profiles let the validator use its Rust-only default; explicit `Hybrid` is the only case that forwards `--runtime-profile hybrid`.
+- Added fake-tool release-contract coverage for the default Rust-only validator path and the explicit Hybrid forwarding path.
+
+Validation:
+
+- `cd rs; cargo fmt -p easydict_packager -- --check`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior sign_and_install -- --nocapture`
+- `git diff --check -- dotnet/scripts/sign-and-install.ps1 rs/crates/easydict_packager/tests/release_contract_behavior.rs`
+
+## 2026-06-12: Hardened Quick CLI app-dir no-op against stale LocalAI payloads
+
+- Rechecked the Quick CLI LocalAI app-dir boundary before changing tests. No new dependency was needed; this is a default rs no-runtime guard.
+- `local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers` now builds an app dir containing stale `workers/localai`, `Easydict.CompatHost.exe`, `dotnet/dotnet.exe`, `hostfxr.dll`, and CoreLib markers, then proves `windows-local-ai --app-dir` still fails on the Rust-native-required boundary without worker/CompatHost/dotnet wording.
+- Strengthened the shared LocalAI CLI no-worker assertion and the batch `--app-dir` path so batch mode is covered by the same stale payload guard.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --test cli_translate_behavior`
+
+## 2026-06-12: Restricted retained-worker hybrid opt-in to Easydict env
+
+- Rechecked the retained runtime-profile boundary after a read-only subagent audit. No new dependency was needed; this is a small Rust policy change.
+- `RuntimeRoutePolicy` now treats `EASYDICT_RUNTIME_PROFILE=hybrid` as the only environment opt-in that can enable retained workers when the compatibility feature is compiled. Generic `RUNTIME_PROFILE=hybrid` no longer enables retained workers by itself; `RUNTIME_PROFILE=rust-only` and unknown generic values still participate as kill switches.
+- Updated the retained-feature runtime-policy test to cover `generic_hybrid_profile_does_not_enable_retained_workers_when_feature_is_compiled`.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --lib runtime_policy -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib --features retained-dotnet-workers runtime_policy -- --nocapture`
+
+Note:
+
+- An earlier broad `cargo test -p easydict_app runtime_policy` attempt compiled unrelated integration tests and failed with disk/PDB/memory limits (`no space on device`, `LNK1318`, `LNK1140`), so the focused `--lib` commands above were used for this policy slice.
+
+## 2026-06-12: Aligned persistent MDX suggestions with MDict header normalization
+
+- Rechecked the local dictionary index/header-normalization gap before changing code. No new dependency was needed; the app now reuses the existing `lib/rs-mdict` normalization helper instead of duplicating MDict strip/case rules.
+- `LexIndex` keeps the compatible LXDX binary format while allowing callers to provide pre-normalized trie keys. `LocalDictionaryIndexService` records a header-aware manifest normalization id and normalizes queries with the matching `StripKey` / `KeyCaseSensitive` rules when the MDX header is readable.
+- Added coverage for pre-normalized LexIndex entries and for persistent MDX indexes whose headers set `StripKey=Yes` or `KeyCaseSensitive=Yes`.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test lex_index_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
+## 2026-06-12: Hardened OCR current-app-dir against stale worker markers
+
+- Rechecked the OCR default route with a parallel worker. No new dependency was needed; this only strengthens the existing Rust-native OCR behavior tests.
+- Updated `current_app_dir_runner_uses_default_windows_native_despite_hybrid_profile_and_stale_worker_markers` to create stale `workers/ocr`, `Easydict.CompatHost.exe`, and `dotnet` markers next to the current test executable while parent runtime-profile env vars say `hybrid`.
+- The current-app-dir WindowsNative path still returns the local pixel-data error boundary and does not mention worker fallback, CompatHost, `.NET`, or dotnet.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test ocr_behavior current_app_dir_runner -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior app_dir_runner_uses -- --nocapture`
+
+## 2026-06-12: Covered default encrypted MDX suggestions through native index
+
+- Rechecked encrypted MDX local-dictionary suggestion routing before changing tests. No new dependency was needed; this uses the existing Rust `rs-mdict` header parsing and native `LexIndex` suggestion path.
+- Added `encrypted_local_dictionary_suggestions_with_valid_credentials_route_native_index_by_default`, proving valid `Encrypted=1` plus regcode/email routes through the default native persistent index path without the retained bridge feature.
+- The test verifies the encrypted dictionary opens through the native reader factory, returns suggestions, writes the native index, and produces no bridge/worker error.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior encrypted_local_dictionary_suggestions_with_valid_credentials_route_native_index_by_default -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestions -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
+## 2026-06-12: Covered plain LocalAI env aliases for CLI native routes
+
+- Rechecked Quick CLI and LongDoc CLI LocalAI environment parsing before changing tests. No new dependency was needed; both CLIs already normalize provider aliases through the shared Rust protocol helper.
+- Added Quick CLI coverage for plain `LOCAL_AI_PROVIDER`, `FOUNDRY_LOCAL_ENDPOINT`, `FOUNDRY_LOCAL_MODEL`, `OPENVINO_DEVICE`, and `EASYDICT_CACHE_DIR` so portable/CI callers can enter native Foundry/OpenVINO routes without writing settings JSON or using retained worker hints.
+- Added matching LongDoc CLI coverage for the same plain env alias shape. Both tests assert native provider preflight/error behavior and reject retained worker, CompatHost, and `.NET` wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_ -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior env_ -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
 ## 2026-06-12: Covered Extract-DotnetRuntime hybrid shim delegation
 
 - Rechecked the retained runtime extraction shim before changing tests. No new dependency was needed: this is an execution-level contract around the existing Rust `easydict_packager extract-dotnet-runtime` subcommand.

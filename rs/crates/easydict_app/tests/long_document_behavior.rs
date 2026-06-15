@@ -4602,6 +4602,193 @@ fn openvino_local_ai_long_document_translates_with_injected_native_nllb_translat
 }
 
 #[test]
+fn local_ai_long_document_route_matrix_stays_native_before_worker_fallback() {
+    const READY_READY: &[WindowsAiReadyState] =
+        &[WindowsAiReadyState::Ready, WindowsAiReadyState::Ready];
+    const NOT_READY: &[WindowsAiReadyState] = &[WindowsAiReadyState::NotReady];
+    const NO_WINDOWS_AI_PROBE: &[WindowsAiReadyState] = &[];
+
+    #[derive(Clone, Copy)]
+    enum ExpectedRoute {
+        Success(&'static str),
+        Error(&'static str),
+    }
+
+    struct RouteCase {
+        name: &'static str,
+        provider: &'static str,
+        foundry_endpoint_setting: &'static str,
+        foundry_probe_endpoint: Option<&'static str>,
+        ready_states: &'static [WindowsAiReadyState],
+        windows_ai_response: Option<&'static str>,
+        expected: ExpectedRoute,
+        expected_generic_native: bool,
+        expected_resolver_calls: usize,
+        expected_windows_ai_generations: usize,
+    }
+
+    let cases = [
+        RouteCase {
+            name: "explicit WindowsAI ready",
+            provider: local_ai_provider_modes::WINDOWS_AI,
+            foundry_endpoint_setting: "",
+            foundry_probe_endpoint: Some("foundry-local-invalid"),
+            ready_states: READY_READY,
+            windows_ai_response: Some("matrix WindowsAI translation"),
+            expected: ExpectedRoute::Success("matrix WindowsAI translation"),
+            expected_generic_native: false,
+            expected_resolver_calls: 0,
+            expected_windows_ai_generations: 1,
+        },
+        RouteCase {
+            name: "Auto WindowsAI ready",
+            provider: local_ai_provider_modes::AUTO,
+            foundry_endpoint_setting: "",
+            foundry_probe_endpoint: Some("foundry-local-invalid"),
+            ready_states: READY_READY,
+            windows_ai_response: Some("matrix Auto WindowsAI translation"),
+            expected: ExpectedRoute::Success("matrix Auto WindowsAI translation"),
+            expected_generic_native: false,
+            expected_resolver_calls: 0,
+            expected_windows_ai_generations: 1,
+        },
+        RouteCase {
+            name: "Auto probes Foundry after WindowsAI not ready",
+            provider: local_ai_provider_modes::AUTO,
+            foundry_endpoint_setting: "",
+            foundry_probe_endpoint: Some("foundry-local-invalid"),
+            ready_states: NOT_READY,
+            windows_ai_response: None,
+            expected: ExpectedRoute::Error("OpenAI HTTP request failed: builder error"),
+            expected_generic_native: false,
+            expected_resolver_calls: 1,
+            expected_windows_ai_generations: 0,
+        },
+        RouteCase {
+            name: "explicit FoundryLocal configured endpoint",
+            provider: local_ai_provider_modes::FOUNDRY_LOCAL,
+            foundry_endpoint_setting: "foundry-local-invalid",
+            foundry_probe_endpoint: None,
+            ready_states: NO_WINDOWS_AI_PROBE,
+            windows_ai_response: None,
+            expected: ExpectedRoute::Error("OpenAI HTTP request failed: builder error"),
+            expected_generic_native: true,
+            expected_resolver_calls: 0,
+            expected_windows_ai_generations: 0,
+        },
+        RouteCase {
+            name: "explicit OpenVINO cache preflight",
+            provider: local_ai_provider_modes::OPENVINO,
+            foundry_endpoint_setting: "",
+            foundry_probe_endpoint: Some("foundry-local-invalid"),
+            ready_states: NO_WINDOWS_AI_PROBE,
+            windows_ai_response: None,
+            expected: ExpectedRoute::Error("OpenVINO runtime or NLLB-200 model is not downloaded"),
+            expected_generic_native: false,
+            expected_resolver_calls: 0,
+            expected_windows_ai_generations: 0,
+        },
+    ];
+
+    for (index, case) in cases.into_iter().enumerate() {
+        let temp_dir = unique_temp_dir(&format!(
+            "longdoc-local-ai-route-matrix-{}",
+            case.name.replace([' ', '-'], "_")
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        let app_dir = temp_dir.join("stale-app-dir");
+        write_stale_longdoc_local_ai_payload_markers(&app_dir);
+
+        let mut request = local_ai_long_document_matrix_request(
+            &temp_dir,
+            case.provider,
+            case.foundry_endpoint_setting,
+            70 + index as u64,
+        );
+        if case.provider == local_ai_provider_modes::OPENVINO {
+            request.settings.cache_dir = Some(temp_dir.to_string_lossy().to_string());
+        }
+        assert_eq!(
+            long_document_request_can_route_natively(&request),
+            case.expected_generic_native,
+            "{} should match the expected generic native routing boundary",
+            case.name
+        );
+
+        let responses = case
+            .windows_ai_response
+            .map(|text| Ok(WindowsAiResponse::complete(text)))
+            .into_iter();
+        let mut client = RecordingWindowsAiClient::with_generate_responses(
+            case.ready_states.iter().copied(),
+            responses,
+        );
+        let mut resolver = RecordingFoundryLocalEndpointResolver::new(
+            case.foundry_probe_endpoint.map(str::to_string),
+        );
+
+        let outcome = run_long_document_request_with_app_dir_and_native_local_ai_client(
+            request,
+            &app_dir,
+            &mut client,
+            &mut resolver,
+        );
+        let diagnostics = format!("{:?}", outcome.events);
+
+        match case.expected {
+            ExpectedRoute::Success(expected_text) => {
+                let result = outcome.result.unwrap_or_else(|error| {
+                    panic!(
+                        "{} should succeed: {error:?}; ready_state_calls={}; generate_prompts={:?}",
+                        case.name,
+                        client.ready_state_calls(),
+                        client.generate_prompts()
+                    )
+                });
+                let output_path = result.output_path.expect("matrix output path");
+                let output = fs::read_to_string(&output_path).expect("matrix output should exist");
+                assert!(
+                    output.contains(expected_text),
+                    "{} should write native output containing {expected_text:?}: {output}",
+                    case.name
+                );
+                assert_no_retained_longdoc_markers(case.name, &format!("{diagnostics}\n{output}"));
+            }
+            ExpectedRoute::Error(expected_text) => {
+                let error = outcome
+                    .result
+                    .expect_err("matrix case should fail on a native/preflight boundary");
+                assert!(
+                    error.message.contains(expected_text),
+                    "{} should fail on the expected native/preflight boundary {expected_text:?}: {}",
+                    case.name,
+                    error.message
+                );
+                assert_no_retained_longdoc_markers(
+                    case.name,
+                    &format!("{diagnostics}\n{}", error.message),
+                );
+            }
+        }
+
+        assert_eq!(
+            resolver.calls(),
+            case.expected_resolver_calls,
+            "{} should only touch the expected native Foundry probe path",
+            case.name
+        );
+        assert_eq!(
+            client.generate_prompts().len(),
+            case.expected_windows_ai_generations,
+            "{} should only use the expected native WindowsAI generation path",
+            case.name
+        );
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+}
+
+#[test]
 fn legacy_local_ai_long_document_service_id_maps_to_native_windows_local_ai_route() {
     let temp_dir = unique_temp_dir("longdoc-native-local-ai-legacy-id");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -5617,6 +5804,97 @@ fn openvino_local_ai_long_document_request(
         query_id,
     )
     .expect("OpenVINO local AI long document request")
+}
+
+fn local_ai_long_document_matrix_request(
+    temp_dir: &std::path::Path,
+    provider: &str,
+    foundry_endpoint: &str,
+    query_id: u64,
+) -> easydict_app::LongDocumentServiceRequest {
+    build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: provider.to_string(),
+                foundry_local_endpoint: foundry_endpoint.to_string(),
+                foundry_local_model: "phi-3-mini".to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: format!("A {provider} local AI long document chunk."),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                two_pass_context: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        query_id,
+    )
+    .expect("LocalAI route matrix long document request")
+}
+
+fn write_stale_longdoc_local_ai_payload_markers(app_dir: &std::path::Path) {
+    let longdoc_worker_dir = app_dir.join("workers").join("longdoc");
+    let localai_worker_dir = app_dir.join("workers").join("localai");
+    let dotnet_host_dir = app_dir.join("dotnet").join("host").join("fxr");
+    let dotnet_shared_dir = app_dir
+        .join("dotnet")
+        .join("shared")
+        .join("Microsoft.NETCore.App");
+    fs::create_dir_all(&longdoc_worker_dir).expect("stale LongDoc worker dir should be created");
+    fs::create_dir_all(&localai_worker_dir).expect("stale LocalAI worker dir should be created");
+    fs::create_dir_all(&dotnet_host_dir).expect("stale dotnet host dir should be created");
+    fs::create_dir_all(&dotnet_shared_dir).expect("stale dotnet shared dir should be created");
+    fs::write(
+        app_dir.join("Easydict.CompatHost.exe"),
+        b"stale compat host",
+    )
+    .expect("stale CompatHost marker should be written");
+    fs::write(
+        longdoc_worker_dir.join("Easydict.Workers.LongDoc.exe"),
+        b"stale longdoc worker",
+    )
+    .expect("stale LongDoc worker marker should be written");
+    fs::write(
+        localai_worker_dir.join("Easydict.Workers.LocalAi.exe"),
+        b"stale localai worker",
+    )
+    .expect("stale LocalAI worker marker should be written");
+    fs::write(app_dir.join("dotnet").join("dotnet.exe"), b"stale dotnet")
+        .expect("stale dotnet marker should be written");
+    fs::write(dotnet_host_dir.join("hostfxr.dll"), b"stale hostfxr")
+        .expect("stale hostfxr marker should be written");
+    fs::write(
+        dotnet_shared_dir.join("System.Private.CoreLib.dll"),
+        b"stale corelib",
+    )
+    .expect("stale CoreLib marker should be written");
+}
+
+fn assert_no_retained_longdoc_markers(context: &str, diagnostics: &str) {
+    for forbidden in [
+        "Long Document worker",
+        ".NET Long Document workers",
+        ".NET Local AI workers",
+        "retained .NET workers",
+        "Easydict.Workers",
+        "Easydict.CompatHost",
+        "CompatHost",
+        "dotnet.exe",
+        "hostfxr",
+        "DOTNET_ROOT",
+    ] {
+        assert!(
+            !diagnostics.contains(forbidden),
+            "{context} should stay on native/preflight routes before retained marker {forbidden}: {diagnostics}"
+        );
+    }
 }
 
 fn native_long_text_markers<S: AsRef<str>>(markers: &[S]) -> String {

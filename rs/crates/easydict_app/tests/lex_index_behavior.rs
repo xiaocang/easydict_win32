@@ -72,6 +72,18 @@ fn native_lex_index_uses_nfkc_lowercase_normalization() {
 }
 
 #[test]
+fn native_lex_index_can_store_pre_normalized_entries_for_dictionary_specific_rules() {
+    let index = LexIndex::from_normalized_entries([
+        ("cooperate".to_string(), "co-operate".to_string()),
+        ("reenter".to_string(), "re-enter".to_string()),
+    ]);
+
+    assert_eq!(index.complete_normalized("co", 10), ["co-operate"]);
+    assert_eq!(index.match_pattern_normalized("re*", 10), ["re-enter"]);
+    assert!(index.complete("co-", 10).is_empty());
+}
+
+#[test]
 fn native_lex_index_empty_and_whitespace_keys_are_ignored() {
     let index = LexIndex::from_keys(["", " ", "\t", "apple"]);
 

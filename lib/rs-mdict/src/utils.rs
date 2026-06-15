@@ -205,6 +205,27 @@ pub fn strip_key_preserving_case(key: &str, is_mdd: bool) -> String {
     result.trim().to_string()
 }
 
+/// Normalize an MDict key using the same StripKey/KeyCaseSensitive semantics
+/// used by lookup and prefix search.
+pub fn normalize_mdict_key_for_lookup(
+    key: &str,
+    is_mdd: bool,
+    strip_key: bool,
+    case_sensitive: bool,
+) -> String {
+    let mut result = if strip_key {
+        strip_key_preserving_case(key, is_mdd)
+    } else {
+        key.to_string()
+    };
+
+    if !case_sensitive {
+        result = result.to_lowercase();
+    }
+
+    result.trim().to_string()
+}
+
 /// Fast XOR decryption
 pub fn fast_decrypt(data: &mut [u8], key: &[u8]) {
     let mut previous: u8 = 0x36;
@@ -354,6 +375,22 @@ mod tests {
         assert_eq!(
             strip_key_preserving_case(r"\images\logo.large.png", true),
             r"\images\logolarge.png"
+        );
+    }
+
+    #[test]
+    fn normalize_mdict_key_for_lookup_applies_strip_and_case_flags() {
+        assert_eq!(
+            normalize_mdict_key_for_lookup(" Co-Operate ", false, true, false),
+            "cooperate"
+        );
+        assert_eq!(
+            normalize_mdict_key_for_lookup(" Co-Operate ", false, true, true),
+            "CoOperate"
+        );
+        assert_eq!(
+            normalize_mdict_key_for_lookup(" Co-Operate ", false, false, false),
+            "co-operate"
         );
     }
 

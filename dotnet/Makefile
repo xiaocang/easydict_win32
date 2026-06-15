@@ -309,19 +309,34 @@ endif
 msix-x64: publish-msix-x64
 	@mkdir -p msix
 	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x64 -PublishDir ./publish-msix/x64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x64.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
-	cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x64.msix --runtime-profile "$(RUNTIME_PROFILE)" --allow-unsigned
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ -n "$$runtime_profile" ]; then \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x64.msix --runtime-profile "$$runtime_profile" --allow-unsigned; \
+	else \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x64.msix --allow-unsigned; \
+	fi
 
 # Create MSIX package for x86
 msix-x86: publish-msix-x86
 	@mkdir -p msix
 	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x86 -PublishDir ./publish-msix/x86 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x86.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
-	cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x86.msix --runtime-profile "$(RUNTIME_PROFILE)" --allow-unsigned
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ -n "$$runtime_profile" ]; then \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x86.msix --runtime-profile "$$runtime_profile" --allow-unsigned; \
+	else \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x86.msix --allow-unsigned; \
+	fi
 
 # Create MSIX package for ARM64
 msix-arm64: publish-msix-arm64
 	@mkdir -p msix
 	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform arm64 -PublishDir ./publish-msix/arm64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-arm64.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
-	cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-arm64.msix --runtime-profile "$(RUNTIME_PROFILE)" --allow-unsigned
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ -n "$$runtime_profile" ]; then \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-arm64.msix --runtime-profile "$$runtime_profile" --allow-unsigned; \
+	else \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-arm64.msix --allow-unsigned; \
+	fi
 
 # Create MSIX package for current platform (default: x64)
 msix: msix-x64

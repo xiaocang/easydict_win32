@@ -60,6 +60,11 @@ impl LexIndex {
         build_from_groups(groups)
     }
 
+    pub fn from_normalized_entries(entries: impl IntoIterator<Item = (String, String)>) -> Self {
+        let groups = collect_grouped_normalized_entries(entries);
+        build_from_groups(groups)
+    }
+
     pub fn build_bytes(keys: impl IntoIterator<Item = impl AsRef<str>>) -> Vec<u8> {
         Self::from_keys(keys).to_bytes()
     }
@@ -152,16 +157,20 @@ impl LexIndex {
     }
 
     pub fn complete(&self, prefix: &str, limit: usize) -> Vec<String> {
+        self.complete_normalized(&normalize_key(prefix), limit)
+    }
+
+    pub fn complete_normalized(&self, normalized_prefix: &str, limit: usize) -> Vec<String> {
         if limit == 0 {
             return Vec::new();
         }
 
-        let normalized = normalize_key(prefix);
+        let normalized = normalized_prefix.trim();
         if normalized.is_empty() {
             return Vec::new();
         }
 
-        let Some(state_id) = self.traverse_exact(&normalized) else {
+        let Some(state_id) = self.traverse_exact(normalized) else {
             return Vec::new();
         };
 
@@ -171,11 +180,15 @@ impl LexIndex {
     }
 
     pub fn match_pattern(&self, pattern: &str, limit: usize) -> Vec<String> {
+        self.match_pattern_normalized(&normalize_key(pattern), limit)
+    }
+
+    pub fn match_pattern_normalized(&self, normalized_pattern: &str, limit: usize) -> Vec<String> {
         if limit == 0 {
             return Vec::new();
         }
 
-        let normalized = normalize_key(pattern);
+        let normalized = normalized_pattern.trim();
         if normalized.is_empty() {
             return Vec::new();
         }
@@ -447,6 +460,25 @@ fn collect_grouped_keys(
             .entry(normalized)
             .or_default()
             .insert(trimmed.to_string());
+    }
+    groups
+}
+
+fn collect_grouped_normalized_entries(
+    entries: impl IntoIterator<Item = (String, String)>,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut groups = BTreeMap::<String, BTreeSet<String>>::new();
+    for (normalized_key, key) in entries {
+        let normalized_key = normalized_key.trim();
+        let key = key.trim();
+        if normalized_key.is_empty() || key.is_empty() {
+            continue;
+        }
+
+        groups
+            .entry(normalized_key.to_string())
+            .or_default()
+            .insert(key.to_string());
     }
     groups
 }

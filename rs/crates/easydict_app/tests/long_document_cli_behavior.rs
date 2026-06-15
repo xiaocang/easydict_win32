@@ -1,9 +1,23 @@
 #![cfg(windows)]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const LOCAL_AI_ENVIRONMENT_OVERRIDE_KEYS: &[&str] = &[
+    "EASYDICT_LOCAL_AI_PROVIDER",
+    "LOCAL_AI_PROVIDER",
+    "EASYDICT_FOUNDRY_LOCAL_ENDPOINT",
+    "FOUNDRY_LOCAL_ENDPOINT",
+    "EASYDICT_FOUNDRY_LOCAL_MODEL",
+    "FOUNDRY_LOCAL_MODEL",
+    "EASYDICT_OPENVINO_DEVICE",
+    "EASYDICT_OPEN_VINO_DEVICE",
+    "OPENVINO_DEVICE",
+    "EASYDICT_OPENVINO_CACHE_DIR",
+    "EASYDICT_CACHE_DIR",
+];
 
 #[test]
 fn help_lists_long_document_options() {
@@ -518,11 +532,11 @@ fn result_json_path_is_prechecked_before_provider_lookup() {
 }
 
 #[test]
-fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
+fn app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-appdir-no-worker");
     let app_dir = work_dir.join("app");
     let settings_dir = work_dir.join("settings");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    write_stale_longdoc_payload_markers(&app_dir);
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
     fs::write(
         settings_dir.join("settings.json"),
@@ -546,6 +560,7 @@ fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
         ])
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
         .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
         .output()
         .expect("long document CLI should run");
@@ -570,6 +585,18 @@ fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
     assert!(
         !normalized.contains("compat host"),
         "LongDoc CLI should not describe a compat host route:\n{stderr}"
+    );
+    assert!(
+        !normalized.contains("dotnet"),
+        "LongDoc CLI should not describe stale dotnet payloads:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Easydict.Workers"),
+        "LongDoc CLI should not describe retained worker payload names:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("hostfxr"),
+        "LongDoc CLI should not describe bundled runtime payloads:\n{stderr}"
     );
 
     let _ = fs::remove_dir_all(work_dir);
@@ -737,6 +764,84 @@ fn env_overrides_foundry_local_endpoint_and_model_before_worker_lookup() {
 }
 
 #[test]
+fn plain_env_aliases_override_local_ai_provider_before_worker_lookup() {
+    #[derive(Clone, Copy)]
+    enum ExpectedRoute {
+        FoundryLocal,
+        OpenVino,
+    }
+
+    let cases = [
+        ("foundry_local", ExpectedRoute::FoundryLocal),
+        ("open-vino", ExpectedRoute::OpenVino),
+    ];
+
+    for (provider_alias, expected_route) in cases {
+        let work_dir = unique_temp_dir(&format!(
+            "easydict-long-doc-cli-plain-local-ai-env-{}",
+            provider_alias.replace(['-', '_'], "-")
+        ));
+        let settings_dir = work_dir.join("settings");
+        let cache_dir = work_dir.join("cache");
+        fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+        fs::create_dir_all(&cache_dir).expect("cache directory should be created");
+        fs::write(
+            settings_dir.join("settings.json"),
+            r#"{"LocalAIProvider":"WindowsAI"}"#,
+        )
+        .expect("settings should be written");
+        let input_path = work_dir.join("sample.txt");
+        fs::write(&input_path, "Hello plain LocalAI env long document")
+            .expect("sample input should be written");
+
+        let mut command = long_doc_cli();
+        command
+            .arg("--input")
+            .arg(&input_path)
+            .args([
+                "--target-language",
+                "zh-Hans",
+                "--from",
+                "en",
+                "--service",
+                "windows-local-ai",
+            ])
+            .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+            .remove_local_ai_env_overrides()
+            .env("LOCAL_AI_PROVIDER", provider_alias)
+            .env("FOUNDRY_LOCAL_ENDPOINT", "foundry-local-invalid")
+            .env("FOUNDRY_LOCAL_MODEL", "cli-foundry-model")
+            .env("EASYDICT_CACHE_DIR", &cache_dir)
+            .env("OPENVINO_DEVICE", "GPU");
+        let output = command.output().expect("long document CLI should run");
+
+        assert_failure(&output);
+        let stderr = stderr(&output);
+        match expected_route {
+            ExpectedRoute::FoundryLocal => {
+                assert!(
+                    stderr.contains("OpenAI HTTP request failed"),
+                    "plain Foundry aliases should route to native Foundry/OpenAI-compatible handling:\n{stderr}"
+                );
+            }
+            ExpectedRoute::OpenVino => {
+                assert!(
+                    stderr.contains("OpenVINO runtime or NLLB-200 model is not downloaded"),
+                    "plain OpenVINO aliases should route to native OpenVINO preflight:\n{stderr}"
+                );
+            }
+        }
+        assert!(
+            !stderr.contains("requires a Rust-native route"),
+            "plain LocalAI aliases should enter native provider handling:\n{stderr}"
+        );
+        assert_no_retained_longdoc_worker_wording(&stderr, provider_alias);
+
+        let _ = fs::remove_dir_all(work_dir);
+    }
+}
+
+#[test]
 fn local_ai_provider_aliases_route_to_native_preflight_without_worker_lookup() {
     #[derive(Clone, Copy)]
     enum ExpectedRoute {
@@ -886,6 +991,19 @@ fn long_doc_cli() -> Command {
     Command::new(binary)
 }
 
+trait LocalAiEnvCommandExt {
+    fn remove_local_ai_env_overrides(&mut self) -> &mut Self;
+}
+
+impl LocalAiEnvCommandExt for Command {
+    fn remove_local_ai_env_overrides(&mut self) -> &mut Self {
+        for key in LOCAL_AI_ENVIRONMENT_OVERRIDE_KEYS {
+            self.env_remove(key);
+        }
+        self
+    }
+}
+
 fn assert_success(output: &Output) {
     assert!(
         output.status.success(),
@@ -935,4 +1053,45 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
         .expect("system clock should be after unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("{prefix}-{}-{nanos}", std::process::id()))
+}
+
+fn write_stale_longdoc_payload_markers(app_dir: &Path) {
+    let longdoc_worker_dir = app_dir.join("workers").join("longdoc");
+    let localai_worker_dir = app_dir.join("workers").join("localai");
+    let dotnet_host_dir = app_dir.join("dotnet").join("host").join("fxr");
+    let dotnet_shared_dir = app_dir
+        .join("dotnet")
+        .join("shared")
+        .join("Microsoft.NETCore.App");
+    fs::create_dir_all(&longdoc_worker_dir)
+        .expect("stale LongDoc worker directory should be created");
+    fs::create_dir_all(&localai_worker_dir)
+        .expect("stale LocalAI worker directory should be created");
+    fs::create_dir_all(&dotnet_host_dir).expect("stale dotnet host directory should be created");
+    fs::create_dir_all(&dotnet_shared_dir)
+        .expect("stale dotnet shared runtime directory should be created");
+    fs::write(
+        app_dir.join("Easydict.CompatHost.exe"),
+        b"stale compat host marker",
+    )
+    .expect("stale CompatHost marker should be written");
+    fs::write(
+        longdoc_worker_dir.join("Easydict.Workers.LongDoc.exe"),
+        b"stale long document worker marker",
+    )
+    .expect("stale LongDoc worker marker should be written");
+    fs::write(
+        localai_worker_dir.join("Easydict.Workers.LocalAi.exe"),
+        b"stale local ai worker marker",
+    )
+    .expect("stale LocalAI worker marker should be written");
+    fs::write(app_dir.join("dotnet").join("dotnet.exe"), b"stale dotnet")
+        .expect("stale dotnet marker should be written");
+    fs::write(dotnet_host_dir.join("hostfxr.dll"), b"stale hostfxr")
+        .expect("stale hostfxr marker should be written");
+    fs::write(
+        dotnet_shared_dir.join("System.Private.CoreLib.dll"),
+        b"stale corelib",
+    )
+    .expect("stale corelib marker should be written");
 }

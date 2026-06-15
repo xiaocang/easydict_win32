@@ -922,18 +922,12 @@ struct KeyNormalization {
 
 impl KeyNormalization {
     fn normalize(self, key: &str) -> String {
-        let is_mdd = self.ext == FileExt::Mdd;
-        let mut result = if self.strip_key {
-            utils::strip_key_preserving_case(key, is_mdd)
-        } else {
-            key.to_string()
-        };
-
-        if !self.case_sensitive {
-            result = result.to_lowercase();
-        }
-
-        result.trim().to_string()
+        utils::normalize_mdict_key_for_lookup(
+            key,
+            self.ext == FileExt::Mdd,
+            self.strip_key,
+            self.case_sensitive,
+        )
     }
 
     fn compare(self, a: &str, b: &str) -> std::cmp::Ordering {

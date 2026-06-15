@@ -34,4 +34,4 @@ pub use mdd::{
 };
 pub use mdx::Mdx;
 pub use types::*;
-pub use utils::parse_header;
+pub use utils::{normalize_mdict_key_for_lookup, parse_header};

@@ -1,10 +1,11 @@
-use crate::lex_index::{LexIndex, LexIndexError};
+use crate::lex_index::{normalize_key, LexIndex, LexIndexError};
 use crate::protocol::SettingsSnapshot;
 use crate::state::ImportedMdxDictionary;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -13,6 +14,15 @@ pub const CURRENT_INDEX_FORMAT_VERSION: i32 = 1;
 pub const INDEX_FILE_NAME: &str = "index.bin";
 pub const MANIFEST_FILE_NAME: &str = "manifest.json";
 pub const DEFAULT_NORMALIZATION_ID: &str = "nfkc-lower-invariant-v1";
+const MDICT_MDX_STRIP_CASE_INSENSITIVE_NORMALIZATION_ID: &str =
+    "mdict-mdx-strip-key-case-insensitive-v1";
+const MDICT_MDX_STRIP_CASE_SENSITIVE_NORMALIZATION_ID: &str =
+    "mdict-mdx-strip-key-case-sensitive-v1";
+const MDICT_MDX_NO_STRIP_CASE_INSENSITIVE_NORMALIZATION_ID: &str =
+    "mdict-mdx-no-strip-key-case-insensitive-v1";
+const MDICT_MDX_NO_STRIP_CASE_SENSITIVE_NORMALIZATION_ID: &str =
+    "mdict-mdx-no-strip-key-case-sensitive-v1";
+const MAX_MDX_HEADER_BYTES: usize = 4 * 1024 * 1024;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,6 +67,88 @@ pub struct LocalDictionaryIndexSuggestionItem {
     pub key: String,
     pub dict_display_name: String,
     pub dict_service_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LocalDictionaryIndexNormalization {
+    NfkcLowerInvariant,
+    MdictMdx {
+        strip_key: bool,
+        case_sensitive: bool,
+    },
+}
+
+impl LocalDictionaryIndexNormalization {
+    fn for_dictionary(dictionary: &LocalDictionaryIndexDescriptor) -> Self {
+        if !dictionary.service_id.starts_with("mdx::") {
+            return Self::NfkcLowerInvariant;
+        }
+
+        mdx_header_normalization(&dictionary.file_path).unwrap_or(Self::NfkcLowerInvariant)
+    }
+
+    fn from_id(value: &str) -> Self {
+        match value {
+            MDICT_MDX_STRIP_CASE_INSENSITIVE_NORMALIZATION_ID => Self::MdictMdx {
+                strip_key: true,
+                case_sensitive: false,
+            },
+            MDICT_MDX_STRIP_CASE_SENSITIVE_NORMALIZATION_ID => Self::MdictMdx {
+                strip_key: true,
+                case_sensitive: true,
+            },
+            MDICT_MDX_NO_STRIP_CASE_INSENSITIVE_NORMALIZATION_ID => Self::MdictMdx {
+                strip_key: false,
+                case_sensitive: false,
+            },
+            MDICT_MDX_NO_STRIP_CASE_SENSITIVE_NORMALIZATION_ID => Self::MdictMdx {
+                strip_key: false,
+                case_sensitive: true,
+            },
+            _ => Self::NfkcLowerInvariant,
+        }
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::NfkcLowerInvariant => DEFAULT_NORMALIZATION_ID,
+            Self::MdictMdx {
+                strip_key: true,
+                case_sensitive: false,
+            } => MDICT_MDX_STRIP_CASE_INSENSITIVE_NORMALIZATION_ID,
+            Self::MdictMdx {
+                strip_key: true,
+                case_sensitive: true,
+            } => MDICT_MDX_STRIP_CASE_SENSITIVE_NORMALIZATION_ID,
+            Self::MdictMdx {
+                strip_key: false,
+                case_sensitive: false,
+            } => MDICT_MDX_NO_STRIP_CASE_INSENSITIVE_NORMALIZATION_ID,
+            Self::MdictMdx {
+                strip_key: false,
+                case_sensitive: true,
+            } => MDICT_MDX_NO_STRIP_CASE_SENSITIVE_NORMALIZATION_ID,
+        }
+    }
+
+    fn normalize_key(self, key: &str) -> String {
+        match self {
+            Self::NfkcLowerInvariant => normalize_key(key),
+            Self::MdictMdx {
+                strip_key,
+                case_sensitive,
+            } => rust_mdict::normalize_mdict_key_for_lookup(key, false, strip_key, case_sensitive),
+        }
+    }
+
+    fn build_index(self, keys: Vec<String>) -> LexIndex {
+        match self {
+            Self::NfkcLowerInvariant => LexIndex::from_keys(keys),
+            Self::MdictMdx { .. } => LexIndex::from_normalized_entries(
+                keys.into_iter().map(|key| (self.normalize_key(&key), key)),
+            ),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -232,13 +324,14 @@ impl LocalDictionaryIndexService {
         fs::create_dir_all(&folder_path)?;
 
         let source_info = fs::metadata(&dictionary.file_path)?;
+        let normalization = LocalDictionaryIndexNormalization::for_dictionary(dictionary);
         let mut current_fingerprint = LocalDictionaryIndexManifest {
             service_id: dictionary.service_id.clone(),
             source_path: dictionary.file_path.clone(),
             source_last_write_utc: format_system_time_utc(source_info.modified()?),
             source_length: source_info.len(),
             index_format_version: CURRENT_INDEX_FORMAT_VERSION,
-            normalization_id: DEFAULT_NORMALIZATION_ID.to_string(),
+            normalization_id: normalization.id().to_string(),
             entry_count: 0,
         };
 
@@ -255,7 +348,7 @@ impl LocalDictionaryIndexService {
         let build_result = (|| {
             let keys = load_keys()
                 .map_err(|error| LocalDictionaryIndexError::KeyEnumeration(error.to_string()))?;
-            let built_index = LexIndex::from_keys(keys);
+            let built_index = normalization.build_index(keys);
             fs::write(&temp_index_path, built_index.to_bytes())?;
 
             current_fingerprint.entry_count = built_index.metadata().entry_count;
@@ -308,8 +401,12 @@ impl LocalDictionaryIndexService {
         service_ids: &[impl AsRef<str>],
         limit: usize,
     ) -> Vec<LocalDictionaryIndexSuggestionItem> {
-        self.query(prefix, service_ids, limit, |index, query, result_limit| {
-            index.complete(query, result_limit)
+        self.query(prefix, service_ids, limit, |entry, query, result_limit| {
+            let normalization =
+                LocalDictionaryIndexNormalization::from_id(&entry.manifest.normalization_id);
+            entry
+                .index
+                .complete_normalized(&normalization.normalize_key(query), result_limit)
         })
     }
 
@@ -319,8 +416,12 @@ impl LocalDictionaryIndexService {
         service_ids: &[impl AsRef<str>],
         limit: usize,
     ) -> Vec<LocalDictionaryIndexSuggestionItem> {
-        self.query(pattern, service_ids, limit, |index, query, result_limit| {
-            index.match_pattern(query, result_limit)
+        self.query(pattern, service_ids, limit, |entry, query, result_limit| {
+            let normalization =
+                LocalDictionaryIndexNormalization::from_id(&entry.manifest.normalization_id);
+            entry
+                .index
+                .match_pattern_normalized(&normalization.normalize_key(query), result_limit)
         })
     }
 
@@ -329,7 +430,7 @@ impl LocalDictionaryIndexService {
         query: &str,
         service_ids: &[impl AsRef<str>],
         limit: usize,
-        executor: impl Fn(&LexIndex, &str, usize) -> Vec<String>,
+        executor: impl Fn(&LoadedIndexEntry, &str, usize) -> Vec<String>,
     ) -> Vec<LocalDictionaryIndexSuggestionItem> {
         if query.trim().is_empty() || service_ids.is_empty() || limit == 0 {
             return Vec::new();
@@ -351,10 +452,7 @@ impl LocalDictionaryIndexService {
                 if !entry.is_queryable {
                     continue;
                 }
-                (
-                    executor(&entry.index, query, limit),
-                    entry.display_name.clone(),
-                )
+                (executor(entry, query, limit), entry.display_name.clone())
             };
 
             for key in keys {
@@ -487,6 +585,65 @@ pub fn escape_data_string(value: &str) -> String {
 fn load_manifest(path: &Path) -> Option<LocalDictionaryIndexManifest> {
     let json = fs::read_to_string(path).ok()?;
     serde_json::from_str(&json).ok()
+}
+
+fn mdx_header_normalization(path: &str) -> Option<LocalDictionaryIndexNormalization> {
+    let header_text = read_mdx_header_text(path).ok()?;
+    let attributes = rust_mdict::parse_header(&header_text).ok()?;
+    Some(LocalDictionaryIndexNormalization::MdictMdx {
+        strip_key: mdx_header_yes_no(&attributes, "StripKey", true),
+        case_sensitive: mdx_header_yes_no(&attributes, "KeyCaseSensitive", false),
+    })
+}
+
+fn read_mdx_header_text(path: impl AsRef<Path>) -> std::io::Result<String> {
+    let mut file = fs::File::open(path)?;
+    let mut header_len = [0u8; 4];
+    file.read_exact(&mut header_len)?;
+    let header_len = u32::from_be_bytes(header_len) as usize;
+    if header_len == 0 || header_len > MAX_MDX_HEADER_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "MDX dictionary header size is invalid",
+        ));
+    }
+
+    let mut header_bytes = vec![0u8; header_len];
+    file.read_exact(&mut header_bytes)?;
+    Ok(decode_mdx_header_text(&header_bytes))
+}
+
+fn decode_mdx_header_text(header_bytes: &[u8]) -> String {
+    if header_bytes.len() % 2 == 0 {
+        let utf16 = header_bytes
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect::<Vec<_>>();
+        String::from_utf16_lossy(&utf16)
+    } else {
+        String::from_utf8_lossy(header_bytes).into_owned()
+    }
+}
+
+fn mdx_header_yes_no(
+    attributes: &HashMap<String, String>,
+    attribute: &str,
+    default_value: bool,
+) -> bool {
+    attributes
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(attribute))
+        .map(|(_, value)| value.trim())
+        .map(|value| {
+            if value.eq_ignore_ascii_case("Yes") {
+                true
+            } else if value.eq_ignore_ascii_case("No") {
+                false
+            } else {
+                default_value
+            }
+        })
+        .unwrap_or(default_value)
 }
 
 fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {

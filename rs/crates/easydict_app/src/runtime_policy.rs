@@ -125,13 +125,13 @@ enum RuntimeProfile {
 
 #[cfg(feature = "retained-dotnet-workers")]
 fn runtime_profile_from_environment() -> RuntimeProfile {
-    let profiles = [
-        std::env::var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE).ok(),
-        std::env::var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE).ok(),
-    ]
-    .into_iter()
-    .map(|value| value.map(|value| runtime_profile_from_value(&value)))
-    .collect::<Vec<_>>();
+    let easydict_profile = std::env::var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE)
+        .ok()
+        .map(|value| runtime_profile_from_value(&value, RuntimeProfileSource::Easydict));
+    let generic_profile = std::env::var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE)
+        .ok()
+        .map(|value| runtime_profile_from_value(&value, RuntimeProfileSource::Generic));
+    let profiles = [easydict_profile, generic_profile];
 
     if profiles
         .iter()
@@ -151,9 +151,16 @@ fn runtime_profile_from_environment() -> RuntimeProfile {
 }
 
 #[cfg(feature = "retained-dotnet-workers")]
-fn runtime_profile_from_value(value: &str) -> RuntimeProfile {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeProfileSource {
+    Easydict,
+    Generic,
+}
+
+#[cfg(feature = "retained-dotnet-workers")]
+fn runtime_profile_from_value(value: &str, source: RuntimeProfileSource) -> RuntimeProfile {
     let normalized = value.trim().to_ascii_lowercase();
-    if normalized == "hybrid" {
+    if normalized == "hybrid" && source == RuntimeProfileSource::Easydict {
         return RuntimeProfile::Hybrid;
     }
 
@@ -357,7 +364,7 @@ mod tests {
 
     #[cfg(feature = "retained-dotnet-workers")]
     #[test]
-    fn generic_hybrid_profile_enables_retained_workers_when_feature_is_compiled() {
+    fn generic_hybrid_profile_does_not_enable_retained_workers_when_feature_is_compiled() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();
         clear_retained_worker_environment();
@@ -365,7 +372,7 @@ mod tests {
 
         let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RuntimeRoutePolicy::all_enabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
         snapshot.restore();
     }
 

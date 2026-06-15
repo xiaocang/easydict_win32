@@ -689,10 +689,12 @@ fn current_app_dir_runner_uses_ollama_provider_despite_hybrid_runtime_profile() 
 }
 
 #[test]
-fn current_app_dir_runner_uses_native_windows_ocr_without_legacy_runtime_profile_probe() {
+fn current_app_dir_runner_uses_default_windows_native_despite_hybrid_profile_and_stale_worker_markers(
+) {
     let _environment = ENVIRONMENT_LOCK.lock().expect("environment lock");
     let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
     let _generic_runtime_profile = EnvironmentVariableGuard::set("RUNTIME_PROFILE", "hybrid");
+    let _legacy_markers = write_current_app_dir_legacy_ocr_markers();
     let request = easydict_app::OcrRecognizeRequest {
         query_id: 16,
         mode: OcrMode::Translate,
@@ -702,19 +704,19 @@ fn current_app_dir_runner_uses_native_windows_ocr_without_legacy_runtime_profile
             pixel_height: 1,
             preferred_language_tag: None,
         },
-        settings: SettingsSnapshot {
-            ocr_engine: Some("WindowsNative".to_string()),
-            ..Default::default()
-        },
+        settings: SettingsSnapshot::default(),
     };
 
     let outcome = run_ocr_recognize_with_current_app_dir(request);
     let error = outcome.result.unwrap_err().message;
+    let lower_error = error.to_ascii_lowercase();
 
     assert!(error.contains("Could not read OCR pixel data"));
-    assert!(!error.contains("OCR worker"));
+    assert!(!lower_error.contains("worker"));
+    assert!(!lower_error.contains("fallback"));
     assert!(!error.contains("CompatHost"));
     assert!(!error.contains(".NET"));
+    assert!(!lower_error.contains("dotnet"));
 }
 
 #[test]
@@ -1447,6 +1449,71 @@ fn write_temp_legacy_ocr_app_dir(name: &str) -> PathBuf {
     )
     .expect("legacy OCR worker marker should be written");
     root
+}
+
+fn write_current_app_dir_legacy_ocr_markers() -> CurrentAppDirLegacyMarkers {
+    let app_dir = std::env::current_exe()
+        .expect("test executable path should be available")
+        .parent()
+        .expect("test executable should have an app directory")
+        .to_path_buf();
+    let mut markers = CurrentAppDirLegacyMarkers::default();
+    let workers_dir = app_dir.join("workers");
+    let ocr_worker_dir = workers_dir.join("ocr");
+    let dotnet_dir = app_dir.join("dotnet");
+
+    markers.ensure_dir(workers_dir);
+    markers.ensure_dir(ocr_worker_dir.clone());
+    markers.ensure_file(
+        app_dir.join("Easydict.CompatHost.exe"),
+        b"stale compat host marker",
+    );
+    markers.ensure_file(
+        ocr_worker_dir.join("Easydict.Workers.Ocr.exe"),
+        b"stale OCR worker marker",
+    );
+    markers.ensure_dir(dotnet_dir.clone());
+    markers.ensure_file(dotnet_dir.join("dotnet.exe"), b"stale dotnet marker");
+    markers.ensure_file(app_dir.join("dotnet.exe"), b"stale root dotnet marker");
+    markers
+}
+
+#[derive(Default)]
+struct CurrentAppDirLegacyMarkers {
+    created_files: Vec<PathBuf>,
+    created_dirs: Vec<PathBuf>,
+}
+
+impl CurrentAppDirLegacyMarkers {
+    fn ensure_dir(&mut self, path: PathBuf) {
+        if path.exists() {
+            return;
+        }
+
+        fs::create_dir(&path).expect("legacy app-dir marker directory should be created");
+        self.created_dirs.push(path);
+    }
+
+    fn ensure_file(&mut self, path: PathBuf, contents: &[u8]) {
+        if path.exists() {
+            return;
+        }
+
+        fs::write(&path, contents).expect("legacy app-dir marker should be written");
+        self.created_files.push(path);
+    }
+}
+
+impl Drop for CurrentAppDirLegacyMarkers {
+    fn drop(&mut self) {
+        for path in self.created_files.iter().rev() {
+            fs::remove_file(path).ok();
+        }
+
+        for path in self.created_dirs.iter().rev() {
+            fs::remove_dir(path).ok();
+        }
+    }
 }
 
 struct EnvironmentVariableGuard {

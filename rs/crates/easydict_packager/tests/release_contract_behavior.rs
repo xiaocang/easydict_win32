@@ -1053,6 +1053,36 @@ fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
         "-UseDotnetLegacy has been retired",
         "legacy dotnet mode should fail locally instead of launching WinUI",
     );
+    assert_contains(
+        &script,
+        "[Parameter(DontShow = $true)]",
+        "retired legacy dotnet mode should stay hidden from normal PowerShell help",
+    );
+    assert_contains(
+        &script,
+        "Invoke-WithRustOnlyRuntimeProfile",
+        "LongDoc helper script should wrap child helper/cargo invocations in a Rust-only profile",
+    );
+    assert_contains(
+        &script,
+        "$env:EASYDICT_RUNTIME_PROFILE = \"rust-only\"",
+        "LongDoc helper script should force the Easydict runtime profile for child processes",
+    );
+    assert_contains(
+        &script,
+        "$env:RUNTIME_PROFILE = \"rust-only\"",
+        "LongDoc helper script should force the generic runtime profile for child processes",
+    );
+    assert_contains(
+        &script,
+        "Remove-Item Env:EASYDICT_RUNTIME_PROFILE",
+        "LongDoc helper script should restore an absent Easydict runtime profile",
+    );
+    assert_contains(
+        &script,
+        "Remove-Item Env:RUNTIME_PROFILE",
+        "LongDoc helper script should restore an absent generic runtime profile",
+    );
 
     for retired_marker in [
         "Invoke-DotnetLegacy",
@@ -1085,6 +1115,8 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
         "PATH",
         "EASYDICT_LONG_DOC_HELPER_RECORD",
         "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
     ]);
     let root = repo_root();
     let test_root = tempfile_dir("translate-long-doc-rust-helper-smoke");
@@ -1109,6 +1141,8 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
         "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
         &forbidden_tool_record,
     );
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
 
     let output = translate_long_doc_script_command(&root)
         .arg("-InputFile")
@@ -1169,6 +1203,16 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
             "translate-long-doc shim should pass the expected Rust helper argument",
         );
     }
+    assert_contains(
+        &record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "translate-long-doc Rust helper path should force the Easydict runtime profile",
+    );
+    assert_contains(
+        &record,
+        "RUNTIME_PROFILE=rust-only",
+        "translate-long-doc Rust helper path should force the generic runtime profile",
+    );
 
     let _ = fs::remove_dir_all(test_root);
 }
@@ -1181,6 +1225,8 @@ fn translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_too
         "PATH",
         "EASYDICT_LONG_DOC_HELPER_RECORD",
         "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
     ]);
     let root = repo_root();
     let test_root = tempfile_dir("translate-long-doc-app-dir-helper");
@@ -1204,6 +1250,8 @@ fn translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_too
         "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
         &forbidden_tool_record,
     );
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
 
     let output = translate_long_doc_script_command(&root)
         .arg("-InputFile")
@@ -1231,6 +1279,8 @@ fn translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_too
     for expected in [
         "HELPER=".to_string(),
         "easydict_long_doc.exe".to_string(),
+        "EASYDICT_RUNTIME_PROFILE=rust-only".to_string(),
+        "RUNTIME_PROFILE=rust-only".to_string(),
         "--input".to_string(),
         input_path.display().to_string(),
         "--target-language".to_string(),
@@ -1262,6 +1312,8 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
         "PATH",
         "EASYDICT_LONG_DOC_HELPER_RECORD",
         "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
     ]);
     let root = repo_root();
     let test_root = tempfile_dir("translate-long-doc-use-cargo-retry");
@@ -1285,6 +1337,8 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
         "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
         &forbidden_tool_record,
     );
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
 
     let output = translate_long_doc_script_command(&root)
         .arg("-InputFile")
@@ -1345,6 +1399,16 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
             "translate-long-doc -UseCargo should pass the expected Rust CLI argument",
         );
     }
+    assert_contains(
+        &record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "translate-long-doc -UseCargo should force the Easydict runtime profile while cargo runs",
+    );
+    assert_contains(
+        &record,
+        "RUNTIME_PROFILE=rust-only",
+        "translate-long-doc -UseCargo should force the generic runtime profile while cargo runs",
+    );
     for forbidden in ["dotnet", "Easydict.Workers", "CompatHost"] {
         assert_not_contains(
             &record,
@@ -1510,6 +1574,56 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         "--runtime-profile \"$(RUNTIME_PROFILE)\"",
         "Makefile validate-msix must not pass an empty runtime profile through to the Rust validator",
     );
+    for (target_name, start, end, msix_path) in [
+        (
+            "msix-x64",
+            "msix-x64: publish-msix-x64",
+            "# Create MSIX package for x86",
+            "./msix/Easydict-x64.msix",
+        ),
+        (
+            "msix-x86",
+            "msix-x86: publish-msix-x86",
+            "# Create MSIX package for ARM64",
+            "./msix/Easydict-x86.msix",
+        ),
+        (
+            "msix-arm64",
+            "msix-arm64: publish-msix-arm64",
+            "# Create MSIX package for current platform",
+            "./msix/Easydict-arm64.msix",
+        ),
+    ] {
+        let target = text_between(&makefile, start, end);
+        assert_contains(
+            target,
+            "if [ -n \"$$runtime_profile\" ]; then",
+            &format!(
+                "Makefile {target_name} should pass runtime profile only when explicitly provided"
+            ),
+        );
+        assert_contains(
+            target,
+            &format!(
+                "easydict_msix_validate -- {msix_path} --runtime-profile \"$$runtime_profile\" --allow-unsigned"
+            ),
+            &format!("Makefile {target_name} should pass the normalized explicit profile"),
+        );
+        assert_contains(
+            target,
+            &format!("easydict_msix_validate -- {msix_path} --allow-unsigned"),
+            &format!(
+                "Makefile {target_name} should omit --runtime-profile when unset so the Rust validator uses its Rust-only default"
+            ),
+        );
+        assert_not_contains(
+            target,
+            "--runtime-profile \"$(RUNTIME_PROFILE)\"",
+            &format!(
+                "Makefile {target_name} must not pass an empty runtime profile through to the Rust validator"
+            ),
+        );
+    }
     assert_contains(
         &release_workflow,
         "verify-bundle-minversion",
@@ -2051,6 +2165,138 @@ fn package_msix_powershell_shim_runs_rust_prepare_winapp_then_rust_fix() {
     let _ = fs::remove_dir_all(test_root);
 }
 
+#[cfg(windows)]
+#[test]
+fn sign_and_install_runs_rust_msix_validator_before_install_with_rust_only_default() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("sign-and-install-rust-only-validator");
+    let fake_bin = test_root.join("bin");
+    let package_path = test_root.join("Easydict.msix");
+    let cert_path = test_root.join("dev-signing.pfx");
+    let record_path = test_root.join("sign-install-record.txt");
+    let wrapper_path = test_root.join("invoke-sign-and-install.ps1");
+
+    fs::create_dir_all(&test_root).expect("create fake sign/install root");
+    fs::write(&package_path, b"fake msix").expect("write fake MSIX path");
+    fs::write(&cert_path, b"fake certificate").expect("write fake signing certificate");
+    write_fake_sign_and_install_tool_scripts(&fake_bin);
+    write_sign_and_install_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/sign-and-install.ps1"),
+        &package_path,
+        &cert_path,
+        None,
+        &record_path,
+    );
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run sign-and-install shim");
+    assert!(
+        output.status.success(),
+        "sign-and-install shim should complete with fake winapp/cargo/Appx cmdlets\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    let sign_index = record
+        .find("WINAPP_ARGS=sign")
+        .expect("sign-and-install should sign before validation");
+    let validator_index = record
+        .find("-p easydict_msix_validate")
+        .expect("sign-and-install should call the Rust MSIX validator");
+    let install_index = record
+        .find("ADD_APPX_PACKAGE=")
+        .expect("sign-and-install should install after validation");
+    assert!(
+        sign_index < validator_index && validator_index < install_index,
+        "sign-and-install should sign, validate, then Add-AppxPackage:\n{record}"
+    );
+    assert_contains(
+        &record,
+        package_path.display().to_string().as_str(),
+        "sign-and-install validator should receive the package path",
+    );
+    assert_not_contains(
+        &record,
+        "--runtime-profile",
+        "omitted RuntimeProfile should let easydict_msix_validate use its rust-only default",
+    );
+    assert_not_contains(
+        &record,
+        "FORBIDDEN_DOTNET",
+        "sign-and-install should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn sign_and_install_passes_hybrid_profile_to_validator_only_when_explicit() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("sign-and-install-hybrid-validator");
+    let fake_bin = test_root.join("bin");
+    let package_path = test_root.join("Easydict.msix");
+    let cert_path = test_root.join("dev-signing.pfx");
+    let record_path = test_root.join("sign-install-record.txt");
+    let wrapper_path = test_root.join("invoke-sign-and-install.ps1");
+
+    fs::create_dir_all(&test_root).expect("create fake sign/install root");
+    fs::write(&package_path, b"fake msix").expect("write fake MSIX path");
+    fs::write(&cert_path, b"fake certificate").expect("write fake signing certificate");
+    write_fake_sign_and_install_tool_scripts(&fake_bin);
+    write_sign_and_install_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/sign-and-install.ps1"),
+        &package_path,
+        &cert_path,
+        Some("Hybrid"),
+        &record_path,
+    );
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run sign-and-install shim with Hybrid profile");
+    assert!(
+        output.status.success(),
+        "sign-and-install Hybrid shim should complete with fake tools\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    let validator_index = record
+        .find("-p easydict_msix_validate")
+        .expect("sign-and-install should call the Rust MSIX validator");
+    let install_index = record
+        .find("ADD_APPX_PACKAGE=")
+        .expect("sign-and-install should install after validation");
+    assert!(
+        validator_index < install_index,
+        "sign-and-install should validate before Add-AppxPackage:\n{record}"
+    );
+    assert_contains(
+        &record,
+        "--runtime-profile hybrid",
+        "explicit Hybrid should be forwarded to easydict_msix_validate",
+    );
+    assert_not_contains(
+        &record,
+        "FORBIDDEN_DOTNET",
+        "sign-and-install should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -2253,6 +2499,74 @@ exit /b 0\r\n",
 }
 
 #[cfg(windows)]
+fn write_fake_sign_and_install_tool_scripts(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake sign/install tool dir");
+    fs::write(
+        fake_bin.join("cargo.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo ARGS=%*\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake sign-and-install cargo");
+    fs::write(
+        fake_bin.join("winapp.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo WINAPP_ARGS=%*\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake sign-and-install winapp");
+    fs::write(
+        fake_bin.join("dotnet.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo FORBIDDEN_DOTNET=%*\r\n\
+exit /b 87\r\n",
+    )
+    .expect("write fake sign-and-install dotnet");
+}
+
+#[cfg(windows)]
+fn write_sign_and_install_wrapper(
+    wrapper_path: &Path,
+    script_path: &Path,
+    package_path: &Path,
+    cert_path: &Path,
+    runtime_profile: Option<&str>,
+    record_path: &Path,
+) {
+    let runtime_profile_arg = runtime_profile
+        .map(|profile| format!(" -RuntimeProfile {}", powershell_string_literal(profile)))
+        .unwrap_or_default();
+    fs::write(
+        wrapper_path,
+        format!(
+            "$ErrorActionPreference = 'Stop'\r\n\
+function Get-AppxPackage {{\r\n\
+    param([string]$Name, [System.Management.Automation.ActionPreference]$ErrorAction)\r\n\
+    Add-Content -LiteralPath {} -Value \"GET_APPX_PACKAGE=$Name\"\r\n\
+    return $null\r\n\
+}}\r\n\
+function Remove-AppxPackage {{\r\n\
+    param([string]$Package)\r\n\
+    Add-Content -LiteralPath {} -Value \"REMOVE_APPX_PACKAGE=$Package\"\r\n\
+}}\r\n\
+function Add-AppxPackage {{\r\n\
+    param([string]$Path)\r\n\
+    Add-Content -LiteralPath {} -Value \"ADD_APPX_PACKAGE=$Path\"\r\n\
+}}\r\n\
+& {} -PackagePath {} -CertPath {}{}\r\n",
+            powershell_literal(record_path),
+            powershell_literal(record_path),
+            powershell_literal(record_path),
+            powershell_literal(script_path),
+            powershell_literal(package_path),
+            powershell_literal(cert_path),
+            runtime_profile_arg,
+        ),
+    )
+    .expect("write sign-and-install wrapper");
+}
+
+#[cfg(windows)]
 fn write_package_portable_wrapper(
     wrapper_path: &Path,
     package_script: &Path,
@@ -2304,7 +2618,12 @@ Add-Content -LiteralPath {} -Value \"POST_RUNTIME_PROFILE=$env:RUNTIME_PROFILE\"
 
 #[cfg(windows)]
 fn powershell_literal(path: &Path) -> String {
-    format!("'{}'", path.display().to_string().replace('\'', "''"))
+    powershell_string_literal(&path.display().to_string())
+}
+
+#[cfg(windows)]
+fn powershell_string_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 #[cfg(windows)]
@@ -2378,6 +2697,8 @@ fn write_fake_long_doc_helper(path: &Path) {
         "@echo off\r\n\
 setlocal\r\n\
 >>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo HELPER=%~f0\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo EASYDICT_RUNTIME_PROFILE=%EASYDICT_RUNTIME_PROFILE%\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo RUNTIME_PROFILE=%RUNTIME_PROFILE%\r\n\
 >>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo ARGS=%*\r\n\
 exit /b 0\r\n",
     )
@@ -2399,12 +2720,21 @@ fn main() {
     let record_path = env::var("EASYDICT_LONG_DOC_HELPER_RECORD").expect("record path");
     let helper = env::current_exe().expect("current exe");
     let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
+    let easydict_runtime_profile =
+        env::var("EASYDICT_RUNTIME_PROFILE").unwrap_or_default();
+    let runtime_profile = env::var("RUNTIME_PROFILE").unwrap_or_default();
     fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(record_path)
         .and_then(|mut file| {
             writeln!(file, "HELPER={}", helper.display())?;
+            writeln!(
+                file,
+                "EASYDICT_RUNTIME_PROFILE={}",
+                easydict_runtime_profile
+            )?;
+            writeln!(file, "RUNTIME_PROFILE={}", runtime_profile)?;
             writeln!(file, "ARGS={}", args)
         })
         .expect("append fake LongDoc helper record");
@@ -2448,6 +2778,8 @@ fn write_fake_long_doc_cargo_script(fake_bin: &Path) {
         "@echo off\r\n\
 setlocal\r\n\
 >>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo CARGO=%~f0\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo EASYDICT_RUNTIME_PROFILE=%EASYDICT_RUNTIME_PROFILE%\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo RUNTIME_PROFILE=%RUNTIME_PROFILE%\r\n\
 >>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo ARGS=%*\r\n\
 exit /b 0\r\n",
     )

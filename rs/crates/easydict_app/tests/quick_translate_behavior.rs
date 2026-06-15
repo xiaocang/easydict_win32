@@ -7241,6 +7241,68 @@ fn local_dictionary_suggestion_runner_routes_wildcard_queries_through_native_ind
 }
 
 #[test]
+fn encrypted_local_dictionary_suggestions_with_valid_credentials_route_native_index_by_default() {
+    let temp_dir = unique_temp_dir("easydict-mdx-suggestions-encrypted-native-index-default");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let encrypted_mdx_path = temp_dir.join("Secure Dictionary.mdx");
+    write_mdx_header(
+        &encrypted_mdx_path,
+        r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" Encrypted="1" RegisterBy="EMail" />"#,
+    );
+    let index_root = temp_dir.join("index");
+
+    let mut state = EasydictUiState::default();
+    state.settings.local_dictionary_suggestions = true;
+    state.settings.imported_mdx_dictionaries.clear();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(
+        &encrypted_mdx_path,
+    ))));
+    state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
+    state.settings.imported_mdx_dictionaries[0].regcode = Some(valid_mdx_regcode());
+    state.settings.imported_mdx_dictionaries[0].email = Some("email@example.com".to_string());
+    state.source_text = "app".to_string();
+    let request =
+        begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+
+    assert!(local_dictionary_suggestion_request_can_route_natively(
+        &request
+    ));
+
+    let mut factory = RecordingNativeIndexReaderFactory::with_key_sets([vec![
+        "app".to_string(),
+        "apple".to_string(),
+        "banana".to_string(),
+    ]]);
+    let update = run_local_dictionary_suggestion_request_with_native_index_root(
+        request,
+        &index_root,
+        &mut factory,
+    );
+
+    assert_eq!(factory.opened, ["mdx::secure-dictionary"]);
+    assert_eq!(
+        update.suggestions,
+        vec![
+            LocalDictionarySuggestion {
+                key: "app".to_string(),
+                dictionary_name: "Secure Dictionary".to_string(),
+            },
+            LocalDictionarySuggestion {
+                key: "apple".to_string(),
+                dictionary_name: "Secure Dictionary".to_string(),
+            },
+        ]
+    );
+    assert_eq!(update.error, None);
+    assert!(index_root
+        .join("mdx%3A%3Asecure-dictionary")
+        .join("index.bin")
+        .exists());
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
 #[cfg(feature = "retained-dotnet-workers")]
 fn local_dictionary_suggestions_route_plain_and_credential_encrypted_mdx_natively() {
     let temp_dir = unique_temp_dir("easydict-mdx-suggestions-valid-encrypted-native");

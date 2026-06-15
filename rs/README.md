@@ -270,15 +270,16 @@ Long document CLI smoke checks:
 cargo run -p easydict_app --bin easydict_long_doc -- --list-services
 ..\scripts\translate-long-doc.ps1 -ListServices -UseCargo
 ..\scripts\translate-long-doc.ps1 -InputFile path\to\input.md -TargetLanguage zh-Hans -Service google -OutputMode bilingual -UseCargo
-..\scripts\translate-long-doc.ps1 -InputFile path\to\input.pdf -TargetLanguage zh-Hans -Service google -PageRange 1-3 -AppDir path\to\packaged-app
+..\scripts\translate-long-doc.ps1 -InputFile path\to\input.pdf -TargetLanguage zh-Hans -Service google -PageRange 1-3 -AppDir path\to\rs-portable
 ```
 
 `..\scripts\translate-long-doc.ps1` defaults to the Rust long document helper
 `easydict_long_doc.exe`. In a source checkout without a built helper, it falls
 back to development mode via `cargo run -p easydict_app --bin easydict_long_doc`.
-Use `-RustHelperPath` or `-AppDir` to locate a packaged helper, and use
-`-UseCargo` when intentionally exercising the development binary. The Rust
-helper accepts
+Use `-RustHelperPath` or `-AppDir` to locate a Rust helper; `-AppDir` only
+resolves `easydict_long_doc.exe` from that directory and does not enable worker
+or runtime lookup. Use `-UseCargo` when intentionally exercising the development
+binary. The Rust helper accepts
 `--list-services`, `--input`, `--target-language`, `--from`, `--output`,
 `--result-json` / `--result-json-path`, `--retry-failed`, `--service`,
 `--output-mode`, `--layout`, `--pdf-export-mode`, `--page`, `--page-range`,
@@ -288,11 +289,10 @@ Passing `--app-dir` no longer enables retained LongDoc worker lookup; requests
 that still need the retained `.NET` worker fail locally with a Rust-native-route
 requirement.
 
-The old WinUI debug entry point is retired for this shim. `-UseDotnetLegacy`
-fails locally instead of launching `dotnet`; use `-UseCargo`, `-RustHelperPath`,
-or `-AppDir` to select the Rust helper. `-ResultJsonPath` writes the Rust-native
-result sidecar, and `-RetryFailed -ResultJsonPath <file>` reuses that sidecar to
-retry only failed chunks without probing retained workers.
+The old WinUI debug entry point is retired for this shim. The script only
+launches the Rust helper or Cargo development mode. `-ResultJsonPath` writes the
+Rust-native result sidecar, and `-RetryFailed -ResultJsonPath <file>` reuses
+that sidecar to retry only failed chunks without probing retained workers.
 
 Sidecar IPC smoke checks:
 

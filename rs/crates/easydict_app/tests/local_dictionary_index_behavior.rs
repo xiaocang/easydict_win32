@@ -341,6 +341,85 @@ fn native_local_dictionary_index_matches_wildcards_across_multiple_indexes() {
 }
 
 #[test]
+fn native_local_dictionary_index_uses_mdict_strip_key_normalization_from_header() {
+    let temp = TempDir::new("local-dictionary-index-mdict-strip-key");
+    let source_path = temp.mdx_header_file(
+        "dict-strip.mdx",
+        r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" StripKey="Yes" KeyCaseSensitive="No" />"#,
+    );
+    let dictionary = descriptor("mdx::strip", "Strip Dictionary", &source_path);
+    let mut builder = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    builder
+        .ensure_index_from_keys(&dictionary, ["co-operate", "cooperation", "re-enter"])
+        .unwrap();
+
+    let folder_path = temp.path.join("mdx%3A%3Astrip");
+    let manifest: LocalDictionaryIndexManifest =
+        serde_json::from_str(&fs::read_to_string(folder_path.join(MANIFEST_FILE_NAME)).unwrap())
+            .unwrap();
+    assert_eq!(
+        manifest.normalization_id,
+        "mdict-mdx-strip-key-case-insensitive-v1"
+    );
+
+    let mut service = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    service.register_descriptor(&dictionary);
+
+    let results = service.complete("co-", &[dictionary.service_id.as_str()], 10);
+    assert_eq!(
+        results
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>(),
+        ["co-operate", "cooperation"]
+    );
+}
+
+#[test]
+fn native_local_dictionary_index_honors_mdict_case_sensitive_header() {
+    let temp = TempDir::new("local-dictionary-index-mdict-case-sensitive");
+    let source_path = temp.mdx_header_file(
+        "dict-case.mdx",
+        r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" StripKey="Yes" KeyCaseSensitive="Yes" />"#,
+    );
+    let dictionary = descriptor("mdx::case", "Case Dictionary", &source_path);
+    let mut builder = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    builder
+        .ensure_index_from_keys(&dictionary, ["Apple", "application"])
+        .unwrap();
+
+    let folder_path = temp.path.join("mdx%3A%3Acase");
+    let manifest: LocalDictionaryIndexManifest =
+        serde_json::from_str(&fs::read_to_string(folder_path.join(MANIFEST_FILE_NAME)).unwrap())
+            .unwrap();
+    assert_eq!(
+        manifest.normalization_id,
+        "mdict-mdx-strip-key-case-sensitive-v1"
+    );
+
+    let mut service = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    service.register_descriptor(&dictionary);
+
+    let lower_results = service.complete("app", &[dictionary.service_id.as_str()], 10);
+    assert_eq!(
+        lower_results
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>(),
+        ["application"]
+    );
+
+    let upper_results = service.complete("App", &[dictionary.service_id.as_str()], 10);
+    assert_eq!(
+        upper_results
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>(),
+        ["Apple"]
+    );
+}
+
+#[test]
 fn native_local_dictionary_index_skips_corrupt_manifest_or_index_without_crashing() {
     let temp = TempDir::new("local-dictionary-index-corrupt");
     let source_path = temp.source_file("dict-corrupt.mdx", "seed");
@@ -506,6 +585,20 @@ impl TempDir {
     fn source_file(&self, file_name: &str, content: &str) -> String {
         let path = self.path.join(file_name);
         fs::write(&path, content).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn mdx_header_file(&self, file_name: &str, header_xml: &str) -> String {
+        let path = self.path.join(file_name);
+        let header_bytes = header_xml
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        let mut file_bytes = Vec::new();
+        file_bytes.extend_from_slice(&(header_bytes.len() as u32).to_be_bytes());
+        file_bytes.extend_from_slice(&header_bytes);
+        file_bytes.extend_from_slice(&0u32.to_be_bytes());
+        fs::write(&path, file_bytes).unwrap();
         path.to_string_lossy().into_owned()
     }
 

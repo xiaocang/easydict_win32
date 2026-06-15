@@ -20,6 +20,7 @@ param(
     [string]$AppDir,
     [string]$RustHelperPath,
     [switch]$UseCargo,
+    [Parameter(DontShow = $true)]
     [switch]$UseDotnetLegacy,
     [switch]$ListServices,
     [switch]$RetryFailed
@@ -145,13 +146,42 @@ function Resolve-RustHelper {
     return $null
 }
 
+function Invoke-WithRustOnlyRuntimeProfile {
+    param([scriptblock]$Command)
+
+    $hadEasydictRuntimeProfile = Test-Path Env:EASYDICT_RUNTIME_PROFILE
+    $previousEasydictRuntimeProfile = $env:EASYDICT_RUNTIME_PROFILE
+    $hadRuntimeProfile = Test-Path Env:RUNTIME_PROFILE
+    $previousRuntimeProfile = $env:RUNTIME_PROFILE
+
+    try {
+        $env:EASYDICT_RUNTIME_PROFILE = "rust-only"
+        $env:RUNTIME_PROFILE = "rust-only"
+        & $Command
+        $script:RustOnlyCommandExitCode = $LASTEXITCODE
+    }
+    finally {
+        if ($hadEasydictRuntimeProfile) {
+            $env:EASYDICT_RUNTIME_PROFILE = $previousEasydictRuntimeProfile
+        } else {
+            Remove-Item Env:EASYDICT_RUNTIME_PROFILE -ErrorAction SilentlyContinue
+        }
+
+        if ($hadRuntimeProfile) {
+            $env:RUNTIME_PROFILE = $previousRuntimeProfile
+        } else {
+            Remove-Item Env:RUNTIME_PROFILE -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Invoke-RustHelper {
     param([string[]]$LongDocArguments)
 
     $helperPath = Resolve-RustHelper
     if ($helperPath) {
-        & $helperPath @LongDocArguments
-        exit $LASTEXITCODE
+        Invoke-WithRustOnlyRuntimeProfile { & $helperPath @LongDocArguments }
+        exit $script:RustOnlyCommandExitCode
     }
 
     if (-not (Test-Path -LiteralPath (Join-Path $rsRoot "Cargo.toml") -PathType Leaf)) {
@@ -173,8 +203,8 @@ function Invoke-RustCargo {
 
     Push-Location $rsRoot
     try {
-        & cargo @cargoArguments
-        $exitCode = $LASTEXITCODE
+        Invoke-WithRustOnlyRuntimeProfile { & cargo @cargoArguments }
+        $exitCode = $script:RustOnlyCommandExitCode
     }
     finally {
         Pop-Location

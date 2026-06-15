@@ -6696,7 +6696,7 @@ fn explicit_worker_policy_without_hybrid_runtime_profile_stays_rust_only() {
 }
 
 #[test]
-fn packaged_auto_local_ai_without_foundry_or_openvino_cache_fails_locally_without_worker_probe() {
+fn packaged_auto_local_ai_with_stale_dotnet_payload_fails_locally_without_worker_probe() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let _foundry_cli = EnvironmentVariableGuard::set(
         FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
@@ -6704,6 +6704,7 @@ fn packaged_auto_local_ai_without_foundry_or_openvino_cache_fails_locally_withou
     );
     let temp_dir = unique_temp_dir("easydict-packaged-auto-local-ai-native-only");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    install_stale_retained_runtime_app_dir_markers(&temp_dir);
     let request = QuickTranslateServiceRequest {
         query_id: 103,
         service: quick_service("windows-local-ai", "Windows Local AI", true, true),
@@ -6735,7 +6736,10 @@ fn packaged_auto_local_ai_without_foundry_or_openvino_cache_fails_locally_withou
     assert!(error.message.contains("requires a Rust-native route"));
     assert!(!error.message.contains(".NET Local AI workers"));
     assert!(!error.message.contains("Local AI worker executable"));
+    assert!(!error.message.contains("Easydict.Workers"));
+    assert!(!error.message.contains("hostfxr"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+    assert!(!error.message.to_ascii_lowercase().contains("dotnet"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -7824,6 +7828,88 @@ fn local_dictionary_suggestion_runner_uses_persistent_native_index_and_skips_fre
     assert!(second_factory.opened.is_empty());
     assert_eq!(second_update.suggestions, first_update.suggestions);
     assert_eq!(second_update.error, None);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn settings_snapshot_defaults_cache_dir_to_rs_user_data_root() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let local_app_data = unique_temp_dir("easydict-settings-snapshot-rs-cache-root");
+    fs::create_dir_all(&local_app_data).expect("local app data dir should be created");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &path_string(&local_app_data));
+
+    let state = EasydictUiState::default();
+    let snapshot = easydict_app::state::settings_snapshot(&state.settings);
+    let expected_cache_dir = local_app_data.join("EasydictRs");
+    assert_eq!(
+        snapshot.cache_dir.as_deref(),
+        Some(path_string(&expected_cache_dir).as_str())
+    );
+    assert!(
+        !local_app_data.join("Easydict").exists(),
+        "settings snapshot should not create or point at the legacy dotnet app data root"
+    );
+
+    fs::remove_dir_all(&local_app_data).expect("local app data dir should be removed");
+}
+
+#[test]
+fn local_dictionary_suggestion_runner_defaults_native_index_to_rs_cache_dir() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let temp_dir = unique_temp_dir("easydict-mdx-suggestions-default-rs-cache-index");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let local_app_data = temp_dir.join("localappdata");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &path_string(&local_app_data));
+    let mdx_path = temp_dir.join("Default Cache Dictionary.mdx");
+    fs::write(
+        &mdx_path,
+        "not a real mdx fixture; fake reader supplies keys",
+    )
+    .expect("source file should be written");
+
+    let mut state = EasydictUiState::default();
+    state.settings.imported_mdx_dictionaries.clear();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
+    state.source_text = "app".to_string();
+    let request =
+        begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    let rs_cache_root = local_app_data.join("EasydictRs");
+    assert_eq!(
+        request.settings.cache_dir.as_deref(),
+        Some(path_string(&rs_cache_root).as_str())
+    );
+
+    let mut factory = RecordingNativeIndexReaderFactory::with_key_sets([vec![
+        "apple".to_string(),
+        "application".to_string(),
+    ]]);
+    let update =
+        easydict_app::local_dictionary::run_local_dictionary_suggestion_request_with_native_index_and_reader_factory(
+            request,
+            &mut factory,
+        );
+
+    assert_eq!(update.error, None);
+    assert_eq!(
+        update
+            .suggestions
+            .iter()
+            .map(|suggestion| suggestion.key.as_str())
+            .collect::<Vec<_>>(),
+        ["apple", "application"]
+    );
+    assert!(rs_cache_root
+        .join("mdx_index")
+        .join("mdx%3A%3Adefault-cache-dictionary")
+        .join("index.bin")
+        .exists());
+    assert!(
+        !local_app_data.join("Easydict").join("mdx_index").exists(),
+        "production settings snapshot should keep native dictionary indexes out of the legacy dotnet cache root"
+    );
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }

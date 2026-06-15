@@ -846,16 +846,8 @@ fn services_settings_default_view_matches_winui_overview_structure() {
     assert_control_contains(&snapshot, "DeepLServiceExpander", "icon=service-deepl");
     assert_control_contains(&snapshot, "DeepLServiceExpander", "hovered=false");
     assert_control_contains(&snapshot, "DeepLServiceExpander", "pressed=false");
-    assert_control_contains(
-        &snapshot,
-        "OpenAIServiceExpander",
-        "header_style=header-surface-fafbfd",
-    );
-    assert_control_contains(
-        &snapshot,
-        "DeepSeekServiceExpander",
-        "header_style=header-surface-f9fafc",
-    );
+    assert_control_not_contains(&snapshot, "OpenAIServiceExpander", "header-surface-");
+    assert_control_not_contains(&snapshot, "DeepSeekServiceExpander", "header-surface-");
     assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "hovered=false");
     assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "pressed=false");
     assert_control_contains(
@@ -1112,11 +1104,7 @@ fn services_settings_local_ai_exposes_provider_configuration() {
     }
 
     assert_control_contains(&snapshot, "WindowsLocalAIExpander", "expanded=true");
-    assert_control_contains(
-        &snapshot,
-        "WindowsLocalAIExpander",
-        "content_style=content-surface-f8f8f7",
-    );
+    assert_control_not_contains(&snapshot, "WindowsLocalAIExpander", "content-surface-");
     assert_control_contains(
         &snapshot,
         "settings.services.local_ai.content",
@@ -1318,11 +1306,7 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
         "Auto-detect picks /responses when the endpoint URL ends",
     );
     assert_control_contains(&snapshot, "OpenAIHelpText", "wrapping=None");
-    assert_control_contains(
-        &snapshot,
-        "OpenAIServiceExpander",
-        "header_style=header-surface-fafbfd",
-    );
+    assert_control_not_contains(&snapshot, "OpenAIServiceExpander", "header-surface-");
     assert_control_contains(&snapshot, "TestOpenAIButton", "height=Fixed(29)");
     assert_control_contains(&snapshot, "OllamaEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "OllamaEndpointHeaderText", "Endpoint");
@@ -1474,21 +1458,13 @@ fn services_settings_render_llm_provider_configuration_rows() {
     }
 
     assert_control_contains(&snapshot, "DeepSeekKeyBox", "action=text_input");
-    assert_control_contains(
-        &snapshot,
+    for id in [
         "DeepSeekServiceExpander",
-        "header_style=header-surface-f9fafc",
-    );
-    assert_control_contains(
-        &snapshot,
         "GroqServiceExpander",
-        "header_style=header-surface-fbfcfd",
-    );
-    assert_control_contains(
-        &snapshot,
         "GeminiServiceExpander",
-        "header_style=header-surface-fbfcfd",
-    );
+    ] {
+        assert_control_not_contains(&snapshot, id, "header-surface-");
+    }
     assert_control_contains(&snapshot, "CustomOpenAIEndpointBox", "action=text_input");
     assert_control_contains(
         &snapshot,
@@ -1496,17 +1472,9 @@ fn services_settings_render_llm_provider_configuration_rows() {
         "Endpoint (Optional)",
     );
     assert_control_contains(&snapshot, "CustomOpenAIModelHeaderText", "Model");
-    assert_control_contains(
-        &snapshot,
-        "CustomOpenAIServiceExpander",
-        "header_style=header-surface-f9fafc",
-    );
-    assert_control_contains(
-        &snapshot,
-        "BuiltInAIServiceExpander",
-        "header_style=header-surface-f9fafc",
-    );
-    assert_control_contains(
+    assert_control_not_contains(&snapshot, "CustomOpenAIServiceExpander", "header-surface-");
+    assert_control_not_contains(&snapshot, "BuiltInAIServiceExpander", "header-surface-");
+    assert_control_not_contains(
         &snapshot,
         "BuiltInAIServiceExpander",
         "content_style=info-bar",
@@ -1514,11 +1482,7 @@ fn services_settings_render_llm_provider_configuration_rows() {
     assert_control_contains(&snapshot, "DoubaoEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "DoubaoEndpointHeaderText", "Endpoint (Optional)");
     assert_control_contains(&snapshot, "DoubaoModelHeaderText", "Model");
-    assert_control_contains(
-        &snapshot,
-        "DoubaoServiceExpander",
-        "header_style=header-surface-fafbfd",
-    );
+    assert_control_not_contains(&snapshot, "DoubaoServiceExpander", "header-surface-");
     assert_control_contains(&snapshot, "GitHubModelsModelCombo", "selected=\"gpt-4.1\"");
     assert_control_contains(
         &snapshot,
@@ -1640,44 +1604,9 @@ fn services_settings_expander_surface_tokens_match_winui_reference_scheme() {
 
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
-    for (id, header_style) in [
-        ("OpenAIServiceExpander", "header-surface-fafbfd"),
-        ("DoubaoServiceExpander", "header-surface-fafbfd"),
-        ("DeepSeekServiceExpander", "header-surface-f9fafc"),
-        ("CustomOpenAIServiceExpander", "header-surface-f9fafc"),
-        ("BuiltInAIServiceExpander", "header-surface-f9fafc"),
-        ("GroqServiceExpander", "header-surface-fbfcfd"),
-        ("GeminiServiceExpander", "header-surface-fbfcfd"),
-        ("CaiyunServiceExpander", "header-surface-fcfcfd"),
-    ] {
-        assert_control_contains(&snapshot, id, &format!("header_style={header_style}"));
-    }
-
     for id in [
         "DeepLServiceExpander",
         "WindowsLocalAIExpander",
-        "OllamaServiceExpander",
-        "ZhipuServiceExpander",
-        "GitHubModelsServiceExpander",
-        "NiuTransServiceExpander",
-        "YoudaoServiceExpander",
-        "VolcanoServiceExpander",
-    ] {
-        assert_control_not_contains(&snapshot, id, "header-surface-");
-    }
-
-    for (id, content_style) in [
-        ("WindowsLocalAIExpander", "content-surface-f8f8f7"),
-        ("CaiyunServiceExpander", "content-surface-f7f8fa"),
-        ("NiuTransServiceExpander", "content-surface-f8f8fa"),
-        ("YoudaoServiceExpander", "content-surface-f8f9fb"),
-        ("BuiltInAIServiceExpander", "info-bar"),
-    ] {
-        assert_control_contains(&snapshot, id, &format!("content_style={content_style}"));
-    }
-
-    for id in [
-        "DeepLServiceExpander",
         "OllamaServiceExpander",
         "OpenAIServiceExpander",
         "DeepSeekServiceExpander",
@@ -1686,11 +1615,38 @@ fn services_settings_expander_surface_tokens_match_winui_reference_scheme() {
         "GitHubModelsServiceExpander",
         "GeminiServiceExpander",
         "CustomOpenAIServiceExpander",
+        "BuiltInAIServiceExpander",
         "DoubaoServiceExpander",
+        "CaiyunServiceExpander",
+        "NiuTransServiceExpander",
+        "YoudaoServiceExpander",
+        "VolcanoServiceExpander",
+    ] {
+        assert_control_not_contains(&snapshot, id, "header-surface-");
+    }
+
+    for id in [
+        "DeepLServiceExpander",
+        "WindowsLocalAIExpander",
+        "OllamaServiceExpander",
+        "OpenAIServiceExpander",
+        "DeepSeekServiceExpander",
+        "GroqServiceExpander",
+        "ZhipuServiceExpander",
+        "GitHubModelsServiceExpander",
+        "GeminiServiceExpander",
+        "CustomOpenAIServiceExpander",
+        "BuiltInAIServiceExpander",
+        "DoubaoServiceExpander",
+        "CaiyunServiceExpander",
+        "NiuTransServiceExpander",
+        "YoudaoServiceExpander",
         "VolcanoServiceExpander",
     ] {
         assert_control_not_contains(&snapshot, id, "content-surface-");
+        assert_control_not_contains(&snapshot, id, "content_style=info-bar");
     }
+    assert_control_contains(&snapshot, "BuiltInAIHintBar", "style=\"info-bar");
 }
 
 #[test]
@@ -1731,28 +1687,12 @@ fn services_settings_render_traditional_http_provider_configuration() {
     }
 
     assert_control_contains(&snapshot, "CaiyunKeyBox", "action=text_input");
-    assert_control_contains(
-        &snapshot,
-        "CaiyunServiceExpander",
-        "header_style=header-surface-fcfcfd",
-    );
-    assert_control_contains(
-        &snapshot,
-        "CaiyunServiceExpander",
-        "content_style=content-surface-f7f8fa",
-    );
+    assert_control_not_contains(&snapshot, "CaiyunServiceExpander", "header-surface-");
+    assert_control_not_contains(&snapshot, "CaiyunServiceExpander", "content-surface-");
     assert_control_contains(&snapshot, "NiuTransKeyBox", "action=text_input");
-    assert_control_contains(
-        &snapshot,
-        "NiuTransServiceExpander",
-        "content_style=content-surface-f8f8fa",
-    );
+    assert_control_not_contains(&snapshot, "NiuTransServiceExpander", "content-surface-");
     assert_control_contains(&snapshot, "YoudaoAppKeyBox", "action=text_input");
-    assert_control_contains(
-        &snapshot,
-        "YoudaoServiceExpander",
-        "content_style=content-surface-f8f9fb",
-    );
+    assert_control_not_contains(&snapshot, "YoudaoServiceExpander", "content-surface-");
     assert_control_contains(&snapshot, "YoudaoAppSecretBox", "action=text_input");
     assert_control_contains(&snapshot, "YoudaoUseOfficialApiToggle", "checked=false");
 

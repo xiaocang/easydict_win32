@@ -88,9 +88,6 @@ function New-RustLongDocArguments {
 
     if ($ListServices) {
         $longDocArguments += "--list-services"
-        if ($AppDir) {
-            $longDocArguments += @("--app-dir", $AppDir)
-        }
 
         return $longDocArguments
     }
@@ -113,7 +110,6 @@ function New-RustLongDocArguments {
     if ($VisionEndpoint) { $longDocArguments += @("--vision-endpoint", $VisionEndpoint) }
     if ($VisionApiKey) { $longDocArguments += @("--vision-api-key", $VisionApiKey) }
     if ($VisionModel) { $longDocArguments += @("--vision-model", $VisionModel) }
-    if ($AppDir) { $longDocArguments += @("--app-dir", $AppDir) }
 
     return $longDocArguments
 }

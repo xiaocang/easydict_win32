@@ -1,15 +1,18 @@
 use easydict_app::browser_registrar::{
-    chrome_registry_path, default_bridge_directory, firefox_registry_path, legacy_bridge_directory,
-    parse_browser_registrar_args, parse_chrome_ext_ids, rust_bridge_directory, serialize_cli_json,
-    usage, BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError,
-    BrowserRegistry, MemoryBrowserRegistry, DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS,
-    DEFAULT_FIREFOX_EXT_ID, LEGACY_BRIDGE_ROOT_NAME, LEGACY_NATIVE_HOST_NAME, NATIVE_HOST_NAME,
+    bridge_directory_for_root, chrome_registry_path, default_bridge_directory,
+    firefox_registry_path, parse_browser_registrar_args, parse_chrome_ext_ids,
+    rust_bridge_directory, serialize_cli_json, usage, BrowserRegistrarCommand,
+    BrowserRegistrarCore, BrowserRegistrarParseError, BrowserRegistry, MemoryBrowserRegistry,
+    DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS, DEFAULT_FIREFOX_EXT_ID, NATIVE_HOST_NAME,
     RUST_BRIDGE_ROOT_NAME, RUST_NATIVE_HOST_NAME,
 };
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const LEGACY_BRIDGE_ROOT_NAME: &str = "Easydict";
+const LEGACY_NATIVE_HOST_NAME: &str = "com.easydict.bridge";
 
 #[test]
 fn parser_defaults_install_and_uninstall_to_both_browsers() {
@@ -531,6 +534,49 @@ fn uninstall_preserves_foreign_native_messaging_registration() {
 }
 
 #[test]
+fn status_and_uninstall_ignore_legacy_dotnet_native_messaging_keys() {
+    let sandbox = TestSandbox::new("ignore_legacy_registry_keys");
+    let bridge_dir = sandbox.path("browser-bridge");
+    let legacy_dir = sandbox.path("legacy-browser-bridge");
+    fs::create_dir_all(&legacy_dir).expect("create legacy bridge dir");
+    let legacy_bridge_path = legacy_dir.join("Easydict.NativeBridge.exe");
+    fs::write(&legacy_bridge_path, b"legacy dotnet native bridge").expect("write legacy bridge");
+    let legacy_manifest_path = legacy_dir.join("chrome-manifest.json");
+    write_json(
+        &legacy_manifest_path,
+        json!({
+            "name": LEGACY_NATIVE_HOST_NAME,
+            "description": "legacy Easydict native messaging bridge",
+            "path": legacy_bridge_path.display().to_string(),
+            "type": "stdio",
+            "allowed_origins": ["chrome-extension://legacy-extension/"]
+        }),
+    );
+    let legacy_chrome_key =
+        format!(r"Software\Google\Chrome\NativeMessagingHosts\{LEGACY_NATIVE_HOST_NAME}");
+    let mut registry = MemoryBrowserRegistry::default();
+    registry
+        .write_default_value(
+            &legacy_chrome_key,
+            &legacy_manifest_path.display().to_string(),
+        )
+        .expect("write legacy registry value");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, registry);
+
+    let status = core.status();
+    assert!(!status.chrome.installed);
+    assert!(!status.firefox.installed);
+
+    let uninstall = core.uninstall(true, true);
+    assert!(uninstall.uninstalled.is_empty());
+    assert_eq!(
+        core.registry().value(&legacy_chrome_key),
+        Some(legacy_manifest_path.display().to_string().as_str())
+    );
+    assert!(legacy_manifest_path.exists());
+}
+
+#[test]
 fn missing_bridge_source_returns_json_shaped_error_without_creating_bridge_dir() {
     let sandbox = TestSandbox::new("missing_source");
     let bridge_dir = sandbox.path("browser-bridge");
@@ -702,7 +748,7 @@ fn default_bridge_directory_matches_the_rs_portable_local_app_data_location() {
 #[test]
 fn legacy_bridge_directory_matches_the_dotnet_local_app_data_location() {
     assert_eq!(
-        legacy_bridge_directory("C:/Users/Test/AppData/Local"),
+        bridge_directory_for_root("C:/Users/Test/AppData/Local", LEGACY_BRIDGE_ROOT_NAME),
         PathBuf::from("C:/Users/Test/AppData/Local")
             .join(LEGACY_BRIDGE_ROOT_NAME)
             .join("browser-bridge")

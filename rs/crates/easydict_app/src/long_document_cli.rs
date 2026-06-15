@@ -76,9 +76,6 @@ pub struct LongDocumentCliOptions {
     #[arg(long = "max-concurrency", value_name = "N")]
     max_concurrency: Option<u32>,
 
-    #[arg(long = "app-dir", value_name = "DIR", hide = true)]
-    app_dir: Option<PathBuf>,
-
     #[arg(short = 'e', long = "env-file", value_name = "FILE")]
     env_file: Option<PathBuf>,
 
@@ -193,9 +190,6 @@ fn run(
         request.params.vision_model = Some(model.to_string());
     }
 
-    // Accepted for old scripts; the default rs CLI no longer uses this to select
-    // packaged retained worker paths.
-    let _ = options.app_dir.as_ref();
     let outcome = if options.retry_failed {
         let result_json = options
             .result_json

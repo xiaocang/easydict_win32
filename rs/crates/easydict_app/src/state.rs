@@ -1,3 +1,4 @@
+use crate::app_data::default_user_data_directory;
 use crate::i18n::{tr, tr_locale};
 use crate::local_dictionary::{
     apply_active_local_dictionary_suggestion, apply_local_dictionary_suggestion,
@@ -2690,7 +2691,8 @@ impl EasydictUiState {
                     Err(error) => BrowserSupportState::failed(error.clone()),
                 };
             }
-            Message::Noop
+            Message::PreviewScrollReady
+            | Message::Noop
             | Message::QuickTranslate
             | Message::QuickTranslateIn(_)
             | Message::InstallBrowserSupport
@@ -2902,8 +2904,13 @@ pub fn settings_snapshot(settings: &SettingsState) -> SettingsSnapshot {
                 .map(ImportedMdxDictionary::snapshot)
                 .collect()
         }),
+        cache_dir: Some(default_cache_dir_string()),
         ..SettingsSnapshot::default()
     }
+}
+
+fn default_cache_dir_string() -> String {
+    default_user_data_directory().to_string_lossy().into_owned()
 }
 
 fn setting_or_default(value: &str, fallback: &str) -> String {
@@ -4507,6 +4514,7 @@ pub enum Message {
     DismissPopButton,
     PopButtonAutoDismiss(u64),
     PopButtonClicked,
+    PreviewScrollReady,
     Noop,
 }
 

@@ -331,9 +331,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OCR 回退（扫描版 PDF） | 不支持 | 支持 — 使用 Windows OCR 处理纯图片页面 |
 | CJK 字体处理 | 基础 | 内置 CJK 字体解析器 + TrueType CMAP 解析 + 自动字体下载 |
 | 页面范围选择 | 支持 | 支持（`1-3,5,7-10` 或 `all`） |
-| 用户界面 | CLI + 简易 GUI | 原生 WinUI 3，含进度、预览、取消 |
+| 用户界面 | CLI + 简易 GUI | Rust 原生桌面应用，含进度、预览、取消；legacy WinUI 仅保留用于 hybrid/parity |
 | 集成度 | 独立工具 | 完整翻译词典应用的一部分（OCR、划词、快捷键、流式翻译等） |
-| 平台 | 跨平台（Python） | Windows 10/11（原生 .NET 8） |
+| 平台 | 跨平台（Python） | Windows 10/11（Rust 原生便携版；不捆绑 .NET 运行时） |
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

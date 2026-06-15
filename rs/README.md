@@ -301,9 +301,9 @@ binary. The Rust helper accepts
 `--result-json` / `--result-json-path`, `--retry-failed`, `--service`,
 `--output-mode`, `--layout`, `--pdf-export-mode`, `--page`, `--page-range`,
 `--max-concurrency`, `--env-file`, `--vision-endpoint`, `--vision-api-key`,
-`--vision-model`, and the legacy no-op `--app-dir`.
-Passing `--app-dir` no longer enables retained LongDoc worker lookup; requests
-that still need the retained `.NET` worker fail locally with a Rust-native-route
+and `--vision-model`. The Rust helper rejects the legacy `--app-dir` CLI option;
+use the PowerShell shim's `-AppDir` only for helper discovery. Requests that
+still need the retained `.NET` worker fail locally with a Rust-native-route
 requirement.
 
 The old WinUI debug entry point is retired for this shim. The script only

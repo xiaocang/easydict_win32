@@ -386,6 +386,30 @@ fn credential_protection_machine_id_copies_legacy_fallback_into_rs_directory() {
     );
 }
 
+#[test]
+fn credential_protection_machine_id_reads_legacy_local_file_without_writing_legacy_directory() {
+    let temp = TempDir::new("credential-machine-id-legacy-local-read-only");
+    let rs_dir = temp.path().join("EasydictRs");
+    let legacy_dir = temp.path().join("Easydict");
+    fs::create_dir_all(&legacy_dir).unwrap();
+    fs::write(legacy_dir.join("local-machine-id"), "legacy-machine-id").unwrap();
+
+    let machine_id = get_or_create_persisted_machine_id_with_legacy_fallback(&rs_dir, &legacy_dir);
+
+    assert_eq!(machine_id, "legacy-machine-id");
+    assert_eq!(
+        fs::read_to_string(rs_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME))
+            .unwrap(),
+        "legacy-machine-id"
+    );
+    assert!(
+        !legacy_dir
+            .join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME)
+            .exists(),
+        "legacy fallback must not write a new machine-id into the dotnet data directory"
+    );
+}
+
 struct TempDir {
     path: PathBuf,
 }

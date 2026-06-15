@@ -54,14 +54,14 @@ build-debug: restore
 
 # Run all tests
 test: restore
-	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"
-	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"
-	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
+	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
+	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run TranslationService tests only
 test-translation:
-	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run WinUI tests only
 test-winui:
@@ -69,11 +69,11 @@ test-winui:
 
 # Run Easydict.Llm.Streaming tests only
 test-streaming:
-	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run Polyglot.TextLayout tests only
 test-textlayout:
-	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run UI automation tests (requires app to be installed or EASYDICT_EXE_PATH set)
 test-ui:
@@ -91,9 +91,9 @@ SERVICE ?= all
 #        make test-integration SERVICE=openai
 test-integration:
 ifeq ($(SERVICE),all)
-	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=detailed" --filter "Category=Integration"
+	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=detailed" --filter "Category=Integration" $(RUST_ONLY_MSBUILD_PROPS)
 else
-	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=detailed" --filter "Category=Integration&Service=$(SERVICE)"
+	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=detailed" --filter "Category=Integration&Service=$(SERVICE)" $(RUST_ONLY_MSBUILD_PROPS)
 endif
 
 # Run tests with verbose output

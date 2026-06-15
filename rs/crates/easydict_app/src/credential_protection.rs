@@ -392,7 +392,7 @@ pub fn get_or_create_persisted_machine_id_with_legacy_fallback(
         return existing;
     }
 
-    if let Some(legacy) = read_machine_id_from_directory(legacy_directory.as_ref()) {
+    if let Some(legacy) = read_machine_id_from_legacy_directory(legacy_directory.as_ref()) {
         fs::write(directory.join(MACHINE_ID_FILE_NAME), &legacy).ok();
         return legacy;
     }
@@ -432,6 +432,15 @@ fn read_machine_id_from_directory(directory: &Path) -> Option<String> {
     }
 
     None
+}
+
+fn read_machine_id_from_legacy_directory(directory: &Path) -> Option<String> {
+    let path = directory.join(MACHINE_ID_FILE_NAME);
+    if let Some(existing) = read_non_empty_trimmed(&path) {
+        return Some(existing);
+    }
+
+    read_non_empty_trimmed(&directory.join(LEGACY_MACHINE_ID_FILE_NAME))
 }
 
 fn read_non_empty_trimmed(path: &Path) -> Option<String> {

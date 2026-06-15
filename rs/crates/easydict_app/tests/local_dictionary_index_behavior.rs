@@ -13,12 +13,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
-fn native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexistence() {
+fn native_local_dictionary_index_default_root_uses_rs_cache_for_dotnet_coexistence() {
     let _environment_guard = ENVIRONMENT_LOCK.lock().unwrap();
     let local_app_data = TempDir::new("local-dictionary-index-default-root");
     let _local_app_data_guard = EnvVarGuard::set("LOCALAPPDATA", local_app_data.path_string());
 
-    let expected = local_app_data.path.join("Easydict").join("mdx_index");
+    let expected = local_app_data.path.join("EasydictRs").join("mdx_index");
     assert_eq!(default_local_dictionary_index_root(), expected);
 
     let service = LocalDictionaryIndexService::new().unwrap();
@@ -26,7 +26,7 @@ fn native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexi
     assert!(expected.exists());
     assert!(!local_app_data
         .path
-        .join("EasydictRs")
+        .join("Easydict")
         .join("mdx_index")
         .exists());
 }
@@ -57,7 +57,7 @@ fn native_local_dictionary_index_root_for_settings_treats_blank_cache_dir_as_def
 
     assert_eq!(
         local_dictionary_index_root_for_settings(&settings),
-        local_app_data.path.join("Easydict").join("mdx_index")
+        local_app_data.path.join("EasydictRs").join("mdx_index")
     );
 }
 

@@ -64,6 +64,7 @@ fn crate_root_retained_worker_exports_are_feature_gated() {
 #[test]
 fn default_cli_rejects_legacy_retained_worker_options_unless_feature_gated() {
     let cli_translate = include_str!("../src/cli_translate.rs");
+    let long_document_cli = include_str!("../src/long_document_cli.rs");
 
     for option in ["--host", "--host-arg", "--app-dir"] {
         for section in cli_legacy_option_sections(cli_translate, option) {
@@ -94,6 +95,52 @@ fn default_cli_rejects_legacy_retained_worker_options_unless_feature_gated() {
         !cli_translate.contains("fn accepts_legacy_host_without_exposing_worker_target"),
         "default parser tests must not keep an unqualified legacy host acceptance test"
     );
+    assert!(
+        !long_document_cli.contains("long = \"app-dir\""),
+        "default LongDoc CLI must reject legacy --app-dir instead of accepting it as a hidden retained-worker-era no-op"
+    );
+}
+
+#[test]
+fn default_browser_registrar_does_not_export_legacy_host_or_root_helpers() {
+    let browser_registrar = include_str!("../src/browser_registrar.rs");
+    let production = production_source(browser_registrar);
+    let app_root = include_str!("../src/lib.rs");
+
+    for forbidden_public_marker in [
+        "pub const LEGACY_NATIVE_HOST_NAME",
+        "pub const LEGACY_BRIDGE_ROOT_NAME",
+        "pub fn legacy_bridge_directory",
+    ] {
+        assert!(
+            !production.contains(forbidden_public_marker),
+            "default browser registrar API must not expose legacy .NET native host/root helper {forbidden_public_marker}"
+        );
+    }
+    assert!(
+        production.contains("pub const NATIVE_HOST_NAME: &str = RUST_NATIVE_HOST_NAME;"),
+        "default browser registrar should alias the native messaging host to the rs host"
+    );
+    assert!(
+        production.contains("pub const DEFAULT_BRIDGE_ROOT_NAME: &str = RUST_BRIDGE_ROOT_NAME;"),
+        "default browser registrar should alias the bridge root to EasydictRs"
+    );
+    assert!(
+        production.contains("value.eq_ignore_ascii_case(LEGACY_BRIDGE_ROOT_NAME)"),
+        "browser registrar should still reject the legacy dotnet bridge root internally"
+    );
+
+    for forbidden_app_call in [
+        "LEGACY_NATIVE_HOST_NAME",
+        "LEGACY_BRIDGE_ROOT_NAME",
+        "legacy_bridge_directory",
+        "com.easydict.bridge",
+    ] {
+        assert!(
+            !production_source(app_root).contains(forbidden_app_call),
+            "default app runtime must not call or embed legacy browser bridge marker {forbidden_app_call}"
+        );
+    }
 }
 
 #[test]
@@ -407,6 +454,119 @@ fn default_app_manifests_do_not_link_hybrid_packaging_or_dotnet_runtime_tools() 
 }
 
 #[test]
+fn default_winfluent_legacy_powershell_features_stay_explicit_and_disabled_for_preview() {
+    let preview_manifest = include_str!("../../easydict_preview_iced/Cargo.toml");
+    let backend_manifest =
+        include_str!("../../../../lib/winfluent-rs/crates/win_fluent_backend_iced/Cargo.toml");
+    let platform_manifest =
+        include_str!("../../../../lib/winfluent-rs/crates/win_fluent_platform_win/Cargo.toml");
+
+    assert!(
+        preview_manifest.contains(
+            "win_fluent_backend_iced = { path = \"../../../lib/winfluent-rs/crates/win_fluent_backend_iced\", default-features = false }"
+        ),
+        "first rs portable preview binary must disable win_fluent_backend_iced default features"
+    );
+    assert!(
+        !preview_manifest.contains("legacy-powershell-dialogs")
+            && !preview_manifest.contains("legacy-powershell-tts"),
+        "easydict_preview_iced must not opt into legacy PowerShell dialog/TTS features"
+    );
+
+    assert!(
+        backend_manifest.contains("\n[features]\ndefault = []\n"),
+        "win_fluent_backend_iced default features must stay empty"
+    );
+    assert!(
+        backend_manifest.contains("legacy-powershell-dialogs = []")
+            && backend_manifest.contains(
+                "legacy-powershell-tts = [\"win_fluent_platform_win/legacy-powershell-tts\"]"
+            ),
+        "WinFluent legacy PowerShell dialog/TTS backends must remain explicit feature opt-ins"
+    );
+    assert!(
+        backend_manifest.contains(
+            "win_fluent_platform_win = { path = \"../win_fluent_platform_win\", default-features = false }"
+        ),
+        "backend should link the Windows platform adapter with default features disabled"
+    );
+
+    assert!(
+        platform_manifest.contains("\n[features]\ndefault = []\n"),
+        "win_fluent_platform_win default features must stay empty"
+    );
+    assert!(
+        platform_manifest.contains("legacy-powershell-tts = []"),
+        "platform PowerShell TTS backend must remain an explicit feature opt-in"
+    );
+}
+
+#[test]
+fn default_manifests_do_not_opt_into_retained_or_legacy_runtime_features() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("app crate should live under rs/crates/easydict_app");
+
+    for manifest_path in cargo_manifest_files_under(repo_root) {
+        let relative_path = relative_slash_path(repo_root, &manifest_path);
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
+
+        for (index, line) in manifest.lines().enumerate() {
+            let line_number = index + 1;
+            let trimmed = line.trim();
+            if retained_or_legacy_feature_definition_is_allowed(&relative_path, trimmed) {
+                continue;
+            }
+            for forbidden_feature in [
+                "legacy-powershell-dialogs",
+                "legacy-powershell-tts",
+                "retained-dotnet-workers",
+                "hybrid-dotnet-runtime-packaging",
+            ] {
+                assert!(
+                    !trimmed.contains(forbidden_feature),
+                    "{relative_path}:{line_number} must not opt into retained or legacy runtime feature {forbidden_feature}: {trimmed}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn rs_crate_manifests_disable_winfluent_default_features() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("app crate should live under rs/crates/easydict_app");
+    let rs_crates_root = repo_root.join("rs").join("crates");
+
+    for manifest_path in cargo_manifest_files_under(&rs_crates_root) {
+        let relative_path = relative_slash_path(repo_root, &manifest_path);
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
+
+        for (line_index, line) in manifest.lines().enumerate() {
+            let trimmed = line.trim();
+            for dependency_name in ["win_fluent_backend_iced", "win_fluent_platform_win"] {
+                let dependency_prefix = format!("{dependency_name} = ");
+                if !trimmed.starts_with(&dependency_prefix) {
+                    continue;
+                }
+
+                assert!(
+                    trimmed.contains("default-features = false"),
+                    "{}:{} must keep {dependency_name} default features disabled for the first rs portable build: {trimmed}",
+                    relative_path,
+                    line_index + 1
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn default_process_spawn_surface_only_allows_foundry_local_cli_boundary() {
     let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     for path in rust_source_files_under(&src_dir) {
@@ -715,6 +875,31 @@ fn assert_crate_root_export_is_retained_worker_feature_gated(crate_root: &str, e
     );
 }
 
+fn retained_or_legacy_feature_definition_is_allowed(relative_path: &str, trimmed: &str) -> bool {
+    matches!(
+        (relative_path, trimmed),
+        (
+            "lib/winfluent-rs/crates/win_fluent_backend_iced/Cargo.toml",
+            "legacy-powershell-dialogs = []"
+        ) | (
+            "lib/winfluent-rs/crates/win_fluent_backend_iced/Cargo.toml",
+            "legacy-powershell-tts = [\"win_fluent_platform_win/legacy-powershell-tts\"]"
+        ) | (
+            "lib/winfluent-rs/crates/win_fluent_platform_win/Cargo.toml",
+            "legacy-powershell-tts = []"
+        ) | (
+            "lib/easydict-runtime-guards/Cargo.toml",
+            "retained-dotnet-workers = []"
+        ) | (
+            "rs/crates/easydict_app/Cargo.toml",
+            "retained-dotnet-workers = [\"easydict_runtime_guards/retained-dotnet-workers\"]"
+        ) | (
+            "rs/crates/easydict_packager/Cargo.toml",
+            "hybrid-dotnet-runtime-packaging = [\"dep:reqwest\"]"
+        )
+    )
+}
+
 fn cli_legacy_option_sections(source: &str, option: &str) -> Vec<String> {
     let needle = format!("\"{option}\" => {{");
     let lines: Vec<_> = source.lines().collect();
@@ -825,7 +1010,11 @@ fn default_test_process_spawn_is_allowlisted(path: &str, line: &str) -> bool {
         "cli_translate_behavior.rs" => {
             trimmed.contains("Command::new(env!(\"CARGO_BIN_EXE_easydict_cli\"))")
         }
-        "long_document_cli_behavior.rs" => trimmed.contains("Command::new(binary)"),
+        "long_document_cli_behavior.rs" => {
+            trimmed.contains("Command::new(binary)")
+                || trimmed.contains("Command::new(long_doc_cli_binary_path())")
+                || trimmed.contains("Command::new(&copied_cli)")
+        }
         "native_bridge_behavior.rs" => trimmed.contains("Command::new(bridge_bin)"),
         "sidecar_ipc_e2e.rs" => {
             trimmed.contains("Command::new(python_executable())")

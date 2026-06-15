@@ -6,13 +6,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const LEGACY_NATIVE_HOST_NAME: &str = "com.easydict.bridge";
 pub const RUST_NATIVE_HOST_NAME: &str = "com.easydict.rs.bridge";
 pub const NATIVE_HOST_NAME: &str = RUST_NATIVE_HOST_NAME;
 pub const BRIDGE_EXE_NAME: &str = "easydict-native-bridge.exe";
 pub const CHROME_MANIFEST_FILE: &str = "chrome-manifest.json";
 pub const FIREFOX_MANIFEST_FILE: &str = "firefox-manifest.json";
-pub const LEGACY_BRIDGE_ROOT_NAME: &str = "Easydict";
+const LEGACY_BRIDGE_ROOT_NAME: &str = "Easydict";
 pub const RUST_BRIDGE_ROOT_NAME: &str = "EasydictRs";
 pub const DEFAULT_BRIDGE_ROOT_NAME: &str = RUST_BRIDGE_ROOT_NAME;
 pub const DEFAULT_CHROME_EXT_IDS: &str =
@@ -165,10 +164,6 @@ pub fn default_chrome_ext_ids() -> Vec<String> {
 
 pub fn default_bridge_directory(local_app_data: impl AsRef<Path>) -> PathBuf {
     bridge_directory_for_root(local_app_data, DEFAULT_BRIDGE_ROOT_NAME)
-}
-
-pub fn legacy_bridge_directory(local_app_data: impl AsRef<Path>) -> PathBuf {
-    bridge_directory_for_root(local_app_data, LEGACY_BRIDGE_ROOT_NAME)
 }
 
 pub fn rust_bridge_directory(local_app_data: impl AsRef<Path>) -> PathBuf {

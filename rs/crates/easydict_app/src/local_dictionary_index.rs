@@ -1,3 +1,4 @@
+use crate::app_data::default_user_data_directory;
 use crate::lex_index::{normalize_key, LexIndex, LexIndexError};
 use crate::protocol::SettingsSnapshot;
 use crate::state::ImportedMdxDictionary;
@@ -548,14 +549,7 @@ impl LocalDictionaryIndexService {
 }
 
 pub fn default_local_dictionary_index_root() -> PathBuf {
-    // Keep the local dictionary index cache shared with the .NET app: the
-    // on-disk LXDX/index manifest format is intentionally compatible, and this
-    // cache does not wake or depend on a .NET runtime.
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Easydict")
-        .join("mdx_index")
+    default_user_data_directory().join("mdx_index")
 }
 
 pub fn local_dictionary_index_root_for_settings(settings: &SettingsSnapshot) -> PathBuf {

@@ -333,9 +333,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 | OCR Fallback (Scanned PDF) | No | Yes — Windows OCR for image-only pages |
 | CJK Font Handling | Basic | Built-in CJK font resolver + TrueType CMAP parser + automatic font download |
 | Page Range Selection | Yes | Yes (`1-3,5,7-10` or `all`) |
-| UI | CLI + minimal GUI | Native WinUI 3 app with progress, preview, cancellation |
+| UI | CLI + minimal GUI | Rust-native desktop app with progress, preview, cancellation; legacy WinUI is retained for hybrid/parity |
 | Integration | Standalone | Part of full translation dictionary app (OCR, selection, hotkeys, streaming, etc.) |
-| Platform | Cross-platform (Python) | Windows 10/11 (native .NET 8) |
+| Platform | Cross-platform (Python) | Windows 10/11 (Rust-native portable; no bundled .NET runtime) |
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

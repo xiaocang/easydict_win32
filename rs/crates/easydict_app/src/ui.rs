@@ -2435,23 +2435,13 @@ fn service_expander(
 }
 
 fn settings_service_expander_header_style(service_id: &str) -> Option<&'static str> {
-    match service_id {
-        "openai" | "doubao" => Some("header-surface-fafbfd"),
-        "deepseek" | "custom-openai" | "builtin" => Some("header-surface-f9fafc"),
-        "groq" | "gemini" => Some("header-surface-fbfcfd"),
-        "caiyun" => Some("header-surface-fcfcfd"),
-        _ => None,
-    }
+    let _ = service_id;
+    None
 }
 
 fn settings_service_expander_content_style(service_id: &str) -> Option<&'static str> {
-    match service_id {
-        "windows-local-ai" => Some("content-surface-f8f8f7"),
-        "caiyun" => Some("content-surface-f7f8fa"),
-        "niutrans" => Some("content-surface-f8f8fa"),
-        "youdao" => Some("content-surface-f8f9fb"),
-        _ => None,
-    }
+    let _ = service_id;
+    None
 }
 
 fn settings_service_expander_header_state(state: &SettingsState, service_id: &str) -> ControlState {
@@ -2462,16 +2452,6 @@ fn settings_service_expander_header_state(state: &SettingsState, service_id: &st
     match service_id {
         "deepl" => state.deepl_service_expander_state.clone(),
         _ => ControlState::default(),
-    }
-}
-
-fn with_expander_content_style(view: View<Message>, classes: impl AsRef<str>) -> View<Message> {
-    match view.into_token() {
-        ViewToken::Expander(mut token) => {
-            token.content_style.extend(classes);
-            View::new(ViewToken::Expander(token))
-        }
-        token => View::new(token),
     }
 }
 
@@ -3526,19 +3506,16 @@ fn builtin_ai_service_expander(
             .into_view(),
     ];
 
-    with_expander_content_style(
-        service_expander(
-            state,
-            descriptor.service_id,
-            service_configuration_expanded(state, descriptor.service_id),
-            descriptor.expander_id,
-            descriptor.title,
-            descriptor.status_id,
-            setting.status,
-            "settings.services.builtin.content",
-            content,
-        ),
-        "info-bar",
+    service_expander(
+        state,
+        descriptor.service_id,
+        service_configuration_expanded(state, descriptor.service_id),
+        descriptor.expander_id,
+        descriptor.title,
+        descriptor.status_id,
+        setting.status,
+        "settings.services.builtin.content",
+        content,
     )
 }
 

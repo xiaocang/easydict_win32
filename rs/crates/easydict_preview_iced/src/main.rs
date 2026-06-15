@@ -208,6 +208,8 @@ fn pop_button_preview_state() -> ControlState {
 struct PreviewScroll {
     target_id: String,
     y: f32,
+    remaining_retries: u8,
+    retry_delay_ms: u64,
 }
 
 fn preview_scroll_from_env() -> Option<PreviewScroll> {
@@ -222,8 +224,30 @@ fn preview_scroll_from_env() -> Option<PreviewScroll> {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "MainScrollViewer".to_string());
+    let remaining_retries = std::env::var("EASYDICT_PREVIEW_SCROLL_RETRY_COUNT")
+        .ok()
+        .and_then(|value| value.parse::<u8>().ok())
+        .unwrap_or(2);
+    let retry_delay_ms = std::env::var("EASYDICT_PREVIEW_SCROLL_RETRY_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(450);
 
-    Some(PreviewScroll { target_id, y })
+    Some(PreviewScroll {
+        target_id,
+        y,
+        remaining_retries,
+        retry_delay_ms,
+    })
+}
+
+fn delayed_preview_scroll_ready(delay_ms: u64) -> Task<Message> {
+    Task::perform(
+        async move {
+            std::thread::sleep(Duration::from_millis(delay_ms));
+        },
+        |_| Message::PreviewScrollReady,
+    )
 }
 
 struct PreviewApp {
@@ -274,7 +298,7 @@ impl Application for PreviewApp {
                 async move {
                     std::thread::sleep(Duration::from_millis(delay_ms));
                 },
-                |_| Message::Noop,
+                |_| Message::PreviewScrollReady,
             )
         } else {
             Task::none()
@@ -303,14 +327,23 @@ impl Application for PreviewApp {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
-        let is_noop = message == Message::Noop;
-        let task = self.inner.update(message);
-        if is_noop {
-            if let Some(scroll) = self.pending_scroll.take() {
-                return Task::batch([task, Task::scroll_to(scroll.target_id, 0.0, scroll.y)]);
+        let is_preview_scroll_ready = message == Message::PreviewScrollReady;
+        if is_preview_scroll_ready {
+            if let Some(scroll) = self.pending_scroll.as_mut() {
+                let task = Task::scroll_to(scroll.target_id.clone(), 0.0, scroll.y);
+                if scroll.remaining_retries == 0 {
+                    self.pending_scroll = None;
+                    return task;
+                }
+
+                scroll.remaining_retries -= 1;
+                return Task::batch([task, delayed_preview_scroll_ready(scroll.retry_delay_ms)]);
             }
+
+            return Task::none();
         }
 
+        let task = self.inner.update(message);
         task
     }
 
@@ -389,6 +422,76 @@ mod tests {
             app.theme_tokens(),
             easydict_app::easydict_theme_tokens(ThemeMode::Light)
         );
+    }
+
+    #[test]
+    fn preview_scroll_waits_for_dedicated_ready_message() {
+        let state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        let mut app = PreviewApp {
+            inner: EasydictApp { state },
+            pending_scroll: Some(PreviewScroll {
+                target_id: "MainScrollViewer".to_string(),
+                y: 0.5,
+                remaining_retries: 0,
+                retry_delay_ms: 1,
+            }),
+            preview_mode: true,
+        };
+
+        assert!(matches!(app.update(Message::Noop), Task::None));
+        assert!(app.pending_scroll.is_some());
+
+        let task = app.update(Message::PreviewScrollReady);
+
+        assert!(app.pending_scroll.is_none());
+        let Task::ScrollTo { id, x, y } = task else {
+            panic!("expected preview scroll task");
+        };
+        assert_eq!(id, "MainScrollViewer");
+        assert_eq!(x, 0.0);
+        assert_eq!(y, 0.5);
+    }
+
+    #[test]
+    fn preview_scroll_retries_to_survive_late_scroll_layout() {
+        let state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        let mut app = PreviewApp {
+            inner: EasydictApp { state },
+            pending_scroll: Some(PreviewScroll {
+                target_id: "MainScrollViewer".to_string(),
+                y: 0.75,
+                remaining_retries: 1,
+                retry_delay_ms: 1,
+            }),
+            preview_mode: true,
+        };
+
+        let first = app.update(Message::PreviewScrollReady);
+
+        assert!(app.pending_scroll.is_some());
+        let Task::Batch(first_batch) = first else {
+            panic!("expected scroll retry batch");
+        };
+        assert!(first_batch.iter().any(|task| matches!(
+            task,
+            Task::ScrollTo { id, x, y }
+                if id == "MainScrollViewer" && *x == 0.0 && *y == 0.75
+        )));
+        assert!(first_batch
+            .iter()
+            .any(|task| matches!(task, Task::Future(_))));
+
+        let second = app.update(Message::PreviewScrollReady);
+
+        assert!(app.pending_scroll.is_none());
+        let Task::ScrollTo { id, x, y } = second else {
+            panic!("expected final preview scroll task");
+        };
+        assert_eq!(id, "MainScrollViewer");
+        assert_eq!(x, 0.0);
+        assert_eq!(y, 0.75);
     }
 
     #[test]
@@ -522,7 +625,10 @@ mod tests {
         assert!(tray_item_ids.contains(&easydict_app::TRAY_OCR_TRANSLATE));
         assert!(tray_item_ids.contains(&easydict_app::TRAY_OPEN_SETTINGS));
         assert!(tray_item_ids.contains(&easydict_app::TRAY_EXIT));
-        assert!(tray_menu.items.iter().any(|item| item.label == "Show Easydict"));
+        assert!(tray_menu
+            .items
+            .iter()
+            .any(|item| item.label == "Show Easydict"));
 
         let subscription = plan.app.subscription();
         assert!(subscription_contains_kind(&subscription, |kind| {

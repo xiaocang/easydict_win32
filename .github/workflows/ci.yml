@@ -39,15 +39,23 @@ jobs:
           cargo test -p easydict_packager --test release_contract_behavior default_browser_extension_sources_do_not_fallback_to_legacy_native_host -- --exact --nocapture
           cargo test -p easydict_packager --test release_contract_behavior default_browser_extension_setup_points_to_rs_portable_not_store -- --exact --nocapture
           cargo test -p easydict_packager --test release_contract_behavior docs_keep_default_cli_and_browser_extension_retained_fallbacks_retired -- --exact --nocapture
+          cargo test -p easydict_packager --lib package_browser_extension -- --nocapture
           cargo test -p easydict_packager --test release_contract_behavior run_wack_script_validates_msix_payload_before_wack_setup -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile -- --exact --nocapture
           cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell -- --exact --nocapture
+          cargo test -p easydict_packager --test msix_runtime_profile_contract_behavior -- --nocapture
           cargo test --manifest-path ../lib/easydict-runtime-guards/Cargo.toml -- --nocapture
           cargo test -p easydict_msix_validate --lib -- --nocapture
           cargo test -p easydict_app runtime_policy --lib -- --nocapture
           cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture
           cargo test -p easydict_app --test sidecar_ipc_e2e -- --nocapture
           cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers -- --exact --nocapture
-          cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture
+          cargo test -p easydict_app --test quick_translate_behavior packaged_auto_local_ai_with_stale_dotnet_payload_fails_locally_without_worker_probe -- --exact --nocapture
+          cargo test -p easydict_app --test long_document_cli_behavior app_dir_is_rejected_before_stale_dotnet_payload_lookup -- --exact --nocapture
+          cargo test -p easydict_app --test long_document_cli_behavior current_exe_dir_ignores_stale_dotnet_payload_markers_without_app_dir -- --exact --nocapture
+          cargo test -p easydict_app --test long_document_behavior local_ai_long_document_route_matrix_stays_native_before_worker_fallback -- --exact --nocapture
 
   build-and-test:
     runs-on: windows-latest

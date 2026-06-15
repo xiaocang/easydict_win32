@@ -11,13 +11,14 @@ param(
     [string]$ReferenceRoot,
     [string]$CaptureScript,
     [string]$Executable,
-    [int]$SettlingMilliseconds = 1800,
+    [int]$SettlingMilliseconds = 4200,
     [int]$ContentCheckRetries = 10,
     [int]$ContentCheckDelayMilliseconds = 350,
     [int]$InterScenarioDelayMilliseconds = 1000,
     [switch]$Build,
     [switch]$SkipBuild,
     [switch]$RunAnalyzer,
+    [switch]$SkipBaselineExpansion,
     [string]$AnalyzerOutputDir,
     [switch]$UseDefaultScoreGates,
     [string[]]$ScoreGate = @(),
@@ -110,6 +111,7 @@ function New-SettingsServiceConfigurationDescriptor {
         [string]$RustExpanderId,
         [string]$DotnetExpandElement,
         [double]$ScrollPercent = 0,
+        [double]$RustScrollPercent = -1,
         [string]$RustLocalAiProvider = "",
         [bool]$DotnetReferenceExpected = $true
     )
@@ -127,6 +129,7 @@ function New-SettingsServiceConfigurationDescriptor {
         RustExpanderId = $RustExpanderId
         DotnetExpandElement = $DotnetExpandElement
         ScrollPercent = [double]$ScrollPercent
+        RustScrollPercent = if ($RustScrollPercent -ge 0) { [double]$RustScrollPercent } else { [double]$ScrollPercent }
         RustLocalAiProvider = $RustLocalAiProvider
         DotnetReferenceExpected = [bool]$DotnetReferenceExpected
     }
@@ -137,7 +140,7 @@ function Get-SettingsServiceConfigurationDescriptors {
         New-SettingsServiceConfigurationDescriptor -ScenarioSlug "deepl" -ServiceId "deepl" -RustExpanderId "DeepLServiceExpander" -DotnetExpandElement "DeepLServiceExpander"
         New-SettingsServiceConfigurationDescriptor -ScenarioSlug "local-ai" -ServiceId "windows-local-ai" -RustExpanderId "WindowsLocalAIExpander" -DotnetExpandElement "WindowsLocalAIExpander" -RustLocalAiProvider "FoundryLocal"
         New-SettingsServiceConfigurationDescriptor -ScenarioSlug "ollama" -ServiceId "ollama" -RustExpanderId "OllamaServiceExpander" -DotnetExpandElement "Ollama (Local LLM)"
-        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "openai" -ServiceId "openai" -RustExpanderId "OpenAIServiceExpander" -DotnetExpandElement "OpenAI" -ScrollPercent 15
+        New-SettingsServiceConfigurationDescriptor -ScenarioSlug "openai" -ServiceId "openai" -RustExpanderId "OpenAIServiceExpander" -DotnetExpandElement "OpenAI" -ScrollPercent 15 -RustScrollPercent 15
         New-SettingsServiceConfigurationDescriptor -ScenarioSlug "deepseek" -ServiceId "deepseek" -RustExpanderId "DeepSeekServiceExpander" -DotnetExpandElement "DeepSeek" -ScrollPercent 25
         New-SettingsServiceConfigurationDescriptor -ScenarioSlug "groq" -ServiceId "groq" -RustExpanderId "GroqServiceExpander" -DotnetExpandElement "Groq" -ScrollPercent 35
         New-SettingsServiceConfigurationDescriptor -ScenarioSlug "zhipu" -ServiceId "zhipu" -RustExpanderId "ZhipuServiceExpander" -DotnetExpandElement "Zhipu (智谱)" -ScrollPercent 45
@@ -2567,8 +2570,9 @@ $scenarioDefinitions = @(
             EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = $serviceDescriptor.ServiceId
             EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS = "Ready"
         }
-        if ([double]$serviceDescriptor.ScrollPercent -gt 0) {
-            $serviceEnvironment["EASYDICT_PREVIEW_SCROLL_PERCENT"] = ([double]$serviceDescriptor.ScrollPercent).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+        $rustScrollPercent = [double]$serviceDescriptor.RustScrollPercent
+        if ($rustScrollPercent -gt 0) {
+            $serviceEnvironment["EASYDICT_PREVIEW_SCROLL_PERCENT"] = $rustScrollPercent.ToString([System.Globalization.CultureInfo]::InvariantCulture)
             $serviceEnvironment["EASYDICT_PREVIEW_SCROLL_TARGET"] = "MainScrollViewer"
         }
         if (-not [string]::IsNullOrWhiteSpace([string]$serviceDescriptor.RustLocalAiProvider)) {
@@ -2765,9 +2769,11 @@ if ($selectedScenarios.Count -eq 0) {
     throw "No parity preview scenarios selected."
 }
 
-$selectedScenarios = @(Expand-SelectedScenariosWithBaselines `
-        -SelectedScenarios $selectedScenarios `
-        -AllScenarios $scenarioDefinitions)
+if (-not $SkipBaselineExpansion) {
+    $selectedScenarios = @(Expand-SelectedScenariosWithBaselines `
+            -SelectedScenarios $selectedScenarios `
+            -AllScenarios $scenarioDefinitions)
+}
 
 Require-Path -Path $CaptureScript -Description "Capture script"
 
@@ -2801,6 +2807,18 @@ foreach ($definition in $selectedScenarios) {
 
     $environment = Join-Environment $definition.Environment @{
         EASYDICT_PREVIEW_SCHEMA_PATH = $schemaPath
+    }
+    if ($environment.ContainsKey("EASYDICT_PREVIEW_SCROLL_PERCENT") -and
+        -not $environment.ContainsKey("EASYDICT_PREVIEW_SCROLL_DELAY_MS")) {
+        $environment["EASYDICT_PREVIEW_SCROLL_DELAY_MS"] = "1600"
+    }
+    if ($environment.ContainsKey("EASYDICT_PREVIEW_SCROLL_PERCENT") -and
+        -not $environment.ContainsKey("EASYDICT_PREVIEW_SCROLL_RETRY_COUNT")) {
+        $environment["EASYDICT_PREVIEW_SCROLL_RETRY_COUNT"] = "3"
+    }
+    if ($environment.ContainsKey("EASYDICT_PREVIEW_SCROLL_PERCENT") -and
+        -not $environment.ContainsKey("EASYDICT_PREVIEW_SCROLL_RETRY_DELAY_MS")) {
+        $environment["EASYDICT_PREVIEW_SCROLL_RETRY_DELAY_MS"] = "450"
     }
     $windowKind = Get-WindowKind -ScenarioId $definition.Id -Group $definition.Group -Environment $environment
     $expectedWindowDips = New-ExpectedWindowDips -Environment $environment -WindowKind $windowKind

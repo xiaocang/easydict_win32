@@ -52,7 +52,7 @@ fn help_lists_long_document_options() {
     }
     assert!(
         !stdout.contains("--app-dir"),
-        "legacy no-op app-dir should stay hidden from first rs portable help\nstdout:\n{stdout}"
+        "legacy app-dir should stay out of first rs portable help\nstdout:\n{stdout}"
     );
     assert!(
         stderr(&output).trim().is_empty(),
@@ -160,8 +160,7 @@ fn command_requires_target_language() {
 #[test]
 fn page_and_page_range_are_mutually_exclusive() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-page-conflict");
-    let app_dir = work_dir.join("app");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&work_dir).expect("work directory should be created");
     let input_path = work_dir.join("sample.pdf");
     let output_path = work_dir.join("translated.txt");
     fs::write(
@@ -188,9 +187,7 @@ fn page_and_page_range_are_mutually_exclusive() {
             "1-3",
             "--max-concurrency",
             "3",
-            "--app-dir",
         ])
-        .arg(&app_dir)
         .arg("--output")
         .arg(&output_path)
         .output()
@@ -464,13 +461,7 @@ fn retry_failed_pdf_ocr_sidecar_reexports_text_without_pdf_or_worker_lookup() {
 #[test]
 fn retry_failed_malformed_sidecar_fails_locally_without_worker_wording() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-malformed-sidecar");
-    let app_dir = work_dir.join("app");
-    fs::create_dir_all(app_dir.join("workers").join("longdoc"))
-        .expect("stale worker directory should be created");
-    fs::create_dir_all(app_dir.join("dotnet").join("host").join("fxr"))
-        .expect("stale dotnet runtime directory should be created");
-    fs::write(app_dir.join("Easydict.CompatHost.exe"), "stale")
-        .expect("stale compat host marker should be written");
+    fs::create_dir_all(&work_dir).expect("work directory should be created");
     let input_path = work_dir.join("sample.txt");
     let result_json_path = work_dir.join("translated-result.json");
     fs::write(&input_path, "Hello retry").expect("sample input should be written");
@@ -483,8 +474,6 @@ fn retry_failed_malformed_sidecar_fails_locally_without_worker_wording() {
         .arg("--result-json")
         .arg(&result_json_path)
         .arg("--retry-failed")
-        .arg("--app-dir")
-        .arg(&app_dir)
         .output()
         .expect("long document CLI should run");
 
@@ -548,7 +537,7 @@ fn result_json_path_is_prechecked_before_provider_lookup() {
 }
 
 #[test]
-fn app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup() {
+fn app_dir_is_rejected_before_stale_dotnet_payload_lookup() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-appdir-no-worker");
     let app_dir = work_dir.join("app");
     let settings_dir = work_dir.join("settings");
@@ -587,10 +576,9 @@ fn app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_looku
     let stderr = stderr(&output);
     let normalized = stderr.to_ascii_lowercase();
     assert!(
-        normalized.contains("rust-native")
-            || normalized.contains("phi silica")
-            || normalized.contains("windows ai"),
-        "stderr should stay on a Rust-native LocalAI failure path:\n{stderr}"
+        normalized.contains("--app-dir")
+            && (normalized.contains("unexpected") || normalized.contains("unknown")),
+        "stderr should reject the legacy LongDoc --app-dir option before runtime routing:\n{stderr}"
     );
     assert!(
         !stderr.contains(".NET workers"),
@@ -598,7 +586,7 @@ fn app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_looku
     );
     assert!(
         !stderr.contains("Long Document worker executable"),
-        "--app-dir must not probe retained LongDoc worker paths:\n{stderr}"
+        "rejected --app-dir must not probe retained LongDoc worker paths:\n{stderr}"
     );
     assert!(
         !normalized.contains("compat host"),
@@ -615,6 +603,80 @@ fn app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_looku
     assert!(
         !stderr.contains("hostfxr"),
         "LongDoc CLI should not describe bundled runtime payloads:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn current_exe_dir_ignores_stale_dotnet_payload_markers_without_app_dir() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-current-exe-no-worker");
+    let app_dir = work_dir.join("app");
+    let settings_dir = work_dir.join("settings");
+    write_stale_longdoc_payload_markers(&app_dir);
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello long document").expect("sample input should be written");
+    let copied_cli = app_dir.join("easydict_long_doc.exe");
+    fs::copy(long_doc_cli_binary_path(), &copied_cli)
+        .expect("long document CLI should copy into fake portable root");
+
+    let output = Command::new(&copied_cli)
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "zh-Hans",
+            "--from",
+            "en",
+            "--service",
+            "windows-local-ai",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_RUNTIME_PROFILE", "hybrid")
+        .env("RUNTIME_PROFILE", "hybrid")
+        .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
+        .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
+        .output()
+        .expect("copied long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("Windows Local AI")
+            || stderr.contains("Phi Silica")
+            || stderr.contains("OpenVINO")
+            || stderr.contains("Rust-native route"),
+        "default current-exe LongDoc LocalAI route should fail through a native LocalAI path:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(".NET workers"),
+        "default current-exe route should not mention retained runtime:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Long Document worker executable"),
+        "default current-exe route must not probe retained LongDoc worker paths:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "default current-exe route should not describe a compat host route:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("dotnet"),
+        "default current-exe route should not describe stale dotnet payloads:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Easydict.Workers"),
+        "default current-exe route should not describe retained worker payload names:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("hostfxr"),
+        "default current-exe route should not describe bundled runtime payloads:\n{stderr}"
     );
 
     let _ = fs::remove_dir_all(work_dir);
@@ -1062,9 +1124,13 @@ fn foundry_local_cli_override_targeting_dotnet_cmd_is_not_spawned() {
 }
 
 fn long_doc_cli() -> Command {
+    Command::new(long_doc_cli_binary_path())
+}
+
+fn long_doc_cli_binary_path() -> PathBuf {
     let binary = option_env!("CARGO_BIN_EXE_easydict_long_doc")
         .expect("easydict_long_doc binary should be built for integration tests");
-    Command::new(binary)
+    PathBuf::from(binary)
 }
 
 trait LocalAiEnvCommandExt {

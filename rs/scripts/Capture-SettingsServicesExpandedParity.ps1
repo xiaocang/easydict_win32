@@ -10,7 +10,7 @@ param(
     [switch]$SkipAnalyzerSelfTest,
     [ValidateSet("all", "base", "hover", "pressed", "mouse-hover")]
     [string[]]$State = @("all"),
-    [int]$SettlingMilliseconds = 1800,
+    [int]$SettlingMilliseconds = 4200,
     [int]$InterScenarioDelayMilliseconds = 500,
     [string]$Theme = "system",
     [string]$UiLanguage = "zh-CN",
@@ -103,6 +103,7 @@ $captureParams = @{
     UiLanguage = $UiLanguage
     SettlingMilliseconds = $SettlingMilliseconds
     InterScenarioDelayMilliseconds = $InterScenarioDelayMilliseconds
+    SkipBaselineExpansion = $true
 }
 if (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
     $captureParams["ReferenceRoot"] = $ReferenceRoot
@@ -135,6 +136,7 @@ $measureParams = @{
     ArtifactRoot = $OutputRoot
     MaxSurfaceDeltaRgb = $MaxSurfaceDeltaRgb
     MaxBoundsDriftDips = $MaxBoundsDriftDips
+    UseSummaryBounds = $true
 }
 if ($FailOnSurfaceDrift) {
     $measureParams["FailOnSurfaceDrift"] = $true

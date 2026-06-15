@@ -6,6 +6,7 @@ param(
     [string]$OutputMarkdown,
     [double]$MaxSurfaceDeltaRgb = 3.0,
     [double]$MaxBoundsDriftDips = 0.5,
+    [switch]$UseSummaryBounds,
     [switch]$FailOnSurfaceDrift
 )
 
@@ -218,12 +219,19 @@ function Measure-BitmapRegion {
     [double]$green = 0
     [double]$blue = 0
     [int]$count = 0
+    $colorCounts = @{}
     for ($y = $top; $y -lt $bottom; $y++) {
         for ($x = $left; $x -lt $right; $x++) {
             $pixel = $Bitmap.GetPixel($x, $y)
             $red += $pixel.R
             $green += $pixel.G
             $blue += $pixel.B
+            $key = ([int]$pixel.R -shl 16) -bor ([int]$pixel.G -shl 8) -bor [int]$pixel.B
+            if ($colorCounts.ContainsKey($key)) {
+                $colorCounts[$key] = [int]$colorCounts[$key] + 1
+            } else {
+                $colorCounts[$key] = 1
+            }
             $count++
         }
     }
@@ -232,6 +240,19 @@ function Measure-BitmapRegion {
     $g = if ($count -eq 0) { 0.0 } else { $green / $count }
     $b = if ($count -eq 0) { 0.0 } else { $blue / $count }
     $luma = (0.2126 * $r) + (0.7152 * $g) + (0.0722 * $b)
+    [int]$surfaceKey = 0
+    [int]$surfaceCount = 0
+    foreach ($entry in $colorCounts.GetEnumerator()) {
+        if ([int]$entry.Value -gt $surfaceCount) {
+            $surfaceKey = [int]$entry.Key
+            $surfaceCount = [int]$entry.Value
+        }
+    }
+    $surfaceR = ($surfaceKey -shr 16) -band 0xFF
+    $surfaceG = ($surfaceKey -shr 8) -band 0xFF
+    $surfaceB = $surfaceKey -band 0xFF
+    $surfaceLuma = (0.2126 * $surfaceR) + (0.7152 * $surfaceG) + (0.0722 * $surfaceB)
+    $surfaceRatio = if ($count -eq 0) { 0.0 } else { [double]$surfaceCount / [double]$count }
 
     [pscustomobject]@{
         bounds = [pscustomobject]@{
@@ -247,7 +268,181 @@ function Measure-BitmapRegion {
         }
         hex = "#{0:X2}{1:X2}{2:X2}" -f [int][Math]::Round($r), [int][Math]::Round($g), [int][Math]::Round($b)
         luma = [Math]::Round($luma, 2)
+        surfaceRgb = [pscustomobject]@{
+            r = [Math]::Round($surfaceR, 2)
+            g = [Math]::Round($surfaceG, 2)
+            b = [Math]::Round($surfaceB, 2)
+        }
+        surfaceHex = "#{0:X2}{1:X2}{2:X2}" -f $surfaceR, $surfaceG, $surfaceB
+        surfaceLuma = [Math]::Round($surfaceLuma, 2)
+        surfaceSampleCount = $surfaceCount
+        surfaceSampleRatio = [Math]::Round($surfaceRatio, 4)
     }
+}
+
+function Measure-ExpandedPartSurface {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Bitmap]$Bitmap,
+
+        [int]$ExpanderX,
+        [int]$ExpanderWidth,
+        [int]$BodyTop,
+        [double]$Scale = 1.0
+    )
+
+    if ($Scale -le 0) {
+        $Scale = 1.0
+    }
+
+    $sampleWidth = [int][Math]::Round(64.0 * $Scale)
+    $sampleHeight = [int][Math]::Round(14.0 * $Scale)
+    $sampleWidth = [Math]::Max(16, $sampleWidth)
+    $sampleHeight = [Math]::Max(8, $sampleHeight)
+    $candidateXOffsets = @(
+        [int][Math]::Round(32.0 * $Scale),
+        [int][Math]::Round([double]$ExpanderWidth * 0.30),
+        [int][Math]::Round([double]$ExpanderWidth * 0.54),
+        [int][Math]::Round([double]$ExpanderWidth * 0.72)
+    )
+    $candidateYOffsets = @(24, 64, 104, 160, 220, 280)
+    $candidates = New-Object System.Collections.Generic.List[object]
+
+    foreach ($offsetDip in $candidateYOffsets) {
+        $y = [int]$BodyTop + [int][Math]::Round([double]$offsetDip * $Scale)
+        if ($y -ge ($Bitmap.Height - $sampleHeight)) {
+            continue
+        }
+
+        foreach ($xOffset in $candidateXOffsets) {
+            $maxX = [Math]::Max(0, $Bitmap.Width - $sampleWidth - 1)
+            $x = [Math]::Min($maxX, [Math]::Max(0, [int]$ExpanderX + [int]$xOffset))
+            $region = Measure-BitmapRegion -Bitmap $Bitmap -X $x -Y $y -Width $sampleWidth -Height $sampleHeight
+            $surfaceLuma = [double](Get-RegionSurfaceLuma -Region $region)
+            $surfaceRatio = [double](Get-PropertyValue -Object $region -Name "surfaceSampleRatio")
+
+            # The light WinUI expanded surface is visibly below the header luma
+            # but above text/border/input chrome. Prefer stable blank surface
+            # samples over large regions dominated by child controls.
+            if ($surfaceLuma -lt 238.0 -or $surfaceLuma -gt 251.2 -or $surfaceRatio -lt 0.45) {
+                continue
+            }
+
+            $targetLuma = 246.93
+            $score = [Math]::Abs($surfaceLuma - $targetLuma) + ((1.0 - $surfaceRatio) * 3.0)
+            $candidates.Add([pscustomobject]@{
+                score = $score
+                luma = $surfaceLuma
+                ratio = $surfaceRatio
+                region = $region
+            }) | Out-Null
+        }
+    }
+
+    if ($candidates.Count -gt 0) {
+        return @($candidates.ToArray() | Sort-Object score, luma | Select-Object -First 1)[0].region
+    }
+
+    return $null
+}
+
+function Measure-HeaderBarSurface {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Bitmap]$Bitmap,
+
+        [int]$ExpanderX,
+        [int]$ExpanderWidth,
+        [int]$HeaderTop,
+        [double]$Scale = 1.0
+    )
+
+    if ($Scale -le 0) {
+        $Scale = 1.0
+    }
+
+    $sampleWidth = [int][Math]::Round(84.0 * $Scale)
+    $sampleHeight = [int][Math]::Round(8.0 * $Scale)
+    $sampleWidth = [Math]::Max(24, $sampleWidth)
+    $sampleHeight = [Math]::Max(6, $sampleHeight)
+    $candidateXOffsets = @(
+        [int][Math]::Round([double]$ExpanderWidth * 0.48),
+        [int][Math]::Round([double]$ExpanderWidth * 0.62),
+        [int][Math]::Round([double]$ExpanderWidth * 0.76)
+    )
+    $candidateYOffsets = @(6, 11, 32, 37)
+    $candidates = New-Object System.Collections.Generic.List[object]
+
+    foreach ($offsetDip in $candidateYOffsets) {
+        $y = [int]$HeaderTop + [int][Math]::Round([double]$offsetDip * $Scale)
+        if ($y -ge ($Bitmap.Height - $sampleHeight)) {
+            continue
+        }
+
+        foreach ($xOffset in $candidateXOffsets) {
+            $maxX = [Math]::Max(0, $Bitmap.Width - $sampleWidth - 1)
+            $x = [Math]::Min($maxX, [Math]::Max(0, [int]$ExpanderX + [int]$xOffset))
+            $region = Measure-BitmapRegion -Bitmap $Bitmap -X $x -Y $y -Width $sampleWidth -Height $sampleHeight
+            $surfaceLuma = [double](Get-RegionSurfaceLuma -Region $region)
+            $surfaceRatio = [double](Get-PropertyValue -Object $region -Name "surfaceSampleRatio")
+
+            # WinUI hover/pressed can draw a narrow feedback band through the
+            # header. The bar color comparison should sample the stable header
+            # surface, not that transient interaction stripe.
+            if ($surfaceLuma -lt 250.5 -or $surfaceLuma -gt 255.0 -or $surfaceRatio -lt 0.65) {
+                continue
+            }
+
+            $targetLuma = 253.07
+            $score = [Math]::Abs($surfaceLuma - $targetLuma) + ((1.0 - $surfaceRatio) * 3.0)
+            $candidates.Add([pscustomobject]@{
+                score = $score
+                luma = $surfaceLuma
+                ratio = $surfaceRatio
+                region = $region
+            }) | Out-Null
+        }
+    }
+
+    if ($candidates.Count -gt 0) {
+        return @($candidates.ToArray() | Sort-Object score, luma | Select-Object -First 1)[0].region
+    }
+
+    return $null
+}
+
+function Get-RegionSurfaceRgb {
+    param(
+        $Region
+    )
+
+    if ($null -eq $Region) {
+        return $null
+    }
+
+    $surfaceRgb = Get-PropertyValue -Object $Region -Name "surfaceRgb"
+    if ($null -ne $surfaceRgb) {
+        return $surfaceRgb
+    }
+
+    return Get-PropertyValue -Object $Region -Name "rgb"
+}
+
+function Get-RegionSurfaceLuma {
+    param(
+        $Region
+    )
+
+    if ($null -eq $Region) {
+        return $null
+    }
+
+    $surfaceLuma = Get-PropertyValue -Object $Region -Name "surfaceLuma"
+    if ($null -ne $surfaceLuma) {
+        return $surfaceLuma
+    }
+
+    return Get-PropertyValue -Object $Region -Name "luma"
 }
 
 function Get-RegionDelta {
@@ -260,9 +455,15 @@ function Get-RegionDelta {
         return $null
     }
 
-    $dr = [double]$Reference.rgb.r - [double]$Candidate.rgb.r
-    $dg = [double]$Reference.rgb.g - [double]$Candidate.rgb.g
-    $db = [double]$Reference.rgb.b - [double]$Candidate.rgb.b
+    $referenceRgb = Get-RegionSurfaceRgb -Region $Reference
+    $candidateRgb = Get-RegionSurfaceRgb -Region $Candidate
+    if ($null -eq $referenceRgb -or $null -eq $candidateRgb) {
+        return $null
+    }
+
+    $dr = [double]$referenceRgb.r - [double]$candidateRgb.r
+    $dg = [double]$referenceRgb.g - [double]$candidateRgb.g
+    $db = [double]$referenceRgb.b - [double]$candidateRgb.b
     [Math]::Round([Math]::Sqrt(($dr * $dr) + ($dg * $dg) + ($db * $db)), 2)
 }
 
@@ -276,7 +477,13 @@ function Get-RegionLumaDelta {
         return $null
     }
 
-    [Math]::Round([double]$Candidate.luma - [double]$Reference.luma, 2)
+    $referenceLuma = Get-RegionSurfaceLuma -Region $Reference
+    $candidateLuma = Get-RegionSurfaceLuma -Region $Candidate
+    if ($null -eq $referenceLuma -or $null -eq $candidateLuma) {
+        return $null
+    }
+
+    [Math]::Round([double]$candidateLuma - [double]$referenceLuma, 2)
 }
 
 function Get-RowMaxColorDelta {
@@ -387,6 +594,20 @@ function Test-StrongSampleRow {
         $candidateSource.StartsWith("summary-", [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Test-ImageSampleSource {
+    param(
+        [string]$Source
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Source)) {
+        return $false
+    }
+
+    return $Source.StartsWith("summary-", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $Source.Equals("detected", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $Source.Equals("detected-chevron", [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Get-SampleStrength {
     param(
         $Row
@@ -410,6 +631,11 @@ function Get-SampleStrength {
         return "chevron"
     }
 
+    if ((Test-ImageSampleSource -Source $referenceSource) -and
+        (Test-ImageSampleSource -Source $candidateSource)) {
+        return "image"
+    }
+
     return "weak"
 }
 
@@ -419,7 +645,7 @@ function Test-RankedSampleRow {
     )
 
     $strength = Get-SampleStrength -Row $Row
-    return $strength -eq "strong" -or $strength -eq "chevron"
+    return $strength -eq "strong" -or $strength -eq "chevron" -or $strength -eq "image"
 }
 
 function Format-DeltaVerdict {
@@ -496,7 +722,10 @@ function Format-RegionHex {
         return "missing"
     }
 
-    $hex = Get-PropertyValue -Object $Region -Name "hex"
+    $hex = Get-PropertyValue -Object $Region -Name "surfaceHex"
+    if ([string]::IsNullOrWhiteSpace([string]$hex)) {
+        $hex = Get-PropertyValue -Object $Region -Name "hex"
+    }
     if ([string]::IsNullOrWhiteSpace([string]$hex)) {
         return "missing"
     }
@@ -534,7 +763,11 @@ function Format-SurfacePair {
 
     $deltaRgb = Get-SurfacePairDelta -HeaderBar $HeaderBar -ExpandedPart $ExpandedPart
     $deltaLuma = Get-SurfacePairLumaDelta -HeaderBar $HeaderBar -ExpandedPart $ExpandedPart
-    "$(Format-RegionHex $HeaderBar) -> $(Format-RegionHex $ExpandedPart) / $(Format-DeltaWithVerdict $deltaRgb) / $(Format-LumaDelta $deltaLuma)"
+    if ($null -eq $deltaRgb) {
+        return "$(Format-RegionHex $HeaderBar) -> $(Format-RegionHex $ExpandedPart) / separation missing / $(Format-LumaDelta $deltaLuma)"
+    }
+
+    "$(Format-RegionHex $HeaderBar) -> $(Format-RegionHex $ExpandedPart) / separation={0:0.##} RGB / $(Format-LumaDelta $deltaLuma)" -f [double]$deltaRgb
 }
 
 function Get-ScaleForEntry {
@@ -626,7 +859,12 @@ function Get-ExpanderHeaderProbeFromSummary {
         return [pscustomobject]@{
             Source = "summary-expander"
             DerivedFrom = $Descriptor.ExpanderId
-            BoundsDips = $expanderBounds
+            BoundsDips = [pscustomobject]@{
+                Left = [double]$expanderBounds.Left
+                Top = [double]$expanderBounds.Top
+                Width = [double]$expanderBounds.Width
+                Height = [Math]::Min(48.0, [double]$expanderBounds.Height)
+            }
         }
     }
 
@@ -996,7 +1234,7 @@ function Find-ExpandedHeaderBoundsByCompactChevron {
         $minX = [int](($clusterRows | Measure-Object -Property minX -Minimum).Minimum)
         $maxX = [int](($clusterRows | Measure-Object -Property maxX -Maximum).Maximum)
         $width = $maxX - $minX + 1
-        if ($height -lt 6 -or $height -gt 14 -or $width -lt 8 -or $width -gt 32 -or $totalDark -lt 18 -or $totalDark -gt 140) {
+        if ($height -lt 4 -or $height -gt 14 -or $width -lt 4 -or $width -gt 32 -or $totalDark -lt 10 -or $totalDark -gt 140) {
             continue
         }
 
@@ -1095,6 +1333,25 @@ function Measure-ExpanderRegions {
     $headerX = $x + [Math]::Max($headerRightInset, $width - $headerWidth - $headerRightInset)
     $bodyX = $x + [Math]::Min([Math]::Max($bodyPreferredX, [int]($width * 0.70)), [Math]::Max(0, $width - $bodyRightReserve))
     $bodyWidth = [Math]::Min($bodyMaxWidth, [Math]::Max($bodyMinWidth, $width - ($bodyX - $x) - $bodyTrailingPadding))
+    $expandedPart = Measure-ExpandedPartSurface `
+        -Bitmap $Bitmap `
+        -ExpanderX $x `
+        -ExpanderWidth $width `
+        -BodyTop ([int]$bodyTop) `
+        -Scale $Scale
+    if ($null -eq $expandedPart) {
+        $expandedPart = Measure-BitmapRegion -Bitmap $Bitmap -X $bodyX -Y ([int]$bodyTop + $bodyInsetY) -Width $bodyWidth -Height $bodySampleHeight
+    }
+
+    $headerBar = Measure-HeaderBarSurface `
+        -Bitmap $Bitmap `
+        -ExpanderX $x `
+        -ExpanderWidth $width `
+        -HeaderTop $y `
+        -Scale $Scale
+    if ($null -eq $headerBar) {
+        $headerBar = Measure-BitmapRegion -Bitmap $Bitmap -X $headerX -Y $headerY -Width $headerWidth -Height $headerSampleHeight
+    }
 
     [pscustomobject]@{
         source = $source
@@ -1104,9 +1361,9 @@ function Measure-ExpanderRegions {
             width = $width
             headerHeight = $headerHeight
         }
-        headerBar = Measure-BitmapRegion -Bitmap $Bitmap -X $headerX -Y $headerY -Width $headerWidth -Height $headerSampleHeight
+        headerBar = $headerBar
         divider = Measure-BitmapRegion -Bitmap $Bitmap -X ($x + [int][Math]::Round(8.0 * $Scale)) -Y ([int]$bodyTop - 1) -Width ([Math]::Max(1, $width - [int][Math]::Round(16.0 * $Scale))) -Height 1
-        expandedPart = Measure-BitmapRegion -Bitmap $Bitmap -X $bodyX -Y ([int]$bodyTop + $bodyInsetY) -Width $bodyWidth -Height $bodySampleHeight
+        expandedPart = $expandedPart
     }
 }
 
@@ -1197,7 +1454,11 @@ foreach ($record in $recordsByScenario.Values) {
     $referenceBitmap = Open-Bitmap -Path $record.ReferenceScreenshot
     try {
         $candidateScale = Get-ScaleForEntry -Bitmap $candidateBitmap -Window $record.CandidateWindow
-        $candidateProbe = Get-ExpanderHeaderProbeFromSummary -UiSummary $record.CandidateUiSummary -Descriptor $descriptor
+        $candidateProbe = if ($UseSummaryBounds) {
+            Get-ExpanderHeaderProbeFromSummary -UiSummary $record.CandidateUiSummary -Descriptor $descriptor
+        } else {
+            $null
+        }
         $candidateBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.BoundsDips } else { $null }
         $candidateBounds = Convert-BoundsToPixels -BoundsDips $candidateBoundsDips -Scale $candidateScale
         $candidateSource = if ($null -ne $candidateProbe) {
@@ -1222,7 +1483,11 @@ foreach ($record in $recordsByScenario.Values) {
         $referenceDerivedFrom = $null
         if ($null -ne $referenceBitmap) {
             $referenceScale = Get-ScaleForEntry -Bitmap $referenceBitmap -Window $record.ReferenceWindow
-            $referenceProbe = Get-ExpanderHeaderProbeFromSummary -UiSummary $record.ReferenceUiSummary -Descriptor $descriptor
+            $referenceProbe = if ($UseSummaryBounds) {
+                Get-ExpanderHeaderProbeFromSummary -UiSummary $record.ReferenceUiSummary -Descriptor $descriptor
+            } else {
+                $null
+            }
             if ($null -ne $referenceProbe) {
                 $referenceBoundsDips = $referenceProbe.BoundsDips
                 $referenceSource = [string]$referenceProbe.Source
@@ -1243,7 +1508,7 @@ foreach ($record in $recordsByScenario.Values) {
                     $referenceDerivedFrom = $null
                     $referenceBoundsDips = Convert-ExpanderPixelsToDips -PixelBounds $referenceRegions.expanderBounds -Scale $referenceScale
                 }
-            } elseif ($null -ne $record.ReferenceUiSummary) {
+            } elseif ($UseSummaryBounds -and $null -ne $record.ReferenceUiSummary) {
                 $referenceSource = "not-expanded"
             } else {
                 $referenceSource = "detected"
@@ -1322,6 +1587,7 @@ $baseExpandedRows = @($orderedScenarioRows | Where-Object { $_.interactionState 
 $referenceGapRows = @($scenarioRows | Where-Object { (-not $_.hasReference) -or (-not $_.referenceExpanded) })
 $strongSampleRows = @($scenarioRows | Where-Object { Test-StrongSampleRow -Row $_ })
 $chevronSampleRows = @($scenarioRows | Where-Object { (Get-SampleStrength -Row $_) -eq "chevron" })
+$imageSampleRows = @($scenarioRows | Where-Object { (Get-SampleStrength -Row $_) -eq "image" })
 $rankedSampleRows = @($scenarioRows | Where-Object { Test-RankedSampleRow -Row $_ })
 $weakSampleRows = @($scenarioRows | Where-Object { -not (Test-RankedSampleRow -Row $_) })
 $largestColorDeltas = @(
@@ -1361,21 +1627,35 @@ $largestHeaderBoundsDrifts = @(
         }
 )
 $serviceStateCoverage = @(
-    $baseExpandedRows |
+    $orderedScenarioRows |
+        Group-Object serviceId |
+        Sort-Object @{ Expression = { Get-ServiceDisplayOrder -ServiceId ([string]$_.Name) }; Ascending = $true } |
         ForEach-Object {
-            $serviceId = [string]$_.serviceId
-            $serviceRows = @($orderedScenarioRows | Where-Object { $_.serviceId -eq $serviceId })
-            $capturedStates = @($serviceRows | ForEach-Object { [string]$_.interactionState } | Sort-Object -Unique)
+            $serviceRows = @($_.Group)
+            $firstRow = @($serviceRows | Select-Object -First 1)[0]
+            $serviceId = [string]$firstRow.serviceId
+            $capturedStates = @(
+                $serviceRows |
+                    Sort-Object @{ Expression = { Get-InteractionStateDisplayOrder -State ([string]$_.interactionState) }; Ascending = $true } |
+                    ForEach-Object { [string]$_.interactionState } |
+                    Select-Object -Unique
+            )
             $expectedStates = @("base", "hover", "pressed")
             if ($serviceId -eq "ollama") {
                 $expectedStates += "mouse-hover"
             }
             $missingStates = @($expectedStates | Where-Object { $_ -notin $capturedStates })
-            $referenceGapStates = @($serviceRows | Where-Object { (-not $_.hasReference) -or (-not $_.referenceExpanded) } | ForEach-Object { [string]$_.interactionState })
+            $referenceGapStates = @(
+                $serviceRows |
+                    Where-Object { (-not $_.hasReference) -or (-not $_.referenceExpanded) } |
+                    Sort-Object @{ Expression = { Get-InteractionStateDisplayOrder -State ([string]$_.interactionState) }; Ascending = $true } |
+                    ForEach-Object { [string]$_.interactionState } |
+                    Select-Object -Unique
+            )
             [pscustomobject]@{
-                service = $_.service
+                service = $firstRow.service
                 serviceId = $serviceId
-                expanderId = $_.expanderId
+                expanderId = $firstRow.expanderId
                 capturedStates = @($capturedStates)
                 missingStates = @($missingStates)
                 referenceGapStates = @($referenceGapStates)
@@ -1387,6 +1667,7 @@ $surfaceSchemeRows = @(
         ForEach-Object {
             $sampleStrength = Get-SampleStrength -Row $_
             $boundsDrift = Get-BoundsDriftScore -Reference $_.referenceExpanderBoundsDips -Candidate $_.candidateExpanderBoundsDips
+            $boundsSizeDrift = Get-SizeDriftScore -Reference $_.referenceExpanderBoundsDips -Candidate $_.candidateExpanderBoundsDips
             $windowDrift = Get-SizeDriftScore -Reference $_.referenceWindowDips -Candidate $_.candidateWindowDips
             $headerDelta = $_.headerBar.deltaRgb
             $expandedDelta = $_.expandedPart.deltaRgb
@@ -1410,8 +1691,8 @@ $surfaceSchemeRows = @(
             if ($null -ne $maxSurfaceDelta -and [double]$maxSurfaceDelta -gt [double]$MaxSurfaceDeltaRgb) {
                 $issues.Add("surface delta > $MaxSurfaceDeltaRgb RGB") | Out-Null
             }
-            if ($null -ne $boundsDrift -and [double]$boundsDrift -gt [double]$MaxBoundsDriftDips) {
-                $issues.Add("header bounds drift > $MaxBoundsDriftDips DIP") | Out-Null
+            if ($null -ne $boundsSizeDrift -and [double]$boundsSizeDrift -gt [double]$MaxBoundsDriftDips) {
+                $issues.Add("header size drift > $MaxBoundsDriftDips DIP") | Out-Null
             }
             if ($null -ne $windowDrift -and [double]$windowDrift -gt [double]$MaxBoundsDriftDips) {
                 $issues.Add("window size drift > $MaxBoundsDriftDips DIP") | Out-Null
@@ -1447,6 +1728,7 @@ $surfaceSchemeRows = @(
                 expandedPartDeltaRgb = $expandedDelta
                 maxSurfaceDeltaRgb = $maxSurfaceDelta
                 headerBoundsDriftDips = $boundsDrift
+                headerSizeDriftDips = $boundsSizeDrift
                 windowDriftDips = $windowDrift
                 referenceWindowDips = $_.referenceWindowDips
                 candidateWindowDips = $_.candidateWindowDips
@@ -1465,6 +1747,7 @@ $summary = [pscustomobject]@{
     baseExpandedScenarioCount = $baseExpandedRows.Count
     strongSampleCount = $strongSampleRows.Count
     chevronSampleCount = $chevronSampleRows.Count
+    imageSampleCount = $imageSampleRows.Count
     rankedSampleCount = $rankedSampleRows.Count
     weakSampleCount = $weakSampleRows.Count
     referenceExpandedCount = @($scenarioRows | Where-Object { $_.referenceExpanded }).Count
@@ -1485,9 +1768,11 @@ $summary = [pscustomobject]@{
 }
 
 $report = [pscustomobject]@{
-    schemaVersion = "easydict.settings-services-expander-colors.v7"
+    schemaVersion = "easydict.settings-services-expander-colors.v9"
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     artifactRoot = $ArtifactRoot
+    boundsMode = if ($UseSummaryBounds) { "summary" } else { "image-detected" }
+    colorMode = "dominant-surface"
     summary = $summary
     surfaceSchemeRows = $surfaceSchemeRows
     scenarios = $orderedScenarioRows
@@ -1499,7 +1784,10 @@ $markdown.Add("# Settings Services Expander Color Report") | Out-Null
 $markdown.Add("") | Out-Null
 $markdown.Add("Artifact root: ``$ArtifactRoot``") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute size/bounds drift <= $MaxBoundsDriftDips DIP.") | Out-Null
+$boundsModeText = if ($UseSummaryBounds) { "summary/UIA bounds" } else { "image-detected expanded chevron bounds" }
+$markdown.Add("Sampling: bounds use $boundsModeText; color deltas use each sampled region's dominant surface color, while JSON also preserves average RGB/luma for diagnostics.") | Out-Null
+$markdown.Add("") | Out-Null
+$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header size drift <= $MaxBoundsDriftDips DIP; viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
 $markdown.Add("") | Out-Null
 
 $markdown.Add("## Service State Coverage") | Out-Null
@@ -1542,7 +1830,7 @@ $markdown.Add("") | Out-Null
 if ($weakSampleRows.Count -eq 0) {
     $markdown.Add("No weak samples were detected; all ranked color deltas use summary bounds or matched chevron probes.") | Out-Null
 } else {
-    $markdown.Add("Rows here are useful visual evidence, but their color deltas are not ranked because at least one side used generic detected or missing bounds instead of summary bounds or a chevron probe.") | Out-Null
+    $markdown.Add("Rows here are useful visual evidence, but their color deltas are not ranked because at least one side was missing or could not be tied to summary/image-detected bounds.") | Out-Null
     $markdown.Add("") | Out-Null
     $markdown.Add("| Scenario | Service | State | Reference | Source | Next action |") | Out-Null
     $markdown.Add("| --- | --- | --- | --- | --- | --- |") | Out-Null
@@ -1575,13 +1863,17 @@ $markdown.Add("## Surface Scheme Verdict") | Out-Null
 $markdown.Add("") | Out-Null
 $markdown.Add("This is the focused base-state checklist for expanding each Settings > Services item. It treats the header bar and expanded part as the decisive color pair, while also keeping absolute window size and expander bounds in DIP visible.") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues |") | Out-Null
-$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
-foreach ($row in $surfaceSchemeRows) {
-    $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips) / drift $(Format-PlainDeltaWithVerdict $row.windowDriftDips)"
-    $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.headerBoundsDriftDips)"
-    $issues = if ($row.issues.Count -eq 0) { "none" } else { $row.issues -join "; " }
-    $markdown.Add("| $($row.service) | $($row.verdict) | $($row.sampleStrength) | $window | $bounds | $(Format-DeltaWithVerdict $row.headerBarDeltaRgb) | $(Format-DeltaWithVerdict $row.expandedPartDeltaRgb) | $($row.referenceScheme) | $($row.candidateScheme) | $issues |") | Out-Null
+if ($surfaceSchemeRows.Count -eq 0) {
+    $markdown.Add("No base expanded captures are present in this artifact. Use the per-service and bar/expanded pairing tables below for the measured interaction states.") | Out-Null
+} else {
+    $markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues |") | Out-Null
+    $markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+    foreach ($row in $surfaceSchemeRows) {
+        $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips) / drift $(Format-PlainDeltaWithVerdict $row.windowDriftDips)"
+        $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.headerBoundsDriftDips)"
+        $issues = if ($row.issues.Count -eq 0) { "none" } else { $row.issues -join "; " }
+        $markdown.Add("| $($row.service) | $($row.verdict) | $($row.sampleStrength) | $window | $bounds | $(Format-DeltaWithVerdict $row.headerBarDeltaRgb) | $(Format-DeltaWithVerdict $row.expandedPartDeltaRgb) | $($row.referenceScheme) | $($row.candidateScheme) | $issues |") | Out-Null
+    }
 }
 $markdown.Add("") | Out-Null
 
@@ -1670,11 +1962,11 @@ $markdown.Add("") | Out-Null
 
 $markdown.Add("## Bar / Expanded Surface Pairing") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("Each pair is sampled as header bar -> expanded part so the expander color scheme is visible per service. The pair delta describes internal surface separation; the Cross-surface delta column is the .NET vs Rust mismatch signal.") | Out-Null
+$markdown.Add("Each measured state is sampled as header bar -> expanded part so the expander color scheme is visible per service. The pair separation is the internal visual step from bar to body; the Cross-surface delta column is the .NET vs Rust mismatch signal.") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("| Scenario | Service | Reference scheme | Rust scheme | Cross-surface delta |") | Out-Null
-$markdown.Add("| --- | --- | --- | --- | --- |") | Out-Null
-foreach ($row in $baseExpandedRows) {
+$markdown.Add("| Scenario | Service | State | Reference scheme | Rust scheme | Cross-surface delta |") | Out-Null
+$markdown.Add("| --- | --- | --- | --- | --- | --- |") | Out-Null
+foreach ($row in $orderedScenarioRows) {
     $referenceScheme = if ($row.referenceExpanded) {
         Format-SurfacePair -HeaderBar $row.headerBar.reference -ExpandedPart $row.expandedPart.reference
     } else {
@@ -1692,7 +1984,7 @@ foreach ($row in $baseExpandedRows) {
     } else {
         "missing"
     }
-    $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $referenceScheme | $candidateScheme | $crossDelta |") | Out-Null
+    $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $($row.interactionState) | $referenceScheme | $candidateScheme | $crossDelta |") | Out-Null
 }
 $markdown.Add("") | Out-Null
 

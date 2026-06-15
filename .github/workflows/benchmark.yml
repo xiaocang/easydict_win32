@@ -106,11 +106,11 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
+        run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Build (Release)
         working-directory: dotnet
-        run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj -c Release
+        run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj -c Release -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Run startup performance benchmarks
         working-directory: dotnet
@@ -118,6 +118,9 @@ jobs:
           dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
           --no-build
           -c Release
+          -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
+          -p:BuildWorkerOutputs=false
+          -p:EnableInProcLongDocFallback=false
           --filter "Category=Performance"
           --verbosity normal
           --logger "trx;LogFileName=startup-benchmark-results.trx"

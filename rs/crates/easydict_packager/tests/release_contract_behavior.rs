@@ -194,10 +194,19 @@ fn benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/benchmark.yml"));
     let benchmark_job = text_between(&workflow, "  benchmark:", "  startup-benchmark:");
+    let startup_benchmark_job = workflow
+        .split_once("  startup-benchmark:")
+        .unwrap_or_else(|| panic!("missing section start: startup-benchmark"))
+        .1;
     let run_benchmark_step = text_between(
         benchmark_job,
         "      - name: Run performance benchmarks",
         "      - name: Upload benchmark results",
+    );
+    let run_startup_benchmark_step = text_between(
+        startup_benchmark_job,
+        "      - name: Run startup performance benchmarks",
+        "      - name: Upload startup benchmark results",
     );
 
     assert_contains(
@@ -260,6 +269,43 @@ fn benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile() {
         "-p:EnableInProcLongDocFallback=true",
         "WinUI benchmarks must not explicitly re-enable the retained .NET fallback",
     );
+    for (marker, description) in [
+        (
+            "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+            "RuntimeProfile",
+        ),
+        (
+            "-p:EnableInProcLongDocFallback=false",
+            "retained LongDoc fallback disable",
+        ),
+        (
+            "-p:BuildWorkerOutputs=false",
+            "retained worker output disable",
+        ),
+    ] {
+        assert_contains(
+            startup_benchmark_job,
+            marker,
+            &format!("startup benchmark restore/build/test should carry {description}"),
+        );
+        assert_contains(
+            run_startup_benchmark_step,
+            marker,
+            &format!(
+                "startup benchmark dotnet test should carry {description} even with --no-build"
+            ),
+        );
+    }
+    assert_contains(
+        run_startup_benchmark_step,
+        "--no-build",
+        "startup benchmark dotnet test should keep no-build while still carrying rust-only MSBuild props",
+    );
+    assert_not_contains(
+        startup_benchmark_job,
+        "-p:EnableInProcLongDocFallback=true",
+        "startup benchmarks must not explicitly re-enable the retained .NET fallback",
+    );
 }
 
 #[test]
@@ -313,6 +359,26 @@ fn memory_workflows_publish_winui_under_rust_only_profile() {
             "-p:EnableInProcLongDocFallback=true",
             &format!("{relative_path} must not explicitly re-enable retained fallback"),
         );
+        if relative_path.ends_with("memory-gate.yml") {
+            let ui_automation_build_step = text_between(
+                &workflow,
+                "      - name: Build UIAutomation tests",
+                "      - name: Run PR memory gate",
+            );
+            for marker in [
+                "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+                "-p:BuildWorkerOutputs=false",
+                "-p:EnableInProcLongDocFallback=false",
+            ] {
+                assert_contains(
+                    ui_automation_build_step,
+                    marker,
+                    &format!(
+                        "{relative_path} UIAutomation build step should carry rust-only diagnostic marker {marker}"
+                    ),
+                );
+            }
+        }
     }
 }
 
@@ -548,14 +614,34 @@ fn local_diagnostic_build_and_test_paths_use_rust_only_msbuild_props() {
             "# Run TranslationService tests only",
         ),
         (
+            "test-translation",
+            "# Run TranslationService tests only",
+            "# Run WinUI tests only",
+        ),
+        (
             "test-winui",
             "# Run WinUI tests only",
             "# Run Easydict.Llm.Streaming tests only",
         ),
         (
+            "test-streaming",
+            "# Run Easydict.Llm.Streaming tests only",
+            "# Run Polyglot.TextLayout tests only",
+        ),
+        (
+            "test-textlayout",
+            "# Run Polyglot.TextLayout tests only",
+            "# Run UI automation tests",
+        ),
+        (
             "test-ui",
             "# Run UI automation tests",
             "# Integration test service filter",
+        ),
+        (
+            "test-integration",
+            "# Run integration tests",
+            "# Run tests with verbose output",
         ),
         (
             "test-verbose",
@@ -929,8 +1015,23 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
     );
     assert_contains(
         publish_job,
-        "cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture",
-        "rs portable release should prove LongDoc --app-dir ignores stale retained .NET payload markers",
+        "cargo test -p easydict_app --test quick_translate_behavior packaged_auto_local_ai_with_stale_dotnet_payload_fails_locally_without_worker_probe -- --exact --nocapture",
+        "rs portable release should prove GUI Quick Translate app-dir LocalAI ignores stale retained .NET payload markers",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --test long_document_cli_behavior app_dir_is_rejected_before_stale_dotnet_payload_lookup -- --exact --nocapture",
+        "rs portable release should prove LongDoc --app-dir is rejected before stale retained .NET payload lookup",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --test long_document_cli_behavior current_exe_dir_ignores_stale_dotnet_payload_markers_without_app_dir -- --exact --nocapture",
+        "rs portable release should prove copied LongDoc CLI ignores stale retained .NET payload markers without --app-dir",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --test long_document_behavior local_ai_long_document_route_matrix_stays_native_before_worker_fallback -- --exact --nocapture",
+        "rs portable release should prove LongDoc LocalAI routes stay native before retained worker fallback",
     );
     assert_contains(
         publish_job,
@@ -1059,6 +1160,26 @@ fn create_rs_portable_release_revalidates_downloaded_zip_before_upload() {
         validation_step,
         "--package $zip.FullName",
         "downloaded release validator should validate each downloaded ZIP path",
+    );
+    assert_contains(
+        validation_step,
+        "$zipSize = $zip.Length",
+        "downloaded release validator should measure each downloaded ZIP size",
+    );
+    assert_contains(
+        validation_step,
+        "Rust portable release ZIP size:",
+        "downloaded release validator should log each downloaded ZIP size",
+    );
+    assert_contains(
+        validation_step,
+        "400000000",
+        "downloaded release validator should keep the same 400 MB package budget gate before upload",
+    );
+    assert_contains(
+        validation_step,
+        "Rust portable release ZIP is over the 400 MB budget",
+        "downloaded release validator should fail clearly when a downloaded ZIP exceeds the budget",
     );
     assert_not_contains(
         release_job,
@@ -1227,13 +1348,38 @@ fn ci_workflow_runs_default_rs_rust_only_boundary_tests() {
     );
     assert_contains(
         rust_only_job,
+        "cargo test -p easydict_packager --lib package_browser_extension -- --nocapture",
+        "default CI should prove browser extension packaging scans allowlisted manifest/common source files and keeps package entries allowlisted",
+    );
+    assert_contains(
+        rust_only_job,
         "cargo test -p easydict_packager --test release_contract_behavior run_wack_script_validates_msix_payload_before_wack_setup -- --exact --nocapture",
         "default CI should prove standalone WACK validates MSIX payloads before WACK setup",
     );
     assert_contains(
         rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile -- --exact --nocapture",
+        "default CI should prove pack-rs-portable child cargo commands force rust-only runtime profile",
+    );
+    assert_contains(
+        rust_only_job,
         "cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture",
         "default CI should validate a real rs portable ZIP payload before release tags",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell -- --exact --nocapture",
+        "default CI should smoke the extracted rs portable CLI without dotnet or PowerShell",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell -- --exact --nocapture",
+        "default CI should smoke the extracted rs portable GUI entrypoint without dotnet or PowerShell",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test msix_runtime_profile_contract_behavior -- --nocapture",
+        "default CI should run the MSIX runtime-profile contract tests directly",
     );
     assert_contains(
         rust_only_job,
@@ -1267,8 +1413,23 @@ fn ci_workflow_runs_default_rs_rust_only_boundary_tests() {
     );
     assert_contains(
         rust_only_job,
-        "cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture",
-        "default CI should prove LongDoc --app-dir ignores stale retained .NET payload markers",
+        "cargo test -p easydict_app --test quick_translate_behavior packaged_auto_local_ai_with_stale_dotnet_payload_fails_locally_without_worker_probe -- --exact --nocapture",
+        "default CI should prove GUI Quick Translate app-dir LocalAI ignores stale retained .NET payload markers",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app --test long_document_cli_behavior app_dir_is_rejected_before_stale_dotnet_payload_lookup -- --exact --nocapture",
+        "default CI should prove LongDoc --app-dir is rejected before stale retained .NET payload lookup",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app --test long_document_cli_behavior current_exe_dir_ignores_stale_dotnet_payload_markers_without_app_dir -- --exact --nocapture",
+        "default CI should prove copied LongDoc CLI ignores stale retained .NET payload markers without --app-dir",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app --test long_document_behavior local_ai_long_document_route_matrix_stays_native_before_worker_fallback -- --exact --nocapture",
+        "default CI should prove LongDoc LocalAI routes stay native before retained worker fallback",
     );
     assert_not_contains(
         rust_only_job,
@@ -1293,6 +1454,11 @@ fn rs_portable_release_runs_runtime_guard_and_msix_validator_tests() {
         "      - name: Build Rust portable ZIP",
     );
 
+    assert_contains(
+        verify_contracts_step,
+        "cargo test -p easydict_packager --lib package_browser_extension -- --nocapture",
+        "rs portable release should directly run browser extension package manifest/common source scans",
+    );
     assert_contains(
         verify_contracts_step,
         "cargo test --manifest-path ../lib/easydict-runtime-guards/Cargo.toml -- --nocapture",
@@ -1641,7 +1807,50 @@ fn docs_keep_default_cli_and_browser_extension_retained_fallbacks_retired() {
         );
     }
 
+    let long_doc_section = text_between(
+        &rs_readme,
+        "Long document CLI smoke checks:",
+        "Sidecar IPC smoke checks:",
+    );
+    assert_contains(
+        long_doc_section,
+        "Use `-RustHelperPath` or `-AppDir` to locate a Rust helper",
+        "rs/README.md should keep PowerShell -AppDir limited to helper discovery",
+    );
+    assert_contains(
+        long_doc_section,
+        "The Rust helper rejects the legacy `--app-dir` CLI option",
+        "rs/README.md should say default LongDoc CLI rejects legacy app-dir",
+    );
+    assert_not_contains(
+        long_doc_section,
+        "legacy no-op `--app-dir`",
+        "rs/README.md must not describe LongDoc --app-dir as accepted by the default Rust helper",
+    );
+    assert_not_contains(
+        long_doc_section,
+        "Passing `--app-dir` no longer enables",
+        "rs/README.md should describe LongDoc --app-dir as rejected, not accepted as a no-op",
+    );
+
     let migration = read_text(&root.join("migration-list.md"));
+    let local_ai_section = text_between(&migration, "## 5. 本地 AI", "- Foundry Local");
+    assert_contains(
+        local_ai_section,
+        "默认 Quick CLI 拒绝 legacy `--host` / `--host-arg` / `--app-dir`",
+        "migration-list.md should keep default Quick CLI legacy options rejected",
+    );
+    assert_contains(
+        local_ai_section,
+        "只在显式 `retained-dotnet-workers` 兼容构建中解析为 no-op",
+        "migration-list.md should keep Quick CLI compatibility parsing behind the retained feature",
+    );
+    assert_not_contains(
+        local_ai_section,
+        "Quick CLI 的 `--app-dir` / `--host` retained-era 输入只保留为 legacy no-op",
+        "migration-list.md should not keep the superseded Quick CLI no-op wording",
+    );
+
     let browser_section = text_between(
         &migration,
         "- Browser Native Messaging",
@@ -1747,6 +1956,46 @@ fn root_readmes_tech_stack_and_distribution_keep_rs_portable_as_default() {
             portable_index < store_index,
             "{relative_path} should list the Rust portable distribution before Store/WinGet",
         );
+
+        if relative_path == "README.md" {
+            let pdf_section = text_between(&text, "## Comparison with pdf2zh", "## License");
+            assert_contains(
+                pdf_section,
+                "Rust-native desktop app",
+                "README.md pdf2zh comparison should describe the default Windows UI as Rust-native",
+            );
+            assert_contains(
+                pdf_section,
+                "Rust-native portable; no bundled .NET runtime",
+                "README.md pdf2zh comparison should keep the default platform no-runtime statement",
+            );
+            for forbidden in ["Native WinUI 3 app", "native .NET 8"] {
+                assert_not_contains(
+                    pdf_section,
+                    forbidden,
+                    "README.md pdf2zh comparison should not describe the default app as WinUI/.NET",
+                );
+            }
+        } else {
+            let pdf_section = text_between(&text, "## 与 pdf2zh 对比", "## 许可证");
+            assert_contains(
+                pdf_section,
+                "Rust 原生桌面应用",
+                "README_ZH.md pdf2zh comparison should describe the default Windows UI as Rust-native",
+            );
+            assert_contains(
+                pdf_section,
+                "Rust 原生便携版；不捆绑 .NET 运行时",
+                "README_ZH.md pdf2zh comparison should keep the default platform no-runtime statement",
+            );
+            for forbidden in ["原生 WinUI 3", "原生 .NET 8"] {
+                assert_not_contains(
+                    pdf_section,
+                    forbidden,
+                    "README_ZH.md pdf2zh comparison should not describe the default app as WinUI/.NET",
+                );
+            }
+        }
     }
 }
 
@@ -2253,6 +2502,9 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
     );
     for forbidden_marker in [
         "retained-dotnet-workers",
+        "hybrid-dotnet-runtime-packaging",
+        "legacy-powershell-dialogs",
+        "legacy-powershell-tts",
         "--features",
         "--all-features",
         "Easydict.Workers",
@@ -2925,26 +3177,33 @@ fn default_browser_extension_sources_do_not_fallback_to_legacy_native_host() {
             "com.easydict.rs.bridge",
             &format!("{relative_path} should use the rs-specific native messaging host"),
         );
+        assert_eq!(
+            source.matches("com.easydict.").count(),
+            source.matches("com.easydict.rs.bridge").count(),
+            "{relative_path} must not introduce any native messaging host other than com.easydict.rs.bridge",
+        );
         assert_not_contains(
             &source,
             "com.easydict.bridge",
             &format!("{relative_path} must not default to the legacy dotnet native messaging host"),
         );
-        assert_not_contains(
-            &source,
+        for forbidden_marker in [
             "sendNativeMessageWithFallback",
-            &format!("{relative_path} should not keep legacy-host fallback plumbing"),
-        );
-        assert_not_contains(
-            &source,
             "sendNativeMessageToHost",
-            &format!("{relative_path} should not iterate native host fallback candidates"),
-        );
-        assert_not_contains(
-            &source,
             "NATIVE_HOST_NAMES",
-            &format!("{relative_path} should keep a single default rs native host"),
-        );
+            "Easydict.NativeBridge",
+            "NativeBridge",
+            ".NET",
+            "dotnet",
+            "legacy",
+            "fallback",
+        ] {
+            assert_not_contains(
+                &source,
+                forbidden_marker,
+                &format!("{relative_path} should not keep legacy host/runtime fallback plumbing"),
+            );
+        }
     }
 }
 
@@ -2971,6 +3230,8 @@ fn default_browser_extension_setup_points_to_rs_portable_not_store() {
     );
 
     for relative_path in [
+        "browser-extension/background.js",
+        "browser-extension/setup.js",
         "browser-extension/setup.html",
         "browser-extension/README.md",
         "browser-extension/_locales/en/messages.json",
@@ -2982,6 +3243,12 @@ fn default_browser_extension_setup_points_to_rs_portable_not_store() {
             "Microsoft Store",
             "com.easydict.bridge",
             "MSIX or Inno installer",
+            "Easydict.NativeBridge",
+            "NativeBridge",
+            ".NET",
+            "dotnet",
+            "legacy",
+            "fallback",
         ] {
             assert_not_contains(
                 &text,
@@ -3368,8 +3635,6 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
         "Overlay".to_string(),
         "--page-range".to_string(),
         "2-3".to_string(),
-        "--app-dir".to_string(),
-        app_dir.display().to_string(),
     ];
     for expected in expected_arguments {
         assert_contains(
@@ -3387,6 +3652,11 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
         &record,
         "RUNTIME_PROFILE=rust-only",
         "translate-long-doc Rust helper path should force the generic runtime profile",
+    );
+    assert_not_contains(
+        &record,
+        "--app-dir",
+        "translate-long-doc shim should use -AppDir only to resolve the Rust helper, not pass legacy --app-dir to the default LongDoc CLI",
     );
 
     let _ = fs::remove_dir_all(test_root);
@@ -3664,8 +3934,6 @@ fn translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_too
         "google".to_string(),
         "--output-mode".to_string(),
         "bilingual".to_string(),
-        "--app-dir".to_string(),
-        app_dir.display().to_string(),
     ] {
         assert_contains(
             &record,
@@ -3673,6 +3941,11 @@ fn translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_too
             "translate-long-doc shim should pass through app-dir helper arguments",
         );
     }
+    assert_not_contains(
+        &record,
+        "--app-dir",
+        "app-dir LongDoc shim should use -AppDir only for helper discovery, not pass legacy --app-dir to Rust CLI",
+    );
 
     let _ = fs::remove_dir_all(test_root);
 }
@@ -3766,8 +4039,6 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
         "Overlay".to_string(),
         "--page-range".to_string(),
         "2-3".to_string(),
-        "--app-dir".to_string(),
-        app_dir.display().to_string(),
     ];
     for expected in expected_arguments {
         assert_contains(
@@ -3776,6 +4047,11 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
             "translate-long-doc -UseCargo should pass the expected Rust CLI argument",
         );
     }
+    assert_not_contains(
+        &record,
+        "--app-dir",
+        "translate-long-doc -UseCargo should not pass legacy --app-dir to the default LongDoc CLI",
+    );
     assert_contains(
         &record,
         "EASYDICT_RUNTIME_PROFILE=rust-only",
@@ -5093,17 +5369,11 @@ fn msix_tooling_help_keeps_first_rs_release_pointed_at_portable() {
         "dotnet/scripts/inspect-msix.ps1",
     ] {
         let script = read_text(&root.join(relative_path));
-        for marker in [
-            "first rs release",
-            "Rust portable-only",
-            "pack-rs-portable",
-        ] {
+        for marker in ["first rs release", "Rust portable-only", "pack-rs-portable"] {
             assert_contains(
                 &script,
                 marker,
-                &format!(
-                    "{relative_path} should steer first rs release/install users to portable"
-                ),
+                &format!("{relative_path} should steer first rs release/install users to portable"),
             );
         }
     }

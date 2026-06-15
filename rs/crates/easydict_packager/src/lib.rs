@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -239,6 +240,7 @@ pub enum PackageBrowserExtensionError {
     ManifestMissing(PathBuf),
     RequiredFileMissing(PathBuf),
     UnsupportedSourceEntry(PathBuf),
+    RetainedRuntimeMarker(PathBuf),
     MissingVersion(PathBuf),
     ManifestNotObject(PathBuf),
     InvalidManifestJson { path: PathBuf, message: String },
@@ -463,6 +465,11 @@ impl fmt::Display for PackageBrowserExtensionError {
             Self::UnsupportedSourceEntry(path) => write!(
                 formatter,
                 "browser extension package does not support symlink or reparse-point source entries: {}",
+                path.display()
+            ),
+            Self::RetainedRuntimeMarker(path) => write!(
+                formatter,
+                "browser extension source file contains retained .NET runtime marker: {}",
                 path.display()
             ),
             Self::MissingVersion(path) => {
@@ -810,7 +817,13 @@ pub fn package_browser_extension(
         ensure_browser_extension_source_entry_supported(&path)?;
     }
 
+    let targets = browser_extension_targets(&options.target)?;
     let version = browser_extension_version(&extension_dir.join("manifest.json"))?;
+    let common_files = browser_extension_common_file_bytes(&extension_dir)?;
+    let prepared_targets = targets
+        .into_iter()
+        .map(|target| prepare_browser_extension_target(&extension_dir, target))
+        .collect::<Result<Vec<_>, _>>()?;
     let output_dir = options
         .output_dir
         .clone()
@@ -821,9 +834,14 @@ pub fn package_browser_extension(
     })?;
 
     let mut packages = Vec::new();
-    for target in browser_extension_targets(&options.target)? {
-        let package =
-            package_browser_extension_target(&extension_dir, &output_dir, &version, target)?;
+    for prepared_target in prepared_targets {
+        let package = package_browser_extension_target(
+            &extension_dir,
+            &output_dir,
+            &version,
+            prepared_target,
+            &common_files,
+        )?;
         packages.push(package);
     }
 
@@ -1805,6 +1823,11 @@ enum BrowserExtensionTarget {
     Firefox,
 }
 
+struct PreparedBrowserExtensionTarget {
+    target: BrowserExtensionTarget,
+    manifest_bytes: Vec<u8>,
+}
+
 impl BrowserExtensionTarget {
     fn manifest_file(self) -> &'static str {
         match self {
@@ -1854,12 +1877,10 @@ fn browser_extension_version(manifest_path: &Path) -> Result<String, PackageBrow
         .ok_or_else(|| PackageBrowserExtensionError::MissingVersion(manifest_path.to_path_buf()))
 }
 
-fn package_browser_extension_target(
+fn prepare_browser_extension_target(
     extension_dir: &Path,
-    output_dir: &Path,
-    version: &str,
     target: BrowserExtensionTarget,
-) -> Result<BrowserExtensionPackage, PackageBrowserExtensionError> {
+) -> Result<PreparedBrowserExtensionTarget, PackageBrowserExtensionError> {
     let manifest_path = extension_dir.join(target.manifest_file());
     let mut manifest = read_manifest_json(&manifest_path)?;
     let Some(manifest_object) = manifest.as_object_mut() else {
@@ -1874,7 +1895,20 @@ fn package_browser_extension_target(
             message: error.to_string(),
         }
     })?;
+    Ok(PreparedBrowserExtensionTarget {
+        target,
+        manifest_bytes,
+    })
+}
 
+fn package_browser_extension_target(
+    extension_dir: &Path,
+    output_dir: &Path,
+    version: &str,
+    prepared_target: PreparedBrowserExtensionTarget,
+    common_files: &HashMap<&'static str, Vec<u8>>,
+) -> Result<BrowserExtensionPackage, PackageBrowserExtensionError> {
+    let target = prepared_target.target;
     let output_path = output_dir.join(target.output_file_name(version));
     let file = File::create(&output_path).map_err(|error| PackageBrowserExtensionError::Io {
         path: output_path.clone(),
@@ -1885,27 +1919,26 @@ fn package_browser_extension_target(
         .start_file("manifest.json", zip_options())
         .map_err(|error| PackageBrowserExtensionError::Zip(error.to_string()))?;
     writer
-        .write_all(&manifest_bytes)
+        .write_all(&prepared_target.manifest_bytes)
         .map_err(|error| PackageBrowserExtensionError::Io {
             path: output_path.clone(),
             message: error.to_string(),
         })?;
 
     for relative_path in BROWSER_EXTENSION_COMMON_FILES {
-        let source_path = extension_dir.join(relative_path);
         let entry_name = normalize_package_entry(relative_path)?;
         writer
             .start_file(entry_name, zip_options())
             .map_err(|error| PackageBrowserExtensionError::Zip(error.to_string()))?;
-        let mut source =
-            File::open(&source_path).map_err(|error| PackageBrowserExtensionError::Io {
-                path: source_path.clone(),
+        let source_bytes = common_files
+            .get(*relative_path)
+            .expect("browser extension common file should be preloaded");
+        writer
+            .write_all(source_bytes)
+            .map_err(|error| PackageBrowserExtensionError::Io {
+                path: extension_dir.join(relative_path),
                 message: error.to_string(),
             })?;
-        io::copy(&mut source, &mut writer).map_err(|error| PackageBrowserExtensionError::Io {
-            path: source_path,
-            message: error.to_string(),
-        })?;
     }
 
     writer
@@ -1923,6 +1956,34 @@ fn package_browser_extension_target(
         path: output_path,
         bytes,
     })
+}
+
+fn browser_extension_common_file_bytes(
+    extension_dir: &Path,
+) -> Result<HashMap<&'static str, Vec<u8>>, PackageBrowserExtensionError> {
+    let mut files = HashMap::new();
+    for relative_path in BROWSER_EXTENSION_COMMON_FILES {
+        let source_path = extension_dir.join(relative_path);
+        let bytes = read_browser_extension_source_file_bytes(&source_path)?;
+        files.insert(*relative_path, bytes);
+    }
+    Ok(files)
+}
+
+fn read_browser_extension_source_file_bytes(
+    path: &Path,
+) -> Result<Vec<u8>, PackageBrowserExtensionError> {
+    ensure_browser_extension_source_entry_supported(path)?;
+    let bytes = fs::read(path).map_err(|error| PackageBrowserExtensionError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    if bytes_contain_retained_runtime_marker(&bytes) {
+        return Err(PackageBrowserExtensionError::RetainedRuntimeMarker(
+            path.to_path_buf(),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn ensure_browser_extension_source_entry_supported(
@@ -2320,8 +2381,12 @@ fn rust_portable_entry_is_allowed(entry_name: &str) -> bool {
     RUST_PORTABLE_REQUIRED_ENTRIES.contains(&entry_name)
 }
 
-fn rust_portable_bytes_contain_retained_marker(bytes: &[u8]) -> bool {
+fn bytes_contain_retained_runtime_marker(bytes: &[u8]) -> bool {
     easydict_runtime_guards::bytes_contain_retained_runtime_marker(bytes)
+}
+
+fn rust_portable_bytes_contain_retained_marker(bytes: &[u8]) -> bool {
+    bytes_contain_retained_runtime_marker(bytes)
 }
 
 fn read_manifest_json(manifest_path: &Path) -> Result<Value, PackageBrowserExtensionError> {
@@ -2330,12 +2395,11 @@ fn read_manifest_json(manifest_path: &Path) -> Result<Value, PackageBrowserExten
             manifest_path.to_path_buf(),
         ));
     }
-    ensure_browser_extension_source_entry_supported(manifest_path)?;
-    let text =
-        fs::read_to_string(manifest_path).map_err(|error| PackageBrowserExtensionError::Io {
-            path: manifest_path.to_path_buf(),
-            message: error.to_string(),
-        })?;
+    let bytes = read_browser_extension_source_file_bytes(manifest_path)?;
+    let text = String::from_utf8(bytes).map_err(|error| PackageBrowserExtensionError::Io {
+        path: manifest_path.to_path_buf(),
+        message: error.to_string(),
+    })?;
     serde_json::from_str(&text).map_err(|error| PackageBrowserExtensionError::InvalidManifestJson {
         path: manifest_path.to_path_buf(),
         message: error.to_string(),
@@ -3930,6 +3994,155 @@ WIN_FLUENT_TTS_TEXT\n";
     }
 
     #[test]
+    fn package_browser_extension_rejects_retained_runtime_markers_inside_common_files() {
+        let extension = browser_extension_source("browser-extension-retained-marker-common-file");
+        let output = tempfile_dir("browser-extension-retained-marker-common-file-output");
+        write_file(
+            &extension,
+            "background.js",
+            b"bridge(); hostfxr.dll This application requires .NET",
+        );
+
+        let error = package_browser_extension(&PackageBrowserExtensionOptions {
+            extension_dir: extension.clone(),
+            output_dir: Some(output.clone()),
+            target: "Chrome".to_string(),
+        })
+        .unwrap_err();
+
+        let PackageBrowserExtensionError::RetainedRuntimeMarker(path) = error else {
+            panic!("expected retained runtime marker error");
+        };
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("background.js")
+        );
+        assert!(
+            !output.join("easydict-ocr-chrome-v1.2.3.zip").exists(),
+            "retained runtime source markers should fail before creating the package archive"
+        );
+
+        let _ = fs::remove_dir_all(extension);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn package_browser_extension_rejects_retained_runtime_markers_inside_manifest_files() {
+        let extension = browser_extension_source("browser-extension-retained-marker-manifest");
+        let output = tempfile_dir("browser-extension-retained-marker-manifest-output");
+        write_file(
+            &extension,
+            "manifest.json",
+            br#"{
+  "manifest_version": 3,
+  "version": "1.2.3",
+  "description": "stale hostfxr.dll marker"
+}"#,
+        );
+
+        let error = package_browser_extension(&PackageBrowserExtensionOptions {
+            extension_dir: extension.clone(),
+            output_dir: Some(output.clone()),
+            target: "Chrome".to_string(),
+        })
+        .unwrap_err();
+
+        let PackageBrowserExtensionError::RetainedRuntimeMarker(path) = error else {
+            panic!("expected retained runtime marker error");
+        };
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("manifest.json")
+        );
+        assert!(
+            !output.join("easydict-ocr-chrome-v1.2.3.zip").exists(),
+            "retained runtime manifest markers should fail before creating the package archive"
+        );
+
+        let _ = fs::remove_dir_all(extension);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn package_browser_extension_rejects_retained_runtime_markers_inside_firefox_manifest() {
+        let extension =
+            browser_extension_source("browser-extension-retained-marker-firefox-manifest");
+        let output = tempfile_dir("browser-extension-retained-marker-firefox-manifest-output");
+        write_file(
+            &extension,
+            "manifest.v2.json",
+            br#"{
+  "manifest_version": 2,
+  "version": "1.2.3",
+  "description": "stale This application requires .NET marker"
+}"#,
+        );
+
+        let error = package_browser_extension(&PackageBrowserExtensionOptions {
+            extension_dir: extension.clone(),
+            output_dir: Some(output.clone()),
+            target: "Firefox".to_string(),
+        })
+        .unwrap_err();
+
+        let PackageBrowserExtensionError::RetainedRuntimeMarker(path) = error else {
+            panic!("expected retained runtime marker error");
+        };
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("manifest.v2.json")
+        );
+        assert!(
+            !output.join("easydict-ocr-firefox-v1.2.3.xpi").exists(),
+            "retained runtime Firefox manifest markers should fail before creating the package archive"
+        );
+
+        let _ = fs::remove_dir_all(extension);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn package_browser_extension_all_targets_rejects_firefox_manifest_marker_before_any_archive() {
+        let extension = browser_extension_source("browser-extension-retained-marker-all-targets");
+        let output = tempfile_dir("browser-extension-retained-marker-all-targets-output");
+        write_file(
+            &extension,
+            "manifest.v2.json",
+            br#"{
+  "manifest_version": 2,
+  "version": "1.2.3",
+  "description": "stale hostfxr.dll marker"
+}"#,
+        );
+
+        let error = package_browser_extension(&PackageBrowserExtensionOptions {
+            extension_dir: extension.clone(),
+            output_dir: Some(output.clone()),
+            target: "All".to_string(),
+        })
+        .unwrap_err();
+
+        let PackageBrowserExtensionError::RetainedRuntimeMarker(path) = error else {
+            panic!("expected retained runtime marker error");
+        };
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("manifest.v2.json")
+        );
+        assert!(
+            !output.join("easydict-ocr-chrome-v1.2.3.zip").exists(),
+            "all-target preflight should fail before creating the Chrome package archive"
+        );
+        assert!(
+            !output.join("easydict-ocr-firefox-v1.2.3.xpi").exists(),
+            "all-target preflight should fail before creating the Firefox package archive"
+        );
+
+        let _ = fs::remove_dir_all(extension);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
     fn package_browser_extension_reports_missing_common_file() {
         let extension = browser_extension_source("browser-extension-missing");
         fs::remove_file(extension.join("setup.js")).expect("remove setup");
@@ -4138,8 +4351,11 @@ WIN_FLUENT_TTS_TEXT\n";
         assert!(
             !args.iter().any(|arg| arg == "--features"
                 || arg == "--all-features"
-                || arg.contains("retained-dotnet-workers")),
-            "rs portable cargo args must keep retained .NET worker bridge disabled: {args:?}"
+                || arg.contains("retained-dotnet-workers")
+                || arg.contains("hybrid-dotnet-runtime-packaging")
+                || arg.contains("legacy-powershell-dialogs")
+                || arg.contains("legacy-powershell-tts")),
+            "rs portable cargo args must keep retained .NET worker and legacy PowerShell features disabled: {args:?}"
         );
     }
 }

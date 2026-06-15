@@ -2,7 +2,9 @@ use crate::grammar_correction::{
     build_grammar_correction_user_prompt, grammar_correction_system_prompt,
     parse_grammar_correction,
 };
-use crate::llm_streaming::{parse_openai_sse_chunks, ChatMessage, ChatRole, OpenAiStreamingFormat};
+use crate::llm_streaming::{
+    ChatMessage, ChatRole, OpenAiSseLineChunkParser, OpenAiStreamingFormat,
+};
 use crate::translation_language::TranslationLanguage;
 use crate::{
     grammar_correction::GrammarCorrectionResult,
@@ -31,6 +33,7 @@ pub use easydict_foundry_local::{
 use ring::digest;
 use serde_json::{json, Map, Value};
 use std::fmt::{self, Write as _};
+use std::io::{BufRead as _, BufReader};
 use std::time::Duration;
 
 pub const OPENAI_TRANSLATION_SYSTEM_PROMPT: &str = "You are a translation expert proficient in various languages, focusing solely on translating text without interpretation. You accurately understand the meanings of proper nouns, idioms, metaphors, allusions, and other obscure words in sentences, translating them appropriately based on the context and language environment. The translation should be natural and fluent. Only return the translated text, without including redundant quotes or additional notes.";
@@ -420,6 +423,18 @@ pub trait OpenAiHttpClient {
     fn post_sse(&mut self, request: &OpenAiHttpRequestPlan)
         -> Result<String, OpenAiExecutionError>;
 
+    fn post_sse_lines(
+        &mut self,
+        request: &OpenAiHttpRequestPlan,
+        on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+    ) -> Result<(), OpenAiExecutionError> {
+        let sse = self.post_sse(request)?;
+        for line in sse.lines() {
+            on_line(line)?;
+        }
+        Ok(())
+    }
+
     fn get_text(
         &mut self,
         _request: &OpenAiHttpGetRequestPlan,
@@ -510,6 +525,59 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         }
 
         Ok(body)
+    }
+
+    fn post_sse_lines(
+        &mut self,
+        request: &OpenAiHttpRequestPlan,
+        on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+    ) -> Result<(), OpenAiExecutionError> {
+        let mut builder = self.client.post(&request.endpoint).json(&request.body);
+        for (name, value) in &request.headers {
+            builder = builder.header(name, value);
+        }
+
+        let response = builder.send().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("OpenAI HTTP request failed: {error}"),
+            )
+        })?;
+        let status = response.status();
+
+        if !status.is_success() {
+            let body = response.text().map_err(|error| {
+                OpenAiExecutionError::new(
+                    OpenAiExecutionErrorCode::NetworkError,
+                    format!("Could not read OpenAI HTTP response: {error}"),
+                )
+            })?;
+            return Err(openai_error_from_response(
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown"),
+                &body,
+            ));
+        }
+
+        let mut reader = BufReader::new(response);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let bytes_read = reader.read_line(&mut line).map_err(|error| {
+                OpenAiExecutionError::new(
+                    OpenAiExecutionErrorCode::NetworkError,
+                    format!("Could not read OpenAI HTTP stream: {error}"),
+                )
+            })?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            let line_without_newline = line.trim_end_matches(&['\r', '\n'][..]);
+            on_line(line_without_newline)?;
+        }
+
+        Ok(())
     }
 
     fn get_text(
@@ -1078,8 +1146,28 @@ pub fn execute_openai_stream_request<C: OpenAiHttpClient>(
     client: &mut C,
     plan: &OpenAiHttpRequestPlan,
 ) -> Result<Vec<String>, OpenAiExecutionError> {
-    let sse = client.post_sse(plan)?;
-    Ok(parse_openai_sse_chunks(plan.streaming_format, &sse))
+    execute_openai_stream_request_observing_chunks(client, plan, |_| {})
+}
+
+pub fn execute_openai_stream_request_observing_chunks<C, F>(
+    client: &mut C,
+    plan: &OpenAiHttpRequestPlan,
+    mut on_chunk: F,
+) -> Result<Vec<String>, OpenAiExecutionError>
+where
+    C: OpenAiHttpClient,
+    F: FnMut(&str),
+{
+    let mut parser = OpenAiSseLineChunkParser::new(plan.streaming_format);
+    let mut chunks = Vec::new();
+    client.post_sse_lines(plan, &mut |line| {
+        if let Some(chunk) = parser.feed_line(line) {
+            on_chunk(&chunk);
+            chunks.push(chunk);
+        }
+        Ok(())
+    })?;
+    Ok(chunks)
 }
 
 pub fn translate_openai_compatible<C: OpenAiHttpClient>(

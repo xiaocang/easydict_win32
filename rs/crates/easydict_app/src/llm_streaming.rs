@@ -55,6 +55,82 @@ pub fn parse_openai_sse_chunks(format: OpenAiStreamingFormat, sse: &str) -> Vec<
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OpenAiSseLineChunkParser {
+    format: OpenAiStreamingFormat,
+    current_event: Option<String>,
+    done: bool,
+}
+
+impl OpenAiSseLineChunkParser {
+    pub fn new(format: OpenAiStreamingFormat) -> Self {
+        Self {
+            format,
+            current_event: None,
+            done: false,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.done
+    }
+
+    pub fn feed_line(&mut self, line: &str) -> Option<String> {
+        if self.done {
+            return None;
+        }
+
+        match self.format {
+            OpenAiStreamingFormat::ChatCompletions => self.feed_chat_completions_line(line),
+            OpenAiStreamingFormat::Responses => self.feed_responses_line(line),
+        }
+    }
+
+    fn feed_chat_completions_line(&mut self, line: &str) -> Option<String> {
+        let line = trim_sse_line(line);
+        if line.is_empty() {
+            return None;
+        }
+
+        let Some(data) = sse_field_value(line, "data") else {
+            return None;
+        };
+
+        if data == DONE_MARKER {
+            self.done = true;
+            return None;
+        }
+
+        extract_chat_completions_delta(data)
+    }
+
+    fn feed_responses_line(&mut self, line: &str) -> Option<String> {
+        let line = trim_sse_line(line);
+        if line.is_empty() {
+            self.current_event = None;
+            return None;
+        }
+
+        if let Some(event) = sse_field_value(line, "event") {
+            self.current_event = Some(event.trim().to_string());
+            return None;
+        }
+
+        let Some(data) = sse_field_value(line, "data") else {
+            return None;
+        };
+        let data = data.trim();
+
+        if data == DONE_MARKER {
+            self.done = true;
+            return None;
+        }
+
+        extract_responses_delta(data, self.current_event.as_deref())
+            .filter(|delta| !delta.is_empty())
+    }
+}
+
 pub fn chat_completions_sse_chunks(sse: &str) -> ChatCompletionsSseChunks<'_> {
     ChatCompletionsSseChunks {
         lines: sse.lines(),
@@ -195,4 +271,13 @@ fn is_responses_delta_event(value: &Value, current_event: Option<&str>) -> bool 
         .get("type")
         .and_then(Value::as_str)
         .is_some_and(|value| value == RESPONSES_DELTA_EVENT)
+}
+
+fn trim_sse_line(line: &str) -> &str {
+    line.trim_end_matches(&['\r', '\n'][..]).trim()
+}
+
+fn sse_field_value<'a>(line: &'a str, field: &str) -> Option<&'a str> {
+    let remainder = line.strip_prefix(field)?.strip_prefix(':')?;
+    Some(remainder.strip_prefix(' ').unwrap_or(remainder))
 }

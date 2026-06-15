@@ -5,13 +5,15 @@ use easydict_app::{
     cleanup_doubao_translation_text, correct_custom_streaming_grammar,
     custom_streaming_config_for_service, custom_streaming_error_from_response,
     doubao_language_code, doubao_service_config, execute_custom_streaming_request,
-    gemini_service_config, parse_doubao_stream_chunks, parse_gemini_stream_chunks,
-    translate_custom_streaming_service, CustomStreamingFormat, CustomStreamingHttpClient,
-    CustomStreamingHttpRequestPlan, CustomStreamingServiceConfig, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, OpenAiTranslationRequest, TranslationLanguage,
-    DOUBAO_DEFAULT_ENDPOINT, DOUBAO_DEFAULT_MODEL,
+    execute_custom_streaming_request_observing_chunks, gemini_service_config,
+    parse_doubao_stream_chunks, parse_gemini_stream_chunks, translate_custom_streaming_service,
+    CustomStreamingFormat, CustomStreamingHttpClient, CustomStreamingHttpRequestPlan,
+    CustomStreamingServiceConfig, OpenAiExecutionError, OpenAiExecutionErrorCode,
+    OpenAiTranslationRequest, TranslationLanguage, DOUBAO_DEFAULT_ENDPOINT, DOUBAO_DEFAULT_MODEL,
 };
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 
 #[test]
 fn gemini_translation_request_plan_matches_legacy_streaming_shape() {
@@ -307,6 +309,77 @@ fn execute_custom_streaming_request_posts_plan_and_parses_selected_format() {
 
     assert_eq!(chunks, vec!["你".to_string(), "好".to_string()]);
     assert_eq!(client.requests, vec![plan]);
+}
+
+#[test]
+fn execute_custom_streaming_request_observes_doubao_chunks_before_stream_returns() {
+    struct StepwiseCustomStreamingHttpClient {
+        events: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl CustomStreamingHttpClient for StepwiseCustomStreamingHttpClient {
+        fn post_sse(
+            &mut self,
+            _request: &CustomStreamingHttpRequestPlan,
+        ) -> Result<String, OpenAiExecutionError> {
+            panic!("streaming executor should use post_sse_lines")
+        }
+
+        fn post_sse_lines(
+            &mut self,
+            request: &CustomStreamingHttpRequestPlan,
+            on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+        ) -> Result<(), OpenAiExecutionError> {
+            self.events
+                .borrow_mut()
+                .push(format!("request:{}", request.endpoint));
+            on_line("event: response.output_text.delta")?;
+            on_line("data: {\"delta\":\"你\"}")?;
+            self.events
+                .borrow_mut()
+                .push("after-first-data".to_string());
+            on_line("event: response.output_text.delta")?;
+            on_line("data: {\"delta\":\"好\"}")?;
+            self.events
+                .borrow_mut()
+                .push("after-second-data".to_string());
+            on_line("data: [DONE]")?;
+            Ok(())
+        }
+    }
+
+    let plan = CustomStreamingHttpRequestPlan {
+        method: "POST",
+        endpoint: "https://ark.example.test/api/v3/responses".to_string(),
+        headers: Vec::new(),
+        body: serde_json::json!({}),
+        streaming_format: CustomStreamingFormat::Doubao,
+    };
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut client = StepwiseCustomStreamingHttpClient {
+        events: Rc::clone(&events),
+    };
+    let mut observed = Vec::new();
+    let callback_events = Rc::clone(&events);
+
+    let chunks = execute_custom_streaming_request_observing_chunks(&mut client, &plan, |chunk| {
+        callback_events.borrow_mut().push(format!("chunk:{chunk}"));
+        observed.push(chunk.to_string());
+    })
+    .unwrap();
+
+    assert_eq!(chunks, vec!["你".to_string(), "好".to_string()]);
+    assert_eq!(observed, chunks);
+    assert_eq!(
+        events.borrow().as_slice(),
+        [
+            "request:https://ark.example.test/api/v3/responses",
+            "chunk:你",
+            "after-first-data",
+            "chunk:好",
+            "after-second-data",
+        ]
+    );
 }
 
 #[derive(Default)]

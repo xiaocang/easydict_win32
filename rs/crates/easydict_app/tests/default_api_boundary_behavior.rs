@@ -211,6 +211,21 @@ fn default_process_spawn_surface_has_no_retained_dotnet_runtime_entries() {
     );
 }
 
+#[test]
+fn production_source_scan_continues_past_early_cfg_test_items() {
+    let long_document = include_str!("../src/long_document.rs");
+    let production = production_source(long_document);
+
+    assert!(
+        production.contains("run_long_document_request_with_app_dir_after_native_probe"),
+        "default boundary scans must not stop at early #[cfg(test)] imports/helpers"
+    );
+    assert!(
+        !production.contains("selected_pdf_page_indexes_matches_compat_page_range_parser"),
+        "default boundary scans should still exclude the trailing #[cfg(test)] mod tests block"
+    );
+}
+
 fn assert_crate_root_export_is_retained_worker_feature_gated(crate_root: &str, export: &str) {
     const RETAINED_WORKER_CFG: &str = "#[cfg(feature = \"retained-dotnet-workers\")]";
 
@@ -437,9 +452,26 @@ fn relative_slash_path(base: &Path, path: &Path) -> String {
 }
 
 fn production_source(source: &str) -> &str {
+    let mut pending_cfg_test_line_start = None;
+    let mut line_start = 0;
+
+    for line in source.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if trimmed == "#[cfg(test)]" {
+            pending_cfg_test_line_start = Some(line_start);
+        } else if trimmed.starts_with("mod tests") {
+            if let Some(start) = pending_cfg_test_line_start {
+                return &source[..start];
+            }
+            pending_cfg_test_line_start = None;
+        } else if !trimmed.is_empty() && !trimmed.starts_with("#[") {
+            pending_cfg_test_line_start = None;
+        }
+
+        line_start += line.len();
+    }
+
     source
-        .find("#[cfg(test)]")
-        .map_or(source, |index| &source[..index])
 }
 
 fn non_comment_lines(source: &str) -> impl Iterator<Item = (usize, &str)> {

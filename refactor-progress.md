@@ -21,6 +21,85 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-11: Added strict WindowsAI WinMD preflight to rs portable builds
+
+- Rechecked the MDD request before moving on: a read-only subagent and focused tests confirmed the Rust route now covers MDD parsing, raw resource lookup, companion discovery, WebView-ready data URL inlining, first-hit multi-MDD behavior, Quick Translate rich HTML separation, and legacy settings companion MDD discovery. No new parser dependency was added; the MIT `lib/rs-mdict` fork remains the active route.
+- `lib/easydict-windows-ai` now has an opt-in `EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1` build gate. Normal development builds still warn and compile the unsupported fallback when WinMD/bindgen is unavailable, but strict Windows builds panic on missing WindowsAI WinMD metadata, missing `OUT_DIR`, or bindgen warnings.
+- `easydict_packager` now runs a WindowsAI preflight cargo check before rs portable preview/helper builds, and both `pack-rs-portable` and `build-rust-helpers` force `EASYDICT_RUNTIME_PROFILE=rust-only`, `RUNTIME_PROFILE=rust-only`, and `EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1` into child cargo. This prevents the first rs portable package from silently shipping a Phi/WindowsAI unsupported fallback.
+- The packager now also checks that the WindowsAI preflight manifest exists before invoking `rustup`/`cargo` or creating rs portable staging/ZIP output. Missing `../lib/easydict-windows-ai/Cargo.toml` now fails locally with a dedicated preflight-manifest error instead of producing partial package artifacts.
+- Release-contract fake cargo coverage now proves the WindowsAI preflight runs before package builds and that all child cargo invocations receive the strict WinRT binding env without enabling retained `.NET` worker features.
+- Default API boundary scanning now walks past early `#[cfg(test)]` imports/helpers and only excludes the trailing `#[cfg(test)] mod tests` block. A LongDoc regression marker keeps the scan from silently skipping production retained-worker/runtime surfaces again.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_paths -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-ai/Cargo.toml -- --nocapture`
+- `cd rs; cargo test -p easydict_packager -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-11: Made WindowsAI/Phi streaming observable and routed CLI to the native Phi boundary
+
+- Rechecked the replacement route before changing this path. The production Rust boundary remains Microsoft Windows App SDK AI `LanguageModel` through the official `windows` / `windows-bindgen` generated WinMD bindings; no third-party Phi wrapper or new runtime dependency was added.
+- `lib/easydict-windows-ai` now exposes `generate_stream_observing_chunks(...)` / `translate_stream_with_client_observing_chunks(...)`. The WinRT adapter pumps `LanguageModel` progress tokens through a channel so callers with non-`'static` observers, including CLI stdout writers, can receive chunks while the stream call is still active.
+- Quick Translate WindowsAI streaming now uses the observer route instead of waiting for `Vec<String>` and replaying after the client returns. The existing sender-based GUI path and new app-dir observing helper share the same implementation.
+- `easydict_cli translate` and `easydict_cli stream` now route `windows-local-ai` through the Rust-only default LocalAI dispatcher, so explicit WindowsAI enters the native Phi client boundary before any generic worker-required fallback. Foundry Local and OpenVINO fallback ordering still stays under the same app/library route, and retained worker probing remains disabled by default.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-ai/Cargo.toml translate_stream -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior windows_ai_client -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior streaming_explicit_windows_ai_client_emits_first_phi_chunk_before_client_returns -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior explicit_windows_ai -- --nocapture`
+
+## 2026-06-11: Wired CLI stream output to native LLM chunk observers
+
+- Reused the native Quick Translate chunk observer route for `easydict_cli stream`, without adding a new SSE/runtime dependency or touching retained worker code.
+- CLI streaming now writes JSONL/plain chunks to stdout and flushes them as the OpenAI-compatible SSE parser emits deltas, instead of replaying chunks only after the final translation result is available.
+- The final `done` event is still emitted after the native service returns the full `TranslationResultDto`, so callers get both incremental output and the existing structured completion payload.
+- Local AI fallback checks remain Rust-native-only by default: stale `--host`, `--host-arg`, `--app-dir`, CompatHost, and retained worker paths cannot make the rs CLI probe a `.NET` worker.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior stream_command_writes_openai_chunks_before_sse_response_completes -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior stream -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_openai_quick_translate_backend_observes_stream_chunks_before_result -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior execute_openai_stream_request_observes_chunks_before_stream_returns -- --nocapture`
+
+## 2026-06-11: Normalized legacy settings secrets during Rust load
+
+- Checked available DPAPI crates before changing this path. `windows-dpapi` exists, but the current workspace adapter already gives the app the required current-user/local-machine DPAPI scopes and .NET-compatible optional entropy; legacy `edloc1:` AES-GCM remains covered by `ring`. No new dependency was added.
+- `load_settings_file(...)` now performs a selective sensitive-field normalization pass after structural settings migration: plaintext secrets, legacy `edloc1:` secrets, and nested protected secrets are written back as normalized `edcred1:user:` values.
+- Existing stable DPAPI-protected values are preserved byte-for-byte when they do not need migration, matching the old `.NET SettingsService` behavior and avoiding noisy settings rewrites.
+- The same load path still removes runtime-only retained worker keys, so default rs settings do not resurrect `UseLongDocWorker`, `UseLocalAiWorker`, or `UseOcrWorker`.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior settings_storage_load_file_normalizes_pending_sensitive_values_without_rewriting_stable_dpapi -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_migration_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test credential_protection_behavior -- --nocapture`
+
+## 2026-06-11: Wired native LLM SSE streaming through Quick Translate callbacks
+
+- Looked at the usual Rust SSE/client candidates (`reqwest-eventsource`, `eventsource-stream`, `eventsource-client`, and `async-openai`). They are useful references, but this slice avoided a new async/Tokio client dependency because the app already uses blocking `reqwest` clients with shared proxy/settings/error behavior.
+- OpenAI-compatible and custom streaming HTTP clients now expose `post_sse_lines(...)`: the default implementation preserves old fake-client behavior, while the production `reqwest` clients read successful SSE responses line by line instead of calling `response.text()`.
+- Added incremental line parsers for OpenAI Chat Completions/Responses and Gemini/Doubao. Doubao keeps its named `response.output_text.delta` event state, and `[DONE]` stops further emission.
+- Quick Translate backends now have `translate_stream_observing_chunks(...)`; native OpenAI-compatible and custom streaming backends call the observer as each parsed delta arrives. The native OpenAI/custom runners send `QuickTranslateStreamChunk` from that observer instead of replaying chunks only after the full response returns.
+- This keeps the first rs portable path Rust-native: no retained `.NET` worker, CompatHost, or bundled runtime is introduced.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test llm_streaming_behavior chat_completions_sse_line_parser_emits_chunks_incrementally_and_stops_at_done -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test openai_compatible_behavior execute_openai_stream_request_observes_chunks_before_stream_returns -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test custom_streaming_behavior execute_custom_streaming_request_observes_doubao_chunks_before_stream_returns -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior native_openai_quick_translate_backend_observes_stream_chunks_before_result -- --nocapture`
+
 ## 2026-06-11: Hardened LongDoc retry sidecars and retained worker gates
 
 - No new third-party dependency was needed; this pass only tightens existing Rust-native LongDoc JSON sidecars and runtime policy boundaries.
@@ -2493,9 +2572,19 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - No new dependency was needed. A read-only subagent rechecked this against the `.NET LocalDictionaryIndexService` and confirmed `%LOCALAPPDATA%\Easydict\mdx_index` is a compatible LXDX/index-manifest cache, not a `.NET runtime`, worker, named-event, registry, or process-launch boundary.
   - Added an inline comment on `default_local_dictionary_index_root()` so the shared root does not get confused with the rs-specific NativeBridge/event roots that must use `EasydictRs`.
   - Added `native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexistence`, which locks the default root to the legacy shared cache while proving `LocalDictionaryIndexService::new()` does not create an `EasydictRs\mdx_index` folder by default.
+- 2026-06-11: Wired Quick Translate Youdao phonetic enrichment into the Rust app task path.
+  - No new dependency was needed. The route reuses the already migrated Youdao web dictionary executor plus the existing `PhoneticMemoryCache`, flight tracker, enrichment planner, and merge helpers from `translation_cache`.
+  - Non-streaming Quick Translate backend tasks now attempt phonetic enrichment before emitting `QuickTranslateServiceFinished`, so successful provider results can be cached and rendered with merged US/UK phonetics. Streaming, grammar, MDX, Youdao itself, non-English targets, sentence-like outputs, existing target phonetics, and `NoResult` stay untouched.
+  - Added focused Quick Translate coverage for Youdao phonetic fetch/merge/cache insert, skip conditions, and phonetic-cache hits that avoid a Youdao HTTP request. Youdao fetch failures remain non-fatal by returning the original translation update.
 
 ## Current Verification
 
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior phonetic_enrichment -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test translation_cache_behavior phonetic -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/quick_translate.rs crates/easydict_app/src/lib.rs crates/easydict_app/tests/quick_translate_behavior.rs`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior -- --nocapture` (currently 177/179 pass; the two stable failures are pre-existing/parallel dirty-state failures in `encrypted_mdx_service_routes_natively_without_compat_host_spawn` and `settings_about_links_open_external_urls`, left untouched)
 - `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexistence -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior -- --nocapture`
 - `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/local_dictionary_index.rs crates/easydict_app/tests/local_dictionary_index_behavior.rs`

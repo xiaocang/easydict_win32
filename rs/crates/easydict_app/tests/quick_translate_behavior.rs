@@ -28,11 +28,11 @@ use easydict_app::{
     begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
     build_quick_translate_plan_for_surface, default_hotkeys, default_named_events,
     default_protocol_registrations, default_shell_verbs, default_tray_menu,
-    local_ai_route_decision, local_dictionary_query_token,
-    local_dictionary_suggestion_request_can_route_natively, parse_startup_activation,
-    quick_translate_request_can_route_natively, resolve_quick_query_language,
-    resolve_startup_activation_disposition, run_local_dictionary_suggestion_request,
-    run_local_dictionary_suggestion_request_with_app_dir,
+    enrich_quick_translate_update_with_youdao_phonetics, local_ai_route_decision,
+    local_dictionary_query_token, local_dictionary_suggestion_request_can_route_natively,
+    parse_startup_activation, quick_translate_request_can_route_natively,
+    resolve_quick_query_language, resolve_startup_activation_disposition,
+    run_local_dictionary_suggestion_request, run_local_dictionary_suggestion_request_with_app_dir,
     run_local_dictionary_suggestion_request_with_native_index_root, run_quick_translate,
     run_quick_translate_service, run_quick_translate_service_with_app_dir,
     run_quick_translate_service_with_app_dir_and_native_local_ai_client,
@@ -50,8 +50,9 @@ use easydict_app::{
     NativeMdxDictionaryReaderFactory, NativeMdxLookupError, NativeOpenAiQuickTranslateBackend,
     NativeOpenVinoQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
     OpenAiApiFormat, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
-    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, PopButtonAnchor,
-    QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
+    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, Phonetic,
+    PhoneticFlightTracker, PhoneticMemoryCache, PopButtonAnchor, QuickQueryMode,
+    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
     QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
@@ -82,9 +83,11 @@ use easydict_windows_ai::{
 use futures_channel::mpsc::{unbounded, TryRecvError};
 #[cfg(feature = "retained-dotnet-workers")]
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Mutex;
 use win_fluent::prelude::{
     Application, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand, PlatformEvent, ResultStatus,
@@ -935,6 +938,80 @@ fn native_openai_quick_translate_stream_uses_settings_and_parses_chunks() {
         .as_str()
         .unwrap()
         .contains("Additional instructions: Preserve glossary terms."));
+}
+
+#[test]
+fn native_openai_quick_translate_backend_observes_stream_chunks_before_result() {
+    struct StepwiseOpenAiHttpClient {
+        events: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl OpenAiHttpClient for StepwiseOpenAiHttpClient {
+        fn post_sse(
+            &mut self,
+            _request: &OpenAiHttpRequestPlan,
+        ) -> Result<String, OpenAiExecutionError> {
+            panic!("native backend streaming should use post_sse_lines")
+        }
+
+        fn post_sse_lines(
+            &mut self,
+            request: &OpenAiHttpRequestPlan,
+            on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+        ) -> Result<(), OpenAiExecutionError> {
+            self.events
+                .borrow_mut()
+                .push(format!("request:{}", request.endpoint));
+            on_line("data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}")?;
+            self.events
+                .borrow_mut()
+                .push("after-first-line".to_string());
+            on_line("data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}")?;
+            self.events
+                .borrow_mut()
+                .push("after-second-line".to_string());
+            on_line("data: [DONE]")?;
+            Ok(())
+        }
+    }
+
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut backend = NativeOpenAiQuickTranslateBackend::new(StepwiseOpenAiHttpClient {
+        events: Rc::clone(&events),
+    });
+    backend.configure(&openai_settings()).unwrap();
+    let mut observed = Vec::new();
+    let callback_events = Rc::clone(&events);
+
+    let streamed = backend
+        .translate_stream_observing_chunks(
+            &TranslateParams {
+                text: "Hello".to_string(),
+                from: Some("en".to_string()),
+                to: Some("zh-Hans".to_string()),
+                services: Some(vec!["openai".to_string()]),
+                custom_prompt: None,
+            },
+            &mut |chunk| {
+                callback_events.borrow_mut().push(format!("chunk:{chunk}"));
+                observed.push(chunk.to_string());
+            },
+        )
+        .unwrap();
+
+    assert_eq!(streamed.chunks, vec!["你".to_string(), "好".to_string()]);
+    assert_eq!(streamed.result.translated_text, "你好");
+    assert_eq!(observed, streamed.chunks);
+    assert_eq!(
+        events.borrow().as_slice(),
+        [
+            "request:https://api.openai.com/v1/chat/completions",
+            "chunk:你",
+            "after-first-line",
+            "chunk:好",
+            "after-second-line",
+        ]
+    );
 }
 
 #[test]
@@ -2513,8 +2590,105 @@ fn streaming_explicit_windows_ai_client_emits_phi_chunks() {
         Ok(Message::QuickTranslateStreamChunk(chunk)) => assert_eq!(chunk.text, "好"),
         other => panic!("expected second WindowsAI stream chunk, got {other:?}"),
     }
-    assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+    assert!(matches!(
+        receiver.try_recv(),
+        Err(TryRecvError::Empty | TryRecvError::Closed)
+    ));
     assert_eq!(foundry_resolver.calls, 0);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn streaming_explicit_windows_ai_client_emits_first_phi_chunk_before_client_returns() {
+    let temp_dir = unique_temp_dir("easydict-streaming-explicit-windows-ai-live-client");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 143,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::WINDOWS_AI.to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let (first_chunk_tx, first_chunk_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let mut windows_ai_client = BlockingWindowsAiStreamClient {
+        first_chunk_tx,
+        release_rx,
+        ready_state_calls: 0,
+        stream_prompts: Vec::new(),
+    };
+    let mut foundry_resolver = RecordingFoundryLocalEndpointResolver::new([Ok(Some(
+        "http://127.0.0.1:5273/v1/chat/completions".to_string(),
+    ))]);
+    let (sender, mut receiver) = unbounded();
+    let thread_temp_dir = temp_dir.clone();
+
+    let worker = std::thread::spawn(move || {
+        let update = run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client(
+            request,
+            &thread_temp_dir,
+            &sender,
+            &mut windows_ai_client,
+            &mut foundry_resolver,
+        );
+        (
+            update,
+            foundry_resolver.calls,
+            windows_ai_client.ready_state_calls,
+            windows_ai_client.stream_prompts,
+        )
+    });
+
+    first_chunk_rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("first Phi chunk should be emitted before the client returns");
+    match receiver.try_recv() {
+        Ok(Message::QuickTranslateStreamChunk(chunk)) => {
+            assert_eq!(chunk.query_id, 143);
+            assert_eq!(chunk.text, "你");
+        }
+        other => panic!("expected first live WindowsAI stream chunk, got {other:?}"),
+    }
+
+    release_tx
+        .send(())
+        .expect("blocking client should still wait for release");
+    let (update, foundry_calls, ready_state_calls, stream_prompts) =
+        worker.join().expect("stream worker should finish");
+
+    match receiver.try_recv() {
+        Ok(Message::QuickTranslateStreamChunk(chunk)) => assert_eq!(chunk.text, "好"),
+        other => panic!("expected second WindowsAI stream chunk, got {other:?}"),
+    }
+    assert!(matches!(
+        receiver.try_recv(),
+        Err(TryRecvError::Empty | TryRecvError::Closed)
+    ));
+    assert_eq!(update.outcome.streamed_chunks, ["你", "好"]);
+    assert_eq!(
+        update
+            .outcome
+            .result
+            .expect("streaming explicit WindowsAI should succeed")
+            .translated_text,
+        "你好"
+    );
+    assert_eq!(foundry_calls, 0);
+    assert_eq!(ready_state_calls, 1);
+    assert_eq!(stream_prompts.len(), 1);
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -4008,6 +4182,139 @@ fn quick_translate_applies_renders_and_clears_word_result() {
     state.source_text = "world".to_string();
     begin_quick_translate(&mut state).expect("second query begins");
     assert_eq!(state.results[0].word_result, None);
+}
+
+#[test]
+fn quick_translate_phonetic_enrichment_fetches_youdao_for_english_word_without_target_phonetics() {
+    let request = phonetic_enrichment_request("en");
+    let update = phonetic_enrichment_update(&request, "hello", None);
+    let mut cache = PhoneticMemoryCache::new();
+    let mut flights = PhoneticFlightTracker::default();
+    let mut client = RecordingTraditionalHttpClient::with_responses([Ok(youdao_phonetic_json())]);
+
+    let enriched = enrich_quick_translate_update_with_youdao_phonetics(
+        &request,
+        update,
+        &mut cache,
+        &mut flights,
+        &mut client,
+    );
+
+    assert_eq!(client.requests.len(), 1);
+    assert_eq!(
+        client.requests[0].service_kind,
+        TraditionalHttpServiceKind::YoudaoWebDict
+    );
+    assert!(client.requests[0]
+        .body
+        .as_deref()
+        .is_some_and(|body| body.contains("q=hello")));
+    let phonetics = enriched
+        .outcome
+        .result
+        .expect("enriched result should stay successful")
+        .word_result
+        .expect("phonetic enrichment should create word result")
+        .phonetics
+        .expect("phonetics should be merged");
+    assert_eq!(phonetics.len(), 2);
+    assert_eq!(phonetics[0].accent.as_deref(), Some("US"));
+    assert_eq!(phonetics[0].text.as_deref(), Some("həˈloʊ"));
+    assert_eq!(phonetics[1].accent.as_deref(), Some("UK"));
+
+    let cached = cache.get("hello").expect("phonetics should be cached");
+    assert_eq!(cached.len(), 2);
+}
+
+#[test]
+fn quick_translate_phonetic_enrichment_skips_non_english_sentence_and_existing_target_phonetics() {
+    let mut cache = PhoneticMemoryCache::new();
+    let mut flights = PhoneticFlightTracker::default();
+    let mut client = RecordingTraditionalHttpClient::default();
+
+    let non_english_request = phonetic_enrichment_request("zh-Hans");
+    let non_english = enrich_quick_translate_update_with_youdao_phonetics(
+        &non_english_request,
+        phonetic_enrichment_update(&non_english_request, "你好", None),
+        &mut cache,
+        &mut flights,
+        &mut client,
+    );
+    assert!(non_english.outcome.result.unwrap().word_result.is_none());
+
+    let sentence_request = phonetic_enrichment_request("en");
+    let sentence = enrich_quick_translate_update_with_youdao_phonetics(
+        &sentence_request,
+        phonetic_enrichment_update(&sentence_request, "Hello there.", None),
+        &mut cache,
+        &mut flights,
+        &mut client,
+    );
+    assert!(sentence.outcome.result.unwrap().word_result.is_none());
+
+    let existing_target = enrich_quick_translate_update_with_youdao_phonetics(
+        &sentence_request,
+        phonetic_enrichment_update(
+            &sentence_request,
+            "hello",
+            Some(vec![PhoneticDto {
+                text: Some("existing".to_string()),
+                audio_url: None,
+                accent: Some("US".to_string()),
+            }]),
+        ),
+        &mut cache,
+        &mut flights,
+        &mut client,
+    );
+    let existing_phonetics = existing_target
+        .outcome
+        .result
+        .unwrap()
+        .word_result
+        .unwrap()
+        .phonetics
+        .unwrap();
+    assert_eq!(existing_phonetics.len(), 1);
+    assert_eq!(existing_phonetics[0].text.as_deref(), Some("existing"));
+    assert!(client.requests.is_empty());
+}
+
+#[test]
+fn quick_translate_phonetic_enrichment_uses_phonetic_cache_before_youdao_request() {
+    let request = phonetic_enrichment_request("en");
+    let update = phonetic_enrichment_update(&request, "hello", None);
+    let mut cache = PhoneticMemoryCache::new();
+    cache.insert(
+        "hello",
+        vec![Phonetic {
+            text: Some("cached".to_string()),
+            audio_url: Some("https://example.invalid/cached.mp3".to_string()),
+            accent: Some("US".to_string()),
+        }],
+    );
+    let mut flights = PhoneticFlightTracker::default();
+    let mut client = RecordingTraditionalHttpClient::default();
+
+    let enriched = enrich_quick_translate_update_with_youdao_phonetics(
+        &request,
+        update,
+        &mut cache,
+        &mut flights,
+        &mut client,
+    );
+
+    assert!(client.requests.is_empty());
+    let phonetics = enriched
+        .outcome
+        .result
+        .unwrap()
+        .word_result
+        .unwrap()
+        .phonetics
+        .unwrap();
+    assert_eq!(phonetics.len(), 1);
+    assert_eq!(phonetics[0].text.as_deref(), Some("cached"));
 }
 
 #[test]
@@ -8035,6 +8342,13 @@ struct RecordingWindowsAiClient {
     warm_up_options: Vec<WindowsAiGenerationOptions>,
 }
 
+struct BlockingWindowsAiStreamClient {
+    first_chunk_tx: std::sync::mpsc::Sender<()>,
+    release_rx: std::sync::mpsc::Receiver<()>,
+    ready_state_calls: usize,
+    stream_prompts: Vec<String>,
+}
+
 #[derive(Default)]
 struct RecordingNllbTokenizer;
 
@@ -8148,6 +8462,13 @@ impl WindowsAiLanguageModelProbe for RecordingWindowsAiClient {
     }
 }
 
+impl WindowsAiLanguageModelProbe for BlockingWindowsAiStreamClient {
+    fn ready_state(&mut self) -> WindowsAiReadyState {
+        self.ready_state_calls += 1;
+        WindowsAiReadyState::Ready
+    }
+}
+
 impl WindowsAiLanguageModelClient for RecordingWindowsAiClient {
     fn generate(
         &mut self,
@@ -8180,6 +8501,54 @@ impl WindowsAiLanguageModelClient for RecordingWindowsAiClient {
     ) -> Result<(), WindowsAiError> {
         self.warm_up_prompts.push(prompt.to_string());
         self.warm_up_options.push(options);
+        Ok(())
+    }
+}
+
+impl WindowsAiLanguageModelClient for BlockingWindowsAiStreamClient {
+    fn generate(
+        &mut self,
+        _prompt: &str,
+        _options: WindowsAiGenerationOptions,
+    ) -> Result<WindowsAiResponse, WindowsAiError> {
+        Err(WindowsAiError::new(
+            "blocking stream client should not run non-streaming generation",
+        ))
+    }
+
+    fn generate_stream(
+        &mut self,
+        _prompt: &str,
+        _options: WindowsAiGenerationOptions,
+    ) -> Result<Vec<String>, WindowsAiError> {
+        Err(WindowsAiError::new(
+            "blocking stream client should use the observing route",
+        ))
+    }
+
+    fn generate_stream_observing_chunks(
+        &mut self,
+        prompt: &str,
+        _options: WindowsAiGenerationOptions,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<Vec<String>, WindowsAiError> {
+        self.stream_prompts.push(prompt.to_string());
+        on_chunk("你");
+        self.first_chunk_tx
+            .send(())
+            .map_err(|error| WindowsAiError::new(error.to_string()))?;
+        self.release_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .map_err(|error| WindowsAiError::new(error.to_string()))?;
+        on_chunk("好");
+        Ok(vec!["你".to_string(), "好".to_string()])
+    }
+
+    fn warm_up(
+        &mut self,
+        _prompt: &str,
+        _options: WindowsAiGenerationOptions,
+    ) -> Result<(), WindowsAiError> {
         Ok(())
     }
 }
@@ -8771,6 +9140,74 @@ fn cache_request(service_id: &str, text: &str) -> TranslationCacheRequest {
         TranslationLanguage::SimplifiedChinese,
         text,
     )
+}
+
+fn phonetic_enrichment_request(to: &str) -> QuickTranslateServiceRequest {
+    QuickTranslateServiceRequest {
+        query_id: 97,
+        service: quick_service("google", "Google Translate", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "你好".to_string(),
+            from: Some("zh-Hans".to_string()),
+            to: Some(to.to_string()),
+            services: Some(vec!["google".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot::default(),
+    }
+}
+
+fn phonetic_enrichment_update(
+    request: &QuickTranslateServiceRequest,
+    translated_text: &str,
+    phonetics: Option<Vec<PhoneticDto>>,
+) -> QuickTranslateServiceUpdate {
+    let mut result = dto(
+        &request.service.id,
+        &request.service.name,
+        translated_text,
+        request.params.from.as_deref(),
+        Some(36),
+    );
+    result.word_result = phonetics.map(|phonetics| WordResultDto {
+        phonetics: Some(phonetics),
+        definitions: None,
+        examples: None,
+        word_forms: None,
+        synonyms: None,
+    });
+
+    QuickTranslateServiceUpdate {
+        query_id: request.query_id,
+        outcome: QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Ok(result),
+        },
+    }
+}
+
+fn youdao_phonetic_json() -> String {
+    r#"{
+        "simple": {
+            "word": [{
+                "usphone": "həˈloʊ",
+                "usspeech": "hello&type=1",
+                "ukphone": "həˈləʊ",
+                "ukspeech": "hello&type=2"
+            }]
+        },
+        "ec": {
+            "word": {
+                "trs": [{"pos": "int.", "tran": "hello"}]
+            }
+        }
+    }"#
+    .to_string()
 }
 
 fn quick_translate_update(

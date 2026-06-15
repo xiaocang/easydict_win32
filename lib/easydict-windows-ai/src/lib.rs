@@ -550,6 +550,19 @@ pub trait WindowsAiLanguageModelClient: WindowsAiLanguageModelProbe {
         options: WindowsAiGenerationOptions,
     ) -> Result<Vec<String>, WindowsAiError>;
 
+    fn generate_stream_observing_chunks(
+        &mut self,
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<Vec<String>, WindowsAiError> {
+        let chunks = self.generate_stream(prompt, options)?;
+        for chunk in &chunks {
+            on_chunk(chunk);
+        }
+        Ok(chunks)
+    }
+
     fn warm_up(
         &mut self,
         prompt: &str,
@@ -647,6 +660,19 @@ impl WindowsAiLanguageModelClient for DefaultWindowsAiLanguageModelClient {
         }
 
         winrt_language_model::generate_stream(prompt, options)
+    }
+
+    fn generate_stream_observing_chunks(
+        &mut self,
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<Vec<String>, WindowsAiError> {
+        if let Some(error) = self.disabled_error() {
+            return Err(error);
+        }
+
+        winrt_language_model::generate_stream_observing_chunks(prompt, options, on_chunk)
     }
 
     fn warm_up(
@@ -1289,11 +1315,32 @@ pub fn translate_stream_with_client<C>(
 where
     C: WindowsAiLanguageModelClient,
 {
+    fn ignore_chunk(_: &str) {}
+    translate_stream_with_client_observing_chunks(client, request, &mut ignore_chunk)
+}
+
+pub fn translate_stream_with_client_observing_chunks<C>(
+    client: &mut C,
+    request: &WindowsAiTranslationRequest,
+    on_chunk: &mut dyn FnMut(&str),
+) -> Result<WindowsAiStreamOutcome, WindowsAiTranslationError>
+where
+    C: WindowsAiLanguageModelClient,
+{
     validate_translation_request(request)?;
     ensure_ready_for_generation(client)?;
     let prompt = build_translation_prompt(request);
+    let mut emit_chunk = |chunk: &str| {
+        if !chunk.is_empty() {
+            on_chunk(chunk);
+        }
+    };
     let chunks = client
-        .generate_stream(&prompt, WindowsAiGenerationOptions::default())
+        .generate_stream_observing_chunks(
+            &prompt,
+            WindowsAiGenerationOptions::default(),
+            &mut emit_chunk,
+        )
         .map_err(map_client_error)?
         .into_iter()
         .filter(|chunk| !chunk.is_empty())
@@ -1423,6 +1470,8 @@ fn parse_u32(value: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+    use std::rc::Rc;
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
     #[derive(Clone, Debug)]
@@ -1466,6 +1515,12 @@ mod tests {
         warm_up_calls: usize,
         last_prompt: Option<String>,
         last_options: Option<WindowsAiGenerationOptions>,
+    }
+
+    #[derive(Debug)]
+    struct ObservingStreamClient {
+        active: Rc<Cell<bool>>,
+        ready_calls: usize,
     }
 
     impl PreparingProbe {
@@ -1581,6 +1636,57 @@ mod tests {
             if let Some(error) = self.warm_up_error.clone() {
                 return Err(error);
             }
+            Ok(())
+        }
+    }
+
+    impl WindowsAiLanguageModelProbe for ObservingStreamClient {
+        fn ready_state(&mut self) -> WindowsAiReadyState {
+            self.ready_calls += 1;
+            WindowsAiReadyState::Ready
+        }
+    }
+
+    impl WindowsAiLanguageModelClient for ObservingStreamClient {
+        fn generate(
+            &mut self,
+            _prompt: &str,
+            _options: WindowsAiGenerationOptions,
+        ) -> Result<WindowsAiResponse, WindowsAiError> {
+            Err(WindowsAiError::new(
+                "non-streaming generation should not run",
+            ))
+        }
+
+        fn generate_stream(
+            &mut self,
+            _prompt: &str,
+            _options: WindowsAiGenerationOptions,
+        ) -> Result<Vec<String>, WindowsAiError> {
+            Err(WindowsAiError::new(
+                "non-observing stream generation should not run",
+            ))
+        }
+
+        fn generate_stream_observing_chunks(
+            &mut self,
+            _prompt: &str,
+            _options: WindowsAiGenerationOptions,
+            on_chunk: &mut dyn FnMut(&str),
+        ) -> Result<Vec<String>, WindowsAiError> {
+            self.active.set(true);
+            on_chunk("你");
+            on_chunk("");
+            on_chunk("好");
+            self.active.set(false);
+            Ok(vec!["你".to_string(), String::new(), "好".to_string()])
+        }
+
+        fn warm_up(
+            &mut self,
+            _prompt: &str,
+            _options: WindowsAiGenerationOptions,
+        ) -> Result<(), WindowsAiError> {
             Ok(())
         }
     }
@@ -2111,6 +2217,37 @@ mod tests {
         assert_eq!(outcome.chunks, ["Hello", " ", "world"]);
         assert_eq!(outcome.result.translated_text, "Hello world");
         assert_eq!(client.stream_calls, 1);
+    }
+
+    #[test]
+    fn translate_stream_observes_chunks_while_client_stream_is_active() {
+        let active = Rc::new(Cell::new(false));
+        let mut client = ObservingStreamClient {
+            active: Rc::clone(&active),
+            ready_calls: 0,
+        };
+        let request = WindowsAiTranslationRequest {
+            text: "Hello".to_string(),
+            from_language: WindowsAiLanguage::English,
+            to_language: WindowsAiLanguage::SimplifiedChinese,
+            custom_prompt: None,
+        };
+        let mut observed = Vec::new();
+
+        let outcome =
+            translate_stream_with_client_observing_chunks(&mut client, &request, &mut |chunk| {
+                assert!(
+                    active.get(),
+                    "chunk observer should run before the Phi stream call returns"
+                );
+                observed.push(chunk.to_string());
+            })
+            .expect("stream");
+
+        assert_eq!(observed, ["你", "好"]);
+        assert_eq!(outcome.chunks, ["你", "好"]);
+        assert_eq!(outcome.result.translated_text, "你好");
+        assert_eq!(client.ready_calls, 1);
     }
 
     #[test]

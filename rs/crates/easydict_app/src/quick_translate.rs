@@ -5,7 +5,7 @@ use crate::compat_protocol::{ConfigureParams, LocalAiTranslateParams, TranslateS
 use crate::custom_streaming::{
     build_custom_streaming_translation_request_plan, cleanup_custom_streaming_translation_text,
     correct_custom_streaming_grammar, custom_streaming_config_for_service,
-    execute_custom_streaming_request, translate_custom_streaming_service,
+    execute_custom_streaming_request_observing_chunks, translate_custom_streaming_service,
     CustomStreamingHttpClient, CustomStreamingServiceConfig, ReqwestCustomStreamingHttpClient,
 };
 use crate::grammar_correction::parse_grammar_correction;
@@ -16,7 +16,7 @@ use crate::mdx_native::{
 };
 use crate::openai_compatible::{
     build_openai_translation_request_plan, cleanup_openai_translation_text,
-    correct_grammar_openai_compatible, execute_openai_stream_request,
+    correct_grammar_openai_compatible, execute_openai_stream_request_observing_chunks,
     openai_compatible_service_can_route_natively, prepare_foundry_local_service,
     resolve_foundry_local_model_id_for_config, resolve_openai_compatible_config_for_service,
     translate_openai_compatible, validate_openai_translation_request_for_service,
@@ -42,12 +42,16 @@ use crate::state::{
 };
 use crate::traditional_http::{
     bing_host, traditional_http_config_for_request, translate_bing_service,
-    translate_traditional_http_service, BingHttpClient, ReqwestBingHttpClient,
-    ReqwestTraditionalHttpClient, TraditionalHttpClient, TraditionalHttpServiceConfig,
+    translate_traditional_http_service, translate_youdao_web_dict_service, BingHttpClient,
+    ReqwestBingHttpClient, ReqwestTraditionalHttpClient, TraditionalHttpClient,
+    TraditionalHttpServiceConfig,
 };
 use crate::translation_cache::{
-    Definition, Phonetic, Synonym, TranslationCacheRequest, TranslationMemoryCache,
-    TranslationResult as CachedTranslationResult, TranslationResultKind, WordForm, WordResult,
+    merge_phonetics_into_result, phonetic_cache_entry_size_kb, plan_phonetic_enrichment,
+    Definition, Phonetic, PhoneticEnrichmentDecision, PhoneticFlightRegistration,
+    PhoneticFlightTracker, PhoneticMemoryCache, Synonym, TranslationCacheRequest,
+    TranslationMemoryCache, TranslationResult as CachedTranslationResult, TranslationResultKind,
+    WordForm, WordResult,
 };
 use crate::translation_language::TranslationLanguage;
 use crate::translation_services::find_translation_service_descriptor;
@@ -58,7 +62,7 @@ use easydict_nllb::{
 };
 use easydict_windows_ai::{
     correct_grammar_stream_with_client, default_windows_ai_language_model_client,
-    translate_stream_with_client, translate_with_client, windows_ai_status,
+    translate_stream_with_client_observing_chunks, translate_with_client, windows_ai_status,
     WindowsAiGrammarCorrectionRequest, WindowsAiLanguage, WindowsAiLanguageModelClient,
     WindowsAiLanguageModelProbe, WindowsAiStatus, WindowsAiTranslationOutcome,
     WindowsAiTranslationRequest,
@@ -68,6 +72,7 @@ use regex::Regex;
 use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use win_fluent::prelude::ResultStatus;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -277,6 +282,15 @@ impl From<OpenAiExecutionError> for QuickTranslateBackendError {
     }
 }
 
+#[derive(Debug, Default)]
+struct QuickTranslatePhoneticEnrichmentState {
+    cache: PhoneticMemoryCache,
+    flights: PhoneticFlightTracker,
+}
+
+static PHONETIC_ENRICHMENT_STATE: OnceLock<Mutex<QuickTranslatePhoneticEnrichmentState>> =
+    OnceLock::new();
+
 pub fn translation_cache_request_for_quick_translate(
     request: &QuickTranslateServiceRequest,
 ) -> Option<TranslationCacheRequest> {
@@ -333,6 +347,153 @@ pub fn quick_translate_service_update_from_cache(
             result: Ok(cached_translation_result_to_dto(&request.service, &result)),
         },
     }
+}
+
+pub fn enrich_quick_translate_update_with_global_youdao_phonetics(
+    request: &QuickTranslateServiceRequest,
+    update: QuickTranslateServiceUpdate,
+) -> QuickTranslateServiceUpdate {
+    if quick_translate_phonetic_enrichment_candidate(request, &update).is_none() {
+        return update;
+    }
+
+    let mut client = match ReqwestTraditionalHttpClient::from_settings(&request.settings) {
+        Ok(client) => client,
+        Err(_) => return update,
+    };
+    let state = PHONETIC_ENRICHMENT_STATE
+        .get_or_init(|| Mutex::new(QuickTranslatePhoneticEnrichmentState::default()));
+    let mut state = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let QuickTranslatePhoneticEnrichmentState { cache, flights } = &mut *state;
+    enrich_quick_translate_update_with_youdao_phonetics(
+        request,
+        update,
+        cache,
+        flights,
+        &mut client,
+    )
+}
+
+pub fn enrich_quick_translate_update_with_youdao_phonetics<C: TraditionalHttpClient>(
+    request: &QuickTranslateServiceRequest,
+    update: QuickTranslateServiceUpdate,
+    phonetic_cache: &mut PhoneticMemoryCache,
+    flight_tracker: &mut PhoneticFlightTracker,
+    client: &mut C,
+) -> QuickTranslateServiceUpdate {
+    let Some(candidate) = quick_translate_phonetic_enrichment_candidate(request, &update) else {
+        return update;
+    };
+
+    if let Some(phonetics) = phonetic_cache.get_by_key(&candidate.cache_key) {
+        return update_with_merged_phonetics(update, candidate.result, &phonetics);
+    }
+
+    if flight_tracker.begin_key(candidate.cache_key.clone())
+        == PhoneticFlightRegistration::AlreadyInFlight
+    {
+        return update;
+    }
+
+    let fetch_result = fetch_youdao_phonetics(client, &candidate.english_word);
+    flight_tracker.complete_key(&candidate.cache_key);
+
+    let Ok(phonetics) = fetch_result else {
+        return update;
+    };
+    if phonetics.is_empty() {
+        return update;
+    }
+
+    let size_kb = phonetic_cache_entry_size_kb(&candidate.cache_key, &phonetics);
+    phonetic_cache.insert_by_key(candidate.cache_key, size_kb, phonetics.clone());
+    update_with_merged_phonetics(update, candidate.result, &phonetics)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct QuickTranslatePhoneticEnrichmentCandidate {
+    result: CachedTranslationResult,
+    english_word: String,
+    cache_key: String,
+}
+
+fn quick_translate_phonetic_enrichment_candidate(
+    request: &QuickTranslateServiceRequest,
+    update: &QuickTranslateServiceUpdate,
+) -> Option<QuickTranslatePhoneticEnrichmentCandidate> {
+    if request.service.id == "youdao"
+        || update.outcome.grammar_result.is_some()
+        || !update.outcome.streamed_chunks.is_empty()
+    {
+        return None;
+    }
+
+    let cache_request = translation_cache_request_for_quick_translate(request)?;
+    if cache_request.to_language != TranslationLanguage::English {
+        return None;
+    }
+
+    let result = update.outcome.result.as_ref().ok()?;
+    if is_no_result(result) {
+        return None;
+    }
+
+    let cached_result =
+        cached_translation_result_from_dto(&cache_request, &update.outcome.service, result)?;
+    match plan_phonetic_enrichment(&cached_result, cache_request.to_language) {
+        PhoneticEnrichmentDecision::Fetch {
+            english_word,
+            cache_key,
+        } => Some(QuickTranslatePhoneticEnrichmentCandidate {
+            result: cached_result,
+            english_word,
+            cache_key,
+        }),
+        PhoneticEnrichmentDecision::Skip(_) => None,
+    }
+}
+
+fn update_with_merged_phonetics(
+    mut update: QuickTranslateServiceUpdate,
+    result: CachedTranslationResult,
+    phonetics: &[Phonetic],
+) -> QuickTranslateServiceUpdate {
+    let result = merge_phonetics_into_result(result, phonetics);
+    update.outcome.result = Ok(cached_translation_result_to_dto(
+        &update.outcome.service,
+        &result,
+    ));
+    update
+}
+
+fn fetch_youdao_phonetics<C: TraditionalHttpClient>(
+    client: &mut C,
+    english_word: &str,
+) -> Result<Vec<Phonetic>, OpenAiExecutionError> {
+    let result = translate_youdao_web_dict_service(
+        client,
+        english_word,
+        TranslationLanguage::English,
+        TranslationLanguage::English,
+        "youdao".to_string(),
+        "Youdao".to_string(),
+    )?;
+
+    Ok(result
+        .word_result
+        .and_then(|word| word.phonetics)
+        .unwrap_or_default()
+        .into_iter()
+        .map(cached_phonetic_from_dto)
+        .filter(|phonetic| {
+            phonetic
+                .text
+                .as_deref()
+                .is_some_and(|text| !text.trim().is_empty())
+        })
+        .collect())
 }
 
 pub fn store_quick_translate_cache_result(
@@ -580,6 +741,18 @@ pub trait QuickTranslateBackend {
         params: &TranslateParams,
     ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError>;
 
+    fn translate_stream_observing_chunks(
+        &mut self,
+        params: &TranslateParams,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        let streamed = self.translate_stream(params)?;
+        for chunk in &streamed.chunks {
+            on_chunk(chunk);
+        }
+        Ok(streamed)
+    }
+
     fn correct_grammar(
         &mut self,
         params: &GrammarCorrectParams,
@@ -741,6 +914,14 @@ impl<C: OpenAiHttpClient, R: FoundryLocalRuntimeController> QuickTranslateBacken
         &mut self,
         params: &TranslateParams,
     ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        self.translate_stream_observing_chunks(params, &mut |_| {})
+    }
+
+    fn translate_stream_observing_chunks(
+        &mut self,
+        params: &TranslateParams,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
         let request = self.openai_translation_request(params)?;
         let (service_id, service_name, config) = self.service_context(params)?;
         let config = self.resolve_foundry_local_model_if_needed(&service_id, config);
@@ -749,7 +930,13 @@ impl<C: OpenAiHttpClient, R: FoundryLocalRuntimeController> QuickTranslateBacken
             .map_err(QuickTranslateBackendError::from)?;
         let plan = build_openai_translation_request_plan(&config, &request)
             .map_err(OpenAiExecutionError::from)?;
-        let chunks = execute_openai_stream_request(&mut self.http_client, &plan)?;
+        let chunks = execute_openai_stream_request_observing_chunks(
+            &mut self.http_client,
+            &plan,
+            |chunk| {
+                on_chunk(chunk);
+            },
+        )?;
         let translated_text = cleanup_openai_translation_text(&chunks.concat());
 
         Ok(QuickTranslateStreamResult {
@@ -924,10 +1111,24 @@ impl<C: CustomStreamingHttpClient> QuickTranslateBackend
         &mut self,
         params: &TranslateParams,
     ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
+        self.translate_stream_observing_chunks(params, &mut |_| {})
+    }
+
+    fn translate_stream_observing_chunks(
+        &mut self,
+        params: &TranslateParams,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<QuickTranslateStreamResult, QuickTranslateBackendError> {
         let request = self.openai_translation_request(params);
         let (service_id, service_name, config) = self.service_context(params)?;
         let plan = build_custom_streaming_translation_request_plan(&config, &request)?;
-        let chunks = execute_custom_streaming_request(&mut self.http_client, &plan)?;
+        let chunks = execute_custom_streaming_request_observing_chunks(
+            &mut self.http_client,
+            &plan,
+            |chunk| {
+                on_chunk(chunk);
+            },
+        )?;
         let translated_text = cleanup_custom_streaming_translation_text(&config, &chunks.concat());
 
         Ok(QuickTranslateStreamResult {
@@ -1942,6 +2143,101 @@ pub fn run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_cl
     )
 }
 
+pub fn run_quick_translate_streaming_service_with_current_app_dir_observing_chunks(
+    request: QuickTranslateServiceRequest,
+    on_chunk: &mut dyn FnMut(&str),
+) -> QuickTranslateServiceUpdate {
+    match current_app_dir() {
+        Ok(app_dir) => run_quick_translate_streaming_service_with_app_dir_observing_chunks(
+            request, app_dir, on_chunk,
+        ),
+        Err(message) => service_error_update(request, message),
+    }
+}
+
+pub fn run_quick_translate_streaming_service_with_app_dir_observing_chunks(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    on_chunk: &mut dyn FnMut(&str),
+) -> QuickTranslateServiceUpdate {
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut windows_ai_client = default_windows_ai_language_model_client();
+    run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client_observing_chunks(
+        request,
+        app_dir,
+        &mut windows_ai_client,
+        &mut foundry_resolver,
+        on_chunk,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client_observing_chunks<
+    C: WindowsAiLanguageModelClient,
+    R: FoundryLocalRuntimeController,
+>(
+    request: QuickTranslateServiceRequest,
+    app_dir: impl AsRef<Path>,
+    windows_ai_client: &mut C,
+    foundry_resolver: &mut R,
+    on_chunk: &mut dyn FnMut(&str),
+) -> QuickTranslateServiceUpdate {
+    let _ = app_dir;
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
+        return service_error_update(request, error);
+    }
+
+    if quick_translate_request_can_route_natively(&request) {
+        return run_quick_translate_streaming_service_with_native_route_observing_chunks(
+            request, on_chunk,
+        )
+        .expect("native route was checked before dispatch");
+    }
+
+    if let Some(update) = explicit_windows_ai_streaming_client_update_for_request_observing_chunks(
+        request.clone(),
+        windows_ai_client,
+        on_chunk,
+    ) {
+        return update;
+    }
+
+    if let Some(update) = auto_windows_ai_streaming_client_update_for_request_observing_chunks(
+        &request,
+        windows_ai_client,
+        on_chunk,
+    ) {
+        return update;
+    }
+
+    if let Some(native_request) =
+        auto_foundry_local_native_probe_request(&request, foundry_resolver)
+    {
+        return run_quick_translate_streaming_service_with_native_route_observing_chunks(
+            native_request,
+            on_chunk,
+        )
+        .expect("Foundry Local native stream request should route through OpenAI backend");
+    }
+
+    if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
+        return run_quick_translate_streaming_service_with_native_route_observing_chunks(
+            native_request,
+            on_chunk,
+        )
+        .expect("OpenVINO native stream request should route through OpenVINO backend");
+    }
+
+    if let Some(error) = local_ai_quick_translate_local_error_for_policy(
+        &request,
+        RuntimeRoutePolicy::all_disabled(),
+    ) {
+        return service_error_update(request, error);
+    }
+
+    unsupported_rust_native_route_update(request)
+}
+
 #[cfg(feature = "retained-dotnet-workers")]
 #[doc(hidden)]
 pub fn run_quick_translate_streaming_service_with_packaged_app_dir_and_worker_policy_and_foundry_resolver<
@@ -2001,11 +2297,13 @@ fn run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_nati
     if let Some(native_request) =
         auto_foundry_local_native_probe_request(&request, foundry_resolver)
     {
-        return run_quick_translate_streaming_service_with_native_openai(native_request, sender);
+        return run_quick_translate_streaming_service_with_native_route(native_request, sender)
+            .expect("Foundry Local native stream request should route through OpenAI backend");
     }
 
     if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
-        return run_quick_translate_streaming_service_with_native_openvino(native_request, sender);
+        return run_quick_translate_streaming_service_with_native_route(native_request, sender)
+            .expect("OpenVINO native stream request should route through OpenVINO backend");
     }
 
     if let Some(error) = local_ai_quick_translate_local_error_for_policy(&request, worker_policy) {
@@ -2132,6 +2430,26 @@ fn explicit_windows_ai_streaming_client_update_for_request<C: WindowsAiLanguageM
     )
 }
 
+fn explicit_windows_ai_streaming_client_update_for_request_observing_chunks<
+    C: WindowsAiLanguageModelClient,
+>(
+    request: QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    on_chunk: &mut dyn FnMut(&str),
+) -> Option<QuickTranslateServiceUpdate> {
+    if !local_ai_request_should_probe_explicit_windows_ai(&request) {
+        return None;
+    }
+
+    Some(
+        run_quick_translate_streaming_service_with_native_windows_ai_client_observing_chunks(
+            request,
+            windows_ai_client,
+            on_chunk,
+        ),
+    )
+}
+
 fn auto_windows_ai_streaming_client_update_for_request<C: WindowsAiLanguageModelClient>(
     request: &QuickTranslateServiceRequest,
     windows_ai_client: &mut C,
@@ -2154,6 +2472,34 @@ fn auto_windows_ai_streaming_client_update_for_request<C: WindowsAiLanguageModel
             request.clone(),
             windows_ai_client,
             sender,
+        ),
+    )
+}
+
+fn auto_windows_ai_streaming_client_update_for_request_observing_chunks<
+    C: WindowsAiLanguageModelClient,
+>(
+    request: &QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    on_chunk: &mut dyn FnMut(&str),
+) -> Option<QuickTranslateServiceUpdate> {
+    if !local_ai_request_should_probe_auto_windows_ai(request) {
+        return None;
+    }
+
+    let status = windows_ai_status(windows_ai_client);
+    if !matches!(
+        status.ready_state,
+        easydict_windows_ai::WindowsAiReadyState::Ready
+    ) {
+        return None;
+    }
+
+    Some(
+        run_quick_translate_streaming_service_with_native_windows_ai_client_observing_chunks(
+            request.clone(),
+            windows_ai_client,
+            on_chunk,
         ),
     )
 }
@@ -2218,33 +2564,55 @@ pub fn run_quick_translate_streaming_service_with_native_route(
     request: QuickTranslateServiceRequest,
     sender: &UnboundedSender<Message>,
 ) -> Option<QuickTranslateServiceUpdate> {
+    let query_id = request.query_id;
+    let service = request.service.clone();
+    let mut send_chunk = |chunk: &str| {
+        let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+            QuickTranslateStreamChunk {
+                query_id,
+                service: service.clone(),
+                text: chunk.to_string(),
+            },
+        ));
+    };
+
+    run_quick_translate_streaming_service_with_native_route_observing_chunks(
+        request,
+        &mut send_chunk,
+    )
+}
+
+pub fn run_quick_translate_streaming_service_with_native_route_observing_chunks(
+    request: QuickTranslateServiceRequest,
+    on_chunk: &mut dyn FnMut(&str),
+) -> Option<QuickTranslateServiceUpdate> {
     if request_uses_native_openai(&request) {
         return Some(run_quick_translate_streaming_service_with_native_openai(
-            request, sender,
+            request, on_chunk,
         ));
     }
 
     if request_uses_native_openvino(&request) {
         return Some(run_quick_translate_streaming_service_with_native_openvino(
-            request, sender,
+            request, on_chunk,
         ));
     }
 
     if request_uses_native_custom_streaming(&request) {
         return Some(
-            run_quick_translate_streaming_service_with_native_custom_streaming(request, sender),
+            run_quick_translate_streaming_service_with_native_custom_streaming(request, on_chunk),
         );
     }
 
     if request_uses_native_traditional_http(&request) {
         return Some(
-            run_quick_translate_streaming_service_with_native_traditional_http(request, sender),
+            run_quick_translate_streaming_service_with_native_traditional_http(request, on_chunk),
         );
     }
 
     if request_uses_native_bing(&request) {
         return Some(run_quick_translate_streaming_service_with_native_bing(
-            request, sender,
+            request, on_chunk,
         ));
     }
 
@@ -2272,21 +2640,46 @@ fn run_quick_translate_streaming_service_with_native_windows_ai_client<
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
     let query_id = request.query_id;
-    let outcome = run_windows_ai_client_request(&request, windows_ai_client, Some(sender));
+    let service = request.service.clone();
+    let mut send_chunk = |chunk: &str| {
+        let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
+            QuickTranslateStreamChunk {
+                query_id,
+                service: service.clone(),
+                text: chunk.to_string(),
+            },
+        ));
+    };
+    run_quick_translate_streaming_service_with_native_windows_ai_client_observing_chunks(
+        request,
+        windows_ai_client,
+        &mut send_chunk,
+    )
+}
+
+fn run_quick_translate_streaming_service_with_native_windows_ai_client_observing_chunks<
+    C: WindowsAiLanguageModelClient,
+>(
+    request: QuickTranslateServiceRequest,
+    windows_ai_client: &mut C,
+    on_chunk: &mut dyn FnMut(&str),
+) -> QuickTranslateServiceUpdate {
+    let query_id = request.query_id;
+    let outcome = run_windows_ai_client_request(&request, windows_ai_client, Some(on_chunk));
     QuickTranslateServiceUpdate { query_id, outcome }
 }
 
 fn run_windows_ai_client_request<C: WindowsAiLanguageModelClient>(
     request: &QuickTranslateServiceRequest,
     windows_ai_client: &mut C,
-    sender: Option<&UnboundedSender<Message>>,
+    on_stream_chunk: Option<&mut dyn FnMut(&str)>,
 ) -> QuickTranslateServiceOutcome {
     match request.execution_kind {
         QuickTranslateExecutionKind::GrammarCorrection => {
             run_windows_ai_client_grammar_request(request, windows_ai_client)
         }
         QuickTranslateExecutionKind::TranslateStream => {
-            run_windows_ai_client_stream_request(request, windows_ai_client, sender)
+            run_windows_ai_client_stream_request(request, windows_ai_client, on_stream_chunk)
         }
         QuickTranslateExecutionKind::Translate => {
             run_windows_ai_client_translate_request(request, windows_ai_client)
@@ -2332,7 +2725,7 @@ fn run_windows_ai_client_translate_request<C: WindowsAiLanguageModelClient>(
 fn run_windows_ai_client_stream_request<C: WindowsAiLanguageModelClient>(
     request: &QuickTranslateServiceRequest,
     windows_ai_client: &mut C,
-    sender: Option<&UnboundedSender<Message>>,
+    on_stream_chunk: Option<&mut dyn FnMut(&str)>,
 ) -> QuickTranslateServiceOutcome {
     let translation_request = match windows_ai_translation_request_from_params(&request.params) {
         Ok(request) => request,
@@ -2346,30 +2739,27 @@ fn run_windows_ai_client_stream_request<C: WindowsAiLanguageModelClient>(
         }
     };
 
-    match translate_stream_with_client(windows_ai_client, &translation_request) {
-        Ok(streamed) => {
-            if let Some(sender) = sender {
-                for chunk in &streamed.chunks {
-                    let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                        QuickTranslateStreamChunk {
-                            query_id: request.query_id,
-                            service: request.service.clone(),
-                            text: chunk.clone(),
-                        },
-                    ));
-                }
-            }
-
-            QuickTranslateServiceOutcome {
-                service: request.service.clone(),
-                grammar_result: None,
-                streamed_chunks: streamed.chunks,
-                result: Ok(windows_ai_translation_outcome_to_dto(
-                    &request.params,
-                    streamed.result,
-                )),
-            }
+    let mut on_stream_chunk = on_stream_chunk;
+    let mut observe_chunk = |chunk: &str| {
+        if let Some(on_stream_chunk) = on_stream_chunk.as_deref_mut() {
+            on_stream_chunk(chunk);
         }
+    };
+
+    match translate_stream_with_client_observing_chunks(
+        windows_ai_client,
+        &translation_request,
+        &mut observe_chunk,
+    ) {
+        Ok(streamed) => QuickTranslateServiceOutcome {
+            service: request.service.clone(),
+            grammar_result: None,
+            streamed_chunks: streamed.chunks,
+            result: Ok(windows_ai_translation_outcome_to_dto(
+                &request.params,
+                streamed.result,
+            )),
+        },
         Err(error) => QuickTranslateServiceOutcome {
             service: request.service.clone(),
             grammar_result: None,
@@ -2440,7 +2830,7 @@ fn run_quick_translate_service_with_native_openai(
 
 fn run_quick_translate_streaming_service_with_native_openai(
     request: QuickTranslateServiceRequest,
-    sender: &UnboundedSender<Message>,
+    on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
     let mut backend = match ReqwestOpenAiHttpClient::from_settings(&request.settings) {
         Ok(client) => NativeOpenAiQuickTranslateBackend::new(client),
@@ -2456,29 +2846,16 @@ fn run_quick_translate_streaming_service_with_native_openai(
     }
 
     let query_id = request.query_id;
-    let service = request.service.clone();
-    match backend.translate_stream(&request.params) {
-        Ok(streamed) => {
-            for chunk in &streamed.chunks {
-                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                    QuickTranslateStreamChunk {
-                        query_id,
-                        service: service.clone(),
-                        text: chunk.clone(),
-                    },
-                ));
-            }
-
-            QuickTranslateServiceUpdate {
-                query_id,
-                outcome: QuickTranslateServiceOutcome {
-                    service: request.service,
-                    grammar_result: None,
-                    streamed_chunks: streamed.chunks,
-                    result: Ok(streamed.result),
-                },
-            }
-        }
+    match backend.translate_stream_observing_chunks(&request.params, on_chunk) {
+        Ok(streamed) => QuickTranslateServiceUpdate {
+            query_id,
+            outcome: QuickTranslateServiceOutcome {
+                service: request.service,
+                grammar_result: None,
+                streamed_chunks: streamed.chunks,
+                result: Ok(streamed.result),
+            },
+        },
         Err(error) => service_error_update(request, error.to_string()),
     }
 }
@@ -2496,7 +2873,7 @@ fn run_quick_translate_service_with_native_openvino(
 
 fn run_quick_translate_streaming_service_with_native_openvino(
     request: QuickTranslateServiceRequest,
-    sender: &UnboundedSender<Message>,
+    on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
     let mut backend = match native_openvino_backend_from_settings(&request.settings) {
         Ok(backend) => backend,
@@ -2512,29 +2889,16 @@ fn run_quick_translate_streaming_service_with_native_openvino(
     }
 
     let query_id = request.query_id;
-    let service = request.service.clone();
-    match backend.translate_stream(&request.params) {
-        Ok(streamed) => {
-            for chunk in &streamed.chunks {
-                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                    QuickTranslateStreamChunk {
-                        query_id,
-                        service: service.clone(),
-                        text: chunk.clone(),
-                    },
-                ));
-            }
-
-            QuickTranslateServiceUpdate {
-                query_id,
-                outcome: QuickTranslateServiceOutcome {
-                    service: request.service,
-                    grammar_result: None,
-                    streamed_chunks: streamed.chunks,
-                    result: Ok(streamed.result),
-                },
-            }
-        }
+    match backend.translate_stream_observing_chunks(&request.params, on_chunk) {
+        Ok(streamed) => QuickTranslateServiceUpdate {
+            query_id,
+            outcome: QuickTranslateServiceOutcome {
+                service: request.service,
+                grammar_result: None,
+                streamed_chunks: streamed.chunks,
+                result: Ok(streamed.result),
+            },
+        },
         Err(error) => service_error_update(request, error.to_string()),
     }
 }
@@ -2581,7 +2945,7 @@ fn run_quick_translate_service_with_native_custom_streaming(
 
 fn run_quick_translate_streaming_service_with_native_custom_streaming(
     request: QuickTranslateServiceRequest,
-    sender: &UnboundedSender<Message>,
+    on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
     let mut backend = match ReqwestCustomStreamingHttpClient::from_settings(&request.settings) {
         Ok(client) => NativeCustomStreamingQuickTranslateBackend::new(client),
@@ -2597,29 +2961,16 @@ fn run_quick_translate_streaming_service_with_native_custom_streaming(
     }
 
     let query_id = request.query_id;
-    let service = request.service.clone();
-    match backend.translate_stream(&request.params) {
-        Ok(streamed) => {
-            for chunk in &streamed.chunks {
-                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                    QuickTranslateStreamChunk {
-                        query_id,
-                        service: service.clone(),
-                        text: chunk.clone(),
-                    },
-                ));
-            }
-
-            QuickTranslateServiceUpdate {
-                query_id,
-                outcome: QuickTranslateServiceOutcome {
-                    service: request.service,
-                    grammar_result: None,
-                    streamed_chunks: streamed.chunks,
-                    result: Ok(streamed.result),
-                },
-            }
-        }
+    match backend.translate_stream_observing_chunks(&request.params, on_chunk) {
+        Ok(streamed) => QuickTranslateServiceUpdate {
+            query_id,
+            outcome: QuickTranslateServiceOutcome {
+                service: request.service,
+                grammar_result: None,
+                streamed_chunks: streamed.chunks,
+                result: Ok(streamed.result),
+            },
+        },
         Err(error) => service_error_update(request, error.to_string()),
     }
 }
@@ -2637,7 +2988,7 @@ fn run_quick_translate_service_with_native_traditional_http(
 
 fn run_quick_translate_streaming_service_with_native_traditional_http(
     request: QuickTranslateServiceRequest,
-    sender: &UnboundedSender<Message>,
+    on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
     let mut backend = match ReqwestTraditionalHttpClient::from_settings(&request.settings) {
         Ok(client) => NativeTraditionalHttpQuickTranslateBackend::new(client),
@@ -2653,29 +3004,16 @@ fn run_quick_translate_streaming_service_with_native_traditional_http(
     }
 
     let query_id = request.query_id;
-    let service = request.service.clone();
-    match backend.translate_stream(&request.params) {
-        Ok(streamed) => {
-            for chunk in &streamed.chunks {
-                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                    QuickTranslateStreamChunk {
-                        query_id,
-                        service: service.clone(),
-                        text: chunk.clone(),
-                    },
-                ));
-            }
-
-            QuickTranslateServiceUpdate {
-                query_id,
-                outcome: QuickTranslateServiceOutcome {
-                    service: request.service,
-                    grammar_result: None,
-                    streamed_chunks: streamed.chunks,
-                    result: Ok(streamed.result),
-                },
-            }
-        }
+    match backend.translate_stream_observing_chunks(&request.params, on_chunk) {
+        Ok(streamed) => QuickTranslateServiceUpdate {
+            query_id,
+            outcome: QuickTranslateServiceOutcome {
+                service: request.service,
+                grammar_result: None,
+                streamed_chunks: streamed.chunks,
+                result: Ok(streamed.result),
+            },
+        },
         Err(error) => service_error_update(request, error.to_string()),
     }
 }
@@ -2788,7 +3126,7 @@ fn run_quick_translate_streaming_service_with_local_ai_bridge(
 
 fn run_quick_translate_streaming_service_with_native_bing(
     request: QuickTranslateServiceRequest,
-    sender: &UnboundedSender<Message>,
+    on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
     let mut backend = match ReqwestBingHttpClient::from_settings(&request.settings) {
         Ok(client) => NativeBingQuickTranslateBackend::new(client),
@@ -2804,29 +3142,16 @@ fn run_quick_translate_streaming_service_with_native_bing(
     }
 
     let query_id = request.query_id;
-    let service = request.service.clone();
-    match backend.translate_stream(&request.params) {
-        Ok(streamed) => {
-            for chunk in &streamed.chunks {
-                let _ = sender.unbounded_send(Message::QuickTranslateStreamChunk(
-                    QuickTranslateStreamChunk {
-                        query_id,
-                        service: service.clone(),
-                        text: chunk.clone(),
-                    },
-                ));
-            }
-
-            QuickTranslateServiceUpdate {
-                query_id,
-                outcome: QuickTranslateServiceOutcome {
-                    service: request.service,
-                    grammar_result: None,
-                    streamed_chunks: streamed.chunks,
-                    result: Ok(streamed.result),
-                },
-            }
-        }
+    match backend.translate_stream_observing_chunks(&request.params, on_chunk) {
+        Ok(streamed) => QuickTranslateServiceUpdate {
+            query_id,
+            outcome: QuickTranslateServiceOutcome {
+                service: request.service,
+                grammar_result: None,
+                streamed_chunks: streamed.chunks,
+                result: Ok(streamed.result),
+            },
+        },
         Err(error) => service_error_update(request, error.to_string()),
     }
 }

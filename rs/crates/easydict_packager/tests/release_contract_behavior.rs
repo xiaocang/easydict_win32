@@ -178,6 +178,33 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
 }
 
 #[test]
+fn windows_ai_build_script_has_strict_rs_portable_binding_gate() {
+    let root = repo_root();
+    let build_script = read_text(&root.join("lib/easydict-windows-ai/build.rs"));
+
+    assert_contains(
+        &build_script,
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
+        "WindowsAI build script should expose an opt-in strict binding gate for release packaging",
+    );
+    assert_contains(
+        &build_script,
+        "cargo:rerun-if-env-changed={WINDOWS_AI_REQUIRE_BINDINGS_ENV}",
+        "WindowsAI build script should make Cargo rerun when the strict binding gate changes",
+    );
+    assert_contains(
+        &build_script,
+        "panic!",
+        "strict WindowsAI binding mode should fail the build instead of silently shipping the unsupported fallback",
+    );
+    assert_contains(
+        &build_script,
+        "easydict_windows_ai_winrt_bindings",
+        "successful binding generation should still set the native WinRT cfg",
+    );
+}
+
+#[test]
 fn release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects() {
     let root = repo_root();
     let build_helpers = read_text(&root.join("dotnet/scripts/Build-RustHelpers.ps1"));
@@ -235,6 +262,7 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
         "PATH",
         "EASYDICT_RUNTIME_PROFILE",
         "RUNTIME_PROFILE",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
         "EASYDICT_FAKE_CARGO_RECORD",
     ]);
     let test_root = tempfile_dir("packager-build-rust-helpers-env");
@@ -243,6 +271,7 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
     let output_dir = test_root.join("out");
     fs::create_dir_all(&workspace).expect("create fake workspace");
     fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
+    write_fake_windows_ai_manifest_for_workspace(&workspace);
     fs::create_dir_all(&output_dir).expect("create output dir");
     write_fake_tooling_scripts(&fake_bin);
     let record_path = test_root.join("cargo-env.txt");
@@ -251,6 +280,7 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
     std::env::set_var("PATH", path_with_fake_tools);
     std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
     std::env::set_var("RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "0");
     std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
 
     let outcome = build_rust_helpers(&BuildRustHelpersOptions {
@@ -273,6 +303,24 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
         &record,
         "RUNTIME_PROFILE=rust-only",
         "build-rust-helpers child cargo should override inherited generic runtime profile",
+    );
+    assert_eq!(
+        record
+            .lines()
+            .filter(|line| *line == "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1")
+            .count(),
+        2,
+        "build-rust-helpers should require WindowsAI WinRT bindings for the preflight and helper build:\n{record}"
+    );
+    assert_contains(
+        &record,
+        "ARGS=check --manifest-path",
+        "build-rust-helpers should preflight WindowsAI WinRT bindings before helper builds",
+    );
+    assert_contains(
+        &record,
+        "easydict-windows-ai",
+        "WindowsAI preflight should target the easydict-windows-ai manifest",
     );
     assert_contains(
         &record,
@@ -301,6 +349,7 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
         "PATH",
         "EASYDICT_RUNTIME_PROFILE",
         "RUNTIME_PROFILE",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
         "EASYDICT_FAKE_CARGO_RECORD",
     ]);
     let test_root = tempfile_dir("packager-pack-rs-portable-env");
@@ -309,6 +358,7 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
     let output_root = test_root.join("out");
     fs::create_dir_all(&workspace).expect("create fake workspace");
     fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
+    write_fake_windows_ai_manifest_for_workspace(&workspace);
     fs::create_dir_all(&output_root).expect("create output root");
     write_fake_tooling_scripts(&fake_bin);
     let record_path = test_root.join("cargo-env.txt");
@@ -317,6 +367,7 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
     std::env::set_var("PATH", path_with_fake_tools);
     std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
     std::env::set_var("RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "0");
     std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
 
     let outcome = pack_rs_portable(&PackRustPortableOptions {
@@ -343,16 +394,36 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
             .lines()
             .filter(|line| *line == "EASYDICT_RUNTIME_PROFILE=rust-only")
             .count(),
-        2,
-        "pack-rs-portable should force Easydict rust-only env for both child cargo builds:\n{record}"
+        3,
+        "pack-rs-portable should force Easydict rust-only env for the preflight and both child cargo builds:\n{record}"
     );
     assert_eq!(
         record
             .lines()
             .filter(|line| *line == "RUNTIME_PROFILE=rust-only")
             .count(),
-        2,
-        "pack-rs-portable should force generic rust-only env for both child cargo builds:\n{record}"
+        3,
+        "pack-rs-portable should force generic rust-only env for the preflight and both child cargo builds:\n{record}"
+    );
+    assert_eq!(
+        record
+            .lines()
+            .filter(|line| *line == "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1")
+            .count(),
+        3,
+        "pack-rs-portable should require WindowsAI WinRT bindings for preflight, preview, and helper builds:\n{record}"
+    );
+    let cargo_args = record
+        .lines()
+        .filter(|line| line.starts_with("ARGS="))
+        .collect::<Vec<_>>();
+    assert!(
+        cargo_args
+            .first()
+            .is_some_and(|line| line.contains("check --manifest-path")
+                && line.contains("easydict-windows-ai")
+                && line.contains("--target x86_64-pc-windows-msvc")),
+        "pack-rs-portable should preflight WindowsAI WinRT bindings before package builds:\n{record}"
     );
     assert_contains(
         &record,
@@ -1011,6 +1082,7 @@ fn write_fake_package_portable_tool_scripts(fake_bin: &Path) {
         "@echo off\r\n\
 >>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo EASYDICT_RUNTIME_PROFILE=%EASYDICT_RUNTIME_PROFILE%\r\n\
 >>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo RUNTIME_PROFILE=%RUNTIME_PROFILE%\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=%EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS%\r\n\
 >>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo ARGS=%*\r\n\
 exit /b 0\r\n",
     )
@@ -1142,6 +1214,22 @@ fn prepend_path(first: &Path, original_path: Option<&OsString>) -> OsString {
     std::env::join_paths(paths).expect("join fake tool PATH")
 }
 
+fn write_fake_windows_ai_manifest_for_workspace(workspace: &Path) {
+    let manifest_path = workspace
+        .parent()
+        .expect("fake workspace should have a parent")
+        .join("lib")
+        .join("easydict-windows-ai")
+        .join("Cargo.toml");
+    fs::create_dir_all(manifest_path.parent().expect("manifest parent"))
+        .expect("create fake WindowsAI manifest dir");
+    fs::write(
+        manifest_path,
+        "[package]\nname = \"easydict_windows_ai\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    )
+    .expect("write fake WindowsAI manifest");
+}
+
 #[cfg(windows)]
 fn write_fake_tooling_scripts(fake_bin: &Path) {
     fs::create_dir_all(fake_bin).expect("create fake tool dir");
@@ -1170,6 +1258,7 @@ fn main() {
         .and_then(|mut file| {
             writeln!(file, "EASYDICT_RUNTIME_PROFILE={}", env::var("EASYDICT_RUNTIME_PROFILE").unwrap_or_default())?;
             writeln!(file, "RUNTIME_PROFILE={}", env::var("RUNTIME_PROFILE").unwrap_or_default())?;
+            writeln!(file, "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS={}", env::var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS").unwrap_or_default())?;
             writeln!(file, "ARGS={}", args)
         })
         .expect("append cargo record");
@@ -1214,6 +1303,7 @@ fn write_fake_tooling_scripts(fake_bin: &Path) {
 {\n\
 printf 'EASYDICT_RUNTIME_PROFILE=%s\\n' \"$EASYDICT_RUNTIME_PROFILE\"\n\
 printf 'RUNTIME_PROFILE=%s\\n' \"$RUNTIME_PROFILE\"\n\
+printf 'EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=%s\\n' \"$EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS\"\n\
 printf 'ARGS=%s\\n' \"$*\"\n\
 } >> \"$EASYDICT_FAKE_CARGO_RECORD\"\n\
 target=\"$PWD/target/x86_64-pc-windows-msvc/release\"\n\

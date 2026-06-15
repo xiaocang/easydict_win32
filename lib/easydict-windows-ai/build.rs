@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 const WINDOWS_APP_SDK_AI_PACKAGE_ID: &str = "microsoft.windowsappsdk.ai";
 const WINDOWS_AI_METADATA_ENV: &str = "EASYDICT_WINDOWS_APP_SDK_AI_METADATA_DIR";
 const WINDOWS_AI_NUGET_ROOT_ENV: &str = "EASYDICT_WINDOWS_APP_SDK_AI_NUGET_ROOT";
+const WINDOWS_AI_REQUIRE_BINDINGS_ENV: &str = "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS";
 const WINDOWS_AI_WINMD_FILE: &str = "Microsoft.Windows.AI.winmd";
 const WINDOWS_AI_FOUNDATION_WINMD_FILE: &str = "Microsoft.Windows.AI.Foundation.winmd";
 const WINDOWS_AI_TEXT_WINMD_FILE: &str = "Microsoft.Windows.AI.Text.winmd";
@@ -11,22 +12,31 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(easydict_windows_ai_winrt_bindings)");
     println!("cargo:rerun-if-env-changed={WINDOWS_AI_METADATA_ENV}");
     println!("cargo:rerun-if-env-changed={WINDOWS_AI_NUGET_ROOT_ENV}");
+    println!("cargo:rerun-if-env-changed={WINDOWS_AI_REQUIRE_BINDINGS_ENV}");
     println!("cargo:rerun-if-env-changed=USERPROFILE");
 
     if std::env::var("CARGO_CFG_TARGET_OS").ok().as_deref() != Some("windows") {
         return;
     }
 
+    let require_bindings = windows_ai_winrt_bindings_required();
+
     let Some(winmd) = find_windows_ai_winmd_set() else {
-        println!(
-            "cargo:warning=Windows App SDK AI WinMD metadata was not found; \
-             easydict_windows_ai will compile with the unsupported WinRT fallback"
+        emit_windows_ai_binding_failure(
+            &format!(
+                "Windows App SDK AI WinMD metadata was not found; set \
+                 {WINDOWS_AI_METADATA_ENV} or {WINDOWS_AI_NUGET_ROOT_ENV}"
+            ),
+            require_bindings,
         );
         return;
     };
 
     let Some(out_dir) = std::env::var_os("OUT_DIR").map(PathBuf::from) else {
-        println!("cargo:warning=OUT_DIR is missing; skipping Windows AI binding generation");
+        emit_windows_ai_binding_failure(
+            "OUT_DIR is missing; cannot generate Windows AI WinRT bindings",
+            require_bindings,
+        );
         return;
     };
     let output_file = out_dir.join("windows_ai_bindings.rs");
@@ -36,11 +46,38 @@ fn main() {
     if warnings.is_empty() {
         println!("cargo:rustc-cfg=easydict_windows_ai_winrt_bindings");
     } else {
-        println!(
-            "cargo:warning=Windows AI binding generation produced warnings: {warnings}; \
-             easydict_windows_ai will compile with the unsupported WinRT fallback"
+        emit_windows_ai_binding_failure(
+            &format!("Windows AI binding generation produced warnings: {warnings}"),
+            require_bindings,
         );
     }
+}
+
+fn windows_ai_winrt_bindings_required() -> bool {
+    std::env::var(WINDOWS_AI_REQUIRE_BINDINGS_ENV)
+        .ok()
+        .is_some_and(|value| env_flag_is_enabled(&value))
+}
+
+fn env_flag_is_enabled(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn emit_windows_ai_binding_failure(message: &str, require_bindings: bool) {
+    if require_bindings {
+        panic!(
+            "{message}; {WINDOWS_AI_REQUIRE_BINDINGS_ENV}=1 requires generated Windows AI \
+             WinRT bindings for rs portable/release builds"
+        );
+    }
+
+    println!(
+        "cargo:warning={message}; easydict_windows_ai will compile with the unsupported \
+         WinRT fallback"
+    );
 }
 
 struct WindowsAiWinmdSet {

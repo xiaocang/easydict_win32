@@ -2,8 +2,13 @@
 
 use easydict_app::FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE;
 use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "EASYDICT_RUNTIME_PROFILE";
@@ -108,6 +113,145 @@ fn native_openai_configuration_error_does_not_spawn_missing_worker() {
     assert!(
         !stderr.contains("worker executable not found"),
         "native OpenAI path should not try to spawn the missing worker:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn stream_command_writes_openai_chunks_before_sse_response_completes() {
+    let settings_dir = unique_temp_dir("easydict-cli-openai-stream-live-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("SSE listener should bind");
+    let endpoint = format!(
+        "http://{}/v1/chat/completions",
+        listener.local_addr().unwrap()
+    );
+    fs::write(
+        settings_dir.join("settings.json"),
+        format!(
+            r#"{{
+  "OpenAIApiKey": "sk-cli-stream",
+  "OpenAIEndpoint": "{endpoint}",
+  "OpenAIModel": "gpt-4o-mini",
+  "OpenAIApiFormatOverride": "ChatCompletions"
+}}"#
+        ),
+    )
+    .expect("settings file should be created");
+
+    let (continue_tx, continue_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("CLI should connect");
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line).unwrap();
+            if bytes == 0 || line == "\r\n" {
+                break;
+            }
+        }
+
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+        stream
+            .write_all("data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}\n\n".as_bytes())
+            .unwrap();
+        stream.flush().unwrap();
+        continue_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("test should allow stream completion");
+        stream
+            .write_all(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}\n\n\
+                  data: [DONE]\n\n"
+                    .as_bytes(),
+            )
+            .unwrap();
+        stream.flush().unwrap();
+    });
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("stream")
+        .args([
+            "--service",
+            "openai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("CLI should spawn");
+
+    let stdout = child.stdout.take().expect("stdout should be piped");
+    let (line_tx, line_rx) = mpsc::channel::<String>();
+    let stdout_reader = thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line).unwrap();
+            if bytes == 0 {
+                break;
+            }
+            line_tx
+                .send(line.trim_end_matches(['\r', '\n']).to_string())
+                .unwrap();
+        }
+    });
+
+    let first_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("first chunk should be printed before SSE response completes");
+    assert!(
+        first_line.contains("\"event\":\"chunk\"") && first_line.contains("\"text\":\"你\""),
+        "first stdout line should be the first chunk, got {first_line}"
+    );
+
+    continue_tx
+        .send(())
+        .expect("server should still wait for continuation");
+    let second_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("second chunk should be printed after continuation");
+    let done_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("done event should be printed after chunks");
+
+    let status = child.wait().expect("CLI should exit");
+    stdout_reader.join().unwrap();
+    server.join().unwrap();
+    let mut stderr_text = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr_text)
+        .unwrap();
+
+    assert!(status.success(), "CLI failed: {stderr_text}");
+    assert!(
+        second_line.contains("\"event\":\"chunk\"") && second_line.contains("\"text\":\"好\""),
+        "second stdout line should be the second chunk, got {second_line}"
+    );
+    assert!(
+        done_line.contains("\"event\":\"done\"")
+            && done_line.contains("\"translatedText\":\"你好\""),
+        "done stdout line should contain final result, got {done_line}"
+    );
+    assert!(
+        !stderr_text.to_ascii_lowercase().contains("compat host")
+            && !stderr_text.contains("worker executable"),
+        "native CLI stream should not mention retained worker paths: {stderr_text}"
     );
 
     let _ = fs::remove_dir_all(settings_dir);
@@ -680,6 +824,107 @@ fn local_ai_cli_env_overrides_provider_and_openvino_cache_dir_before_worker_look
     assert!(
         !stderr.to_ascii_lowercase().contains("compat host"),
         "OpenVINO env route should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn explicit_windows_ai_cli_uses_native_phi_client_before_worker_required_error() {
+    let work_dir = unique_temp_dir("easydict-cli-explicit-windows-ai-native");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("Phi Silica"),
+        "explicit WindowsAI CLI should use the native Phi client boundary:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "explicit WindowsAI CLI should not stop at the generic worker-required fallback:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "explicit WindowsAI CLI should not probe retained LocalAI workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "explicit WindowsAI CLI should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn explicit_windows_ai_stream_cli_uses_native_phi_client_without_worker_probe() {
+    let work_dir = unique_temp_dir("easydict-cli-explicit-windows-ai-stream-native");
+    let settings_dir = work_dir.join("settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{"LocalAIProvider":"WindowsAI"}"#,
+    )
+    .expect("settings should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("stream")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("Phi Silica"),
+        "explicit WindowsAI stream CLI should use the native Phi client boundary:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("requires a Rust-native route"),
+        "explicit WindowsAI stream CLI should not stop at the generic worker-required fallback:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Local AI worker executable not found"),
+        "explicit WindowsAI stream CLI should not probe retained LocalAI workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "explicit WindowsAI stream CLI should not describe a compat host:\n{stderr}"
     );
 
     let _ = fs::remove_dir_all(work_dir);

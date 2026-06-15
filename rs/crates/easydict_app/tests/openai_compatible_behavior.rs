@@ -10,6 +10,7 @@ use easydict_app::{
     check_foundry_local_runtime_status, clamp_openai_temperature, cleanup_openai_translation_text,
     correct_grammar_openai_compatible, custom_openai_service_config, deepseek_service_config,
     detect_openai_api_format_from_url, execute_openai_stream_request,
+    execute_openai_stream_request_observing_chunks,
     extract_foundry_local_chat_completions_endpoint,
     extract_foundry_local_chat_completions_endpoint_from_logs,
     foundry_local_models_endpoint_from_chat_completions_endpoint, foundry_local_service_config,
@@ -36,9 +37,11 @@ use easydict_app::{
     OPENAI_DEFAULT_ENDPOINT, OPENAI_DEFAULT_MODEL, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
     ZHIPU_DEFAULT_ENDPOINT,
 };
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -1312,6 +1315,84 @@ fn execute_openai_stream_request_posts_plan_and_parses_chunks() {
     assert_eq!(
         client.requests[0].headers[0],
         ("Authorization".to_string(), "Bearer sk-test".to_string())
+    );
+}
+
+#[test]
+fn execute_openai_stream_request_observes_chunks_before_stream_returns() {
+    struct StepwiseOpenAiHttpClient {
+        events: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl OpenAiHttpClient for StepwiseOpenAiHttpClient {
+        fn post_sse(
+            &mut self,
+            _request: &OpenAiHttpRequestPlan,
+        ) -> Result<String, OpenAiExecutionError> {
+            panic!("streaming executor should use post_sse_lines")
+        }
+
+        fn post_sse_lines(
+            &mut self,
+            request: &OpenAiHttpRequestPlan,
+            on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+        ) -> Result<(), OpenAiExecutionError> {
+            self.events
+                .borrow_mut()
+                .push(format!("request:{}", request.endpoint));
+            on_line("data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}")?;
+            self.events
+                .borrow_mut()
+                .push("after-first-line".to_string());
+            on_line("data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}")?;
+            self.events
+                .borrow_mut()
+                .push("after-second-line".to_string());
+            on_line("data: [DONE]")?;
+            Ok(())
+        }
+    }
+
+    let plan = build_openai_translation_request_plan(
+        &openai_service_config(
+            "sk-test",
+            Some(OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT),
+            Some("gpt-4o-mini"),
+            Some(0.3),
+            OpenAiApiFormat::Auto,
+        ),
+        &OpenAiTranslationRequest {
+            text: "Hello".to_string(),
+            from_language: TranslationLanguage::English,
+            to_language: TranslationLanguage::SimplifiedChinese,
+            custom_prompt: None,
+        },
+    )
+    .unwrap();
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut client = StepwiseOpenAiHttpClient {
+        events: Rc::clone(&events),
+    };
+    let mut observed = Vec::new();
+    let callback_events = Rc::clone(&events);
+
+    let chunks = execute_openai_stream_request_observing_chunks(&mut client, &plan, |chunk| {
+        callback_events.borrow_mut().push(format!("chunk:{chunk}"));
+        observed.push(chunk.to_string());
+    })
+    .unwrap();
+
+    assert_eq!(chunks, vec!["你".to_string(), "好".to_string()]);
+    assert_eq!(observed, chunks);
+    assert_eq!(
+        events.borrow().as_slice(),
+        [
+            "request:https://api.openai.com/v1/chat/completions",
+            "chunk:你",
+            "after-first-line",
+            "chunk:好",
+            "after-second-line",
+        ]
     );
 }
 

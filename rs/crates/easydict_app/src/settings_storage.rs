@@ -16,6 +16,26 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use win_fluent::prelude::ThemeMode;
 
+const SENSITIVE_SETTING_KEYS: &[&str] = &[
+    "DeepLApiKey",
+    "OpenAIApiKey",
+    "OcrApiKey",
+    "CaiyunApiKey",
+    "NiuTransApiKey",
+    "YoudaoAppKey",
+    "YoudaoAppSecret",
+    "VolcanoAccessKeyId",
+    "VolcanoSecretAccessKey",
+    "DeepSeekApiKey",
+    "GroqApiKey",
+    "ZhipuApiKey",
+    "GitHubModelsToken",
+    "GeminiApiKey",
+    "CustomOpenAIApiKey",
+    "BuiltInAIApiKey",
+    "DoubaoApiKey",
+];
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SettingsLoadResult {
     pub settings: SettingsState,
@@ -71,11 +91,47 @@ pub fn load_settings_file(
     let path = path.as_ref();
     let json = fs::read_to_string(path)?;
     let (migrated_json, changed) = migrate_settings_json(&json)?;
-    if changed {
-        fs::write(path, &migrated_json)?;
+    let machine_id = default_storage_machine_id();
+    let mut root = serde_json::from_str::<Value>(&migrated_json)?
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let sensitive_changed = normalize_sensitive_settings(&mut root, &machine_id)?;
+
+    let normalized_json = if changed || sensitive_changed {
+        let normalized_json = serde_json::to_string_pretty(&Value::Object(root))?;
+        fs::write(path, &normalized_json)?;
+        normalized_json
+    } else {
+        migrated_json
+    };
+
+    load_settings_json_with_machine_id(&normalized_json, &machine_id)
+}
+
+fn normalize_sensitive_settings(
+    root: &mut Map<String, Value>,
+    machine_id: &str,
+) -> Result<bool, SettingsStorageError> {
+    let mut changed = false;
+    for key in SENSITIVE_SETTING_KEYS {
+        let Some(stored) = string_value(root, key).filter(|value| !value.is_empty()) else {
+            continue;
+        };
+        let plaintext = unprotect_or_return_plaintext_with_machine_id(Some(&stored), machine_id);
+        if !plaintext.needs_migration {
+            continue;
+        }
+
+        let protected = protect_credential(plaintext.value.as_deref().unwrap_or_default())
+            .map_err(|error| SettingsStorageError::Credential(error.to_string()))?;
+        if protected != stored {
+            root.insert((*key).to_string(), Value::String(protected));
+            changed = true;
+        }
     }
 
-    load_settings_json(&migrated_json)
+    Ok(changed)
 }
 
 pub fn save_settings_file(

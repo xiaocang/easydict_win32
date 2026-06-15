@@ -9,6 +9,7 @@ use crate::openai_compatible::{
 use crate::protocol::{GrammarCorrectResultDto, SettingsSnapshot, TranslationResultDto};
 use crate::translation_language::TranslationLanguage;
 use serde_json::{json, Value};
+use std::io::{BufRead as _, BufReader};
 use std::time::Duration;
 
 pub const GEMINI_API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
@@ -139,6 +140,18 @@ pub trait CustomStreamingHttpClient {
         &mut self,
         request: &CustomStreamingHttpRequestPlan,
     ) -> Result<String, OpenAiExecutionError>;
+
+    fn post_sse_lines(
+        &mut self,
+        request: &CustomStreamingHttpRequestPlan,
+        on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+    ) -> Result<(), OpenAiExecutionError> {
+        let sse = self.post_sse(request)?;
+        for line in sse.lines() {
+            on_line(line)?;
+        }
+        Ok(())
+    }
 }
 
 pub struct ReqwestCustomStreamingHttpClient {
@@ -216,6 +229,59 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
         }
 
         Ok(body)
+    }
+
+    fn post_sse_lines(
+        &mut self,
+        request: &CustomStreamingHttpRequestPlan,
+        on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+    ) -> Result<(), OpenAiExecutionError> {
+        let mut builder = self.client.post(&request.endpoint).json(&request.body);
+        for (name, value) in &request.headers {
+            builder = builder.header(name, value);
+        }
+
+        let response = builder.send().map_err(|error| {
+            OpenAiExecutionError::new(
+                OpenAiExecutionErrorCode::NetworkError,
+                format!("Custom streaming HTTP request failed: {error}"),
+            )
+        })?;
+        let status = response.status();
+
+        if !status.is_success() {
+            let body = response.text().map_err(|error| {
+                OpenAiExecutionError::new(
+                    OpenAiExecutionErrorCode::NetworkError,
+                    format!("Could not read custom streaming HTTP response: {error}"),
+                )
+            })?;
+            return Err(custom_streaming_error_from_response(
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown"),
+                &body,
+            ));
+        }
+
+        let mut reader = BufReader::new(response);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let bytes_read = reader.read_line(&mut line).map_err(|error| {
+                OpenAiExecutionError::new(
+                    OpenAiExecutionErrorCode::NetworkError,
+                    format!("Could not read custom streaming HTTP stream: {error}"),
+                )
+            })?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            let line_without_newline = line.trim_end_matches(&['\r', '\n'][..]);
+            on_line(line_without_newline)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -434,8 +500,28 @@ pub fn execute_custom_streaming_request<C: CustomStreamingHttpClient>(
     client: &mut C,
     plan: &CustomStreamingHttpRequestPlan,
 ) -> Result<Vec<String>, OpenAiExecutionError> {
-    let sse = client.post_sse(plan)?;
-    Ok(parse_custom_streaming_chunks(plan.streaming_format, &sse))
+    execute_custom_streaming_request_observing_chunks(client, plan, |_| {})
+}
+
+pub fn execute_custom_streaming_request_observing_chunks<C, F>(
+    client: &mut C,
+    plan: &CustomStreamingHttpRequestPlan,
+    mut on_chunk: F,
+) -> Result<Vec<String>, OpenAiExecutionError>
+where
+    C: CustomStreamingHttpClient,
+    F: FnMut(&str),
+{
+    let mut parser = CustomStreamingSseLineChunkParser::new(plan.streaming_format);
+    let mut chunks = Vec::new();
+    client.post_sse_lines(plan, &mut |line| {
+        if let Some(chunk) = parser.feed_line(line) {
+            on_chunk(&chunk);
+            chunks.push(chunk);
+        }
+        Ok(())
+    })?;
+    Ok(chunks)
 }
 
 pub fn translate_custom_streaming_service<C: CustomStreamingHttpClient>(
@@ -498,6 +584,85 @@ pub fn parse_custom_streaming_chunks(format: CustomStreamingFormat, sse: &str) -
     match format {
         CustomStreamingFormat::Gemini => parse_gemini_stream_chunks(sse),
         CustomStreamingFormat::Doubao => parse_doubao_stream_chunks(sse),
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CustomStreamingSseLineChunkParser {
+    format: CustomStreamingFormat,
+    current_event: Option<String>,
+    done: bool,
+}
+
+impl CustomStreamingSseLineChunkParser {
+    pub fn new(format: CustomStreamingFormat) -> Self {
+        Self {
+            format,
+            current_event: None,
+            done: false,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.done
+    }
+
+    pub fn feed_line(&mut self, line: &str) -> Option<String> {
+        if self.done {
+            return None;
+        }
+
+        match self.format {
+            CustomStreamingFormat::Gemini => self.feed_gemini_line(line),
+            CustomStreamingFormat::Doubao => self.feed_doubao_line(line),
+        }
+    }
+
+    fn feed_gemini_line(&mut self, line: &str) -> Option<String> {
+        let line = line.trim();
+        if line.is_empty() {
+            return None;
+        }
+
+        let data = line
+            .strip_prefix("data:")
+            .map(|data| data.strip_prefix(' ').unwrap_or(data))
+            .unwrap_or(line)
+            .trim();
+        if data == "[DONE]" {
+            self.done = true;
+            return None;
+        }
+
+        gemini_text_delta(data)
+    }
+
+    fn feed_doubao_line(&mut self, line: &str) -> Option<String> {
+        let line = line.trim();
+        if line.is_empty() {
+            self.current_event = None;
+            return None;
+        }
+
+        if let Some(event) = line.strip_prefix("event:") {
+            self.current_event = Some(event.trim().to_string());
+            return None;
+        }
+
+        let Some(data) = line.strip_prefix("data:") else {
+            return None;
+        };
+        let data = data.trim();
+        if data == "[DONE]" {
+            self.done = true;
+            return None;
+        }
+
+        let chunk = (self.current_event.as_deref() == Some("response.output_text.delta"))
+            .then(|| doubao_text_delta(data))
+            .flatten();
+        self.current_event = None;
+        chunk
     }
 }
 

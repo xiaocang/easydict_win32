@@ -23,9 +23,17 @@ mod imp {
         WindowsAiError, WindowsAiGenerationOptions, WindowsAiReadyState, WindowsAiResponse,
         WindowsAiResponseStatus,
     };
+    use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use windows_core::{HRESULT, HSTRING};
     use windows_future::AsyncOperationProgressHandler;
+
+    enum StreamEvent {
+        Chunk(String),
+        Complete(Result<Vec<String>, WindowsAiError>),
+    }
+
+    type StreamEventSender = Arc<Mutex<mpsc::Sender<StreamEvent>>>;
 
     pub fn ready_state() -> WindowsAiReadyState {
         LanguageModel::GetReadyState()
@@ -86,6 +94,53 @@ mod imp {
         prompt: &str,
         options: WindowsAiGenerationOptions,
     ) -> Result<Vec<String>, WindowsAiError> {
+        generate_stream_inner(prompt, options, None)
+    }
+
+    pub fn generate_stream_observing_chunks(
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+        on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<Vec<String>, WindowsAiError> {
+        let (sender, receiver) = mpsc::channel();
+        let sender = Arc::new(Mutex::new(sender));
+        let prompt = prompt.to_string();
+        let worker_sender = Arc::clone(&sender);
+        let worker = std::thread::spawn(move || {
+            let result = generate_stream_inner(&prompt, options, Some(Arc::clone(&worker_sender)));
+            send_stream_event(&worker_sender, StreamEvent::Complete(result));
+        });
+
+        let mut completed = None;
+        while let Ok(event) = receiver.recv() {
+            match event {
+                StreamEvent::Chunk(chunk) => on_chunk(&chunk),
+                StreamEvent::Complete(result) => {
+                    completed = Some(result);
+                    break;
+                }
+            }
+        }
+
+        let panicked = worker.join().is_err();
+        if let Some(result) = completed {
+            return result;
+        }
+        if panicked {
+            return Err(WindowsAiError::new(
+                "Windows AI stream worker panicked before returning a result.",
+            ));
+        }
+        Err(WindowsAiError::new(
+            "Windows AI stream worker exited without returning a result.",
+        ))
+    }
+
+    fn generate_stream_inner(
+        prompt: &str,
+        options: WindowsAiGenerationOptions,
+        observer: Option<StreamEventSender>,
+    ) -> Result<Vec<String>, WindowsAiError> {
         let model = create_language_model("stream")?;
         let sdk_options = language_model_options(options)?;
         let prompt = HSTRING::from(prompt);
@@ -94,6 +149,7 @@ mod imp {
             .map_err(|error| runtime_error("stream", error))?;
         let chunks = Arc::new(Mutex::new(Vec::new()));
         let progress_chunks = Arc::clone(&chunks);
+        let progress_observer = observer.clone();
         operation
             .SetProgress(&AsyncOperationProgressHandler::<
                 LanguageModelResponseResult,
@@ -102,6 +158,9 @@ mod imp {
                 if let Some(token) = token.cloned() {
                     let text = token.to_string_lossy();
                     if !text.is_empty() {
+                        if let Some(observer) = progress_observer.as_ref() {
+                            send_stream_event(observer, StreamEvent::Chunk(text.clone()));
+                        }
                         if let Ok(mut chunks) = progress_chunks.lock() {
                             chunks.push(text);
                         }
@@ -124,6 +183,12 @@ mod imp {
             .ok()
             .and_then(|chunks| chunks.into_inner().ok())
             .unwrap_or_default())
+    }
+
+    fn send_stream_event(sender: &StreamEventSender, event: StreamEvent) {
+        if let Ok(sender) = sender.lock() {
+            let _ = sender.send(event);
+        }
     }
 
     pub fn warm_up(
@@ -314,6 +379,14 @@ mod imp {
         Err(unsupported_error())
     }
 
+    pub fn generate_stream_observing_chunks(
+        _prompt: &str,
+        _options: WindowsAiGenerationOptions,
+        _on_chunk: &mut dyn FnMut(&str),
+    ) -> Result<Vec<String>, WindowsAiError> {
+        Err(unsupported_error())
+    }
+
     pub fn warm_up(
         _prompt: &str,
         _options: WindowsAiGenerationOptions,
@@ -346,6 +419,14 @@ pub fn generate_stream(
     options: WindowsAiGenerationOptions,
 ) -> Result<Vec<String>, WindowsAiError> {
     imp::generate_stream(prompt, options)
+}
+
+pub fn generate_stream_observing_chunks(
+    prompt: &str,
+    options: WindowsAiGenerationOptions,
+    on_chunk: &mut dyn FnMut(&str),
+) -> Result<Vec<String>, WindowsAiError> {
+    imp::generate_stream_observing_chunks(prompt, options, on_chunk)
 }
 
 pub fn warm_up(prompt: &str, options: WindowsAiGenerationOptions) -> Result<(), WindowsAiError> {

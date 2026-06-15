@@ -9,6 +9,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use win_fluent::prelude::ThemeMode;
 
 #[cfg(windows)]
+use easydict_app::{protect_credential, try_unprotect_credential};
+
+#[cfg(windows)]
 #[test]
 fn settings_storage_saves_legacy_keys_and_protects_sensitive_values() {
     let mut settings = SettingsState::default();
@@ -222,6 +225,94 @@ fn settings_storage_loads_migrated_legacy_json_and_decrypts_old_credentials() {
         .any(|warning| warning.contains("DeepLApiKey needs credential normalization")));
 }
 
+#[cfg(windows)]
+#[test]
+fn settings_storage_load_file_normalizes_pending_sensitive_values_without_rewriting_stable_dpapi() {
+    let temp = TempDir::new("settings-storage-sensitive-normalization");
+    let _guard = EnvVarGuard::set(
+        "EASYDICT_SETTINGS_DIR",
+        temp.path().to_string_lossy().to_string(),
+    );
+    let machine_id = easydict_app::get_or_create_persisted_machine_id(temp.path());
+    let already_protected = protect_credential("sk-already-protected").unwrap();
+    let nested_protected = protect_credential(&protect_credential("sk-nested-protected").unwrap())
+        .expect("nested credential should protect");
+    let legacy_protected = protect_credential_legacy("deepl-legacy", &machine_id).unwrap();
+    let path = temp.path().join("settings.json");
+    fs::write(
+        &path,
+        format!(
+            r#"{{
+  "OpenAIApiKey": "{already_protected}",
+  "CustomOpenAIApiKey": "{nested_protected}",
+  "DeepLApiKey": "{legacy_protected}",
+  "OcrApiKey": "plain-ocr-secret",
+  "UseLocalAiWorker": true
+}}"#
+        ),
+    )
+    .unwrap();
+
+    let result = load_settings_file(&path).expect("settings file should load");
+
+    assert_eq!(result.settings.open_ai_api_key, "sk-already-protected");
+    assert_eq!(result.settings.deepl_api_key, "deepl-legacy");
+    assert_eq!(result.settings.ocr_api_key, "plain-ocr-secret");
+    let custom_provider = result
+        .settings
+        .service_provider_settings
+        .iter()
+        .find(|setting| setting.service_id == "custom-openai")
+        .unwrap();
+    assert_eq!(custom_provider.api_key, "sk-nested-protected");
+    assert!(
+        !result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("needs credential normalization")),
+        "load_settings_file should return the post-normalization state: {:?}",
+        result.warnings
+    );
+
+    let persisted = fs::read_to_string(&path).unwrap();
+    let root: Value = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(
+        root["OpenAIApiKey"].as_str(),
+        Some(already_protected.as_str())
+    );
+    assert_ne!(
+        root["CustomOpenAIApiKey"].as_str(),
+        Some(nested_protected.as_str())
+    );
+    assert_ne!(
+        root["DeepLApiKey"].as_str(),
+        Some(legacy_protected.as_str())
+    );
+    assert_ne!(root["OcrApiKey"].as_str(), Some("plain-ocr-secret"));
+    for key in ["CustomOpenAIApiKey", "DeepLApiKey", "OcrApiKey"] {
+        assert!(root[key].as_str().unwrap().starts_with("edcred1:user:"));
+    }
+    assert_eq!(
+        try_unprotect_credential(root["CustomOpenAIApiKey"].as_str().unwrap()).as_deref(),
+        Some("sk-nested-protected")
+    );
+    assert_eq!(
+        try_unprotect_credential(root["DeepLApiKey"].as_str().unwrap()).as_deref(),
+        Some("deepl-legacy")
+    );
+    assert_eq!(
+        try_unprotect_credential(root["OcrApiKey"].as_str().unwrap()).as_deref(),
+        Some("plain-ocr-secret")
+    );
+    assert!(root.get("UseLocalAiWorker").is_none());
+    for plaintext in ["sk-nested-protected", "deepl-legacy", "plain-ocr-secret"] {
+        assert!(
+            !persisted.contains(plaintext),
+            "settings file should not retain plaintext {plaintext}"
+        );
+    }
+}
+
 #[test]
 fn settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_paths() {
     let temp = TempDir::new("settings-storage-mdd-discovery");
@@ -392,5 +483,31 @@ impl TempDir {
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+#[cfg(windows)]
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<String>,
+}
+
+#[cfg(windows)]
+impl EnvVarGuard {
+    fn set(key: &'static str, value: String) -> Self {
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
     }
 }

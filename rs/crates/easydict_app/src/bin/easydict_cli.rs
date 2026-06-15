@@ -8,7 +8,10 @@ use easydict_app::{
     auto_foundry_local_native_probe_request, auto_openvino_native_fallback_request,
     default_settings_storage_path, find_translation_service_descriptor, load_settings_file,
     local_ai_quick_translate_local_error, local_ai_quick_translate_native_preflight_error,
-    run_quick_translate_service_with_native_route, settings_snapshot,
+    run_quick_translate_service_with_current_app_dir,
+    run_quick_translate_service_with_native_route,
+    run_quick_translate_streaming_service_with_current_app_dir_observing_chunks,
+    run_quick_translate_streaming_service_with_native_route_observing_chunks, settings_snapshot,
     CommandFoundryLocalEndpointResolver, QuickQueryMode, QuickTranslateBackendError,
     QuickTranslateExecutionKind, QuickTranslateService, QuickTranslateServiceRequest,
     QuickTranslateServiceUpdate, SettingsStorageError,
@@ -110,15 +113,91 @@ fn run_stream_translation(
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<TranslationResultDto, CliError> {
-    if let Some(update) = try_run_native_service_update(
-        options,
-        text.clone(),
-        QuickTranslateExecutionKind::TranslateStream,
-    )? {
-        return write_native_stream_update(update, stdout, stderr, options);
+    let mut chunk_write_error = None;
+    let mut write_chunk = |chunk: &str| {
+        if chunk_write_error.is_none() {
+            if let Err(error) = write_stream_chunk(stdout, options, chunk) {
+                chunk_write_error = Some(error);
+            }
+        }
+    };
+
+    let update = try_run_native_stream_service_update(options, text, &mut write_chunk)?;
+    drop(write_chunk);
+
+    if let Some(update) = update {
+        if let Some(error) = chunk_write_error {
+            return Err(error);
+        }
+        return write_native_stream_done(update, stdout, stderr, options);
     }
 
     Err(unsupported_rust_route_error(options))
+}
+
+fn try_run_native_stream_service_update(
+    options: &CliOptions,
+    text: String,
+    on_chunk: &mut dyn FnMut(&str),
+) -> Result<Option<QuickTranslateServiceUpdate>, CliError> {
+    let Some(request) =
+        native_service_request(options, text, QuickTranslateExecutionKind::TranslateStream)?
+    else {
+        return Ok(None);
+    };
+
+    if let Some(error) = local_ai_quick_translate_native_preflight_error(&request) {
+        return Err(CliError::UnsupportedRustRoute(error.to_string()));
+    }
+
+    if quick_translate_request_can_route_natively(&request) {
+        return Ok(
+            run_quick_translate_streaming_service_with_native_route_observing_chunks(
+                request, on_chunk,
+            ),
+        );
+    }
+
+    if request.service.id == "windows-local-ai" {
+        return Ok(Some(
+            run_quick_translate_streaming_service_with_current_app_dir_observing_chunks(
+                request, on_chunk,
+            ),
+        ));
+    }
+
+    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    if let Some(native_request) =
+        auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
+    {
+        return Ok(
+            run_quick_translate_streaming_service_with_native_route_observing_chunks(
+                native_request,
+                on_chunk,
+            ),
+        );
+    }
+
+    if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
+        return Ok(
+            run_quick_translate_streaming_service_with_native_route_observing_chunks(
+                native_request,
+                on_chunk,
+            ),
+        );
+    }
+
+    if let Some(error) = local_ai_quick_translate_local_error(&request) {
+        return Err(CliError::UnsupportedRustRoute(error.to_string()));
+    }
+
+    if request.service.id == "windows-local-ai" {
+        return Err(CliError::UnsupportedRustRoute(
+            LOCAL_AI_WORKER_DISABLED_MESSAGE.to_string(),
+        ));
+    }
+
+    Ok(None)
 }
 
 fn try_run_native_service_update(
@@ -136,6 +215,12 @@ fn try_run_native_service_update(
 
     if quick_translate_request_can_route_natively(&request) {
         return Ok(run_quick_translate_service_with_native_route(request));
+    }
+
+    if request.service.id == "windows-local-ai" {
+        return Ok(Some(run_quick_translate_service_with_current_app_dir(
+            request,
+        )));
     }
 
     let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
@@ -338,35 +423,34 @@ fn grammar_result_from_update(
     })
 }
 
-fn write_native_stream_update(
+fn write_stream_chunk(
+    stdout: &mut impl Write,
+    options: &CliOptions,
+    chunk: &str,
+) -> Result<(), CliError> {
+    if options.json {
+        writeln!(
+            stdout,
+            "{}",
+            json!({
+                "event": "chunk",
+                "text": chunk,
+            })
+        )?;
+    } else {
+        write!(stdout, "{chunk}")?;
+    }
+    stdout.flush()?;
+    Ok(())
+}
+
+fn write_native_stream_done(
     update: QuickTranslateServiceUpdate,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
     options: &CliOptions,
 ) -> Result<TranslationResultDto, CliError> {
-    let streamed_chunks = update.outcome.streamed_chunks;
     let result = update.outcome.result.map_err(CliError::QuickTranslate)?;
-    let chunks = if streamed_chunks.is_empty() && !result.translated_text.is_empty() {
-        vec![result.translated_text.clone()]
-    } else {
-        streamed_chunks
-    };
-
-    for chunk in chunks {
-        if options.json {
-            writeln!(
-                stdout,
-                "{}",
-                json!({
-                    "event": "chunk",
-                    "text": chunk,
-                })
-            )?;
-        } else {
-            write!(stdout, "{chunk}")?;
-        }
-        stdout.flush()?;
-    }
 
     if options.json {
         writeln!(

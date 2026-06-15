@@ -163,6 +163,7 @@ pub enum BuildRustHelpersError {
     UnsupportedPlatform(String),
     UnsupportedConfiguration(String),
     WorkspaceMissing(PathBuf),
+    WindowsAiManifestMissing(PathBuf),
     RustupFailed { exit_code: Option<i32> },
     CargoFailed { exit_code: Option<i32> },
     MissingHelper(PathBuf),
@@ -188,6 +189,7 @@ pub enum PackRustPortableError {
     UnsupportedPlatform(String),
     UnsupportedConfiguration(String),
     WorkspaceMissing(PathBuf),
+    WindowsAiManifestMissing(PathBuf),
     CargoFailed {
         command: &'static str,
         exit_code: Option<i32>,
@@ -313,6 +315,11 @@ impl fmt::Display for BuildRustHelpersError {
             Self::WorkspaceMissing(path) => {
                 write!(formatter, "Rust workspace not found at {}", path.display())
             }
+            Self::WindowsAiManifestMissing(path) => write!(
+                formatter,
+                "WindowsAI WinRT binding preflight manifest not found at {}",
+                path.display()
+            ),
             Self::RustupFailed { exit_code } => match exit_code {
                 Some(code) => write!(formatter, "rustup target add failed with exit code {code}"),
                 None => write!(formatter, "rustup target add failed"),
@@ -409,6 +416,11 @@ impl fmt::Display for PackRustPortableError {
             Self::WorkspaceMissing(path) => {
                 write!(formatter, "Rust workspace not found at {}", path.display())
             }
+            Self::WindowsAiManifestMissing(path) => write!(
+                formatter,
+                "WindowsAI WinRT binding preflight manifest not found at {}",
+                path.display()
+            ),
             Self::CargoFailed { command, exit_code } => match exit_code {
                 Some(code) => write!(formatter, "{command} failed with exit code {code}"),
                 None => write!(formatter, "{command} failed"),
@@ -613,25 +625,22 @@ pub fn build_rust_helpers(
             options.rust_workspace.clone(),
         ));
     }
-
-    run_rustup_target_add_if_available(cargo_target)?;
-    let mut cargo_args = rust_helper_cargo_args(cargo_target, &options.configuration);
-    let status = std::process::Command::new("cargo")
-        .args(&cargo_args)
-        .envs(rust_portable_cargo_environment())
-        .current_dir(&options.rust_workspace)
-        .status()
-        .map_err(|error| BuildRustHelpersError::Io {
-            path: PathBuf::from("cargo"),
-            message: error.to_string(),
-        })?;
-    if !status.success() {
-        return Err(BuildRustHelpersError::CargoFailed {
-            exit_code: status.code(),
-        });
+    let windows_ai_manifest = windows_ai_manifest_path_for_workspace(&options.rust_workspace);
+    if !windows_ai_manifest.is_file() {
+        return Err(BuildRustHelpersError::WindowsAiManifestMissing(
+            windows_ai_manifest,
+        ));
     }
 
-    cargo_args.clear();
+    run_rustup_target_add_if_available(cargo_target)?;
+    run_build_cargo_command(
+        &options.rust_workspace,
+        windows_ai_bindings_preflight_cargo_args(&windows_ai_manifest, cargo_target),
+    )?;
+    run_build_cargo_command(
+        &options.rust_workspace,
+        rust_helper_cargo_args(cargo_target, &options.configuration),
+    )?;
     copy_built_rust_helpers(
         &options.rust_workspace,
         cargo_target,
@@ -703,6 +712,12 @@ pub fn pack_rs_portable(
             options.rust_workspace.clone(),
         ));
     }
+    let windows_ai_manifest = windows_ai_manifest_path_for_workspace(&options.rust_workspace);
+    if !windows_ai_manifest.is_file() {
+        return Err(PackRustPortableError::WindowsAiManifestMissing(
+            windows_ai_manifest,
+        ));
+    }
 
     let package_name =
         rust_portable_package_name(options.package_version.as_deref(), &options.platform);
@@ -717,6 +732,11 @@ pub fn pack_rs_portable(
     })?;
 
     run_rustup_target_add_if_available(cargo_target).map_err(pack_error_from_build_error)?;
+    run_pack_cargo_command(
+        &options.rust_workspace,
+        windows_ai_bindings_preflight_cargo_args(&windows_ai_manifest, cargo_target),
+        "cargo check WindowsAI WinRT bindings",
+    )?;
     run_pack_cargo_command(
         &options.rust_workspace,
         preview_app_cargo_args(cargo_target, &options.configuration),
@@ -1035,6 +1055,8 @@ pub const RUST_HELPER_EXECUTABLES: &[&str] = &[
     "easydict_long_doc.exe",
 ];
 
+const WINDOWS_AI_REQUIRE_WINRT_BINDINGS_ENV: &str = "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS";
+
 const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
     "Easydict.Rust.exe",
     "easydict-native-bridge.exe",
@@ -1148,11 +1170,55 @@ fn run_pack_cargo_command(
     Ok(())
 }
 
-fn rust_portable_cargo_environment() -> [(&'static str, &'static str); 2] {
+fn run_build_cargo_command(
+    rust_workspace: &Path,
+    cargo_args: Vec<String>,
+) -> Result<(), BuildRustHelpersError> {
+    let status = std::process::Command::new("cargo")
+        .args(&cargo_args)
+        .envs(rust_portable_cargo_environment())
+        .current_dir(rust_workspace)
+        .status()
+        .map_err(|error| BuildRustHelpersError::Io {
+            path: PathBuf::from("cargo"),
+            message: error.to_string(),
+        })?;
+    if !status.success() {
+        return Err(BuildRustHelpersError::CargoFailed {
+            exit_code: status.code(),
+        });
+    }
+    Ok(())
+}
+
+fn rust_portable_cargo_environment() -> [(&'static str, &'static str); 3] {
     [
         ("EASYDICT_RUNTIME_PROFILE", "rust-only"),
         ("RUNTIME_PROFILE", "rust-only"),
+        (WINDOWS_AI_REQUIRE_WINRT_BINDINGS_ENV, "1"),
     ]
+}
+
+fn windows_ai_bindings_preflight_cargo_args(
+    windows_ai_manifest: &Path,
+    cargo_target: &str,
+) -> Vec<String> {
+    vec![
+        "check".to_string(),
+        "--manifest-path".to_string(),
+        windows_ai_manifest.to_string_lossy().to_string(),
+        "--target".to_string(),
+        cargo_target.to_string(),
+    ]
+}
+
+fn windows_ai_manifest_path_for_workspace(rust_workspace: &Path) -> PathBuf {
+    rust_workspace
+        .parent()
+        .unwrap_or(rust_workspace)
+        .join("lib")
+        .join("easydict-windows-ai")
+        .join("Cargo.toml")
 }
 
 fn stage_rust_portable_payload(
@@ -1224,6 +1290,9 @@ fn pack_error_from_build_error(error: BuildRustHelpersError) -> PackRustPortable
         }
         BuildRustHelpersError::WorkspaceMissing(path) => {
             PackRustPortableError::WorkspaceMissing(path)
+        }
+        BuildRustHelpersError::WindowsAiManifestMissing(path) => {
+            PackRustPortableError::WindowsAiManifestMissing(path)
         }
         BuildRustHelpersError::RustupFailed { exit_code } => PackRustPortableError::CargoFailed {
             command: "rustup target add",
@@ -2254,9 +2323,68 @@ mod tests {
             rust_portable_cargo_environment(),
             [
                 ("EASYDICT_RUNTIME_PROFILE", "rust-only"),
-                ("RUNTIME_PROFILE", "rust-only")
+                ("RUNTIME_PROFILE", "rust-only"),
+                ("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "1")
             ]
         );
+    }
+
+    #[test]
+    fn build_rust_helpers_reports_missing_windows_ai_preflight_manifest_before_cargo() {
+        let workspace = tempfile_dir("build-helpers-missing-windows-ai-manifest");
+        write_file(&workspace, "Cargo.toml", b"[workspace]\n");
+        let output_dir = tempfile_dir("build-helpers-missing-windows-ai-output");
+
+        let expected_manifest = windows_ai_manifest_path_for_workspace(&workspace);
+        let error = build_rust_helpers(&BuildRustHelpersOptions {
+            rust_workspace: workspace.clone(),
+            platform: "x64".to_string(),
+            configuration: "Release".to_string(),
+            output_dir,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            BuildRustHelpersError::WindowsAiManifestMissing(expected_manifest)
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn pack_rs_portable_reports_missing_windows_ai_preflight_manifest_before_output() {
+        let workspace = tempfile_dir("pack-rs-missing-windows-ai-manifest");
+        write_file(&workspace, "Cargo.toml", b"[workspace]\n");
+        let output_root = tempfile_dir("pack-rs-missing-windows-ai-output");
+
+        let expected_manifest = windows_ai_manifest_path_for_workspace(&workspace);
+        let error = pack_rs_portable(&PackRustPortableOptions {
+            rust_workspace: workspace.clone(),
+            platform: "x64".to_string(),
+            configuration: "Release".to_string(),
+            output_root: output_root.clone(),
+            package_version: Some("v0.0.0-test".to_string()),
+            create_zip: false,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PackRustPortableError::WindowsAiManifestMissing(expected_manifest)
+        );
+        assert!(
+            !output_root
+                .join("easydict-rs-portable-v0.0.0-test-win-x64")
+                .exists(),
+            "missing WindowsAI preflight manifest should fail before creating the portable staging directory"
+        );
+        assert!(
+            !output_root
+                .join("easydict-rs-portable-v0.0.0-test-win-x64.zip")
+                .exists(),
+            "missing WindowsAI preflight manifest should fail before creating the portable ZIP"
+        );
+        let _ = fs::remove_dir_all(workspace);
     }
 
     #[test]

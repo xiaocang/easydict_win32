@@ -83,11 +83,13 @@ pub use custom_streaming::{
     cleanup_doubao_translation_text, correct_custom_streaming_grammar,
     custom_streaming_config_for_service, custom_streaming_error_from_response,
     doubao_language_code, doubao_service_config, execute_custom_streaming_request,
-    gemini_service_config, parse_custom_streaming_chunks, parse_doubao_stream_chunks,
-    parse_gemini_stream_chunks, translate_custom_streaming_service, CustomStreamingFormat,
-    CustomStreamingHttpClient, CustomStreamingHttpRequestPlan, CustomStreamingServiceConfig,
-    DoubaoConfig, GeminiConfig, ReqwestCustomStreamingHttpClient, DOUBAO_DEFAULT_ENDPOINT,
-    DOUBAO_DEFAULT_MODEL, GEMINI_API_BASE_URL, GEMINI_DEFAULT_MODEL,
+    execute_custom_streaming_request_observing_chunks, gemini_service_config,
+    parse_custom_streaming_chunks, parse_doubao_stream_chunks, parse_gemini_stream_chunks,
+    translate_custom_streaming_service, CustomStreamingFormat, CustomStreamingHttpClient,
+    CustomStreamingHttpRequestPlan, CustomStreamingServiceConfig,
+    CustomStreamingSseLineChunkParser, DoubaoConfig, GeminiConfig,
+    ReqwestCustomStreamingHttpClient, DOUBAO_DEFAULT_ENDPOINT, DOUBAO_DEFAULT_MODEL,
+    GEMINI_API_BASE_URL, GEMINI_DEFAULT_MODEL,
 };
 pub use doc_layout_yolo::{
     apply_doc_layout_yolo_nms, compute_doc_layout_yolo_iou, doc_layout_yolo_class_to_region,
@@ -160,8 +162,8 @@ pub use layout_model_download::{
 pub use llm_streaming::{
     chat_completions_sse_chunks, extract_chat_completions_delta, extract_responses_delta,
     parse_chat_completions_sse_chunks, parse_openai_sse_chunks, parse_responses_sse_chunks,
-    responses_sse_chunks, ChatCompletionsSseChunks, ChatMessage, ChatRole, OpenAiStreamingFormat,
-    ResponsesSseChunks,
+    responses_sse_chunks, ChatCompletionsSseChunks, ChatMessage, ChatRole,
+    OpenAiSseLineChunkParser, OpenAiStreamingFormat, ResponsesSseChunks,
 };
 pub use local_dictionary::{
     apply_active_local_dictionary_suggestion, apply_local_dictionary_suggestion,
@@ -260,6 +262,7 @@ pub use openai_compatible::{
     cleanup_openai_translation_text, correct_grammar_openai_compatible,
     custom_openai_service_config, decrypt_built_in_ai_secret, deepseek_service_config,
     detect_openai_api_format_from_url, execute_openai_stream_request,
+    execute_openai_stream_request_observing_chunks,
     extract_foundry_local_chat_completions_endpoint,
     extract_foundry_local_chat_completions_endpoint_from_logs,
     foundry_local_models_endpoint_from_chat_completions_endpoint, foundry_local_service_config,
@@ -327,16 +330,22 @@ pub use quick_translate::{
     begin_manual_quick_translate_service, begin_manual_quick_translate_service_for_surface,
     begin_quick_translate, begin_quick_translate_for_surface,
     begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
-    build_quick_translate_plan_for_surface, local_ai_quick_translate_local_error,
-    local_ai_quick_translate_native_preflight_error, local_ai_route_decision,
-    quick_translate_request_can_route_natively, quick_translate_service_update_from_cache,
-    resolve_auto_target_language, resolve_different_target_language, resolve_quick_query_language,
-    run_quick_translate, run_quick_translate_service, run_quick_translate_service_with_app_dir,
+    build_quick_translate_plan_for_surface, enrich_quick_translate_update_with_youdao_phonetics,
+    local_ai_quick_translate_local_error, local_ai_quick_translate_native_preflight_error,
+    local_ai_route_decision, quick_translate_request_can_route_natively,
+    quick_translate_service_update_from_cache, resolve_auto_target_language,
+    resolve_different_target_language, resolve_quick_query_language, run_quick_translate,
+    run_quick_translate_service, run_quick_translate_service_with_app_dir,
     run_quick_translate_service_with_app_dir_and_native_local_ai_client,
     run_quick_translate_service_with_app_dir_and_native_local_ai_probes,
+    run_quick_translate_service_with_current_app_dir,
     run_quick_translate_service_with_native_route,
     run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver,
     run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client,
+    run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client_observing_chunks,
+    run_quick_translate_streaming_service_with_app_dir_observing_chunks,
+    run_quick_translate_streaming_service_with_current_app_dir_observing_chunks,
+    run_quick_translate_streaming_service_with_native_route_observing_chunks,
     run_quick_translate_with_app_dir, store_quick_translate_cache_result,
     translation_cache_request_for_quick_translate, LocalAiRouteDecision,
     NativeBingQuickTranslateBackend, NativeCustomStreamingQuickTranslateBackend,
@@ -1767,7 +1776,14 @@ fn quick_translate_backend_service_task(
         )
     } else {
         Task::perform(
-            async move { quick_translate::run_quick_translate_service_with_current_app_dir(request) },
+            async move {
+                let update = quick_translate::run_quick_translate_service_with_current_app_dir(
+                    request.clone(),
+                );
+                quick_translate::enrich_quick_translate_update_with_global_youdao_phonetics(
+                    &request, update,
+                )
+            },
             Message::QuickTranslateServiceFinished,
         )
     }

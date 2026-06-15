@@ -1,6 +1,7 @@
 use easydict_app::{
     chat_completions_sse_chunks, parse_chat_completions_sse_chunks, parse_openai_sse_chunks,
-    parse_responses_sse_chunks, ChatMessage, ChatRole, OpenAiStreamingFormat,
+    parse_responses_sse_chunks, ChatMessage, ChatRole, OpenAiSseLineChunkParser,
+    OpenAiStreamingFormat,
 };
 
 #[test]
@@ -102,6 +103,26 @@ data: {"choices":[{"delta":{"content":"🌍"}}]}
     assert_eq!(
         parse_chat_completions_sse_chunks(sse),
         ["你好", "世界", "🌍"]
+    );
+}
+
+#[test]
+fn chat_completions_sse_line_parser_emits_chunks_incrementally_and_stops_at_done() {
+    let mut parser = OpenAiSseLineChunkParser::new(OpenAiStreamingFormat::ChatCompletions);
+
+    assert_eq!(
+        parser.feed_line("data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}"),
+        Some("你".to_string())
+    );
+    assert_eq!(
+        parser.feed_line("data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}"),
+        Some("好".to_string())
+    );
+    assert_eq!(parser.feed_line("data: [DONE]"), None);
+    assert!(parser.is_done());
+    assert_eq!(
+        parser.feed_line("data: {\"choices\":[{\"delta\":{\"content\":\"!\"}}]}"),
+        None
     );
 }
 

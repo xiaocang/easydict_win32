@@ -1167,9 +1167,13 @@ public sealed class WorkerPackagingTests
         var csproj = File.ReadAllText(csprojPath);
 
         csproj.Should().Contain("<RuntimeProfile Condition=\"'$(RuntimeProfile)' == ''\">RustOnly</RuntimeProfile>");
-        csproj.Should().Contain("<IsRustOnlyRuntimeProfile Condition=\"'$(RuntimeProfile)' == 'RustOnly' or '$(RuntimeProfile)' == 'rust-only' or '$(RuntimeProfile)' == 'rustonly' or '$(RuntimeProfile)' == 'rust_only'\">true</IsRustOnlyRuntimeProfile>");
+        csproj.Should().Contain("<IsHybridRuntimeProfile Condition=\"'$(RuntimeProfile)' == 'Hybrid' or '$(RuntimeProfile)' == 'hybrid'\">true</IsHybridRuntimeProfile>");
+        csproj.Should().Contain("<IsRustOnlyRuntimeProfile Condition=\"'$(IsHybridRuntimeProfile)' != 'true'\">true</IsRustOnlyRuntimeProfile>");
         csproj.Should().Contain("<BuildWorkerOutputs Condition=\"'$(IsRustOnlyRuntimeProfile)' == 'true'\">false</BuildWorkerOutputs>");
         csproj.Should().Contain("<EnableInProcLongDocFallback Condition=\"'$(IsRustOnlyRuntimeProfile)' == 'true'\">false</EnableInProcLongDocFallback>");
+        csproj.Should().NotContain("'$(RuntimeProfile)' == 'dotnet'");
+        csproj.Should().NotContain("'$(RuntimeProfile)' == 'dotnet-hybrid'");
+        csproj.Should().NotContain("'$(RuntimeProfile)' == 'dotnet_hybrid'");
     }
 
     [Fact]

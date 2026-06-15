@@ -804,6 +804,109 @@ fn pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell() {
 
 #[cfg(windows)]
 #[test]
+fn build_rust_helpers_powershell_shim_delegates_and_forces_runtime_profile() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_FAKE_CARGO_RECORD",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("build-rust-helpers-shim-runtime-profile");
+    let fake_bin = test_root.join("bin");
+    let output_dir = test_root.join("out");
+    let wrapper_path = test_root.join("run-build-rust-helpers.ps1");
+    let cargo_record_path = test_root.join("cargo-record.txt");
+    let post_env_record_path = test_root.join("post-env.txt");
+    fs::create_dir_all(&test_root).expect("create test root");
+    fs::create_dir_all(&output_dir).expect("create output dir");
+    write_fake_package_portable_tool_scripts(&fake_bin);
+    write_build_rust_helpers_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/Build-RustHelpers.ps1"),
+        &output_dir,
+        &post_env_record_path,
+    );
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "outer-parent");
+    std::env::set_var("RUNTIME_PROFILE", "outer-parent");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run Build-RustHelpers wrapper");
+
+    assert!(
+        output.status.success(),
+        "Build-RustHelpers shim wrapper should succeed with fake cargo\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cargo_record = read_text(&cargo_record_path);
+    assert_contains(
+        &cargo_record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "Build-RustHelpers shim should force Easydict runtime profile while cargo runs",
+    );
+    assert_contains(
+        &cargo_record,
+        "RUNTIME_PROFILE=rust-only",
+        "Build-RustHelpers shim should force generic runtime profile while cargo runs",
+    );
+    assert_contains(
+        &cargo_record,
+        "ARGS=run --manifest-path",
+        "Build-RustHelpers shim should invoke cargo run through the Rust packager",
+    );
+    let output_dir_text = output_dir.display().to_string();
+    for expected in [
+        "-p",
+        "easydict_packager",
+        "build-rust-helpers",
+        "--workspace",
+        "--platform arm64",
+        "--configuration Debug",
+        "--output-dir",
+        output_dir_text.as_str(),
+    ] {
+        assert_contains(
+            &cargo_record,
+            expected,
+            "Build-RustHelpers shim should pass the expected build-rust-helpers arguments",
+        );
+    }
+    for forbidden in [
+        "retained-dotnet-workers",
+        "--features",
+        "--all-features",
+        "CompatHost",
+    ] {
+        assert_not_contains(
+            &cargo_record,
+            forbidden,
+            "Build-RustHelpers shim must not enable retained runtime features",
+        );
+    }
+
+    let post_env_record = read_text(&post_env_record_path);
+    assert_contains(
+        &post_env_record,
+        "POST_EASYDICT_RUNTIME_PROFILE=hybrid",
+        "Build-RustHelpers shim should restore the caller's Easydict runtime profile",
+    );
+    assert_contains(
+        &post_env_record,
+        "POST_RUNTIME_PROFILE=hybrid",
+        "Build-RustHelpers shim should restore the caller's generic runtime profile",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
 fn package_portable_powershell_shim_forces_and_restores_runtime_profile() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let environment = EnvironmentSnapshot::capture([
@@ -1064,6 +1167,87 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
             &record,
             &expected,
             "translate-long-doc shim should pass the expected Rust helper argument",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_tools() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_LONG_DOC_HELPER_RECORD",
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-app-dir-helper");
+    let fake_bin = test_root.join("bin");
+    let app_dir = test_root.join("app");
+    let helper_path = app_dir.join("easydict_long_doc.exe");
+    let record_path = test_root.join("helper-args.txt");
+    let forbidden_tool_record = test_root.join("forbidden-tools.txt");
+    let input_path = test_root.join("input.md");
+    let output_path = test_root.join("translated.md");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_forbidden_tool_scripts(&fake_bin);
+    write_stale_dotnet_payload_markers(&app_dir);
+    write_fake_long_doc_helper_exe(&helper_path);
+    fs::write(&input_path, "# hello\n").expect("write input");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &record_path);
+    std::env::set_var(
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        &forbidden_tool_record,
+    );
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-InputFile")
+        .arg(&input_path)
+        .args(["-TargetLanguage", "zh-Hans", "-SourceLanguage", "en"])
+        .arg("-OutputFile")
+        .arg(&output_path)
+        .args(["-ServiceId", "google", "-OutputMode", "bilingual"])
+        .arg("-AppDir")
+        .arg(&app_dir)
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        output.status.success(),
+        "translate-long-doc shim should invoke app-dir fake Rust helper successfully\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !forbidden_tool_record.exists(),
+        "app-dir LongDoc shim must not launch cargo/dotnet tools from PATH"
+    );
+    let record = read_text(&record_path);
+    for expected in [
+        "HELPER=".to_string(),
+        "easydict_long_doc.exe".to_string(),
+        "--input".to_string(),
+        input_path.display().to_string(),
+        "--target-language".to_string(),
+        "zh-Hans".to_string(),
+        "--output".to_string(),
+        output_path.display().to_string(),
+        "--service".to_string(),
+        "google".to_string(),
+        "--output-mode".to_string(),
+        "bilingual".to_string(),
+        "--app-dir".to_string(),
+        app_dir.display().to_string(),
+    ] {
+        assert_contains(
+            &record,
+            &expected,
+            "translate-long-doc shim should pass through app-dir helper arguments",
         );
     }
 
@@ -1610,6 +1794,263 @@ fn legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_
     let _ = fs::remove_dir_all(test_root);
 }
 
+#[cfg(windows)]
+#[test]
+fn extract_dotnet_runtime_powershell_shim_delegates_to_hybrid_rust_packager() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_FAKE_CARGO_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("extract-runtime-shim-hybrid");
+    let fake_bin = test_root.join("bin");
+    let runtime_output_dir = test_root.join("dotnet-runtime");
+    let record_path = test_root.join("cargo-record.txt");
+
+    write_fake_package_portable_tool_scripts(&fake_bin);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+    std::env::remove_var("EASYDICT_RUNTIME_PROFILE");
+    std::env::remove_var("RUNTIME_PROFILE");
+
+    let output = powershell_script_command(&root.join("dotnet/scripts/Extract-DotnetRuntime.ps1"))
+        .args(["-Rid", "win-arm64"])
+        .arg("-OutputDir")
+        .arg(&runtime_output_dir)
+        .args(["-Version", "8.0.99"])
+        .args(["-RuntimeProfile", "Hybrid"])
+        .output()
+        .expect("run Extract-DotnetRuntime shim");
+
+    assert!(
+        output.status.success(),
+        "Extract-DotnetRuntime shim should delegate to fake cargo for explicit Hybrid\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    let runtime_output_dir_text = runtime_output_dir.display().to_string();
+    for expected in [
+        "-p easydict_packager",
+        "--features hybrid-dotnet-runtime-packaging",
+        "extract-dotnet-runtime",
+        "--rid win-arm64",
+        "--output-dir",
+        runtime_output_dir_text.as_str(),
+        "--version 8.0.99",
+        "--runtime-profile Hybrid",
+    ] {
+        assert_contains(
+            &record,
+            expected,
+            "Extract-DotnetRuntime should delegate the hybrid runtime extraction to Rust cargo",
+        );
+    }
+    assert_not_contains(
+        &record,
+        "FORBIDDEN_DOTNET",
+        "Extract-DotnetRuntime shim must not invoke dotnet directly",
+    );
+
+    let script = read_text(&root.join("dotnet/scripts/Extract-DotnetRuntime.ps1"));
+    for forbidden in [
+        "Invoke-WebRequest",
+        "Expand-Archive",
+        "System.IO.Compression",
+    ] {
+        assert_not_contains(
+            &script,
+            forbidden,
+            "Extract-DotnetRuntime should not reintroduce PowerShell download/extract logic",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn msix_maintenance_powershell_shims_delegate_to_rust_cli() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("msix-maintenance-shims");
+    let fake_bin = test_root.join("bin");
+    let publish_dir = test_root.join("publish");
+    let msix_path = test_root.join("Easydict.msix");
+    let record_path = test_root.join("cargo-record.txt");
+
+    fs::create_dir_all(&publish_dir).expect("create fake publish dir");
+    fs::write(&msix_path, b"fake msix").expect("write fake MSIX path");
+    write_fake_package_portable_tool_scripts(&fake_bin);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let fix_output = powershell_script_command(&root.join("dotnet/scripts/Fix-MsixMinVersion.ps1"))
+        .arg("-MsixPath")
+        .arg(&msix_path)
+        .args(["-MinVersion", "10.0.19041.0"])
+        .output()
+        .expect("run Fix-MsixMinVersion shim");
+    assert!(
+        fix_output.status.success(),
+        "Fix-MsixMinVersion shim should delegate to fake cargo\n{}",
+        powershell_output_text(&fix_output)
+    );
+
+    let dedupe_output =
+        powershell_script_command(&root.join("dotnet/scripts/Dedupe-WorkerSharedFiles.ps1"))
+            .arg("-PublishDir")
+            .arg(&publish_dir)
+            .output()
+            .expect("run Dedupe-WorkerSharedFiles shim");
+    assert!(
+        dedupe_output.status.success(),
+        "Dedupe-WorkerSharedFiles shim should delegate to fake cargo\n{}",
+        powershell_output_text(&dedupe_output)
+    );
+
+    let record = read_text(&record_path);
+    assert_eq!(
+        record
+            .lines()
+            .filter(|line| line.starts_with("ARGS=run --manifest-path "))
+            .count(),
+        2,
+        "both MSIX maintenance shims should call cargo run:\n{record}"
+    );
+    for expected in [
+        "-p easydict_msix_validate",
+        "fix-minversion",
+        msix_path.display().to_string().as_str(),
+        "--min-version 10.0.19041.0",
+        "dedupe-worker-shared",
+        publish_dir.display().to_string().as_str(),
+    ] {
+        assert_contains(
+            &record,
+            expected,
+            "MSIX maintenance shims should pass through the Rust CLI subcommands and paths",
+        );
+    }
+    assert_not_contains(
+        &record,
+        "FORBIDDEN_DOTNET",
+        "MSIX maintenance shims should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn package_msix_powershell_shim_runs_rust_prepare_winapp_then_rust_fix() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("package-msix-shim-hybrid");
+    let fake_bin = test_root.join("bin");
+    let publish_dir = test_root.join("publish");
+    let manifest_path = test_root.join("Package.appxmanifest");
+    let output_msix_path = test_root.join("out").join("Easydict.msix");
+    let record_path = test_root.join("package-msix-record.txt");
+
+    fs::create_dir_all(&publish_dir).expect("create fake publish dir");
+    fs::write(&manifest_path, "<Package></Package>").expect("write fake manifest");
+    write_fake_package_msix_success_tool_scripts(&fake_bin);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&root.join("dotnet/scripts/Package-Msix.ps1"))
+        .args(["-Platform", "x64"])
+        .arg("-PublishDir")
+        .arg(&publish_dir)
+        .arg("-ManifestPath")
+        .arg(&manifest_path)
+        .arg("-OutputMsixPath")
+        .arg(&output_msix_path)
+        .args(["-RuntimeProfile", "Hybrid"])
+        .args(["-MsixVersion", "9.8.7.6"])
+        .arg("-VerifyTargetsizeIcons")
+        .output()
+        .expect("run Package-Msix shim");
+
+    assert!(
+        output.status.success(),
+        "Package-Msix shim should complete with fake cargo and winapp\n{}",
+        powershell_output_text(&output)
+    );
+    assert!(
+        output_msix_path.is_file(),
+        "fake winapp should create the package path for the MinVersion fixer"
+    );
+
+    let record = read_text(&record_path);
+    let prepare_index = record
+        .find("prepare-package-inputs")
+        .expect("Package-Msix should call Rust prepare-package-inputs");
+    let winapp_index = record
+        .find("WINAPP_ARGS=package")
+        .expect("Package-Msix should call winapp package after Rust prepare");
+    let fix_index = record
+        .find("fix-minversion")
+        .expect("Package-Msix should call Rust fix-minversion after winapp");
+    assert!(
+        prepare_index < winapp_index && winapp_index < fix_index,
+        "Package-Msix should run Rust prepare, winapp package, then Rust fix-minversion:\n{record}"
+    );
+
+    let publish_dir_text = publish_dir.display().to_string();
+    let manifest_path_text = manifest_path.display().to_string();
+    let output_msix_text = output_msix_path.display().to_string();
+    for expected in [
+        "-p easydict_msix_validate",
+        "prepare-package-inputs",
+        "--platform x64",
+        "--publish-dir",
+        publish_dir_text.as_str(),
+        "--manifest",
+        manifest_path_text.as_str(),
+        "--runtime-profile hybrid",
+        "--msix-version 9.8.7.6",
+        "--verify-targetsize-icons",
+        "WINAPP_ARGS=package",
+        "--output",
+        output_msix_text.as_str(),
+        "--skip-pri --verbose",
+        "fix-minversion",
+        "--min-version 10.0.19041.0",
+    ] {
+        assert_contains(
+            &record,
+            expected,
+            "Package-Msix shim should pass the expected Rust/winapp arguments",
+        );
+    }
+
+    let package_script = read_text(&root.join("dotnet/scripts/Package-Msix.ps1"));
+    assert_not_contains(
+        &package_script,
+        "[xml]",
+        "Package-Msix should not fall back to PowerShell XML manifest rewriting",
+    );
+    assert_not_contains(
+        &package_script,
+        "System.Xml",
+        "Package-Msix should keep manifest editing in the Rust MSIX helper",
+    );
+    assert_not_contains(
+        &record,
+        "FORBIDDEN_DOTNET",
+        "Package-Msix should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -1788,6 +2229,30 @@ exit /b 87\r\n",
 }
 
 #[cfg(windows)]
+fn write_fake_package_msix_success_tool_scripts(fake_bin: &Path) {
+    write_fake_package_portable_tool_scripts(fake_bin);
+    fs::write(
+        fake_bin.join("winapp.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo WINAPP_ARGS=%*\r\n\
+set \"out=\"\r\n\
+set \"nextIsOutput=\"\r\n\
+:parse\r\n\
+if \"%~1\"==\"\" goto done\r\n\
+if defined nextIsOutput set \"out=%~1\" & set \"nextIsOutput=\" & shift & goto parse\r\n\
+if /I \"%~1\"==\"--output\" set \"nextIsOutput=1\"\r\n\
+shift\r\n\
+goto parse\r\n\
+:done\r\n\
+if \"%out%\"==\"\" exit /b 0\r\n\
+for %%I in (\"%out%\") do if not exist \"%%~dpI\" mkdir \"%%~dpI\"\r\n\
+>\"%out%\" echo fake msix\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake winapp");
+}
+
+#[cfg(windows)]
 fn write_package_portable_wrapper(
     wrapper_path: &Path,
     package_script: &Path,
@@ -1810,6 +2275,31 @@ Add-Content -LiteralPath {} -Value \"POST_RUNTIME_PROFILE=$env:RUNTIME_PROFILE\"
         ),
     )
     .expect("write Package-Portable wrapper");
+}
+
+#[cfg(windows)]
+fn write_build_rust_helpers_wrapper(
+    wrapper_path: &Path,
+    build_script: &Path,
+    output_dir: &Path,
+    post_env_record_path: &Path,
+) {
+    fs::write(
+        wrapper_path,
+        format!(
+            "$ErrorActionPreference = 'Stop'\r\n\
+$env:EASYDICT_RUNTIME_PROFILE = 'hybrid'\r\n\
+$env:RUNTIME_PROFILE = 'hybrid'\r\n\
+& {} -Platform arm64 -Configuration Debug -OutputDir {}\r\n\
+Add-Content -LiteralPath {} -Value \"POST_EASYDICT_RUNTIME_PROFILE=$env:EASYDICT_RUNTIME_PROFILE\"\r\n\
+Add-Content -LiteralPath {} -Value \"POST_RUNTIME_PROFILE=$env:RUNTIME_PROFILE\"\r\n",
+            powershell_literal(build_script),
+            powershell_literal(output_dir),
+            powershell_literal(post_env_record_path),
+            powershell_literal(post_env_record_path),
+        ),
+    )
+    .expect("write Build-RustHelpers wrapper");
 }
 
 #[cfg(windows)]
@@ -1892,6 +2382,46 @@ setlocal\r\n\
 exit /b 0\r\n",
     )
     .expect("write fake LongDoc helper");
+}
+
+#[cfg(windows)]
+fn write_fake_long_doc_helper_exe(path: &Path) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("create fake LongDoc exe parent");
+    }
+    let source_path = path.with_extension("rs");
+    fs::write(
+        &source_path,
+        r#"
+use std::{env, fs, io::Write as _};
+
+fn main() {
+    let record_path = env::var("EASYDICT_LONG_DOC_HELPER_RECORD").expect("record path");
+    let helper = env::current_exe().expect("current exe");
+    let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(record_path)
+        .and_then(|mut file| {
+            writeln!(file, "HELPER={}", helper.display())?;
+            writeln!(file, "ARGS={}", args)
+        })
+        .expect("append fake LongDoc helper record");
+}
+"#,
+    )
+    .expect("write fake LongDoc exe source");
+    let status = std::process::Command::new("rustc")
+        .arg(&source_path)
+        .arg("-o")
+        .arg(path)
+        .status()
+        .expect("compile fake LongDoc helper executable");
+    assert!(
+        status.success(),
+        "fake LongDoc helper executable should compile"
+    );
 }
 
 #[cfg(windows)]

@@ -586,6 +586,30 @@ fn delete_file(path: impl AsRef<Path>) {
 }
 
 fn source_bridge_path_is_rust_native_bridge(path: &Path) -> bool {
+    source_bridge_path_is_rust_native_bridge_with_canonicalizer(path, |path| {
+        fs::canonicalize(path).ok()
+    })
+}
+
+fn source_bridge_path_is_rust_native_bridge_with_canonicalizer<F>(
+    path: &Path,
+    canonicalize: F,
+) -> bool
+where
+    F: Fn(&Path) -> Option<PathBuf>,
+{
+    if !bridge_source_path_shape_is_allowed(path) {
+        return false;
+    }
+
+    let Some(canonical_path) = canonicalize(path) else {
+        return false;
+    };
+
+    bridge_source_path_shape_is_allowed(&canonical_path)
+}
+
+fn bridge_source_path_shape_is_allowed(path: &Path) -> bool {
     let has_expected_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -624,4 +648,39 @@ fn path_matches(path: &Path, expected_path: &Path) -> bool {
 
 fn json_io_error(error: serde_json::Error) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_bridge_path_rejects_canonical_legacy_worker_or_dotnet_bridge_source() {
+        let requested = Path::new(r"C:\Tools\EasydictRs\easydict-native-bridge.exe");
+
+        for canonical in [
+            PathBuf::from(r"C:\Payload\dotnet\host\fxr\easydict-native-bridge.exe"),
+            PathBuf::from(r"C:\Payload\workers\ocr\easydict-native-bridge.exe"),
+            PathBuf::from(r"C:\Payload\Easydict.CompatHost.exe"),
+        ] {
+            assert!(
+                !source_bridge_path_is_rust_native_bridge_with_canonicalizer(requested, |_| {
+                    Some(canonical.clone())
+                }),
+                "canonical target should be rejected: {}",
+                canonical.display()
+            );
+        }
+    }
+
+    #[test]
+    fn source_bridge_path_allows_canonical_rust_native_bridge_source() {
+        let requested = Path::new(r"C:\Tools\EasydictRs\easydict-native-bridge.exe");
+        let canonical = PathBuf::from(r"C:\Tools\EasydictRs\easydict-native-bridge.exe");
+
+        assert!(source_bridge_path_is_rust_native_bridge_with_canonicalizer(
+            requested,
+            |_| Some(canonical.clone())
+        ));
+    }
 }

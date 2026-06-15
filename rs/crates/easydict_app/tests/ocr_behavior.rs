@@ -4,12 +4,12 @@ use easydict_app::{
     apply_ocr_outcome, begin_ocr_recognize, bgra_to_base64_bmp, bgra_to_base64_jpeg_data_url,
     build_custom_api_ocr_request, build_ollama_ocr_request, group_and_sort_ocr_lines,
     merge_ocr_lines, merge_ocr_words, merged_ocr_text, parse_ocr_http_response, run_ocr_recognize,
-    run_ocr_recognize_with_app_dir, windows_native_ocr_availability_with_recognizer, CapturePhase,
-    CapturePoint, CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message,
-    NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult,
-    OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
-    OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams,
-    OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
+    run_ocr_recognize_with_app_dir, run_ocr_recognize_with_current_app_dir,
+    windows_native_ocr_availability_with_recognizer, CapturePhase, CapturePoint, CaptureRect,
+    DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend, OcrAvailabilityDto,
+    OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig, OcrEngineKind, OcrHttpClient,
+    OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError, OcrLanguageDto, OcrLineDto,
+    OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
 };
 use serde_json::json;
 use std::{
@@ -18,6 +18,7 @@ use std::{
     io::{Read, Write},
     net::TcpListener,
     path::PathBuf,
+    sync::Mutex,
     thread,
     time::Duration,
 };
@@ -25,6 +26,8 @@ use win_fluent::prelude::{
     Application, PlatformCommand, ScreenCaptureRequest, ScreenCaptureResult, ScreenRect,
     ScreenWindow, Task, WindowCommand,
 };
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn begin_ocr_recognize_builds_native_request_from_capture() {
@@ -597,6 +600,121 @@ fn app_dir_runner_uses_custom_api_provider_without_legacy_ocr_worker_probe() {
     assert!(http_request.contains(r#""content":"Read via custom API.""#));
     assert!(!http_request.contains("Easydict.Workers.Ocr"));
     assert!(!http_request.contains("CompatHost"));
+}
+
+#[test]
+fn current_app_dir_runner_uses_custom_api_provider_despite_hybrid_runtime_profile() {
+    let _environment = ENVIRONMENT_LOCK.lock().expect("environment lock");
+    let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    let _generic_runtime_profile = EnvironmentVariableGuard::set("RUNTIME_PROFILE", "hybrid");
+    let (endpoint, server) = serve_one_http_response(
+        r#"{ "choices": [{ "message": { "content": " current app dir native text " } }] }"#,
+    );
+    let custom_endpoint = endpoint.replace("/api/generate", "/v1/chat/completions");
+    let path = write_temp_bgra("custom_api_current_app_dir", &[0, 0, 255, 255]);
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 14,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: path.to_string_lossy().into_owned(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("CustomApi".to_string()),
+            ocr_api_key: Some("sk-current-ocr".to_string()),
+            ocr_endpoint: Some(custom_endpoint),
+            ocr_model: Some("gpt-vision-current".to_string()),
+            ocr_system_prompt: Some("Read via current app dir.".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize_with_current_app_dir(request);
+    let http_request = server.join().expect("HTTP test server should finish");
+
+    fs::remove_file(&path).ok();
+    assert_eq!(
+        outcome.result.expect("OCR result").text,
+        "current app dir native text"
+    );
+    assert!(http_request.starts_with("POST /v1/chat/completions "));
+    assert!(http_request.contains("Authorization: Bearer sk-current-ocr"));
+    assert!(http_request.contains(r#""model":"gpt-vision-current""#));
+    assert!(http_request.contains(r#""content":"Read via current app dir.""#));
+    assert!(!http_request.contains("Easydict.Workers.Ocr"));
+    assert!(!http_request.contains("CompatHost"));
+}
+
+#[test]
+fn current_app_dir_runner_uses_ollama_provider_despite_hybrid_runtime_profile() {
+    let _environment = ENVIRONMENT_LOCK.lock().expect("environment lock");
+    let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    let _generic_runtime_profile = EnvironmentVariableGuard::set("RUNTIME_PROFILE", "hybrid");
+    let (endpoint, server) =
+        serve_one_http_response(r#"{ "response": " current app dir ollama native text " }"#);
+    let path = write_temp_bgra("ollama_current_app_dir", &[255, 255, 0, 255]);
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 15,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: path.to_string_lossy().into_owned(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("Ollama".to_string()),
+            ocr_endpoint: Some(endpoint),
+            ocr_model: Some("llava-current".to_string()),
+            ocr_system_prompt: Some("Read via current app dir Ollama.".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize_with_current_app_dir(request);
+    let http_request = server.join().expect("HTTP test server should finish");
+
+    fs::remove_file(&path).ok();
+    assert_eq!(
+        outcome.result.expect("OCR result").text,
+        "current app dir ollama native text"
+    );
+    assert!(http_request.starts_with("POST /api/generate "));
+    assert!(http_request.contains(r#""model":"llava-current""#));
+    assert!(http_request.contains(r#""prompt":"Read via current app dir Ollama.""#));
+    assert!(!http_request.contains("Easydict.Workers.Ocr"));
+    assert!(!http_request.contains("CompatHost"));
+}
+
+#[test]
+fn current_app_dir_runner_uses_native_windows_ocr_without_legacy_runtime_profile_probe() {
+    let _environment = ENVIRONMENT_LOCK.lock().expect("environment lock");
+    let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    let _generic_runtime_profile = EnvironmentVariableGuard::set("RUNTIME_PROFILE", "hybrid");
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 16,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: r"C:\Missing\current-app-dir-pixels.bgra".to_string(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("WindowsNative".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize_with_current_app_dir(request);
+    let error = outcome.result.unwrap_err().message;
+
+    assert!(error.contains("Could not read OCR pixel data"));
+    assert!(!error.contains("OCR worker"));
+    assert!(!error.contains("CompatHost"));
+    assert!(!error.contains(".NET"));
 }
 
 #[test]
@@ -1329,6 +1447,29 @@ fn write_temp_legacy_ocr_app_dir(name: &str) -> PathBuf {
     )
     .expect("legacy OCR worker marker should be written");
     root
+}
+
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let previous = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, previous }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(value) = &self.previous {
+            std::env::set_var(self.name, value);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
 }
 
 fn serve_one_http_response(body: &'static str) -> (String, thread::JoinHandle<String>) {

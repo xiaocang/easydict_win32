@@ -21,6 +21,149 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Covered Extract-DotnetRuntime hybrid shim delegation
+
+- Rechecked the retained runtime extraction shim before changing tests. No new dependency was needed: this is an execution-level contract around the existing Rust `easydict_packager extract-dotnet-runtime` subcommand.
+- Added `extract_dotnet_runtime_powershell_shim_delegates_to_hybrid_rust_packager`, which runs `dotnet/scripts/Extract-DotnetRuntime.ps1 -RuntimeProfile Hybrid` through PowerShell with fake cargo. The test proves the shim passes `--features hybrid-dotnet-runtime-packaging`, `extract-dotnet-runtime`, and `--runtime-profile Hybrid` to the Rust packager.
+- The test also guards against direct dotnet invocation and against reintroducing PowerShell download/archive extraction logic in the shim.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior extract_dotnet_runtime_powershell_shim_delegates_to_hybrid_rust_packager -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager --check`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+
+## 2026-06-12: Covered Package-Msix hybrid shim sequence
+
+- Rechecked the MSIX packaging shim before changing tests. No new dependency was needed: `easydict_msix_validate` already owns package input preparation and MinVersion repair, while WinApp remains the existing external MSIX packager.
+- Added `package_msix_powershell_shim_runs_rust_prepare_winapp_then_rust_fix`, which runs `dotnet/scripts/Package-Msix.ps1 -RuntimeProfile Hybrid` through PowerShell with fake cargo and fake winapp. The test proves the success path is Rust `prepare-package-inputs --runtime-profile hybrid`, then `winapp package`, then Rust `fix-minversion`.
+- The same contract asserts `Package-Msix.ps1` does not fall back to PowerShell XML manifest rewriting and does not invoke dotnet directly.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior package_msix_powershell_shim_runs_rust_prepare_winapp_then_rust_fix -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager --check`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+
+## 2026-06-12: Treated direct WinUI old runtime-profile aliases as Rust-only
+
+- Rechecked the WinUI MSBuild runtime-profile boundary before changing code. No new dependency was needed: this is an MSBuild property contract.
+- `Easydict.WinUI.csproj` now treats only `RuntimeProfile=Hybrid` / `hybrid` as the retained `.NET` worker opt-in. Empty, Rust-only aliases, old `dotnet` / `dotnet-hybrid` spellings, and unknown values all resolve to Rust-only behavior with `BuildWorkerOutputs=false` and `EnableInProcLongDocFallback=false`.
+- Updated `WorkerPackagingTests` contract text so old dotnet aliases cannot be reintroduced as hybrid opt-ins.
+
+Validation:
+
+- `cd dotnet; dotnet msbuild src/Easydict.WinUI/Easydict.WinUI.csproj -nologo -p:RuntimeProfile=dotnet -p:Configuration=Debug -getProperty:IsHybridRuntimeProfile -getProperty:IsRustOnlyRuntimeProfile -getProperty:BuildWorkerOutputs -getProperty:EnableInProcLongDocFallback`
+- `cd dotnet; dotnet msbuild src/Easydict.WinUI/Easydict.WinUI.csproj -nologo -p:RuntimeProfile=dotnet-hybrid -p:Configuration=Debug -getProperty:IsHybridRuntimeProfile -getProperty:IsRustOnlyRuntimeProfile -getProperty:BuildWorkerOutputs -getProperty:EnableInProcLongDocFallback`
+- `cd dotnet; dotnet msbuild src/Easydict.WinUI/Easydict.WinUI.csproj -nologo -p:RuntimeProfile=banana -p:Configuration=Debug -getProperty:IsHybridRuntimeProfile -getProperty:IsRustOnlyRuntimeProfile -getProperty:BuildWorkerOutputs -getProperty:EnableInProcLongDocFallback`
+- `cd dotnet; dotnet msbuild src/Easydict.WinUI/Easydict.WinUI.csproj -nologo -p:RuntimeProfile=rust-only -p:Configuration=Debug -getProperty:IsHybridRuntimeProfile -getProperty:IsRustOnlyRuntimeProfile -getProperty:BuildWorkerOutputs -getProperty:EnableInProcLongDocFallback`
+- `cd dotnet; dotnet msbuild src/Easydict.WinUI/Easydict.WinUI.csproj -nologo -p:RuntimeProfile=Hybrid -p:Configuration=Debug -getProperty:IsHybridRuntimeProfile -getProperty:IsRustOnlyRuntimeProfile -getProperty:BuildWorkerOutputs -getProperty:EnableInProcLongDocFallback`
+
+Note: a focused `dotnet test tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~RustOnlyWinUIBuild_DisablesRetainedWorkersAndInProcLongDocFallback --no-restore` was retried after a short wait, but the test assembly currently fails to compile on unrelated existing LongDoc/layout test surfaces (`DocLayoutYoloService`, `LayoutDetectionStrategy`, `VisionLayoutDetectionService`, `TableStructureRecognitionService`, and `DocumentOutputMode` ambiguity) before this static contract test can run.
+
+## 2026-06-12: Covered MSIX maintenance PowerShell shim delegation
+
+- Rechecked the remaining MSIX maintenance shims before changing tests. No new dependency was needed: `easydict_msix_validate` already owns MinVersion repair and worker shared-file dedupe.
+- Added `msix_maintenance_powershell_shims_delegate_to_rust_cli`, which runs `dotnet/scripts/Fix-MsixMinVersion.ps1` and `dotnet/scripts/Dedupe-WorkerSharedFiles.ps1` through PowerShell with fake cargo. The test proves both shims delegate to `cargo run -p easydict_msix_validate -- fix-minversion` / `dedupe-worker-shared` and do not invoke dotnet directly.
+- This strengthens the release/package chain where old PowerShell entry points remain for compatibility but the implementation must stay Rust-owned.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior msix_maintenance_powershell_shims_delegate_to_rust_cli -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager --check`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+
+## 2026-06-12: Finished OCR current-app-dir no-worker matrix
+
+- Extended the production `run_ocr_recognize_with_current_app_dir(...)` coverage beyond Custom API. No new dependency was needed; this reuses the existing Rust OCR HTTP provider and WindowsNative local backend boundary.
+- Added current-app-dir regressions for Ollama HTTP OCR and WindowsNative missing-pixel failure while both runtime profile environment variables are `hybrid`. The runner still stays native and does not surface OCR worker, CompatHost, or `.NET` wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test ocr_behavior current_app_dir_runner_ -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
+## 2026-06-12: Hardened Build-RustHelpers PowerShell shim runtime profile
+
+- Rechecked the Rust helper packaging shim before changing code. No new dependency was needed: this is a PowerShell environment contract around the existing Rust `easydict_packager build-rust-helpers` subcommand.
+- `dotnet/scripts/Build-RustHelpers.ps1` now forces both `EASYDICT_RUNTIME_PROFILE` and `RUNTIME_PROFILE` to `rust-only` while invoking cargo, then restores the caller's previous environment. This keeps helper builds from inheriting a parent hybrid profile.
+- Added `build_rust_helpers_powershell_shim_delegates_and_forces_runtime_profile`, using fake cargo through a real PowerShell wrapper to prove the shim delegates to `cargo run -p easydict_packager -- build-rust-helpers`, does not enable retained-worker features, sends rust-only profile env to cargo, and restores the caller's hybrid env afterward.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior build_rust_helpers_powershell_shim_delegates_and_forces_runtime_profile -- --exact --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager --check`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+
+## 2026-06-12: Covered direct MSIX validator CLI rust-only default
+
+- Rechecked the MSIX validation CLI surface before changing code. No new dependency was needed: the Rust validator already owns ZIP/package payload scanning and runtime-profile parsing.
+- Added `validate_msix_cli_defaults_to_rust_only_payload_policy`, covering the plain `easydict_msix_validate <msix>` path with no `--runtime-profile`. A package containing retained `workers/` and `dotnet/` payloads now has direct CLI regression coverage proving the default path rejects it under Rust-only policy, while the same fixture only passes with explicit `--runtime-profile hybrid`.
+- This closes the gap between library-level payload layout tests, bundle CLI default coverage, and `prepare-package-inputs` CLI default coverage.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_msix_validate validate_msix_cli_defaults_to_rust_only_payload_policy -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_msix_validate --check`
+
+## 2026-06-12: Pinned OCR current-app-dir runner to Rust-native Custom API
+
+- Rechecked the OCR migration surface before changing code. No new dependency was needed: the existing Rust-native OCR provider stack already owns Windows OCR, Ollama, and Custom API HTTP routes, and the old OCR worker is retired.
+- Added `current_app_dir_runner_uses_custom_api_provider_despite_hybrid_runtime_profile`, covering the production helper used by the app-side OCR task. Even if the parent process sets both `EASYDICT_RUNTIME_PROFILE=hybrid` and `RUNTIME_PROFILE=hybrid`, the current-app-dir runner still sends a native Custom API HTTP request and does not expose legacy OCR worker or CompatHost markers.
+- This complements the existing app-dir OCR regressions that place stale `workers/ocr` and `Easydict.CompatHost.exe` markers beside the runner.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test ocr_behavior current_app_dir_runner_uses_custom_api_provider_despite_hybrid_runtime_profile -- --nocapture`
+
+## 2026-06-12: Pinned LongDoc current-app-dir runner to Rust-only defaults
+
+- Rechecked the LongDoc default runner before changing code. No new dependency was needed: this is a route-policy contract over the existing Rust-native LongDoc runner.
+- Added `current_app_dir_runner_ignores_hybrid_runtime_profile_before_worker_probe`, covering the exact helper used by the LongDoc CLI default path. Even if parent process environment sets both `EASYDICT_RUNTIME_PROFILE=hybrid` and `RUNTIME_PROFILE=hybrid`, the default current-app-dir runner still uses Rust-only policy and returns a local Rust-native-required error for non-native Docx input before any retained LongDoc worker probe.
+- Re-ran adjacent app-dir/native-route regressions and the same new test with `retained-dotnet-workers` enabled to keep the explicit coexistence feature from weakening the default runner.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_behavior current_app_dir_runner_ignores_hybrid_runtime_profile_before_worker_probe -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior app_dir_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_enable_hybrid -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_route_helper_ignores_hybrid_environment_and_keeps_retained_worker_disabled -- --nocapture`
+- `cd rs; cargo test -p easydict_app --features retained-dotnet-workers --test long_document_behavior current_app_dir_runner_ignores_hybrid_runtime_profile_before_worker_probe -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+
+## 2026-06-12: Hardened rs portable package source boundaries and LongDoc app-dir shim
+
+- Rechecked portable packaging and LongDoc script reuse before changing code. No new dependency was needed: the existing Rust packager, PowerShell shim, and release-contract test helpers cover the boundary.
+- `easydict_packager` now rejects unsupported directory entries in `validate-rs-portable` via the symlink / Windows reparse-point policy, so a staged directory package cannot hide retained runtime payloads or package-external files behind an allowed first-release entry name.
+- `pack-rs-portable` and `build-rust-helpers` now canonicalize preview/helper executable sources before copying and require those sources to resolve inside the Rust build output directory. This blocks renamed or linked stale `.NET` worker/runtime files from being staged as `Easydict.Rust.exe` or Rust helper executables.
+- Added a release-contract regression for `scripts/translate-long-doc.ps1 -AppDir <portable app dir>` without `-RustHelperPath` or `-UseCargo`: it resolves `$AppDir\easydict_long_doc.exe`, forwards `--app-dir`, and does not invoke fake cargo/dotnet tools even when stale `.NET` payload markers exist beside the helper.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager validate_rs_portable -- --nocapture`
+- `cd rs; cargo test -p easydict_packager rust_portable -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_tools -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable -- --nocapture`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+- `cd rs; cargo check -p easydict_packager --all-targets --features hybrid-dotnet-runtime-packaging`
+
+## 2026-06-12: Hardened browser bridge source canonical target validation
+
+- Rechecked the browser bridge install boundary before changing it. No new dependency was needed: the registrar already owns path validation, staging, manifest generation, and registry writes with standard filesystem APIs.
+- `source_bridge_path_is_rust_native_bridge(...)` now validates both the requested source path and its canonical target. A file named `easydict-native-bridge.exe` is still rejected if it resolves into legacy `workers/` or `dotnet/` payload roots, preventing renamed or aliased retained payloads from being staged as the rs native messaging host.
+- A parallel settings audit found no additional real historical retained runtime hint settings beyond `UseLongDocWorker`, `UseLocalAiWorker`, and `UseOcrWorker`, which are already removed by Rust settings migration/storage. No synthetic `WorkerPath` / `CompatHostPath` / `DotnetRoot` / `RuntimeProfile` cleanup keys were added.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app browser_registrar::tests::source_bridge_path --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior install_rejects_renamed_bridge_sources_from_legacy_worker_or_dotnet_payload_roots -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/browser_registrar.rs`
+
 ## 2026-06-12: Hardened Foundry CLI override canonical target validation
 
 - Rechecked the external-process boundary before changing it. No new dependency was needed: the only default process boundary remains the Rust-owned `lib/easydict-foundry-local` wrapper around the native Foundry Local CLI.

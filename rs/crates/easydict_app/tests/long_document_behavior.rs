@@ -1,3 +1,4 @@
+use easydict_app::long_document::run_long_document_request_with_current_app_dir;
 #[cfg(feature = "retained-dotnet-workers")]
 use easydict_app::long_document::run_long_document_request_with_packaged_app_dir_and_worker_policy;
 use easydict_app::protocol::{
@@ -2639,6 +2640,59 @@ fn app_dir_longdoc_runner_defaults_to_rust_only_even_when_worker_policy_can_enab
 
         assert!(hybrid_error.message.contains("Long Document worker"));
         assert!(hybrid_error.message.contains("I/O error"));
+    }
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn current_app_dir_runner_ignores_hybrid_runtime_profile_before_worker_probe() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _easydict_runtime_profile =
+        EnvironmentVariableGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+    let _generic_runtime_profile = EnvironmentVariableGuard::set("RUNTIME_PROFILE", "hybrid");
+    let temp_dir = unique_temp_dir("longdoc-current-app-dir-hybrid-env-rust-only");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A current-app-dir request that still needs the retained worker."
+                    .to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "google".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        55,
+    )
+    .expect("longdoc request should be built");
+    request.params.input_mode = "Docx".to_string();
+
+    assert!(!long_document_request_can_route_natively(&request));
+
+    let outcome = run_long_document_request_with_current_app_dir(request);
+    let error = outcome
+        .result
+        .expect_err("default current-app-dir runner should keep retained LongDoc disabled");
+
+    assert!(error.message.contains("requires a Rust-native route"));
+    for forbidden in [
+        ".NET Long Document workers",
+        "Long Document worker executable",
+        "CompatHost",
+        "DOTNET_ROOT",
+    ] {
+        assert!(
+            !error.message.contains(forbidden),
+            "current-app-dir runner should fail before retained worker probing: {}",
+            error.message
+        );
     }
 
     fs::remove_dir_all(&temp_dir).ok();

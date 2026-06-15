@@ -514,6 +514,43 @@ mod tests {
     use zip::ZipWriter;
 
     #[test]
+    fn validate_msix_cli_defaults_to_rust_only_payload_policy() {
+        let temp = Builder::new()
+            .prefix("easydict-msix-cli-rust-only-package-")
+            .tempdir()
+            .expect("create temp dir");
+        let package_path = temp.path().join("Easydict-x64.msix");
+        write_package(
+            &package_path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            &retained_runtime_entries(),
+        );
+
+        let package = package_path.to_string_lossy().into_owned();
+
+        assert_eq!(
+            run(vec![package.clone(), "--allow-unsigned".to_string()]),
+            1,
+            "default validate-msix CLI must enforce rust-only payload policy"
+        );
+        assert_eq!(
+            run(vec![
+                package,
+                "--allow-unsigned".to_string(),
+                "--runtime-profile".to_string(),
+                "hybrid".to_string(),
+            ]),
+            0,
+            "the same retained-runtime package should only pass with an explicit hybrid profile"
+        );
+    }
+
+    #[test]
     fn verify_bundle_minversion_cli_defaults_to_rust_only_payload_policy() {
         let temp = Builder::new()
             .prefix("easydict-msix-cli-rust-only-bundle-")
@@ -641,6 +678,22 @@ mod tests {
             add_file(&mut writer, name, contents, options);
         }
         writer.finish().expect("finish test package").into_inner()
+    }
+
+    fn write_package(path: &Path, manifest: String, entries: &[(&str, &[u8])]) {
+        let file = File::create(path).expect("create test package");
+        let mut writer = ZipWriter::new(file);
+        let options: FileOptions<'_, ()> = FileOptions::default();
+        add_file(
+            &mut writer,
+            "AppxManifest.xml",
+            manifest.as_bytes(),
+            options,
+        );
+        for (name, contents) in entries {
+            add_file(&mut writer, name, contents, options);
+        }
+        writer.finish().expect("finish test package");
     }
 
     fn write_bundle(path: &Path, entries: &[(&str, &[u8])]) {

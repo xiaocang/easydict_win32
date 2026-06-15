@@ -168,6 +168,7 @@ pub enum BuildRustHelpersError {
     RustupFailed { exit_code: Option<i32> },
     CargoFailed { exit_code: Option<i32> },
     MissingHelper(PathBuf),
+    UnsafeBuildArtifactSource { source: PathBuf, build_dir: PathBuf },
     Io { path: PathBuf, message: String },
 }
 
@@ -196,6 +197,10 @@ pub enum PackRustPortableError {
         exit_code: Option<i32>,
     },
     MissingExecutable(PathBuf),
+    UnsafeBuildArtifactSource {
+        source: PathBuf,
+        build_dir: PathBuf,
+    },
     UnsafeOutputPath {
         output_root: PathBuf,
         package_dir: PathBuf,
@@ -213,6 +218,7 @@ pub enum ValidateRustPortableError {
     PackageMissing(PathBuf),
     UnsupportedPackagePath(PathBuf),
     InvalidArchiveEntry(String),
+    UnsupportedDirectoryEntry(PathBuf),
     ForbiddenEntries(Vec<String>),
     MissingRequiredEntries(Vec<String>),
     UnexpectedEntries(Vec<String>),
@@ -336,6 +342,12 @@ impl fmt::Display for BuildRustHelpersError {
                     path.display()
                 )
             }
+            Self::UnsafeBuildArtifactSource { source, build_dir } => write!(
+                formatter,
+                "Rust build artifact {} resolves outside build output directory {}",
+                source.display(),
+                build_dir.display()
+            ),
             Self::Io { path, message } => write!(formatter, "{}: {message}", path.display()),
         }
     }
@@ -433,6 +445,12 @@ impl fmt::Display for PackRustPortableError {
                     path.display()
                 )
             }
+            Self::UnsafeBuildArtifactSource { source, build_dir } => write!(
+                formatter,
+                "Rust build artifact {} resolves outside build output directory {}",
+                source.display(),
+                build_dir.display()
+            ),
             Self::UnsafeOutputPath {
                 output_root,
                 package_dir,
@@ -468,6 +486,11 @@ impl fmt::Display for ValidateRustPortableError {
             Self::InvalidArchiveEntry(name) => write!(
                 formatter,
                 "Rust portable ZIP contains unsafe entry path: {name}"
+            ),
+            Self::UnsupportedDirectoryEntry(path) => write!(
+                formatter,
+                "Rust portable package contains an unsupported directory entry: {}",
+                path.display()
             ),
             Self::ForbiddenEntries(entries) => write!(
                 formatter,
@@ -869,6 +892,7 @@ pub fn copy_built_rust_helpers(
         .join(cargo_target)
         .join(profile_dir);
     let registrar_source = built_dir.join("easydict_browser_registrar.exe");
+    ensure_build_artifact_source_within_build_dir(&registrar_source, &built_dir)?;
     let legacy_name = "BrowserHostRegistrar.exe";
     fs::copy(&registrar_source, output_dir.join(legacy_name)).map_err(|error| {
         BuildRustHelpersError::Io {
@@ -906,6 +930,7 @@ fn copy_built_rust_helper_executables(
         if !source.is_file() {
             return Err(BuildRustHelpersError::MissingHelper(source));
         }
+        ensure_build_artifact_source_within_build_dir(&source, &built_dir)?;
         fs::copy(&source, output_dir.join(exe_name)).map_err(|error| {
             BuildRustHelpersError::Io {
                 path: output_dir.join(exe_name),
@@ -916,6 +941,43 @@ fn copy_built_rust_helper_executables(
     }
 
     Ok(copied_files)
+}
+
+fn ensure_build_artifact_source_within_build_dir(
+    source: &Path,
+    built_dir: &Path,
+) -> Result<(), BuildRustHelpersError> {
+    let is_within =
+        build_artifact_source_is_within_build_dir_with_canonicalizer(source, built_dir, |path| {
+            fs::canonicalize(path)
+        })
+        .map_err(|(path, error)| BuildRustHelpersError::Io {
+            path,
+            message: error.to_string(),
+        })?;
+
+    if is_within {
+        Ok(())
+    } else {
+        Err(BuildRustHelpersError::UnsafeBuildArtifactSource {
+            source: source.to_path_buf(),
+            build_dir: built_dir.to_path_buf(),
+        })
+    }
+}
+
+fn build_artifact_source_is_within_build_dir_with_canonicalizer<F, E>(
+    source: &Path,
+    built_dir: &Path,
+    mut canonicalize: F,
+) -> Result<bool, (PathBuf, E)>
+where
+    F: FnMut(&Path) -> Result<PathBuf, E>,
+{
+    let canonical_source = canonicalize(source).map_err(|error| (source.to_path_buf(), error))?;
+    let canonical_built_dir =
+        canonicalize(built_dir).map_err(|error| (built_dir.to_path_buf(), error))?;
+    Ok(canonical_source.starts_with(canonical_built_dir))
 }
 
 pub fn extract_dotnet_runtime_archive(
@@ -1238,6 +1300,8 @@ fn stage_rust_portable_payload(
     if !preview_exe.is_file() {
         return Err(PackRustPortableError::MissingExecutable(preview_exe));
     }
+    ensure_build_artifact_source_within_build_dir(&preview_exe, &built_dir)
+        .map_err(pack_error_from_build_error)?;
 
     fs::copy(&preview_exe, package_dir.join("Easydict.Rust.exe")).map_err(|error| {
         PackRustPortableError::Io {
@@ -1305,6 +1369,9 @@ fn pack_error_from_build_error(error: BuildRustHelpersError) -> PackRustPortable
             command: "cargo build Rust helper executables",
             exit_code,
         },
+        BuildRustHelpersError::UnsafeBuildArtifactSource { source, build_dir } => {
+            PackRustPortableError::UnsafeBuildArtifactSource { source, build_dir }
+        }
         BuildRustHelpersError::MissingHelper(path) => {
             PackRustPortableError::MissingExecutable(path)
         }
@@ -1625,13 +1692,58 @@ fn collect_rust_portable_directory_entries(
 
     for child in children {
         let child_path = child.path();
+        let file_type = child
+            .file_type()
+            .map_err(|error| ValidateRustPortableError::Io {
+                path: child_path.clone(),
+                message: error.to_string(),
+            })?;
+        if rust_portable_directory_entry_is_unsupported_by_flags(
+            file_type.is_symlink(),
+            rust_portable_directory_entry_is_reparse_point(&child_path)?,
+        ) {
+            return Err(ValidateRustPortableError::UnsupportedDirectoryEntry(
+                child_path,
+            ));
+        }
+
         entries.push(rust_portable_entry_name(root, &child_path)?);
-        if child_path.is_dir() {
+        if file_type.is_dir() {
             collect_rust_portable_directory_entries(root, &child_path, entries)?;
         }
     }
 
     Ok(())
+}
+
+fn rust_portable_directory_entry_is_unsupported_by_flags(
+    is_symlink: bool,
+    is_reparse_point: bool,
+) -> bool {
+    is_symlink || is_reparse_point
+}
+
+fn rust_portable_directory_entry_is_reparse_point(
+    path: &Path,
+) -> Result<bool, ValidateRustPortableError> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        let metadata =
+            fs::symlink_metadata(path).map_err(|error| ValidateRustPortableError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        Ok(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(false)
+    }
 }
 
 fn rust_portable_zip_entries(
@@ -2031,6 +2143,22 @@ mod tests {
             RUST_PORTABLE_REQUIRED_ENTRIES.len()
         );
         let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn validate_rs_portable_directory_entry_policy_rejects_links_and_reparse_points() {
+        assert!(!rust_portable_directory_entry_is_unsupported_by_flags(
+            false, false
+        ));
+        assert!(rust_portable_directory_entry_is_unsupported_by_flags(
+            true, false
+        ));
+        assert!(rust_portable_directory_entry_is_unsupported_by_flags(
+            false, true
+        ));
+        assert!(rust_portable_directory_entry_is_unsupported_by_flags(
+            true, true
+        ));
     }
 
     #[test]
@@ -2645,6 +2773,29 @@ mod tests {
         );
         let _ = fs::remove_dir_all(workspace);
         let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn build_artifact_source_guard_rejects_canonical_target_outside_build_dir() {
+        let build_dir = PathBuf::from(r"C:\workspace\rs\target\x86_64-pc-windows-msvc\debug");
+        let requested = build_dir.join("easydict_long_doc.exe");
+        let canonical_target =
+            PathBuf::from(r"C:\workspace\dotnet\publish\workers\Easydict.Workers.LongDoc.exe");
+
+        let result = build_artifact_source_is_within_build_dir_with_canonicalizer(
+            &requested,
+            &build_dir,
+            |path| {
+                if path == requested {
+                    Ok::<PathBuf, std::io::Error>(canonical_target.clone())
+                } else {
+                    Ok::<PathBuf, std::io::Error>(path.to_path_buf())
+                }
+            },
+        )
+        .expect("canonicalize simulated paths");
+
+        assert!(!result);
     }
 
     #[test]

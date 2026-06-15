@@ -37,7 +37,31 @@ $arguments = @(
     $OutputDir
 )
 
-& cargo @arguments
-if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+$previousRuntimeProfile = $env:EASYDICT_RUNTIME_PROFILE
+$previousGenericRuntimeProfile = $env:RUNTIME_PROFILE
+$env:EASYDICT_RUNTIME_PROFILE = "rust-only"
+$env:RUNTIME_PROFILE = "rust-only"
+$exitCode = 0
+try {
+    & cargo @arguments
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    if ($null -eq $previousRuntimeProfile) {
+        Remove-Item Env:EASYDICT_RUNTIME_PROFILE -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:EASYDICT_RUNTIME_PROFILE = $previousRuntimeProfile
+    }
+
+    if ($null -eq $previousGenericRuntimeProfile) {
+        Remove-Item Env:RUNTIME_PROFILE -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:RUNTIME_PROFILE = $previousGenericRuntimeProfile
+    }
+}
+
+if ($exitCode -ne 0) {
+    exit $exitCode
 }

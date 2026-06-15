@@ -110,25 +110,27 @@ impl WorkerCommand {
 enum RetainedWorkerKind {
     LongDoc,
     LocalAi,
+    Other,
 }
 
 impl RetainedWorkerKind {
-    fn from_worker_subdir(worker_subdir: &str) -> Option<Self> {
+    fn from_worker_subdir(worker_subdir: &str) -> Self {
         if worker_subdir.eq_ignore_ascii_case("longdoc") {
-            return Some(Self::LongDoc);
+            return Self::LongDoc;
         }
 
         if worker_subdir.eq_ignore_ascii_case("localai") {
-            return Some(Self::LocalAi);
+            return Self::LocalAi;
         }
 
-        None
+        Self::Other
     }
 
     fn is_enabled_by(self, policy: RetainedWorkerPolicy) -> bool {
         match self {
             Self::LongDoc => policy.longdoc_worker_enabled,
             Self::LocalAi => policy.local_ai_worker_enabled,
+            Self::Other => policy.longdoc_worker_enabled && policy.local_ai_worker_enabled,
         }
     }
 
@@ -136,6 +138,7 @@ impl RetainedWorkerKind {
         let base = match self {
             Self::LongDoc => LONGDOC_WORKER_DISABLED_MESSAGE,
             Self::LocalAi => LOCAL_AI_WORKER_DISABLED_MESSAGE,
+            Self::Other => "Retained .NET worker requires a Rust-native route for this request.",
         };
 
         format!("{base} Set EASYDICT_RUNTIME_PROFILE=hybrid to enable retained .NET workers.")
@@ -705,9 +708,7 @@ pub fn packaged_worker_command_with_openvino_cache_base(
             )
             .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1");
 
-    if let Some(kind) = RetainedWorkerKind::from_worker_subdir(worker_subdir) {
-        command = command.retained_worker(kind);
-    }
+    command = command.retained_worker(RetainedWorkerKind::from_worker_subdir(worker_subdir));
 
     command = command.deferred_dotnet_root(app_dir.join("dotnet"));
 

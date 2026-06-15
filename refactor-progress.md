@@ -21,6 +21,45 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-11: Hardened LongDoc retry sidecars and retained worker gates
+
+- No new third-party dependency was needed; this pass only tightens existing Rust-native LongDoc JSON sidecars and runtime policy boundaries.
+- Native LongDoc result sidecars now write route metadata (`inputPath`, original `outputPath`, `pdfExportMode`, `layoutDetection`, `pageRange`) with a `routeMetadataVersion`, while retry remains compatible with older sidecars that do not have those fields.
+- Retry Failed restores new sidecar route metadata before output preflight/export, so Bilingual retry reuses the original output base path instead of deriving `*-bilingual-bilingual.*`, and PDF retry restores the original output path, page range, and PDF export mode instead of trusting stale current CLI/request parameters.
+- The retained worker feature-on boundary now treats any packaged worker subdir, including unknown stale `workers/*` directories, as a retained worker route that must pass the explicit `hybrid` runtime profile gate before I/O or process spawning.
+- Runtime profile tests now lock unknown/dotnet-named values as Rust-only even when the other profile environment variable says `hybrid`.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --features retained-dotnet-workers --test compat_client unknown_packaged_worker_subdir_requires_hybrid_runtime_profile_before_io_probe -- --nocapture`
+- `cd rs; cargo test -p easydict_app --features retained-dotnet-workers runtime_policy::tests::unknown_runtime_profile_overrides_other_hybrid_profile -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior retry_failed_restores -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior result_json -- --nocapture`
+
+## 2026-06-11: Exercised the LongDoc PowerShell shim against a fake Rust helper
+
+- No new dependency was needed; the packager release-contract test now runs `scripts/translate-long-doc.ps1` through PowerShell with a fake `easydict_long_doc` helper and fake forbidden `cargo`/`dotnet` tools on `PATH`.
+- The execution contract verifies `-ResultJsonPath`, `-RetryFailed`, `-OutputFile`, `-AppDir`, `-PdfExportMode`, and `-PageRange` are passed to the Rust helper as `--result-json`, `--retry-failed`, `--output`, `--app-dir`, `--pdf-export-mode`, and `--page-range`.
+- The fake app directory deliberately contains stale `dotnet/`, `workers/longdoc`, `workers/localai`, and `Easydict.CompatHost.exe` markers; the shim still invokes only the selected Rust helper and does not touch the forbidden `cargo`/`dotnet` shims.
+- Added negative executions proving `-RetryFailed` without `-ResultJsonPath` and `-UseDotnetLegacy` fail before the helper is started.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_ -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior -- --nocapture`
+
+## 2026-06-11: Exercised the rs portable PowerShell shim runtime profile gate
+
+- No new dependency was needed; the release-contract test now runs a temporary PowerShell wrapper around `rs/scripts/Package-Portable.ps1` with a fake `cargo.cmd`.
+- The wrapper sets `EASYDICT_RUNTIME_PROFILE=hybrid` and `RUNTIME_PROFILE=hybrid` before invoking the shim, then records the environment after the shim returns.
+- The fake cargo record proves `Package-Portable.ps1` invokes `cargo run --manifest-path <rs>/Cargo.toml -p easydict_packager -- pack-rs-portable ...` with both runtime profile env vars forced to `rust-only`, without `--features retained-dotnet-workers`, `--all-features`, or compat-host markers.
+- The post-call record proves the shim restores the caller's original `hybrid` env values after packaging, keeping first rs portable builds isolated without permanently mutating the developer shell.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior package_portable_powershell_shim_forces_and_restores_runtime_profile -- --nocapture`
+
 ## Migration Phases
 
 1. **Historical Rust shell with .NET behavior**
@@ -2434,9 +2473,48 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - No new dependency was needed. The CLI forwards `--result-json` / `--result-json-path` into `TranslateDocumentParams.result_json_path`, and non-JSON CLI output prints the sidecar path when a native run succeeds.
   - `scripts/translate-long-doc.ps1` now accepts `-ResultJsonPath` and passes `--result-json` to `easydict_long_doc`, keeping the root script Rust-only while exposing the native result sidecar.
   - Added CLI coverage proving a conflicting sidecar path is prechecked before provider lookup, plus release-contract coverage that the PowerShell shim keeps the sidecar pass-through and still does not launch legacy .NET LongDoc mode.
+- 2026-06-11: Made unsupported MDX encryption errors win before credential prompts.
+  - Rechecked current Rust MDict options before touching the route: `rs-mdict` still covers the supported MDX/MDD route already in-tree, while the newer Rust MDict crates found during scouting either add replacement risk or carry AGPL licensing. No dependency changed.
+  - `Encrypted=3` / unknown encrypted MDX modes are now classified as unsupported before credential validation. Missing regcode/email no longer produces a misleading credentials-required error for modes the Rust-native reader cannot support.
+  - Added regressions for native lookup, Quick Translate MDX services, and local dictionary suggestions proving unsupported encryption fails locally before opening the MDX reader and without CompatHost wording.
+- 2026-06-11: Persisted native LongDoc checkpoints in result sidecars.
+  - No new dependency was needed. The native runner now reuses the existing `long_document_export` and `pdf_export_blocks` checkpoint shapes, adding serde coverage so the same structures can become the later Retry Failed restore input.
+  - Native Text/Markdown/simple-PDF result JSON sidecars still flatten the unchanged `TranslateDocumentResult`, but now also include route metadata plus text and optional PDF checkpoints with source chunks, chunk metadata, translated chunks, and failed chunk indexes.
+  - Added LongDoc behavior coverage for successful text sidecars, partial-success sidecars with failed chunks absent from `translatedChunks`, and PDF sidecars that remain result-compatible while carrying the PDF checkpoint.
+- 2026-06-11: Added native LongDoc Retry Failed backend restore.
+  - No new dependency was needed. The backend reads the existing result JSON sidecar, restores text/PDF checkpoints, seeds already translated chunks, disables document-context retry work like the .NET retry path, and only sends failed chunk indexes back through the native translator/cache/formula-protection route.
+  - Retry success now merges translated chunks, clears failed indexes, reexports TXT/MD/simple-PDF outputs, and rewrites the sidecar. Continued failures stay `PartiallyCompleted`; a completed sidecar with no failed chunks reexports without provider calls.
+  - UI still needs to wire its Retry Failed entrypoint to this backend helper; this step intentionally avoided `ui.rs`, `state.rs`, `i18n.rs`, and UI contract files while another agent is editing them.
+- 2026-06-11: Wired LongDoc Retry Failed through the Rust CLI and PowerShell shim.
+  - No new dependency was needed. `easydict_long_doc --retry-failed --result-json <file>` now calls the native sidecar restore helper; missing `--result-json` fails locally before settings/provider work.
+  - `scripts/translate-long-doc.ps1` now exposes `-RetryFailed`, requires `-ResultJsonPath`, and passes `--retry-failed` to the Rust helper in both packaged-helper and cargo modes while keeping `-UseDotnetLegacy` retired.
+  - Added CLI coverage for the retry argument contract and a real no-provider sidecar reexport path, plus release-contract coverage that the shim keeps retry on the Rust side and cannot reintroduce dotnet/CompatHost launch markers.
+- 2026-06-11: Locked the LocalDictionary index default root as an intentional `.NET`/Rust cache coexistence point.
+  - No new dependency was needed. A read-only subagent rechecked this against the `.NET LocalDictionaryIndexService` and confirmed `%LOCALAPPDATA%\Easydict\mdx_index` is a compatible LXDX/index-manifest cache, not a `.NET runtime`, worker, named-event, registry, or process-launch boundary.
+  - Added an inline comment on `default_local_dictionary_index_root()` so the shared root does not get confused with the rs-specific NativeBridge/event roots that must use `EasydictRs`.
+  - Added `native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexistence`, which locks the default root to the legacy shared cache while proving `LocalDictionaryIndexService::new()` does not create an `EasydictRs\mdx_index` folder by default.
 
 ## Current Verification
 
+- `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexistence -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior -- --nocapture`
+- `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/local_dictionary_index.rs crates/easydict_app/tests/local_dictionary_index_behavior.rs`
+- `git diff --check -- rs/crates/easydict_app/src/local_dictionary_index.rs rs/crates/easydict_app/tests/local_dictionary_index_behavior.rs migration-list.md refactor-progress.md`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/long_document_cli.rs rs/crates/easydict_app/tests/long_document_cli_behavior.rs rs/crates/easydict_packager/tests/release_contract_behavior.rs`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_result_json_retry_failed_updates_text_and_pdf_checkpoints -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior result_json -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_text_long_document_runner_extracts_pdf_and_writes_text_outputs -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/document_layout.rs rs/crates/easydict_app/src/long_document_export.rs rs/crates/easydict_app/src/pdf_export_blocks.rs rs/crates/easydict_app/src/long_document.rs rs/crates/easydict_app/src/lib.rs rs/crates/easydict_app/tests/long_document_behavior.rs`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior native_mdx_header_encryption_edge_values_classify_rust_native_boundaries -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior mdx_encryption -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior unsupported_encrypted -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/mdx_native.rs rs/crates/easydict_app/tests/mdx_native_behavior.rs rs/crates/easydict_app/tests/quick_translate_behavior.rs`
 - `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_route_decision -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_route_decision_matrix --features retained-dotnet-workers -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test long_document_cli_behavior -- --nocapture`

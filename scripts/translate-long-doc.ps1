@@ -21,7 +21,8 @@ param(
     [string]$RustHelperPath,
     [switch]$UseCargo,
     [switch]$UseDotnetLegacy,
-    [switch]$ListServices
+    [switch]$ListServices,
+    [switch]$RetryFailed
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,6 +63,10 @@ function Assert-RequestArguments {
         throw "TargetLanguage is required unless -ListServices is used."
     }
 
+    if ($RetryFailed -and -not $ResultJsonPath) {
+        throw "ResultJsonPath is required when -RetryFailed is used."
+    }
+
     if ($scriptParameters.ContainsKey("Page") -and $PageRange) {
         throw "Use either -Page or -PageRange, not both."
     }
@@ -93,6 +98,7 @@ function New-RustLongDocArguments {
     if ($EnvFile) { $longDocArguments += @("--env-file", $EnvFile) }
     if ($OutputFile) { $longDocArguments += @("--output", $OutputFile) }
     if ($ResultJsonPath) { $longDocArguments += @("--result-json", $ResultJsonPath) }
+    if ($RetryFailed) { $longDocArguments += "--retry-failed" }
     if ($ServiceId) { $longDocArguments += @("--service", $ServiceId) }
     if ($OutputMode) { $longDocArguments += @("--output-mode", $OutputMode) }
     if ($Layout) { $longDocArguments += @("--layout", $Layout) }

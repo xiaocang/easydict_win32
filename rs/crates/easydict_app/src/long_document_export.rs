@@ -1,9 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 const LINE_ENDING: &str = "\r\n";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum LongDocumentExportBlockType {
     Unknown,
     Paragraph,
@@ -13,7 +16,8 @@ pub enum LongDocumentExportBlockType {
     Formula,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LongDocumentExportChunkMetadata {
     pub chunk_index: usize,
     pub page_number: i32,
@@ -21,7 +25,8 @@ pub struct LongDocumentExportChunkMetadata {
     pub order_in_page: i32,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LongDocumentExportCheckpoint {
     pub source_chunks: Vec<String>,
     pub chunk_metadata: Vec<LongDocumentExportChunkMetadata>,

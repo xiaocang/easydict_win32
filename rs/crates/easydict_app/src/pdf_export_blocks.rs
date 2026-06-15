@@ -1,8 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::PdfRect;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum PdfExportSourceBlockType {
     Paragraph,
     Heading,
@@ -12,14 +15,16 @@ pub enum PdfExportSourceBlockType {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PdfExportBlockTextStyle {
     pub font_size: f64,
     pub line_spacing: f64,
     pub rotation_angle: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PdfExportChunkMetadata {
     pub chunk_index: usize,
     pub page_number: i32,
@@ -36,7 +41,8 @@ pub struct PdfExportChunkMetadata {
     pub detected_font_names: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PdfExportCheckpoint {
     pub source_chunks: Vec<String>,
     pub chunk_metadata: Vec<PdfExportChunkMetadata>,

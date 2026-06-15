@@ -196,6 +196,8 @@ pub use long_document::{
     apply_long_document_outcome, apply_long_document_start_error, begin_long_document_translate,
     build_long_document_request, long_document_request_can_route_natively,
     long_document_service_kind_is_supported, long_document_supported_service_descriptors,
+    retry_failed_native_text_long_document_from_result_json,
+    retry_failed_native_text_long_document_from_result_json_with_translator,
     run_long_document_request, run_long_document_request_with_app_dir,
     run_long_document_request_with_app_dir_and_native_local_ai_client,
     run_long_document_request_with_native_route, run_native_text_long_document_request,

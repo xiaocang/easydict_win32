@@ -6253,8 +6253,6 @@ fn encrypted_mdx_service_routes_natively_without_compat_host_spawn() {
     state.results = Vec::new();
     state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
     state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
-    state.settings.imported_mdx_dictionaries[0].regcode = Some(valid_mdx_regcode());
-    state.settings.imported_mdx_dictionaries[0].email = Some("email@example.com".to_string());
     let plan = begin_quick_translate(&mut state).expect("MDX query should begin");
     let mut requests = plan.service_requests();
     let request = requests.remove(0);
@@ -6336,6 +6334,7 @@ fn unsupported_encrypted_mdx_service_fails_locally_without_compat_host_spawn() {
     assert!(error
         .message
         .contains("not supported by the Rust-native MDX reader"));
+    assert!(!error.message.contains("credentials are required"));
     assert!(!error.message.contains("CompatHost executable not found"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
@@ -6892,8 +6891,6 @@ fn unsupported_encrypted_local_dictionary_suggestions_fail_locally_without_compa
         &encrypted_mdx_path,
     ))));
     state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
-    state.settings.imported_mdx_dictionaries[0].regcode = Some(valid_mdx_regcode());
-    state.settings.imported_mdx_dictionaries[0].email = Some("email@example.com".to_string());
     state.source_text = "app".to_string();
     let request =
         begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
@@ -6909,6 +6906,7 @@ fn unsupported_encrypted_local_dictionary_suggestions_fail_locally_without_compa
         matches!(
             update.error.as_deref(),
             Some(message) if message.contains("not supported by the Rust-native MDX reader")
+                && !message.contains("credentials are required")
                 && !message.to_ascii_lowercase().contains("compat host")
         ),
         "unexpected unsupported encrypted suggestion error: {:?}",

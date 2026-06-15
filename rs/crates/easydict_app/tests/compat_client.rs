@@ -529,6 +529,24 @@ fn packaged_worker_command_spawn_requires_hybrid_runtime_profile_before_io_probe
 }
 
 #[test]
+fn unknown_packaged_worker_subdir_requires_hybrid_runtime_profile_before_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let app_dir = Path::new(r"C:\EasydictMissingPortable");
+
+    let error = match packaged_worker_command(app_dir, "legacy", "Easydict.Workers.Legacy.exe")
+        .spawn()
+    {
+        Ok(_) => panic!("unknown packaged retained worker must require explicit hybrid runtime"),
+        Err(error) => error,
+    };
+
+    retained_worker_disabled_error(error, "Retained .NET worker");
+}
+
+#[test]
 fn packaged_worker_command_spawn_respects_rust_only_runtime_profile_before_io_probe() {
     let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let _runtime_profile = EnvVarGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");

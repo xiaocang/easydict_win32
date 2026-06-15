@@ -280,15 +280,19 @@ Use `-RustHelperPath` or `-AppDir` to locate a packaged helper, and use
 `-UseCargo` when intentionally exercising the development binary. The Rust
 helper accepts
 `--list-services`, `--input`, `--target-language`, `--from`, `--output`,
-`--service`, `--output-mode`, `--layout`, `--pdf-export-mode`, `--page`,
-`--page-range`, `--max-concurrency`, `--env-file`, `--vision-endpoint`,
-`--vision-api-key`, `--vision-model`, and the legacy no-op `--app-dir`.
+`--result-json` / `--result-json-path`, `--retry-failed`, `--service`,
+`--output-mode`, `--layout`, `--pdf-export-mode`, `--page`, `--page-range`,
+`--max-concurrency`, `--env-file`, `--vision-endpoint`, `--vision-api-key`,
+`--vision-model`, and the legacy no-op `--app-dir`.
 Passing `--app-dir` no longer enables retained LongDoc worker lookup; requests
 that still need the retained `.NET` worker fail locally with a Rust-native-route
 requirement.
 
-The old WinUI debug entry point is legacy-only now. Pass `-UseDotnetLegacy`
-explicitly only when you need to compare against the previous .NET debug CLI.
+The old WinUI debug entry point is retired for this shim. `-UseDotnetLegacy`
+fails locally instead of launching `dotnet`; use `-UseCargo`, `-RustHelperPath`,
+or `-AppDir` to select the Rust helper. `-ResultJsonPath` writes the Rust-native
+result sidecar, and `-RetryFailed -ResultJsonPath <file>` reuses that sidecar to
+retry only failed chunks without probing retained workers.
 
 Sidecar IPC smoke checks:
 

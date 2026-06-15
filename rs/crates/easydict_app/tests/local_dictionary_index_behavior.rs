@@ -1,12 +1,34 @@
 use easydict_app::{
-    LocalDictionaryIndexDescriptor, LocalDictionaryIndexManifest, LocalDictionaryIndexService,
-    CURRENT_INDEX_FORMAT_VERSION, DEFAULT_NORMALIZATION_ID, INDEX_FILE_NAME, MANIFEST_FILE_NAME,
+    default_local_dictionary_index_root, LocalDictionaryIndexDescriptor,
+    LocalDictionaryIndexManifest, LocalDictionaryIndexService, CURRENT_INDEX_FORMAT_VERSION,
+    DEFAULT_NORMALIZATION_ID, INDEX_FILE_NAME, MANIFEST_FILE_NAME,
 };
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+#[test]
+fn native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexistence() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().unwrap();
+    let local_app_data = TempDir::new("local-dictionary-index-default-root");
+    let _local_app_data_guard = EnvVarGuard::set("LOCALAPPDATA", local_app_data.path_string());
+
+    let expected = local_app_data.path.join("Easydict").join("mdx_index");
+    assert_eq!(default_local_dictionary_index_root(), expected);
+
+    let service = LocalDictionaryIndexService::new().unwrap();
+    assert_eq!(service.index_root(), expected.as_path());
+    assert!(expected.exists());
+    assert!(!local_app_data
+        .path
+        .join("EasydictRs")
+        .join("mdx_index")
+        .exists());
+}
 
 #[test]
 fn native_local_dictionary_index_builds_index_and_manifest() {
@@ -455,10 +477,37 @@ impl TempDir {
         fs::write(&path, content).unwrap();
         path.to_string_lossy().into_owned()
     }
+
+    fn path_string(&self) -> String {
+        self.path.to_string_lossy().into_owned()
+    }
 }
 
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: String) -> Self {
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
     }
 }

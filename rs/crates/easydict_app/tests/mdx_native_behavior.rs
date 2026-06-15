@@ -273,6 +273,37 @@ fn native_mdx_header_encryption_edge_values_classify_rust_native_boundaries() {
             expected_local_error,
             "{name}"
         );
+
+        if expected_local_error {
+            let mut dictionary = mdx_dictionary(true, []);
+            dictionary.file_path = path_string(&mdx_path);
+            let settings = mdx_settings_with_dictionary(dictionary);
+            assert!(
+                !native_mdx_lookup_needs_credentials(&params, &settings),
+                "{name} should be unsupported, not credential-gated"
+            );
+            let error = native_mdx_lookup_local_input_error(&params, &settings)
+                .expect("unsupported encryption should fail locally without credentials");
+            assert!(
+                error
+                    .to_string()
+                    .contains("not supported by the Rust-native MDX reader"),
+                "{name}: {error}"
+            );
+            let mut factory = RecordingMdxReaderFactory::default();
+            let lookup_error = run_native_mdx_lookup_with_factory(&mut factory, &params, &settings)
+                .expect_err("unsupported encryption should fail before opening MDX reader");
+            assert!(
+                lookup_error
+                    .to_string()
+                    .contains("not supported by the Rust-native MDX reader"),
+                "{name}: {lookup_error}"
+            );
+            assert!(
+                factory.opened.is_empty(),
+                "{name} should not open the MDX reader after unsupported encryption preflight"
+            );
+        }
     }
 
     let utf8_path = temp_dir.join("utf8-odd-header.mdx");

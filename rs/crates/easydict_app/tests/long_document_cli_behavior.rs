@@ -22,6 +22,7 @@ fn help_lists_long_document_options() {
         "--from",
         "--output",
         "--result-json",
+        "--retry-failed",
         "--service",
         "--output-mode",
         "--layout",
@@ -184,6 +185,166 @@ fn page_and_page_range_are_mutually_exclusive() {
     assert!(
         stdout(&output).trim().is_empty(),
         "conflicting page options should not write output"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn retry_failed_requires_result_json_path() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-requires-sidecar");
+    fs::create_dir_all(&work_dir).expect("work directory should be created");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello long document").expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args(["--target-language", "zh-Hans", "--retry-failed"])
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("--retry-failed requires --result-json"),
+        "stderr should explain retry sidecar requirement:\n{stderr}"
+    );
+    assert!(
+        stdout(&output).trim().is_empty(),
+        "invalid retry arguments should not write stdout"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn retry_failed_without_failed_chunks_reexports_from_result_json_without_provider_lookup() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-no-failures");
+    fs::create_dir_all(&work_dir).expect("work directory should be created");
+    let input_path = work_dir.join("sample.txt");
+    let output_path = work_dir.join("translated.txt");
+    let result_json_path = work_dir.join("translated-result.json");
+    fs::write(&input_path, "Hello retry").expect("sample input should be written");
+    fs::write(&output_path, "stale output").expect("stale output should be written");
+    fs::write(
+        &result_json_path,
+        format!(
+            r#"{{
+  "state": "Completed",
+  "outputPath": "{}",
+  "totalChunks": 1,
+  "succeededChunks": 1,
+  "resultJsonPath": "{}",
+  "checkpoint": {{
+    "inputMode": "PlainText",
+    "outputMode": "Monolingual",
+    "serviceId": "google",
+    "from": "English",
+    "to": "SimplifiedChinese",
+    "text": {{
+      "sourceChunks": ["Hello retry"],
+      "chunkMetadata": [
+        {{
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "sourceBlockType": "Paragraph",
+          "orderInPage": 0
+        }}
+      ],
+      "translatedChunks": {{
+        "0": "[zh] Hello retry"
+      }},
+      "failedChunkIndexes": []
+    }}
+  }}
+}}"#,
+            json_path(&output_path),
+            json_path(&result_json_path)
+        ),
+    )
+    .expect("result sidecar should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args(["--target-language", "zh-Hans", "--from", "en"])
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--result-json-path")
+        .arg(&result_json_path)
+        .arg("--retry-failed")
+        .output()
+        .expect("long document CLI should run");
+
+    assert_success(&output);
+    let stdout = stdout(&output);
+    assert!(
+        stdout.contains("State: Completed") && stdout.contains("Result JSON:"),
+        "retry CLI output should report completed sidecar result:\n{stdout}"
+    );
+    assert_eq!(
+        fs::read_to_string(&output_path).expect("retry output should be written"),
+        "[zh] Hello retry"
+    );
+    let rewritten =
+        fs::read_to_string(&result_json_path).expect("retry sidecar should be rewritten");
+    assert!(
+        rewritten.contains(r#""failedChunkIndexes": []"#)
+            && rewritten.contains(r#""translatedChunks""#),
+        "retry should rewrite checkpoint sidecar:\n{rewritten}"
+    );
+    let stderr = stderr(&output);
+    assert!(
+        !stderr.contains("Long Document worker") && !stderr.contains("CompatHost"),
+        "retry CLI should stay on Rust-native sidecar route:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn retry_failed_malformed_sidecar_fails_locally_without_worker_wording() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-malformed-sidecar");
+    let app_dir = work_dir.join("app");
+    fs::create_dir_all(app_dir.join("workers").join("longdoc"))
+        .expect("stale worker directory should be created");
+    fs::create_dir_all(app_dir.join("dotnet").join("host").join("fxr"))
+        .expect("stale dotnet runtime directory should be created");
+    fs::write(app_dir.join("Easydict.CompatHost.exe"), "stale")
+        .expect("stale compat host marker should be written");
+    let input_path = work_dir.join("sample.txt");
+    let result_json_path = work_dir.join("translated-result.json");
+    fs::write(&input_path, "Hello retry").expect("sample input should be written");
+    fs::write(&result_json_path, "{not-json").expect("malformed sidecar should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args(["--target-language", "zh-Hans", "--from", "en"])
+        .arg("--result-json")
+        .arg(&result_json_path)
+        .arg("--retry-failed")
+        .arg("--app-dir")
+        .arg(&app_dir)
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("Could not parse long document result JSON"),
+        "stderr should report malformed sidecar parsing locally:\n{stderr}"
+    );
+    for forbidden in ["Long Document worker", "CompatHost", ".NET workers"] {
+        assert!(
+            !stderr.contains(forbidden),
+            "malformed retry sidecar should not probe retained worker path {forbidden}:\n{stderr}"
+        );
+    }
+    assert!(
+        stdout(&output).trim().is_empty(),
+        "malformed retry sidecar should not write stdout"
     );
 
     let _ = fs::remove_dir_all(work_dir);
@@ -533,6 +694,10 @@ fn stdout(output: &Output) -> String {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn json_path(path: &std::path::Path) -> String {
+    path.display().to_string().replace('\\', "\\\\")
 }
 
 fn unique_temp_dir(prefix: &str) -> PathBuf {

@@ -449,6 +449,9 @@ impl LocalDictionaryIndexService {
 }
 
 pub fn default_local_dictionary_index_root() -> PathBuf {
+    // Keep the local dictionary index cache shared with the .NET app: the
+    // on-disk LXDX/index manifest format is intentionally compatible, and this
+    // cache does not wake or depend on a .NET runtime.
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)

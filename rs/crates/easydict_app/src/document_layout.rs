@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PdfRect {
     pub x: f64,
     pub y: f64,

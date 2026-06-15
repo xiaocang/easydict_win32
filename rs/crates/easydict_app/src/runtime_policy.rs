@@ -371,6 +371,37 @@ mod tests {
 
     #[cfg(feature = "retained-dotnet-workers")]
     #[test]
+    fn unknown_runtime_profile_overrides_other_hybrid_profile() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let snapshot = EnvironmentSnapshot::capture();
+        clear_retained_worker_environment();
+
+        for (easydict_profile, generic_profile) in [
+            ("dotnet", "hybrid"),
+            ("hybrid", "dotnet"),
+            ("dotnet-hybrid", "hybrid"),
+            ("hybrid", "dotnet-hybrid"),
+        ] {
+            std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, easydict_profile);
+            std::env::set_var(
+                GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
+                generic_profile,
+            );
+
+            let policy = RuntimeRoutePolicy::from_environment();
+
+            assert_eq!(
+                policy,
+                RuntimeRoutePolicy::all_disabled(),
+                "unknown profile pair EASYDICT_RUNTIME_PROFILE={easydict_profile:?}, RUNTIME_PROFILE={generic_profile:?} must not enable retained workers"
+            );
+        }
+
+        snapshot.restore();
+    }
+
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
     fn dotnet_named_runtime_profiles_do_not_enable_retained_workers() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();

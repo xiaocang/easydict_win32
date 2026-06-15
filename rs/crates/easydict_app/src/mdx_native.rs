@@ -35,12 +35,8 @@ impl MdxEncryptionMode {
         self != Self::None
     }
 
-    fn can_route_natively_without_credentials(self) -> bool {
-        matches!(self, Self::None | Self::KeyInfoBlock)
-    }
-
     fn requires_credentials(self) -> bool {
-        !self.can_route_natively_without_credentials()
+        self == Self::RecordBlock
     }
 }
 
@@ -353,15 +349,7 @@ fn native_mdx_dictionary_local_input_error(
         return Some(NativeMdxLookupError::new("MDX dictionary file not found."));
     }
 
-    if native_mdx_dictionary_requires_credentials(dictionary)
-        && native_mdx_dictionary_has_credentials(dictionary)
-    {
-        if let Some(error) = native_mdx_dictionary_credential_error(dictionary) {
-            return Some(error);
-        }
-    }
-
-    if dictionary.is_encrypted && native_mdx_dictionary_has_credentials(dictionary) {
+    if dictionary.is_encrypted {
         match mdx_dictionary_encryption_mode(dictionary) {
             Ok(mode) => {
                 if matches!(
@@ -374,6 +362,14 @@ fn native_mdx_dictionary_local_input_error(
                 }
             }
             Err(error) => return Some(error),
+        }
+    }
+
+    if native_mdx_dictionary_requires_credentials(dictionary)
+        && native_mdx_dictionary_has_credentials(dictionary)
+    {
+        if let Some(error) = native_mdx_dictionary_credential_error(dictionary) {
+            return Some(error);
         }
     }
 

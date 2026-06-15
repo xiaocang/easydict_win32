@@ -1,5 +1,6 @@
 use crate::long_document::{
     build_long_document_request, long_document_supported_service_descriptors,
+    retry_failed_native_text_long_document_from_result_json,
     run_long_document_request_with_current_app_dir, LongDocumentEvent, LongDocumentOutcome,
 };
 use crate::protocol::normalize_local_ai_provider_mode;
@@ -52,6 +53,9 @@ pub struct LongDocumentCliOptions {
 
     #[arg(long = "result-json", alias = "result-json-path", value_name = "FILE")]
     result_json: Option<PathBuf>,
+
+    #[arg(long = "retry-failed", help = "Retry failed chunks from --result-json")]
+    retry_failed: bool,
 
     #[arg(short = 's', long = "service", value_name = "SERVICE_ID")]
     service: Option<String>,
@@ -143,6 +147,11 @@ fn run(
             ));
         }
     }
+    if options.retry_failed && options.result_json.is_none() {
+        return Err(LongDocumentCliError::InvalidArgument(
+            "--retry-failed requires --result-json".to_string(),
+        ));
+    }
 
     if let Some(env_file) = options.env_file.as_deref() {
         load_and_apply_env_file(env_file)?;
@@ -179,7 +188,15 @@ fn run(
     // Accepted for old scripts; the default rs CLI no longer uses this to select
     // packaged retained worker paths.
     let _ = options.app_dir.as_ref();
-    let outcome = run_long_document_request_with_current_app_dir(request);
+    let outcome = if options.retry_failed {
+        let result_json = options
+            .result_json
+            .as_ref()
+            .expect("retry-failed result_json was validated");
+        retry_failed_native_text_long_document_from_result_json(request, result_json)
+    } else {
+        run_long_document_request_with_current_app_dir(request)
+    };
 
     write_outcome(stdout, stderr, &outcome, options.json)?;
     state.long_document.last_output_path = outcome.result.as_ref().ok().and_then(|result| {

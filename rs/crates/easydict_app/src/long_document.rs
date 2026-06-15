@@ -94,6 +94,7 @@ use easydict_windows_ai::{
     WindowsAiGenerationOptions, WindowsAiLanguage, WindowsAiLanguageModelClient,
     WindowsAiReadyState, WindowsAiResponseStatus, WindowsAiTranslationRequest,
 };
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "retained-dotnet-workers")]
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -853,6 +854,41 @@ pub fn run_native_text_long_document_request_with_translator_and_cancellation<
     }
 }
 
+pub fn retry_failed_native_text_long_document_from_result_json(
+    request: LongDocumentServiceRequest,
+    result_json_path: impl AsRef<Path>,
+) -> LongDocumentOutcome {
+    let mut translator = QuickTranslateNativeLongDocumentTranslator;
+    retry_failed_native_text_long_document_from_result_json_with_translator(
+        &mut translator,
+        request,
+        result_json_path,
+    )
+}
+
+#[doc(hidden)]
+pub fn retry_failed_native_text_long_document_from_result_json_with_translator<
+    T: NativeLongDocumentTranslator,
+>(
+    translator: &mut T,
+    request: LongDocumentServiceRequest,
+    result_json_path: impl AsRef<Path>,
+) -> LongDocumentOutcome {
+    let input_label = input_label(&request);
+    let result = retry_failed_native_text_long_document_from_result_json_inner(
+        translator,
+        &request,
+        result_json_path.as_ref(),
+    );
+
+    LongDocumentOutcome {
+        query_id: request.query_id,
+        input_label,
+        events: result.events,
+        result: result.result,
+    }
+}
+
 pub fn apply_long_document_outcome(state: &mut EasydictUiState, outcome: LongDocumentOutcome) {
     if state.long_document.active_query_id != Some(outcome.query_id) {
         return;
@@ -1188,7 +1224,273 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator, 
                 quality_report: None,
                 result_json_path: result_json_path.clone(),
             };
-            write_native_result_json_sidecar(result_json_path.as_deref(), &result)?;
+            write_native_result_json_sidecar(
+                result_json_path.as_deref(),
+                &result,
+                input_kind,
+                &request.params,
+                &export.checkpoint,
+                export.pdf_checkpoint.as_ref(),
+            )?;
+            Ok(result)
+        })
+    };
+
+    NativeLongDocumentRun { events, result }
+}
+
+fn retry_failed_native_text_long_document_from_result_json_inner<
+    T: NativeLongDocumentTranslator,
+>(
+    translator: &mut T,
+    request: &LongDocumentServiceRequest,
+    result_json_path: &Path,
+) -> NativeLongDocumentRun {
+    let sidecar = match read_native_result_json_sidecar(result_json_path) {
+        Ok(sidecar) => sidecar,
+        Err(error) => {
+            return NativeLongDocumentRun {
+                events: Vec::new(),
+                result: Err(error),
+            };
+        }
+    };
+    let Some(input_kind) = native_text_input_kind(&sidecar.checkpoint.input_mode) else {
+        return NativeLongDocumentRun {
+            events: Vec::new(),
+            result: Err(LongDocumentBackendError::new(format!(
+                "Native long document checkpoint input mode '{}' is not supported",
+                sidecar.checkpoint.input_mode
+            ))),
+        };
+    };
+    let chunks =
+        match native_text_source_chunks_from_retry_checkpoint(input_kind, &sidecar.checkpoint) {
+            Ok(chunks) => chunks,
+            Err(error) => {
+                return NativeLongDocumentRun {
+                    events: Vec::new(),
+                    result: Err(error),
+                };
+            }
+        };
+    let failed_indexes = sidecar
+        .checkpoint
+        .text
+        .failed_chunk_indexes
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    if let Some(index) = failed_indexes
+        .iter()
+        .copied()
+        .find(|index| *index >= chunks.len())
+    {
+        return NativeLongDocumentRun {
+            events: Vec::new(),
+            result: Err(LongDocumentBackendError::new(format!(
+                "Native long document checkpoint failed chunk index {index} is out of range"
+            ))),
+        };
+    }
+
+    let mut retry_request = request.clone();
+    retry_request.params.input_mode = sidecar.checkpoint.input_mode.clone();
+    retry_request.params.output_mode = sidecar.checkpoint.output_mode.clone();
+    retry_request.params.service_id = sidecar.checkpoint.service_id.clone();
+    retry_request.params.from = sidecar.checkpoint.from.clone();
+    retry_request.params.to = sidecar.checkpoint.to.clone();
+    retry_request.params.result_json_path = Some(result_json_path.display().to_string());
+    restore_native_retry_route_from_checkpoint(&mut retry_request, &sidecar.checkpoint);
+
+    if let Err(error) = preflight_native_text_output_paths(&retry_request, input_kind) {
+        return NativeLongDocumentRun {
+            events: Vec::new(),
+            result: Err(error),
+        };
+    }
+
+    let total_chunks = chunks.len() as u32;
+    let mut translations = vec![None; chunks.len()];
+    for (index, translated) in &sidecar.checkpoint.text.translated_chunks {
+        if *index >= translations.len() {
+            return NativeLongDocumentRun {
+                events: Vec::new(),
+                result: Err(LongDocumentBackendError::new(format!(
+                    "Native long document checkpoint translated chunk index {index} is out of range"
+                ))),
+            };
+        }
+        translations[*index] = Some(translated.clone());
+    }
+
+    let mut events = vec![LongDocumentEvent::Status(StatusEventData {
+        message: "Retrying failed long document chunks natively".to_string(),
+    })];
+    let mut failed_chunk_indexes = Vec::new();
+    let mut first_error = None;
+    let mut translation_cache = native_long_document_translation_cache(&retry_request.settings);
+    let max_concurrency = retry_request
+        .settings
+        .long_doc_max_concurrency
+        .unwrap_or(1)
+        .clamp(1, 16)
+        .max(1) as usize;
+    let mut next_failed_index = 0;
+
+    while next_failed_index < failed_indexes.len() {
+        let mut batch = Vec::new();
+        while next_failed_index < failed_indexes.len() && batch.len() < max_concurrency {
+            let index = failed_indexes[next_failed_index];
+            next_failed_index += 1;
+            let chunk = &chunks[index];
+            let chunk_text = chunk.text.as_str();
+
+            events.push(LongDocumentEvent::Progress(ProgressEventData {
+                stage: "Retrying".to_string(),
+                current_block: (next_failed_index) as u32,
+                total_blocks: failed_indexes.len() as u32,
+                current_page: chunk.page_number,
+                total_pages: 1,
+                percentage: ((next_failed_index - 1) as f64 / failed_indexes.len() as f64) * 100.0,
+                current_block_preview: Some(chunk_preview(chunk_text)),
+            }));
+
+            let preparation = prepare_native_text_chunk_for_translation(&retry_request, chunk);
+            if matches!(&preparation, NativeTextChunkPreparation::PreserveOriginal) {
+                events.push(LongDocumentEvent::BlockTranslated(
+                    BlockTranslatedEventData {
+                        chunk_index: index as u32,
+                        page_number: Some(chunk.page_number),
+                        source_block_id: Some(chunk.source_block_id.clone()),
+                        translated_text: chunk.text.clone(),
+                        retry_count: 0,
+                        last_error: None,
+                    },
+                ));
+                translations[index] = Some(chunk.text.clone());
+                continue;
+            }
+
+            let NativeTextChunkPreparation::Translate {
+                protected_text,
+                protection,
+            } = preparation
+            else {
+                unreachable!("preserve-original preparation was handled above");
+            };
+
+            let Some(mut translate_request) =
+                native_quick_translate_request_for_chunk(&retry_request, &protected_text)
+            else {
+                first_error.get_or_insert_with(|| {
+                    "Long document service is not available natively".to_string()
+                });
+                failed_chunk_indexes.push(index as u32);
+                continue;
+            };
+            apply_native_text_formula_prompt(&mut translate_request, protection.as_ref(), 0, false);
+
+            let chunk_hash =
+                (!chunk_text.trim().is_empty()).then(|| long_document_source_hash(chunk_text));
+            if let (Some(cache), Some(hash)) = (translation_cache.as_mut(), chunk_hash.as_deref()) {
+                if let Ok(Some(cached)) = cache.try_get(
+                    &retry_request.params.service_id,
+                    &retry_request.params.from,
+                    &retry_request.params.to,
+                    hash,
+                ) {
+                    if !cached.trim().is_empty() {
+                        events.push(LongDocumentEvent::BlockTranslated(
+                            BlockTranslatedEventData {
+                                chunk_index: index as u32,
+                                page_number: Some(chunk.page_number),
+                                source_block_id: Some(chunk.source_block_id.clone()),
+                                translated_text: cached.clone(),
+                                retry_count: 0,
+                                last_error: None,
+                            },
+                        ));
+                        translations[index] = Some(cached);
+                        continue;
+                    }
+                }
+            }
+
+            batch.push(NativeTextChunkWork {
+                index,
+                chunk: chunk.text.clone(),
+                fallback_text: chunk.fallback_text.clone(),
+                page_number: chunk.page_number,
+                source_block_id: chunk.source_block_id.clone(),
+                source_hash: chunk_hash,
+                request: translate_request,
+                protection,
+            });
+        }
+
+        let batch_results = translate_native_text_chunk_batch(translator, batch);
+        for result in batch_results {
+            apply_native_text_chunk_result(
+                &retry_request,
+                &mut translation_cache,
+                &mut translations,
+                &mut failed_chunk_indexes,
+                &mut first_error,
+                &mut events,
+                result,
+            );
+        }
+    }
+
+    events.push(LongDocumentEvent::Progress(ProgressEventData {
+        stage: "Exporting".to_string(),
+        current_block: failed_indexes.len() as u32,
+        total_blocks: failed_indexes.len() as u32,
+        current_page: 1,
+        total_pages: 1,
+        percentage: 100.0,
+        current_block_preview: None,
+    }));
+
+    let succeeded_chunks = translations.iter().filter(|chunk| chunk.is_some()).count() as u32;
+    let result = if succeeded_chunks == 0 {
+        Err(LongDocumentBackendError::new(first_error.unwrap_or_else(
+            || "Retry failed for all long document chunks.".to_string(),
+        )))
+    } else {
+        export_native_text_document(
+            &retry_request,
+            input_kind,
+            &chunks,
+            &translations,
+            &preserved_chunk_indexes_from_retry_checkpoint(&sidecar.checkpoint),
+        )
+        .and_then(|export| {
+            let result_json_path = normalized_result_json_path(&retry_request);
+            let result = TranslateDocumentResult {
+                state: if failed_chunk_indexes.is_empty() {
+                    "Completed".to_string()
+                } else {
+                    "PartiallyCompleted".to_string()
+                },
+                output_path: Some(export.output_path),
+                bilingual_output_path: export.bilingual_output_path,
+                total_chunks,
+                succeeded_chunks,
+                failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
+                    .then(|| failed_chunk_indexes.to_vec()),
+                quality_report: sidecar.result.quality_report.clone(),
+                result_json_path: result_json_path.clone(),
+            };
+            write_native_result_json_sidecar(
+                result_json_path.as_deref(),
+                &result,
+                input_kind,
+                &retry_request.params,
+                &export.checkpoint,
+                export.pdf_checkpoint.as_ref(),
+            )?;
             Ok(result)
         })
     };
@@ -2174,6 +2476,41 @@ enum NativeTextInputKind {
 struct NativeTextExport {
     output_path: String,
     bilingual_output_path: Option<String>,
+    checkpoint: LongDocumentExportCheckpoint,
+    pdf_checkpoint: Option<PdfExportCheckpoint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeLongDocumentResultSidecar {
+    #[serde(flatten)]
+    result: TranslateDocumentResult,
+    checkpoint: NativeLongDocumentSidecarCheckpoint,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeLongDocumentSidecarCheckpoint {
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    route_metadata_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    input_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    output_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pdf_export_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    layout_detection: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    page_range: Option<String>,
+    input_mode: String,
+    output_mode: String,
+    service_id: String,
+    from: String,
+    to: String,
+    text: LongDocumentExportCheckpoint,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pdf: Option<PdfExportCheckpoint>,
 }
 
 fn native_text_input_kind(input_mode: &str) -> Option<NativeTextInputKind> {
@@ -2182,6 +2519,14 @@ fn native_text_input_kind(input_mode: &str) -> Option<NativeTextInputKind> {
         "Markdown" => Some(NativeTextInputKind::Markdown),
         "Pdf" => Some(NativeTextInputKind::PdfText),
         _ => None,
+    }
+}
+
+fn native_text_input_kind_name(input_kind: NativeTextInputKind) -> &'static str {
+    match input_kind {
+        NativeTextInputKind::PlainText => "PlainText",
+        NativeTextInputKind::Markdown => "Markdown",
+        NativeTextInputKind::PdfText => "Pdf",
     }
 }
 
@@ -3951,6 +4296,8 @@ mod tests {
             }),
         }];
         let translations = vec![Some("你好，PDF".to_string())];
+        let text_checkpoint =
+            native_export_checkpoint(NativeTextInputKind::PdfText, &source_chunks, &translations);
 
         let export = try_export_native_pdf_document(
             &request,
@@ -3958,6 +4305,7 @@ mod tests {
             &translations,
             "",
             &BTreeSet::new(),
+            &text_checkpoint,
         )
         .expect("CJK overlay PDF export should not fail")
         .expect("CJK overlay should handle native PDF export");
@@ -4042,6 +4390,8 @@ mod tests {
             }),
         }];
         let translations = vec![Some("显式 Overlay".to_string())];
+        let text_checkpoint =
+            native_export_checkpoint(NativeTextInputKind::PdfText, &source_chunks, &translations);
 
         let export = try_export_native_pdf_document(
             &request,
@@ -4049,6 +4399,7 @@ mod tests {
             &translations,
             "",
             &BTreeSet::new(),
+            &text_checkpoint,
         )
         .expect("explicit overlay PDF export should not fail")
         .expect("explicit overlay should handle native PDF export");
@@ -4108,6 +4459,8 @@ mod tests {
             0,
         )];
         let translations = vec![Some("Translated fallback text".to_string())];
+        let text_checkpoint =
+            native_export_checkpoint(NativeTextInputKind::PdfText, &source_chunks, &translations);
 
         let export = try_export_native_pdf_document(
             &request,
@@ -4115,6 +4468,7 @@ mod tests {
             &translations,
             "",
             &BTreeSet::new(),
+            &text_checkpoint,
         )
         .expect("native PDF export failure should fall back to text export");
 
@@ -4931,6 +5285,7 @@ fn export_native_text_document(
             translations,
             &bilingual,
             preserved_chunk_indexes,
+            &checkpoint,
         )? {
             return Ok(export);
         }
@@ -4946,6 +5301,8 @@ fn export_native_text_document(
             Ok(NativeTextExport {
                 output_path: bilingual_path.display().to_string(),
                 bilingual_output_path: Some(bilingual_path.display().to_string()),
+                checkpoint,
+                pdf_checkpoint: None,
             })
         }
         "Both" => {
@@ -4959,6 +5316,8 @@ fn export_native_text_document(
             Ok(NativeTextExport {
                 output_path: output_path.display().to_string(),
                 bilingual_output_path: Some(bilingual_path.display().to_string()),
+                checkpoint,
+                pdf_checkpoint: None,
             })
         }
         _ => {
@@ -4967,6 +5326,8 @@ fn export_native_text_document(
             Ok(NativeTextExport {
                 output_path: output_path.display().to_string(),
                 bilingual_output_path: None,
+                checkpoint,
+                pdf_checkpoint: None,
             })
         }
     }
@@ -4978,6 +5339,7 @@ fn try_export_native_pdf_document(
     translations: &[Option<String>],
     bilingual_text: &str,
     preserved_chunk_indexes: &BTreeSet<usize>,
+    text_checkpoint: &LongDocumentExportCheckpoint,
 ) -> Result<Option<NativeTextExport>, LongDocumentBackendError> {
     if request.params.output_mode == "Bilingual" {
         return Ok(None);
@@ -5023,6 +5385,8 @@ fn try_export_native_pdf_document(
             request,
             &output_path,
             bilingual_text,
+            text_checkpoint,
+            checkpoint,
         )?));
     }
 
@@ -5059,6 +5423,8 @@ fn try_export_native_pdf_document(
         request,
         &output_path,
         bilingual_text,
+        text_checkpoint,
+        checkpoint,
     )?))
 }
 
@@ -5066,6 +5432,8 @@ fn native_pdf_export_result(
     request: &LongDocumentServiceRequest,
     output_path: &Path,
     bilingual_text: &str,
+    text_checkpoint: &LongDocumentExportCheckpoint,
+    pdf_checkpoint: PdfExportCheckpoint,
 ) -> Result<NativeTextExport, LongDocumentBackendError> {
     let bilingual_output_path = if request.params.output_mode == "Both" {
         let bilingual_path = native_pdf_bilingual_text_output_path(&output_path);
@@ -5079,6 +5447,8 @@ fn native_pdf_export_result(
     Ok(NativeTextExport {
         output_path: output_path.display().to_string(),
         bilingual_output_path,
+        checkpoint: text_checkpoint.clone(),
+        pdf_checkpoint: Some(pdf_checkpoint),
     })
 }
 
@@ -5278,19 +5648,185 @@ fn normalized_result_json_path(request: &LongDocumentServiceRequest) -> Option<S
         .map(ToOwned::to_owned)
 }
 
+fn read_native_result_json_sidecar(
+    result_json_path: &Path,
+) -> Result<NativeLongDocumentResultSidecar, LongDocumentBackendError> {
+    let json = fs::read_to_string(result_json_path).map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not read long document result JSON '{}': {error}",
+            result_json_path.display()
+        ))
+    })?;
+    serde_json::from_str(&json).map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not parse long document result JSON '{}': {error}",
+            result_json_path.display()
+        ))
+    })
+}
+
 fn write_native_result_json_sidecar(
     result_json_path: Option<&str>,
     result: &TranslateDocumentResult,
+    input_kind: NativeTextInputKind,
+    params: &TranslateDocumentParams,
+    checkpoint: &LongDocumentExportCheckpoint,
+    pdf_checkpoint: Option<&PdfExportCheckpoint>,
 ) -> Result<(), LongDocumentBackendError> {
     let Some(path) = result_json_path else {
         return Ok(());
     };
-    let json = serde_json::to_vec_pretty(result).map_err(|error| {
+    let sidecar = NativeLongDocumentResultSidecar {
+        result: result.clone(),
+        checkpoint: NativeLongDocumentSidecarCheckpoint {
+            input_mode: native_text_input_kind_name(input_kind).to_string(),
+            output_mode: params.output_mode.clone(),
+            service_id: params.service_id.clone(),
+            from: params.from.clone(),
+            to: params.to.clone(),
+            route_metadata_version: 1,
+            input_path: non_empty(&params.input_path),
+            output_path: params.output_path.as_deref().and_then(non_empty),
+            pdf_export_mode: params.pdf_export_mode.as_deref().and_then(non_empty),
+            layout_detection: params.layout_detection.as_deref().and_then(non_empty),
+            page_range: params.page_range.as_deref().and_then(non_empty),
+            text: checkpoint.clone(),
+            pdf: pdf_checkpoint.cloned(),
+        },
+    };
+    let json = serde_json::to_vec_pretty(&sidecar).map_err(|error| {
         LongDocumentBackendError::new(format!(
             "Could not serialize long document result JSON: {error}"
         ))
     })?;
     fs::write(path, json).map_err(native_write_error)
+}
+
+fn restore_native_retry_route_from_checkpoint(
+    request: &mut LongDocumentServiceRequest,
+    checkpoint: &NativeLongDocumentSidecarCheckpoint,
+) {
+    if checkpoint.route_metadata_version == 0 {
+        return;
+    }
+
+    request.params.input_path = checkpoint.input_path.clone().unwrap_or_default();
+    request.params.output_path = checkpoint.output_path.clone();
+    request.params.pdf_export_mode = checkpoint.pdf_export_mode.clone();
+    request.params.layout_detection = checkpoint.layout_detection.clone();
+    request.params.page_range = checkpoint.page_range.clone();
+
+    request.input = checkpoint
+        .input_path
+        .as_deref()
+        .and_then(non_empty)
+        .map(LongDocumentInput::File)
+        .unwrap_or_else(|| LongDocumentInput::InlineText(String::new()));
+}
+
+fn native_text_source_chunks_from_retry_checkpoint(
+    input_kind: NativeTextInputKind,
+    checkpoint: &NativeLongDocumentSidecarCheckpoint,
+) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError> {
+    let metadata_by_index = checkpoint
+        .text
+        .chunk_metadata
+        .iter()
+        .map(|metadata| (metadata.chunk_index, metadata))
+        .collect::<BTreeMap<_, _>>();
+    let pdf_metadata_by_index = checkpoint.pdf.as_ref().map(|pdf| {
+        pdf.chunk_metadata
+            .iter()
+            .map(|metadata| (metadata.chunk_index, metadata.clone()))
+            .collect::<BTreeMap<_, _>>()
+    });
+
+    checkpoint
+        .text
+        .source_chunks
+        .iter()
+        .enumerate()
+        .map(|(index, text)| {
+            let page_number = metadata_by_index
+                .get(&index)
+                .map(|metadata| native_retry_page_number(metadata.page_number))
+                .unwrap_or(1);
+
+            if matches!(input_kind, NativeTextInputKind::PdfText) {
+                if let Some(pdf_metadata) = pdf_metadata_by_index
+                    .as_ref()
+                    .and_then(|metadata| metadata.get(&index))
+                {
+                    return Ok(NativeTextSourceChunk {
+                        text: text.clone(),
+                        fallback_text: pdf_metadata.fallback_text.clone(),
+                        page_number: native_retry_page_number(pdf_metadata.page_number),
+                        source_block_id: native_retry_source_block_id(
+                            &pdf_metadata.source_block_id,
+                            index,
+                            "pdf-p1-text",
+                        ),
+                        source_kind: if pdf_metadata.bounding_box.is_some() {
+                            NativeTextSourceKind::PdfSourceBlock
+                        } else {
+                            NativeTextSourceKind::PdfSelectableText
+                        },
+                        pdf_context: None,
+                        pdf_export_metadata: Some(pdf_metadata.clone()),
+                    });
+                }
+            }
+
+            Ok(NativeTextSourceChunk {
+                text: text.clone(),
+                fallback_text: None,
+                page_number,
+                source_block_id: if matches!(input_kind, NativeTextInputKind::PdfText) {
+                    format!("pdf-p{}-text-b{}", page_number, index + 1)
+                } else {
+                    format!("native-text-{}", index + 1)
+                },
+                source_kind: if matches!(input_kind, NativeTextInputKind::PdfText) {
+                    NativeTextSourceKind::PdfSelectableText
+                } else {
+                    NativeTextSourceKind::PlainText
+                },
+                pdf_context: None,
+                pdf_export_metadata: None,
+            })
+        })
+        .collect()
+}
+
+fn native_retry_page_number(page_number: i32) -> u32 {
+    u32::try_from(page_number).unwrap_or(1).max(1)
+}
+
+fn native_retry_source_block_id(source_block_id: &str, index: usize, prefix: &str) -> String {
+    let source_block_id = source_block_id.trim();
+    if source_block_id.is_empty() {
+        format!("{prefix}-b{}", index + 1)
+    } else {
+        source_block_id.to_string()
+    }
+}
+
+fn preserved_chunk_indexes_from_retry_checkpoint(
+    checkpoint: &NativeLongDocumentSidecarCheckpoint,
+) -> BTreeSet<usize> {
+    checkpoint
+        .pdf
+        .as_ref()
+        .map(|pdf| {
+            pdf.chunk_metadata
+                .iter()
+                .filter_map(|metadata| {
+                    (metadata.translation_skipped || metadata.preserve_original_text_in_pdf_export)
+                        .then_some(metadata.chunk_index)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn native_export_checkpoint(
@@ -5714,6 +6250,10 @@ fn selected_file_path(value: &str) -> Option<String> {
 fn non_empty(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_string())
+}
+
+fn is_zero_u32(value: &u32) -> bool {
+    *value == 0
 }
 
 fn long_document_vision_layout_params(

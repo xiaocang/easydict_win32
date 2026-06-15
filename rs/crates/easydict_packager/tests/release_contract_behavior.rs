@@ -396,6 +396,109 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
     let _ = fs::remove_dir_all(test_root);
 }
 
+#[cfg(windows)]
+#[test]
+fn package_portable_powershell_shim_forces_and_restores_runtime_profile() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_FAKE_CARGO_RECORD",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("package-portable-shim-runtime-profile");
+    let fake_bin = test_root.join("bin");
+    let output_root = test_root.join("out");
+    let wrapper_path = test_root.join("run-package-portable.ps1");
+    let cargo_record_path = test_root.join("cargo-record.txt");
+    let post_env_record_path = test_root.join("post-env.txt");
+    fs::create_dir_all(&test_root).expect("create test root");
+    fs::create_dir_all(&output_root).expect("create output root");
+    write_fake_package_portable_tool_scripts(&fake_bin);
+    write_package_portable_wrapper(
+        &wrapper_path,
+        &root.join("rs/scripts/Package-Portable.ps1"),
+        &output_root,
+        &post_env_record_path,
+    );
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "outer-parent");
+    std::env::set_var("RUNTIME_PROFILE", "outer-parent");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run Package-Portable wrapper");
+
+    assert!(
+        output.status.success(),
+        "Package-Portable shim wrapper should succeed with fake cargo\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cargo_record = read_text(&cargo_record_path);
+    assert_contains(
+        &cargo_record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "Package-Portable shim should force Easydict runtime profile while cargo runs",
+    );
+    assert_contains(
+        &cargo_record,
+        "RUNTIME_PROFILE=rust-only",
+        "Package-Portable shim should force generic runtime profile while cargo runs",
+    );
+    assert_contains(
+        &cargo_record,
+        "ARGS=run --manifest-path",
+        "Package-Portable shim should invoke cargo run through the Rust packager",
+    );
+    for expected in [
+        "-p",
+        "easydict_packager",
+        "pack-rs-portable",
+        "--workspace",
+        "--platform x64",
+        "--configuration Debug",
+        "--output-root",
+        "--package-version v0.0.0-shim",
+        "--no-zip",
+    ] {
+        assert_contains(
+            &cargo_record,
+            expected,
+            "Package-Portable shim should pass the expected pack-rs-portable arguments",
+        );
+    }
+    for forbidden in [
+        "retained-dotnet-workers",
+        "--features",
+        "--all-features",
+        "CompatHost",
+    ] {
+        assert_not_contains(
+            &cargo_record,
+            forbidden,
+            "Package-Portable shim must not enable retained runtime features",
+        );
+    }
+
+    let post_env_record = read_text(&post_env_record_path);
+    assert_contains(
+        &post_env_record,
+        "POST_EASYDICT_RUNTIME_PROFILE=hybrid",
+        "Package-Portable shim should restore the caller's Easydict runtime profile",
+    );
+    assert_contains(
+        &post_env_record,
+        "POST_RUNTIME_PROFILE=hybrid",
+        "Package-Portable shim should restore the caller's generic runtime profile",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
 #[test]
 fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
     let root = repo_root();
@@ -418,8 +521,23 @@ fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
     );
     assert_contains(
         &script,
+        "[switch]$RetryFailed",
+        "LongDoc helper script should accept the Rust retry-failed switch",
+    );
+    assert_contains(
+        &script,
         "\"--result-json\", $ResultJsonPath",
         "LongDoc helper script should pass the result JSON sidecar path to Rust",
+    );
+    assert_contains(
+        &script,
+        "\"--retry-failed\"",
+        "LongDoc helper script should pass retry-failed to Rust",
+    );
+    assert_contains(
+        &script,
+        "ResultJsonPath is required when -RetryFailed is used.",
+        "LongDoc helper script should keep retry-failed tied to a Rust sidecar",
     );
     assert_contains(
         &script,
@@ -431,10 +549,15 @@ fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
         "Invoke-DotnetLegacy",
         "New-LegacyLongDocArguments",
         "& dotnet",
+        "dotnet.exe",
+        "dotnet run",
+        "Start-Process dotnet",
         "dotnetArguments",
         "dotnet\\src\\Easydict.WinUI",
         "dotnet/src/Easydict.WinUI",
         "Easydict.WinUI.csproj",
+        "Easydict.Workers.LongDocument",
+        "Easydict.CompatHost",
         "--translate-long-doc",
     ] {
         assert_not_contains(
@@ -443,6 +566,188 @@ fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
             &format!("scripts/translate-long-doc.ps1 must not launch legacy .NET LongDoc mode"),
         );
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_LONG_DOC_HELPER_RECORD",
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-rust-helper-smoke");
+    let fake_bin = test_root.join("bin");
+    let app_dir = test_root.join("app");
+    let helper_path = test_root.join("fake-easydict-long-doc.cmd");
+    let record_path = test_root.join("helper-args.txt");
+    let forbidden_tool_record = test_root.join("forbidden-tools.txt");
+    let input_path = test_root.join("input.pdf");
+    let output_path = test_root.join("translated.pdf");
+    let result_json_path = test_root.join("translated-result.json");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_long_doc_helper(&helper_path);
+    write_fake_forbidden_tool_scripts(&fake_bin);
+    write_stale_dotnet_payload_markers(&app_dir);
+    fs::write(&input_path, b"%PDF-1.7\n").expect("write input");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &record_path);
+    std::env::set_var(
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        &forbidden_tool_record,
+    );
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-InputFile")
+        .arg(&input_path)
+        .args(["-TargetLanguage", "zh-Hans", "-SourceLanguage", "en"])
+        .arg("-OutputFile")
+        .arg(&output_path)
+        .arg("-ResultJsonPath")
+        .arg(&result_json_path)
+        .arg("-RetryFailed")
+        .args(["-ServiceId", "google", "-OutputMode", "both"])
+        .args(["-PdfExportMode", "Overlay", "-PageRange", "2-3"])
+        .arg("-AppDir")
+        .arg(&app_dir)
+        .arg("-RustHelperPath")
+        .arg(&helper_path)
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        output.status.success(),
+        "translate-long-doc shim should invoke fake Rust helper successfully\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !forbidden_tool_record.exists(),
+        "Rust-helper shim path must not launch cargo/dotnet/pwsh from PATH"
+    );
+    let record = read_text(&record_path);
+    let expected_arguments = vec![
+        "--input".to_string(),
+        input_path.display().to_string(),
+        "--target-language".to_string(),
+        "zh-Hans".to_string(),
+        "--from".to_string(),
+        "en".to_string(),
+        "--output".to_string(),
+        output_path.display().to_string(),
+        "--result-json".to_string(),
+        result_json_path.display().to_string(),
+        "--retry-failed".to_string(),
+        "--service".to_string(),
+        "google".to_string(),
+        "--output-mode".to_string(),
+        "both".to_string(),
+        "--pdf-export-mode".to_string(),
+        "Overlay".to_string(),
+        "--page-range".to_string(),
+        "2-3".to_string(),
+        "--app-dir".to_string(),
+        app_dir.display().to_string(),
+    ];
+    for expected in expected_arguments {
+        assert_contains(
+            &record,
+            &expected,
+            "translate-long-doc shim should pass the expected Rust helper argument",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_rejects_retry_failed_without_sidecar_before_helper() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["EASYDICT_LONG_DOC_HELPER_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-retry-without-sidecar");
+    let helper_path = test_root.join("fake-easydict-long-doc.cmd");
+    let record_path = test_root.join("helper-args.txt");
+    let input_path = test_root.join("input.txt");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_long_doc_helper(&helper_path);
+    fs::write(&input_path, "retry me").expect("write input");
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &record_path);
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-InputFile")
+        .arg(&input_path)
+        .args(["-TargetLanguage", "zh-Hans"])
+        .arg("-RetryFailed")
+        .arg("-RustHelperPath")
+        .arg(&helper_path)
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        !output.status.success(),
+        "missing ResultJsonPath should fail before helper"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_contains(
+        &stderr,
+        "ResultJsonPath is required when -RetryFailed is used.",
+        "retry-failed validation should explain the missing sidecar",
+    );
+    assert!(
+        !record_path.exists(),
+        "retry-failed validation must fail before invoking the Rust helper"
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+    drop(environment);
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_rejects_legacy_dotnet_mode_before_helper() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["EASYDICT_LONG_DOC_HELPER_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-legacy-retired");
+    let helper_path = test_root.join("fake-easydict-long-doc.cmd");
+    let record_path = test_root.join("helper-args.txt");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_long_doc_helper(&helper_path);
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &record_path);
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-ListServices")
+        .arg("-UseDotnetLegacy")
+        .arg("-RustHelperPath")
+        .arg(&helper_path)
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        !output.status.success(),
+        "retired legacy mode should fail before helper"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_contains(
+        &stderr,
+        "-UseDotnetLegacy has been retired",
+        "legacy dotnet mode should be rejected locally",
+    );
+    assert!(
+        !record_path.exists(),
+        "legacy mode validation must fail before invoking the Rust helper"
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+    drop(environment);
 }
 
 #[test]
@@ -673,6 +978,141 @@ fn assert_contains(haystack: &str, needle: &str, message: &str) {
 
 fn assert_not_contains(haystack: &str, needle: &str, message: &str) {
     assert!(!haystack.contains(needle), "{message}\nforbidden: {needle}");
+}
+
+#[cfg(windows)]
+fn translate_long_doc_script_command(root: &Path) -> std::process::Command {
+    powershell_script_command(&root.join("scripts/translate-long-doc.ps1"))
+}
+
+#[cfg(windows)]
+fn powershell_script_command(script_path: &Path) -> std::process::Command {
+    let shell = if std::process::Command::new("pwsh")
+        .args(["-NoProfile", "-Command", "$PSVersionTable.PSVersion"])
+        .output()
+        .is_ok_and(|output| output.status.success())
+    {
+        "pwsh"
+    } else {
+        "powershell"
+    };
+    let mut command = std::process::Command::new(shell);
+    command
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(script_path);
+    command
+}
+
+#[cfg(windows)]
+fn write_fake_package_portable_tool_scripts(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake Package-Portable tool dir");
+    fs::write(
+        fake_bin.join("cargo.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo EASYDICT_RUNTIME_PROFILE=%EASYDICT_RUNTIME_PROFILE%\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo RUNTIME_PROFILE=%RUNTIME_PROFILE%\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo ARGS=%*\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake Package-Portable cargo");
+    fs::write(
+        fake_bin.join("dotnet.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo FORBIDDEN_DOTNET=%*\r\n\
+exit /b 87\r\n",
+    )
+    .expect("write fake Package-Portable dotnet");
+}
+
+#[cfg(windows)]
+fn write_package_portable_wrapper(
+    wrapper_path: &Path,
+    package_script: &Path,
+    output_root: &Path,
+    post_env_record_path: &Path,
+) {
+    fs::write(
+        wrapper_path,
+        format!(
+            "$ErrorActionPreference = 'Stop'\r\n\
+$env:EASYDICT_RUNTIME_PROFILE = 'hybrid'\r\n\
+$env:RUNTIME_PROFILE = 'hybrid'\r\n\
+& {} -Platform x64 -Configuration Debug -OutputRoot {} -PackageVersion v0.0.0-shim -NoZip\r\n\
+Add-Content -LiteralPath {} -Value \"POST_EASYDICT_RUNTIME_PROFILE=$env:EASYDICT_RUNTIME_PROFILE\"\r\n\
+Add-Content -LiteralPath {} -Value \"POST_RUNTIME_PROFILE=$env:RUNTIME_PROFILE\"\r\n",
+            powershell_literal(package_script),
+            powershell_literal(output_root),
+            powershell_literal(post_env_record_path),
+            powershell_literal(post_env_record_path),
+        ),
+    )
+    .expect("write Package-Portable wrapper");
+}
+
+#[cfg(windows)]
+fn powershell_literal(path: &Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\'', "''"))
+}
+
+#[cfg(windows)]
+fn write_fake_long_doc_helper(path: &Path) {
+    fs::write(
+        path,
+        "@echo off\r\n\
+setlocal\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo HELPER=%~f0\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo ARGS=%*\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake LongDoc helper");
+}
+
+#[cfg(windows)]
+fn write_fake_forbidden_tool_scripts(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake forbidden tool dir");
+    for tool in ["cargo.cmd", "dotnet.cmd"] {
+        fs::write(
+            fake_bin.join(tool),
+            format!(
+                "@echo off\r\n\
+>>\"%EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD%\" echo {tool} %*\r\n\
+exit /b 87\r\n"
+            ),
+        )
+        .expect("write fake forbidden tool");
+    }
+}
+
+#[cfg(windows)]
+fn write_stale_dotnet_payload_markers(app_dir: &Path) {
+    fs::create_dir_all(app_dir.join("workers").join("longdoc"))
+        .expect("create stale LongDoc worker dir");
+    fs::create_dir_all(app_dir.join("workers").join("localai"))
+        .expect("create stale LocalAI worker dir");
+    fs::create_dir_all(app_dir.join("dotnet").join("host").join("fxr"))
+        .expect("create stale dotnet runtime host dir");
+    fs::create_dir_all(
+        app_dir
+            .join("dotnet")
+            .join("shared")
+            .join("Microsoft.NETCore.App"),
+    )
+    .expect("create stale dotnet shared runtime dir");
+    fs::write(
+        app_dir.join("Easydict.CompatHost.exe"),
+        b"stale compat host",
+    )
+    .expect("write stale CompatHost marker");
+    fs::write(
+        app_dir
+            .join("workers")
+            .join("longdoc")
+            .join("Easydict.Workers.LongDoc.exe"),
+        b"stale longdoc worker",
+    )
+    .expect("write stale LongDoc worker marker");
+    fs::write(app_dir.join("dotnet").join("dotnet.exe"), b"stale dotnet")
+        .expect("write stale dotnet marker");
 }
 
 fn text_between<'a>(text: &'a str, start: &str, end: &str) -> &'a str {

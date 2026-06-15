@@ -1262,4 +1262,37 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>ปุ่มลัดไม่ถูกต้อง ตัวอย่าง: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>การแปล OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>ขนาดฟอนต์ผลลัพธ์</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>ปรับขนาดฟอนต์ของผลการแปล</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>โหมดกะทัดรัด</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>ซ่อนชื่อเรื่อง สถานะ ไอคอนช่วยเหลือ และปุ่มลัดเสริม เพื่อให้หน้าต่างแปลภาษากะทัดรัดขึ้น</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>ปุ่มการทำงานด่วน</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>แสดงปุ่ม OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>แสดงปุ่มปักหมุด</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>แสดงปุ่มเล่น</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>เล่นข้อความต้นฉบับ</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>แสดงปุ่มสลับ</value>
+  </data>
 </root>

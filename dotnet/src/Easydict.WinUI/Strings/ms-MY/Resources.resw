@@ -896,4 +896,37 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Pintasan tidak sah. Contoh: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Terjemahan OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Saiz fon hasil</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Laraskan saiz fon hasil terjemahan.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Mod padat</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Sembunyikan tajuk, status, ikon bantuan dan tindakan pantas tambahan untuk paparan terjemahan yang lebih padat.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Butang tindakan pantas</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Tunjukkan butang OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Tunjukkan butang pin</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Tunjukkan butang main</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Mainkan teks sumber</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Tunjukkan butang tukar</value>
+  </data>
 </root>

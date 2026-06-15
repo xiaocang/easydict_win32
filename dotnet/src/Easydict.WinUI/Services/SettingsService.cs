@@ -423,6 +423,34 @@ public sealed class SettingsService
     // App Theme (System, Light, Dark, Minimal)
     public string AppTheme { get; set; } = "System"; // Default to system theme
 
+    // Appearance / personalization (issue #172)
+    /// <summary>
+    /// Font-size multiplier for translation result text across all windows.
+    /// 1.0 = default; clamped to [0.85, 1.4] when applied via AppearanceService.
+    /// </summary>
+    public double ResultFontScale { get; set; } = 1.0;
+
+    /// <summary>Hide secondary chrome and optional helper actions for a tighter translation surface.</summary>
+    public bool CompactMode { get; set; } = false;
+
+    /// <summary>Show the OCR quick-action button in the translation windows.</summary>
+    public bool ShowOcrButton { get; set; } = true;
+
+    /// <summary>Show the pin / always-on-top toggle button.</summary>
+    public bool ShowPinButton { get; set; } = true;
+
+    /// <summary>Show the play-source-text (TTS) button.</summary>
+    public bool ShowSourcePlayButton { get; set; } = true;
+
+    /// <summary>Show the swap-languages button.</summary>
+    public bool ShowSwapButton { get; set; } = true;
+
+    /// <summary>
+    /// Keep the fixed window always on top. Default true (fixed window has always been topmost);
+    /// exposed so users can turn it off via the pin toggle.
+    /// </summary>
+    public bool FixedWindowIsPinned { get; set; } = true;
+
     // Startup settings
     public bool LaunchAtStartup { get; set; } = false;
 
@@ -762,6 +790,16 @@ public sealed class SettingsService
         AutoPlayTranslation = GetValue(nameof(AutoPlayTranslation), false);
         UILanguage = GetValue(nameof(UILanguage), "");
         AppTheme = GetValue(nameof(AppTheme), "System");
+
+        // Appearance / personalization (issue #172)
+        ResultFontScale = GetValue(nameof(ResultFontScale), 1.0);
+        CompactMode = GetValue(nameof(CompactMode), false);
+        ShowOcrButton = GetValue(nameof(ShowOcrButton), true);
+        ShowPinButton = GetValue(nameof(ShowPinButton), true);
+        ShowSourcePlayButton = GetValue(nameof(ShowSourcePlayButton), true);
+        ShowSwapButton = GetValue(nameof(ShowSwapButton), true);
+        FixedWindowIsPinned = GetValue(nameof(FixedWindowIsPinned), true);
+
         LaunchAtStartup = GetValue(nameof(LaunchAtStartup), false);
         MinimizeToTrayOnStartup = GetValue(nameof(MinimizeToTrayOnStartup), false);
         EnableDpiAwareness = GetValue(nameof(EnableDpiAwareness), true);
@@ -992,6 +1030,16 @@ public sealed class SettingsService
         _settings[nameof(AutoPlayTranslation)] = AutoPlayTranslation;
         _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(AppTheme)] = AppTheme;
+
+        // Appearance / personalization (issue #172)
+        _settings[nameof(ResultFontScale)] = ResultFontScale;
+        _settings[nameof(CompactMode)] = CompactMode;
+        _settings[nameof(ShowOcrButton)] = ShowOcrButton;
+        _settings[nameof(ShowPinButton)] = ShowPinButton;
+        _settings[nameof(ShowSourcePlayButton)] = ShowSourcePlayButton;
+        _settings[nameof(ShowSwapButton)] = ShowSwapButton;
+        _settings[nameof(FixedWindowIsPinned)] = FixedWindowIsPinned;
+
         _settings[nameof(LaunchAtStartup)] = LaunchAtStartup;
         _settings[nameof(MinimizeToTrayOnStartup)] = MinimizeToTrayOnStartup;
         _settings[nameof(EnableDpiAwareness)] = EnableDpiAwareness;

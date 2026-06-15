@@ -124,6 +124,14 @@ public sealed class FixedWindowService : IDisposable
     }
 
     /// <summary>
+    /// Re-apply appearance settings (result font size, button visibility) to the fixed window.
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        _fixedWindow?.ApplyAppearance();
+    }
+
+    /// <summary>
     /// Ensure the fixed window instance exists.
     /// </summary>
     private void EnsureWindowCreated()

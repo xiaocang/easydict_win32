@@ -30,6 +30,7 @@ internal static class ServiceResultViewHost
         control.ServiceResult = result;
         ApplyAutomationProperties(control, result);
         control.RefreshThemeChrome();
+        control.ApplyAppearance(AppearanceService.CurrentSnapshot());
         return control;
     }
 
@@ -252,6 +253,21 @@ internal static class ServiceResultViewHost
             }
 
             control.RefreshThemeChrome();
+        }
+    }
+
+    /// <summary>
+    /// Re-apply the current appearance snapshot (result font size) to existing items.
+    /// Mirrors <see cref="RefreshThemeChrome"/>; call after a font-size setting change.
+    /// </summary>
+    public static void RefreshAppearance(IEnumerable<IServiceResultView> controls)
+    {
+        using var hotspot = UiThreadHotspotDiagnostics.Measure("ServiceResultViewHost.RefreshAppearance");
+
+        var snapshot = AppearanceService.CurrentSnapshot();
+        foreach (var control in controls)
+        {
+            control.ApplyAppearance(snapshot);
         }
     }
 

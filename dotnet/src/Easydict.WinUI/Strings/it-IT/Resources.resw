@@ -1300,4 +1300,37 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Scorciatoia non valida. Esempio: Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Traduzione OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Dimensione carattere dei risultati</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Regola la dimensione del carattere dei risultati di traduzione.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Modalità compatta</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Nasconde titoli, stato, icone di aiuto e azioni rapide secondarie per rendere l&apos;interfaccia di traduzione più compatta.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Pulsanti di azione rapida</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Mostra pulsante OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Mostra pulsante blocca</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Mostra pulsante riproduci</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Riproduci testo sorgente</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Mostra pulsante scambia</value>
+  </data>
 </root>

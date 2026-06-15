@@ -64,6 +64,13 @@ public sealed partial class MinimalServiceResultItem : UserControl, IServiceResu
 
     public void RefreshDemotionState() => QueueUpdateUI();
 
+    public void ApplyAppearance(AppearanceSettings settings)
+    {
+        ServiceNameText.FontSize = settings.ServiceNameFontSize;
+        StatusText.FontSize = settings.StatusFontSize;
+        ResultText.FontSize = settings.ResultFontSize;
+    }
+
     public IEnumerable<string> GetDisplayedPhoneticKeys() => Array.Empty<string>();
 
     public void Cleanup()

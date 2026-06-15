@@ -62,6 +62,8 @@ public sealed partial class MiniWindow : Window
     private QuickQueryLanguageResolution? _lastQuickQueryResolution;
     private bool _showingGrammarFallbackNotice;
     private TitleBarDragRegionHelper? _titleBarHelper;
+    private CompactWindowControlsView? _compactWindowControls;
+    private WindowDragSession? _compactWindowDragSession;
     private bool _hasAutoPlayedCurrentQuery = false;
     private DateTime _lastShowTime = DateTime.MinValue;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _resizeThrottleTimer;
@@ -79,6 +81,7 @@ public sealed partial class MiniWindow : Window
     private const int ResizeThrottleMs = 150;
     private const int InputFocusRetryDelayMs = 50;
     private const int InputFocusMaxAttempts = 10;
+    private const double CompactWindowControlsIdleOpacity = 0.52;
 
     /// <summary>
     /// Maximum time to wait for in-flight query to complete during cleanup.
@@ -89,6 +92,7 @@ public sealed partial class MiniWindow : Window
     {
         _targetLanguageSelector = new TargetLanguageSelector(_settings);
         this.InitializeComponent();
+        InitializeCompactWindowControls();
 
         // Construct the streaming coalescer on the UI dispatcher — its timer is
         // thread-affine. Built here (not lazily in the streaming loop) so the
@@ -142,7 +146,7 @@ public sealed partial class MiniWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
                 "MiniWindow");
             _titleBarHelper.Initialize();
         }
@@ -183,11 +187,51 @@ public sealed partial class MiniWindow : Window
 
         // Tooltips
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
+        ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("Close"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(CloseButton, loc.GetString("Close"));
+        if (_compactWindowControls is { } compactControls)
+        {
+            ToolTipService.SetToolTip(compactControls.CloseButton, loc.GetString("Close"));
+            ToolTipService.SetToolTip(compactControls.DragIsland, loc.GetStringOrDefault("DragWindowTooltip", "Drag window"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(compactControls.CloseButton, loc.GetString("Close"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                compactControls.DragIsland,
+                loc.GetStringOrDefault("DragWindowTooltip", "Drag window"));
+        }
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        var sourcePlayTooltip = loc.GetString("PlaySourceTextTooltip");
+        ToolTipService.SetToolTip(SourcePlayButton, sourcePlayTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            SourcePlayButton,
+            sourcePlayTooltip);
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, loc.GetString("TranslateTooltip"));
+    }
+
+    private void InitializeCompactWindowControls()
+    {
+        if (WindowSurface.Child is not Grid surfaceGrid)
+        {
+            return;
+        }
+
+        _compactWindowControls = new CompactWindowControlsView();
+        surfaceGrid.Children.Add(_compactWindowControls.Root);
+        _compactWindowControls.Root.PointerEntered += OnCompactWindowControlsPointerEntered;
+        _compactWindowControls.Root.PointerExited += OnCompactWindowControlsPointerExited;
+        _compactWindowControls.DragIsland.PointerPressed += OnCompactDragIslandPointerPressed;
+        _compactWindowControls.DragIsland.PointerMoved += OnCompactDragIslandPointerMoved;
+        _compactWindowControls.DragIsland.PointerReleased += OnCompactDragIslandPointerReleased;
+        _compactWindowControls.DragIsland.PointerCanceled += OnCompactDragIslandPointerCanceled;
+        _compactWindowControls.DragIsland.PointerCaptureLost += OnCompactDragIslandPointerCaptureLost;
+        _compactWindowControls.CloseButton.Click += OnCompactCloseClicked;
+        _compactWindowControls.RefreshTheme(Content as FrameworkElement);
     }
 
     /// <summary>
@@ -247,6 +291,10 @@ public sealed partial class MiniWindow : Window
         // Apply pinned state
         _isPinned = _settings.MiniWindowIsPinned;
         UpdatePinState();
+
+        // Apply quick-action button visibility from settings
+        ApplyButtonVisibility();
+        ApplyCompactChromeLayout();
     }
 
     /// <summary>
@@ -443,11 +491,11 @@ public sealed partial class MiniWindow : Window
         InputTextBox.PlaceholderText = _currentMode == QueryMode.GrammarCorrection
             ? loc.GetString("InputPlaceholder_Grammar")
             : loc.GetString("InputPlaceholder");
-        ToolTipService.SetToolTip(
-            TranslateButton,
-            _currentMode == QueryMode.GrammarCorrection
-                ? loc.GetString("TranslateButton_Grammar_Tooltip")
-                : loc.GetString("TranslateTooltip"));
+        var translateTooltip = _currentMode == QueryMode.GrammarCorrection
+            ? loc.GetString("TranslateButton_Grammar_Tooltip")
+            : loc.GetString("TranslateTooltip");
+        ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
 
         if (reinitializeServiceResults && previousMode != _currentMode)
         {
@@ -479,7 +527,7 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionFallbackNotice",
                 "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
-            DetectedLangText.Visibility = Visibility.Visible;
+            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
             RequestResize();
             return;
         }
@@ -489,7 +537,7 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = loc.GetStringOrDefault(
                 "GrammarCorrectionActiveNotice",
                 "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
-            DetectedLangText.Visibility = Visibility.Visible;
+            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
             RequestResize();
             return;
         }
@@ -859,7 +907,7 @@ public sealed partial class MiniWindow : Window
             var desiredHeightDips = content.DesiredSize.Height;
 
             // Calculate new height with limits
-            var minHeightPx = DpiHelper.DipsToPhysicalPixels(200, scale);
+            var minHeightPx = DpiHelper.DipsToPhysicalPixels(AppearanceService.MinFloatingWindowHeightDips, scale);
             var desiredHeightPx = DpiHelper.DipsToPhysicalPixels(desiredHeightDips + 16, scale); // +16 for padding
             
             var newHeightPx = Math.Clamp(desiredHeightPx, minHeightPx, maxHeightPx);
@@ -1014,8 +1062,9 @@ public sealed partial class MiniWindow : Window
         _isQuerying = loading;
 
         var loc = LocalizationService.Instance;
-        ToolTipService.SetToolTip(TranslateButton,
-            loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip"));
+        var translateTooltip = loading ? loc.GetString("Cancel") : loc.GetString("TranslateTooltip");
+        ToolTipService.SetToolTip(TranslateButton, translateTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
 
         // Swap icon: show cancel (X) glyph during query, translate glyph otherwise
         TranslateIcon.Glyph = loading ? "\uE711" : "\uE8C1";
@@ -1736,7 +1785,7 @@ public sealed partial class MiniWindow : Window
             DetectedLangText.Text = string.Format(
                 LocalizationService.Instance.GetString("DetectedLanguage"),
                 displayName);
-            DetectedLangText.Visibility = Visibility.Visible;
+            DetectedLangText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {
@@ -1775,6 +1824,11 @@ public sealed partial class MiniWindow : Window
     private void OnCloseClicked(object sender, RoutedEventArgs e)
     {
         HideWindow();
+    }
+
+    private void OnOcrClicked(object sender, RoutedEventArgs e)
+    {
+        _ = App.TriggerOcrTranslateAsync();
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)
@@ -2247,9 +2301,8 @@ public sealed partial class MiniWindow : Window
             SourceTextContainer,
             minimal,
             Content as FrameworkElement);
-        SourcePlayButton.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-        DetectedLangText.Visibility = minimal ? Visibility.Collapsed : DetectedLangText.Visibility;
-        StatusText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
+        ApplyButtonVisibility();
+        ApplyCompactChromeLayout();
         var themeRoot = Content as FrameworkElement;
         MinimalThemeService.ApplyAccentIconForeground(TranslateIcon, LoadingRing, themeRoot);
 
@@ -2270,6 +2323,174 @@ public sealed partial class MiniWindow : Window
         {
             TryApplyMicaBackdrop();
         }
+    }
+
+    /// <summary>
+    /// Re-apply appearance settings (result font size + quick-action button visibility)
+    /// to the mini window. Called from the app-wide appearance broadcast (issue #172).
+    /// </summary>
+    public void ApplyAppearance()
+    {
+        ApplyButtonVisibility();
+        ApplyCompactChromeLayout();
+        ServiceResultViewHost.RefreshAppearance(_resultControls);
+        RequestResize();
+    }
+
+    private bool IsCompactChrome => MinimalThemeService.IsActive || SettingsService.Instance.CompactMode;
+
+    private bool ShouldShowCompactWindowControls => SettingsService.Instance.CompactMode;
+
+    private void ApplyCompactChromeLayout()
+    {
+        var compact = IsCompactChrome;
+        var showCompactControls = ShouldShowCompactWindowControls;
+        TitleBarRegion.Visibility = showCompactControls ? Visibility.Collapsed : Visibility.Visible;
+        TitleBarRegion.Margin = showCompactControls ? new Thickness(0) : new Thickness(0, 0, 0, 4);
+        if (_compactWindowControls is { } compactControls)
+        {
+            compactControls.Root.Visibility = showCompactControls ? Visibility.Visible : Visibility.Collapsed;
+            compactControls.Root.Opacity = showCompactControls ? CompactWindowControlsIdleOpacity : 0;
+            compactControls.RefreshTheme(Content as FrameworkElement);
+        }
+        TitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        if (compact)
+        {
+            DetectedLangText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            RefreshDetectedLanguageChrome();
+        }
+        StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        DispatcherQueue.TryEnqueue(() => _titleBarHelper?.UpdateDragRegions());
+    }
+
+    private void RefreshDetectedLanguageChrome()
+    {
+        if (_lastQuickQueryResolution is { } resolution)
+        {
+            UpdateQuickQueryModeStatus(resolution);
+            return;
+        }
+
+        UpdateDetectedLanguageDisplay(_lastDetectedLanguage);
+    }
+
+    private void OnCompactWindowControlsPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (ShouldShowCompactWindowControls)
+        {
+            if (_compactWindowControls is { } compactControls)
+            {
+                compactControls.Root.Opacity = 1;
+            }
+        }
+    }
+
+    private void OnCompactWindowControlsPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (ShouldShowCompactWindowControls)
+        {
+            if (_compactWindowControls is { } compactControls)
+            {
+                compactControls.Root.Opacity = CompactWindowControlsIdleOpacity;
+            }
+        }
+    }
+
+    private void OnCompactDragIslandPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!ShouldShowCompactWindowControls
+            || _compactWindowDragSession is not null
+            || sender is not UIElement dragElement
+            || !WindowDragHelper.TryBeginLeftButtonDrag(this, dragElement, e, out var session))
+        {
+            return;
+        }
+
+        _compactWindowDragSession = session;
+        e.Handled = true;
+    }
+
+    private void OnCompactDragIslandPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_compactWindowDragSession is not { } session
+            || sender is not UIElement dragElement
+            || !WindowDragHelper.IsSessionPointer(session, e))
+        {
+            return;
+        }
+
+        if (WindowDragHelper.TryUpdateLeftButtonDrag(session, dragElement, e))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        EndCompactWindowDrag(dragElement, e, releaseCapture: true);
+    }
+
+    private void OnCompactDragIslandPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement dragElement)
+        {
+            EndCompactWindowDrag(dragElement, e, releaseCapture: true);
+        }
+    }
+
+    private void OnCompactDragIslandPointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement dragElement)
+        {
+            EndCompactWindowDrag(dragElement, e, releaseCapture: true);
+        }
+    }
+
+    private void OnCompactDragIslandPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement dragElement)
+        {
+            EndCompactWindowDrag(dragElement, e, releaseCapture: false);
+        }
+    }
+
+    private void EndCompactWindowDrag(UIElement dragElement, PointerRoutedEventArgs e, bool releaseCapture)
+    {
+        if (_compactWindowDragSession is not { } session
+            || !WindowDragHelper.IsSessionPointer(session, e))
+        {
+            return;
+        }
+
+        _compactWindowDragSession = null;
+        if (releaseCapture)
+        {
+            dragElement.ReleasePointerCapture(e.Pointer);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnCompactCloseClicked(object sender, RoutedEventArgs e)
+    {
+        HideWindow();
+    }
+
+    /// <summary>
+    /// Show/hide quick-action buttons per user settings. Helper actions are hidden in compact chrome.
+    /// </summary>
+    private void ApplyButtonVisibility()
+    {
+        var settings = SettingsService.Instance;
+        var compact = IsCompactChrome;
+
+        PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
+        OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+        SwapButton.Visibility = !compact && settings.ShowSwapButton ? Visibility.Visible : Visibility.Collapsed;
+        SourcePlayButton.Visibility = (!compact && settings.ShowSourcePlayButton)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     /// <summary>

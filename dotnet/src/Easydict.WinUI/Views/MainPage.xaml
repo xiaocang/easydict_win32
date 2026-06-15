@@ -125,18 +125,55 @@
                 </StackPanel>
             </Border>
 
-            <!-- Settings Button -->
-            <Button
-                x:Name="SettingsButton"
+            <!-- Header action buttons -->
+            <StackPanel
                 Grid.Column="3"
-                Click="OnSettingsClicked"
-                Style="{StaticResource EasydictIconButtonStyle}"
-                ToolTipService.ToolTip="Settings"
+                Orientation="Horizontal"
+                Spacing="2"
                 VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE713;"
-                          FontSize="18"
-                          Foreground="{ThemeResource ButtonForeground}"/>
-            </Button>
+                <ToggleButton
+                    x:Name="PinButton"
+                    Click="OnPinClicked"
+                    ToolTipService.ToolTip="Pin window (stay on top)"
+                    AutomationProperties.Name="Pin window (stay on top)"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                    Padding="0"
+                    Width="32"
+                    Height="32"
+                    VerticalAlignment="Center">
+                    <FontIcon x:Name="PinIcon"
+                              Glyph="&#xE718;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </ToggleButton>
+                <Button
+                    x:Name="OcrButton"
+                    Click="OnOcrClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="OCR translate"
+                    AutomationProperties.Name="OCR translate"
+                    Width="32"
+                    Height="32"
+                    VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE722;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+                <!-- Settings Button -->
+                <Button
+                    x:Name="SettingsButton"
+                    Click="OnSettingsClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="Settings"
+                    AutomationProperties.Name="Settings"
+                    VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE713;"
+                              FontSize="18"
+                              Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Quick Translate Content -->
@@ -217,6 +254,7 @@
                         Click="OnSwapLanguagesClicked"
                         Style="{StaticResource EasydictIconButtonStyle}"
                         ToolTipService.ToolTip="Swap source and target languages"
+                        AutomationProperties.Name="Swap source and target languages"
                         Margin="8,0"
                         VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE8AB;"
@@ -252,7 +290,8 @@
                         Click="OnTranslateClicked"
                         Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         VerticalAlignment="Center"
-                        ToolTipService.ToolTip="Translate">
+                        ToolTipService.ToolTip="Translate"
+                        AutomationProperties.Name="Translate">
                         <Grid>
                             <ProgressRing
                                 x:Name="LoadingRing"
@@ -299,6 +338,7 @@
                             Click="OnSwapLanguagesClicked"
                             Style="{StaticResource EasydictIconButtonStyle}"
                             ToolTipService.ToolTip="Swap source and target languages"
+                            AutomationProperties.Name="Swap source and target languages"
                             VerticalAlignment="Center"
                             Margin="4,0">
                             <FontIcon Glyph="&#xE8AB;"
@@ -329,7 +369,8 @@
                         Click="OnTranslateClicked"
                         Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                         HorizontalAlignment="Center"
-                        ToolTipService.ToolTip="Translate">
+                        ToolTipService.ToolTip="Translate"
+                        AutomationProperties.Name="Translate">
                         <Grid>
                             <ProgressRing
                                 x:Name="LoadingRingNarrow"
@@ -364,7 +405,8 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
+                        <Grid x:Name="QuickInputHeaderGrid"
+                              Grid.Row="0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -394,6 +436,7 @@
                                 Click="OnSourcePlayClicked"
                                 Style="{StaticResource EasydictIconButtonStyle}"
                                 ToolTipService.ToolTip="Play source text"
+                                AutomationProperties.Name="Play source text"
                                 Width="24"
                                 Height="24"
                                 HorizontalAlignment="Right"
@@ -497,7 +540,8 @@
                 </Border>
 
                 <!-- Footer -->
-                <Grid Grid.Row="3"
+                <Grid x:Name="QuickFooterGrid"
+                      Grid.Row="3"
                       Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -748,7 +792,8 @@
                             Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
-                            ToolTipService.ToolTip="Translate">
+                            ToolTipService.ToolTip="Translate"
+                            AutomationProperties.Name="Translate">
                         <FontIcon x:Name="LongDocTranslateIcon"
                                   Glyph="&#xE8C1;"
                                   FontSize="16"

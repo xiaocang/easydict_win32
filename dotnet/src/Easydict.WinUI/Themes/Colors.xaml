@@ -73,20 +73,20 @@
 
             <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">6</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">10</CornerRadius>
-            <CornerRadius x:Key="EasydictRoundButtonCornerRadius">20</CornerRadius>
+            <CornerRadius x:Key="EasydictRoundButtonCornerRadius">18</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
             <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
-            <CornerRadius x:Key="FloatingInputCornerRadius">18</CornerRadius>
+            <CornerRadius x:Key="FloatingInputCornerRadius">10</CornerRadius>
             <Thickness x:Key="EasydictCardBorderThickness">1</Thickness>
             <Thickness x:Key="EasydictIconButtonBorderThickness">0</Thickness>
             <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
-            <Thickness x:Key="FloatingWindowContentPadding">16</Thickness>
+            <Thickness x:Key="FloatingWindowContentPadding">8</Thickness>
             <Thickness x:Key="FloatingWindowBorderThickness">0</Thickness>
-            <Thickness x:Key="FloatingInputPadding">12,10</Thickness>
-            <Thickness x:Key="FloatingInputMargin">0,2,0,6</Thickness>
-            <Thickness x:Key="EasydictCardPadding">12</Thickness>
+            <Thickness x:Key="FloatingInputPadding">6,4</Thickness>
+            <Thickness x:Key="FloatingInputMargin">0,0,0,3</Thickness>
+            <Thickness x:Key="EasydictCardPadding">6</Thickness>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="{StaticResource MainViewBackgroundColor}" />
@@ -277,20 +277,20 @@
 
             <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
             <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
-            <CornerRadius x:Key="EasydictCardCornerRadius">10</CornerRadius>
+            <CornerRadius x:Key="EasydictCardCornerRadius">6</CornerRadius>
             <CornerRadius x:Key="EasydictControlCornerRadius">10</CornerRadius>
-            <CornerRadius x:Key="EasydictRoundButtonCornerRadius">20</CornerRadius>
+            <CornerRadius x:Key="EasydictRoundButtonCornerRadius">18</CornerRadius>
             <CornerRadius x:Key="EasydictStatusCornerRadius">12</CornerRadius>
             <CornerRadius x:Key="FloatingWindowCornerRadius">0</CornerRadius>
-            <CornerRadius x:Key="FloatingInputCornerRadius">18</CornerRadius>
+            <CornerRadius x:Key="FloatingInputCornerRadius">10</CornerRadius>
             <Thickness x:Key="EasydictCardBorderThickness">1</Thickness>
             <Thickness x:Key="EasydictIconButtonBorderThickness">0</Thickness>
             <Thickness x:Key="FloatingWindowOuterPadding">0</Thickness>
-            <Thickness x:Key="FloatingWindowContentPadding">16</Thickness>
+            <Thickness x:Key="FloatingWindowContentPadding">8</Thickness>
             <Thickness x:Key="FloatingWindowBorderThickness">0</Thickness>
-            <Thickness x:Key="FloatingInputPadding">12,10</Thickness>
-            <Thickness x:Key="FloatingInputMargin">0,2,0,6</Thickness>
-            <Thickness x:Key="EasydictCardPadding">12</Thickness>
+            <Thickness x:Key="FloatingInputPadding">6,4</Thickness>
+            <Thickness x:Key="FloatingInputMargin">0,0,0,3</Thickness>
+            <Thickness x:Key="EasydictCardPadding">6</Thickness>
 
             <!-- Brushes -->
             <SolidColorBrush x:Key="MainViewBackgroundBrush" Color="#1F2229" />

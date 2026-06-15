@@ -19,7 +19,7 @@
             BorderBrush="{ThemeResource MainBorderBrush}"
             BorderThickness="0"
             CornerRadius="0"
-            Padding="16">
+            Padding="{ThemeResource FloatingWindowContentPadding}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -30,28 +30,65 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Header with Close button (no Pin - always on top) - also serves as drag region -->
+                <!-- Header with Pin, OCR and Hide buttons - also serves as drag region -->
                 <Grid x:Name="TitleBarRegion"
                 Grid.Row="0"
                 Margin="0,0,0,4"
                 Background="Transparent">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock
+            <ToggleButton
+                x:Name="PinButton"
                 Grid.Column="0"
+                Click="OnPinClicked"
+                ToolTipService.ToolTip="Pin window (stay on top)"
+                AutomationProperties.Name="Pin window (stay on top)"
+                Background="Transparent"
+                BorderThickness="0"
+                CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                Width="28"
+                Height="28"
+                Padding="0">
+                <FontIcon x:Name="PinIcon"
+                        Glyph="&#xE718;"
+                        FontSize="14"
+                        Foreground="{ThemeResource ButtonForeground}"/>
+            </ToggleButton>
+
+            <TextBlock
+                x:Name="TitleText"
+                Grid.Column="1"
                 Text="Fixed Translate"
                 FontSize="12"
                 FontWeight="SemiBold"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 VerticalAlignment="Center"
-                Margin="4,0,0,0"/>
+                HorizontalAlignment="Center"/>
+
+            <Button
+                x:Name="OcrButton"
+                Grid.Column="2"
+                Click="OnOcrClicked"
+                Style="{StaticResource EasydictIconButtonStyle}"
+                ToolTipService.ToolTip="OCR translate"
+                AutomationProperties.Name="OCR translate"
+                Width="28"
+                Height="28"
+                Padding="0">
+                <FontIcon Glyph="&#xE722;"
+                        FontSize="14"
+                        Foreground="{ThemeResource ButtonForeground}"/>
+            </Button>
 
             <Button
                 x:Name="CloseButton"
-                Grid.Column="1"
+                AutomationProperties.Name="Hide window"
+                Grid.Column="3"
                 Click="OnCloseClicked"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"
@@ -125,6 +162,7 @@
                 Padding="0"
                 Style="{StaticResource EasydictIconButtonStyle}"
                 ToolTipService.ToolTip="Swap languages"
+                AutomationProperties.Name="Swap languages"
                 Margin="4,0">
                 <FontIcon Glyph="&#xE8AB;"
                         FontSize="12"
@@ -149,6 +187,7 @@
                 Padding="0"
                 Style="{StaticResource EasydictPrimaryRoundButtonStyle}"
                 ToolTipService.ToolTip="Translate"
+                AutomationProperties.Name="Translate"
                 Margin="4,0,0,0">
                 <Grid>
                     <ProgressRing

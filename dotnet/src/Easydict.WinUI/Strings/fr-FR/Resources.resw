@@ -1313,4 +1313,37 @@
   <data name="InvalidHotkeyInlineError" xml:space="preserve">
     <value>Raccourci non valide. Exemple : Ctrl+Alt+T</value>
   </data>
+  <data name="OcrButtonTooltip" xml:space="preserve">
+    <value>Traduction OCR</value>
+  </data>
+  <data name="ResultFontSize" xml:space="preserve">
+    <value>Taille de police des résultats</value>
+  </data>
+  <data name="ResultFontSizeDescription" xml:space="preserve">
+    <value>Ajustez la taille de police des résultats de traduction.</value>
+  </data>
+  <data name="CompactMode" xml:space="preserve">
+    <value>Mode compact</value>
+  </data>
+  <data name="CompactModeDescription" xml:space="preserve">
+    <value>Masque les titres, l&apos;état, les icônes d&apos;aide et les actions rapides secondaires pour une interface de traduction plus compacte.</value>
+  </data>
+  <data name="QuickActionsHeader" xml:space="preserve">
+    <value>Boutons d'action rapide</value>
+  </data>
+  <data name="ShowOcrButton" xml:space="preserve">
+    <value>Afficher le bouton OCR</value>
+  </data>
+  <data name="ShowPinButton" xml:space="preserve">
+    <value>Afficher le bouton d'épinglage</value>
+  </data>
+  <data name="ShowSourcePlayButton" xml:space="preserve">
+    <value>Afficher le bouton de lecture</value>
+  </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Lire le texte source</value>
+  </data>
+  <data name="ShowSwapButton" xml:space="preserve">
+    <value>Afficher le bouton d'échange</value>
+  </data>
 </root>

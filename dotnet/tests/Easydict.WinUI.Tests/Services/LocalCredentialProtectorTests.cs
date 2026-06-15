@@ -41,7 +41,22 @@ public sealed class LocalCredentialProtectorTests
     public void TryUnprotect_WithTamperedProtectedValue_ShouldFail()
     {
         var protectedValue = LocalCredentialProtector.Protect("sk-test-local-api-key");
-        var tamperedValue = protectedValue[..^4] + "AAAA";
+
+        // Corrupt the DPAPI blob itself while keeping the "edcred1:user:" prefix intact,
+        // so the value is still recognized as protected and the real unprotect path runs.
+        // Flip the first half of the decoded blob: this hits the version, provider/master-key
+        // GUIDs, and salt, which CryptUnprotectData must reject regardless of the variable
+        // description length. Mutating only the trailing bytes is unreliable because DPAPI
+        // does not authenticate the final bytes of the blob on every Windows build.
+        var separatorIndex = protectedValue.LastIndexOf(':');
+        var prefix = protectedValue[..(separatorIndex + 1)];
+        var blob = Convert.FromBase64String(protectedValue[(separatorIndex + 1)..]);
+        for (var i = 0; i < blob.Length / 2; i++)
+        {
+            blob[i] ^= 0xFF;
+        }
+
+        var tamperedValue = prefix + Convert.ToBase64String(blob);
 
         LocalCredentialProtector.TryUnprotect(tamperedValue, out var unprotected)
             .Should().BeFalse();

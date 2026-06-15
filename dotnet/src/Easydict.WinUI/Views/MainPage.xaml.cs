@@ -280,8 +280,15 @@ namespace Easydict.WinUI.Views
             }
 #endif
 
+            // Apply quick-action button visibility + pin state from settings (issue #172)
+            ApplyButtonVisibility();
+            UpdatePinState();
+
             // Initialize service result controls based on enabled services
             InitializeServiceResults(skipRebuildWhenDebugFlagSet: true, reason: "OnPageLoaded");
+
+            // Re-apply result font size to any reused result controls (issue #172)
+            ServiceResultViewHost.RefreshAppearance(_resultControls);
 
             SettingsService.Instance.HideEmptyServiceResultsChanged += OnHideEmptyServiceResultsChanged;
             if (_deferLoadedThemeChrome)
@@ -314,6 +321,7 @@ namespace Easydict.WinUI.Views
             {
                 Frame.ForwardStack.Clear();
                 ApplySettings();
+                ApplyAppearance();
                 _deferLoadedThemeChrome = true;
                 QueueApplyThemeChrome(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
                 if (ShouldForceFullGcAfterSettingsReturn())
@@ -383,20 +391,31 @@ namespace Easydict.WinUI.Views
             }
 
             var minimal = MinimalThemeService.IsActive;
-            ModeEmojiIcon.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-            InputHelpIcon.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-            SourcePlayButton.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-            ResultsTitleText.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-            if (minimal)
+            var compact = IsCompactChrome;
+            ModeEmojiIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ModeSelectorButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ModeSubtitle.Visibility = compact || _currentMode != QueryMode.LongDocument
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+            InputHelpIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            SourcePlayButton.Visibility = (!compact && SettingsService.Instance.ShowSourcePlayButton)
+                ? Visibility.Visible : Visibility.Collapsed;
+            ResultsTitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            if (compact)
             {
                 DetectedLanguageText.Visibility = Visibility.Collapsed;
             }
-            LangHelpIcon.Visibility = minimal || _currentMode != QueryMode.Translation
+            else
+            {
+                RefreshDetectedLanguageChrome();
+            }
+            LangHelpIcon.Visibility = compact || _currentMode != QueryMode.Translation
                 ? Visibility.Collapsed
                 : Visibility.Visible;
-            LangHelpIconNarrow.Visibility = minimal || _currentMode != QueryMode.Translation
+            LangHelpIconNarrow.Visibility = compact || _currentMode != QueryMode.Translation
                 ? Visibility.Collapsed
                 : Visibility.Visible;
+            QuickInputHeaderGrid.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
 
             if (refreshServiceResults)
             {
@@ -411,10 +430,11 @@ namespace Easydict.WinUI.Views
             }
 
             ApplyMainWindowBorderChrome(minimal);
-            ApplyMainLayoutChrome(minimal);
+            ApplyMainLayoutChrome(minimal, compact);
             ApplyStatusChrome();
             ApplyStatusSummaryChrome();
             ApplyTranslateButtonsChrome();
+            ApplyButtonVisibility();
             RefreshMainControlChrome();
 
             if (!refreshServiceResults)
@@ -428,7 +448,9 @@ namespace Easydict.WinUI.Views
             }
         }
 
-        private void ApplyMainLayoutChrome(bool minimal)
+        private bool IsCompactChrome => MinimalThemeService.IsActive || SettingsService.Instance.CompactMode;
+
+        private void ApplyMainLayoutChrome(bool minimal, bool compact)
         {
             if (minimal)
             {
@@ -443,7 +465,7 @@ namespace Easydict.WinUI.Views
                 QuickOutputCard.Margin = new Thickness(0, 2, 0, 0);
                 QuickInputCardContent.Margin = new Thickness(4);
                 QuickOutputCardContent.Margin = new Thickness(4);
-                QuickInputHeaderRow.Height = new GridLength(15);
+                QuickInputHeaderRow.Height = compact ? new GridLength(0) : new GridLength(15);
 
                 LongDocInputCard.Margin = new Thickness(0, 0, 0, 2);
                 LongDocControlBar.Margin = new Thickness(0, 4, 0, 4);
@@ -453,12 +475,16 @@ namespace Easydict.WinUI.Views
                 LongDocOutputCardContent.Margin = new Thickness(4);
                 LongDocHistoryExpander.Margin = new Thickness(0, 8, 0, 0);
 
-                SettingsButton.Width = 36;
-                SettingsButton.Height = 36;
-                SwapLanguageButton.Width = 36;
-                SwapLanguageButton.Height = 36;
-                SwapLanguageButtonNarrow.Width = 36;
-                SwapLanguageButtonNarrow.Height = 36;
+                PinButton.Width = 32;
+                PinButton.Height = 32;
+                OcrButton.Width = 32;
+                OcrButton.Height = 32;
+                SettingsButton.Width = compact ? 28 : 32;
+                SettingsButton.Height = compact ? 28 : 32;
+                SwapLanguageButton.Width = 32;
+                SwapLanguageButton.Height = 32;
+                SwapLanguageButtonNarrow.Width = 32;
+                SwapLanguageButtonNarrow.Height = 32;
                 SourcePlayButton.Width = 24;
                 SourcePlayButton.Height = 24;
                 SourcePlayIcon.FontSize = 12;
@@ -468,39 +494,43 @@ namespace Easydict.WinUI.Views
                 return;
             }
 
-            MainHeader.Margin = new Thickness(0, 0, 0, 10);
+            MainHeader.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 0, 6);
             QuickContentGrid.Padding = new Thickness(0);
             LongDocContentGrid.Padding = new Thickness(0);
-            ActionBarWide.Margin = new Thickness(0, 8, 0, 8);
-            ActionBarNarrow.Margin = new Thickness(0, 8, 0, 8);
-            ActionBarNarrow.Spacing = 8;
+            ActionBarWide.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 4);
+            ActionBarNarrow.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 4);
+            ActionBarNarrow.Spacing = 4;
 
-            QuickInputCard.Margin = new Thickness(0, 0, 0, 8);
+            QuickInputCard.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 0, 4);
             QuickOutputCard.Margin = new Thickness(0);
             QuickInputCardContent.Margin = new Thickness(0);
             QuickOutputCardContent.Margin = new Thickness(0);
-            QuickInputHeaderRow.Height = GridLength.Auto;
+            QuickInputHeaderRow.Height = compact ? new GridLength(0) : GridLength.Auto;
 
-            LongDocInputCard.Margin = new Thickness(0, 0, 0, 8);
-            LongDocControlBar.Margin = new Thickness(0, 8, 0, 8);
-            LongDocControlBar.RowSpacing = 8;
+            LongDocInputCard.Margin = new Thickness(0, 0, 0, 4);
+            LongDocControlBar.Margin = new Thickness(0, 4, 0, 4);
+            LongDocControlBar.RowSpacing = 4;
             LongDocInputCardContent.Margin = new Thickness(0);
             LongDocOutputCard.Margin = new Thickness(0);
             LongDocOutputCardContent.Margin = new Thickness(0);
-            LongDocHistoryExpander.Margin = new Thickness(0, 10, 0, 0);
+            LongDocHistoryExpander.Margin = new Thickness(0, 8, 0, 0);
 
-            SettingsButton.Width = 36;
-            SettingsButton.Height = 36;
-            SwapLanguageButton.Width = 36;
-            SwapLanguageButton.Height = 36;
-            SwapLanguageButtonNarrow.Width = 36;
-            SwapLanguageButtonNarrow.Height = 36;
-            SourcePlayButton.Width = 28;
-            SourcePlayButton.Height = 28;
-            SourcePlayIcon.FontSize = 14;
-            TranslateButton.Margin = new Thickness(0, 0, 18, 0);
+            PinButton.Width = 32;
+            PinButton.Height = 32;
+            OcrButton.Width = 32;
+            OcrButton.Height = 32;
+            SettingsButton.Width = compact ? 28 : 32;
+            SettingsButton.Height = compact ? 28 : 32;
+            SwapLanguageButton.Width = 32;
+            SwapLanguageButton.Height = 32;
+            SwapLanguageButtonNarrow.Width = 32;
+            SwapLanguageButtonNarrow.Height = 32;
+            SourcePlayButton.Width = 24;
+            SourcePlayButton.Height = 24;
+            SourcePlayIcon.FontSize = 12;
+            TranslateButton.Margin = new Thickness(4, 0, 0, 0);
             TranslateButtonNarrow.Margin = new Thickness(0);
-            LongDocTranslateButton.Margin = new Thickness(0, 0, 18, 0);
+            LongDocTranslateButton.Margin = new Thickness(0);
         }
 
         private void ApplyMainWindowBorderChrome(bool minimal)
@@ -514,7 +544,7 @@ namespace Easydict.WinUI.Views
                 MainWindowBorder.BorderThickness = new Thickness(0);
                 MainWindowBorder.CornerRadius = new CornerRadius(0);
                 MainWindowBorder.Padding = new Thickness(0);
-                ApplyMainInputChrome(minimal);
+                ApplyMainInputChrome(minimal, IsCompactChrome);
                 return;
             }
 
@@ -524,11 +554,14 @@ namespace Easydict.WinUI.Views
             MainWindowBorder.BorderBrush = CreateThemeBrush("MainBorderColor");
             MainWindowBorder.BorderThickness = new Thickness(0);
             MainWindowBorder.CornerRadius = new CornerRadius(0);
-            MainWindowBorder.Padding = new Thickness(16);
-            ApplyMainInputChrome(minimal);
+            MainWindowBorder.Padding = ThemeResourceService.GetResourceOrDefault(
+                "FloatingWindowContentPadding",
+                this,
+                new Thickness(8));
+            ApplyMainInputChrome(minimal, IsCompactChrome);
         }
 
-        private void ApplyMainInputChrome(bool minimal)
+        private void ApplyMainInputChrome(bool minimal, bool compact)
         {
             if (minimal)
             {
@@ -538,7 +571,7 @@ namespace Easydict.WinUI.Views
                 InputTextContainer.BorderThickness = new Thickness(0);
                 InputTextContainer.CornerRadius = new CornerRadius(0);
                 InputTextContainer.Padding = new Thickness(0);
-                InputTextContainer.Margin = new Thickness(0, 4, 0, 0);
+                InputTextContainer.Margin = compact ? new Thickness(0) : new Thickness(0, 4, 0, 0);
                 InputTextBox.Background = transparent;
                 InputTextBox.BorderBrush = transparent;
                 InputTextBox.BorderThickness = new Thickness(0);
@@ -567,8 +600,8 @@ namespace Easydict.WinUI.Views
             InputTextContainer.Padding = ThemeResourceService.GetResourceOrDefault(
                 "FloatingInputPadding",
                 this,
-                new Thickness(10, 9, 10, 9));
-            InputTextContainer.Margin = new Thickness(0, 4, 0, 0);
+                new Thickness(6, 4, 6, 4));
+            InputTextContainer.Margin = compact ? new Thickness(0) : new Thickness(0, 3, 0, 0);
 
             InputTextBox.Background = textBackground;
             InputTextBox.BorderBrush = transparentBrush;
@@ -798,6 +831,17 @@ namespace Easydict.WinUI.Views
                 ? _lastStatusText.ToUpperInvariant()
                 : _lastStatusText;
 
+            if (SettingsService.Instance.CompactMode && !MinimalThemeService.IsActive)
+            {
+                StatusIndicator.Visibility = _lastStatusConnected == false
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                if (_lastStatusConnected != false)
+                {
+                    return;
+                }
+            }
+
             if (MinimalThemeService.IsActive)
             {
                 StatusIndicator.Visibility = _lastStatusConnected == false
@@ -856,9 +900,25 @@ namespace Easydict.WinUI.Views
         {
             StatusSummaryText.Text = _lastStatusSummaryText;
             StatusSummaryText.Visibility =
-                !MinimalThemeService.IsActive || _lastStatusSummaryIsImportant
+                !IsCompactChrome || _lastStatusSummaryIsImportant
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+            ApplyQuickFooterChrome(IsCompactChrome);
+        }
+
+        private void ApplyQuickFooterChrome(bool compact)
+        {
+            if (!compact)
+            {
+                QuickFooterGrid.Visibility = Visibility.Visible;
+                QuickFooterGrid.Margin = new Thickness(0, 4, 0, 0);
+                return;
+            }
+
+            var showFooter = _lastStatusSummaryIsImportant
+                || LocalModelPreparationProgressPanel.Visibility == Visibility.Visible;
+            QuickFooterGrid.Visibility = showFooter ? Visibility.Visible : Visibility.Collapsed;
+            QuickFooterGrid.Margin = showFooter ? new Thickness(0, 2, 0, 0) : new Thickness(0);
         }
 
         private void ShowLocalModelPreparationProgress(string resourceKey)
@@ -883,6 +943,7 @@ namespace Easydict.WinUI.Views
                 LocalModelPreparationProgressBar.IsIndeterminate = true;
             }
             LocalModelPreparationProgressPanel.Visibility = Visibility.Visible;
+            ApplyQuickFooterChrome(IsCompactChrome);
         }
 
         private void HideLocalModelPreparationProgress()
@@ -890,6 +951,7 @@ namespace Easydict.WinUI.Views
             LocalModelPreparationProgressPanel.Visibility = Visibility.Collapsed;
             LocalModelPreparationStatusText.Text = string.Empty;
             _localModelPreparationLastProgressPercent = null;
+            ApplyQuickFooterChrome(IsCompactChrome);
         }
 
         private void SyncLocalModelPreparationProgressFromCoordinator()
@@ -972,6 +1034,7 @@ namespace Easydict.WinUI.Views
             double normalWidth,
             double normalHeight)
         {
+            AutomationProperties.SetName(button, text);
             if (minimal)
             {
                 button.Content = text;
@@ -1226,8 +1289,21 @@ namespace Easydict.WinUI.Views
             SyncLocalModelPreparationProgressFromCoordinator();
 
             // Tooltips
+            ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
+            ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrButtonTooltip"));
             ToolTipService.SetToolTip(SettingsButton, loc.GetString("SettingsTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PinButton, loc.GetString("PinWindowTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(OcrButton, loc.GetString("OcrButtonTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SettingsButton, loc.GetString("SettingsTooltip"));
             ToolTipService.SetToolTip(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
+            ToolTipService.SetToolTip(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
+            var sourcePlayTooltip = loc.GetString("PlaySourceTextTooltip");
+            ToolTipService.SetToolTip(SourcePlayButton, sourcePlayTooltip);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                SourcePlayButton,
+                sourcePlayTooltip);
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
@@ -1284,11 +1360,12 @@ namespace Easydict.WinUI.Views
             };
 
             // Update subtitle
+            var compactChrome = IsCompactChrome;
             switch (_currentMode)
             {
                 case QueryMode.LongDocument:
                     ModeSubtitle.Text = loc.GetString("Mode_LongDocument") ?? "Long Document";
-                    ModeSubtitle.Visibility = Visibility.Visible;
+                    ModeSubtitle.Visibility = compactChrome ? Visibility.Collapsed : Visibility.Visible;
                     break;
                 default:
                     ModeSubtitle.Visibility = Visibility.Collapsed;
@@ -1310,12 +1387,14 @@ namespace Easydict.WinUI.Views
 
             if (_currentMode == QueryMode.Translation)
             {
+                var compact = IsCompactChrome;
+                var showSwap = !compact && SettingsService.Instance.ShowSwapButton;
                 TargetLangCombo.Visibility = Visibility.Visible;
-                SwapLanguageButton.Visibility = Visibility.Visible;
-                LangHelpIcon.Visibility = Visibility.Visible;
+                SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
+                LangHelpIcon.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
                 TargetLangComboNarrow.Visibility = Visibility.Visible;
-                SwapLanguageButtonNarrow.Visibility = Visibility.Visible;
-                LangHelpIconNarrow.Visibility = Visibility.Visible;
+                SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
+                LangHelpIconNarrow.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
 
                 InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
                 ResultsTitleText.Text = loc.GetString("TranslationResults")
@@ -1937,6 +2016,8 @@ namespace Easydict.WinUI.Views
                 : loc.GetString("TranslateTooltip");
             ToolTipService.SetToolTip(TranslateButton, translateTooltip);
             ToolTipService.SetToolTip(TranslateButtonNarrow, translateTooltip);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, translateTooltip);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButtonNarrow, translateTooltip);
 
             if (reinitializeServiceResults && previousMode != _currentQuickQueryMode)
             {
@@ -1967,7 +2048,7 @@ namespace Easydict.WinUI.Views
                 DetectedLanguageText.Text = loc.GetStringOrDefault(
                     "GrammarCorrectionFallbackNotice",
                     "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.");
-                DetectedLanguageText.Visibility = Visibility.Visible;
+                DetectedLanguageText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
                 return;
             }
 
@@ -1976,12 +2057,23 @@ namespace Easydict.WinUI.Views
                 DetectedLanguageText.Text = loc.GetStringOrDefault(
                     "GrammarCorrectionActiveNotice",
                     "Grammar check mode: AI correction services will run. Choose a different target language to translate.");
-                DetectedLanguageText.Visibility = Visibility.Visible;
+                DetectedLanguageText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
                 return;
             }
 
             _showingGrammarFallbackNotice = false;
             UpdateDetectedLanguageDisplay(resolution.EffectiveSourceLanguage);
+        }
+
+        private void RefreshDetectedLanguageChrome()
+        {
+            if (_lastQuickQueryResolution is { } resolution)
+            {
+                UpdateQuickQueryModeStatus(resolution);
+                return;
+            }
+
+            UpdateDetectedLanguageDisplay(_lastDetectedLanguage);
         }
 
         private void RefreshQuickQueryModePreview()
@@ -3198,7 +3290,7 @@ namespace Easydict.WinUI.Views
                 DetectedLanguageText.Text = string.Format(
                     LocalizationService.Instance.GetString("DetectedLanguage"),
                     displayName);
-                DetectedLanguageText.Visibility = Visibility.Visible;
+                DetectedLanguageText.Visibility = IsCompactChrome ? Visibility.Collapsed : Visibility.Visible;
             }
             else
             {
@@ -4298,6 +4390,58 @@ namespace Easydict.WinUI.Views
             }
 
             await SwitchModeAsync(newMode);
+        }
+
+        private void OnOcrClicked(object sender, RoutedEventArgs e)
+        {
+            _ = App.TriggerOcrTranslateAsync();
+        }
+
+        private void OnPinClicked(object sender, RoutedEventArgs e)
+        {
+            var pinned = !SettingsService.Instance.AlwaysOnTop;
+            SettingsService.Instance.AlwaysOnTop = pinned;
+            SettingsService.Instance.Save();
+            App.ApplyAlwaysOnTop(pinned);
+            UpdatePinState();
+        }
+
+        private void UpdatePinState()
+        {
+            var pinned = SettingsService.Instance.AlwaysOnTop;
+            PinButton.IsChecked = pinned;
+            PinIcon.Glyph = pinned ? "\uE840" : "\uE718"; // Pinned vs Unpinned icon
+        }
+
+        /// <summary>
+        /// Re-apply appearance settings (result font size + quick-action button visibility)
+        /// to the main page. Called from the app-wide appearance broadcast (issue #172).
+        /// </summary>
+        public void ApplyAppearance()
+        {
+            ApplyThemeChrome(refreshServiceResults: false);
+            UpdatePinState();
+            ServiceResultViewHost.RefreshAppearance(_resultControls);
+        }
+
+        /// <summary>
+        /// Show/hide quick-action buttons per user settings. Source-play and swap are hidden
+        /// in compact chrome, and swap only shows in Translation mode — matching the gating
+        /// applied by ApplyThemeChrome and the mode-switch logic.
+        /// </summary>
+        private void ApplyButtonVisibility()
+        {
+            var settings = SettingsService.Instance;
+            var compact = IsCompactChrome;
+            PinButton.Visibility = !compact && settings.ShowPinButton ? Visibility.Visible : Visibility.Collapsed;
+            OcrButton.Visibility = !compact && settings.ShowOcrButton ? Visibility.Visible : Visibility.Collapsed;
+
+            SourcePlayButton.Visibility = (!compact && settings.ShowSourcePlayButton)
+                ? Visibility.Visible : Visibility.Collapsed;
+
+            var showSwap = !compact && settings.ShowSwapButton && _currentMode == QueryMode.Translation;
+            SwapLanguageButton.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
+            SwapLanguageButtonNarrow.Visibility = showSwap ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private async void OnSettingsClicked(object sender, RoutedEventArgs e)

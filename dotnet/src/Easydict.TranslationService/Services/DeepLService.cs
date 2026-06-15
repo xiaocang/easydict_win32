@@ -89,7 +89,9 @@ public sealed class DeepLService : BaseTranslationService
             return true;
         }
 
-        // "Fetch when something new shows up": warm the dynamic list for next time.
+        // Intentionally dormant future-proofing: the enum-derived API baseline already covers DeepL's
+        // current support, so this "miss" path (and the additive refresh it warms) effectively only
+        // fires if the enum ever gains a language DeepL adds later. It is a safety net, not a hot path.
         if (!string.IsNullOrEmpty(_apiKey))
         {
             TriggerLanguageRefresh();
@@ -189,6 +191,13 @@ public sealed class DeepLService : BaseTranslationService
     /// Fetch DeepL's official target-language list and union it onto the baseline. Additive only:
     /// a partial or empty response never shrinks supported languages below the baseline. Requires an
     /// API key (the free web JSON-RPC path has no languages endpoint).
+    /// <para>
+    /// NOTE: This is intentionally dormant future-proofing. The API-mode baseline is already the full
+    /// <see cref="Language"/> enum (minus Classical Chinese), so a fetched list (a subset of the enum)
+    /// cannot currently change <see cref="SupportedLanguages"/>. It is retained so that, if the enum
+    /// gains a language DeepL also supports, the live set can confirm/augment it without a code change.
+    /// It stays public/tested so the parsing + mapping logic remains correct and ready.
+    /// </para>
     /// </summary>
     public async Task RefreshSupportedLanguagesAsync(CancellationToken cancellationToken = default)
     {

@@ -1917,6 +1917,7 @@ $surfaceSchemeRows = @(
             $expandedDelta = $_.expandedPart.deltaRgb
             $maxSurfaceDelta = Get-RowMaxColorDelta -Row $_
             $issues = New-Object System.Collections.Generic.List[string]
+            $diagnostics = New-Object System.Collections.Generic.List[string]
             $dotnetReferenceExpected = Test-DotnetReferenceExpected -DescriptorOrRow $_
 
             if (-not $dotnetReferenceExpected -and -not $_.hasReference) {
@@ -1940,10 +1941,12 @@ $surfaceSchemeRows = @(
             }
             $bodySizeDriftIsDiagnostic = [bool]$_.referenceExpandedBodyBoundsInferred -or
                 [bool]$_.candidateExpandedBodyBoundsInferred
-            if (-not $bodySizeDriftIsDiagnostic -and
-                $null -ne $bodySizeDrift -and
-                [double]$bodySizeDrift -gt [double]$MaxBoundsDriftDips) {
-                $issues.Add("expanded body size drift > $MaxBoundsDriftDips DIP") | Out-Null
+            if ($null -ne $bodySizeDrift -and [double]$bodySizeDrift -gt [double]$MaxBoundsDriftDips) {
+                if ($bodySizeDriftIsDiagnostic) {
+                    $diagnostics.Add("expanded body size drift > $MaxBoundsDriftDips DIP (diagnostic: inferred bounds)") | Out-Null
+                } else {
+                    $issues.Add("expanded body size drift > $MaxBoundsDriftDips DIP") | Out-Null
+                }
             }
             if ($null -ne $windowDrift -and [double]$windowDrift -gt [double]$MaxBoundsDriftDips) {
                 $issues.Add("window size drift > $MaxBoundsDriftDips DIP") | Out-Null
@@ -1995,11 +1998,45 @@ $surfaceSchemeRows = @(
                 candidateExpandedBodyBoundsInferred = $_.candidateExpandedBodyBoundsInferred
                 verdict = $verdict
                 issues = @($issues.ToArray())
+                diagnostics = @($diagnostics.ToArray())
             }
         }
 )
 $surfaceSchemeIssues = @($surfaceSchemeRows | Where-Object { $_.verdict -ne "ok" -and $_.verdict -ne "rust-only" })
 $surfaceSchemeRustOnly = @($surfaceSchemeRows | Where-Object { $_.verdict -eq "rust-only" })
+$surfaceGeometryDiagnostics = @($surfaceSchemeRows | Where-Object { $null -ne $_.diagnostics -and $_.diagnostics.Count -gt 0 })
+$expandedBodyGeometrySourceRows = if ($baseExpandedRows.Count -gt 0) { $baseExpandedRows } else { $orderedScenarioRows }
+$expandedBodyGeometryRows = @(
+    $expandedBodyGeometrySourceRows |
+        Where-Object {
+            $bodySizeDrift = Get-SizeDriftScore -Reference $_.referenceExpandedBodyBoundsDips -Candidate $_.candidateExpandedBodyBoundsDips
+            $null -ne $bodySizeDrift -and [double]$bodySizeDrift -gt [double]$MaxBoundsDriftDips
+        } |
+        Sort-Object `
+            @{ Expression = { Get-ServiceDisplayOrder -ServiceId $_.serviceId }; Ascending = $true },
+            @{ Expression = { Get-InteractionStateDisplayOrder -State $_.interactionState }; Ascending = $true },
+            scenarioId |
+        ForEach-Object {
+            $bodyBoundsDrift = Get-BoundsDriftScore -Reference $_.referenceExpandedBodyBoundsDips -Candidate $_.candidateExpandedBodyBoundsDips
+            $bodySizeDrift = Get-SizeDriftScore -Reference $_.referenceExpandedBodyBoundsDips -Candidate $_.candidateExpandedBodyBoundsDips
+            $inferred = [bool]$_.referenceExpandedBodyBoundsInferred -or [bool]$_.candidateExpandedBodyBoundsInferred
+            [pscustomobject]@{
+                scenarioId = $_.scenarioId
+                service = $_.service
+                serviceId = $_.serviceId
+                expanderId = $_.expanderId
+                interactionState = $_.interactionState
+                sampleStrength = Get-SampleStrength -Row $_
+                sizeDriftDips = $bodySizeDrift
+                boundsDriftDips = $bodyBoundsDrift
+                referenceBoundsDips = $_.referenceExpandedBodyBoundsDips
+                candidateBoundsDips = $_.candidateExpandedBodyBoundsDips
+                referenceInferred = [bool]$_.referenceExpandedBodyBoundsInferred
+                candidateInferred = [bool]$_.candidateExpandedBodyBoundsInferred
+                diagnostic = $inferred
+            }
+        }
+)
 
 $summary = [pscustomobject]@{
     scenarioCount = $scenarioRows.Count
@@ -2014,6 +2051,8 @@ $summary = [pscustomobject]@{
     surfaceSchemeComparedCount = @($surfaceSchemeRows | Where-Object { $_.verdict -eq "ok" }).Count
     surfaceSchemeIssueCount = $surfaceSchemeIssues.Count
     surfaceSchemeRustOnlyCount = $surfaceSchemeRustOnly.Count
+    surfaceGeometryDiagnosticCount = $surfaceGeometryDiagnostics.Count
+    expandedBodyGeometryDriftCount = $expandedBodyGeometryRows.Count
     colorDeltaThresholds = [pscustomobject]@{
         okMaxRgb = 3.0
         watchMaxRgb = 8.0
@@ -2021,13 +2060,15 @@ $summary = [pscustomobject]@{
         failMaxBoundsDriftDips = $MaxBoundsDriftDips
     }
     surfaceSchemeIssues = $surfaceSchemeIssues
+    surfaceGeometryDiagnostics = $surfaceGeometryDiagnostics
+    expandedBodyGeometryRows = $expandedBodyGeometryRows
     largestColorDeltas = $largestColorDeltas
     largestHeaderBoundsDrifts = $largestHeaderBoundsDrifts
     serviceStateCoverage = $serviceStateCoverage
 }
 
 $report = [pscustomobject]@{
-    schemaVersion = "easydict.settings-services-expander-colors.v11"
+    schemaVersion = "easydict.settings-services-expander-colors.v12"
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     artifactRoot = $ArtifactRoot
     boundsMode = if ($UseSummaryBounds) { "summary" } else { "image-detected" }
@@ -2036,6 +2077,7 @@ $report = [pscustomobject]@{
     colorMode = "dominant-surface"
     summary = $summary
     surfaceSchemeRows = $surfaceSchemeRows
+    expandedBodyGeometryRows = $expandedBodyGeometryRows
     scenarios = $orderedScenarioRows
 }
 Write-JsonFile -Path $OutputJson -Value $report -Depth 12
@@ -2056,7 +2098,7 @@ if ($InferImageExpandedBodyBounds) {
 $optionalBoundsSuffix = if ($optionalBoundsText.Count -gt 0) { " Optional diagnostics: $($optionalBoundsText -join '; ')." } else { "" }
 $markdown.Add("Sampling: bounds use $boundsModeText; color deltas use each sampled region's dominant surface color, while JSON also preserves average RGB/luma for diagnostics.$optionalBoundsSuffix") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header size drift <= $MaxBoundsDriftDips DIP; exact expanded-body size drift is gated when both sides come from non-inferred bounds, while image-inferred body bounds remain visible as diagnostics. Viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
+$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues, $($summary.surfaceGeometryDiagnosticCount) base expanded-body geometry diagnostics. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header size drift <= $MaxBoundsDriftDips DIP; exact expanded-body size drift is gated when both sides come from non-inferred bounds, while image-inferred body bounds remain visible as diagnostics. Viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
 $markdown.Add("") | Out-Null
 
 $markdown.Add("## Service State Coverage") | Out-Null
@@ -2135,14 +2177,42 @@ $markdown.Add("") | Out-Null
 if ($surfaceSchemeRows.Count -eq 0) {
     $markdown.Add("No base expanded captures are present in this artifact. Use the per-service and bar/expanded pairing tables below for the measured interaction states.") | Out-Null
 } else {
-    $markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Expanded body bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues |") | Out-Null
+    $markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Expanded body bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues / diagnostics |") | Out-Null
     $markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
     foreach ($row in $surfaceSchemeRows) {
         $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips) / drift $(Format-PlainDeltaWithVerdict $row.windowDriftDips)"
         $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.headerBoundsDriftDips)"
         $bodyBounds = "ref $(Format-BoundsDips $row.referenceExpandedBodyBoundsDips) / rust $(Format-BoundsDips $row.candidateExpandedBodyBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.expandedBodyBoundsDriftDips)"
-        $issues = if ($row.issues.Count -eq 0) { "none" } else { $row.issues -join "; " }
+        $rowNotes = New-Object System.Collections.Generic.List[string]
+        foreach ($issue in @($row.issues)) {
+            $rowNotes.Add([string]$issue) | Out-Null
+        }
+        foreach ($diagnostic in @($row.diagnostics)) {
+            $rowNotes.Add([string]$diagnostic) | Out-Null
+        }
+        $issues = if ($rowNotes.Count -eq 0) { "none" } else { $rowNotes -join "; " }
         $markdown.Add("| $($row.service) | $($row.verdict) | $($row.sampleStrength) | $window | $bounds | $bodyBounds | $(Format-DeltaWithVerdict $row.headerBarDeltaRgb) | $(Format-DeltaWithVerdict $row.expandedPartDeltaRgb) | $($row.referenceScheme) | $($row.candidateScheme) | $issues |") | Out-Null
+    }
+}
+$markdown.Add("") | Out-Null
+
+$markdown.Add("## Expanded Body Geometry Diagnostics") | Out-Null
+$markdown.Add("") | Out-Null
+$markdown.Add("Rows here call out absolute expanded-body size differences. Diagnostic rows usually come from inferred visible-body bounds in scrolled captures, so they should guide visual inspection without being mixed into the bar/body color gate.") | Out-Null
+$markdown.Add("") | Out-Null
+if ($expandedBodyGeometryRows.Count -eq 0) {
+    $markdown.Add("No expanded body size drift above $MaxBoundsDriftDips DIP was detected.") | Out-Null
+} else {
+    $markdown.Add("| Service | State | Scenario | Sample | Size drift DIP | Bounds drift DIP | Expanded body bounds DIP | Inferred |") | Out-Null
+    $markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+    foreach ($row in $expandedBodyGeometryRows) {
+        $bodyBounds = "ref $(Format-BoundsDips $row.referenceBoundsDips) / rust $(Format-BoundsDips $row.candidateBoundsDips)"
+        $inferred = if ($row.referenceInferred -or $row.candidateInferred) {
+            "ref=$($row.referenceInferred), rust=$($row.candidateInferred)"
+        } else {
+            "no"
+        }
+        $markdown.Add("| $($row.service) | $($row.interactionState) | ``$($row.scenarioId)`` | $($row.sampleStrength) | $(Format-PlainDeltaWithVerdict $row.sizeDriftDips) | $(Format-PlainDeltaWithVerdict $row.boundsDriftDips) | $bodyBounds | $inferred |") | Out-Null
     }
 }
 $markdown.Add("") | Out-Null

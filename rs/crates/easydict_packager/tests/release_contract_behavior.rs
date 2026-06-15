@@ -3393,6 +3393,114 @@ fn package_portable_powershell_shim_forces_and_restores_runtime_profile() {
     let _ = fs::remove_dir_all(test_root);
 }
 
+#[test]
+fn rs_portable_release_package_portable_wrapper_stays_thin_rs_packager_shim_without_hybrid_payload_paths(
+) {
+    let root = repo_root();
+    let script = read_text(&root.join("rs/scripts/Package-Portable.ps1"));
+
+    for required in [
+        "compatibility shim",
+        "\"run\"",
+        "\"--manifest-path\"",
+        "\"-p\", \"easydict_packager\"",
+        "\"pack-rs-portable\"",
+        "\"--workspace\", $rsRoot",
+        "\"--platform\", $Platform",
+        "\"--configuration\", $Configuration",
+        "$env:EASYDICT_RUNTIME_PROFILE = \"rust-only\"",
+        "$env:RUNTIME_PROFILE = \"rust-only\"",
+    ] {
+        assert_contains(
+            &script,
+            required,
+            "Package-Portable.ps1 should remain a thin Rust packager shim",
+        );
+    }
+
+    for forbidden in [
+        "--features",
+        "--all-features",
+        "hybrid-dotnet-runtime-packaging",
+        "retained-dotnet-workers",
+        "extract-dotnet-runtime",
+        "zip-directory",
+        "Build-RustHelpers.ps1",
+        "Compress-Archive",
+        "System.IO.Compression",
+        "Easydict.CompatHost",
+        "Easydict.Workers",
+        "BrowserHostRegistrar.exe",
+        "Easydict.WinUI.exe",
+        "workers/",
+        "workers\\",
+        "dotnet/",
+        "dotnet\\",
+        "hostfxr",
+        "runtimeconfig.json",
+        "deps.json",
+    ] {
+        assert_not_contains(
+            &script,
+            forbidden,
+            &format!(
+                "Package-Portable.ps1 must not grow retained/hybrid packaging path {forbidden}"
+            ),
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn rs_portable_release_legacy_release_script_redirects_to_rs_portable_workflow_without_creating_release(
+) {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_LEGACY_RELEASE_TOOL_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("legacy-release-script-retired");
+    let fake_bin = test_root.join("bin");
+    let record_path = test_root.join("release-tools.txt");
+    write_fake_legacy_release_tool_scripts(&fake_bin);
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_LEGACY_RELEASE_TOOL_RECORD", &record_path);
+
+    let output = powershell_script_command(&root.join("dotnet/scripts/release.ps1"))
+        .args(["-Tag", "v0.0.0-retired"])
+        .output()
+        .expect("run retired legacy release script");
+    let output_text = powershell_output_text(&output);
+
+    assert!(
+        !output.status.success(),
+        "retired legacy release script should fail locally and redirect to the rs portable workflow\n{output_text}"
+    );
+    for expected in [
+        "release.ps1 is retired",
+        "Release and Publish workflow",
+        "release_flavor is rs-portable",
+        "easydict_packager pack-rs-portable",
+        "validate-rs-portable",
+        "retained .NET payload guards",
+    ] {
+        assert_contains(
+            &output_text,
+            expected,
+            "retired legacy release script should explain the rs portable release path",
+        );
+    }
+    assert!(
+        !record_path.exists(),
+        "retired legacy release script must not invoke git or gh; record:\n{}",
+        record_path
+            .exists()
+            .then(|| read_text(&record_path))
+            .unwrap_or_default()
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
 #[cfg(windows)]
 #[test]
 fn browser_extension_powershell_shim_delegates_to_rust_packager() {
@@ -4986,6 +5094,116 @@ fn legacy_publish_installer_uses_guarded_shim_instead_of_inline_iscc_packaging()
 }
 
 #[test]
+fn rs_portable_release_legacy_inno_installer_stays_on_dotnet_coexistence_names() {
+    let root = repo_root();
+    let installer = read_text(&root.join("dotnet/installer/Easydict.iss"));
+
+    for required in [
+        r#"#define AppExeName "Easydict.WinUI.exe""#,
+        r#"CloseApplicationsFilter=Easydict.WinUI.exe"#,
+        r#"Software\Classes\easydict"#,
+        r#"Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge"#,
+        r#"Software\Mozilla\NativeMessagingHosts\com.easydict.bridge"#,
+        r#"{localappdata}\Easydict\browser-bridge"#,
+        r#"'Software\Google\Chrome\NativeMessagingHosts\com.easydict.bridge'"#,
+        r#"'Software\Mozilla\NativeMessagingHosts\com.easydict.bridge'"#,
+    ] {
+        assert_contains(
+            &installer,
+            required,
+            "legacy Inno installer should keep owning only the dotnet coexistence names",
+        );
+    }
+
+    for forbidden in [
+        "Easydict.Rust.exe",
+        "EasydictRs",
+        "easydict-rs",
+        "com.easydict.rs.bridge",
+        r#"Software\Classes\easydict-rs"#,
+        r#"{localappdata}\EasydictRs"#,
+        "Local\\EasydictRs-OcrTranslate",
+        "Easydict.Rs.LocalSettingsCredential",
+    ] {
+        assert_not_contains(
+            &installer,
+            forbidden,
+            "legacy Inno installer must not claim first-release rs portable names",
+        );
+    }
+}
+
+#[test]
+fn rs_portable_release_store_listing_workflow_stays_metadata_only_not_package_release() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/store-listings.yml"));
+    let submit_tool_step = text_between(
+        &workflow,
+        "      - name: Install Microsoft Store Developer CLI",
+        "      - name: Configure msstore credentials",
+    );
+    let sync_step = text_between(
+        &workflow,
+        "      - name: Run store listing sync",
+        "      - name: Summary",
+    );
+    let summary_step = workflow
+        .split_once("      - name: Summary")
+        .unwrap_or_else(|| panic!("missing section start: Store listings summary"))
+        .1;
+
+    assert_contains(
+        submit_tool_step,
+        "if: github.event.inputs.action == 'submit'",
+        "Store listing workflow should install MSStore.CLI only for submit",
+    );
+    assert_contains(
+        submit_tool_step,
+        "dotnet tool install -g MSStore.CLI",
+        "Store listing submit may keep using Microsoft's external msstore CLI",
+    );
+    assert_contains(
+        sync_step,
+        ".winstore/scripts/Sync-StoreListings.ps1 @params",
+        "Store listing workflow should delegate metadata sync to the Rust-backed shim",
+    );
+    assert_contains(
+        summary_step,
+        "-p",
+        "Store listing summary should call the Rust listing tool",
+    );
+    assert_contains(
+        summary_step,
+        "easydict_store_listings",
+        "Store listing summary should stay on the Rust metadata tool",
+    );
+
+    for forbidden in [
+        "dotnet publish",
+        "dotnet build",
+        "dotnet test",
+        "pack-rs-portable",
+        "validate-rs-portable",
+        "Package-Msix.ps1",
+        "Build-Installer.ps1",
+        "Extract-DotnetRuntime.ps1",
+        "Package-Portable.ps1",
+        "actions/upload-artifact",
+        "softprops/action-gh-release",
+        "gh release",
+        "winget",
+        "winapp",
+        "iscc",
+    ] {
+        assert_not_contains(
+            &workflow,
+            forbidden,
+            "Store listing workflow must remain metadata-only, not a package release path",
+        );
+    }
+}
+
+#[test]
 fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
     let root = repo_root();
     let script = read_text(&root.join("dotnet/scripts/Extract-DotnetRuntime.ps1"));
@@ -6492,6 +6710,22 @@ exit /b 0\r\n",
 exit /b 87\r\n",
     )
     .expect("write fake Package-Portable dotnet");
+}
+
+#[cfg(windows)]
+fn write_fake_legacy_release_tool_scripts(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake legacy release tool dir");
+    for tool in ["git", "gh"] {
+        fs::write(
+            fake_bin.join(format!("{tool}.cmd")),
+            format!(
+                "@echo off\r\n\
+>>\"%EASYDICT_LEGACY_RELEASE_TOOL_RECORD%\" echo {tool}.cmd %*\r\n\
+exit /b 87\r\n"
+            ),
+        )
+        .unwrap_or_else(|error| panic!("write fake {tool}: {error}"));
+    }
 }
 
 #[cfg(windows)]

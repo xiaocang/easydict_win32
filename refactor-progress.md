@@ -21,6 +21,54 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-14: Kept Store listing workflow metadata-only
+
+- Added a release-contract regression that scans `.github/workflows/store-listings.yml` under the `rs_portable_release` filter.
+- The workflow may still install Microsoft's `MSStore.CLI` only for `submit`, and validate/preview/summary continue through the Rust `easydict_store_listings` tool path.
+- The workflow is now guarded against drifting into package publishing: no `dotnet publish/build/test`, rs portable packaging/validation, MSIX/Inno/runtime extraction scripts, artifact upload, GitHub Release, WinGet, WinApp, or ISCC steps.
+- No new third-party library was needed; this is a release-orchestration contract over the existing workflow text.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_store_listing_workflow_stays_metadata_only_not_package_release -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release -- --nocapture`
+
+## 2026-06-14: Locked the legacy Inno installer to dotnet coexistence names
+
+- Added a release-contract regression that scans `dotnet/installer/Easydict.iss` as a legacy/hybrid installer surface.
+- The installer must keep using `Easydict.WinUI.exe`, the legacy `easydict://` protocol key, `com.easydict.bridge`, and `%LOCALAPPDATA%\Easydict\browser-bridge`, while explicitly not claiming first-release rs portable names such as `Easydict.Rust.exe`, `easydict-rs`, `com.easydict.rs.bridge`, or `EasydictRs`.
+- No new third-party library was needed. This protects side-by-side install behavior without changing the installer script.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_legacy_inno_installer_stays_on_dotnet_coexistence_names -- --exact --nocapture`
+
+## 2026-06-14: Locked Package-Portable.ps1 as a thin rs packager shim
+
+- Added a release-contract regression under the `rs_portable_release` filter that statically scans `rs/scripts/Package-Portable.ps1`.
+- The wrapper must keep delegating to `cargo run --manifest-path <rs>/Cargo.toml -p easydict_packager -- pack-rs-portable ...` with both runtime profile env vars forced to `rust-only`, and must not grow hybrid features, runtime extraction, legacy helper copy, PowerShell ZIP, worker, CompatHost, `dotnet/`, `workers/`, or runtimeconfig/deps paths.
+- No new third-party library was needed. This preserves the direct Rust packager as the only first-release portable assembly owner while keeping the PowerShell wrapper compatibility-only.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_package_portable_wrapper_stays_thin_rs_packager_shim_without_hybrid_payload_paths -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release -- --nocapture`
+
+## 2026-06-14: Retired the legacy local release script as a side-effecting release path
+
+- Replaced `dotnet/scripts/release.ps1` with a no-side-effect retired shim. It preserves the old parameters but exits locally with guidance to create a tag and let `.github/workflows/release-publish.yml` build the default rs portable release.
+- Added a release-contract regression under the `rs_portable_release` filter that runs the script with fake `git` and `gh` tools on `PATH`; the test proves the script does not create tags, push tags, or create GitHub releases outside the rs portable workflow gate.
+- No new third-party library was needed. This is release orchestration hardening so the first rs portable path keeps going through `pack-rs-portable`, `validate-rs-portable`, checksum verification, and retained `.NET` payload guards.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_legacy_release_script_redirects_to_rs_portable_workflow_without_creating_release -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release -- --nocapture`
+
 ## 2026-06-14: Added a default packager help no-runtime release contract
 
 - Added a release-contract test under the `rs_portable_release` filter that executes the default `easydict_packager --help` binary and verifies the visible CLI surface only exposes Rust-owned commands for rs portable packaging, validation, checksums, browser extension packaging, and Rust helper builds.

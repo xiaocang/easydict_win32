@@ -3,8 +3,7 @@ use std::env;
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
-use std::process::Command;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -212,6 +211,7 @@ enum IcedRuntimeMessage<Message> {
     WindowOpened(window::Id),
     WindowClosed(window::Id),
     WindowCloseRequested(window::Id),
+    WindowNativeEvent(window::Id, window::Event),
 }
 
 #[derive(Clone)]
@@ -348,16 +348,25 @@ where
                     .native_windows
                     .insert(window_id, runtime_window.clone());
                 state.sync_window_view(&logical_id, None);
+                let opened_task = state
+                    .platform_event_task(PlatformEvent::Window(WindowEvent::Opened(
+                        logical_id.clone(),
+                    )))
+                    .unwrap_or_else(iced::Task::none);
                 iced::Task::batch([
                     apply_native_window_options_task(window_id, runtime_window.options, true),
                     state.delayed_focused_text_editor_task(),
+                    opened_task,
                 ])
             }
             IcedRuntimeMessage::WindowClosed(window_id) => {
+                let logical_id = state.logical_window_for_native(window_id);
                 if let Some(runtime_window) = state.native_windows.remove(&window_id) {
                     state.logical_windows.remove(&runtime_window.logical_id);
                 }
-                iced::Task::none()
+                state
+                    .platform_event_task(PlatformEvent::Window(WindowEvent::Closed(logical_id)))
+                    .unwrap_or_else(iced::Task::none)
             }
             IcedRuntimeMessage::WindowCloseRequested(window_id) => {
                 let logical_id = state.logical_window_for_native(window_id);
@@ -365,6 +374,17 @@ where
                 state
                     .platform_event_task(event)
                     .unwrap_or_else(|| state.close_request_fallback_task(window_id, &logical_id))
+            }
+            IcedRuntimeMessage::WindowNativeEvent(window_id, event) => {
+                let logical_id = state.logical_window_for_native(window_id);
+                let event = match event {
+                    window::Event::Focused => WindowEvent::Focused(logical_id),
+                    window::Event::Rescaled(_) => WindowEvent::DpiChanged(logical_id),
+                    _ => return iced::Task::none(),
+                };
+                state
+                    .platform_event_task(PlatformEvent::Window(event))
+                    .unwrap_or_else(iced::Task::none)
             }
         }
     }
@@ -411,6 +431,7 @@ where
         Subscription::batch([
             window::close_requests().map(IcedRuntimeMessage::WindowCloseRequested),
             window::close_events().map(IcedRuntimeMessage::WindowClosed),
+            window::events().map(|(id, event)| IcedRuntimeMessage::WindowNativeEvent(id, event)),
             fluent_subscription(state.app.subscription(), tray_plan.as_ref()),
         ])
     }
@@ -1008,7 +1029,7 @@ fn run_platform_open_folder_dialog(options: FolderDialogOptions) -> Option<Strin
             "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }\n",
         );
 
-        let output = Command::new("powershell")
+        let output = std::process::Command::new("powershell")
             .arg("-NoProfile")
             .arg("-STA")
             .arg("-WindowStyle")
@@ -1072,17 +1093,7 @@ fn run_platform_insert_text(text: String) -> Result<(), String> {
 }
 
 fn run_platform_open_url(url: String) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        win_fluent_platform_win::WindowsPlatformAdapter::open_url(&url)
-            .map_err(|error| format!("{error:?}"))
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = url;
-        Ok(())
-    }
+    easydict_windows_shell::open_url(&url).map_err(|error| error.to_string())
 }
 
 fn run_platform_register_shell_verb(verb: ShellVerb) -> Result<(), String> {
@@ -1173,51 +1184,20 @@ fn run_platform_bundled_executable(
     executable_name: String,
     arguments: Vec<String>,
 ) -> Result<(), String> {
-    let executable = env::current_exe()
-        .map_err(|error| error.to_string())?
-        .parent()
-        .ok_or_else(|| "current executable has no parent directory".to_string())?
-        .join(executable_name);
-
-    let mut command = Command::new(&executable);
-    command.args(arguments);
-    hide_process_window(&mut command);
-
-    let status = command.status().map_err(|error| {
-        format!(
-            "failed to run bundled executable {}: {error}",
-            executable.display()
-        )
-    })?;
-    if !status.success() {
-        return Err(format!(
-            "bundled executable {} exited with {status}",
-            executable.display()
-        ));
-    }
-
-    Ok(())
-}
-
-fn hide_process_window(command: &mut Command) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = command;
-    }
+    easydict_windows_shell::run_bundled_executable(&executable_name, &arguments)
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(windows)]
 fn current_executable_path_string() -> Result<String, String> {
-    env::current_exe()
+    let path = env::current_exe().map_err(|error| error.to_string())?;
+    validate_platform_registry_executable_path(&path)?;
+    Ok(path.display().to_string())
+}
+
+fn validate_platform_registry_executable_path(path: &Path) -> Result<(), String> {
+    easydict_windows_shell::validate_command_executable_target(path)
         .map_err(|error| error.to_string())
-        .map(|path| path.display().to_string())
 }
 
 fn run_platform_capture_text_insertion_target() -> Result<(), String> {
@@ -7746,6 +7726,37 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct WindowEventRecorderApp {
+        events: Vec<WindowEvent>,
+    }
+
+    impl FluentApplication for WindowEventRecorderApp {
+        type Message = WindowEvent;
+        type Flags = ();
+
+        fn new(_flags: Self::Flags) -> (Self, FluentTask<Self::Message>) {
+            (Self { events: Vec::new() }, FluentTask::none())
+        }
+
+        fn title(&self, _window: &WindowId) -> String {
+            "Window event recorder".to_string()
+        }
+
+        fn view(&self, _window: &WindowId) -> View<Self::Message> {
+            page("Recorder").content(text("Ready")).into_view()
+        }
+
+        fn update(&mut self, message: Self::Message) -> FluentTask<Self::Message> {
+            self.events.push(message);
+            FluentTask::none()
+        }
+
+        fn subscription(&self) -> FluentSubscription<Self::Message> {
+            FluentSubscription::window("mini", |event| event)
+        }
+    }
+
     fn empty_desktop_integration_plan<Message>() -> DesktopIntegrationPlan<Message> {
         DesktopIntegrationPlan {
             tray_menu: None,
@@ -7753,6 +7764,120 @@ mod tests {
             shell_verbs: Vec::new(),
             protocol_registrations: Vec::new(),
         }
+    }
+
+    #[test]
+    fn winfluent_open_url_rejects_non_web_and_retained_targets_before_shellexecute() {
+        for target in [
+            "file:///C:/Easydict/dotnet.exe",
+            "powershell.exe",
+            "easydict://ocr-translate",
+            "C:\\Easydict\\workers\\localai\\Easydict.Workers.LocalAi.exe",
+        ] {
+            let error = run_platform_open_url(target.to_string()).unwrap_err();
+            assert!(
+                error.contains("invalid URL target"),
+                "{target} should be rejected by the guarded shell URL boundary, got {error}"
+            );
+        }
+
+        assert!(
+            run_platform_open_url("   ".to_string()).is_ok(),
+            "blank URL should preserve the existing no-op behavior"
+        );
+    }
+
+    #[test]
+    fn winfluent_bundled_executable_rejects_retained_runtime_or_script_targets_before_spawn() {
+        for executable_name in [
+            "dotnet.exe",
+            "powershell.exe",
+            "pwsh.exe",
+            "Easydict.CompatHost.exe",
+            "workers\\localai\\Easydict.Workers.LocalAi.exe",
+        ] {
+            let error = run_platform_bundled_executable(executable_name.to_string(), Vec::new())
+                .unwrap_err();
+            assert!(
+                error.contains("invalid bundled executable name"),
+                "{executable_name} should be rejected before filesystem lookup or spawn, got {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn winfluent_bundled_executable_rejects_retained_runtime_arguments_before_spawn() {
+        let error = run_platform_bundled_executable(
+            "easydict_browser_registrar.exe".to_string(),
+            vec!["--runtime=dotnet.exe".to_string()],
+        )
+        .unwrap_err();
+
+        assert!(
+            error.contains("invalid bundled executable argument"),
+            "guarded bundled executable boundary should reject retained arguments before spawn, got {error}"
+        );
+    }
+
+    #[test]
+    fn winfluent_bundled_executable_rejects_retained_runtime_content_before_spawn() {
+        let current_exe = std::env::current_exe().expect("current test executable");
+        let exe_dir = current_exe
+            .parent()
+            .expect("current test executable should have parent");
+        let executable_name = format!(
+            "winfluent-retained-marker-{}-{}.exe",
+            std::process::id(),
+            trace_wall_ms()
+        );
+        let executable_path = exe_dir.join(&executable_name);
+        std::fs::write(
+            &executable_path,
+            b"fake rust helper bytes with stale hostfxr.dll marker",
+        )
+        .expect("write retained marker executable fixture");
+
+        let error = run_platform_bundled_executable(executable_name, Vec::new()).unwrap_err();
+        let _ = std::fs::remove_file(&executable_path);
+
+        assert!(
+            error.contains("contains retained runtime marker"),
+            "guarded bundled executable boundary should reject marker bytes before spawn, got {error}"
+        );
+    }
+
+    #[test]
+    fn winfluent_register_shell_verb_and_protocol_guard_current_exe_before_registry_write() {
+        let retained_path = Path::new(r"C:\Payload\workers\localai\Easydict.Workers.LocalAi.exe");
+        let retained_error = validate_platform_registry_executable_path(retained_path).expect_err(
+            "registry command target path markers should be rejected before registry IO",
+        );
+        assert!(
+            retained_error.contains("retained runtime"),
+            "registry command target should reject retained path markers, got {retained_error}"
+        );
+
+        let dir = std::env::temp_dir().join(format!(
+            "winfluent-registry-target-{}-{}",
+            std::process::id(),
+            trace_wall_ms()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let executable_path = dir.join("Easydict.Rust.exe");
+        std::fs::write(
+            &executable_path,
+            b"fake rust exe with stale System.Private.CoreLib.dll marker",
+        )
+        .expect("write fake executable");
+
+        let content_error = validate_platform_registry_executable_path(&executable_path)
+            .expect_err("registry command target bytes should be scanned before registry IO");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            content_error.contains("contains retained runtime marker"),
+            "registry command target should reject retained marker bytes, got {content_error}"
+        );
     }
 
     #[test]
@@ -7873,6 +7998,132 @@ mod tests {
 
         assert!(!runtime.logical_windows.contains_key(&WindowId::new("mini")));
         assert!(!runtime.native_windows.contains_key(&native_id));
+    }
+
+    #[test]
+    fn opened_native_window_dispatches_logical_opened_event() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let native_id = window::Id::unique();
+        runtime.pending_windows.insert(
+            native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new("mini"),
+                options: WindowOptions::new("mini", "Mini"),
+            },
+        );
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowOpened(native_id),
+        );
+
+        assert_eq!(
+            runtime.app.events,
+            vec![WindowEvent::Opened(WindowId::new("mini"))]
+        );
+        assert_eq!(
+            runtime.logical_windows.get(&WindowId::new("mini")),
+            Some(&native_id)
+        );
+        assert!(runtime.native_windows.contains_key(&native_id));
+    }
+
+    #[test]
+    fn closed_native_window_dispatches_logical_closed_event() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let native_id = window::Id::unique();
+        let runtime_window = RuntimeWindow {
+            logical_id: WindowId::new("mini"),
+            options: WindowOptions::new("mini", "Mini"),
+        };
+        runtime
+            .logical_windows
+            .insert(WindowId::new("mini"), native_id);
+        runtime.native_windows.insert(native_id, runtime_window);
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowClosed(native_id),
+        );
+
+        assert_eq!(
+            runtime.app.events,
+            vec![WindowEvent::Closed(WindowId::new("mini"))]
+        );
+        assert!(!runtime.logical_windows.contains_key(&WindowId::new("mini")));
+        assert!(!runtime.native_windows.contains_key(&native_id));
+    }
+
+    #[test]
+    fn focused_native_window_dispatches_logical_focus_event() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let native_id = window::Id::unique();
+        runtime
+            .logical_windows
+            .insert(WindowId::new("mini"), native_id);
+        runtime.native_windows.insert(
+            native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new("mini"),
+                options: WindowOptions::new("mini", "Mini"),
+            },
+        );
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowNativeEvent(native_id, window::Event::Focused),
+        );
+
+        assert_eq!(
+            runtime.app.events,
+            vec![WindowEvent::Focused(WindowId::new("mini"))]
+        );
+    }
+
+    #[test]
+    fn rescaled_native_window_dispatches_logical_dpi_event() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let native_id = window::Id::unique();
+        runtime
+            .logical_windows
+            .insert(WindowId::new("mini"), native_id);
+        runtime.native_windows.insert(
+            native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new("mini"),
+                options: WindowOptions::new("mini", "Mini"),
+            },
+        );
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowNativeEvent(native_id, window::Event::Rescaled(1.5)),
+        );
+
+        assert_eq!(
+            runtime.app.events,
+            vec![WindowEvent::DpiChanged(WindowId::new("mini"))]
+        );
     }
 
     #[test]

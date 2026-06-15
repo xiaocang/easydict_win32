@@ -62,13 +62,23 @@ fn run() -> Result<ExitCode, BrowserRegistrarCliError> {
         }
         BrowserRegistrarCommand::Uninstall => {
             let output = core.uninstall(options.chrome, options.firefox);
+            let success = output.success;
             println!("{}", serialize_cli_json(&output));
-            Ok(ExitCode::SUCCESS)
+            Ok(if success {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
         }
         BrowserRegistrarCommand::Status => {
             let output = core.status();
+            let success = output.error.is_none();
             println!("{}", serialize_cli_json(&output));
-            Ok(ExitCode::SUCCESS)
+            Ok(if success {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
         }
     }
 }

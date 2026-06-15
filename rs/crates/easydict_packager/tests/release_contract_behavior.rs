@@ -926,6 +926,10 @@ fn release_workflow_hybrid_flavor_does_not_build_or_upload_rs_portable_assets() 
         "pattern: easydict-rs-portable-*",
         "path: rs-portable",
         "rs-portable/*.zip",
+        "rs-portable/checksums-*.sha256",
+        "checksums-*.sha256",
+        "checksums-x64.sha256",
+        "easydict-rs-portable-${{ github.ref_name }}",
     ] {
         assert_not_contains(
             create_bundle_job,
@@ -939,6 +943,86 @@ fn release_workflow_hybrid_flavor_does_not_build_or_upload_rs_portable_assets() 
         create_rs_portable_release_job,
         "needs: [prepare, publish-rs-portable]",
         "the rs portable release upload job should keep owning rs portable assets",
+    );
+}
+
+#[test]
+fn rs_portable_release_uploads_sha256_checksums_for_rs_zip() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_job = text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+    let release_job = text_between(
+        &workflow,
+        "  create-rs-portable-release:",
+        "  publish-winget:",
+    );
+    let checksum_step = text_between(
+        publish_job,
+        "      - name: Write Rust portable SHA256 checksum",
+        "      - name: Upload Rust portable ZIP and checksum as artifact",
+    );
+
+    assert_appears_before(
+        publish_job,
+        "      - name: Validate Rust portable ZIP",
+        "      - name: Write Rust portable SHA256 checksum",
+        "rs portable checksum should be generated only after the ZIP payload is validated",
+    );
+    assert_appears_before(
+        publish_job,
+        "      - name: Write Rust portable SHA256 checksum",
+        "      - name: Upload Rust portable ZIP and checksum as artifact",
+        "rs portable checksum should be generated before upload-artifact runs",
+    );
+    assert_contains(
+        checksum_step,
+        "write-sha256-checksum",
+        "rs portable publish job should generate checksums through the Rust packager",
+    );
+    assert_contains(
+        checksum_step,
+        "$checksumPath = \"dist/checksums-${{ matrix.platform }}.sha256\"",
+        "rs portable publish job should use the README-documented platform checksum name",
+    );
+    assert_contains(
+        checksum_step,
+        "--package $zipPath",
+        "checksum generation should hash the already validated ZIP",
+    );
+    assert_contains(
+        checksum_step,
+        "--output $checksumPath",
+        "checksum generation should write the explicit release checksum artifact",
+    );
+    assert_contains(
+        publish_job,
+        "Upload Rust portable ZIP and checksum as artifact",
+        "rs portable artifact upload should include both files",
+    );
+    assert_contains(
+        publish_job,
+        "rs/dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip",
+        "rs portable artifact upload should include the ZIP",
+    );
+    assert_contains(
+        publish_job,
+        "rs/dist/checksums-${{ matrix.platform }}.sha256",
+        "rs portable artifact upload should include the matching checksum",
+    );
+    assert_contains(
+        release_job,
+        "Get-ChildItem -Path rs-portable -Filter checksums-*.sha256 -File",
+        "rs release job should download and enumerate checksum artifacts",
+    );
+    assert_contains(
+        release_job,
+        "verify-sha256-checksum",
+        "rs release job should verify the downloaded ZIP against the downloaded checksum before upload",
+    );
+    assert_contains(
+        release_job,
+        "rs-portable/checksums-*.sha256",
+        "GitHub Release upload should include the checksum assets alongside the ZIP",
     );
 }
 
@@ -1040,6 +1124,11 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
     );
     assert_contains(
         publish_job,
+        "write-sha256-checksum",
+        "rs portable packaging should write a SHA256 checksum before artifact upload",
+    );
+    assert_contains(
+        publish_job,
         "easydict-rs-portable-${{ matrix.platform }}",
         "rs portable upload artifact should remain separately named from legacy assets",
     );
@@ -1071,8 +1160,18 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
     );
     assert_contains(
         release_job,
+        "verify-sha256-checksum",
+        "first rs release should verify downloaded checksum artifacts before GitHub release upload",
+    );
+    assert_contains(
+        release_job,
         "rs-portable/*.zip",
-        "first rs release should upload only rs portable ZIP assets",
+        "first rs release should upload rs portable ZIP assets",
+    );
+    assert_contains(
+        release_job,
+        "rs-portable/checksums-*.sha256",
+        "first rs release should upload the matching rs portable checksum assets",
     );
 
     for (section_name, section) in [
@@ -1134,12 +1233,12 @@ fn create_rs_portable_release_revalidates_downloaded_zip_before_upload() {
         .expect("first rs release should upload portable artifacts");
     assert!(
         download_index < validation_index && validation_index < upload_index,
-        "first rs release should download, revalidate, then upload the portable ZIP assets"
+        "first rs release should download, revalidate, then upload the portable ZIP and checksum assets"
     );
     assert_contains(
         validation_step,
         "Get-ChildItem -Path rs-portable -Filter *.zip -File",
-        "downloaded release validator should enumerate only ZIP artifacts",
+        "downloaded release validator should enumerate ZIP artifacts",
     );
     assert_contains(
         validation_step,
@@ -1148,8 +1247,33 @@ fn create_rs_portable_release_revalidates_downloaded_zip_before_upload() {
     );
     assert_contains(
         validation_step,
+        "Get-ChildItem -Path rs-portable -Filter checksums-*.sha256 -File",
+        "downloaded release validator should enumerate checksum artifacts",
+    );
+    assert_contains(
+        validation_step,
+        "No Rust portable checksum artifacts were downloaded",
+        "downloaded release validator should fail clearly when artifact matching returns no checksums",
+    );
+    assert_contains(
+        validation_step,
+        "Rust portable checksum count",
+        "downloaded release validator should reject checksum/ZIP count mismatches",
+    );
+    assert_contains(
+        validation_step,
         "cargo run --manifest-path rs/Cargo.toml -p easydict_packager --",
         "downloaded release validator should use the Rust packager CLI",
+    );
+    assert_contains(
+        validation_step,
+        "verify-sha256-checksum",
+        "downloaded release validator should verify checksums before upload",
+    );
+    assert_contains(
+        validation_step,
+        "--checksum $checksumPath",
+        "downloaded release validator should pair each ZIP with the platform checksum file",
     );
     assert_contains(
         validation_step,
@@ -1280,7 +1404,7 @@ fn rs_portable_release_zip_has_size_budget_gate() {
     let validation_step = text_between(
         publish_job,
         "      - name: Validate Rust portable ZIP",
-        "      - name: Upload Rust portable ZIP as artifact",
+        "      - name: Write Rust portable SHA256 checksum",
     );
 
     assert_contains(
@@ -1472,6 +1596,47 @@ fn rs_portable_release_runs_runtime_guard_and_msix_validator_tests() {
 }
 
 #[test]
+fn rs_portable_release_packager_invocation_never_enables_hybrid_feature() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_job = text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+    let build_step = text_between(
+        publish_job,
+        "      - name: Build Rust portable ZIP",
+        "      - name: Validate Rust portable ZIP",
+    );
+
+    for required in [
+        "cargo run --manifest-path Cargo.toml -p easydict_packager --",
+        "pack-rs-portable",
+        "--workspace .",
+        "--configuration Release",
+        "--package-version \"${{ github.ref_name }}\"",
+    ] {
+        assert_contains(
+            build_step,
+            required,
+            &format!("rs portable release packager invocation should contain {required}"),
+        );
+    }
+
+    for forbidden in [
+        "--features",
+        "hybrid-dotnet-runtime-packaging",
+        "extract-dotnet-runtime",
+        "zip-directory",
+        "--runtime-profile",
+        "Easydict-legacy-hybrid",
+    ] {
+        assert_not_contains(
+            build_step,
+            forbidden,
+            &format!("rs portable release packager invocation must not contain {forbidden}"),
+        );
+    }
+}
+
+#[test]
 fn ci_build_and_test_job_keeps_dotnet_build_on_rust_only_profile() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/ci.yml"));
@@ -1608,6 +1773,71 @@ fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
             legacy_install_section,
             "Rust",
             &format!("{relative_path} should say WinGet is not the default Rust portable install"),
+        );
+    }
+}
+
+#[test]
+fn migration_list_acceptance_defaults_to_rs_portable_before_legacy_dotnet() {
+    let root = repo_root();
+    let migration = read_text(&root.join("migration-list.md"));
+    let acceptance = text_between(&migration, "## 0. 总体验收命令", "## 1. 项目边界与运行形态");
+
+    assert_contains(
+        &migration,
+        "第一版 rs 默认验收命令从仓库根目录执行",
+        "migration-list.md should describe the rs portable path as the default acceptance entry",
+    );
+    assert_contains(
+        &migration,
+        "`dotnet/` 命令只用于 legacy/hybrid 或 parity 验收",
+        "migration-list.md should demote dotnet commands to legacy/hybrid or parity checks",
+    );
+    assert_contains(
+        acceptance,
+        "第一版 rs portable 默认验收",
+        "migration-list.md should keep a first-class rs portable acceptance section",
+    );
+    assert_contains(
+        acceptance,
+        r"cargo run --manifest-path rs\Cargo.toml -p easydict_packager -- pack-rs-portable --workspace rs --platform x64 --configuration Release",
+        "migration-list.md should make direct Rust pack-rs-portable the default package command",
+    );
+    assert_contains(
+        acceptance,
+        r"cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior -- --nocapture",
+        "migration-list.md should keep the default Rust API/runtime boundary test in the default acceptance path",
+    );
+    assert_contains(
+        acceptance,
+        r"cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release -- --nocapture",
+        "migration-list.md should keep rs portable release contracts in the default acceptance path",
+    );
+
+    let rs_acceptance_index = acceptance
+        .find("第一版 rs portable 默认验收")
+        .expect("rs portable acceptance section");
+    let legacy_index = acceptance
+        .find("Legacy/Hybrid .NET parity")
+        .expect("legacy dotnet parity section");
+    assert!(
+        rs_acceptance_index < legacy_index,
+        "migration-list.md should present rs portable acceptance before legacy dotnet parity commands"
+    );
+
+    let default_acceptance = &acceptance[..legacy_index];
+    for forbidden in [
+        "dotnet restore",
+        "dotnet build",
+        "dotnet test",
+        "make test-integration",
+    ] {
+        assert_not_contains(
+            default_acceptance,
+            forbidden,
+            &format!(
+                "migration-list.md default rs acceptance must not start from legacy dotnet command {forbidden}"
+            ),
         );
     }
 }

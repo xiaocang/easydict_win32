@@ -1,5 +1,5 @@
 use easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker;
-use std::{fs, path::Path};
+use std::path::Path;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopShellVerb {
@@ -181,6 +181,7 @@ pub fn register_shell_verb_with_executable_path(
     executable_path: &str,
 ) -> Result<(), String> {
     validate_desktop_command_executable_path(executable_path)?;
+    validate_desktop_command_arguments(&plan.command_arguments)?;
 
     for (registry_key_path, command_key_path) in plan
         .registry_key_paths
@@ -208,6 +209,7 @@ pub fn register_protocol_with_executable_path(
     executable_path: &str,
 ) -> Result<(), String> {
     validate_desktop_command_executable_path(executable_path)?;
+    validate_desktop_command_arguments(&plan.command_arguments)?;
 
     write_registry_string(&plan.registry_key_path, None, &plan.description)?;
     write_registry_string(&plan.registry_key_path, Some("URL Protocol"), "")?;
@@ -229,6 +231,7 @@ pub fn register_startup_with_executable_path(
     executable_path: &str,
 ) -> Result<(), String> {
     validate_desktop_command_executable_path(executable_path)?;
+    validate_desktop_command_arguments(&plan.command_arguments)?;
 
     write_registry_string(
         &plan.registry_key_path,
@@ -271,51 +274,20 @@ fn validate_desktop_command_executable_path(executable_path: &str) -> Result<(),
         ));
     }
 
-    let executable = Path::new(executable_path);
-    let metadata = fs::symlink_metadata(executable).map_err(|error| {
-        format!("failed to inspect desktop integration command target {executable_path}: {error}")
-    })?;
-    let file_type = metadata.file_type();
-    if desktop_command_target_is_unsupported_by_flags(
-        file_type.is_file(),
-        file_type.is_symlink(),
-        desktop_command_target_is_reparse_point(&metadata),
-    ) {
-        return Err(format!(
-            "desktop integration command target must be a regular non-link executable file: {executable_path}"
-        ));
-    }
+    easydict_windows_shell::validate_command_executable_target(Path::new(executable_path))
+        .map_err(|error| error.to_string())
+}
 
-    let bytes = fs::read(executable).map_err(|error| {
-        format!("failed to read desktop integration command target {executable_path}: {error}")
-    })?;
-    if easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes) {
-        return Err(format!(
-            "desktop integration command target contains retained runtime marker: {executable_path}"
-        ));
+fn validate_desktop_command_arguments(arguments: &[String]) -> Result<(), String> {
+    for argument in arguments {
+        if command_target_is_retained_runtime_or_script_marker(argument) {
+            return Err(format!(
+                "desktop integration command argument is a retained runtime, worker, or script entry: {argument}"
+            ));
+        }
     }
 
     Ok(())
-}
-
-fn desktop_command_target_is_unsupported_by_flags(
-    is_file: bool,
-    is_symlink: bool,
-    is_reparse_point: bool,
-) -> bool {
-    !is_file || is_symlink || is_reparse_point
-}
-
-#[cfg(windows)]
-fn desktop_command_target_is_reparse_point(metadata: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-}
-
-#[cfg(not(windows))]
-fn desktop_command_target_is_reparse_point(_metadata: &fs::Metadata) -> bool {
-    false
 }
 
 fn write_registry_string(
@@ -367,6 +339,7 @@ fn quote_windows_argument(value: &str, force: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn shell_verb_plan_matches_ocr_registry_contract() {
@@ -488,6 +461,48 @@ mod tests {
         let error = validate_desktop_command_executable_path(&executable.to_string_lossy())
             .expect_err("desktop command validation should reject retained runtime bytes");
         assert!(error.contains("contains retained runtime marker"));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn desktop_registry_command_arguments_reject_retained_runtime_or_script_markers() {
+        let temp_dir = unique_temp_dir("desktop-registry-command-arguments");
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let executable = temp_dir.join("Easydict.Rust.exe");
+        fs::write(&executable, b"fake rust executable").expect("write fake executable");
+        let executable_path = executable.to_string_lossy();
+
+        let shell_plan = shell_verb_plan(
+            &DesktopShellVerb::new("EasydictRsOCR", "OCR Translate")
+                .argument("--script")
+                .argument("legacy-backend.ps1"),
+        )
+        .expect("shell verb should produce registry plan");
+        let shell_error = register_shell_verb_with_executable_path(&shell_plan, &executable_path)
+            .expect_err("shell verb registration should reject retained script arguments");
+        assert!(shell_error.contains("command argument"));
+        assert!(shell_error.contains("legacy-backend.ps1"));
+
+        let protocol_plan = protocol_registration_plan(
+            &DesktopProtocolRegistration::new("easydict-rs", "URL:Easydict Rust Protocol")
+                .argument("--runtime=dotnet.exe"),
+        );
+        let protocol_error =
+            register_protocol_with_executable_path(&protocol_plan, &executable_path)
+                .expect_err("protocol registration should reject retained runtime arguments");
+        assert!(protocol_error.contains("command argument"));
+        assert!(protocol_error.contains("dotnet.exe"));
+
+        let startup_plan = DesktopStartupRegistrationPlan {
+            registry_key_path: r"Software\Microsoft\Windows\CurrentVersion\Run".to_string(),
+            value_name: "EasydictRs".to_string(),
+            command_arguments: vec![r"workers\localai\Easydict.Workers.LocalAi.exe".to_string()],
+        };
+        let startup_error = register_startup_with_executable_path(&startup_plan, &executable_path)
+            .expect_err("startup registration should reject retained worker arguments");
+        assert!(startup_error.contains("command argument"));
+        assert!(startup_error.contains("Easydict.Workers.LocalAi.exe"));
 
         let _ = fs::remove_dir_all(temp_dir);
     }

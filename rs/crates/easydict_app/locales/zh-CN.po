@@ -153,6 +153,9 @@ msgstr "API 密钥（可选）"
 msgid "settings.services.endpoint_optional"
 msgstr "端点（可选）"
 
+msgid "settings.services.endpoint_required"
+msgstr "端点（必填）"
+
 msgid "settings.services.model"
 msgstr "模型"
 

@@ -9,6 +9,7 @@ use std::process::Command;
 pub enum WindowsShellError {
     InvalidUrlTarget(String),
     InvalidBundledExecutableName(String),
+    InvalidBundledExecutableArgument(String),
     CurrentExecutableUnavailable(String),
     CurrentExecutableHasNoParent,
     ProcessLaunchFailed { executable: PathBuf, error: String },
@@ -25,6 +26,9 @@ impl fmt::Display for WindowsShellError {
             }
             Self::InvalidBundledExecutableName(name) => {
                 write!(formatter, "invalid bundled executable name: {name}")
+            }
+            Self::InvalidBundledExecutableArgument(argument) => {
+                write!(formatter, "invalid bundled executable argument: {argument}")
             }
             Self::CurrentExecutableUnavailable(error) => {
                 write!(
@@ -100,7 +104,8 @@ pub fn bundled_executable_path_next_to(
 }
 
 fn run_executable(executable: &Path, arguments: &[String]) -> Result<(), WindowsShellError> {
-    validate_bundled_executable_target(executable)?;
+    validate_bundled_executable_arguments(arguments)?;
+    validate_command_executable_target(executable)?;
     let mut command = Command::new(executable);
     command.args(arguments);
     hide_process_window(&mut command);
@@ -116,6 +121,22 @@ fn run_executable(executable: &Path, arguments: &[String]) -> Result<(), Windows
             executable: executable.to_path_buf(),
             status: status.to_string(),
         });
+    }
+
+    Ok(())
+}
+
+pub fn validate_command_executable_target(executable: &Path) -> Result<(), WindowsShellError> {
+    validate_command_executable_target_impl(executable)
+}
+
+fn validate_bundled_executable_arguments(arguments: &[String]) -> Result<(), WindowsShellError> {
+    for argument in arguments {
+        if easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(argument) {
+            return Err(WindowsShellError::InvalidBundledExecutableArgument(
+                argument.to_string(),
+            ));
+        }
     }
 
     Ok(())
@@ -159,7 +180,17 @@ fn validate_open_url_target(url: &str) -> Result<&str, WindowsShellError> {
     }
 }
 
-fn validate_bundled_executable_target(executable: &Path) -> Result<(), WindowsShellError> {
+fn validate_command_executable_target_impl(executable: &Path) -> Result<(), WindowsShellError> {
+    let executable_text = executable.to_string_lossy();
+    if easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(
+        &executable_text,
+    ) {
+        return Err(WindowsShellError::InvalidBundledExecutableTarget {
+            executable: executable.to_path_buf(),
+            reason: "is a retained runtime, worker, or script target".to_string(),
+        });
+    }
+
     let metadata = fs::symlink_metadata(executable).map_err(|error| {
         WindowsShellError::InvalidBundledExecutableTarget {
             executable: executable.to_path_buf(),
@@ -378,6 +409,59 @@ mod tests {
     }
 
     #[test]
+    fn bundled_executable_arguments_allow_browser_registrar_options() {
+        let arguments = vec![
+            "install".to_string(),
+            "--browser".to_string(),
+            "chrome".to_string(),
+            "--bridge-root-name".to_string(),
+            "EasydictRs".to_string(),
+        ];
+
+        validate_bundled_executable_arguments(&arguments)
+            .expect("browser registrar arguments should be accepted");
+    }
+
+    #[test]
+    fn bundled_executable_arguments_reject_retained_runtime_or_script_markers() {
+        for argument in [
+            "--runtime=dotnet.exe",
+            "--script=legacy-backend.ps1",
+            r"workers\localai\Easydict.Workers.LocalAi.exe",
+            r"C:\Payload\dotnet\host\fxr\8.0.11\hostfxr.dll",
+            "powershell.exe",
+            "foundry.cmd /c dotnet.exe",
+        ] {
+            assert_eq!(
+                validate_bundled_executable_arguments(&[argument.to_string()]),
+                Err(WindowsShellError::InvalidBundledExecutableArgument(
+                    argument.to_string()
+                )),
+                "{argument} must not be accepted as a bundled Rust helper argument"
+            );
+        }
+    }
+
+    #[test]
+    fn run_executable_rejects_retained_arguments_before_spawn() {
+        let dir = unique_temp_dir("retained-helper-argument");
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let exe = dir.join("easydict_browser_registrar.exe");
+        std::fs::write(&exe, b"fake rust helper").expect("write helper");
+
+        let argument = "--runtime=dotnet.exe".to_string();
+        let error = run_executable(&exe, std::slice::from_ref(&argument))
+            .expect_err("retained argument should be rejected before spawn");
+
+        assert_eq!(
+            error,
+            WindowsShellError::InvalidBundledExecutableArgument(argument)
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn bundled_executable_target_rejects_links_reparse_points_and_non_files() {
         assert!(!bundled_executable_target_is_unsupported_by_flags(
             true, false, false
@@ -400,9 +484,23 @@ mod tests {
         let exe = dir.join("easydict_browser_registrar.exe");
         std::fs::write(&exe, b"fake rust helper").expect("write helper");
 
-        validate_bundled_executable_target(&exe).expect("regular file should be accepted");
+        validate_command_executable_target(&exe).expect("regular file should be accepted");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn command_executable_target_rejects_retained_runtime_path_markers_before_io() {
+        let error = validate_command_executable_target(Path::new(r"C:\Payload\dotnet\dotnet.exe"))
+            .expect_err("retained runtime path should be rejected before filesystem IO");
+
+        assert_eq!(
+            error,
+            WindowsShellError::InvalidBundledExecutableTarget {
+                executable: Path::new(r"C:\Payload\dotnet\dotnet.exe").to_path_buf(),
+                reason: "is a retained runtime, worker, or script target".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -418,7 +516,7 @@ mod tests {
         );
         std::fs::write(&exe, bytes).expect("write helper");
 
-        let error = validate_bundled_executable_target(&exe)
+        let error = validate_command_executable_target(&exe)
             .expect_err("retained runtime content must be rejected before spawn");
 
         assert_eq!(

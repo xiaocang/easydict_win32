@@ -90,3 +90,8 @@ path = "src/bin/easydict_lex_index.rs"
 [[bin]]
 name = "easydict_long_doc"
 path = "src/bin/easydict_long_doc.rs"
+
+[[bin]]
+name = "easydict-ipc-mock"
+path = "src/bin/easydict_ipc_mock.rs"
+required-features = ["retained-dotnet-workers"]

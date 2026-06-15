@@ -571,6 +571,15 @@ pub struct EasydictApp {
     pub state: EasydictUiState,
 }
 
+const APP_WINDOW_SUBSCRIPTION_IDS: [&str; 6] = [
+    "main",
+    "settings",
+    "mini",
+    "fixed",
+    "capture-overlay",
+    "pop-button",
+];
+
 impl Application for EasydictApp {
     type Message = Message;
     type Flags = EasydictUiState;
@@ -1073,10 +1082,12 @@ impl Application for EasydictApp {
             hotkeys_for_settings(&self.state.settings)
                 .into_iter()
                 .map(|hotkey| Subscription::hotkey(hotkey, Message::HotkeyTriggered))
-                .chain([
-                    Subscription::tray(Message::TrayCommand),
-                    Subscription::window(WindowId::new("main"), Message::WindowEvent),
-                ]),
+                .chain(std::iter::once(Subscription::tray(Message::TrayCommand)))
+                .chain(
+                    APP_WINDOW_SUBSCRIPTION_IDS
+                        .into_iter()
+                        .map(|id| Subscription::window(WindowId::new(id), Message::WindowEvent)),
+                ),
         )
     }
 
@@ -2105,19 +2116,15 @@ fn browser_registrar_action_task(
 
 fn register_shell_verb_task(verb: desktop_integration::DesktopShellVerb) -> Task<Message> {
     Task::perform(
-        async move {
-            let _ = desktop_integration::register_shell_verb(verb);
-        },
-        |_| Message::Noop,
+        async move { desktop_integration::register_shell_verb(verb) },
+        Message::DesktopIntegrationActionFinished,
     )
 }
 
 fn unregister_shell_verb_task(verb: desktop_integration::DesktopShellVerb) -> Task<Message> {
     Task::perform(
-        async move {
-            let _ = desktop_integration::unregister_shell_verb(verb);
-        },
-        |_| Message::Noop,
+        async move { desktop_integration::unregister_shell_verb(verb) },
+        Message::DesktopIntegrationActionFinished,
     )
 }
 
@@ -2133,19 +2140,18 @@ fn protocol_registration_task() -> Task<Message> {
     Task::perform(
         async move {
             for protocol in default_desktop_protocol_registrations() {
-                let _ = desktop_integration::register_protocol(protocol);
+                desktop_integration::register_protocol(protocol)?;
             }
+            Ok(())
         },
-        |_| Message::Noop,
+        Message::DesktopIntegrationActionFinished,
     )
 }
 
 fn startup_registration_task(enabled: bool) -> Task<Message> {
     Task::perform(
-        async move {
-            let _ = desktop_integration::set_startup_enabled(enabled);
-        },
-        |_| Message::Noop,
+        async move { desktop_integration::set_startup_enabled(enabled) },
+        Message::DesktopIntegrationActionFinished,
     )
 }
 

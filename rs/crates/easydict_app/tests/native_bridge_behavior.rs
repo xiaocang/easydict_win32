@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use easydict_app::native_bridge::{
     encode_native_message, parse_native_action, run_native_bridge, BridgeResponse,
-    MAX_NATIVE_MESSAGE_BYTES, NATIVE_HOST_NAME, OCR_TRANSLATE_ACTION,
+    INVALID_NATIVE_ACTION, MAX_NATIVE_MESSAGE_BYTES, NATIVE_HOST_NAME, OCR_TRANSLATE_ACTION,
 };
 use easydict_app::OCR_TRANSLATE_EVENT_NAME;
 
@@ -44,17 +44,35 @@ fn native_bridge_binary_signals_rs_ocr_event_not_legacy_dotnet_event() {
 }
 
 #[test]
-fn native_bridge_defaults_invalid_or_missing_action_to_ocr_translate() {
+fn native_bridge_rejects_invalid_or_missing_action_before_signal() {
     assert_eq!(NATIVE_HOST_NAME, "com.easydict.rs.bridge");
     assert_eq!(
-        parse_native_action(br#"{"action":"ocr-translate"}"#),
+        parse_native_action(br#"{"action":"ocr-translate"}"#).expect("valid action"),
         OCR_TRANSLATE_ACTION
     );
-    assert_eq!(
-        parse_native_action(br#"{"other":true}"#),
-        OCR_TRANSLATE_ACTION
-    );
-    assert_eq!(parse_native_action(b"not-json"), OCR_TRANSLATE_ACTION);
+
+    for (payload, expected_error) in [
+        (b"not-json".as_slice(), "invalid native message JSON"),
+        (
+            br#"{"other":true}"#.as_slice(),
+            "missing native message action",
+        ),
+        (
+            br#"{"action":null}"#.as_slice(),
+            "missing native message action",
+        ),
+        (
+            br#"{"action":123}"#.as_slice(),
+            "invalid native message JSON",
+        ),
+    ] {
+        let error = parse_native_action(payload).expect_err("invalid action should be rejected");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(
+            error.to_string().contains(expected_error),
+            "invalid action error should be diagnosable: {error}"
+        );
+    }
 }
 
 #[test]
@@ -121,6 +139,50 @@ fn native_bridge_reports_false_for_unknown_actions_without_signal() {
 }
 
 #[test]
+fn native_bridge_rejects_malformed_or_missing_action_without_signal() {
+    for (payload, expected_error) in [
+        (b"not-json".as_slice(), "invalid native message JSON"),
+        (
+            br#"{"other":true}"#.as_slice(),
+            "missing native message action",
+        ),
+        (
+            br#"{"action":null}"#.as_slice(),
+            "missing native message action",
+        ),
+        (
+            br#"{"action":123}"#.as_slice(),
+            "invalid native message JSON",
+        ),
+    ] {
+        let input = encode_raw_native_message(payload);
+        let mut output = Vec::new();
+        let mut signal_count = 0usize;
+
+        let responses = run_native_bridge(Cursor::new(input), &mut output, || {
+            signal_count += 1;
+            Ok(true)
+        })
+        .expect("bridge loop should report invalid action locally");
+
+        assert_eq!(responses, 1);
+        assert_eq!(signal_count, 0);
+
+        let response = decode_single_response(&output);
+        assert!(!response.success);
+        assert_eq!(response.action, INVALID_NATIVE_ACTION);
+        let error = response
+            .error
+            .as_deref()
+            .expect("invalid action response should carry an error");
+        assert!(
+            error.contains(expected_error),
+            "invalid action response should be diagnosable: {error}"
+        );
+    }
+}
+
+#[test]
 fn native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_signal() {
     let input =
         encode_native_message(&serde_json::json!({ "action": "status" })).expect("input frame");
@@ -169,6 +231,119 @@ fn native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_sign
         assert!(
             !combined.contains(forbidden),
             "native bridge binary should not expose legacy host marker {forbidden}:\n{combined}"
+        );
+    }
+}
+
+#[test]
+fn native_bridge_binary_rejects_malformed_json_without_dotnet_host_or_event_signal() {
+    let bridge_bin = native_bridge_binary_path();
+    let mut child = Command::new(bridge_bin)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("native bridge binary should spawn");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin should be piped")
+        .write_all(&encode_raw_native_message(b"not-json"))
+        .expect("native bridge input should be written");
+
+    let output = child
+        .wait_with_output()
+        .expect("native bridge binary should exit");
+
+    assert!(
+        output.status.success(),
+        "native bridge binary should reject malformed JSON locally\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let response = decode_single_response(&output.stdout);
+    assert!(!response.success);
+    assert_eq!(response.action, INVALID_NATIVE_ACTION);
+    let error = response
+        .error
+        .as_deref()
+        .expect("invalid JSON response should carry an error");
+    assert!(
+        error.contains("invalid native message JSON"),
+        "invalid JSON response should be diagnosable: {error}"
+    );
+
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for forbidden in [
+        "Easydict.NativeBridge",
+        "Easydict NativeBridge",
+        "CompatHost",
+        ".NET",
+        "dotnet",
+        "worker executable",
+    ] {
+        assert!(
+            !combined.contains(forbidden),
+            "native bridge binary should not expose legacy host marker {forbidden}:\n{combined}"
+        );
+    }
+}
+
+#[test]
+fn native_bridge_binary_rejects_invalid_frame_length_without_dotnet_host_wording() {
+    let bridge_bin = native_bridge_binary_path();
+    let mut child = Command::new(bridge_bin)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("native bridge binary should spawn");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin should be piped")
+        .write_all(&0u32.to_le_bytes())
+        .expect("native bridge input should be written");
+
+    let output = child
+        .wait_with_output()
+        .expect("native bridge binary should exit");
+
+    assert!(
+        !output.status.success(),
+        "native bridge binary should reject invalid frame length"
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "invalid frame length should not produce a success response"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[easydict-native-bridge]"),
+        "invalid frame length should be reported by the Rust helper: {stderr}"
+    );
+    assert!(
+        stderr.contains("native message length must be non-zero"),
+        "invalid frame length should be diagnosable: {stderr}"
+    );
+    for forbidden in [
+        "Easydict.NativeBridge",
+        "Easydict NativeBridge",
+        "CompatHost",
+        ".NET",
+        "dotnet",
+        "worker executable",
+    ] {
+        assert!(
+            !stderr.contains(forbidden),
+            "native bridge binary should not expose legacy host marker {forbidden}:\n{stderr}"
         );
     }
 }
@@ -240,42 +415,67 @@ fn native_bridge_binary_path() -> PathBuf {
 }
 
 #[test]
-fn native_bridge_stops_without_response_for_invalid_lengths_or_incomplete_frames() {
+fn native_bridge_stops_cleanly_on_empty_stdin_without_response() {
     let mut signal_count = 0usize;
-    let mut zero_output = Vec::new();
-    let responses = run_native_bridge(Cursor::new(0u32.to_le_bytes()), &mut zero_output, || {
+    let mut output = Vec::new();
+    let responses = run_native_bridge(Cursor::new(Vec::new()), &mut output, || {
         signal_count += 1;
         Ok(true)
     })
-    .expect("zero length");
-    assert_eq!(responses, 0);
-    assert_eq!(signal_count, 0);
-    assert!(zero_output.is_empty());
+    .expect("empty stdin");
 
-    let mut too_large = Vec::new();
-    too_large.extend_from_slice(&(MAX_NATIVE_MESSAGE_BYTES + 1).to_le_bytes());
-    let mut large_output = Vec::new();
-    let responses = run_native_bridge(Cursor::new(too_large), &mut large_output, || {
-        signal_count += 1;
-        Ok(true)
-    })
-    .expect("too large");
     assert_eq!(responses, 0);
     assert_eq!(signal_count, 0);
-    assert!(large_output.is_empty());
+    assert!(output.is_empty());
+}
 
-    let mut incomplete = Vec::new();
-    incomplete.extend_from_slice(&16u32.to_le_bytes());
-    incomplete.extend_from_slice(b"{}");
-    let mut incomplete_output = Vec::new();
-    let responses = run_native_bridge(Cursor::new(incomplete), &mut incomplete_output, || {
-        signal_count += 1;
-        Ok(true)
-    })
-    .expect("incomplete");
-    assert_eq!(responses, 0);
-    assert_eq!(signal_count, 0);
-    assert!(incomplete_output.is_empty());
+#[test]
+fn native_bridge_rejects_invalid_lengths_or_incomplete_frames_without_signal() {
+    let cases = [
+        (
+            0u32.to_le_bytes().to_vec(),
+            std::io::ErrorKind::InvalidData,
+            "native message length must be non-zero",
+        ),
+        (
+            (MAX_NATIVE_MESSAGE_BYTES + 1).to_le_bytes().to_vec(),
+            std::io::ErrorKind::InvalidData,
+            "native message exceeds maximum size",
+        ),
+        (
+            vec![16, 0],
+            std::io::ErrorKind::UnexpectedEof,
+            "incomplete native message length prefix",
+        ),
+        (
+            {
+                let mut incomplete = Vec::new();
+                incomplete.extend_from_slice(&16u32.to_le_bytes());
+                incomplete.extend_from_slice(b"{}");
+                incomplete
+            },
+            std::io::ErrorKind::UnexpectedEof,
+            "incomplete native message payload",
+        ),
+    ];
+
+    for (input, expected_kind, expected_message) in cases {
+        let mut signal_count = 0usize;
+        let mut output = Vec::new();
+        let error = run_native_bridge(Cursor::new(input), &mut output, || {
+            signal_count += 1;
+            Ok(true)
+        })
+        .expect_err("invalid native message frame should fail");
+
+        assert_eq!(error.kind(), expected_kind);
+        assert!(
+            error.to_string().contains(expected_message),
+            "invalid frame error should mention {expected_message}: {error}"
+        );
+        assert_eq!(signal_count, 0);
+        assert!(output.is_empty());
+    }
 }
 
 fn decode_single_response(frame: &[u8]) -> BridgeResponse {
@@ -283,4 +483,11 @@ fn decode_single_response(frame: &[u8]) -> BridgeResponse {
     let length = u32::from_le_bytes(frame[0..4].try_into().expect("length prefix")) as usize;
     assert_eq!(frame.len(), 4 + length);
     serde_json::from_slice(&frame[4..]).expect("response json")
+}
+
+fn encode_raw_native_message(payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::with_capacity(4 + payload.len());
+    frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    frame.extend_from_slice(payload);
+    frame
 }

@@ -19,6 +19,9 @@ pub const FOUNDRY_LOCAL_STATUS_NOT_INSTALLED: &str = "FoundryLocal_Status_NotIns
 pub const FOUNDRY_LOCAL_STATUS_NOT_RUNNING: &str = "FoundryLocal_Status_NotRunning";
 pub const FOUNDRY_LOCAL_STATUS_START_FAILED: &str = "FoundryLocal_Status_StartFailed";
 
+#[cfg(windows)]
+const WINDOWS_FOUNDRY_LOCAL_SEARCH_EXTENSIONS: &[&str] = &[".COM", ".EXE", ".BAT", ".CMD"];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FoundryLocalErrorCode {
     InvalidResponse,
@@ -591,13 +594,35 @@ impl CommandFoundryLocalEndpointResolver {
     where
         F: Fn(&Path) -> Option<PathBuf>,
     {
+        let search_dirs = foundry_local_cli_search_dirs_from_env();
+        let search_extensions = foundry_local_cli_search_extensions_from_env();
+        self.validated_cli_executable_for_spawn_with_canonicalizer_and_search_paths(
+            canonicalize,
+            &search_dirs,
+            &search_extensions,
+        )
+    }
+
+    fn validated_cli_executable_for_spawn_with_canonicalizer_and_search_paths<F>(
+        &self,
+        canonicalize: F,
+        search_dirs: &[PathBuf],
+        search_extensions: &[String],
+    ) -> FoundryLocalResult<Cow<'_, Path>>
+    where
+        F: Fn(&Path) -> Option<PathBuf>,
+    {
         if let Some(blocked) = &self.blocked_executable_name {
             return Err(foundry_local_cli_retained_target_error(blocked));
         }
 
-        let executable =
-            executable_for_allowed_foundry_local_cli_target(&self.executable_name, canonicalize)
-                .map_err(|blocked| foundry_local_cli_retained_target_error(&blocked))?;
+        let executable = executable_for_allowed_foundry_local_cli_target_with_search_paths(
+            &self.executable_name,
+            canonicalize,
+            search_dirs,
+            search_extensions,
+        )
+        .map_err(|blocked| foundry_local_cli_retained_target_error(&blocked))?;
         validate_foundry_local_cli_executable_file_content(executable.as_ref())?;
         Ok(executable)
     }
@@ -1087,21 +1112,177 @@ fn executable_for_allowed_foundry_local_cli_target<F>(
 where
     F: Fn(&Path) -> Option<PathBuf>,
 {
+    let search_dirs = foundry_local_cli_search_dirs_from_env();
+    let search_extensions = foundry_local_cli_search_extensions_from_env();
+    executable_for_allowed_foundry_local_cli_target_with_search_paths(
+        executable_name,
+        canonicalize,
+        &search_dirs,
+        &search_extensions,
+    )
+}
+
+fn executable_for_allowed_foundry_local_cli_target_with_search_paths<'a, F>(
+    executable_name: &'a str,
+    canonicalize: F,
+    search_dirs: &[PathBuf],
+    search_extensions: &[String],
+) -> Result<Cow<'a, Path>, String>
+where
+    F: Fn(&Path) -> Option<PathBuf>,
+{
     if is_retained_dotnet_runtime_or_worker_command(executable_name) {
         return Err(executable_name.to_string());
     }
 
     let executable_path = Path::new(executable_name);
     if let Some(canonical_path) = canonicalize(executable_path) {
-        let canonical = canonical_path.to_string_lossy().to_string();
-        if is_retained_dotnet_runtime_or_worker_command(&canonical) {
-            return Err(format!("{executable_name} -> {canonical}"));
-        }
+        return allowed_foundry_local_cli_canonical_target(executable_name, canonical_path);
+    }
 
-        return Ok(Cow::Owned(canonical_path));
+    if let Some(canonical_path) = resolve_foundry_local_cli_from_search_path(
+        executable_name,
+        search_dirs,
+        search_extensions,
+        &canonicalize,
+    )? {
+        return allowed_foundry_local_cli_canonical_target(executable_name, canonical_path);
     }
 
     Ok(Cow::Borrowed(executable_path))
+}
+
+fn allowed_foundry_local_cli_canonical_target<'a>(
+    requested: &str,
+    canonical_path: PathBuf,
+) -> Result<Cow<'a, Path>, String> {
+    let canonical = canonical_path.to_string_lossy().to_string();
+    if is_retained_dotnet_runtime_or_worker_command(&canonical) {
+        return Err(format!("{requested} -> {canonical}"));
+    }
+
+    Ok(Cow::Owned(canonical_path))
+}
+
+fn resolve_foundry_local_cli_from_search_path<F>(
+    executable_name: &str,
+    search_dirs: &[PathBuf],
+    search_extensions: &[String],
+    canonicalize: &F,
+) -> Result<Option<PathBuf>, String>
+where
+    F: Fn(&Path) -> Option<PathBuf>,
+{
+    if !foundry_local_cli_name_can_search_path(executable_name) {
+        return Ok(None);
+    }
+
+    for directory in search_dirs {
+        for candidate_name in foundry_local_cli_candidate_names(executable_name, search_extensions)
+        {
+            let candidate = directory.join(&candidate_name);
+            let Some(canonical_path) = canonicalize(&candidate) else {
+                continue;
+            };
+
+            let candidate_text = candidate.to_string_lossy().to_string();
+            if is_retained_dotnet_runtime_or_worker_command(&candidate_text) {
+                return Err(format!("{executable_name} -> {}", candidate.display()));
+            }
+
+            return Ok(Some(canonical_path));
+        }
+    }
+
+    Ok(None)
+}
+
+fn foundry_local_cli_name_can_search_path(executable_name: &str) -> bool {
+    !executable_name.is_empty()
+        && !executable_name.contains(['/', '\\', ':'])
+        && executable_name != "."
+        && executable_name != ".."
+}
+
+fn foundry_local_cli_candidate_names(
+    executable_name: &str,
+    search_extensions: &[String],
+) -> Vec<String> {
+    let mut candidates = vec![executable_name.to_string()];
+    if Path::new(executable_name).extension().is_some() {
+        return candidates;
+    }
+
+    for extension in search_extensions {
+        let trimmed = extension.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let extension = if trimmed.starts_with('.') {
+            trimmed.to_string()
+        } else {
+            format!(".{trimmed}")
+        };
+        let candidate = format!("{executable_name}{extension}");
+        if !candidates
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&candidate))
+        {
+            candidates.push(candidate);
+        }
+    }
+
+    candidates
+}
+
+fn foundry_local_cli_search_dirs_from_env() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(executable) = env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            dirs.push(parent.to_path_buf());
+        }
+    }
+    if let Ok(current_dir) = env::current_dir() {
+        if !dirs.iter().any(|entry| entry == &current_dir) {
+            dirs.push(current_dir);
+        }
+    }
+    if let Some(path) = env::var_os("PATH") {
+        for directory in env::split_paths(&path) {
+            if !directory.as_os_str().is_empty() && !dirs.iter().any(|entry| entry == &directory) {
+                dirs.push(directory);
+            }
+        }
+    }
+    dirs
+}
+
+#[cfg(windows)]
+fn foundry_local_cli_search_extensions_from_env() -> Vec<String> {
+    let extensions = env::var_os("PATHEXT")
+        .map(|value| {
+            value
+                .to_string_lossy()
+                .split(';')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .filter(|extensions| !extensions.is_empty());
+
+    extensions.unwrap_or_else(|| {
+        WINDOWS_FOUNDRY_LOCAL_SEARCH_EXTENSIONS
+            .iter()
+            .map(|extension| extension.to_string())
+            .collect()
+    })
+}
+
+#[cfg(not(windows))]
+fn foundry_local_cli_search_extensions_from_env() -> Vec<String> {
+    Vec::new()
 }
 
 fn foundry_local_cli_retained_target_error(blocked: &str) -> FoundryLocalError {
@@ -1542,6 +1723,55 @@ mod tests {
         assert!(error.message.contains("retained runtime/worker"));
         assert!(error.message.contains("contains retained runtime marker"));
         assert!(error.message.contains("foundry.exe"));
+        fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn default_cli_name_rejects_retained_script_target_found_on_search_path() {
+        let temp_dir = unique_temp_dir("easydict-foundry-local-path-script");
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        let cli_path = temp_dir.join("foundry.cmd");
+        fs::write(&cli_path, b"@echo off\r\ndotnet.exe\r\n").expect("fake CLI should be written");
+
+        let resolver =
+            CommandFoundryLocalEndpointResolver::new("foundry", Duration::from_millis(1));
+        let error = resolver
+            .validated_cli_executable_for_spawn_with_canonicalizer_and_search_paths(
+                |path| fs::canonicalize(path).ok(),
+                std::slice::from_ref(&temp_dir),
+                &[".EXE".to_string(), ".CMD".to_string()],
+            )
+            .expect_err("search-path script shim should be blocked before spawn");
+
+        assert_eq!(error.code, FoundryLocalErrorCode::ServiceUnavailable);
+        assert!(error.message.contains("retained runtime/worker"));
+        assert!(
+            error.message.to_ascii_lowercase().contains("foundry.cmd"),
+            "expected the blocked search-path shim in the error, got: {}",
+            error.message
+        );
+        fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn default_cli_name_resolves_safe_exe_from_search_path_before_spawn() {
+        let temp_dir = unique_temp_dir("easydict-foundry-local-path-exe");
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        let cli_path = temp_dir.join("foundry.exe");
+        fs::write(&cli_path, b"native foundry cli").expect("fake CLI should be written");
+
+        let resolver =
+            CommandFoundryLocalEndpointResolver::new("foundry", Duration::from_millis(1));
+        let executable = resolver
+            .validated_cli_executable_for_spawn_with_canonicalizer_and_search_paths(
+                |path| fs::canonicalize(path).ok(),
+                std::slice::from_ref(&temp_dir),
+                &[".EXE".to_string(), ".CMD".to_string()],
+            )
+            .expect("safe search-path exe should resolve before spawn");
+
+        let expected = fs::canonicalize(&cli_path).expect("fake CLI should canonicalize");
+        assert_eq!(executable.as_ref(), expected.as_path());
         fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
     }
 

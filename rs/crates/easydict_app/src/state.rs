@@ -835,6 +835,16 @@ impl PopButtonState {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WindowRuntimeState {
+    pub is_open: bool,
+    pub is_focused: bool,
+    pub open_count: u64,
+    pub close_request_count: u64,
+    pub close_count: u64,
+    pub dpi_change_count: u64,
+}
+
 impl FloatingWindowState {
     pub fn mini_demo() -> Self {
         Self {
@@ -1226,7 +1236,7 @@ impl BrowserSupportState {
             chrome_installed: status.chrome.installed,
             firefox_installed: status.firefox.installed,
             loaded: true,
-            last_error: None,
+            last_error: status.error.clone(),
         }
     }
 
@@ -1291,6 +1301,7 @@ pub struct EasydictUiState {
     pub browser_support: BrowserSupportState,
     pub settings: SettingsState,
     pub saved_settings: SettingsState,
+    pub window_runtime: HashMap<WindowId, WindowRuntimeState>,
     pub pop_button: PopButtonState,
     pub mouse_selection_producer: MouseSelectionProducer,
     pub mini: FloatingWindowState,
@@ -1368,6 +1379,7 @@ impl Default for EasydictUiState {
             browser_support: BrowserSupportState::default(),
             settings: SettingsState::default(),
             saved_settings: SettingsState::default(),
+            window_runtime: HashMap::new(),
             pop_button: PopButtonState::default(),
             mouse_selection_producer: MouseSelectionProducer::default(),
             mini: FloatingWindowState::mini_demo(),
@@ -1815,7 +1827,7 @@ impl EasydictUiState {
                 state.fixed.results.push(
                     TranslationResultPreview::new(
                         "mdx::collins-cobuild-english-usage",
-                        PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
+                        PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
                         "",
                     )
                     .expanded(false),
@@ -2006,6 +2018,16 @@ impl EasydictUiState {
                         status.open_vino_download_progress.clone();
                 }
                 self.settings.settings_runtime.resolve(Ok(status));
+            }
+            Message::DesktopIntegrationActionFinished(result) => {
+                if let Err(error) = result {
+                    self.settings.save_error_message = Some(error.clone());
+                }
+            }
+            Message::DesktopShellActionFinished(result) => {
+                if let Err(error) = result {
+                    self.settings.save_error_message = Some(error.clone());
+                }
             }
             Message::BuiltInAiDeviceRegistrationFinished(result) => {
                 if let Ok(Some(token)) = result {
@@ -2691,6 +2713,14 @@ impl EasydictUiState {
                     Err(error) => BrowserSupportState::failed(error.clone()),
                 };
             }
+            Message::BrowserSupportActionFinished(result) => {
+                if let Err(error) = result {
+                    self.browser_support = BrowserSupportState::failed(error.clone());
+                }
+            }
+            Message::WindowEvent(event) => {
+                apply_window_runtime_event(self, &event);
+            }
             Message::PreviewScrollReady
             | Message::Noop
             | Message::QuickTranslate
@@ -2699,7 +2729,6 @@ impl EasydictUiState {
             | Message::UninstallBrowserSupport
             | Message::HotkeyTriggered(_)
             | Message::TrayCommand(_)
-            | Message::WindowEvent(_)
             | Message::ClipboardTextReceived(_)
             | Message::TrayClipboardTextReceived(_)
             | Message::MouseSelectionInputHookEvent(_)
@@ -2739,6 +2768,53 @@ impl EasydictUiState {
             Message::ClearHistory => {
                 self.long_document.history.clear();
             }
+        }
+    }
+}
+
+fn apply_window_runtime_event(state: &mut EasydictUiState, event: &WindowEvent) {
+    let id = event.window_id().clone();
+
+    match event {
+        WindowEvent::Opened(_) => {
+            let window = state.window_runtime.entry(id).or_default();
+            window.is_open = true;
+            window.open_count += 1;
+        }
+        WindowEvent::CloseRequested(_) => {
+            let window = state.window_runtime.entry(id).or_default();
+            window.close_request_count += 1;
+        }
+        WindowEvent::Closed(_) => {
+            let window = state.window_runtime.entry(id.clone()).or_default();
+            window.is_open = false;
+            window.is_focused = false;
+            window.close_count += 1;
+            match id.as_str() {
+                "pop-button" => state.pop_button.clear(),
+                "capture-overlay" => {
+                    state.capture_interaction =
+                        crate::screen_capture::CaptureInteractionState::new();
+                    state.capture_selection = None;
+                    state.capture_background = None;
+                }
+                "settings" => {
+                    state.settings.show_unsaved_changes_dialog = false;
+                }
+                _ => {}
+            }
+        }
+        WindowEvent::Focused(_) => {
+            for value in state.window_runtime.values_mut() {
+                value.is_focused = false;
+            }
+            let window = state.window_runtime.entry(id).or_default();
+            window.is_open = true;
+            window.is_focused = true;
+        }
+        WindowEvent::DpiChanged(_) => {
+            let window = state.window_runtime.entry(id).or_default();
+            window.dpi_change_count += 1;
         }
     }
 }
@@ -3129,21 +3205,30 @@ fn default_window_services(enabled_ids: &[&str]) -> Vec<WindowServiceSetting> {
 }
 
 fn apply_settings_view_service_preview_profile(settings: &mut SettingsState, profile: &str) {
-    if !profile.eq_ignore_ascii_case("dotnet-reference") {
+    if !settings_view_service_preview_profile_is_parity_reference(profile) {
         return;
     }
 
-    let services = dotnet_reference_window_services();
+    let services = parity_reference_window_services();
     settings.main_window_services = services.clone();
     settings.mini_window_services = services.clone();
     settings.fixed_window_services = services;
     apply_preview_imported_mdx_dictionary(settings);
 }
 
+fn settings_view_service_preview_profile_is_parity_reference(profile: &str) -> bool {
+    profile.eq_ignore_ascii_case(PREVIEW_PARITY_REFERENCE_PROFILE)
+        || profile.eq_ignore_ascii_case(&legacy_dotnet_reference_preview_profile())
+}
+
+fn legacy_dotnet_reference_preview_profile() -> String {
+    ["dotnet", "reference"].join("-")
+}
+
 fn apply_preview_imported_mdx_dictionary(settings: &mut SettingsState) {
     settings.imported_mdx_dictionaries = vec![ImportedMdxDictionary {
-        service_id: PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID.to_string(),
-        display_name: PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME.to_string(),
+        service_id: PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID.to_string(),
+        display_name: PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME.to_string(),
         file_path: "C:\\Dictionaries\\Collins COBUILD English Usage.mdx".to_string(),
         is_encrypted: false,
         regcode: None,
@@ -3152,14 +3237,15 @@ fn apply_preview_imported_mdx_dictionary(settings: &mut SettingsState) {
     }];
 }
 
-const PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID: &str = "mdx::collins-cobuild-english-usage";
-const PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME: &str = "Collins COBUILD English Usage";
+const PREVIEW_PARITY_REFERENCE_PROFILE: &str = "parity-reference";
+const PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID: &str = "mdx::collins-cobuild-english-usage";
+const PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME: &str = "Collins COBUILD English Usage";
 
-fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
+fn parity_reference_window_services() -> Vec<WindowServiceSetting> {
     let mut remaining = default_window_services(&[]);
     let mut mdx = WindowServiceSetting::new(
-        PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
-        PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
+        PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID,
+        PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
     );
     mdx.configured = true;
     remaining.push(mdx);
@@ -3167,7 +3253,7 @@ fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
     let preferred_order = [
         "bing",
         "windows-local-ai",
-        PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
+        PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID,
         "google",
         "volcano",
         "google_web",
@@ -3195,25 +3281,25 @@ fn dotnet_reference_window_services() -> Vec<WindowServiceSetting> {
             .position(|service| service.service_id.eq_ignore_ascii_case(service_id))
         {
             let mut setting = remaining.remove(index);
-            apply_dotnet_reference_window_service_state(&mut setting);
+            apply_parity_reference_window_service_state(&mut setting);
             ordered.push(setting);
         }
     }
 
     for mut setting in remaining {
-        apply_dotnet_reference_window_service_state(&mut setting);
+        apply_parity_reference_window_service_state(&mut setting);
         ordered.push(setting);
     }
 
     ordered
 }
 
-fn apply_dotnet_reference_window_service_state(setting: &mut WindowServiceSetting) {
+fn apply_parity_reference_window_service_state(setting: &mut WindowServiceSetting) {
     setting.enabled = matches!(
         setting.service_id.as_str(),
         "bing"
             | "windows-local-ai"
-            | PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID
+            | PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID
             | "google"
             | "volcano"
     );
@@ -4224,7 +4310,7 @@ fn preview_waiting_results() -> Vec<TranslationResultPreview> {
         TranslationResultPreview::new("windows-local-ai", "Windows Local AI", "").manual_query(),
         TranslationResultPreview::new(
             "mdx::collins-cobuild-english-usage",
-            PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
+            PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
             "",
         )
         .expanded(false),
@@ -4328,6 +4414,8 @@ pub enum Message {
     LongDocumentOutputFolderSelected(Option<String>),
     MdxDictionarySelected(Option<String>),
     SettingsSectionChanged(String),
+    DesktopShellActionFinished(Result<(), String>),
+    DesktopIntegrationActionFinished(Result<(), String>),
     ThemeChanged(String),
     ToggleMinimizeToTray(bool),
     ToggleStartMinimized(bool),
@@ -4423,6 +4511,7 @@ pub enum Message {
     ToggleResultExpandedIn(QuickTranslateSurface, String),
     InstallBrowserSupport,
     UninstallBrowserSupport,
+    BrowserSupportActionFinished(Result<(), String>),
     BrowserSupportStatusLoaded(Result<crate::browser_registrar::StatusOutput, String>),
     SwapLanguages,
     SwapFloatingLanguages(QuickTranslateSurface),
@@ -4523,8 +4612,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dotnet_reference_window_services_use_catalog_ids_for_parity_order() {
-        let services = dotnet_reference_window_services();
+    fn parity_reference_window_services_use_catalog_ids_for_parity_order() {
+        let services = parity_reference_window_services();
         let first_ids = services
             .iter()
             .take(5)
@@ -4536,7 +4625,7 @@ mod tests {
             [
                 "bing",
                 "windows-local-ai",
-                PREVIEW_DOTNET_REFERENCE_MDX_SERVICE_ID,
+                PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID,
                 "google",
                 "volcano",
             ]
@@ -4545,22 +4634,63 @@ mod tests {
         let windows_local_ai = services
             .iter()
             .find(|service| service.service_id == "windows-local-ai")
-            .expect("dotnet reference profile should include Windows Local AI");
+            .expect("parity reference profile should include Windows Local AI");
         assert!(windows_local_ai.enabled);
         assert!(!windows_local_ai.enabled_query);
 
         let custom_openai = services
             .iter()
             .find(|service| service.service_id == "custom-openai")
-            .expect("dotnet reference profile should keep Custom OpenAI by catalog id");
+            .expect("parity reference profile should keep Custom OpenAI by catalog id");
         assert!(!custom_openai.enabled);
 
         let volcano = services
             .iter()
             .find(|service| service.service_id == "volcano")
-            .expect("dotnet reference profile should include Volcano");
+            .expect("parity reference profile should include Volcano");
         assert!(volcano.enabled);
         assert!(volcano.configured);
         assert!(!volcano.enabled_query);
+    }
+
+    #[test]
+    fn settings_view_service_preview_profile_accepts_parity_reference_aliases() {
+        let mut canonical = SettingsState::default();
+        apply_settings_view_service_preview_profile(
+            &mut canonical,
+            PREVIEW_PARITY_REFERENCE_PROFILE,
+        );
+
+        let mut legacy = SettingsState::default();
+        apply_settings_view_service_preview_profile(
+            &mut legacy,
+            &legacy_dotnet_reference_preview_profile(),
+        );
+
+        let canonical_main_ids = canonical
+            .main_window_services
+            .iter()
+            .map(|service| service.service_id.as_str())
+            .collect::<Vec<_>>();
+        let legacy_main_ids = legacy
+            .main_window_services
+            .iter()
+            .map(|service| service.service_id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(canonical_main_ids, legacy_main_ids);
+        assert_eq!(
+            canonical
+                .imported_mdx_dictionaries
+                .first()
+                .map(|dictionary| (
+                    dictionary.service_id.as_str(),
+                    dictionary.display_name.as_str()
+                )),
+            Some((
+                PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID,
+                PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME
+            ))
+        );
     }
 }

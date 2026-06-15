@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use easydict_packager::{
     build_rust_helpers, pack_rs_portable, validate_rs_portable_payload, BuildRustHelpersOptions,
     PackRustPortableOptions, PackageBrowserExtensionOptions, ValidateRustPortableOptions,
+    VerifySha256ChecksumOptions, WriteSha256ChecksumOptions,
 };
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 use easydict_packager::{
@@ -28,11 +29,128 @@ fn run(args: Vec<String>) -> i32 {
         "build-rust-helpers" => run_build_rust_helpers(&args[1..]),
         "package-browser-extension" => run_package_browser_extension(&args[1..]),
         "validate-rs-portable" => run_validate_rs_portable(&args[1..]),
+        "write-sha256-checksum" => run_write_sha256_checksum(&args[1..]),
+        "verify-sha256-checksum" => run_verify_sha256_checksum(&args[1..]),
         "pack-rs-portable" => run_pack_rs_portable(&args[1..]),
         unknown => {
             eprintln!("error: unknown command: {unknown}");
             print_usage();
             2
+        }
+    }
+}
+
+fn run_write_sha256_checksum(args: &[String]) -> i32 {
+    let mut package_path = None;
+    let mut checksum_path = None;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--package" => {
+                let Some(value) = read_value(args, &mut index, "--package") else {
+                    return 2;
+                };
+                package_path = Some(PathBuf::from(value));
+            }
+            "--output" => {
+                let Some(value) = read_value(args, &mut index, "--output") else {
+                    return 2;
+                };
+                checksum_path = Some(PathBuf::from(value));
+            }
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(package_path) = package_path else {
+        eprintln!("error: write-sha256-checksum requires --package");
+        print_usage();
+        return 2;
+    };
+
+    match easydict_packager::write_sha256_checksum(&WriteSha256ChecksumOptions {
+        package_path,
+        checksum_path,
+    }) {
+        Ok(outcome) => {
+            println!("SHA256 {}  {}", outcome.checksum, outcome.package_name);
+            println!("Wrote checksum: {}", outcome.checksum_path.display());
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
+        }
+    }
+}
+
+fn run_verify_sha256_checksum(args: &[String]) -> i32 {
+    let mut package_path = None;
+    let mut checksum_path = None;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--package" => {
+                let Some(value) = read_value(args, &mut index, "--package") else {
+                    return 2;
+                };
+                package_path = Some(PathBuf::from(value));
+            }
+            "--checksum" => {
+                let Some(value) = read_value(args, &mut index, "--checksum") else {
+                    return 2;
+                };
+                checksum_path = Some(PathBuf::from(value));
+            }
+            "-h" | "--help" => {
+                print_usage();
+                return 2;
+            }
+            unknown => {
+                eprintln!("error: unknown argument: {unknown}");
+                print_usage();
+                return 2;
+            }
+        }
+        index += 1;
+    }
+
+    let Some(package_path) = package_path else {
+        eprintln!("error: verify-sha256-checksum requires --package");
+        print_usage();
+        return 2;
+    };
+    let Some(checksum_path) = checksum_path else {
+        eprintln!("error: verify-sha256-checksum requires --checksum");
+        print_usage();
+        return 2;
+    };
+
+    match easydict_packager::verify_sha256_checksum(&VerifySha256ChecksumOptions {
+        package_path,
+        checksum_path,
+    }) {
+        Ok(outcome) => {
+            println!(
+                "SHA256 verified: {}  {}",
+                outcome.checksum, outcome.package_name
+            );
+            0
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            1
         }
     }
 }
@@ -574,6 +692,8 @@ fn packager_usage_lines() -> &'static [&'static str] {
         "Usage: easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>    # Rust helper executables only; legacy registrar alias requires hybrid feature",
         "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
         "       easydict_packager validate-rs-portable --package <dir-or-zip>",
+        "       easydict_packager write-sha256-checksum --package <zip> [--output <sha256-file>]",
+        "       easydict_packager verify-sha256-checksum --package <zip> --checksum <sha256-file>",
         "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
     ]
 }
@@ -586,6 +706,8 @@ fn packager_usage_lines() -> &'static [&'static str] {
         "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir> [--runtime-profile hybrid --include-legacy-registrar-alias]    # legacy/hybrid alias only; never used by rs portable",
         "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
         "       easydict_packager validate-rs-portable --package <dir-or-zip>",
+        "       easydict_packager write-sha256-checksum --package <zip> [--output <sha256-file>]",
+        "       easydict_packager verify-sha256-checksum --package <zip> --checksum <sha256-file>",
         "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
     ]
 }
@@ -933,6 +1055,36 @@ mod tests {
             Some(PackageRuntimeProfile::RustOnly)
         );
         assert_eq!(PackageRuntimeProfile::parse_explicit("dotnet"), None);
+    }
+
+    #[test]
+    fn sha256_checksum_commands_roundtrip() {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let package_path = temp.path().join("easydict-rs-portable-v0.0.0-win-x64.zip");
+        let checksum_path = temp.path().join("checksums-x64.sha256");
+        fs::write(&package_path, b"abc").expect("write package bytes");
+
+        let write_code = run(vec![
+            "write-sha256-checksum".to_string(),
+            "--package".to_string(),
+            package_path.to_string_lossy().to_string(),
+            "--output".to_string(),
+            checksum_path.to_string_lossy().to_string(),
+        ]);
+        assert_eq!(write_code, 0);
+        assert_eq!(
+            fs::read_to_string(&checksum_path).expect("read checksum"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  easydict-rs-portable-v0.0.0-win-x64.zip\n"
+        );
+
+        let verify_code = run(vec![
+            "verify-sha256-checksum".to_string(),
+            "--package".to_string(),
+            package_path.to_string_lossy().to_string(),
+            "--checksum".to_string(),
+            checksum_path.to_string_lossy().to_string(),
+        ]);
+        assert_eq!(verify_code, 0);
     }
 
     #[cfg(feature = "hybrid-dotnet-runtime-packaging")]

@@ -2606,7 +2606,7 @@ $scenarioDefinitions = @(
     New-MatrixScenario -Id "parity-settings-views-window-results-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "views"
-        EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE = "dotnet-reference"
+        EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE = "parity-reference"
     })
     New-MatrixScenario -Id "parity-settings-hotkeys-shortcut-inputs-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"

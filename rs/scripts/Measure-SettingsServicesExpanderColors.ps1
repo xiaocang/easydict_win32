@@ -7,6 +7,8 @@ param(
     [double]$MaxSurfaceDeltaRgb = 3.0,
     [double]$MaxBoundsDriftDips = 0.5,
     [switch]$UseSummaryBounds,
+    [switch]$ValidateVisibleExpanderBounds,
+    [switch]$InferImageExpandedBodyBounds,
     [switch]$FailOnSurfaceDrift
 )
 
@@ -829,6 +831,56 @@ function Convert-ExpanderPixelsToDips {
     }
 }
 
+function Convert-FullExpanderPixelsToDips {
+    param(
+        $PixelBounds,
+        [double]$Scale
+    )
+
+    if ($null -eq $PixelBounds) {
+        return $null
+    }
+    if ($Scale -le 0) {
+        $Scale = 1.0
+    }
+
+    $fullHeight = Get-PropertyValue -Object $PixelBounds -Name "fullHeight"
+    if ($null -eq $fullHeight) {
+        return $null
+    }
+
+    [pscustomobject]@{
+        Left = [Math]::Round([double]$PixelBounds.left / $Scale, 2)
+        Top = [Math]::Round([double]$PixelBounds.top / $Scale, 2)
+        Width = [Math]::Round([double]$PixelBounds.width / $Scale, 2)
+        Height = [Math]::Round([double]$fullHeight / $Scale, 2)
+    }
+}
+
+function New-ExpandedBodyBoundsDips {
+    param(
+        $FullExpanderBoundsDips
+    )
+
+    if ($null -eq $FullExpanderBoundsDips) {
+        return $null
+    }
+
+    $fullHeight = [double]$FullExpanderBoundsDips.Height
+    $bodyTopOffset = 49.0
+    $bodyHeight = $fullHeight - $bodyTopOffset
+    if ($bodyHeight -le 0.0) {
+        return $null
+    }
+
+    [pscustomobject]@{
+        Left = [double]$FullExpanderBoundsDips.Left
+        Top = [Math]::Round([double]$FullExpanderBoundsDips.Top + $bodyTopOffset, 2)
+        Width = [double]$FullExpanderBoundsDips.Width
+        Height = [Math]::Round($bodyHeight, 2)
+    }
+}
+
 function Get-FirstControlBoundsFromSummary {
     param(
         $UiSummary,
@@ -856,6 +908,12 @@ function Get-ExpanderHeaderProbeFromSummary {
 
     $expanderBounds = Get-ControlBoundsFromSummary -UiSummary $UiSummary -AutomationId $Descriptor.ExpanderId
     if ($null -ne $expanderBounds) {
+        $fullBoundsDips = [pscustomobject]@{
+            Left = [double]$expanderBounds.Left
+            Top = [double]$expanderBounds.Top
+            Width = [double]$expanderBounds.Width
+            Height = [double]$expanderBounds.Height
+        }
         return [pscustomobject]@{
             Source = "summary-expander"
             DerivedFrom = $Descriptor.ExpanderId
@@ -865,6 +923,8 @@ function Get-ExpanderHeaderProbeFromSummary {
                 Width = [double]$expanderBounds.Width
                 Height = [Math]::Min(48.0, [double]$expanderBounds.Height)
             }
+            FullBoundsDips = $fullBoundsDips
+            ExpandedBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $fullBoundsDips
         }
     }
 
@@ -883,6 +943,8 @@ function Get-ExpanderHeaderProbeFromSummary {
             Width = 796.0
             Height = 48.0
         }
+        FullBoundsDips = $null
+        ExpandedBodyBoundsDips = $null
     }
 }
 
@@ -985,6 +1047,116 @@ function Find-ExpandedBodyTop {
     }
 
     return $null
+}
+
+function Test-ExpanderHeaderChevronAtBounds {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Bitmap]$Bitmap,
+
+        $BoundsPixels,
+
+        [double]$Scale = 1.0
+    )
+
+    if ($null -eq $BoundsPixels) {
+        return $false
+    }
+    if ($Scale -le 0) {
+        $Scale = 1.0
+    }
+
+    $left = [int]$BoundsPixels.Left
+    $top = [int]$BoundsPixels.Top
+    $width = [int]$BoundsPixels.Width
+    $height = [int]$BoundsPixels.Height
+    if ($width -le 0 -or $height -le 0) {
+        return $false
+    }
+
+    $scanLeft = [Math]::Max(0, $left + $width - [int][Math]::Round(88.0 * $Scale))
+    $scanRight = [Math]::Min($Bitmap.Width, $left + $width - [int][Math]::Round(8.0 * $Scale))
+    $scanTop = [Math]::Max(0, $top + [int][Math]::Round(8.0 * $Scale))
+    $scanBottom = [Math]::Min($Bitmap.Height, $top + [int][Math]::Round(46.0 * $Scale))
+    if ($scanRight -le $scanLeft -or $scanBottom -le $scanTop) {
+        return $false
+    }
+
+    [int]$darkCount = 0
+    [int]$minX = [int]::MaxValue
+    [int]$maxX = [int]::MinValue
+    [int]$minY = [int]::MaxValue
+    [int]$maxY = [int]::MinValue
+    for ($y = $scanTop; $y -lt $scanBottom; $y++) {
+        for ($x = $scanLeft; $x -lt $scanRight; $x++) {
+            $pixel = $Bitmap.GetPixel($x, $y)
+            $luma = (0.2126 * $pixel.R) + (0.7152 * $pixel.G) + (0.0722 * $pixel.B)
+            if ($luma -lt 170.0) {
+                $darkCount++
+                $minX = [Math]::Min($minX, $x)
+                $maxX = [Math]::Max($maxX, $x)
+                $minY = [Math]::Min($minY, $y)
+                $maxY = [Math]::Max($maxY, $y)
+            }
+        }
+    }
+
+    return $darkCount -ge [Math]::Max(8, [int][Math]::Round(8.0 * $Scale))
+}
+
+function Find-ExpandedBodyBottom {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Drawing.Bitmap]$Bitmap,
+
+        [int]$ExpanderX,
+        [int]$ExpanderWidth,
+        [int]$BodyTop,
+        [double]$Scale = 1.0
+    )
+
+    if ($Scale -le 0) {
+        $Scale = 1.0
+    }
+
+    $sampleWidth = [int][Math]::Round(56.0 * $Scale)
+    $sampleWidth = [Math]::Max(18, $sampleWidth)
+    $sampleHeight = [int][Math]::Round(6.0 * $Scale)
+    $sampleHeight = [Math]::Max(3, $sampleHeight)
+    $sampleX = [Math]::Min(
+        [Math]::Max(0, $Bitmap.Width - $sampleWidth - 1),
+        [Math]::Max(0, $ExpanderX + $ExpanderWidth - [int][Math]::Round(180.0 * $Scale))
+    )
+    $startY = $BodyTop + [int][Math]::Round(12.0 * $Scale)
+    $minBodyHeight = [int][Math]::Round(64.0 * $Scale)
+    $lastBodyY = $null
+    $misses = 0
+
+    for ($y = $startY; $y -lt ($Bitmap.Height - $sampleHeight); $y += [Math]::Max(1, [int][Math]::Round(3.0 * $Scale))) {
+        $region = Measure-BitmapRegion -Bitmap $Bitmap -X $sampleX -Y $y -Width $sampleWidth -Height $sampleHeight
+        $surfaceLuma = [double](Get-RegionSurfaceLuma -Region $region)
+        $surfaceRatio = [double](Get-PropertyValue -Object $region -Name "surfaceSampleRatio")
+        $isBodySurface = $surfaceLuma -ge 238.0 -and $surfaceLuma -le 251.2 -and $surfaceRatio -ge 0.35
+
+        if ($isBodySurface) {
+            $lastBodyY = $y
+            $misses = 0
+            continue
+        }
+
+        if ($null -ne $lastBodyY -and ($y - $BodyTop) -ge $minBodyHeight) {
+            $misses++
+            if ($misses -ge 3) {
+                return [Math]::Min($Bitmap.Height, [int]$lastBodyY + $sampleHeight)
+            }
+        }
+    }
+
+    if ($null -eq $lastBodyY) {
+        return $null
+    }
+
+    return [Math]::Min($Bitmap.Height, [int]$lastBodyY + $sampleHeight)
 }
 
 function Find-ExpandedHeaderBoundsByChevron {
@@ -1275,7 +1447,9 @@ function Measure-ExpanderRegions {
         $BoundsPixels,
         [double]$DetectionStartPercent = 0.18,
         [string]$SourceName = "bounds",
-        [double]$Scale = 1.0
+        [double]$Scale = 1.0,
+        [switch]$ValidateBoundsVisual,
+        [switch]$InferBodyBounds
     )
 
     if ($Scale -le 0) {
@@ -1299,6 +1473,9 @@ function Measure-ExpanderRegions {
 
     $source = $SourceName
     if ($null -ne $BoundsPixels) {
+        if ($ValidateBoundsVisual -and -not (Test-ExpanderHeaderChevronAtBounds -Bitmap $Bitmap -BoundsPixels $BoundsPixels -Scale $Scale)) {
+            return $null
+        }
         $x = [int]$BoundsPixels.Left
         $y = [int]$BoundsPixels.Top
         $width = [int]$BoundsPixels.Width
@@ -1353,6 +1530,22 @@ function Measure-ExpanderRegions {
         $headerBar = Measure-BitmapRegion -Bitmap $Bitmap -X $headerX -Y $headerY -Width $headerWidth -Height $headerSampleHeight
     }
 
+    $bodyBottom = if ($InferBodyBounds) {
+        Find-ExpandedBodyBottom `
+            -Bitmap $Bitmap `
+            -ExpanderX $x `
+            -ExpanderWidth $width `
+            -BodyTop ([int]$bodyTop) `
+            -Scale $Scale
+    } else {
+        $null
+    }
+    $fullHeight = if ($null -ne $bodyBottom -and [int]$bodyBottom -gt $y) {
+        [int]$bodyBottom - $y
+    } else {
+        $null
+    }
+
     [pscustomobject]@{
         source = $source
         expanderBounds = [pscustomobject]@{
@@ -1360,6 +1553,8 @@ function Measure-ExpanderRegions {
             top = $y
             width = $width
             headerHeight = $headerHeight
+            bodyTop = $bodyTop
+            fullHeight = $fullHeight
         }
         headerBar = $headerBar
         divider = Measure-BitmapRegion -Bitmap $Bitmap -X ($x + [int][Math]::Round(8.0 * $Scale)) -Y ([int]$bodyTop - 1) -Width ([Math]::Max(1, $width - [int][Math]::Round(16.0 * $Scale))) -Height 1
@@ -1460,6 +1655,8 @@ foreach ($record in $recordsByScenario.Values) {
             $null
         }
         $candidateBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.BoundsDips } else { $null }
+        $candidateFullBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.FullBoundsDips } else { $null }
+        $candidateBodyBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.ExpandedBodyBoundsDips } else { $null }
         $candidateBounds = Convert-BoundsToPixels -BoundsDips $candidateBoundsDips -Scale $candidateScale
         $candidateSource = if ($null -ne $candidateProbe) {
             [string]$candidateProbe.Source
@@ -1472,13 +1669,27 @@ foreach ($record in $recordsByScenario.Values) {
             -BoundsPixels $candidateBounds `
             -DetectionStartPercent $detectionStartPercent `
             -SourceName $candidateSource `
-            -Scale $candidateScale
+            -Scale $candidateScale `
+            -ValidateBoundsVisual:$ValidateVisibleExpanderBounds `
+            -InferBodyBounds:$InferImageExpandedBodyBounds
         if ($null -eq $candidateBoundsDips -and $null -ne $candidateRegions) {
             $candidateBoundsDips = Convert-ExpanderPixelsToDips -PixelBounds $candidateRegions.expanderBounds -Scale $candidateScale
+        }
+        if ($InferImageExpandedBodyBounds -and
+            $null -ne $candidateRegions -and
+            ($null -eq $candidateBodyBoundsDips -or
+                ($null -ne $candidateFullBoundsDips -and [double]$candidateFullBoundsDips.Height -le 49.0))) {
+            $imageFullBoundsDips = Convert-FullExpanderPixelsToDips -PixelBounds $candidateRegions.expanderBounds -Scale $candidateScale
+            if ($null -ne $imageFullBoundsDips) {
+                $candidateFullBoundsDips = $imageFullBoundsDips
+                $candidateBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $candidateFullBoundsDips
+            }
         }
 
         $referenceRegions = $null
         $referenceBoundsDips = $null
+        $referenceFullBoundsDips = $null
+        $referenceBodyBoundsDips = $null
         $referenceSource = "missing"
         $referenceDerivedFrom = $null
         if ($null -ne $referenceBitmap) {
@@ -1490,6 +1701,8 @@ foreach ($record in $recordsByScenario.Values) {
             }
             if ($null -ne $referenceProbe) {
                 $referenceBoundsDips = $referenceProbe.BoundsDips
+                $referenceFullBoundsDips = $referenceProbe.FullBoundsDips
+                $referenceBodyBoundsDips = $referenceProbe.ExpandedBodyBoundsDips
                 $referenceSource = [string]$referenceProbe.Source
                 $referenceDerivedFrom = [string]$referenceProbe.DerivedFrom
                 $referenceBounds = if ($referenceSource -eq "summary-expander") {
@@ -1502,11 +1715,23 @@ foreach ($record in $recordsByScenario.Values) {
                     -BoundsPixels $referenceBounds `
                     -DetectionStartPercent $detectionStartPercent `
                     -SourceName $referenceSource `
-                    -Scale $referenceScale
+                    -Scale $referenceScale `
+                    -ValidateBoundsVisual:$ValidateVisibleExpanderBounds `
+                    -InferBodyBounds:$InferImageExpandedBodyBounds
                 if ($referenceSource -ne "summary-expander" -and $null -ne $referenceRegions) {
                     $referenceSource = [string]$referenceRegions.source
                     $referenceDerivedFrom = $null
                     $referenceBoundsDips = Convert-ExpanderPixelsToDips -PixelBounds $referenceRegions.expanderBounds -Scale $referenceScale
+                }
+                if ($InferImageExpandedBodyBounds -and
+                    $null -ne $referenceRegions -and
+                    ($null -eq $referenceBodyBoundsDips -or
+                        ($null -ne $referenceFullBoundsDips -and [double]$referenceFullBoundsDips.Height -le 49.0))) {
+                    $imageFullBoundsDips = Convert-FullExpanderPixelsToDips -PixelBounds $referenceRegions.expanderBounds -Scale $referenceScale
+                    if ($null -ne $imageFullBoundsDips) {
+                        $referenceFullBoundsDips = $imageFullBoundsDips
+                        $referenceBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $referenceFullBoundsDips
+                    }
                 }
             } elseif ($UseSummaryBounds -and $null -ne $record.ReferenceUiSummary) {
                 $referenceSource = "not-expanded"
@@ -1517,9 +1742,15 @@ foreach ($record in $recordsByScenario.Values) {
                     -BoundsPixels $null `
                     -DetectionStartPercent $detectionStartPercent `
                     -SourceName $referenceSource `
-                    -Scale $referenceScale
+                    -Scale $referenceScale `
+                    -ValidateBoundsVisual:$ValidateVisibleExpanderBounds `
+                    -InferBodyBounds:$InferImageExpandedBodyBounds
                 if ($null -ne $referenceRegions) {
                     $referenceBoundsDips = Convert-ExpanderPixelsToDips -PixelBounds $referenceRegions.expanderBounds -Scale $referenceScale
+                    if ($InferImageExpandedBodyBounds) {
+                        $referenceFullBoundsDips = Convert-FullExpanderPixelsToDips -PixelBounds $referenceRegions.expanderBounds -Scale $referenceScale
+                        $referenceBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $referenceFullBoundsDips
+                    }
                 }
             }
         }
@@ -1540,6 +1771,10 @@ foreach ($record in $recordsByScenario.Values) {
             referenceDerivedFrom = $referenceDerivedFrom
             candidateExpanderBoundsDips = $candidateBoundsDips
             referenceExpanderBoundsDips = $referenceBoundsDips
+            candidateFullExpanderBoundsDips = $candidateFullBoundsDips
+            referenceFullExpanderBoundsDips = $referenceFullBoundsDips
+            candidateExpandedBodyBoundsDips = $candidateBodyBoundsDips
+            referenceExpandedBodyBoundsDips = $referenceBodyBoundsDips
             candidateWindowDips = Get-WindowSizeDips -Window $record.CandidateWindow
             referenceWindowDips = Get-WindowSizeDips -Window $record.ReferenceWindow
             headerBar = [pscustomobject]@{
@@ -1668,6 +1903,8 @@ $surfaceSchemeRows = @(
             $sampleStrength = Get-SampleStrength -Row $_
             $boundsDrift = Get-BoundsDriftScore -Reference $_.referenceExpanderBoundsDips -Candidate $_.candidateExpanderBoundsDips
             $boundsSizeDrift = Get-SizeDriftScore -Reference $_.referenceExpanderBoundsDips -Candidate $_.candidateExpanderBoundsDips
+            $bodyBoundsDrift = Get-BoundsDriftScore -Reference $_.referenceExpandedBodyBoundsDips -Candidate $_.candidateExpandedBodyBoundsDips
+            $bodySizeDrift = Get-SizeDriftScore -Reference $_.referenceExpandedBodyBoundsDips -Candidate $_.candidateExpandedBodyBoundsDips
             $windowDrift = Get-SizeDriftScore -Reference $_.referenceWindowDips -Candidate $_.candidateWindowDips
             $headerDelta = $_.headerBar.deltaRgb
             $expandedDelta = $_.expandedPart.deltaRgb
@@ -1693,6 +1930,9 @@ $surfaceSchemeRows = @(
             }
             if ($null -ne $boundsSizeDrift -and [double]$boundsSizeDrift -gt [double]$MaxBoundsDriftDips) {
                 $issues.Add("header size drift > $MaxBoundsDriftDips DIP") | Out-Null
+            }
+            if ($null -ne $bodySizeDrift -and [double]$bodySizeDrift -gt [double]$MaxBoundsDriftDips) {
+                $issues.Add("expanded body size drift > $MaxBoundsDriftDips DIP") | Out-Null
             }
             if ($null -ne $windowDrift -and [double]$windowDrift -gt [double]$MaxBoundsDriftDips) {
                 $issues.Add("window size drift > $MaxBoundsDriftDips DIP") | Out-Null
@@ -1729,11 +1969,17 @@ $surfaceSchemeRows = @(
                 maxSurfaceDeltaRgb = $maxSurfaceDelta
                 headerBoundsDriftDips = $boundsDrift
                 headerSizeDriftDips = $boundsSizeDrift
+                expandedBodyBoundsDriftDips = $bodyBoundsDrift
+                expandedBodySizeDriftDips = $bodySizeDrift
                 windowDriftDips = $windowDrift
                 referenceWindowDips = $_.referenceWindowDips
                 candidateWindowDips = $_.candidateWindowDips
                 referenceExpanderBoundsDips = $_.referenceExpanderBoundsDips
                 candidateExpanderBoundsDips = $_.candidateExpanderBoundsDips
+                referenceFullExpanderBoundsDips = $_.referenceFullExpanderBoundsDips
+                candidateFullExpanderBoundsDips = $_.candidateFullExpanderBoundsDips
+                referenceExpandedBodyBoundsDips = $_.referenceExpandedBodyBoundsDips
+                candidateExpandedBodyBoundsDips = $_.candidateExpandedBodyBoundsDips
                 verdict = $verdict
                 issues = @($issues.ToArray())
             }
@@ -1768,10 +2014,12 @@ $summary = [pscustomobject]@{
 }
 
 $report = [pscustomobject]@{
-    schemaVersion = "easydict.settings-services-expander-colors.v9"
+    schemaVersion = "easydict.settings-services-expander-colors.v11"
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     artifactRoot = $ArtifactRoot
     boundsMode = if ($UseSummaryBounds) { "summary" } else { "image-detected" }
+    visibleExpanderBoundsValidation = [bool]$ValidateVisibleExpanderBounds
+    imageExpandedBodyBoundsInference = [bool]$InferImageExpandedBodyBounds
     colorMode = "dominant-surface"
     summary = $summary
     surfaceSchemeRows = $surfaceSchemeRows
@@ -1785,9 +2033,17 @@ $markdown.Add("") | Out-Null
 $markdown.Add("Artifact root: ``$ArtifactRoot``") | Out-Null
 $markdown.Add("") | Out-Null
 $boundsModeText = if ($UseSummaryBounds) { "summary/UIA bounds" } else { "image-detected expanded chevron bounds" }
-$markdown.Add("Sampling: bounds use $boundsModeText; color deltas use each sampled region's dominant surface color, while JSON also preserves average RGB/luma for diagnostics.") | Out-Null
+$optionalBoundsText = @()
+if ($ValidateVisibleExpanderBounds) {
+    $optionalBoundsText += "summary bounds require a matching visible expander chevron"
+}
+if ($InferImageExpandedBodyBounds) {
+    $optionalBoundsText += "missing expanded body bounds may be inferred from image surfaces"
+}
+$optionalBoundsSuffix = if ($optionalBoundsText.Count -gt 0) { " Optional diagnostics: $($optionalBoundsText -join '; ')." } else { "" }
+$markdown.Add("Sampling: bounds use $boundsModeText; color deltas use each sampled region's dominant surface color, while JSON also preserves average RGB/luma for diagnostics.$optionalBoundsSuffix") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header size drift <= $MaxBoundsDriftDips DIP; viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
+$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header/expanded-body size drift <= $MaxBoundsDriftDips DIP; viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
 $markdown.Add("") | Out-Null
 
 $markdown.Add("## Service State Coverage") | Out-Null
@@ -1866,13 +2122,14 @@ $markdown.Add("") | Out-Null
 if ($surfaceSchemeRows.Count -eq 0) {
     $markdown.Add("No base expanded captures are present in this artifact. Use the per-service and bar/expanded pairing tables below for the measured interaction states.") | Out-Null
 } else {
-    $markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues |") | Out-Null
-    $markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+    $markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Expanded body bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues |") | Out-Null
+    $markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
     foreach ($row in $surfaceSchemeRows) {
         $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips) / drift $(Format-PlainDeltaWithVerdict $row.windowDriftDips)"
         $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.headerBoundsDriftDips)"
+        $bodyBounds = "ref $(Format-BoundsDips $row.referenceExpandedBodyBoundsDips) / rust $(Format-BoundsDips $row.candidateExpandedBodyBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.expandedBodyBoundsDriftDips)"
         $issues = if ($row.issues.Count -eq 0) { "none" } else { $row.issues -join "; " }
-        $markdown.Add("| $($row.service) | $($row.verdict) | $($row.sampleStrength) | $window | $bounds | $(Format-DeltaWithVerdict $row.headerBarDeltaRgb) | $(Format-DeltaWithVerdict $row.expandedPartDeltaRgb) | $($row.referenceScheme) | $($row.candidateScheme) | $issues |") | Out-Null
+        $markdown.Add("| $($row.service) | $($row.verdict) | $($row.sampleStrength) | $window | $bounds | $bodyBounds | $(Format-DeltaWithVerdict $row.headerBarDeltaRgb) | $(Format-DeltaWithVerdict $row.expandedPartDeltaRgb) | $($row.referenceScheme) | $($row.candidateScheme) | $issues |") | Out-Null
     }
 }
 $markdown.Add("") | Out-Null
@@ -1881,8 +2138,8 @@ $markdown.Add("## Per-Service Expanded Comparison") | Out-Null
 $markdown.Add("") | Out-Null
 $markdown.Add("Rows are ordered by the .NET Services page order. Header bar and expanded part are the decisive color surfaces; divider is reported separately later because 1px anti-aliasing makes it noisier.") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("| Service | State | Scenario | Reference | Sample | Window DIP | Header bounds DIP | Header bar | Expanded part | Rust scheme |") | Out-Null
-$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+$markdown.Add("| Service | State | Scenario | Reference | Sample | Window DIP | Header bounds DIP | Expanded body bounds DIP | Header bar | Expanded part | Rust scheme |") | Out-Null
+$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
 foreach ($row in $orderedScenarioRows) {
     $reference = if ($row.hasReference) {
         if ($row.referenceExpanded) {
@@ -1896,6 +2153,7 @@ foreach ($row in $orderedScenarioRows) {
     $sample = Get-SampleStrength -Row $row
     $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips)"
     $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / $(Format-BoundsDeltaDips -Reference $row.referenceExpanderBoundsDips -Candidate $row.candidateExpanderBoundsDips)"
+    $bodyBounds = "ref $(Format-BoundsDips $row.referenceExpandedBodyBoundsDips) / rust $(Format-BoundsDips $row.candidateExpandedBodyBoundsDips) / $(Format-BoundsDeltaDips -Reference $row.referenceExpandedBodyBoundsDips -Candidate $row.candidateExpandedBodyBoundsDips)"
     $bar = if (-not $row.hasReference) {
         "rust $(Format-RegionHex $row.headerBar.candidate)"
     } elseif (-not $row.referenceExpanded) {
@@ -1915,7 +2173,7 @@ foreach ($row in $orderedScenarioRows) {
     } else {
         "missing"
     }
-    $markdown.Add("| $($row.service) | $($row.interactionState) | ``$($row.scenarioId)`` | $reference | $sample | $window | $bounds | $bar | $expanded | $rustScheme |") | Out-Null
+    $markdown.Add("| $($row.service) | $($row.interactionState) | ``$($row.scenarioId)`` | $reference | $sample | $window | $bounds | $bodyBounds | $bar | $expanded | $rustScheme |") | Out-Null
 }
 $markdown.Add("") | Out-Null
 
@@ -1932,8 +2190,8 @@ $markdown.Add("") | Out-Null
 
 $markdown.Add("## Base Expanded Service Items") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("| Scenario | Service | Reference | Sample | Window DIP | Header bounds DIP | Bar color | Expanded part color |") | Out-Null
-$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+$markdown.Add("| Scenario | Service | Reference | Sample | Window DIP | Header bounds DIP | Expanded body bounds DIP | Bar color | Expanded part color |") | Out-Null
+$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
 foreach ($row in $baseExpandedRows) {
     $reference = if ($row.hasReference) {
         if ($row.referenceExpanded) {
@@ -1947,6 +2205,7 @@ foreach ($row in $baseExpandedRows) {
     $sample = Get-SampleStrength -Row $row
     $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips)"
     $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / $(Format-BoundsDeltaDips -Reference $row.referenceExpanderBoundsDips -Candidate $row.candidateExpanderBoundsDips)"
+    $bodyBounds = "ref $(Format-BoundsDips $row.referenceExpandedBodyBoundsDips) / rust $(Format-BoundsDips $row.candidateExpandedBodyBoundsDips) / $(Format-BoundsDeltaDips -Reference $row.referenceExpandedBodyBoundsDips -Candidate $row.candidateExpandedBodyBoundsDips)"
     $bar = "ref $(Format-RegionHex $row.headerBar.reference) / rust $(Format-RegionHex $row.headerBar.candidate) / $(Format-DeltaWithVerdict $row.headerBar.deltaRgb) / $(Format-LumaDelta $row.headerBar.deltaLuma)"
     $expanded = "ref $(Format-RegionHex $row.expandedPart.reference) / rust $(Format-RegionHex $row.expandedPart.candidate) / $(Format-DeltaWithVerdict $row.expandedPart.deltaRgb) / $(Format-LumaDelta $row.expandedPart.deltaLuma)"
     if (-not $row.hasReference) {
@@ -1956,7 +2215,7 @@ foreach ($row in $baseExpandedRows) {
         $bar = "ref missing / rust $(Format-RegionHex $row.headerBar.candidate)"
         $expanded = "ref missing / rust $(Format-RegionHex $row.expandedPart.candidate)"
     }
-    $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $reference | $sample | $window | $bounds | $bar | $expanded |") | Out-Null
+    $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $reference | $sample | $window | $bounds | $bodyBounds | $bar | $expanded |") | Out-Null
 }
 $markdown.Add("") | Out-Null
 
@@ -2002,8 +2261,8 @@ $markdown.Add("") | Out-Null
 
 $markdown.Add("## All Measurements") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("| Scenario | Service | State | Reference | Window DIP | Header bounds DIP | Source | Header bar | Divider | Expanded part |") | Out-Null
-$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+$markdown.Add("| Scenario | Service | State | Reference | Window DIP | Header bounds DIP | Expanded body bounds DIP | Source | Header bar | Divider | Expanded part |") | Out-Null
+$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
 foreach ($row in $orderedScenarioRows) {
     $reference = if ($row.hasReference) {
         if ($row.referenceExpanded) {
@@ -2016,6 +2275,7 @@ foreach ($row in $orderedScenarioRows) {
     }
     $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips)"
     $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / $(Format-BoundsDeltaDips -Reference $row.referenceExpanderBoundsDips -Candidate $row.candidateExpanderBoundsDips)"
+    $bodyBounds = "ref $(Format-BoundsDips $row.referenceExpandedBodyBoundsDips) / rust $(Format-BoundsDips $row.candidateExpandedBodyBoundsDips) / $(Format-BoundsDeltaDips -Reference $row.referenceExpandedBodyBoundsDips -Candidate $row.candidateExpandedBodyBoundsDips)"
     $source = "ref=$($row.referenceSource)"
     if (-not [string]::IsNullOrWhiteSpace([string]$row.referenceDerivedFrom)) {
         $source += "($($row.referenceDerivedFrom))"
@@ -2048,7 +2308,7 @@ foreach ($row in $orderedScenarioRows) {
         $divider = if ($null -ne $row.divider.candidate) { "ref missing / rust $(Format-RegionHex $row.divider.candidate)" } else { "n/a" }
         $expanded = if ($null -ne $row.expandedPart.candidate) { "ref missing / rust $(Format-RegionHex $row.expandedPart.candidate)" } else { "n/a" }
     }
-    $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $($row.interactionState) | $reference | $window | $bounds | $source | $header | $divider | $expanded |") | Out-Null
+    $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $($row.interactionState) | $reference | $window | $bounds | $bodyBounds | $source | $header | $divider | $expanded |") | Out-Null
 }
 $markdown | Set-Content -LiteralPath $OutputMarkdown -Encoding utf8
 

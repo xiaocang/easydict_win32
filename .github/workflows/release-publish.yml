@@ -548,11 +548,24 @@ jobs:
             throw "Rust portable ZIP is over the 400 MB budget: $zipSize bytes"
           }
 
-      - name: Upload Rust portable ZIP as artifact
+      - name: Write Rust portable SHA256 checksum
+        shell: pwsh
+        working-directory: rs
+        run: |
+          $zipPath = "dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip"
+          $checksumPath = "dist/checksums-${{ matrix.platform }}.sha256"
+          cargo run --manifest-path Cargo.toml -p easydict_packager -- `
+            write-sha256-checksum `
+            --package $zipPath `
+            --output $checksumPath
+
+      - name: Upload Rust portable ZIP and checksum as artifact
         uses: actions/upload-artifact@v4
         with:
           name: easydict-rs-portable-${{ matrix.platform }}
-          path: rs/dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip
+          path: |
+            rs/dist/easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip
+            rs/dist/checksums-${{ matrix.platform }}.sha256
           retention-days: 7
 
   # Create MSIX bundle containing all architectures and upload all release assets
@@ -699,8 +712,27 @@ jobs:
           if ($zips.Count -eq 0) {
             throw "No Rust portable ZIP artifacts were downloaded"
           }
+          $checksums = @(Get-ChildItem -Path rs-portable -Filter checksums-*.sha256 -File)
+          if ($checksums.Count -eq 0) {
+            throw "No Rust portable checksum artifacts were downloaded"
+          }
+          if ($checksums.Count -ne $zips.Count) {
+            throw "Rust portable checksum count ($($checksums.Count)) did not match ZIP count ($($zips.Count))"
+          }
 
           foreach ($zip in $zips) {
+            if ($zip.Name -notmatch '-win-(?<Platform>[^.]+)\.zip$') {
+              throw "Cannot derive Rust portable platform from ZIP name: $($zip.Name)"
+            }
+            $checksumPath = Join-Path $zip.DirectoryName "checksums-$($Matches.Platform).sha256"
+            if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+              throw "Missing checksum for Rust portable ZIP $($zip.Name): $checksumPath"
+            }
+            cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- `
+              verify-sha256-checksum `
+              --package $zip.FullName `
+              --checksum $checksumPath
+
             cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- `
               validate-rs-portable `
               --package $zip.FullName
@@ -720,6 +752,7 @@ jobs:
           prerelease: ${{ needs.prepare.outputs.IS_PRERELEASE == 'true' }}
           files: |
             rs-portable/*.zip
+            rs-portable/checksums-*.sha256
           generate_release_notes: true
 
   publish-winget:

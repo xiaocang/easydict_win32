@@ -1,4 +1,4 @@
-use easydict_app::browser_registrar::RUST_BRIDGE_ROOT_NAME;
+use easydict_app::browser_registrar::{BrowserStatusEntry, StatusOutput, RUST_BRIDGE_ROOT_NAME};
 #[cfg(feature = "retained-dotnet-workers")]
 use easydict_app::compat_client::{DirectWorkerFacade, WorkerCommand};
 #[cfg(feature = "retained-dotnet-workers")]
@@ -5925,6 +5925,15 @@ fn shell_context_menu_registration_uses_rust_owned_desktop_integration_helper() 
 
     assert!(app_source.contains("desktop_integration::register_shell_verb"));
     assert!(app_source.contains("desktop_integration::unregister_shell_verb"));
+    assert!(app_source.contains("Message::DesktopIntegrationActionFinished"));
+    assert!(
+        !app_source.contains("let _ = desktop_integration::register_shell_verb"),
+        "shell context menu registration errors must not be swallowed"
+    );
+    assert!(
+        !app_source.contains("let _ = desktop_integration::unregister_shell_verb"),
+        "shell context menu unregistration errors must not be swallowed"
+    );
     assert!(
         !desktop_source.contains("win_fluent::"),
         "desktop integration registry writer should use app-owned DTOs, not WinFluent platform types"
@@ -5947,6 +5956,10 @@ fn startup_protocol_registration_uses_rust_owned_desktop_integration_helper() {
     assert!(app_source.contains("fn protocol_registration_task()"));
     assert!(app_source.contains("desktop_integration::register_protocol"));
     assert!(
+        !app_source.contains("let _ = desktop_integration::register_protocol"),
+        "startup protocol registration errors must not be swallowed"
+    );
+    assert!(
         !desktop_source.contains("win_fluent::"),
         "desktop integration protocol writer should use app-owned DTOs, not WinFluent platform types"
     );
@@ -5965,6 +5978,10 @@ fn launch_at_startup_registration_uses_rust_owned_desktop_integration_helper() {
     assert!(app_source.contains("desktop_integration::set_startup_enabled(enabled)"));
     assert!(desktop_source.contains("startup_registration_plan"));
     assert!(
+        !app_source.contains("let _ = desktop_integration::set_startup_enabled"),
+        "startup registration errors must not be swallowed"
+    );
+    assert!(
         !app_source.contains("Task::register_startup"),
         "startup registration should not route through WinFluent platform commands"
     );
@@ -5979,6 +5996,19 @@ fn browser_support_and_external_links_use_rust_owned_desktop_shell_helper() {
     assert!(app_source.contains("desktop_shell::open_url_task"));
     assert!(desktop_shell_source.contains("pub fn run_browser_registrar_task("));
     assert!(desktop_shell_source.contains("crate::BROWSER_REGISTRAR_EXE"));
+    assert!(desktop_shell_source.contains("Message::DesktopShellActionFinished"));
+    assert!(
+        !desktop_shell_source.contains("let _ = easydict_windows_shell::open_url"),
+        "external URL guard failures must not be swallowed"
+    );
+    assert!(
+        desktop_shell_source.contains("Message::BrowserSupportActionFinished"),
+        "browser registrar helper failures should flow back into browser-support state"
+    );
+    assert!(
+        !desktop_shell_source.contains("let _ = easydict_windows_shell::run_bundled_executable"),
+        "browser registrar helper launch errors must not be swallowed"
+    );
     assert!(
         !desktop_shell_source.contains("pub fn run_bundled_executable_task("),
         "default app should not expose a generic bundled executable task"
@@ -6026,6 +6056,85 @@ fn browser_support_messages_run_bundled_registrar_commands() {
             "--bridge-root-name".to_string(),
             RUST_BRIDGE_ROOT_NAME.to_string(),
         ]
+    );
+}
+
+#[test]
+fn desktop_shell_action_errors_update_settings_error_state() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::DesktopShellActionFinished(Err(
+        "invalid URL target: file:///C:/Payload/legacy-backend.ps1".to_string(),
+    )));
+
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("invalid URL target: file:///C:/Payload/legacy-backend.ps1")
+    );
+}
+
+#[test]
+fn browser_support_action_errors_update_browser_support_state() {
+    let mut state = EasydictUiState {
+        browser_support: BrowserSupportState {
+            chrome_installed: true,
+            firefox_installed: true,
+            loaded: true,
+            last_error: None,
+        },
+        ..EasydictUiState::default()
+    };
+
+    state.apply(Message::BrowserSupportActionFinished(Err(
+        "invalid bundled executable argument: --runtime=dotnet.exe".to_string(),
+    )));
+
+    assert_eq!(
+        state.browser_support,
+        BrowserSupportState {
+            loaded: true,
+            last_error: Some(
+                "invalid bundled executable argument: --runtime=dotnet.exe".to_string()
+            ),
+            ..BrowserSupportState::default()
+        }
+    );
+}
+
+#[test]
+fn browser_support_status_errors_update_browser_support_state() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::BrowserSupportStatusLoaded(Ok(StatusOutput {
+        chrome: BrowserStatusEntry { installed: false },
+        firefox: BrowserStatusEntry { installed: true },
+        bridge_exists: true,
+        bridge_directory: "C:/Users/Test/AppData/Local/EasydictRs/browser-bridge".to_string(),
+        error: Some("failed to read chrome native messaging registry key".to_string()),
+    })));
+
+    assert_eq!(
+        state.browser_support,
+        BrowserSupportState {
+            chrome_installed: false,
+            firefox_installed: true,
+            loaded: true,
+            last_error: Some("failed to read chrome native messaging registry key".to_string()),
+        }
+    );
+}
+
+#[test]
+fn desktop_integration_action_errors_update_settings_error_state() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::DesktopIntegrationActionFinished(Err(
+        "desktop integration command target is a retained runtime".to_string(),
+    )));
+
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("desktop integration command target is a retained runtime")
     );
 }
 
@@ -7516,9 +7625,10 @@ fn key_info_encrypted_mdx_service_routes_natively_without_compat_host_spawn() {
 }
 
 #[test]
-fn unsupported_encrypted_mdx_service_fails_locally_without_compat_host_spawn() {
-    let temp_dir = unique_temp_dir("easydict-mdx-unsupported-encrypted-no-host");
+fn unsupported_encrypted_mdx_service_with_stale_app_dir_fails_locally_without_compat_host_probe() {
+    let temp_dir = unique_temp_dir("easydict-mdx-unsupported-encrypted-stale-app-dir");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    install_stale_retained_runtime_app_dir_markers(&temp_dir);
     let mdx_path = temp_dir.join("Combined Dictionary.mdx");
     write_mdx_header(
         &mdx_path,
@@ -7548,8 +7658,21 @@ fn unsupported_encrypted_mdx_service_fails_locally_without_compat_host_spawn() {
         .message
         .contains("not supported by the Rust-native MDX reader"));
     assert!(!error.message.contains("credentials are required"));
-    assert!(!error.message.contains("CompatHost executable not found"));
-    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+    let lower_error = error.message.to_ascii_lowercase();
+    for forbidden in [
+        "compat host",
+        "easydict.workers",
+        "dotnet",
+        "hostfxr",
+        "powershell",
+        "pwsh",
+    ] {
+        assert!(
+            !lower_error.contains(forbidden),
+            "default Rust MDX lookup must not expose stale app-dir retained payload marker {forbidden}: {}",
+            error.message
+        );
+    }
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -8755,7 +8878,19 @@ fn default_hotkey_subscriptions_cover_migration_contract() {
     assert!(silent.modifiers.contains(&HotkeyModifier::Shift));
     assert!(contains_tray_subscription(&app.subscription()));
     assert!(!contains_named_event_subscription(&app.subscription()));
-    assert!(contains_main_window_subscription(&app.subscription()));
+    for id in [
+        "main",
+        "settings",
+        "mini",
+        "fixed",
+        "capture-overlay",
+        "pop-button",
+    ] {
+        assert!(
+            contains_window_subscription(&app.subscription(), id),
+            "missing window subscription for {id}"
+        );
+    }
 }
 
 #[test]
@@ -9458,6 +9593,83 @@ fn main_window_close_respects_minimize_to_tray_setting() {
         )
     ));
     assert!(contains_exit_task(&system_close_window));
+}
+
+#[test]
+fn window_lifecycle_events_update_runtime_state_for_utility_windows() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::WindowEvent(WindowEvent::Opened(WindowId::new(
+        "mini",
+    ))));
+    let mini = app
+        .state
+        .window_runtime
+        .get(&WindowId::new("mini"))
+        .expect("mini lifecycle state");
+    assert!(mini.is_open);
+    assert_eq!(mini.open_count, 1);
+
+    app.update(Message::WindowEvent(WindowEvent::Focused(WindowId::new(
+        "mini",
+    ))));
+    assert!(
+        app.state
+            .window_runtime
+            .get(&WindowId::new("mini"))
+            .expect("mini lifecycle state")
+            .is_focused
+    );
+
+    app.update(Message::WindowEvent(WindowEvent::Focused(WindowId::new(
+        "fixed",
+    ))));
+    assert!(
+        !app.state
+            .window_runtime
+            .get(&WindowId::new("mini"))
+            .expect("mini lifecycle state")
+            .is_focused
+    );
+    assert!(
+        app.state
+            .window_runtime
+            .get(&WindowId::new("fixed"))
+            .expect("fixed lifecycle state")
+            .is_focused
+    );
+
+    app.update(Message::WindowEvent(WindowEvent::DpiChanged(
+        WindowId::new("fixed"),
+    )));
+    assert_eq!(
+        app.state
+            .window_runtime
+            .get(&WindowId::new("fixed"))
+            .expect("fixed lifecycle state")
+            .dpi_change_count,
+        1
+    );
+
+    app.state.pop_button.pending_text = Some("selected text".to_string());
+    app.state.pop_button.visible = true;
+    app.state.pop_button.anchor = Some(PopButtonAnchor::new(10, 20));
+
+    app.update(Message::WindowEvent(WindowEvent::Closed(WindowId::new(
+        "pop-button",
+    ))));
+    let pop_button = app
+        .state
+        .window_runtime
+        .get(&WindowId::new("pop-button"))
+        .expect("pop button lifecycle state");
+    assert!(!pop_button.is_open);
+    assert_eq!(pop_button.close_count, 1);
+    assert!(!app.state.pop_button.visible);
+    assert_eq!(app.state.pop_button.pending_text, None);
+    assert_eq!(app.state.pop_button.anchor, None);
 }
 
 #[test]
@@ -11428,21 +11640,23 @@ fn contains_tray_subscription(subscription: &Subscription<Message>) -> bool {
     }
 }
 
-fn contains_main_window_subscription(subscription: &Subscription<Message>) -> bool {
+fn contains_window_subscription(subscription: &Subscription<Message>, expected_id: &str) -> bool {
     match subscription {
         Subscription::None => false,
-        Subscription::Batch(values) => values.iter().any(contains_main_window_subscription),
+        Subscription::Batch(values) => values
+            .iter()
+            .any(|subscription| contains_window_subscription(subscription, expected_id)),
         Subscription::Event { kind, map } => {
             let SubscriptionKind::Window(id) = kind else {
                 return false;
             };
 
-            id.as_str() == "main"
-                && map(PlatformEvent::Window(WindowEvent::CloseRequested(
-                    WindowId::new("main"),
-                ))) == Some(Message::WindowEvent(WindowEvent::CloseRequested(
-                    WindowId::new("main"),
-                )))
+            id.as_str() == expected_id
+                && map(PlatformEvent::Window(WindowEvent::Focused(WindowId::new(
+                    expected_id,
+                )))) == Some(Message::WindowEvent(WindowEvent::Focused(WindowId::new(
+                    expected_id,
+                ))))
         }
     }
 }

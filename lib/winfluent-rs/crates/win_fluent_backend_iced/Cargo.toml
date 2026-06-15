@@ -10,6 +10,7 @@ legacy-powershell-dialogs = []
 legacy-powershell-tts = ["win_fluent_platform_win/legacy-powershell-tts"]
 
 [dependencies]
+easydict_windows_shell = { path = "../../../easydict-windows-shell" }
 iced = { version = "0.14.0", default-features = false, features = [
     "advanced",
     "crisp",

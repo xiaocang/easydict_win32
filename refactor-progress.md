@@ -21,6 +21,310 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-14: Replaced retained-worker PowerShell IPC mocks with a Rust helper
+
+- Removed the `compat_client` retained-feature tests' inline PowerShell JSONL mock host/worker scripts. The tests now spawn the Rust `easydict-ipc-mock` helper, which reuses the existing retained IPC DTOs and `serde_json`.
+- Added the helper as an explicit `Cargo.toml` bin behind `required-features = ["retained-dotnet-workers"]`, so it is available for retained compatibility tests without becoming a default rs portable entrypoint.
+- No new third-party library was needed. Existing `serde_json` plus the app-owned `compat_protocol` DTOs are enough; this avoids adding a process-test helper crate or shell dependency for the mock runtime.
+
+Validation:
+
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --features retained-dotnet-workers --test compat_client -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+
+## 2026-06-14: Neutralized the default preview parity service profile name
+
+- Renamed the default Settings services preview profile from the old `.NET`-worded name to neutral `parity-reference`, and updated the rs preview parity script to request that canonical profile.
+- Kept the old profile spelling only as a compatibility alias in `state.rs`, built without embedding the legacy literal as a default visible profile name.
+- No new third-party library was needed. This stays inside the existing Rust app preview-state helpers and default API boundary tests.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\default_api_boundary_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib parity_reference -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_preview_service_profile_uses_neutral_parity_reference_name -- --exact --nocapture`
+
+## 2026-06-14: Made migration-list acceptance default to rs portable
+
+- Closed a documentation/release-boundary contradiction found by the packaging audit. `migration-list.md` no longer says the core verification commands all start from `dotnet/`; its top-level acceptance path now starts from the first rs portable flow.
+- The default acceptance commands now include the Rust app API/runtime boundary, the rs portable release contract subset, and direct `easydict_packager pack-rs-portable`. Legacy `dotnet restore/build/test` remains listed only under `Legacy/Hybrid .NET parity`.
+- Added a release-contract regression so the migration checklist cannot drift back to presenting `dotnet restore`, `dotnet build`, `dotnet test`, or `make test-integration` as the default rs acceptance path.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior migration_list_acceptance_defaults_to_rs_portable_before_legacy_dotnet -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release -- --nocapture`
+
+## 2026-06-14: Revalidated default Bing and Linguee Rust-native service routes
+
+- Rechecked the known-risk note around historically skipped Bing/Linguee external integrations. The current Rust route now has default catalog coverage for both: Bing uses the Rust-native two-phase backend, and Linguee is registered by default through the native traditional HTTP route.
+- Updated the migration checklist wording so future work treats external Bing/Linguee integrations as non-authoritative network smoke, not as a sign that the core Rust services are missing.
+- No new dependency or code path was needed. This is evidence over the existing `traditional_http` / `NativeBingQuickTranslateBackend` service glue.
+
+Validation:
+
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior default_bing_catalog_entry_routes_to_native_two_phase_backend -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior default_linguee_catalog_entry_routes_to_native_traditional_http -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test translation_services_behavior service_catalog_includes_linguee_by_default -- --exact --nocapture`
+
+## 2026-06-14: Locked PowerShell process names to text-selection classification only
+
+- Added a focused text-selection regression for `powershell` / `pwsh` process names. They remain terminal aliases for selection strategy parity, but they produce a UIA-only capture plan and no clipboard `Ctrl+C` shortcut attempt.
+- This complements the existing default API guard that forbids text-selection smoke tests from copying the test binary to `pwsh.exe` / `powershell.exe`; PowerShell names are metadata only, not helper process targets.
+- No new dependency was needed. The boundary stays inside `easydict_app::text_selection` and the existing `lib/easydict-windows-text-selection` native helper layer.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\text_selection_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test text_selection_behavior powershell_terminal_names_are_classification_only_and_skip_clipboard_shortcuts -- --exact --nocapture`
+
+## 2026-06-14: Guarded MDX unsupported-encryption failures against stale app-dir payloads
+
+- Strengthened the default Quick Translate MDX failure route. An unsupported/combined encrypted MDX (`Encrypted=3`) now has regression coverage with a test app directory containing stale `Easydict.CompatHost.exe`, `workers/*`, `dotnet/dotnet.exe`, `hostfxr.dll`, and CoreLib markers.
+- The default Rust path still fails locally with the Rust-native MDX unsupported-encryption message and does not probe or expose CompatHost, retained workers, bundled `.NET`, hostfxr, PowerShell, or pwsh wording.
+- No new third-party library was needed. This stays on the existing `lib/rs-mdict` parser route and app-owned Quick Translate glue.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior unsupported_encrypted_mdx_service_with_stale_app_dir_fails_locally_without_compat_host_probe -- --exact --nocapture`
+
+## 2026-06-14: Revalidated Rust-owned mouse selection and clipboard input streams
+
+- Rechecked the old PopButton/mouse-selection "remaining work" note against the current tree. The app now starts and stops the Rust-owned low-level mouse/keyboard hook stream from the persisted `MouseSelectionTranslate` setting, maps hook events through `MouseSelectionProducer`, schedules pending double/triple-click timer tasks, and dispatches capture/dismiss actions into the existing PopButton consumer path.
+- Revalidated the clipboard monitor route as an app-owned stream over `lib/easydict-windows-text-selection` clipboard helpers. Monitoring, tray/hotkey clipboard translation, and self-written clipboard suppression no longer depend on WinFluent clipboard subscriptions or `.NET` clipboard APIs.
+- No new dependency was needed. The low-level input boundary remains in `lib/easydict-windows-text-selection` on Microsoft's official `windows` crate; higher-level crates such as `willhook`/`rdev` still do not expose the raw message ids, timestamps, and `dwExtraInfo` parity needed here. Real Notepad/VS Code/Windows Terminal end-to-end PopButton smoke remains a later Windows ignored/E2E task.
+
+Validation:
+
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mouse_selection_behavior -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior mouse_selection -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib clipboard -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+
+## 2026-06-14: Locked rs portable release packager invocation to default Rust-only features
+
+- Audited `easydict_packager` and the release workflow with a subagent. The default packager still has no default features, the `.NET` runtime downloader remains behind `hybrid-dotnet-runtime-packaging`, and `publish-rs-portable` already invokes `pack-rs-portable` directly from the `rs` workspace.
+- Added a focused release-contract regression for the default `publish-rs-portable` build step. The workflow step must keep using `cargo run --manifest-path Cargo.toml -p easydict_packager -- pack-rs-portable ...` and must not add `--features`, `hybrid-dotnet-runtime-packaging`, `extract-dotnet-runtime`, `zip-directory`, `--runtime-profile`, or legacy hybrid artifact names.
+- No new third-party library was needed. This is a packaging boundary guard over the existing Rust packager and first-release portable workflow.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_packager_invocation_never_enables_hybrid_feature -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release -- --nocapture`
+
+## 2026-06-14: Revalidated Collins COBUILD MDX/MDD on the Rust-native route
+
+- Re-ran the user-provided Collins COBUILD English Usage corpus through the Rust MDX/MDD stack, including the companion `.mdd` file. The MDD resource `\cceu.css` was read as `text/css` with 4579 raw bytes.
+- Confirmed the app path still auto-discovers the companion MDD for a legacy MDX settings entry, inlines the CSS as a data URL during native MDX lookup, and preserves Quick Translate `rawHtml` only when MDD resources were actually attached.
+- No new third-party library was needed. The route uses the existing `lib/rs-mdict` fork plus the app-owned `mdx_native` / settings / Quick Translate glue.
+
+Validation:
+
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_MDD_RESOURCE='\cceu.css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIME='text/css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIN_BYTES='4000'; cargo test --manifest-path lib\rs-mdict\Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_real_corpus_mdd_from_env_for_legacy_mdx_entry -- --exact --nocapture`
+
+## 2026-06-14: Rejected malformed Native Messaging requests without triggering OCR
+
+- Closed a native bridge protocol sharp edge. The Rust `easydict-native-bridge` now only signals OCR for the explicit browser extension message `{ "action": "ocr-translate" }`; malformed JSON, missing action, `null`, and non-string action values no longer default to OCR.
+- Invalid Native Messaging requests now return a structured `{ success: false, action: "invalid", error: ... }` response and do not signal `Local\EasydictRs-OcrTranslate`. Invalid frame lengths, oversized frames, and incomplete frames are no longer silent successful empty runs; the real helper binary reports them with the Rust helper prefix and a non-zero exit code while still exposing no legacy `Easydict.NativeBridge`, CompatHost, `.NET`, `dotnet`, or worker wording.
+- No new third-party library was needed. This stays inside the existing Rust-owned Native Messaging frame parser and `lib/easydict-windows-ipc` event boundary.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\native_bridge.rs rs\crates\easydict_app\tests\native_bridge_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_rejects_invalid_or_missing_action_before_signal -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_rejects_malformed_or_missing_action_without_signal -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_binary_rejects_malformed_json_without_dotnet_host_or_event_signal -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_rejects_invalid_lengths_or_incomplete_frames_without_signal -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_binary_rejects_invalid_frame_length_without_dotnet_host_wording -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test native_bridge_behavior -- --nocapture`
+
+## 2026-06-14: Surfaced browser registrar status read failures
+
+- Closed the matching browser registrar `status` observability gap. Registry read failures, manifest file read failures, and malformed manifest JSON now produce `StatusOutput.error` instead of being silently folded into `installed: false`.
+- Ordinary uninstalled state and manifest integrity mismatches still remain non-error `installed: false`, so stale/foreign registrations are not over-reported. App state preserves partial installed flags and carries the error through `BrowserSupportState.last_error`; the standalone registrar CLI returns a non-zero exit code when `status` includes an error.
+- Reused the same status-aware check for final uninstall cleanup. After uninstalling a selected browser, the registrar no longer removes the shared bridge directory if another browser's status cannot be trusted because its registry key or manifest cannot be read.
+- No new third-party library was needed. This reuses the existing Rust-owned registrar and the existing browser-support state error field.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\browser_registrar.rs rs\crates\easydict_app\src\bin\easydict_browser_registrar.rs rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\tests\browser_registrar_behavior.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior status -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior uninstall_reports_remaining_browser_status_failures_before_removing_bridge_directory -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior browser_support_status_errors_update_browser_support_state -- --exact --nocapture`
+
+## 2026-06-14: Locked default app shell actions onto the Rust-owned shell boundary
+
+- Added a default API boundary regression that scans `easydict_app/src` production code for raw WinFluent shell/process surfaces. Default app code must not call `Task::open_url`, `Task::run_bundled_executable`, `PlatformCommand::OpenUrl`, `PlatformCommand::RunBundledExecutable`, `WindowsPlatformAdapter::open_url`, or `win_fluent_platform_win::WindowsPlatformAdapter`.
+- Added a companion WinFluent backend dispatch contract. `PlatformCommand::OpenUrl` and `PlatformCommand::RunBundledExecutable` must continue to flow through `run_platform_open_url(...)` / `run_platform_bundled_executable(...)`, and those helpers must delegate to `lib/easydict-windows-shell` instead of raw `WindowsPlatformAdapter` or direct process spawn.
+- This keeps external links and browser registrar helper launches routed through `easydict_app::desktop_shell`, which in turn uses `lib/easydict-windows-shell` for URL validation, helper-name/argument validation, retained-runtime byte scanning, and observable error propagation.
+- No code in `lib/winfluent-rs/crates/win_fluent_platform_win` was changed in this slice because that file currently has independent tray/UI work in progress. The app-level contract closes the default rs path without colliding with that work.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\default_api_boundary_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_app_shell_actions_do_not_bypass_windows_shell_lib -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior winfluent_backend_shell_commands_delegate_to_windows_shell_lib -- --exact --nocapture`
+
+## 2026-06-14: Surfaced browser registrar uninstall cleanup failures
+
+- Closed the browser registrar uninstall success-reporting gap. `BrowserRegistrarCore::uninstall(...)` now reports `success: false` with an `error` field when owned registry reads/deletes, manifest deletion, or final bridge-directory cleanup fails, and it no longer marks a browser as uninstalled when the owned cleanup step failed.
+- `easydict_browser_registrar uninstall` now returns a non-zero exit code when that structured uninstall result is unsuccessful, so the app's existing `run_bundled_executable(...)` path can surface failed cleanup through `BrowserSupportState::failed(...)`.
+- No new third-party library was needed. The slice reuses the existing Rust-owned browser registrar, `lib/easydict-windows-registry`, and standard-library filesystem cleanup; the larger helper/process guard remains in `lib/easydict-windows-shell`.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\src\browser_registrar.rs rs\crates\easydict_app\src\bin\easydict_browser_registrar.rs rs\crates\easydict_app\tests\browser_registrar_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior uninstall_reports_ -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior browser_registrar_cli_returns_failure_exit_when_uninstall_reports_failure -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --bin easydict_browser_registrar -- --nocapture`
+
+## 2026-06-14: Surfaced guarded external-link failures in settings state
+
+- Closed the app-owned `open_url_task(...)` observability gap. `desktop_shell::open_url_task(...)` no longer discards `lib/easydict-windows-shell::open_url(...)` errors.
+- Guard failures such as retained/script URL targets now emit `Message::DesktopShellActionFinished(Err(...))` and update `settings.save_error_message`, using the same settings error dialog path as desktop integration failures.
+- No new third-party library was needed. The URL policy still lives in `lib/easydict-windows-shell` and delegates retained marker detection to `lib/easydict-runtime-guards`.
+
+Validation:
+
+- `rustfmt --edition 2021 --config skip_children=true --check rs/crates/easydict_app/src/lib.rs rs/crates/easydict_app/src/state.rs rs/crates/easydict_app/src/desktop_shell.rs rs/crates/easydict_app/tests/quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior browser_support_and_external_links_use_rust_owned_desktop_shell_helper -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_shell_action_errors_update_settings_error_state -- --exact --nocapture`
+
+## 2026-06-14: Surfaced desktop integration failures in settings state
+
+- Closed the matching observability gap for Rust-owned desktop integration tasks. Shell context menu registration/unregistration, startup registration, and startup protocol registration no longer discard `desktop_integration` results with `let _ = ...`.
+- Failures now emit `Message::DesktopIntegrationActionFinished(Err(...))` and update `settings.save_error_message`, so retained-runtime/script guard failures or registry write errors are visible through the existing settings error dialog path.
+- No new third-party library was needed. This reuses the existing app settings error surface and the Rust-owned `lib/easydict-windows-registry` / `desktop_integration` wrappers.
+
+Validation:
+
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior shell_context_menu_registration_uses_rust_owned_desktop_integration_helper -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior startup_protocol_registration_uses_rust_owned_desktop_integration_helper -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior launch_at_startup_registration_uses_rust_owned_desktop_integration_helper -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_integration_action_errors_update_settings_error_state -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior shell_context_menu_toggle_emits_registration_commands_and_updates_setting -- --exact --nocapture`
+
+## 2026-06-14: Surfaced browser registrar helper failures in app state
+
+- Closed a small observability gap around the Rust-owned browser registrar helper. `desktop_shell::run_browser_registrar_task(...)` no longer discards `lib/easydict-windows-shell::run_bundled_executable(...)` errors.
+- Browser registrar launch failures now emit `Message::BrowserSupportActionFinished(Err(...))` and update `BrowserSupportState::failed(...)`, so retained-runtime/script guard failures are visible to the app state instead of silently disappearing while a delayed status refresh runs.
+- No new third-party library was needed. This reuses the existing browser-support state surface.
+
+Validation:
+
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior browser_support -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_bundled_helper_process_boundary_stays_inside_windows_shell_lib -- --exact --nocapture`
+
+## 2026-06-14: Guarded bundled-helper arguments before spawn
+
+- Closed the remaining generic bundled-helper argument gap. `lib/easydict-windows-shell::run_bundled_executable(...)` now validates helper arguments with `lib/easydict-runtime-guards` before target metadata/content probing or `Command::new(...)`.
+- This keeps legitimate browser registrar arguments (`install`, `uninstall`, `status`, `--browser`, `--bridge-root-name EasydictRs`) working, while rejecting argument-level trampolines such as `--runtime=dotnet.exe`, `--script=legacy-backend.ps1`, `workers\...`, PowerShell/Pwsh, or `foundry.cmd /c dotnet.exe`.
+- The generic WinFluent `RunBundledExecutable` compatibility command inherits the same shell-lib guard; a safe helper name with retained runtime arguments now fails before filesystem lookup or spawn.
+- No new third-party library was needed. This reuses the existing Rust-owned shell wrapper and shared runtime guard classifier.
+
+Validation:
+
+- `cargo fmt --manifest-path lib\easydict-windows-shell\Cargo.toml --check`
+- `cargo fmt --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced --check`
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path lib\easydict-windows-shell\Cargo.toml bundled_executable_arguments -- --nocapture`
+- `cargo test --manifest-path lib\easydict-windows-shell\Cargo.toml run_executable_rejects_retained_arguments_before_spawn -- --nocapture`
+- `cargo test --manifest-path lib\easydict-windows-shell\Cargo.toml -- --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced winfluent_bundled_executable_rejects_retained_runtime_arguments_before_spawn -- --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced --lib -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_bundled_helper_process_boundary_stays_inside_windows_shell_lib -- --exact --nocapture`
+
+## 2026-06-14: Resolved Foundry Local default CLI targets before spawn
+
+- Closed the highest-priority leftover process boundary from the parallel scan. The default Foundry Local command name (`foundry`) is no longer handed directly to Windows process search after only checking the literal string.
+- `lib/easydict-foundry-local` now resolves bare `foundry` / `foundry.exe` candidates from the current executable directory, current directory, `PATH`, and Windows `PATHEXT` before spawn. Search-path hits are then canonicalized, checked by `lib/easydict-runtime-guards`, and byte-scanned before `Command::new(...)`.
+- A PATH shim such as `foundry.cmd` / `foundry.bat`, or a same-name CLI under a retained `.NET` runtime/worker/script path, now fails before spawn. A safe `foundry.exe` found through the same search resolves to the canonical absolute path and that exact path is spawned.
+- No new third-party library was needed; this stays inside the existing Foundry wrapper in `lib/`.
+
+Validation:
+
+- `cargo fmt --manifest-path lib\easydict-foundry-local\Cargo.toml --check`
+- `cargo test --manifest-path lib\easydict-foundry-local\Cargo.toml default_cli_name -- --nocapture`
+- `cargo test --manifest-path lib\easydict-foundry-local\Cargo.toml cli_executable_override -- --nocapture`
+- `cargo test --manifest-path lib\easydict-foundry-local\Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --exact --nocapture`
+
+## 2026-06-14: Guarded desktop registry command targets and arguments
+
+- Closed the registry-command gap from the runtime-boundary audit. `easydict_app::desktop_integration` now validates shell/protocol/startup executable targets through `lib/easydict-windows-shell`'s `validate_command_executable_target(...)`, so registry commands share the same path-marker, symlink/reparse, regular-file, and retained marker byte scan used by bundled helper launches.
+- Added argument-level validation before any registry write. A safe-looking `Easydict.Rust.exe` command line can no longer smuggle retained `.NET` runtime, worker, PowerShell, or script markers through shell/protocol/startup command arguments.
+- Guarded the remaining generic WinFluent registry compatibility path: `RegisterShellVerb` and `RegisterProtocol` now validate the resolved current exe with the same shell target guard before calling the Windows registry adapter.
+- No new third-party library was needed. This slice deliberately reused the existing `lib/easydict-windows-shell` and `lib/easydict-runtime-guards` boundaries.
+
+Validation:
+
+- `cargo fmt --manifest-path lib\easydict-windows-shell\Cargo.toml --check`
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_app --check`
+- `cargo fmt --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced --check`
+- `cargo test --manifest-path lib\easydict-windows-shell\Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app desktop_registry_command_arguments_reject_retained_runtime_or_script_markers -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_desktop_registry_command_boundary_scans_targets_before_registry_writes -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_bundled_helper_process_boundary_stays_inside_windows_shell_lib -- --exact --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced winfluent_register_shell_verb_and_protocol_guard_current_exe_before_registry_write -- --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced --lib -- --nocapture`
+
+## 2026-06-14: Guarded WinFluent generic URL and bundled-helper commands
+
+- Closed the high-risk WinFluent platform-command gap from the parallel audit. `win_fluent_backend_iced` now routes generic `PlatformCommand::OpenUrl` and `PlatformCommand::RunBundledExecutable` through `lib/easydict-windows-shell` instead of directly calling the platform adapter `ShellExecuteW` path or spawning a helper with `Command::new(...)`.
+- No new external library was needed. The backend now reuses the existing Rust-owned shell wrapper, which already owns http/https URL validation, bundled-helper name checks, symlink/reparse/non-file rejection, hidden-window spawn, and retained `.NET` / PowerShell byte-marker scanning.
+- Added backend regressions for non-web/retained URL rejection, retained/script helper-name rejection, and retained marker bytes in a same-directory helper fixture.
+
+Validation:
+
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced winfluent_open_url -- --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced winfluent_bundled_executable -- --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced window -- --nocapture`
+- `cargo test --manifest-path lib\winfluent-rs\Cargo.toml -p win_fluent_backend_iced tray -- --nocapture`
+- `cargo test --manifest-path lib\easydict-windows-shell\Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior default_winfluent_legacy_powershell_features_stay_explicit_and_disabled_for_preview -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior rs_crate_manifests_disable_winfluent_default_features -- --exact --nocapture`
+
+## 2026-06-14: Re-ran the user-provided Collins MDX/MDD corpus
+
+- Rechecked `C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx` with its companion MDD. The Rust MDD reader still resolves `\cceu.css` as `text/css` with 4579 bytes.
+- The app-level native MDX route and Quick Translate route both inline the Collins MDD stylesheet through Rust-native `data:text/css;base64,...` HTML rewriting, and legacy settings still auto-discover the companion MDD from the same directory.
+
+Validation:
+
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; $env:RS_MDICT_TEST_MDD_RESOURCE='\cceu.css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIME='text/css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIN_BYTES='1000'; cargo test --manifest-path lib\rs-mdict\Cargo.toml --features real-corpus-tests test_mdd_locate_configured_resource -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_real_corpus_mdd_from_env_for_legacy_mdx_entry -- --exact --nocapture`
+
+## 2026-06-14: Generated rs portable SHA256 checksums through Rust packager
+
+- Added Rust-owned SHA256 checksum generation and verification to `easydict_packager` using the RustCrypto `sha2` crate. The output format is compatible with `sha256sum -c` and the README examples (`checksums-x64.sha256`).
+- Updated the rs portable release path so `publish-rs-portable` writes `checksums-${platform}.sha256`, uploads it with the ZIP artifact, and `create-rs-portable-release` verifies each downloaded ZIP/checksum pair before publishing both files to GitHub Releases.
+- Tightened release-contract coverage so hybrid/.NET release jobs still do not download or upload rs portable ZIP/checksum assets.
+
+Validation:
+
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --lib -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --bin easydict_packager -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_uploads_sha256_checksums_for_rs_zip -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior create_rs_portable_release_revalidates_downloaded_zip_before_upload -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior release_workflow_hybrid_flavor_does_not_build_or_upload_rs_portable_assets -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_zip_has_size_budget_gate -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid_assets -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_path_forces_rust_only_runtime_profile -- --exact --nocapture`
+
 ## 2026-06-14: Made browser extension all-target packaging preflight atomic
 
 - Tightened `easydict_packager package-browser-extension` so `target=All` first scans and serializes every target manifest plus every allowlisted common file before creating any ZIP/XPI archive. If the Firefox manifest or any shared extension file contains retained `.NET` runtime markers, the command now fails without leaving a partially-created Chrome package behind.
@@ -3437,7 +3741,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Generates Rust-owned request IDs, parses typed results, queues events that arrive before the final response, and surfaces remote protocol errors.
   - Classifies a missing host executable as a fallback condition and reports early host exit as `ProcessExited`.
   - Provides the packaging-path helper for the transitional host name: `Easydict.CompatHost.exe`.
-  - Adds `compat_client` integration tests with an out-of-process PowerShell JSONL mock host covering success, streaming-style event-before-response, remote error, process exit, and missing-host fallback classification.
+  - Adds `compat_client` integration tests with an out-of-process JSONL mock host covering success, streaming-style event-before-response, remote error, process exit, and missing-host fallback classification; the original PowerShell mock was superseded on 2026-06-14 by the Rust `easydict-ipc-mock` helper.
 - 2026-05-31: Added the first `.NET Compat Host` executable project at `dotnet/src/Easydict.CompatHost`.
   - The host is a console JSON Lines process with no WinUI surface and no in-proc CoreCLR hosting requirement for Rust.
   - `translate` is wired through a `TranslationManager` adapter so the bridge can preserve existing .NET translation behavior while Rust owns the desktop shell.
@@ -5581,7 +5885,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - No new library was needed. This is GitHub Actions release-policy hardening on the existing Rust `easydict_packager` path.
   - Added `rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts`, which section-scans `publish-rs-portable` and `create-rs-portable-release` instead of only checking whole-workflow markers.
   - The test proves the package job runs from the Rust workspace, calls `Package-Portable.ps1`, validates with `validate-rs-portable`, and uses the separate `easydict-rs-portable-*` artifact name.
-  - The release job must depend only on `prepare` and `publish-rs-portable`, download only rs portable artifacts, and upload only `rs-portable/*.zip`; both jobs reject dotnet setup, WinApp/MSIX, installer, `.NET` runtime extraction, retained worker, CompatHost, and WinGet markers.
+  - The release job must depend only on `prepare` and `publish-rs-portable`, download only rs portable artifacts, and upload only `rs-portable/*.zip` plus matching `rs-portable/checksums-*.sha256`; both jobs reject dotnet setup, WinApp/MSIX, installer, `.NET` runtime extraction, retained worker, CompatHost, and WinGet markers.
 - 2026-06-09: Made the default rs runtime-marker boundary dynamic.
   - No new library was needed. This is a source-contract hardening step over the existing default app boundary test.
   - A read-only subagent found no current default rs path that triggers `.NET` runtime, retained workers, CompatHost, `dotnet.exe`, or PowerShell helpers.
@@ -5756,7 +6060,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Added `memory_profiling_docs_use_rust_only_no_runtime_publish` to keep local diagnostic docs from reintroducing self-contained `.NET` runtime payload guidance.
 - 2026-06-14: Added final-upload validation for the first rs portable release asset.
   - No replacement library was needed. The release job now reuses the existing Rust `easydict_packager validate-rs-portable` CLI, which already shares the retained payload path/content scanner.
-  - `create-rs-portable-release` now checks out the repository, downloads `easydict-rs-portable-*` artifacts, fails if no ZIP was downloaded, and validates every `rs-portable/*.zip` before `softprops/action-gh-release` uploads it.
+  - `create-rs-portable-release` now checks out the repository, downloads `easydict-rs-portable-*` artifacts, fails if no ZIP or checksum was downloaded, validates every `rs-portable/*.zip`, and verifies matching `checksums-*.sha256` before `softprops/action-gh-release` uploads them.
   - This adds a second release-layer guard after the build job's package validation, preventing a broadened artifact pattern or polluted downloaded ZIP from bypassing the Rust-only `.NET` payload validator.
 - 2026-06-14: Locked runtime-producing release workflow steps behind explicit hybrid gates.
   - No replacement library was needed. This is a release-contract guard over existing legacy/hybrid workflow paths, not a new runtime implementation.

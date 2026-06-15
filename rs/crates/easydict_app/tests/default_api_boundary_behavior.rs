@@ -237,30 +237,51 @@ fn default_app_manifest_disables_auto_discovered_binary_entrypoints() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let app_manifest = include_str!("../Cargo.toml");
     let expected_bins = [
-        ("easydict_app", "src/main.rs"),
+        ("easydict_app", "src/main.rs", None),
         (
             "easydict_browser_registrar",
             "src/bin/easydict_browser_registrar.rs",
+            None,
         ),
-        ("easydict_cli", "src/bin/easydict_cli.rs"),
+        ("easydict_cli", "src/bin/easydict_cli.rs", None),
         (
             "easydict-native-bridge",
             "src/bin/easydict_native_bridge.rs",
+            None,
         ),
-        ("easydict-lex-index", "src/bin/easydict_lex_index.rs"),
-        ("easydict_long_doc", "src/bin/easydict_long_doc.rs"),
+        ("easydict-lex-index", "src/bin/easydict_lex_index.rs", None),
+        ("easydict_long_doc", "src/bin/easydict_long_doc.rs", None),
+        (
+            "easydict-ipc-mock",
+            "src/bin/easydict_ipc_mock.rs",
+            Some("retained-dotnet-workers"),
+        ),
     ];
 
     assert!(
         app_manifest.contains("\nautobins = false\n"),
         "easydict_app must disable Cargo autobins so new src/bin files cannot become default rs entrypoints implicitly"
     );
-    for (name, path) in expected_bins.iter() {
+    for (name, path, required_feature) in expected_bins.iter() {
         assert!(
             app_manifest.contains(&format!("name = \"{name}\""))
                 && app_manifest.contains(&format!("path = \"{path}\"")),
             "easydict_app manifest should explicitly allow bin {name} at {path}"
         );
+        if let Some(required_feature) = required_feature {
+            let bin_section = app_manifest
+                .split(&format!("name = \"{name}\""))
+                .nth(1)
+                .unwrap_or_else(|| panic!("manifest should contain bin {name}"));
+            let bin_section = bin_section
+                .split("[[bin]]")
+                .next()
+                .expect("bin section should be delimited");
+            assert!(
+                bin_section.contains(&format!("required-features = [\"{required_feature}\"]")),
+                "helper bin {name} must stay behind explicit feature {required_feature}"
+            );
+        }
     }
 
     let mut actual_src_bin_files = fs::read_dir(manifest_dir.join("src/bin"))
@@ -278,7 +299,7 @@ fn default_app_manifest_disables_auto_discovered_binary_entrypoints() {
 
     let mut expected_src_bin_files = expected_bins
         .iter()
-        .filter_map(|(_, path)| path.strip_prefix("src/bin/"))
+        .filter_map(|(_, path, _)| path.strip_prefix("src/bin/"))
         .map(str::to_string)
         .collect::<Vec<_>>();
     expected_src_bin_files.sort();
@@ -623,6 +644,22 @@ fn default_process_spawn_surface_has_no_retained_dotnet_runtime_entries() {
             .starts_with("#![cfg(feature = \"retained-dotnet-workers\")]"),
         "retained worker process-spawn tests must stay behind retained-dotnet-workers cfg"
     );
+    assert!(
+        compat_client_tests.contains("CARGO_BIN_EXE_easydict-ipc-mock"),
+        "retained worker IPC tests should use the Rust mock helper binary"
+    );
+    for forbidden_mock_runtime in [
+        "WorkerCommand::new(\"powershell.exe\")",
+        "WorkerCommand::new(\"pwsh.exe\")",
+        "ExecutionPolicy",
+        "ConvertTo-Json",
+        "ConvertFrom-Json",
+    ] {
+        assert!(
+            !compat_client_tests.contains(forbidden_mock_runtime),
+            "retained worker IPC tests must not use PowerShell as a mock runtime: {forbidden_mock_runtime}"
+        );
+    }
 }
 
 #[test]
@@ -639,14 +676,28 @@ fn default_bundled_helper_process_boundary_stays_inside_windows_shell_lib() {
         "bundled-helper launch should validate helper names before resolving next to the app exe"
     );
     assert!(
-        production.contains("fn validate_bundled_executable_target("),
+        production.contains("pub fn validate_command_executable_target("),
+        "Windows shell lib should expose shared executable target validation"
+    );
+    assert!(
+        production.contains("fn validate_command_executable_target_impl("),
         "bundled-helper launch should validate the resolved target before spawning"
+    );
+    assert!(
+        production.contains("fn validate_bundled_executable_arguments("),
+        "bundled-helper launch should validate helper arguments before spawning"
     );
     assert!(
         production.contains(
             "easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(executable_name)"
         ),
         "bundled-helper names should delegate retained runtime/script detection to lib/easydict-runtime-guards"
+    );
+    assert!(
+        production.contains(
+            "easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(argument)"
+        ),
+        "bundled-helper arguments should delegate retained runtime/script detection to lib/easydict-runtime-guards"
     );
     assert!(
         production.contains("fs::symlink_metadata(executable)"),
@@ -677,14 +728,21 @@ fn default_bundled_helper_process_boundary_stays_inside_windows_shell_lib() {
     );
 
     let validation_offset = production
-        .find("validate_bundled_executable_target(executable)?")
+        .find("validate_command_executable_target(executable)?")
         .expect("run_executable should validate target before spawn");
+    let argument_validation_offset = production
+        .find("validate_bundled_executable_arguments(arguments)?")
+        .expect("run_executable should validate arguments before spawn");
     let spawn_offset = production
         .find("Command::new(executable)")
         .expect("run_executable should contain the bundled helper spawn");
     assert!(
         validation_offset < spawn_offset,
         "bundled-helper target validation must run before Command::new"
+    );
+    assert!(
+        argument_validation_offset < spawn_offset,
+        "bundled-helper argument validation must run before Command::new"
     );
 }
 
@@ -721,6 +779,105 @@ fn default_shell_open_url_boundary_rejects_non_web_and_retained_targets() {
 }
 
 #[test]
+fn default_app_shell_actions_do_not_bypass_windows_shell_lib() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("app manifest should be under rs/crates/easydict_app");
+    let src_dir = workspace
+        .join("rs")
+        .join("crates")
+        .join("easydict_app")
+        .join("src");
+    let forbidden_markers = [
+        "Task::open_url",
+        "Task::run_bundled_executable",
+        "PlatformCommand::OpenUrl",
+        "PlatformCommand::RunBundledExecutable",
+        "WindowsPlatformAdapter::open_url",
+        "win_fluent_platform_win::WindowsPlatformAdapter",
+    ];
+
+    for path in rust_source_files_under(&src_dir) {
+        let source = fs::read_to_string(&path).expect("source should be readable");
+        let production = production_source(&source);
+        let relative_path = path.strip_prefix(workspace).unwrap_or(&path).display();
+
+        for forbidden_marker in forbidden_markers {
+            assert!(
+                !production.contains(forbidden_marker),
+                "{relative_path} must route external links and bundled helpers through easydict_app::desktop_shell + lib/easydict-windows-shell, not raw WinFluent shell surface {forbidden_marker}"
+            );
+        }
+    }
+}
+
+#[test]
+fn winfluent_backend_shell_commands_delegate_to_windows_shell_lib() {
+    let source =
+        include_str!("../../../../lib/winfluent-rs/crates/win_fluent_backend_iced/src/lib.rs");
+    let production = production_source(source);
+
+    let open_url_dispatch = production
+        .split("PlatformCommand::OpenUrl(url)")
+        .nth(1)
+        .expect("WinFluent backend should dispatch OpenUrl platform commands");
+    assert!(
+        open_url_dispatch.contains("run_platform_open_url(url)"),
+        "WinFluent backend OpenUrl dispatch must go through the shell-lib helper"
+    );
+
+    let bundled_helper_dispatch = production
+        .split("PlatformCommand::RunBundledExecutable")
+        .nth(1)
+        .expect("WinFluent backend should dispatch RunBundledExecutable platform commands");
+    assert!(
+        bundled_helper_dispatch
+            .contains("run_platform_bundled_executable(executable_name, arguments)"),
+        "WinFluent backend bundled-helper dispatch must go through the shell-lib helper"
+    );
+
+    let open_url_helper = production
+        .split("fn run_platform_open_url(url: String) -> Result<(), String>")
+        .nth(1)
+        .expect("WinFluent backend should define run_platform_open_url");
+    let open_url_helper = open_url_helper
+        .split("fn run_platform_register_shell_verb")
+        .next()
+        .expect("open_url helper should precede register shell verb helper");
+    assert!(
+        open_url_helper.contains("easydict_windows_shell::open_url(&url)"),
+        "WinFluent backend open_url helper must delegate to lib/easydict-windows-shell"
+    );
+    assert!(
+        !open_url_helper.contains("WindowsPlatformAdapter::open_url"),
+        "WinFluent backend open_url helper must not call the raw platform adapter"
+    );
+
+    let bundled_helper = production
+        .split(
+            "fn run_platform_bundled_executable(\n    executable_name: String,\n    arguments: Vec<String>,\n) -> Result<(), String>",
+        )
+        .nth(1)
+        .expect("WinFluent backend should define run_platform_bundled_executable");
+    let bundled_helper = bundled_helper
+        .split("#[cfg(windows)]")
+        .next()
+        .expect("bundled helper should precede current_executable_path_string");
+    assert!(
+        bundled_helper.contains(
+            "easydict_windows_shell::run_bundled_executable(&executable_name, &arguments)"
+        ),
+        "WinFluent backend bundled-helper helper must delegate to lib/easydict-windows-shell"
+    );
+    assert!(
+        !bundled_helper.contains("Command::new(")
+            && !bundled_helper.contains("WindowsPlatformAdapter"),
+        "WinFluent backend bundled-helper helper must not spawn directly or call raw platform surfaces"
+    );
+}
+
+#[test]
 fn default_desktop_registry_command_boundary_scans_targets_before_registry_writes() {
     let source = include_str!("../src/desktop_integration.rs");
     let production = production_source(source);
@@ -730,17 +887,14 @@ fn default_desktop_registry_command_boundary_scans_targets_before_registry_write
         "desktop integration should reject retained runtime/script command targets by path"
     );
     assert!(
-        production.contains("fs::symlink_metadata(executable)"),
-        "desktop integration should inspect shell/protocol/startup command target metadata"
+        production.contains(
+            "easydict_windows_shell::validate_command_executable_target(Path::new(executable_path))"
+        ),
+        "desktop integration should share shell executable metadata/content validation"
     );
     assert!(
-        production.contains("desktop_command_target_is_reparse_point(&metadata)"),
-        "desktop integration should reject reparse-point command targets before registry writes"
-    );
-    assert!(
-        production
-            .contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes)"),
-        "desktop integration should scan command target bytes for retained .NET runtime markers"
+        production.contains("validate_desktop_command_arguments(&plan.command_arguments)?"),
+        "desktop integration should scan registry command arguments for retained runtime/script markers"
     );
 
     for register_fn in [
@@ -756,12 +910,19 @@ fn default_desktop_registry_command_boundary_scans_targets_before_registry_write
         let validation_offset = section
             .find("validate_desktop_command_executable_path(executable_path)?")
             .unwrap_or_else(|| panic!("{register_fn} should validate command target"));
+        let argument_validation_offset = section
+            .find("validate_desktop_command_arguments(&plan.command_arguments)?")
+            .unwrap_or_else(|| panic!("{register_fn} should validate command arguments"));
         let registry_write_offset = section
             .find("write_registry_string")
             .unwrap_or_else(|| panic!("{register_fn} should write registry values"));
         assert!(
             validation_offset < registry_write_offset,
             "{register_fn} must validate command target before registry writes"
+        );
+        assert!(
+            argument_validation_offset < registry_write_offset,
+            "{register_fn} must validate command arguments before registry writes"
         );
     }
 }
@@ -808,6 +969,36 @@ fn default_text_selection_terminal_smoke_helper_uses_non_shell_terminal_name() {
         assert!(
             !text_selection_tests.contains(forbidden_helper),
             "terminal smoke test must not copy the test binary to shell runtime helper name {forbidden_helper}"
+        );
+    }
+}
+
+#[test]
+fn default_preview_service_profile_uses_neutral_parity_reference_name() {
+    let state_source = include_str!("../src/state.rs");
+    let preview_matrix = include_str!("../../../scripts/Capture-PreviewParityMatrix.ps1");
+
+    assert!(
+        state_source.contains("PREVIEW_PARITY_REFERENCE_PROFILE: &str = \"parity-reference\""),
+        "default preview service profile should use a neutral parity-reference name",
+    );
+    assert!(
+        preview_matrix
+            .contains("EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE = \"parity-reference\""),
+        "rs preview parity script should request the neutral parity-reference profile",
+    );
+    for forbidden in [
+        "dotnet-reference",
+        "dotnet_reference_window_services",
+        "PREVIEW_DOTNET_REFERENCE",
+    ] {
+        assert!(
+            !state_source.contains(forbidden),
+            "default app source should not expose the retired preview profile marker {forbidden}",
+        );
+        assert!(
+            !preview_matrix.contains(forbidden),
+            "rs preview parity script should not expose the retired preview profile marker {forbidden}",
         );
     }
 }
@@ -893,6 +1084,9 @@ fn retained_or_legacy_feature_definition_is_allowed(relative_path: &str, trimmed
         ) | (
             "rs/crates/easydict_app/Cargo.toml",
             "retained-dotnet-workers = [\"easydict_runtime_guards/retained-dotnet-workers\"]"
+        ) | (
+            "rs/crates/easydict_app/Cargo.toml",
+            "required-features = [\"retained-dotnet-workers\"]"
         ) | (
             "rs/crates/easydict_packager/Cargo.toml",
             "hybrid-dotnet-runtime-packaging = [\"dep:reqwest\"]"

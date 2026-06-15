@@ -24,23 +24,17 @@ static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 fn mock_jsonl_client() -> WorkerClient {
     spawn_worker_command_with_hybrid_profile(
-        WorkerCommand::new("powershell.exe")
-            .arg("-NoProfile")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-Command")
-            .arg(MOCK_HOST_SCRIPT),
+        WorkerCommand::new(mock_ipc_binary())
+            .arg("--mode")
+            .arg("host"),
     )
     .expect("mock worker client must spawn")
 }
 
 fn mock_worker_command(worker_kind: &str, protocol_version: u32) -> WorkerCommand {
-    WorkerCommand::new("powershell.exe")
-        .arg("-NoProfile")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-Command")
-        .arg(MOCK_WORKER_SCRIPT)
+    WorkerCommand::new(mock_ipc_binary())
+        .arg("--mode")
+        .arg("worker")
         .env("MOCK_WORKER_KIND", worker_kind)
         .env("MOCK_WORKER_PROTOCOL_VERSION", protocol_version.to_string())
 }
@@ -60,6 +54,10 @@ fn mock_worker(worker_kind: &str) -> DirectWorkerFacade {
         worker_kind,
     )
     .expect("mock direct worker must spawn and emit ready")
+}
+
+fn mock_ipc_binary() -> &'static str {
+    env!("CARGO_BIN_EXE_easydict-ipc-mock")
 }
 
 struct EnvVarGuard {
@@ -153,307 +151,6 @@ fn spawn_direct_worker_with_hybrid_profile(
         EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
     DirectWorkerFacade::spawn_worker(command, worker_kind)
 }
-
-const MOCK_HOST_SCRIPT: &str = r#"
-# Packaged workers speak UTF-8 JSON Lines. Force UTF-8 on both streams so
-# the mock matches that contract on non-UTF-8 default locales (e.g. zh-CN GBK consoles),
-# otherwise non-ASCII payloads like translated text are emitted in the system codepage
-# and fail the Rust client's UTF-8 line reader.
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::InputEncoding = [System.Text.Encoding]::UTF8
-
-function Write-JsonLine($value) {
-    $json = $value | ConvertTo-Json -Compress -Depth 16
-    [Console]::Out.WriteLine($json)
-    [Console]::Out.Flush()
-}
-
-while (($line = [Console]::In.ReadLine()) -ne $null) {
-    if ([string]::IsNullOrWhiteSpace($line)) {
-        continue
-    }
-
-    try {
-        $request = $line | ConvertFrom-Json
-    }
-    catch {
-        Write-JsonLine ([ordered]@{
-            id = 'malformed'
-            error = [ordered]@{
-                code = 'invalid_json'
-                message = $_.Exception.Message
-            }
-        })
-        continue
-    }
-
-    switch ($request.method) {
-        'configure' {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{ ok = $true }
-            })
-        }
-        'translate' {
-            $text = [string]$request.params.text
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    translatedText = "mock:$text"
-                    serviceId = 'mock'
-                    serviceName = 'Mock Worker'
-                    detectedLanguage = 'English'
-                    timingMs = 7
-                }
-            })
-        }
-        'translate_stream' {
-            $text = [string]$request.params.text
-            Write-JsonLine ([ordered]@{
-                event = 'translate_chunk'
-                id = $request.id
-                data = [ordered]@{ text = 'mock:' }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'translate_chunk'
-                id = $request.id
-                data = [ordered]@{ text = $text }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'translate_done'
-                id = $request.id
-                data = [ordered]@{
-                    translatedText = "mock:$text"
-                    serviceId = 'mock'
-                    serviceName = 'Mock Worker'
-                    detectedLanguage = 'English'
-                    timingMs = 8
-                }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    translatedText = "mock:$text"
-                    serviceId = 'mock'
-                    serviceName = 'Mock Worker'
-                    detectedLanguage = 'English'
-                    timingMs = 8
-                }
-            })
-        }
-        'grammar_correct' {
-            $text = [string]$request.params.text
-            $language = [string]$request.params.language
-            Write-JsonLine ([ordered]@{
-                event = 'grammar_chunk'
-                id = $request.id
-                data = [ordered]@{ text = '[CORRECTED]' }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'grammar_chunk'
-                id = $request.id
-                data = [ordered]@{ text = 'I have an apple.' }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'grammar_done'
-                id = $request.id
-                data = [ordered]@{
-                    originalText = $text
-                    correctedText = 'I have an apple.'
-                    explanation = 'Use have with I and an before apple.'
-                    rawText = '[CORRECTED]I have an apple.[/CORRECTED]'
-                    serviceId = 'mock'
-                    serviceName = 'Mock Worker'
-                    language = $language
-                    timingMs = 9
-                    hasCorrections = $true
-                }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    originalText = $text
-                    correctedText = 'I have an apple.'
-                    explanation = 'Use have with I and an before apple.'
-                    rawText = '[CORRECTED]I have an apple.[/CORRECTED]'
-                    serviceId = 'mock'
-                    serviceName = 'Mock Worker'
-                    language = $language
-                    timingMs = 9
-                    hasCorrections = $true
-                }
-            })
-        }
-        'emit_event_then_translate' {
-            Write-JsonLine ([ordered]@{
-                event = 'chunk'
-                id = $request.id
-                data = [ordered]@{ text = 'mock:' }
-            })
-
-            $text = [string]$request.params.text
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    translatedText = "mock:$text"
-                    serviceId = 'mock'
-                    serviceName = 'Mock Worker'
-                    detectedLanguage = 'English'
-                    timingMs = 7
-                }
-            })
-        }
-        'fail_remote' {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                error = [ordered]@{
-                    code = 'service_error'
-                    message = 'mock service failed'
-                }
-            })
-        }
-        'exit_now' {
-            exit 0
-        }
-        default {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                error = [ordered]@{
-                    code = 'method_not_found'
-                    message = 'unknown method'
-                }
-            })
-        }
-    }
-}
-"#;
-
-const MOCK_WORKER_SCRIPT: &str = r#"
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::InputEncoding = [System.Text.Encoding]::UTF8
-
-function Write-JsonLine($value) {
-    $json = $value | ConvertTo-Json -Compress -Depth 16
-    [Console]::Out.WriteLine($json)
-    [Console]::Out.Flush()
-}
-
-$workerKind = if ([string]::IsNullOrWhiteSpace($env:MOCK_WORKER_KIND)) { 'longdoc' } else { $env:MOCK_WORKER_KIND }
-$protocolVersion = if ([string]::IsNullOrWhiteSpace($env:MOCK_WORKER_PROTOCOL_VERSION)) { 1 } else { [int]$env:MOCK_WORKER_PROTOCOL_VERSION }
-$capabilities = if (-not [string]::IsNullOrWhiteSpace($env:MOCK_WORKER_CAPABILITIES)) {
-    @($env:MOCK_WORKER_CAPABILITIES -split ',' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-}
-else {
-    if ($workerKind -eq 'localai') {
-        @('configure', 'translate_stream', 'grammar_stream', 'cancel', 'shutdown')
-    }
-    else {
-        @('configure', 'translate_document', 'cancel', 'shutdown')
-    }
-}
-
-Write-JsonLine ([ordered]@{
-    event = 'ready'
-    data = [ordered]@{
-        workerKind = $workerKind
-        workerVersion = '9.9.9'
-        protocolVersion = $protocolVersion
-        capabilities = $capabilities
-    }
-})
-
-while (($line = [Console]::In.ReadLine()) -ne $null) {
-    if ([string]::IsNullOrWhiteSpace($line)) {
-        continue
-    }
-
-    $request = $line | ConvertFrom-Json
-    switch ($request.method) {
-        'configure' {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{ ok = $true }
-            })
-        }
-        'translate_document' {
-            $outputPath = [string]$request.params.outputPath
-            Write-JsonLine ([ordered]@{
-                event = 'status'
-                id = $request.id
-                data = [ordered]@{ message = 'direct worker longdoc started' }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    state = 'Completed'
-                    outputPath = $outputPath
-                    bilingualOutputPath = $null
-                    totalChunks = 1
-                    succeededChunks = 1
-                    failedChunkIndexes = @()
-                    qualityReport = $null
-                }
-            })
-        }
-        'translate_stream' {
-            $text = [string]$request.params.text
-            Write-JsonLine ([ordered]@{
-                event = 'chunk'
-                id = $request.id
-                data = [ordered]@{ text = 'direct ' }
-            })
-            Write-JsonLine ([ordered]@{
-                event = 'chunk'
-                id = $request.id
-                data = [ordered]@{ text = "worker $text" }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    done = $true
-                    fullText = "direct worker $text"
-                }
-            })
-        }
-        'grammar_stream' {
-            Write-JsonLine ([ordered]@{
-                event = 'chunk'
-                id = $request.id
-                data = [ordered]@{ text = '[CORRECTED]Direct worker.[/CORRECTED]' }
-            })
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{
-                    done = $true
-                    fullText = '[CORRECTED]Direct worker.[/CORRECTED]'
-                }
-            })
-        }
-        'cancel' {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{ cancelled = $true }
-            })
-        }
-        'shutdown' {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                result = [ordered]@{ ok = $true }
-            })
-            break
-        }
-        default {
-            Write-JsonLine ([ordered]@{
-                id = $request.id
-                error = [ordered]@{
-                    code = 'method_not_found'
-                    message = "unknown direct worker method: $($request.method)"
-                }
-            })
-        }
-    }
-}
-"#;
 
 #[test]
 fn default_worker_paths_match_packaging_contract() {

@@ -1363,6 +1363,7 @@ dependencies = [
  "easydict_runtime_guards",
  "reqwest",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "zip 8.6.0",
 ]
@@ -6700,6 +6701,7 @@ dependencies = [
 name = "win_fluent_backend_iced"
 version = "0.1.0"
 dependencies = [
+ "easydict_windows_shell",
  "iced",
  "win_fluent",
  "win_fluent_platform_win",

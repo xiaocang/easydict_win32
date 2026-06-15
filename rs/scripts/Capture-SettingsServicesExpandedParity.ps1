@@ -137,6 +137,7 @@ $measureParams = @{
     MaxSurfaceDeltaRgb = $MaxSurfaceDeltaRgb
     MaxBoundsDriftDips = $MaxBoundsDriftDips
     UseSummaryBounds = $true
+    InferImageExpandedBodyBounds = $true
 }
 if ($FailOnSurfaceDrift) {
     $measureParams["FailOnSurfaceDrift"] = $true

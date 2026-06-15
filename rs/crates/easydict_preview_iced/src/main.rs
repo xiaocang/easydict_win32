@@ -262,7 +262,11 @@ impl Application for PreviewApp {
 
     fn new(flags: Self::Flags) -> (Self, Task<Self::Message>) {
         let preview_mode = preview_mode_requested();
-        let (inner, initial_task) = EasydictApp::new(flags);
+        let (inner, initial_task) = if preview_mode {
+            (EasydictApp { state: flags }, Task::none())
+        } else {
+            EasydictApp::new(flags)
+        };
         if preview_mode {
             dump_preview_schema_if_requested(&inner);
         }
@@ -556,6 +560,31 @@ mod tests {
             None::<&std::path::Path>,
             ["EASYDICT_PREVIEW_SCENARIO"]
         ));
+    }
+
+    #[test]
+    fn preview_app_skips_real_startup_side_effect_tasks() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let previous_scenario = std::env::var("EASYDICT_PREVIEW_SCENARIO").ok();
+        let previous_toggle = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT").ok();
+        let previous_scroll = std::env::var("EASYDICT_PREVIEW_SCROLL_PERCENT").ok();
+
+        std::env::set_var("EASYDICT_PREVIEW_SCENARIO", "initial");
+        std::env::remove_var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT");
+        std::env::remove_var("EASYDICT_PREVIEW_SCROLL_PERCENT");
+
+        let state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        let (_app, task) = PreviewApp::new(state);
+
+        restore_env("EASYDICT_PREVIEW_SCENARIO", previous_scenario);
+        restore_env("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT", previous_toggle);
+        restore_env("EASYDICT_PREVIEW_SCROLL_PERCENT", previous_scroll);
+
+        assert!(
+            matches!(task, Task::None),
+            "preview screenshots must not start production desktop integration tasks"
+        );
     }
 
     #[test]

@@ -153,6 +153,9 @@ msgstr "API Key (Optional)"
 msgid "settings.services.endpoint_optional"
 msgstr "Endpoint (Optional)"
 
+msgid "settings.services.endpoint_required"
+msgstr "Endpoint (Required)"
+
 msgid "settings.services.model"
 msgstr "Model"
 

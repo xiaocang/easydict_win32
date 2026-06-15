@@ -3,11 +3,12 @@ use easydict_app::browser_registrar::{
     firefox_registry_path, parse_browser_registrar_args, parse_chrome_ext_ids,
     rust_bridge_directory, serialize_cli_json, usage, BrowserRegistrarCommand,
     BrowserRegistrarCore, BrowserRegistrarParseError, BrowserRegistry, MemoryBrowserRegistry,
-    DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS, DEFAULT_FIREFOX_EXT_ID, NATIVE_HOST_NAME,
-    RUST_BRIDGE_ROOT_NAME, RUST_NATIVE_HOST_NAME,
+    CHROME_MANIFEST_FILE, DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS, DEFAULT_FIREFOX_EXT_ID,
+    NATIVE_HOST_NAME, RUST_BRIDGE_ROOT_NAME, RUST_NATIVE_HOST_NAME,
 };
 use serde_json::{json, Value};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -186,6 +187,30 @@ fn browser_registrar_binary_uses_rust_owned_registry_helper() {
         !registrar_bin.contains("WindowsPlatformAdapter"),
         "browser registrar binary should keep registry IO behind lib/easydict-windows-registry"
     );
+}
+
+#[test]
+fn browser_registrar_cli_returns_failure_exit_when_uninstall_reports_failure() {
+    let registrar_bin = include_str!("../src/bin/easydict_browser_registrar.rs");
+    let uninstall_branch = registrar_bin
+        .split("BrowserRegistrarCommand::Uninstall")
+        .nth(1)
+        .expect("uninstall branch should exist");
+
+    assert!(uninstall_branch.contains("let success = output.success"));
+    assert!(uninstall_branch.contains("ExitCode::from(1)"));
+}
+
+#[test]
+fn browser_registrar_cli_returns_failure_exit_when_status_reports_failure() {
+    let registrar_bin = include_str!("../src/bin/easydict_browser_registrar.rs");
+    let status_branch = registrar_bin
+        .split("BrowserRegistrarCommand::Status")
+        .nth(1)
+        .expect("status branch should exist");
+
+    assert!(status_branch.contains("let success = output.error.is_none()"));
+    assert!(status_branch.contains("ExitCode::from(1)"));
 }
 
 #[test]
@@ -402,7 +427,9 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
             "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
         }),
     );
-    assert!(!core.status().chrome.installed);
+    let status = core.status();
+    assert!(!status.chrome.installed);
+    assert!(status.error.is_none());
 
     write_json(
         &manifest_path,
@@ -414,7 +441,9 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
             "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
         }),
     );
-    assert!(!core.status().chrome.installed);
+    let status = core.status();
+    assert!(!status.chrome.installed);
+    assert!(status.error.is_none());
 
     let other_bridge_path = sandbox.path("other-easydict-native-bridge.exe");
     fs::write(&other_bridge_path, b"bridge").expect("write other bridge");
@@ -428,7 +457,9 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
             "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
         }),
     );
-    assert!(!core.status().chrome.installed);
+    let status = core.status();
+    assert!(!status.chrome.installed);
+    assert!(status.error.is_none());
 
     write_json(
         &manifest_path,
@@ -440,7 +471,9 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
             "allowed_origins": ["chrome-extension://custom-chrome-extension/"]
         }),
     );
-    assert!(core.status().chrome.installed);
+    let status = core.status();
+    assert!(status.chrome.installed);
+    assert!(status.error.is_none());
 }
 
 #[test]
@@ -464,6 +497,97 @@ fn status_accepts_manifests_with_custom_extension_ids() {
 }
 
 #[test]
+fn status_reports_registry_read_failures_instead_of_silent_uninstalled_state() {
+    let sandbox = TestSandbox::new("status_registry_read_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(
+        &bridge_dir,
+        ReadFailureRegistry::new(&chrome_registry_path()),
+    );
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let status = core.status();
+
+    assert!(!status.chrome.installed);
+    assert!(status
+        .error
+        .as_deref()
+        .expect("status error")
+        .contains("failed to read chrome native messaging registry key"));
+    let json: Value = serde_json::from_str(&serialize_cli_json(&status)).expect("status json");
+    assert_eq!(json["chrome"]["installed"], false);
+    assert!(json["error"]
+        .as_str()
+        .expect("json error")
+        .contains("registry key"));
+}
+
+#[test]
+fn status_reports_manifest_read_failures_instead_of_silent_uninstalled_state() {
+    let sandbox = TestSandbox::new("status_manifest_read_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let manifest_path = bridge_dir.join(CHROME_MANIFEST_FILE);
+    fs::remove_file(&manifest_path).expect("replace manifest file");
+    fs::create_dir(&manifest_path).expect("create conflicting manifest directory");
+
+    let status = core.status();
+
+    assert!(!status.chrome.installed);
+    assert!(status
+        .error
+        .as_deref()
+        .expect("status error")
+        .contains("failed to read chrome native messaging manifest"));
+}
+
+#[test]
+fn status_reports_manifest_parse_failures_instead_of_silent_uninstalled_state() {
+    let sandbox = TestSandbox::new("status_manifest_parse_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    fs::write(bridge_dir.join(CHROME_MANIFEST_FILE), b"{not valid json")
+        .expect("write invalid manifest json");
+
+    let status = core.status();
+
+    assert!(!status.chrome.installed);
+    assert!(status
+        .error
+        .as_deref()
+        .expect("status error")
+        .contains("failed to parse chrome native messaging manifest"));
+}
+
+#[test]
 fn uninstall_removes_selected_browser_and_cleans_directory_when_none_remain() {
     let sandbox = TestSandbox::new("uninstall");
     let source_bridge = sandbox.write_source_bridge();
@@ -479,15 +603,176 @@ fn uninstall_removes_selected_browser_and_cleans_directory_when_none_remain() {
     );
 
     let chrome = core.uninstall(true, false);
+    assert!(chrome.success);
+    assert!(chrome.error.is_none());
     assert_eq!(chrome.uninstalled, ["chrome"]);
     assert!(core.registry().value(&chrome_registry_path()).is_none());
     assert!(core.registry().value(&firefox_registry_path()).is_some());
     assert!(bridge_dir.exists());
 
     let firefox = core.uninstall(false, true);
+    assert!(firefox.success);
+    assert!(firefox.error.is_none());
     assert_eq!(firefox.uninstalled, ["firefox"]);
     assert!(core.registry().value(&firefox_registry_path()).is_none());
     assert!(!bridge_dir.exists());
+}
+
+#[test]
+fn uninstall_reports_registry_delete_failures_without_claiming_browser_success() {
+    let sandbox = TestSandbox::new("uninstall_registry_delete_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(
+        &bridge_dir,
+        DeleteFailureRegistry::new(&chrome_registry_path()),
+    );
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let output = core.uninstall(true, false);
+
+    assert!(!output.success);
+    assert!(output.uninstalled.is_empty());
+    let error = output.error.as_deref().expect("cleanup error");
+    assert!(error.contains("failed to delete chrome native messaging registry key"));
+    let expected_manifest_path = bridge_dir.join(CHROME_MANIFEST_FILE).display().to_string();
+    assert_eq!(
+        core.registry().value(&chrome_registry_path()),
+        Some(expected_manifest_path.as_str())
+    );
+    assert!(bridge_dir.exists());
+
+    let json: Value = serde_json::from_str(&serialize_cli_json(&output)).expect("error json");
+    assert_eq!(json["success"], false);
+    assert_eq!(json["uninstalled"], json!([]));
+    assert!(json["error"]
+        .as_str()
+        .expect("json error")
+        .contains("registry key"));
+}
+
+#[test]
+fn uninstall_reports_manifest_delete_failures_before_reporting_success() {
+    let sandbox = TestSandbox::new("uninstall_manifest_delete_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let manifest_path = bridge_dir.join(CHROME_MANIFEST_FILE);
+    fs::remove_file(&manifest_path).expect("replace manifest file");
+    fs::create_dir(&manifest_path).expect("create conflicting manifest directory");
+
+    let output = core.uninstall(true, false);
+
+    assert!(!output.success);
+    assert!(output.uninstalled.is_empty());
+    assert!(output
+        .error
+        .as_deref()
+        .expect("cleanup error")
+        .contains("failed to delete chrome native messaging manifest"));
+    assert!(core.registry().value(&chrome_registry_path()).is_none());
+    assert!(
+        bridge_dir.exists(),
+        "bridge directory cleanup should wait when manifest deletion failed"
+    );
+}
+
+#[test]
+fn uninstall_reports_registry_read_failures_without_cleaning_bridge_directory() {
+    let sandbox = TestSandbox::new("uninstall_registry_read_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(
+        &bridge_dir,
+        ReadFailureRegistry::new(&chrome_registry_path()),
+    );
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let output = core.uninstall(true, false);
+
+    assert!(!output.success);
+    assert!(output.uninstalled.is_empty());
+    assert!(output
+        .error
+        .as_deref()
+        .expect("cleanup error")
+        .contains("failed to read chrome native messaging registry key"));
+    assert!(bridge_dir.exists());
+}
+
+#[test]
+fn uninstall_reports_remaining_browser_status_failures_before_removing_bridge_directory() {
+    let sandbox = TestSandbox::new("uninstall_remaining_status_failure");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(
+        &bridge_dir,
+        ReadFailureRegistry::new(&firefox_registry_path()),
+    );
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    let output = core.uninstall(true, false);
+
+    assert!(!output.success);
+    assert_eq!(output.uninstalled, ["chrome"]);
+    assert!(output
+        .error
+        .as_deref()
+        .expect("cleanup error")
+        .contains("failed to read firefox native messaging registry key"));
+    assert!(
+        bridge_dir.exists(),
+        "bridge directory should remain until the other browser status can be trusted"
+    );
+}
+
+#[test]
+fn uninstall_reports_bridge_directory_cleanup_failures() {
+    let sandbox = TestSandbox::new("uninstall_bridge_directory_cleanup_failure");
+    let bridge_dir = sandbox.path("browser-bridge");
+    fs::write(&bridge_dir, b"not a directory").expect("create conflicting bridge path");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    let output = core.uninstall(true, true);
+
+    assert!(!output.success);
+    assert!(output.uninstalled.is_empty());
+    assert!(output
+        .error
+        .as_deref()
+        .expect("cleanup error")
+        .contains("failed to remove browser bridge directory"));
+    assert!(bridge_dir.exists());
 }
 
 #[test]
@@ -524,6 +809,8 @@ fn uninstall_preserves_foreign_native_messaging_registration() {
 
     let output = core.uninstall(true, false);
 
+    assert!(output.success);
+    assert!(output.error.is_none());
     assert!(output.uninstalled.is_empty());
     assert_eq!(
         core.registry().value(&chrome_registry_path()),
@@ -568,6 +855,8 @@ fn status_and_uninstall_ignore_legacy_dotnet_native_messaging_keys() {
     assert!(!status.firefox.installed);
 
     let uninstall = core.uninstall(true, true);
+    assert!(uninstall.success);
+    assert!(uninstall.error.is_none());
     assert!(uninstall.uninstalled.is_empty());
     assert_eq!(
         core.registry().value(&legacy_chrome_key),
@@ -808,5 +1097,79 @@ impl TestSandbox {
 impl Drop for TestSandbox {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+struct DeleteFailureRegistry {
+    inner: MemoryBrowserRegistry,
+    failing_key: String,
+}
+
+impl DeleteFailureRegistry {
+    fn new(failing_key: &str) -> Self {
+        Self {
+            inner: MemoryBrowserRegistry::default(),
+            failing_key: failing_key.to_string(),
+        }
+    }
+
+    fn value(&self, key_path: &str) -> Option<&str> {
+        self.inner.value(key_path)
+    }
+}
+
+impl BrowserRegistry for DeleteFailureRegistry {
+    fn write_default_value(&mut self, key_path: &str, value: &str) -> io::Result<()> {
+        self.inner.write_default_value(key_path, value)
+    }
+
+    fn delete_key(&mut self, key_path: &str) -> io::Result<()> {
+        if key_path == self.failing_key {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "simulated registry delete failure",
+            ));
+        }
+
+        self.inner.delete_key(key_path)
+    }
+
+    fn read_default_value(&self, key_path: &str) -> io::Result<Option<String>> {
+        self.inner.read_default_value(key_path)
+    }
+}
+
+struct ReadFailureRegistry {
+    inner: MemoryBrowserRegistry,
+    failing_key: String,
+}
+
+impl ReadFailureRegistry {
+    fn new(failing_key: &str) -> Self {
+        Self {
+            inner: MemoryBrowserRegistry::default(),
+            failing_key: failing_key.to_string(),
+        }
+    }
+}
+
+impl BrowserRegistry for ReadFailureRegistry {
+    fn write_default_value(&mut self, key_path: &str, value: &str) -> io::Result<()> {
+        self.inner.write_default_value(key_path, value)
+    }
+
+    fn delete_key(&mut self, key_path: &str) -> io::Result<()> {
+        self.inner.delete_key(key_path)
+    }
+
+    fn read_default_value(&self, key_path: &str) -> io::Result<Option<String>> {
+        if key_path == self.failing_key {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "simulated registry read failure",
+            ));
+        }
+
+        self.inner.read_default_value(key_path)
     }
 }

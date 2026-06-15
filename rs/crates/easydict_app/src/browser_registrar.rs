@@ -295,7 +295,7 @@ where
         match bridge_file_has_retained_runtime_marker(&bridge_path) {
             Ok(false) => {}
             Ok(true) => {
-                delete_file(&bridge_path);
+                let _ = delete_file(&bridge_path);
                 return InstallOutput::error(format!(
                     "Staged bridge contains retained payload or script markers: {}",
                     bridge_path.display()
@@ -341,6 +341,7 @@ where
 
     pub fn uninstall(&mut self, chrome: bool, firefox: bool) -> UninstallOutput {
         let mut uninstalled = Vec::new();
+        let mut errors = Vec::new();
 
         if chrome {
             self.uninstall_browser_if_owned(
@@ -348,6 +349,7 @@ where
                 CHROME_MANIFEST_FILE,
                 "chrome",
                 &mut uninstalled,
+                &mut errors,
             );
         }
 
@@ -357,31 +359,43 @@ where
                 FIREFOX_MANIFEST_FILE,
                 "firefox",
                 &mut uninstalled,
+                &mut errors,
             );
         }
 
-        if !self.is_registered(&chrome_registry_path())
-            && !self.is_registered(&firefox_registry_path())
-        {
-            let _ = fs::remove_dir_all(&self.bridge_directory);
+        if errors.is_empty() {
+            let (chrome_status, chrome_errors) =
+                self.status_entry_for_browser(&chrome_registry_path(), "chrome");
+            let (firefox_status, firefox_errors) =
+                self.status_entry_for_browser(&firefox_registry_path(), "firefox");
+            errors.extend(chrome_errors);
+            errors.extend(firefox_errors);
+
+            if errors.is_empty() && !chrome_status.installed && !firefox_status.installed {
+                if let Err(error) = remove_directory(&self.bridge_directory) {
+                    errors.push(format!(
+                        "failed to remove browser bridge directory {}: {error}",
+                        self.bridge_directory.display()
+                    ));
+                }
+            }
         }
 
-        UninstallOutput {
-            success: true,
-            uninstalled,
-        }
+        UninstallOutput::from_cleanup(uninstalled, errors)
     }
 
     pub fn status(&self) -> StatusOutput {
+        let (chrome, mut errors) = self.status_entry_for_browser(&chrome_registry_path(), "chrome");
+        let (firefox, firefox_errors) =
+            self.status_entry_for_browser(&firefox_registry_path(), "firefox");
+        errors.extend(firefox_errors);
+
         StatusOutput {
-            chrome: BrowserStatusEntry {
-                installed: self.is_registered(&chrome_registry_path()),
-            },
-            firefox: BrowserStatusEntry {
-                installed: self.is_registered(&firefox_registry_path()),
-            },
+            chrome,
+            firefox,
             bridge_exists: self.bridge_exe_path().exists(),
             bridge_directory: self.bridge_directory.display().to_string(),
+            error: (!errors.is_empty()).then(|| errors.join("; ")),
         }
     }
 
@@ -414,25 +428,61 @@ where
         Ok(path.display().to_string())
     }
 
-    fn is_registered(&self, registry_path: &str) -> bool {
-        let Ok(Some(manifest_path)) = self.registry.read_default_value(registry_path) else {
-            return false;
-        };
-        let Ok(json) = fs::read_to_string(&manifest_path) else {
-            return false;
-        };
-        let Ok(manifest) = serde_json::from_str::<ManifestIntegrityProbe>(&json) else {
-            return false;
-        };
-
-        self.manifest_integrity_is_valid(&manifest)
-    }
-
     fn manifest_integrity_is_valid(&self, manifest: &ManifestIntegrityProbe) -> bool {
         manifest.name == NATIVE_HOST_NAME
             && manifest.manifest_type == "stdio"
             && path_points_to_bridge(Path::new(&manifest.path), &self.bridge_exe_path())
             && bridge_file_is_rust_native(&self.bridge_exe_path())
+    }
+
+    fn status_entry_for_browser(
+        &self,
+        registry_path: &str,
+        browser_name: &str,
+    ) -> (BrowserStatusEntry, Vec<String>) {
+        let manifest_path = match self.registry.read_default_value(registry_path) {
+            Ok(Some(value)) => value,
+            Ok(None) => return (BrowserStatusEntry { installed: false }, Vec::new()),
+            Err(error) => {
+                return (
+                    BrowserStatusEntry { installed: false },
+                    vec![format!(
+                        "failed to read {browser_name} native messaging registry key {registry_path}: {error}"
+                    )],
+                );
+            }
+        };
+
+        let json = match fs::read_to_string(&manifest_path) {
+            Ok(json) => json,
+            Err(error) => {
+                return (
+                    BrowserStatusEntry { installed: false },
+                    vec![format!(
+                        "failed to read {browser_name} native messaging manifest {manifest_path}: {error}"
+                    )],
+                );
+            }
+        };
+
+        let manifest = match serde_json::from_str::<ManifestIntegrityProbe>(&json) {
+            Ok(manifest) => manifest,
+            Err(error) => {
+                return (
+                    BrowserStatusEntry { installed: false },
+                    vec![format!(
+                        "failed to parse {browser_name} native messaging manifest {manifest_path}: {error}"
+                    )],
+                );
+            }
+        };
+
+        (
+            BrowserStatusEntry {
+                installed: self.manifest_integrity_is_valid(&manifest),
+            },
+            Vec::new(),
+        )
     }
 
     fn uninstall_browser_if_owned(
@@ -441,25 +491,51 @@ where
         manifest_file: &str,
         browser_name: &str,
         uninstalled: &mut Vec<String>,
+        errors: &mut Vec<String>,
     ) {
-        if !self.registry_points_to_owned_manifest(registry_path, manifest_file) {
+        match self.registry_points_to_owned_manifest(registry_path, manifest_file) {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(error) => {
+                errors.push(format!(
+                    "failed to read {browser_name} native messaging registry key {registry_path}: {error}"
+                ));
+                return;
+            }
+        }
+
+        if let Err(error) = self.registry.delete_key(registry_path) {
+            errors.push(format!(
+                "failed to delete {browser_name} native messaging registry key {registry_path}: {error}"
+            ));
             return;
         }
 
-        let _ = self.registry.delete_key(registry_path);
-        delete_file(self.bridge_directory.join(manifest_file));
+        let manifest_path = self.bridge_directory.join(manifest_file);
+        if let Err(error) = delete_file(&manifest_path) {
+            errors.push(format!(
+                "failed to delete {browser_name} native messaging manifest {}: {error}",
+                manifest_path.display()
+            ));
+            return;
+        }
+
         uninstalled.push(browser_name.to_string());
     }
 
-    fn registry_points_to_owned_manifest(&self, registry_path: &str, manifest_file: &str) -> bool {
-        let Ok(Some(manifest_path)) = self.registry.read_default_value(registry_path) else {
-            return false;
+    fn registry_points_to_owned_manifest(
+        &self,
+        registry_path: &str,
+        manifest_file: &str,
+    ) -> io::Result<bool> {
+        let Some(manifest_path) = self.registry.read_default_value(registry_path)? else {
+            return Ok(false);
         };
 
-        path_matches(
+        Ok(path_matches(
             Path::new(&manifest_path),
             &self.bridge_directory.join(manifest_file),
-        )
+        ))
     }
 }
 
@@ -504,6 +580,18 @@ impl InstallOutput {
 pub struct UninstallOutput {
     pub success: bool,
     pub uninstalled: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl UninstallOutput {
+    fn from_cleanup(uninstalled: Vec<String>, errors: Vec<String>) -> Self {
+        Self {
+            success: errors.is_empty(),
+            uninstalled,
+            error: (!errors.is_empty()).then(|| errors.join("; ")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -517,6 +605,8 @@ pub struct StatusOutput {
     pub firefox: BrowserStatusEntry,
     pub bridge_exists: bool,
     pub bridge_directory: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -601,10 +691,20 @@ fn write_manifest_file<T: Serialize>(path: &Path, manifest: &T) -> io::Result<()
     fs::write(path, json)
 }
 
-fn delete_file(path: impl AsRef<Path>) {
+fn delete_file(path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
-    if path.exists() {
-        let _ = fs::remove_file(path);
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+fn remove_directory(path: impl AsRef<Path>) -> io::Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
     }
 }
 

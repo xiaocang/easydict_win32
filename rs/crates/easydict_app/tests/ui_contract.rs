@@ -21,10 +21,13 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert!(snapshot.contains("id=\"main.header\""));
     assert!(snapshot.contains("id=\"ModeMenuButton\""));
     assert!(snapshot.contains("id=\"ModeTitleText\""));
-    assert!(snapshot
-        .contains("Text value=\"Easydict\" style=Subtitle selectable=false id=\"ModeTitleText\""));
+    assert_control_contains(&snapshot, "ModeTitleText", "value=\"Easydict\"");
+    assert_control_contains(&snapshot, "ModeTitleText", "style=Subtitle");
+    assert_control_contains(&snapshot, "ModeTitleText", "selectable=false");
     assert!(snapshot.contains("quick:\"🌐  Translate\":Radio:checked=true"));
     assert!(snapshot.contains("id=\"SettingsButton\""));
+    assert_control_contains(&snapshot, "SettingsButton", "width=Fixed(36)");
+    assert_control_contains(&snapshot, "SettingsButton", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"QuickInputCard\""));
     assert_control_contains(&snapshot, "QuickInputCard", "kind=Elevated");
     assert_control_contains(&snapshot, "QuickInputCard", "content_spacing=4");
@@ -35,21 +38,31 @@ fn main_quick_translate_matches_current_xaml_surface() {
     assert!(snapshot.contains("id=\"InputTextBox\""));
     assert_control_contains(&snapshot, "InputTextBox", "key_bindings=Enter");
     assert_control_contains(&snapshot, "InputTextBox", "focused=true");
-    assert_control_contains(&snapshot, "InputTextBox", "height=Fixed(88)");
-    assert_control_contains(&snapshot, "InputTextBox", "min_height=88");
-    assert_control_contains(&snapshot, "InputTextBox", "max_height=104");
+    assert_control_contains(&snapshot, "InputTextBox", "height=Fixed(96)");
+    assert_control_contains(&snapshot, "InputTextBox", "min_height=96");
+    assert_control_contains(&snapshot, "InputTextBox", "max_height=112");
     assert_control_contains(&snapshot, "InputTextBox", "chrome=Standard");
+    assert_control_contains(&snapshot, "main.quick.play_source", "width=Fixed(28)");
+    assert_control_contains(&snapshot, "main.quick.play_source", "height=Fixed(28)");
     assert!(snapshot.contains("AdaptiveSwitch breakpoint_width=360"));
     assert!(snapshot.contains("id=\"SourceLangCombo\""));
-    assert_control_contains(&snapshot, "SourceLangCombo", "width=Fixed(126)");
+    assert_control_contains(&snapshot, "SourceLangCombo", "width=Fixed(130)");
+    assert_control_contains(&snapshot, "SourceLangCombo", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"SourceLangComboNarrow\""));
     assert_control_contains(&snapshot, "SourceLangComboNarrow", "width=Fill");
+    assert_control_contains(&snapshot, "SourceLangComboNarrow", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"SwapLanguageButton\""));
+    assert_control_contains(&snapshot, "SwapLanguageButton", "width=Fixed(36)");
+    assert_control_contains(&snapshot, "SwapLanguageButton", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"SwapLanguageButtonNarrow\""));
+    assert_control_contains(&snapshot, "SwapLanguageButtonNarrow", "width=Fixed(36)");
+    assert_control_contains(&snapshot, "SwapLanguageButtonNarrow", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"TargetLangCombo\""));
-    assert_control_contains(&snapshot, "TargetLangCombo", "width=Fixed(126)");
+    assert_control_contains(&snapshot, "TargetLangCombo", "width=Fixed(130)");
+    assert_control_contains(&snapshot, "TargetLangCombo", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"TargetLangComboNarrow\""));
     assert_control_contains(&snapshot, "TargetLangComboNarrow", "width=Fill");
+    assert_control_contains(&snapshot, "TargetLangComboNarrow", "height=Fixed(36)");
     assert!(snapshot.contains("id=\"TranslateButton\""));
     assert!(snapshot.contains("id=\"TranslateButtonNarrow\""));
     assert_control_contains(&snapshot, "TranslateButton", "kind=PrimaryRound");
@@ -91,14 +104,18 @@ fn main_quick_translate_uses_dotnet_aligned_input_and_responsive_language_widths
     let state = EasydictUiState::default();
     let snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
 
-    assert_control_contains(&snapshot, "InputTextBox", "min_height=88");
-    assert_control_contains(&snapshot, "InputTextBox", "height=Fixed(88)");
-    assert_control_contains(&snapshot, "InputTextBox", "max_height=104");
+    assert_control_contains(&snapshot, "InputTextBox", "min_height=96");
+    assert_control_contains(&snapshot, "InputTextBox", "height=Fixed(96)");
+    assert_control_contains(&snapshot, "InputTextBox", "max_height=112");
     assert_control_contains(&snapshot, "InputTextBox", "chrome=Standard");
-    assert_control_contains(&snapshot, "SourceLangCombo", "width=Fixed(126)");
-    assert_control_contains(&snapshot, "TargetLangCombo", "width=Fixed(126)");
+    assert_control_contains(&snapshot, "SourceLangCombo", "width=Fixed(130)");
+    assert_control_contains(&snapshot, "SourceLangCombo", "height=Fixed(36)");
+    assert_control_contains(&snapshot, "TargetLangCombo", "width=Fixed(130)");
+    assert_control_contains(&snapshot, "TargetLangCombo", "height=Fixed(36)");
     assert_control_contains(&snapshot, "SourceLangComboNarrow", "width=Fill");
+    assert_control_contains(&snapshot, "SourceLangComboNarrow", "height=Fixed(36)");
     assert_control_contains(&snapshot, "TargetLangComboNarrow", "width=Fill");
+    assert_control_contains(&snapshot, "TargetLangComboNarrow", "height=Fixed(36)");
     assert_control_contains(&snapshot, "LanguageHelpButton", "Text value=\"?\"");
 }
 
@@ -846,8 +863,6 @@ fn services_settings_default_view_matches_winui_overview_structure() {
     assert_control_contains(&snapshot, "DeepLServiceExpander", "icon=service-deepl");
     assert_control_contains(&snapshot, "DeepLServiceExpander", "hovered=false");
     assert_control_contains(&snapshot, "DeepLServiceExpander", "pressed=false");
-    assert_control_not_contains(&snapshot, "OpenAIServiceExpander", "header-surface-");
-    assert_control_not_contains(&snapshot, "DeepSeekServiceExpander", "header-surface-");
     assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "hovered=false");
     assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "pressed=false");
     assert_control_contains(
@@ -876,6 +891,24 @@ fn services_settings_default_view_matches_winui_overview_structure() {
         "WindowsLocalAIExpander",
         "icon=service-windows-local-ai",
     );
+    for (id, icon) in [
+        ("OllamaServiceExpander", "icon=service-ollama"),
+        ("OpenAIServiceExpander", "icon=service-openai"),
+        ("DeepSeekServiceExpander", "icon=service-deepseek"),
+        ("GroqServiceExpander", "icon=service-groq"),
+        ("ZhipuServiceExpander", "icon=service-zhipu"),
+        ("GitHubModelsServiceExpander", "icon=service-github"),
+        ("GeminiServiceExpander", "icon=service-gemini"),
+        ("CustomOpenAIServiceExpander", "icon=service-custom-openai"),
+        ("BuiltInAIServiceExpander", "icon=service-builtin-ai"),
+        ("DoubaoServiceExpander", "icon=service-doubao"),
+        ("CaiyunServiceExpander", "icon=service-caiyun"),
+        ("NiuTransServiceExpander", "icon=service-niutrans"),
+        ("YoudaoServiceExpander", "icon=service-youdao"),
+        ("VolcanoServiceExpander", "icon=service-volcano"),
+    ] {
+        assert_control_contains(&snapshot, id, icon);
+    }
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "⚠");
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "style=Warning");
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "width=Fixed(20)");
@@ -1104,7 +1137,6 @@ fn services_settings_local_ai_exposes_provider_configuration() {
     }
 
     assert_control_contains(&snapshot, "WindowsLocalAIExpander", "expanded=true");
-    assert_control_not_contains(&snapshot, "WindowsLocalAIExpander", "content-surface-");
     assert_control_contains(
         &snapshot,
         "settings.services.local_ai.content",
@@ -1306,7 +1338,6 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
         "Auto-detect picks /responses when the endpoint URL ends",
     );
     assert_control_contains(&snapshot, "OpenAIHelpText", "wrapping=None");
-    assert_control_not_contains(&snapshot, "OpenAIServiceExpander", "header-surface-");
     assert_control_contains(&snapshot, "TestOpenAIButton", "height=Fixed(29)");
     assert_control_contains(&snapshot, "OllamaEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "OllamaEndpointHeaderText", "Endpoint");
@@ -1458,36 +1489,26 @@ fn services_settings_render_llm_provider_configuration_rows() {
     }
 
     assert_control_contains(&snapshot, "DeepSeekKeyBox", "action=text_input");
-    for id in [
-        "DeepSeekServiceExpander",
-        "GroqServiceExpander",
-        "GeminiServiceExpander",
-    ] {
-        assert_control_not_contains(&snapshot, id, "header-surface-");
-    }
     assert_control_contains(&snapshot, "CustomOpenAIEndpointBox", "action=text_input");
     assert_control_contains(
         &snapshot,
         "CustomOpenAIEndpointHeaderText",
-        "Endpoint (Optional)",
+        "Endpoint (Required)",
     );
+    assert_snapshot_order(&snapshot, "CustomOpenAIEndpointBox", "CustomOpenAIKeyBox");
+    assert_snapshot_order(&snapshot, "CustomOpenAIKeyBox", "CustomOpenAIModelBox");
     assert_control_contains(&snapshot, "CustomOpenAIModelHeaderText", "Model");
-    assert_control_not_contains(&snapshot, "CustomOpenAIServiceExpander", "header-surface-");
-    assert_control_not_contains(&snapshot, "BuiltInAIServiceExpander", "header-surface-");
-    assert_control_not_contains(
-        &snapshot,
-        "BuiltInAIServiceExpander",
-        "content_style=info-bar",
-    );
+    assert_control_contains(&snapshot, "CustomOpenAIModelBox", "action=text_input");
     assert_control_contains(&snapshot, "DoubaoEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "DoubaoEndpointHeaderText", "Endpoint (Optional)");
     assert_control_contains(&snapshot, "DoubaoModelHeaderText", "Model");
-    assert_control_not_contains(&snapshot, "DoubaoServiceExpander", "header-surface-");
+    assert_control_contains(&snapshot, "DoubaoModelBox", "action=text_input");
     assert_control_contains(&snapshot, "GitHubModelsModelCombo", "selected=\"gpt-4.1\"");
+    assert_control_contains(&snapshot, "BuiltInModelCombo", "glm-4-flash-250414 (GLM)");
     assert_control_contains(
         &snapshot,
-        "DoubaoModelBox",
-        "selected=\"doubao-seed-translation-250915\"",
+        "BuiltInModelCombo",
+        "llama-3.3-70b-versatile (Groq)",
     );
     assert_control_contains(&snapshot, "BuiltInAIHintMessageText", "limited free quota");
     assert_control_contains(&snapshot, "BuiltInDescriptionText", "open.bigmodel.cn");
@@ -1623,26 +1644,6 @@ fn services_settings_expander_surface_tokens_match_winui_reference_scheme() {
         "VolcanoServiceExpander",
     ] {
         assert_control_not_contains(&snapshot, id, "header-surface-");
-    }
-
-    for id in [
-        "DeepLServiceExpander",
-        "WindowsLocalAIExpander",
-        "OllamaServiceExpander",
-        "OpenAIServiceExpander",
-        "DeepSeekServiceExpander",
-        "GroqServiceExpander",
-        "ZhipuServiceExpander",
-        "GitHubModelsServiceExpander",
-        "GeminiServiceExpander",
-        "CustomOpenAIServiceExpander",
-        "BuiltInAIServiceExpander",
-        "DoubaoServiceExpander",
-        "CaiyunServiceExpander",
-        "NiuTransServiceExpander",
-        "YoudaoServiceExpander",
-        "VolcanoServiceExpander",
-    ] {
         assert_control_not_contains(&snapshot, id, "content-surface-");
         assert_control_not_contains(&snapshot, id, "content_style=info-bar");
     }
@@ -1687,12 +1688,8 @@ fn services_settings_render_traditional_http_provider_configuration() {
     }
 
     assert_control_contains(&snapshot, "CaiyunKeyBox", "action=text_input");
-    assert_control_not_contains(&snapshot, "CaiyunServiceExpander", "header-surface-");
-    assert_control_not_contains(&snapshot, "CaiyunServiceExpander", "content-surface-");
     assert_control_contains(&snapshot, "NiuTransKeyBox", "action=text_input");
-    assert_control_not_contains(&snapshot, "NiuTransServiceExpander", "content-surface-");
     assert_control_contains(&snapshot, "YoudaoAppKeyBox", "action=text_input");
-    assert_control_not_contains(&snapshot, "YoudaoServiceExpander", "content-surface-");
     assert_control_contains(&snapshot, "YoudaoAppSecretBox", "action=text_input");
     assert_control_contains(&snapshot, "YoudaoUseOfficialApiToggle", "checked=false");
 
@@ -2540,8 +2537,9 @@ fn long_document_mode_keeps_file_controls_output_and_history() {
     let snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
 
     assert!(snapshot.contains("Text value=\"📄\""));
-    assert!(snapshot
-        .contains("Text value=\"Easydict\" style=Subtitle selectable=false id=\"ModeTitleText\""));
+    assert_control_contains(&snapshot, "ModeTitleText", "value=\"Easydict\"");
+    assert_control_contains(&snapshot, "ModeTitleText", "style=Subtitle");
+    assert_control_contains(&snapshot, "ModeTitleText", "selectable=false");
     assert!(snapshot.contains("Text value=\"Long Document\" style=Caption"));
     assert!(snapshot.contains("long-document:\"📄  Long Document\":Radio:checked=true"));
     assert!(snapshot.contains("title=\"📝 Source Text\""));
@@ -3175,6 +3173,19 @@ fn assert_control_not_contains(snapshot: &str, id: &str, unexpected: &str) {
     assert!(
         !line.contains(unexpected),
         "control {id} unexpectedly contained {unexpected}; line was {line}"
+    );
+}
+
+fn assert_snapshot_order(snapshot: &str, first_id: &str, second_id: &str) {
+    let first = snapshot
+        .find(&format!("id=\"{first_id}\""))
+        .unwrap_or_else(|| panic!("missing control id {first_id}\n{snapshot}"));
+    let second = snapshot
+        .find(&format!("id=\"{second_id}\""))
+        .unwrap_or_else(|| panic!("missing control id {second_id}\n{snapshot}"));
+    assert!(
+        first < second,
+        "expected {first_id} before {second_id} in snapshot"
     );
 }
 

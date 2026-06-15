@@ -58,6 +58,26 @@ fn terminal_detection_handles_versioned_and_normalized_names() {
 }
 
 #[test]
+fn powershell_terminal_names_are_classification_only_and_skip_clipboard_shortcuts() {
+    let suppression = TextSelectionSuppressionTracker::new();
+    let current_pid = 42;
+
+    for process in ["powershell", "PowerShell", "pwsh", "PWSH"] {
+        assert!(
+            is_terminal_process_name(Some(process)),
+            "{process} should be classified as a terminal process"
+        );
+
+        let target = TextSelectionTarget::new(Some(process), Some(100), current_pid);
+        assert_eq!(
+            build_text_selection_plan(&target, &suppression, 1_000),
+            TextSelectionPlan::Attempts(vec![TextSelectionAttempt::Uia]),
+            "{process} should use UIA-only terminal capture without clipboard Ctrl+C"
+        );
+    }
+}
+
+#[test]
 fn electron_detection_uses_dotnet_exact_process_catalog() {
     assert!(is_electron_process_name(Some("Code")));
     assert!(is_electron_process_name(Some("code - insiders")));

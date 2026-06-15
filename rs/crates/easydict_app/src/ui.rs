@@ -740,6 +740,8 @@ fn main_header(state: &EasydictUiState) -> View<Message> {
                 .id("SettingsButton")
                 .icon(icon::settings())
                 .icon_only()
+                .width(Length::Fixed(36))
+                .height(Length::Fixed(36))
                 .tooltip(tr("main.settings", "Settings"))
                 .on_press(Message::OpenSettings),
         ))
@@ -844,8 +846,8 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
             "main.source_placeholder",
             "Enter or paste text to translate...",
         ))
-        .min_height(88)
-        .max_height(104)
+        .min_height(96)
+        .max_height(112)
         .text_style(TextStyle::BodyLarge)
         .state(source_text_state)
         .on_key(
@@ -911,6 +913,8 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
                 .id("main.quick.play_source")
                 .icon(icon::play())
                 .icon_only()
+                .width(Length::Fixed(28))
+                .height(Length::Fixed(28))
                 .tooltip("Play source text")
                 .on_press(Message::SpeakResult)
                 .into_view(),
@@ -1476,19 +1480,23 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .id("SourceLangCombo")
             .label("Source Language")
             .selected(state.source_language.clone())
-            .width(Length::Fixed(126))
+            .width(Length::Fixed(130))
+            .height(Length::Fixed(36))
             .on_change(Message::SourceLanguageChanged),
         button("Swap languages")
             .id("SwapLanguageButton")
             .icon(icon::swap())
             .icon_only()
+            .width(Length::Fixed(36))
+            .height(Length::Fixed(36))
             .tooltip("Swap source and target languages")
             .on_press(Message::SwapLanguages),
         combo_box(selected_language_items(true, &state.settings))
             .id("TargetLangCombo")
             .label("Target Language")
             .selected(state.target_language.clone())
-            .width(Length::Fixed(126))
+            .width(Length::Fixed(130))
+            .height(Length::Fixed(36))
             .on_change(Message::TargetLanguageChanged),
     ];
     if state.settings.theme != ThemeMode::Minimal {
@@ -1513,11 +1521,14 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
             .label("Source Language")
             .selected(state.source_language.clone())
             .width(Length::Fill)
+            .height(Length::Fixed(36))
             .on_change(Message::SourceLanguageChanged),
         button("Swap languages")
             .id("SwapLanguageButtonNarrow")
             .icon(icon::swap())
             .icon_only()
+            .width(Length::Fixed(36))
+            .height(Length::Fixed(36))
             .tooltip("Swap source and target languages")
             .on_press(Message::SwapLanguages),
         combo_box(selected_language_items(true, &state.settings))
@@ -1525,6 +1536,7 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
             .label("Target Language")
             .selected(state.target_language.clone())
             .width(Length::Fill)
+            .height(Length::Fixed(36))
             .on_change(Message::TargetLanguageChanged),
     ];
     if state.settings.theme != ThemeMode::Minimal {
@@ -3334,7 +3346,7 @@ fn llm_provider_service_expander(
     locale: &str,
 ) -> View<Message> {
     let setting = service_provider_setting(state, descriptor);
-    let mut content = vec![secret_field_stack(
+    let key_field = secret_field_stack(
         format!("{}Field", descriptor.key_box_id),
         350,
         styled_text_id(
@@ -3359,16 +3371,22 @@ fn llm_provider_service_expander(
             .into_view(),
         descriptor.key_reveal_id,
         "Reveal secret",
-    )];
+    );
 
+    let mut endpoint_field = None;
     if let Some(endpoint_box_id) = descriptor.endpoint_box_id {
-        content.push(settings_field_stack(
+        let endpoint_label = if descriptor.service_id == "custom-openai" {
+            service_endpoint_required_label(locale)
+        } else {
+            service_endpoint_optional_label(locale)
+        };
+        endpoint_field = Some(settings_field_stack(
             format!("{endpoint_box_id}Field"),
             450,
             vec![
                 styled_text_id(
                     service_provider_endpoint_header_id(endpoint_box_id),
-                    service_endpoint_optional_label(locale),
+                    endpoint_label,
                     TextStyle::Body,
                 ),
                 text_editor(setting.endpoint.clone())
@@ -3390,29 +3408,24 @@ fn llm_provider_service_expander(
         ));
     }
 
+    let model_field = service_provider_model_field(descriptor, locale, &setting);
+
+    let mut content = Vec::new();
+    if descriptor.service_id == "custom-openai" {
+        if let Some(endpoint) = endpoint_field {
+            content.push(endpoint);
+        }
+        content.push(key_field);
+        content.push(model_field);
+    } else {
+        content.push(key_field);
+        if let Some(endpoint) = endpoint_field {
+            content.push(endpoint);
+        }
+        content.push(model_field);
+    }
+
     content.extend([
-        settings_labeled_control_field(
-            format!("{}Field", descriptor.model_box_id),
-            service_provider_model_header_id(descriptor.model_box_id),
-            service_model_label(locale),
-            provider_model_width(descriptor),
-            combo_box(provider_model_items(descriptor))
-                .id(descriptor.model_box_id)
-                .label(service_model_label(locale))
-                .width(Length::Fixed(provider_model_width(descriptor)))
-                .selected(setting.model.as_str())
-                .on_change({
-                    let service_id = descriptor.service_id.to_string();
-                    move |value| {
-                        Message::ServiceProviderSettingChanged(
-                            service_id.clone(),
-                            ServiceProviderField::Model,
-                            value,
-                        )
-                    }
-                })
-                .into_view(),
-        ),
         styled_text(descriptor.description, TextStyle::Caption),
         button(service_test_label(locale))
             .id(descriptor.test_button_id)
@@ -3433,6 +3446,63 @@ fn llm_provider_service_expander(
         setting.status,
         format!("settings.services.{}.content", descriptor.service_id),
         content,
+    )
+}
+
+fn service_provider_model_field(
+    descriptor: &LlmProviderDescriptor,
+    locale: &str,
+    setting: &ServiceProviderSetting,
+) -> View<Message> {
+    let service_id = descriptor.service_id.to_string();
+    if matches!(descriptor.service_id, "custom-openai" | "doubao") {
+        return settings_field_stack(
+            format!("{}Field", descriptor.model_box_id),
+            provider_model_width(descriptor),
+            vec![
+                styled_text_id(
+                    service_provider_model_header_id(descriptor.model_box_id),
+                    service_model_label(locale),
+                    TextStyle::Body,
+                ),
+                text_editor(setting.model.clone())
+                    .id(descriptor.model_box_id)
+                    .placeholder(descriptor.default_model)
+                    .width(Length::Fixed(provider_model_width(descriptor)))
+                    .max_height(36)
+                    .on_input(move |value| {
+                        Message::ServiceProviderSettingChanged(
+                            service_id.clone(),
+                            ServiceProviderField::Model,
+                            value,
+                        )
+                    })
+                    .into_view(),
+            ],
+        );
+    }
+
+    settings_labeled_control_field(
+        format!("{}Field", descriptor.model_box_id),
+        service_provider_model_header_id(descriptor.model_box_id),
+        service_model_label(locale),
+        provider_model_width(descriptor),
+        combo_box(provider_model_items(descriptor))
+            .id(descriptor.model_box_id)
+            .label(service_model_label(locale))
+            .width(Length::Fixed(provider_model_width(descriptor)))
+            .selected(setting.model.as_str())
+            .on_change({
+                let service_id = descriptor.service_id.to_string();
+                move |value| {
+                    Message::ServiceProviderSettingChanged(
+                        service_id.clone(),
+                        ServiceProviderField::Model,
+                        value,
+                    )
+                }
+            })
+            .into_view(),
     )
 }
 
@@ -3569,7 +3639,16 @@ fn provider_model_items(descriptor: &LlmProviderDescriptor) -> Vec<ComboBoxItem>
     descriptor
         .model_options
         .iter()
-        .map(|model| ComboBoxItem::new(*model, *model))
+        .map(|model| {
+            let label = match (descriptor.service_id, *model) {
+                ("builtin", "glm-4-flash-250414") => "glm-4-flash-250414 (GLM)",
+                ("builtin", "glm-4-flash") => "glm-4-flash (GLM)",
+                ("builtin", "llama-3.3-70b-versatile") => "llama-3.3-70b-versatile (Groq)",
+                ("builtin", "llama-3.1-8b-instant") => "llama-3.1-8b-instant (Groq)",
+                _ => *model,
+            };
+            ComboBoxItem::new(*model, label)
+        })
         .collect()
 }
 
@@ -3598,6 +3677,14 @@ fn service_endpoint_optional_label(locale: &str) -> String {
         locale,
         "settings.services.endpoint_optional",
         "Endpoint (Optional)",
+    )
+}
+
+fn service_endpoint_required_label(locale: &str) -> String {
+    tr_locale(
+        locale,
+        "settings.services.endpoint_required",
+        "Endpoint (Required)",
     )
 }
 
@@ -3721,7 +3808,7 @@ fn caiyun_service_expander(state: &SettingsState, locale: &str) -> View<Message>
         "caiyun",
         service_configuration_expanded(state, "caiyun"),
         "CaiyunServiceExpander",
-        "Caiyun",
+        "Caiyun (彩云小译)",
         "CaiyunStatusText",
         state.caiyun_status.clone(),
         "settings.services.caiyun.content",
@@ -3762,7 +3849,7 @@ fn niu_trans_service_expander(state: &SettingsState, locale: &str) -> View<Messa
         "niutrans",
         service_configuration_expanded(state, "niutrans"),
         "NiuTransServiceExpander",
-        "NiuTrans",
+        "NiuTrans (小牛翻译)",
         "NiuTransStatusText",
         state.niu_trans_status.clone(),
         "settings.services.niutrans.content",
@@ -3803,7 +3890,7 @@ fn youdao_service_expander(state: &SettingsState, locale: &str) -> View<Message>
         "youdao",
         service_configuration_expanded(state, "youdao"),
         "YoudaoServiceExpander",
-        "Youdao",
+        "Youdao (有道翻译)",
         "YoudaoStatusText",
         state.youdao_status.clone(),
         "settings.services.youdao.content",
@@ -5595,7 +5682,7 @@ fn llm_provider_descriptors() -> [LlmProviderDescriptor; 8] {
             endpoint_placeholder: "",
             model_box_id: "GeminiModelCombo",
             test_button_id: "TestGeminiButton",
-            description: "Get your API key from aistudio.google.com.",
+            description: "Get your API key from aistudio.google.com. You can type a custom model name.",
             default_endpoint: "",
             default_model: "gemini-2.5-flash",
             model_options: &[
@@ -5605,6 +5692,8 @@ fn llm_provider_descriptors() -> [LlmProviderDescriptor; 8] {
                 "gemini-2.0-flash",
                 "gemini-1.5-flash",
                 "gemini-1.5-pro",
+                "gemini-3-flash-preview",
+                "gemini-3-pro-preview",
             ],
         },
         LlmProviderDescriptor {
@@ -5621,7 +5710,7 @@ fn llm_provider_descriptors() -> [LlmProviderDescriptor; 8] {
             endpoint_placeholder: "https://your-api.example.com/v1/chat/completions",
             model_box_id: "CustomOpenAIModelBox",
             test_button_id: "TestCustomOpenAIButton",
-            description: "Configure any OpenAI-compatible API endpoint.",
+            description: "Configure any OpenAI-compatible API endpoint (e.g., local LLM servers, other AI providers).",
             default_endpoint: "",
             default_model: "gpt-3.5-turbo",
             model_options: &["gpt-3.5-turbo", "gpt-4o-mini", "llama3.2", "qwen2.5"],

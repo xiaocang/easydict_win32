@@ -5,6 +5,7 @@ use std::io::{self, BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -149,6 +150,31 @@ pub struct ValidateRustPortableOutcome {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WriteSha256ChecksumOptions {
+    pub package_path: PathBuf,
+    pub checksum_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WriteSha256ChecksumOutcome {
+    pub checksum_path: PathBuf,
+    pub checksum: String,
+    pub package_name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VerifySha256ChecksumOptions {
+    pub package_path: PathBuf,
+    pub checksum_path: PathBuf,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VerifySha256ChecksumOutcome {
+    pub checksum: String,
+    pub package_name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BrowserExtensionPackage {
     pub label: String,
     pub path: PathBuf,
@@ -287,6 +313,30 @@ pub enum ValidateRustPortableError {
     UnexpectedEntries(Vec<String>),
     Io { path: PathBuf, message: String },
     Zip(String),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Sha256ChecksumError {
+    PackageMissing(PathBuf),
+    PackageNotFile(PathBuf),
+    ChecksumMissing(PathBuf),
+    ChecksumNotFile(PathBuf),
+    MissingPackageFileName(PathBuf),
+    InvalidChecksumFile(PathBuf),
+    PackageNameMismatch {
+        checksum_path: PathBuf,
+        expected: String,
+        actual: String,
+    },
+    ChecksumMismatch {
+        package_path: PathBuf,
+        expected: String,
+        actual: String,
+    },
+    Io {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 impl fmt::Display for ZipDirectoryError {
@@ -619,6 +669,58 @@ impl fmt::Display for ValidateRustPortableError {
 }
 
 impl std::error::Error for ValidateRustPortableError {}
+
+impl fmt::Display for Sha256ChecksumError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PackageMissing(path) => {
+                write!(formatter, "package file not found: {}", path.display())
+            }
+            Self::PackageNotFile(path) => {
+                write!(formatter, "package path is not a file: {}", path.display())
+            }
+            Self::ChecksumMissing(path) => {
+                write!(formatter, "checksum file not found: {}", path.display())
+            }
+            Self::ChecksumNotFile(path) => {
+                write!(formatter, "checksum path is not a file: {}", path.display())
+            }
+            Self::MissingPackageFileName(path) => write!(
+                formatter,
+                "package path has no file name for checksum output: {}",
+                path.display()
+            ),
+            Self::InvalidChecksumFile(path) => {
+                write!(
+                    formatter,
+                    "invalid SHA256 checksum file: {}",
+                    path.display()
+                )
+            }
+            Self::PackageNameMismatch {
+                checksum_path,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "checksum file {} references {actual}, expected {expected}",
+                checksum_path.display()
+            ),
+            Self::ChecksumMismatch {
+                package_path,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "SHA256 mismatch for {}: expected {expected}, got {actual}",
+                package_path.display()
+            ),
+            Self::Io { path, message } => write!(formatter, "{}: {message}", path.display()),
+        }
+    }
+}
+
+impl std::error::Error for Sha256ChecksumError {}
 
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 pub fn zip_directory(
@@ -1019,6 +1121,85 @@ pub fn validate_rs_portable_payload(
 
     Ok(ValidateRustPortableOutcome {
         checked_entries: entries.len(),
+    })
+}
+
+pub fn write_sha256_checksum(
+    options: &WriteSha256ChecksumOptions,
+) -> Result<WriteSha256ChecksumOutcome, Sha256ChecksumError> {
+    ensure_checksum_package_file(&options.package_path)?;
+    let package_name = checksum_package_name(&options.package_path)?;
+    let checksum = sha256_file_hex(&options.package_path)?;
+    let checksum_path = options
+        .checksum_path
+        .clone()
+        .unwrap_or_else(|| options.package_path.with_extension("zip.sha256"));
+
+    if let Some(parent) = checksum_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|error| Sha256ChecksumError::Io {
+            path: parent.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    }
+    let contents = format!("{checksum}  {package_name}\n");
+    fs::write(&checksum_path, contents).map_err(|error| Sha256ChecksumError::Io {
+        path: checksum_path.clone(),
+        message: error.to_string(),
+    })?;
+
+    Ok(WriteSha256ChecksumOutcome {
+        checksum_path,
+        checksum,
+        package_name,
+    })
+}
+
+pub fn verify_sha256_checksum(
+    options: &VerifySha256ChecksumOptions,
+) -> Result<VerifySha256ChecksumOutcome, Sha256ChecksumError> {
+    ensure_checksum_package_file(&options.package_path)?;
+    if !options.checksum_path.exists() {
+        return Err(Sha256ChecksumError::ChecksumMissing(
+            options.checksum_path.clone(),
+        ));
+    }
+    if !options.checksum_path.is_file() {
+        return Err(Sha256ChecksumError::ChecksumNotFile(
+            options.checksum_path.clone(),
+        ));
+    }
+
+    let expected_package_name = checksum_package_name(&options.package_path)?;
+    let text =
+        fs::read_to_string(&options.checksum_path).map_err(|error| Sha256ChecksumError::Io {
+            path: options.checksum_path.clone(),
+            message: error.to_string(),
+        })?;
+    let (expected_checksum, actual_package_name) =
+        parse_single_sha256_checksum_line(&text, &options.checksum_path)?;
+    if actual_package_name != expected_package_name {
+        return Err(Sha256ChecksumError::PackageNameMismatch {
+            checksum_path: options.checksum_path.clone(),
+            expected: expected_package_name,
+            actual: actual_package_name,
+        });
+    }
+
+    let actual_checksum = sha256_file_hex(&options.package_path)?;
+    if actual_checksum != expected_checksum {
+        return Err(Sha256ChecksumError::ChecksumMismatch {
+            package_path: options.package_path.clone(),
+            expected: expected_checksum,
+            actual: actual_checksum,
+        });
+    }
+
+    Ok(VerifySha256ChecksumOutcome {
+        checksum: actual_checksum,
+        package_name: actual_package_name,
     })
 }
 
@@ -1699,6 +1880,90 @@ fn collect_package_file_count_and_size(
         }
     }
     Ok(())
+}
+
+fn ensure_checksum_package_file(package_path: &Path) -> Result<(), Sha256ChecksumError> {
+    if !package_path.exists() {
+        return Err(Sha256ChecksumError::PackageMissing(
+            package_path.to_path_buf(),
+        ));
+    }
+    if !package_path.is_file() {
+        return Err(Sha256ChecksumError::PackageNotFile(
+            package_path.to_path_buf(),
+        ));
+    }
+    Ok(())
+}
+
+fn checksum_package_name(package_path: &Path) -> Result<String, Sha256ChecksumError> {
+    package_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| Sha256ChecksumError::MissingPackageFileName(package_path.to_path_buf()))
+}
+
+fn sha256_file_hex(path: &Path) -> Result<String, Sha256ChecksumError> {
+    let file = File::open(path).map_err(|error| Sha256ChecksumError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let mut reader = BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let bytes_read = reader
+            .read(&mut buffer)
+            .map_err(|error| Sha256ChecksumError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn parse_single_sha256_checksum_line(
+    text: &str,
+    checksum_path: &Path,
+) -> Result<(String, String), Sha256ChecksumError> {
+    let mut lines = text.lines().map(str::trim).filter(|line| !line.is_empty());
+    let Some(line) = lines.next() else {
+        return Err(Sha256ChecksumError::InvalidChecksumFile(
+            checksum_path.to_path_buf(),
+        ));
+    };
+    if lines.next().is_some() {
+        return Err(Sha256ChecksumError::InvalidChecksumFile(
+            checksum_path.to_path_buf(),
+        ));
+    }
+
+    let mut parts = line.split_whitespace();
+    let Some(checksum) = parts.next() else {
+        return Err(Sha256ChecksumError::InvalidChecksumFile(
+            checksum_path.to_path_buf(),
+        ));
+    };
+    if checksum.len() != 64 || !checksum.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(Sha256ChecksumError::InvalidChecksumFile(
+            checksum_path.to_path_buf(),
+        ));
+    }
+    let package_name = parts.collect::<Vec<_>>().join(" ");
+    if package_name.is_empty() {
+        return Err(Sha256ChecksumError::InvalidChecksumFile(
+            checksum_path.to_path_buf(),
+        ));
+    }
+    Ok((
+        checksum.to_ascii_lowercase(),
+        package_name.trim_start_matches('*').to_string(),
+    ))
 }
 
 fn run_rustup_target_add_if_available(cargo_target: &str) -> Result<(), BuildRustHelpersError> {
@@ -2671,6 +2936,79 @@ mod tests {
             RUST_PORTABLE_REQUIRED_ENTRIES.len()
         );
         let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn write_sha256_checksum_emits_sha256sum_compatible_file() {
+        let temp = tempfile_dir("rs-portable-sha256-write");
+        let package_name = "easydict-rs-portable-v0.0.0-win-x64.zip";
+        let package_path = temp.join(package_name);
+        let checksum_path = temp.join("checksums-x64.sha256");
+        fs::write(&package_path, b"abc").expect("write package bytes");
+
+        let outcome = write_sha256_checksum(&WriteSha256ChecksumOptions {
+            package_path: package_path.clone(),
+            checksum_path: Some(checksum_path.clone()),
+        })
+        .expect("write checksum");
+
+        assert_eq!(
+            outcome.checksum,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(outcome.package_name, package_name);
+        assert_eq!(outcome.checksum_path, checksum_path);
+        assert_eq!(
+            fs::read_to_string(&checksum_path).expect("read checksum"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  easydict-rs-portable-v0.0.0-win-x64.zip\n"
+        );
+
+        let verified = verify_sha256_checksum(&VerifySha256ChecksumOptions {
+            package_path,
+            checksum_path,
+        })
+        .expect("verify checksum");
+        assert_eq!(verified.checksum, outcome.checksum);
+        assert_eq!(verified.package_name, package_name);
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn verify_sha256_checksum_rejects_mismatch_before_release_upload() {
+        let temp = tempfile_dir("rs-portable-sha256-mismatch");
+        let package_path = temp.join("easydict-rs-portable-v0.0.0-win-x64.zip");
+        let checksum_path = temp.join("checksums-x64.sha256");
+        fs::write(&package_path, b"abc").expect("write package bytes");
+        fs::write(
+            &checksum_path,
+            "0000000000000000000000000000000000000000000000000000000000000000  easydict-rs-portable-v0.0.0-win-x64.zip\n",
+        )
+        .expect("write stale checksum");
+
+        let error = verify_sha256_checksum(&VerifySha256ChecksumOptions {
+            package_path: package_path.clone(),
+            checksum_path,
+        })
+        .unwrap_err();
+
+        let Sha256ChecksumError::ChecksumMismatch {
+            package_path: actual_path,
+            expected,
+            actual,
+        } = error
+        else {
+            panic!("expected checksum mismatch");
+        };
+        assert_eq!(actual_path, package_path);
+        assert_eq!(
+            expected,
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        );
+        assert_eq!(
+            actual,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        let _ = fs::remove_dir_all(temp);
     }
 
     #[test]

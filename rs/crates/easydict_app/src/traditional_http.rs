@@ -12,6 +12,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hmac};
 use serde_json::json;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const GOOGLE_TRANSLATE_ENDPOINT: &str = "https://translate.googleapis.com/translate_a/single";
@@ -469,10 +470,11 @@ impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
         &mut self,
         request: &TraditionalHttpRequestPlan,
     ) -> Result<String, OpenAiExecutionError> {
+        let endpoint = traditional_http_request_endpoint(request);
         let mut builder = match request.method {
-            "GET" => self.client.get(&request.endpoint),
+            "GET" => self.client.get(endpoint.as_ref()),
             "POST" => {
-                let mut post = self.client.post(&request.endpoint);
+                let mut post = self.client.post(endpoint.as_ref());
                 if let Some(body) = &request.body {
                     post = post.body(body.clone());
                 }
@@ -519,6 +521,93 @@ impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
         }
 
         Ok(body)
+    }
+}
+
+#[cfg(debug_assertions)]
+fn traditional_http_request_endpoint(request: &TraditionalHttpRequestPlan) -> Cow<'_, str> {
+    if let Some(env_key) = traditional_http_endpoint_override_env_key(request.service_kind) {
+        if let Ok(endpoint) = std::env::var(env_key) {
+            let endpoint = endpoint.trim();
+            if !endpoint.is_empty() {
+                if request.method == "GET"
+                    || request.service_kind == TraditionalHttpServiceKind::Bing
+                {
+                    if let Some(endpoint_with_query) =
+                        debug_endpoint_with_original_query(endpoint, &request.endpoint)
+                    {
+                        return Cow::Owned(endpoint_with_query);
+                    }
+                }
+                return Cow::Owned(endpoint.to_string());
+            }
+        }
+    }
+
+    Cow::Borrowed(&request.endpoint)
+}
+
+#[cfg(debug_assertions)]
+fn debug_endpoint_with_original_query(
+    override_endpoint: &str,
+    original_endpoint: &str,
+) -> Option<String> {
+    let mut override_url = reqwest::Url::parse(override_endpoint).ok()?;
+    if override_url.query().is_some() {
+        return Some(override_url.to_string());
+    }
+
+    let original_url = reqwest::Url::parse(original_endpoint).ok()?;
+    if let Some(query) = original_url.query() {
+        override_url.set_query(Some(query));
+    }
+    Some(override_url.to_string())
+}
+
+#[cfg(not(debug_assertions))]
+fn traditional_http_request_endpoint(request: &TraditionalHttpRequestPlan) -> Cow<'_, str> {
+    Cow::Borrowed(&request.endpoint)
+}
+
+#[cfg(debug_assertions)]
+fn traditional_http_endpoint_override_env_key(
+    service_kind: TraditionalHttpServiceKind,
+) -> Option<&'static str> {
+    match service_kind {
+        TraditionalHttpServiceKind::Google => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_GOOGLE")
+        }
+        TraditionalHttpServiceKind::GoogleWeb => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_GOOGLE_WEB")
+        }
+        TraditionalHttpServiceKind::Caiyun => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_CAIYUN")
+        }
+        TraditionalHttpServiceKind::DeepLApi => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_DEEPL_API")
+        }
+        TraditionalHttpServiceKind::NiuTrans => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_NIUTRANS")
+        }
+        TraditionalHttpServiceKind::Volcano => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_VOLCANO")
+        }
+        TraditionalHttpServiceKind::Bing => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_BING_TRANSLATE")
+        }
+        TraditionalHttpServiceKind::YoudaoOpenApi => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_YOUDAO_OPENAPI")
+        }
+        TraditionalHttpServiceKind::YoudaoWebDict => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_YOUDAO_WEB_DICT")
+        }
+        TraditionalHttpServiceKind::YoudaoWebTranslateKey => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_YOUDAO_WEB_TRANSLATE_KEY")
+        }
+        TraditionalHttpServiceKind::YoudaoWebTranslate => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_YOUDAO_WEB_TRANSLATE")
+        }
+        _ => None,
     }
 }
 
@@ -1634,7 +1723,7 @@ impl BingHttpClient for ReqwestBingHttpClient {
         &mut self,
         host: &str,
     ) -> Result<BingTranslatorPage, OpenAiExecutionError> {
-        let url = format!("https://{host}{BING_TRANSLATOR_PATH}");
+        let url = bing_translator_page_endpoint(host);
         let response = self
             .client
             .get(&url)
@@ -1671,7 +1760,8 @@ impl BingHttpClient for ReqwestBingHttpClient {
         &mut self,
         plan: &TraditionalHttpRequestPlan,
     ) -> Result<BingHttpResponse, OpenAiExecutionError> {
-        let mut builder = self.client.post(&plan.endpoint);
+        let endpoint = traditional_http_request_endpoint(plan);
+        let mut builder = self.client.post(endpoint.as_ref());
         if let Some(body) = &plan.body {
             builder = builder.body(body.clone());
         }
@@ -1693,6 +1783,22 @@ impl BingHttpClient for ReqwestBingHttpClient {
         })?;
         Ok(BingHttpResponse { status, body })
     }
+}
+
+#[cfg(debug_assertions)]
+fn bing_translator_page_endpoint(host: &str) -> String {
+    std::env::var("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_BING_TRANSLATOR")
+        .ok()
+        .and_then(|value| {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        })
+        .unwrap_or_else(|| format!("https://{host}{BING_TRANSLATOR_PATH}"))
+}
+
+#[cfg(not(debug_assertions))]
+fn bing_translator_page_endpoint(host: &str) -> String {
+    format!("https://{host}{BING_TRANSLATOR_PATH}")
 }
 
 /// Run the full two-phase Bing translation (fetch credentials, then translate),

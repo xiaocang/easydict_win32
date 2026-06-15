@@ -1,10 +1,13 @@
 use easydict_packager::{
-    build_rust_helpers, pack_rs_portable, BuildRustHelpersOptions, PackRustPortableOptions,
+    build_rust_helpers, pack_rs_portable, validate_rs_portable_payload, BuildRustHelpersOptions,
+    PackRustPortableOptions, ValidateRustPortableOptions,
 };
 use std::ffi::OsString;
 use std::fs;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use zip::ZipArchive;
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -79,6 +82,95 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
         "Remove-Item Env:RUNTIME_PROFILE",
         "portable shim should restore absent generic runtime profile after packaging",
     );
+}
+
+#[test]
+fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid_assets() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let integration_tests_job = text_between(&workflow, "  integration-tests:", "  publish-msix:");
+    let publish_msix_job = text_between(&workflow, "  publish-msix:", "  publish-rs-portable:");
+    let publish_rs_portable_job =
+        text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+    let create_bundle_job = text_between(
+        &workflow,
+        "  create-bundle:",
+        "  create-rs-portable-release:",
+    );
+    let create_rs_portable_release_job = text_between(
+        &workflow,
+        "  create-rs-portable-release:",
+        "  publish-winget:",
+    );
+    let publish_winget_job = workflow
+        .split_once("  publish-winget:")
+        .unwrap_or_else(|| panic!("missing section start: publish-winget"))
+        .1;
+
+    assert_contains(
+        &workflow,
+        "default: 'rs-portable'",
+        "release workflow dispatch should default to the rs portable artifact set",
+    );
+    assert_contains(
+        &workflow,
+        "RELEASE_FLAVOR: ${{ github.event.inputs.release_flavor || 'rs-portable' }}",
+        "tag-triggered releases should normalize the absent release flavor to rs-portable",
+    );
+
+    let publish_rs_portable_header =
+        text_between(publish_rs_portable_job, "    name:", "    steps:");
+    assert_not_contains(
+        publish_rs_portable_header,
+        "\n    if:",
+        "publish-rs-portable should be scheduled on the default/tag path",
+    );
+    assert_contains(
+        publish_rs_portable_job,
+        "needs: prepare",
+        "publish-rs-portable should only depend on the shared version preparation job",
+    );
+    assert_contains(
+        create_rs_portable_release_job,
+        "if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'rs-portable' }}",
+        "the rs release upload job should be positively gated to the default rs-portable flavor",
+    );
+    assert_contains(
+        create_rs_portable_release_job,
+        "needs: [prepare, publish-rs-portable]",
+        "the default release upload path should not wait on hybrid .NET/MSIX jobs",
+    );
+
+    for (job_name, job) in [
+        ("integration-tests", integration_tests_job),
+        ("publish-msix", publish_msix_job),
+        ("create-bundle", create_bundle_job),
+        ("publish-winget", publish_winget_job),
+    ] {
+        let gate_line = job
+            .lines()
+            .find(|line| line.trim_start().starts_with("if:"))
+            .unwrap_or_else(|| panic!("{job_name} should define a job-level release_flavor gate"));
+        assert_contains(
+            gate_line,
+            "(github.event.inputs.release_flavor || 'rs-portable') == 'hybrid'",
+            &format!("{job_name} should be positively gated to release_flavor == 'hybrid'"),
+        );
+        for forbidden_condition in [
+            "!= 'rs-portable'",
+            "!= \"rs-portable\"",
+            "!= 'rust'",
+            "!= \"rust\"",
+            "!= 'rust-only'",
+            "!= \"rust-only\"",
+        ] {
+            assert_not_contains(
+                gate_line,
+                forbidden_condition,
+                &format!("{job_name} should not use a negative rust/rs-portable gate"),
+            );
+        }
+    }
 }
 
 #[test]
@@ -509,6 +601,203 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
             "{entry} should be staged in the first rs portable payload"
         );
     }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[test]
+fn pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
+        "EASYDICT_FAKE_CARGO_RECORD",
+    ]);
+    let test_root = tempfile_dir("packager-pack-rs-portable-zip");
+    let fake_bin = test_root.join("bin");
+    let workspace = test_root.join("workspace");
+    let output_root = test_root.join("out");
+    let target_release = workspace
+        .join("target")
+        .join("x86_64-pc-windows-msvc")
+        .join("release");
+    fs::create_dir_all(&workspace).expect("create fake workspace");
+    fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
+    write_fake_windows_ai_manifest_for_workspace(&workspace);
+    write_stale_dotnet_payload_markers(&target_release);
+    fs::create_dir_all(&output_root).expect("create output root");
+    write_fake_tooling_scripts(&fake_bin);
+    let record_path = test_root.join("cargo-env.txt");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "0");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let outcome = pack_rs_portable(&PackRustPortableOptions {
+        rust_workspace: workspace.clone(),
+        platform: "x64".to_string(),
+        configuration: "Release".to_string(),
+        output_root: output_root.clone(),
+        package_version: Some("v0.0.0-zip".to_string()),
+        create_zip: true,
+    })
+    .expect("pack-rs-portable should stage, zip, and validate the first rs portable payload");
+
+    let zip_path = outcome
+        .zip_path
+        .as_ref()
+        .expect("pack-rs-portable should report the created ZIP path");
+    assert!(
+        zip_path.is_file(),
+        "pack-rs-portable should create a real ZIP at {}",
+        zip_path.display()
+    );
+    assert!(
+        outcome.package_dir.is_dir(),
+        "pack-rs-portable should keep the staged directory for validation"
+    );
+    assert_eq!(
+        outcome.zip_validation_entries,
+        Some(6),
+        "pack-rs-portable should validate the ZIP payload after creating it"
+    );
+
+    let directory_validation = validate_rs_portable_payload(&ValidateRustPortableOptions {
+        package_path: outcome.package_dir.clone(),
+    })
+    .expect("staged rs portable directory should validate");
+    let zip_validation = validate_rs_portable_payload(&ValidateRustPortableOptions {
+        package_path: zip_path.clone(),
+    })
+    .expect("created rs portable ZIP should validate");
+    assert_eq!(directory_validation.checked_entries, 6);
+    assert_eq!(zip_validation.checked_entries, 6);
+
+    let expected_entries = vec![
+        "Easydict.Rust.exe".to_string(),
+        "README-portable.txt".to_string(),
+        "easydict-native-bridge.exe".to_string(),
+        "easydict_browser_registrar.exe".to_string(),
+        "easydict_cli.exe".to_string(),
+        "easydict_long_doc.exe".to_string(),
+    ];
+    let directory_entries = directory_entry_names(&outcome.package_dir);
+    let zip_entries = zip_entry_names(zip_path);
+    assert_eq!(
+        directory_entries, expected_entries,
+        "staged rs portable directory should contain only the first-release Rust payload"
+    );
+    assert_eq!(
+        zip_entries, expected_entries,
+        "created rs portable ZIP should contain only the first-release Rust payload"
+    );
+    assert_entries_do_not_contain_retained_dotnet_payload(&directory_entries, "staged directory");
+    assert_entries_do_not_contain_retained_dotnet_payload(&zip_entries, "created ZIP");
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
+        "EASYDICT_FAKE_CARGO_RECORD",
+        "EASYDICT_PACKAGED_CLI_RECORD",
+        "EASYDICT_RELEASE_FORBIDDEN_TOOL_RECORD",
+    ]);
+    let test_root = tempfile_dir("packager-pack-rs-portable-cli-smoke");
+    let fake_bin = test_root.join("bin");
+    let workspace = test_root.join("workspace");
+    let output_root = test_root.join("out");
+    let extract_dir = test_root.join("extract");
+    fs::create_dir_all(&workspace).expect("create fake workspace");
+    fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
+    write_fake_windows_ai_manifest_for_workspace(&workspace);
+    fs::create_dir_all(&output_root).expect("create output root");
+    fs::create_dir_all(&extract_dir).expect("create extract root");
+    write_fake_tooling_scripts(&fake_bin);
+    write_fake_release_forbidden_tool_exes(&fake_bin);
+    let cargo_record_path = test_root.join("cargo-env.txt");
+    let cli_record_path = test_root.join("packaged-cli.txt");
+    let forbidden_tool_record = test_root.join("forbidden-tools.txt");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "0");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+
+    let outcome = pack_rs_portable(&PackRustPortableOptions {
+        rust_workspace: workspace.clone(),
+        platform: "x64".to_string(),
+        configuration: "Release".to_string(),
+        output_root: output_root.clone(),
+        package_version: Some("v0.0.0-cli-smoke".to_string()),
+        create_zip: true,
+    })
+    .expect("pack-rs-portable should create a validated ZIP with executable Rust helpers");
+
+    let zip_path = outcome.zip_path.as_ref().expect("created ZIP path");
+    extract_zip(zip_path, &extract_dir);
+    let packaged_cli = extract_dir.join("easydict_cli.exe");
+    assert!(
+        packaged_cli.is_file(),
+        "extracted rs portable ZIP should contain easydict_cli.exe"
+    );
+
+    let output = std::process::Command::new(&packaged_cli)
+        .arg("--help")
+        .env("PATH", prepend_path(&fake_bin, environment.original_path()))
+        .env("EASYDICT_RUNTIME_PROFILE", "rust-only")
+        .env("RUNTIME_PROFILE", "rust-only")
+        .env("EASYDICT_PACKAGED_CLI_RECORD", &cli_record_path)
+        .env(
+            "EASYDICT_RELEASE_FORBIDDEN_TOOL_RECORD",
+            &forbidden_tool_record,
+        )
+        .output()
+        .expect("run extracted packaged easydict_cli.exe");
+
+    assert!(
+        output.status.success(),
+        "extracted packaged CLI smoke should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !forbidden_tool_record.exists(),
+        "extracted packaged CLI smoke must not invoke dotnet.exe, powershell.exe, or pwsh.exe"
+    );
+    let cli_record = read_text(&cli_record_path);
+    assert_contains(
+        &cli_record,
+        "CLI=easydict_cli",
+        "extracted packaged CLI smoke should execute the helper from the ZIP",
+    );
+    assert_contains(
+        &cli_record,
+        "ARGS=--help",
+        "extracted packaged CLI smoke should pass through the requested arguments",
+    );
+    assert_contains(
+        &cli_record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "extracted packaged CLI smoke should run under the first-release rust-only profile",
+    );
+    assert_contains(
+        &cli_record,
+        "RUNTIME_PROFILE=rust-only",
+        "extracted packaged CLI smoke should run under the generic rust-only profile",
+    );
 
     let _ = fs::remove_dir_all(test_root);
 }
@@ -1342,6 +1631,117 @@ fn assert_not_contains(haystack: &str, needle: &str, message: &str) {
     assert!(!haystack.contains(needle), "{message}\nforbidden: {needle}");
 }
 
+fn directory_entry_names(root: &Path) -> Vec<String> {
+    let mut entries = Vec::new();
+    collect_directory_entry_names(root, root, &mut entries);
+    entries.sort();
+    entries
+}
+
+fn collect_directory_entry_names(root: &Path, current: &Path, entries: &mut Vec<String>) {
+    let mut children = fs::read_dir(current)
+        .unwrap_or_else(|error| panic!("read directory {}: {error}", current.display()))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|error| panic!("collect directory {}: {error}", current.display()));
+    children.sort_by_key(|entry| entry.path());
+
+    for child in children {
+        let path = child.path();
+        entries.push(relative_entry_name(root, &path));
+        if path.is_dir() {
+            collect_directory_entry_names(root, &path, entries);
+        }
+    }
+}
+
+fn zip_entry_names(zip_path: &Path) -> Vec<String> {
+    let file = fs::File::open(zip_path)
+        .unwrap_or_else(|error| panic!("open ZIP {}: {error}", zip_path.display()));
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .unwrap_or_else(|error| panic!("read ZIP {}: {error}", zip_path.display()));
+    let mut entries = Vec::new();
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .unwrap_or_else(|error| panic!("read ZIP entry {index}: {error}"));
+        entries.push(entry.name().trim_end_matches('/').replace('\\', "/"));
+    }
+    entries.sort();
+    entries
+}
+
+fn extract_zip(zip_path: &Path, destination: &Path) {
+    let file = fs::File::open(zip_path)
+        .unwrap_or_else(|error| panic!("open ZIP {}: {error}", zip_path.display()));
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .unwrap_or_else(|error| panic!("read ZIP {}: {error}", zip_path.display()));
+    archive.extract(destination).unwrap_or_else(|error| {
+        panic!(
+            "extract ZIP {} to {}: {error}",
+            zip_path.display(),
+            destination.display()
+        )
+    });
+}
+
+fn relative_entry_name(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or_else(|error| {
+            panic!(
+                "entry {} should be under {}: {error}",
+                path.display(),
+                root.display()
+            )
+        })
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn assert_entries_do_not_contain_retained_dotnet_payload(entries: &[String], label: &str) {
+    for entry in entries {
+        let normalized = entry
+            .replace('\\', "/")
+            .trim_matches('/')
+            .to_ascii_lowercase();
+        let components = normalized.split('/').collect::<Vec<_>>();
+        let first = components.first().copied().unwrap_or_default();
+        let file_name = components.last().copied().unwrap_or_default();
+        let contains_retained_payload = first == "dotnet"
+            || first == "workers"
+            || normalized.contains("/host/fxr/")
+            || normalized.contains("/shared/microsoft.netcore.app/")
+            || normalized.contains("/shared/microsoft.windowsdesktop.app/")
+            || normalized.contains("/shared/microsoft.aspnetcore.app/")
+            || matches!(
+                file_name,
+                "createdump.exe"
+                    | "dotnet.exe"
+                    | "hostfxr.dll"
+                    | "coreclr.dll"
+                    | "hostpolicy.dll"
+                    | "clrjit.dll"
+                    | "mscordaccore.dll"
+                    | "mscordbi.dll"
+                    | "mscorlib.dll"
+                    | "netstandard.dll"
+                    | "system.private.corelib.dll"
+            )
+            || file_name.ends_with(".runtimeconfig.json")
+            || file_name.ends_with(".deps.json")
+            || file_name.starts_with("easydict.compathost")
+            || file_name.starts_with("easydict.nativebridge")
+            || file_name.starts_with("easydict.sidecarclient")
+            || file_name.starts_with("easydict.workers.")
+            || file_name.starts_with("easydict.winui");
+        assert!(
+            !contains_retained_payload,
+            "{label} should not contain retained .NET runtime/worker payload entry: {entry}"
+        );
+    }
+}
+
 #[cfg(windows)]
 fn translate_long_doc_script_command(root: &Path) -> std::process::Command {
     powershell_script_command(&root.join("scripts/translate-long-doc.ps1"))
@@ -1628,6 +2028,40 @@ fn main() {
     if exe_name.eq_ignore_ascii_case("rustup") {
         return;
     }
+    if matches!(
+        exe_name.to_ascii_lowercase().as_str(),
+        "dotnet" | "powershell" | "pwsh"
+    ) {
+        if let Ok(record_path) = env::var("EASYDICT_RELEASE_FORBIDDEN_TOOL_RECORD") {
+            let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
+            use std::io::Write as _;
+            fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&record_path)
+                .and_then(|mut file| writeln!(file, "{} {}", exe_name, args))
+                .expect("append forbidden tool record");
+        }
+        std::process::exit(87);
+    }
+    if exe_name.eq_ignore_ascii_case("easydict_cli") {
+        let record_path = env::var("EASYDICT_PACKAGED_CLI_RECORD").expect("packaged CLI record path");
+        let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
+        use std::io::Write as _;
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&record_path)
+            .and_then(|mut file| {
+                writeln!(file, "CLI={}", exe_name)?;
+                writeln!(file, "ARGS={}", args)?;
+                writeln!(file, "EASYDICT_RUNTIME_PROFILE={}", env::var("EASYDICT_RUNTIME_PROFILE").unwrap_or_default())?;
+                writeln!(file, "RUNTIME_PROFILE={}", env::var("RUNTIME_PROFILE").unwrap_or_default())
+            })
+            .expect("append packaged CLI record");
+        println!("easydict_cli packaged smoke");
+        return;
+    }
 
     let record_path = env::var("EASYDICT_FAKE_CARGO_RECORD").expect("record path");
     let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
@@ -1650,14 +2084,15 @@ fn main() {
         .join("x86_64-pc-windows-msvc")
         .join("release");
     fs::create_dir_all(&target).expect("create fake target dir");
-    fs::write(target.join("easydict_preview_iced.exe"), b"fake").expect("write preview exe");
+    let self_path = env::current_exe().expect("current exe path");
+    fs::copy(&self_path, target.join("easydict_preview_iced.exe")).expect("write preview exe");
     for exe in [
         "easydict-native-bridge.exe",
         "easydict_browser_registrar.exe",
         "easydict_cli.exe",
         "easydict_long_doc.exe",
     ] {
-        fs::write(target.join(exe), b"fake").expect("write helper exe");
+        fs::copy(&self_path, target.join(exe)).expect("write helper exe");
     }
 }
 "#,
@@ -1672,6 +2107,15 @@ fn main() {
         .expect("compile fake cargo executable");
     assert!(status.success(), "fake cargo executable should compile");
     fs::copy(&cargo_exe, fake_bin.join("rustup.exe")).expect("copy fake rustup executable");
+}
+
+#[cfg(windows)]
+fn write_fake_release_forbidden_tool_exes(fake_bin: &Path) {
+    let cargo_exe = fake_bin.join("cargo.exe");
+    for tool in ["dotnet.exe", "powershell.exe", "pwsh.exe"] {
+        fs::copy(&cargo_exe, fake_bin.join(tool))
+            .unwrap_or_else(|error| panic!("copy fake forbidden tool {tool}: {error}"));
+    }
 }
 
 #[cfg(not(windows))]

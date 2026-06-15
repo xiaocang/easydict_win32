@@ -771,7 +771,7 @@ pub fn deepseek_service_config(
     model: Option<&str>,
 ) -> OpenAiCompatibleConfig {
     OpenAiCompatibleConfig::new(
-        DEEPSEEK_DEFAULT_ENDPOINT,
+        openai_compatible_endpoint_or_debug_override("deepseek", DEEPSEEK_DEFAULT_ENDPOINT),
         model.unwrap_or(DEEPSEEK_DEFAULT_MODEL),
     )
     .with_api_key(api_key)
@@ -781,16 +781,22 @@ pub fn groq_service_config(
     api_key: impl Into<String>,
     model: Option<&str>,
 ) -> OpenAiCompatibleConfig {
-    OpenAiCompatibleConfig::new(GROQ_DEFAULT_ENDPOINT, model.unwrap_or(GROQ_DEFAULT_MODEL))
-        .with_api_key(api_key)
+    OpenAiCompatibleConfig::new(
+        openai_compatible_endpoint_or_debug_override("groq", GROQ_DEFAULT_ENDPOINT),
+        model.unwrap_or(GROQ_DEFAULT_MODEL),
+    )
+    .with_api_key(api_key)
 }
 
 pub fn zhipu_service_config(
     api_key: impl Into<String>,
     model: Option<&str>,
 ) -> OpenAiCompatibleConfig {
-    OpenAiCompatibleConfig::new(ZHIPU_DEFAULT_ENDPOINT, model.unwrap_or(ZHIPU_DEFAULT_MODEL))
-        .with_api_key(api_key)
+    OpenAiCompatibleConfig::new(
+        openai_compatible_endpoint_or_debug_override("zhipu", ZHIPU_DEFAULT_ENDPOINT),
+        model.unwrap_or(ZHIPU_DEFAULT_MODEL),
+    )
+    .with_api_key(api_key)
 }
 
 pub fn github_models_service_config(
@@ -798,10 +804,40 @@ pub fn github_models_service_config(
     model: Option<&str>,
 ) -> OpenAiCompatibleConfig {
     OpenAiCompatibleConfig::new(
-        GITHUB_MODELS_DEFAULT_ENDPOINT,
+        openai_compatible_endpoint_or_debug_override("github", GITHUB_MODELS_DEFAULT_ENDPOINT),
         model.unwrap_or(GITHUB_MODELS_DEFAULT_MODEL),
     )
     .with_api_key(api_key)
+}
+
+#[cfg(debug_assertions)]
+fn openai_compatible_endpoint_or_debug_override(
+    service_id: &str,
+    default_endpoint: &str,
+) -> String {
+    let env_key = match service_id {
+        "deepseek" => "EASYDICT_TEST_OPENAI_COMPATIBLE_ENDPOINT_DEEPSEEK",
+        "groq" => "EASYDICT_TEST_OPENAI_COMPATIBLE_ENDPOINT_GROQ",
+        "zhipu" => "EASYDICT_TEST_OPENAI_COMPATIBLE_ENDPOINT_ZHIPU",
+        "github" => "EASYDICT_TEST_OPENAI_COMPATIBLE_ENDPOINT_GITHUB",
+        _ => return default_endpoint.to_string(),
+    };
+
+    std::env::var(env_key)
+        .ok()
+        .and_then(|value| {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        })
+        .unwrap_or_else(|| default_endpoint.to_string())
+}
+
+#[cfg(not(debug_assertions))]
+fn openai_compatible_endpoint_or_debug_override(
+    _service_id: &str,
+    default_endpoint: &str,
+) -> String {
+    default_endpoint.to_string()
 }
 
 pub fn built_in_ai_direct_service_config(

@@ -805,7 +805,8 @@ fn gemini_request_body(system_prompt: String, user_prompt: String, temperature: 
 
 fn gemini_stream_endpoint(model: &str, api_key: &str) -> Result<String, OpenAiExecutionError> {
     let endpoint = format!(
-        "{GEMINI_API_BASE_URL}/models/{}:streamGenerateContent",
+        "{}/models/{}:streamGenerateContent",
+        gemini_api_base_url(),
         model.trim()
     );
     let mut url = reqwest::Url::parse(&endpoint).map_err(|error| {
@@ -818,6 +819,20 @@ fn gemini_stream_endpoint(model: &str, api_key: &str) -> Result<String, OpenAiEx
         .append_pair("alt", "sse")
         .append_pair("key", api_key.trim());
     Ok(url.to_string())
+}
+
+#[cfg(debug_assertions)]
+fn gemini_api_base_url() -> String {
+    std::env::var("EASYDICT_TEST_CUSTOM_STREAMING_GEMINI_API_BASE_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| GEMINI_API_BASE_URL.to_string())
+}
+
+#[cfg(not(debug_assertions))]
+fn gemini_api_base_url() -> &'static str {
+    GEMINI_API_BASE_URL
 }
 
 fn validate_required(label: &str, value: &str) -> Result<(), OpenAiExecutionError> {

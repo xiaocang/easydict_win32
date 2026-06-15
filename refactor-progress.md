@@ -21,6 +21,151 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Added CLI grammar and batch native OpenAI contracts
+
+- Rechecked the remaining CLI core gaps after the provider and LongDoc work. No new third-party library was needed: grammar and batch already reuse the Rust OpenAI-compatible request planner, settings loader, Reqwest/SSE executor, and grammar parser.
+- Added a real `easydict_cli grammar --service openai --json` regression against a local SSE endpoint. It proves the binary entrypoint returns `correctedText`, `hasCorrections`, and `serviceId` from the Rust-native grammar route without retained worker, CompatHost, or `.NET` wording.
+- Added a real `easydict_cli batch --service openai --json` regression against a local SSE endpoint. It proves each input line is translated through the Rust-native provider path, emits one JSON result event per line, and stays independent of retained worker fallback.
+- Revalidated the current LongDoc dirty slice in parallel: the sidecar/retry/output-preflight changes pass the full LongDoc CLI and behavior test groups, and a read-only subagent found no default rs path from those files into retained LongDoc worker or CompatHost.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_openai_cli_grammar_succeeds_against_local_server_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_openai_cli_batch_succeeds_against_local_server_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_openai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Added traditional HTTP provider CLI native contracts
+
+- Rechecked the remaining short-text traditional providers before changing code. Bing and Google Web use web flows where no provider-owned Rust SDK fits Easydict's request/parser parity; Youdao OpenAPI and Volcano require their existing app-key/signature algorithms. No new dependency was added.
+- Added debug/test-only endpoint overrides for Google Web, Bing translator page + `ttranslatev3`, Volcano, Youdao OpenAPI, Youdao Web Dict, and Youdao WebTranslate key/translate calls. Release endpoints remain unchanged.
+- Added real `easydict_cli translate --json` regressions for Bing, Google Web, Volcano, Youdao OpenAPI, Youdao Web Dict, and Youdao WebTranslate. These prove the CLI goes through the Rust-native HTTP executors, sends the expected signed/two-phase/request-parser shapes, parses local provider responses, and avoids retained worker/CompatHost/`.NET` wording.
+- Tightened the CLI local HTTP test helper so accepted sockets are switched back to blocking mode. This removes a Windows-only `WouldBlock` race when the native CLI regression suite runs several local HTTP servers in parallel.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_bing_cli_runs_two_phase_flow_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_google_web_cli_succeeds_against_local_endpoint_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_volcano_cli_succeeds_against_local_api_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_youdao_web_dict_cli_succeeds_against_local_api_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_youdao -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `git diff --check -- rs/crates/easydict_app/src/traditional_http.rs rs/crates/easydict_app/tests/cli_translate_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-12: Added fixed OpenAI-compatible provider CLI and default release DAG contracts
+
+- Rechecked the fixed OpenAI-compatible provider slice before adding code. DeepSeek, Groq, Zhipu, and GitHub Models all expose OpenAI/Chat Completions-compatible HTTP routes, so the existing Rust `ReqwestOpenAiHttpClient`, request planner, and SSE parser remain the right boundary. No new dependency was added.
+- Added debug/test-only endpoint overrides for DeepSeek/Groq/Zhipu/GitHub Models, preserving release defaults while allowing real `easydict_cli translate --json` execution tests against local SSE endpoints.
+- Added CLI regressions for `--service deepseek`, `groq`, `zhipu`, and `github` proving API key/model settings enter the native OpenAI-compatible request path, native chunks aggregate to `translatedText`, and stdout/stderr stay free of retained worker, CompatHost, and `.NET` wording.
+- In parallel, a subagent added a release workflow contract proving the default/tag path schedules only the rs portable release jobs. Hybrid `.NET`/MSIX/WinGet artifact jobs must be positively gated by `release_flavor == 'hybrid'` and cannot use negative non-rs-portable conditions.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_deepseek_cli_translate_succeeds_against_local_endpoint_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_groq_cli_translate_succeeds_against_local_endpoint_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_zhipu_cli_translate_succeeds_against_local_endpoint_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_github_models_cli_translate_succeeds_against_local_endpoint_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid_assets -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --package easydict_packager --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `git diff --check -- rs/crates/easydict_app/src/openai_compatible.rs rs/crates/easydict_app/tests/cli_translate_behavior.rs rs/crates/easydict_packager/tests/release_contract_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-12: Added Ollama/Custom OpenAI CLI and MSIX prepare CLI contracts
+
+- Rechecked the next OpenAI-compatible provider gaps. Ollama and Custom OpenAI already run through the existing Rust `ReqwestOpenAiHttpClient`, request planner, settings loader, and SSE parser, so adding a third-party SDK would add adapter surface without reducing retained `.NET` runtime reliance. No new dependency was added.
+- Added real `easydict_cli translate --service ollama --json` and `--service custom-openai --json` regressions against local SSE endpoints. Ollama proves the configured local endpoint/model works without an Authorization header; Custom OpenAI proves user endpoint/API key/model settings flow into the same Rust-native request path. Both reject retained worker/CompatHost/`.NET` wording.
+- Added a true CLI-level `prepare-package-inputs` regression for `easydict_msix_validate`: omitted `--runtime-profile` defaults to Rust-only, rejects a publish directory containing `dotnet/` and `workers/` before writing the prepared manifest, while explicit `--runtime-profile hybrid` continues and writes the manifest.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_custom_openai_cli_translate_succeeds_against_local_endpoint_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ollama_cli_translate_succeeds_against_local_endpoint_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate prepare_package_inputs_cli_defaults_to_rust_only_and_rejects_retained_payload_before_manifest_write -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --package easydict_msix_validate --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `cd rs; cargo check -p easydict_msix_validate --all-targets`
+
+## 2026-06-12: Added Google/Caiyun/Gemini CLI and packaged CLI smoke contracts
+
+- Rechecked the next short-text provider gaps after DeepL/Doubao. Google/Caiyun/Gemini are already represented by the existing Rust planners/parsers and settings/Reqwest layers; external client crates would not improve the migration boundary enough to justify bypassing local proxy/error/settings behavior. No new dependency was added.
+- Added debug/test-only endpoint overrides for Google and Caiyun traditional HTTP execution, preserving the original Google query string when redirecting to a local endpoint. Added real `easydict_cli translate --service google --json` and `--service caiyun --json` regressions against local HTTP servers, proving the CLI sends native request shapes and avoids retained worker wording.
+- Added a debug/test-only Gemini API base URL override and a real `easydict_cli translate --service gemini --json` regression against a local SSE server. It proves the Gemini custom-streaming route posts the expected model/key/prompt payload, aggregates native SSE chunks, and does not fall back to CompatHost/`.NET` wording.
+- In parallel, a subagent added a packaged rs portable smoke: `pack-rs-portable` creates a real ZIP, the test extracts it, runs packaged `easydict_cli.exe --help`, and fake `dotnet.exe` / `powershell.exe` / `pwsh.exe` recorders stay untouched.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_google_cli_succeeds_against_local_endpoint_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_caiyun_cli_succeeds_against_local_api_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_gemini_cli_translate_succeeds_against_local_sse_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_ -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --package easydict_packager --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `cd rs; cargo check -p easydict_packager --tests`
+
+## 2026-06-12: Added DeepL/Doubao CLI and package-output Rust-only contracts
+
+- Rechecked the DeepL/Doubao provider options before changing code. DeepL's official API and Doubao/Volcano Ark streaming shape are already represented by the existing Rust request planners and SSE parsers, while the available Rust client crates would bypass local settings/proxy/error mapping. No new dependency was added.
+- Added a debug/test-only DeepL API endpoint override beside the existing NiuTrans override, then added a real `easydict_cli translate --service deepl --json` regression against a local HTTP server. It proves the CLI sends the native DeepL form request, parses `translations[].text`, and does not fall back to retained worker wording.
+- Added a real `easydict_cli translate --service doubao --json` regression against a local SSE server configured through settings. It proves the native Doubao route posts the expected model/language payload, aggregates `response.output_text.delta` chunks, and stays free of CompatHost/`.NET` wording.
+- In parallel, subagents added package-boundary contracts: `pack-rs-portable` now has a real ZIP-producing regression that validates both staging directory and ZIP exclude stale `dotnet/`, `workers/`, and CompatHost payloads; `easydict_msix_validate` now has a CLI regression proving omitted `--runtime-profile` uses Rust-only payload policy and rejects retained runtime markers unless `hybrid` is explicit.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_deepl_cli_succeeds_against_local_api_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_doubao_cli_translate_succeeds_against_local_sse_without_worker_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_niutrans_cli_succeeds_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate verify_bundle_minversion_cli_defaults_to_rust_only_payload_policy -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --package easydict_packager --package easydict_msix_validate --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+- `cd rs; cargo check -p easydict_msix_validate --all-targets`
+
+## 2026-06-12: Added native bridge and OpenAI CLI execution contracts
+
+- Rechecked the short-text OpenAI-compatible and browser NativeBridge slices after the MDD work. No new third-party library was needed: these paths already use the Rust app's native messaging protocol, request planning, and SSE parser.
+- Added a real `easydict-native-bridge` binary stdio regression for an unknown action. It proves the rs bridge answers locally through the Native Messaging framing layer and does not expose legacy `Easydict.NativeBridge`, CompatHost, `.NET`, `dotnet`, or worker executable wording.
+- Added a `rust-only` OpenAI CLI regression proving `easydict_cli translate --service openai --json` calls a local SSE-compatible endpoint, aggregates native stream chunks into `translatedText`, preserves the requested model/text payload, and does not fall back to retained worker wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test native_bridge_behavior native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_signal -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test native_bridge_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_openai_cli_translate_succeeds_against_local_server_without_worker_wording -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+- `git diff --check -- rs/crates/easydict_app/tests/native_bridge_behavior.rs rs/crates/easydict_app/tests/cli_translate_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-12: Added CLI traditional HTTP native execution contract
+
+- Rechecked the traditional HTTP translation slice after MDD support. No new third-party library was needed: the Rust app already owns request planning, Reqwest execution, and response parsing for NiuTrans and the other traditional HTTP providers.
+- Added a debug/test-only traditional HTTP endpoint override for NiuTrans so execution-level tests can drive the real `easydict_cli` binary against a local HTTP server without depending on external network services. Release builds keep the normal provider endpoint constants.
+- Added a `rust-only` CLI regression proving `easydict_cli translate --service niutrans --json` sends the native NiuTrans JSON request, parses the native response, returns `translatedText`, and does not mention retained workers, CompatHost, `.NET`, or Rust-native-route-required fallback wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_niutrans_cli_succeeds_without_worker_or_compat_host_wording -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test traditional_http_behavior translate_traditional_http_service_executes_plan_and_returns_dto -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
 ## 2026-06-12: Guarded LocalAI aliases and MSIX package input preparation
 
 - Rechecked the post-MDD core migration gaps with parallel read-only audits. No new third-party library was needed: the next risks were route/packaging boundary regressions over existing Rust code.

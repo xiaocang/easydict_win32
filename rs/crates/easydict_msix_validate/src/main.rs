@@ -501,3 +501,213 @@ fn print_usage() {
         "  --allow-unsigned: skip the AppxSignature.p7x check (use for the release workflow which builds unsigned bundles)"
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use easydict_msix_validate::DEFAULT_EXPECTED_PUBLISHER;
+    use std::fs::File;
+    use std::io::{Cursor, Seek, Write};
+    use std::path::Path;
+    use tempfile::Builder;
+    use zip::write::FileOptions;
+    use zip::ZipWriter;
+
+    #[test]
+    fn verify_bundle_minversion_cli_defaults_to_rust_only_payload_policy() {
+        let temp = Builder::new()
+            .prefix("easydict-msix-cli-rust-only-bundle-")
+            .tempdir()
+            .expect("create temp dir");
+        let bundle_path = temp.path().join("Easydict.msixbundle");
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            &retained_runtime_entries(),
+        );
+        write_bundle(&bundle_path, &[("Easydict-x64.msix", &package)]);
+
+        let bundle = bundle_path.to_string_lossy().into_owned();
+
+        assert_eq!(
+            run(vec!["verify-bundle-minversion".to_string(), bundle.clone()]),
+            1,
+            "default verify-bundle-minversion must enforce rust-only payload policy"
+        );
+        assert_eq!(
+            run(vec![
+                "verify-bundle-minversion".to_string(),
+                bundle,
+                "--runtime-profile".to_string(),
+                "hybrid".to_string(),
+            ]),
+            0,
+            "the same retained-runtime bundle should only pass with an explicit hybrid profile"
+        );
+    }
+
+    #[test]
+    fn prepare_package_inputs_cli_defaults_to_rust_only_and_rejects_retained_payload_before_manifest_write(
+    ) {
+        let temp = Builder::new()
+            .prefix("easydict-msix-cli-prepare-rust-only-")
+            .tempdir()
+            .expect("create temp dir");
+        let publish_dir = temp.path().join("publish");
+        std::fs::create_dir_all(&publish_dir).expect("create publish dir");
+        write_required_msix_assets(&publish_dir);
+        write_file(
+            &publish_dir.join("workers/longdoc/Easydict.Workers.LongDoc.exe"),
+            b"stale longdoc worker",
+        );
+        write_file(
+            &publish_dir.join("dotnet/host/fxr/8.0.11/hostfxr.dll"),
+            b"stale hostfxr",
+        );
+
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        std::fs::write(
+            &source_manifest,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+        )
+        .expect("write source manifest");
+        let default_output_manifest = temp.path().join("prepared.default.appxmanifest");
+        let hybrid_output_manifest = temp.path().join("prepared.hybrid.appxmanifest");
+
+        let default_args = vec![
+            "prepare-package-inputs".to_string(),
+            "--platform".to_string(),
+            "x64".to_string(),
+            "--publish-dir".to_string(),
+            publish_dir.to_string_lossy().into_owned(),
+            "--manifest".to_string(),
+            source_manifest.to_string_lossy().into_owned(),
+            "--output-manifest".to_string(),
+            default_output_manifest.to_string_lossy().into_owned(),
+        ];
+        assert_eq!(
+            run(default_args),
+            1,
+            "default prepare-package-inputs must enforce rust-only payload policy"
+        );
+        assert!(
+            !default_output_manifest.exists(),
+            "rust-only prepare-package-inputs must fail before writing the prepared manifest"
+        );
+
+        assert_eq!(
+            run(vec![
+                "prepare-package-inputs".to_string(),
+                "--platform".to_string(),
+                "x64".to_string(),
+                "--publish-dir".to_string(),
+                publish_dir.to_string_lossy().into_owned(),
+                "--manifest".to_string(),
+                source_manifest.to_string_lossy().into_owned(),
+                "--output-manifest".to_string(),
+                hybrid_output_manifest.to_string_lossy().into_owned(),
+                "--runtime-profile".to_string(),
+                "hybrid".to_string(),
+            ]),
+            0,
+            "explicit hybrid prepare-package-inputs may continue with retained coexistence payloads"
+        );
+        assert!(
+            hybrid_output_manifest.is_file(),
+            "hybrid prepare-package-inputs should write the prepared manifest"
+        );
+    }
+
+    fn package_bytes_with_entries(manifest: String, entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let cursor = Cursor::new(Vec::new());
+        let mut writer = ZipWriter::new(cursor);
+        let options: FileOptions<'_, ()> = FileOptions::default();
+        add_file(
+            &mut writer,
+            "AppxManifest.xml",
+            manifest.as_bytes(),
+            options,
+        );
+        for (name, contents) in entries {
+            add_file(&mut writer, name, contents, options);
+        }
+        writer.finish().expect("finish test package").into_inner()
+    }
+
+    fn write_bundle(path: &Path, entries: &[(&str, &[u8])]) {
+        let file = File::create(path).expect("create test bundle");
+        let mut writer = ZipWriter::new(file);
+        let options: FileOptions<'_, ()> = FileOptions::default();
+        for (name, contents) in entries {
+            add_file(&mut writer, name, contents, options);
+        }
+        writer.finish().expect("finish test bundle");
+    }
+
+    fn add_file<W: Write + Seek>(
+        writer: &mut ZipWriter<W>,
+        name: &str,
+        contents: &[u8],
+        options: FileOptions<'_, ()>,
+    ) {
+        writer.start_file(name, options).expect("start zip file");
+        writer.write_all(contents).expect("write zip file");
+    }
+
+    fn write_required_msix_assets(root: &Path) {
+        for asset in [
+            "Assets/SplashScreen.scale-100.png",
+            "Assets/LockScreenLogo.scale-100.png",
+            "Assets/Square150x150Logo.scale-100.png",
+            "Assets/Square44x44Logo.scale-100.png",
+            "Assets/Wide310x150Logo.scale-100.png",
+            "Assets/StoreLogo.png",
+        ] {
+            write_file(&root.join(asset), b"asset");
+        }
+    }
+
+    fn write_file(path: &Path, contents: &[u8]) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create test file parent");
+        }
+        std::fs::write(path, contents).expect("write test file");
+    }
+
+    fn manifest(name: &str, publisher: &str, min_version: &str, architecture: &str) -> String {
+        format!(
+            r#"<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+  <Identity Name="{name}" Publisher="{publisher}" Version="1.0.0.0" ProcessorArchitecture="{architecture}" />
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="{min_version}" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+</Package>"#
+        )
+    }
+
+    fn retained_runtime_entries() -> Vec<(&'static str, &'static [u8])> {
+        vec![
+            ("easydict-native-bridge.exe", b"native-bridge"),
+            ("easydict_browser_registrar.exe", b"registrar"),
+            ("BrowserHostRegistrar.exe", b"registrar-alias"),
+            ("easydict_cli.exe", b"cli"),
+            ("easydict_long_doc.exe", b"longdoc-cli"),
+            ("workers/longdoc/Easydict.Workers.LongDoc.exe", b"longdoc"),
+            ("workers/localai/Easydict.Workers.LocalAi.exe", b"localai"),
+            ("dotnet/host/fxr/8.0.11/hostfxr.dll", b"hostfxr"),
+            (
+                "dotnet/shared/Microsoft.NETCore.App/8.0.11/coreclr.dll",
+                b"coreclr",
+            ),
+        ]
+    }
+}

@@ -2,19 +2,23 @@ use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     cleanup_invalid_layout_model_files_for_directory, delete_all_layout_model_files_for_directory,
-    ensure_full_layout_model_available_for_directory, ensure_layout_model_available_for_directory,
-    ensure_tatr_model_available_for_directory, is_full_layout_model_ready_for_directory,
-    layout_model_status_for_directory, model_cache_dir, LayoutModelDownloadConfig,
-    LayoutModelDownloadError, LayoutModelPaths, ResourceDownloadClient, ResourceDownloadError,
-    ResourceDownloadProgress, ResourceProbeResult, DOC_LAYOUT_MODEL_FILE_NAME,
-    DOC_LAYOUT_MODEL_URLS, MIN_DOC_LAYOUT_MODEL_FILE_SIZE, MIN_RUNTIME_FILE_SIZE,
-    MIN_TATR_MODEL_FILE_SIZE, ONNX_RUNTIME_FILE_NAME, ONNX_RUNTIME_URLS,
+    ensure_full_layout_model_available, ensure_full_layout_model_available_for_directory,
+    ensure_layout_model_available_for_directory, ensure_tatr_model_available_for_directory,
+    is_full_layout_model_ready_for_directory, layout_model_status_for_directory, model_cache_dir,
+    LayoutModelDownloadConfig, LayoutModelDownloadError, LayoutModelPaths, ResourceDownloadClient,
+    ResourceDownloadError, ResourceDownloadProgress, ResourceProbeResult,
+    DOC_LAYOUT_MODEL_FILE_NAME, DOC_LAYOUT_MODEL_URLS, MIN_DOC_LAYOUT_MODEL_FILE_SIZE,
+    MIN_RUNTIME_FILE_SIZE, MIN_TATR_MODEL_FILE_SIZE, ONNX_RUNTIME_FILE_NAME, ONNX_RUNTIME_URLS,
     ONNX_RUNTIME_ZIP_ENTRY_PATH, TATR_MODEL_FILE_NAME, TATR_MODEL_URLS,
 };
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default)]
 struct FakeResourceDownloadClient {
@@ -93,6 +97,29 @@ fn temp_dir(name: &str) -> PathBuf {
     ))
 }
 
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    original: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let original = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, original }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(value) = self.original.as_ref() {
+            std::env::set_var(self.name, value);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
+}
+
 fn tiny_config() -> LayoutModelDownloadConfig {
     LayoutModelDownloadConfig {
         runtime_urls: vec!["https://runtime.example/ort.zip".to_string()],
@@ -118,6 +145,16 @@ fn zip_with_entry(entry: &str, body: &[u8]) -> Vec<u8> {
     writer.start_file(entry, options).expect("start zip entry");
     writer.write_all(body).expect("write zip entry");
     writer.finish().expect("finish zip").into_inner()
+}
+
+fn create_valid_sized_file(path: &Path, min_size: u64) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("create sized file parent");
+    }
+    fs::File::create(path)
+        .expect("create sized file")
+        .set_len(min_size + 1)
+        .expect("set sized file length");
 }
 
 #[test]
@@ -348,6 +385,62 @@ fn layout_model_full_ensure_downloads_runtime_doc_layout_and_tatr_models() {
     assert_eq!(stages, vec!["runtime", "model", "tatr"]);
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn layout_model_settings_entry_uses_configured_cache_dir() {
+    let dir = temp_dir("settings-cache-dir");
+    let paths = LayoutModelPaths::for_base(&dir);
+    create_valid_sized_file(&paths.native_lib_path, MIN_RUNTIME_FILE_SIZE);
+    create_valid_sized_file(&paths.doc_layout_model_path, MIN_DOC_LAYOUT_MODEL_FILE_SIZE);
+    create_valid_sized_file(&paths.tatr_model_path, MIN_TATR_MODEL_FILE_SIZE);
+    let settings = SettingsSnapshot {
+        cache_dir: Some(dir.display().to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    let status = ensure_full_layout_model_available(&settings, &mut |_| {})
+        .expect("cached layout models should be found without downloading");
+
+    assert!(status.is_full_layout_ready());
+    assert_eq!(status.native_library_path, Some(paths.native_lib_path));
+    assert_eq!(
+        status.doc_layout_model_path,
+        Some(paths.doc_layout_model_path)
+    );
+    assert_eq!(status.tatr_model_path, Some(paths.tatr_model_path));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn layout_model_settings_entry_treats_blank_cache_dir_as_default() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let local_app_data = temp_dir("settings-blank-cache-dir");
+    let default_base = local_app_data.join("Easydict");
+    let paths = LayoutModelPaths::for_base(&default_base);
+    create_valid_sized_file(&paths.native_lib_path, MIN_RUNTIME_FILE_SIZE);
+    create_valid_sized_file(&paths.doc_layout_model_path, MIN_DOC_LAYOUT_MODEL_FILE_SIZE);
+    create_valid_sized_file(&paths.tatr_model_path, MIN_TATR_MODEL_FILE_SIZE);
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &local_app_data.to_string_lossy());
+    let settings = SettingsSnapshot {
+        cache_dir: Some(" \t\r\n ".to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    let status = ensure_full_layout_model_available(&settings, &mut |_| {})
+        .expect("blank cache_dir should use default layout model cache");
+
+    assert!(status.is_full_layout_ready());
+    assert_eq!(status.native_library_path, Some(paths.native_lib_path));
+    assert_eq!(
+        status.doc_layout_model_path,
+        Some(paths.doc_layout_model_path)
+    );
+    assert_eq!(status.tatr_model_path, Some(paths.tatr_model_path));
+
+    let _ = fs::remove_dir_all(&local_app_data);
 }
 
 #[test]

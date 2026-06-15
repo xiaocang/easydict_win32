@@ -21,6 +21,85 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Aligned persistent translation-cache clearing with SettingsSnapshot cache roots
+
+- Rechecked cache-library reuse before changing the route. No new crate was needed: the existing `LongDocumentTranslationCache` SQLite helper already owns the `.NET`-compatible table shape and clear operation.
+- Added `clear_persistent_translation_cache_for_settings(...)`, which resolves the persistent LongDoc cache through `SettingsSnapshot.cache_dir_str()` before clearing it. Blank cache roots keep the existing default-root fallback.
+- `ClearTranslationCache` now goes through the same settings-aware helper that native LongDoc cache writes use. The current UI settings state still does not expose a direct `cache_dir` field, so this slice avoided the UI-owned files while closing the Rust helper boundary for portable/cache-root flows.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior clear_persistent_translation_cache_uses_settings_cache_dir -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior translation_cache -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test translation_cache_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Routed native local dictionary indexes through SettingsSnapshot cache roots
+
+- Rechecked index-library reuse before changing the route. No new crate was needed: Easydict still needs the existing `LXDX` binary format and PascalCase manifest compatibility, so the current Rust `lex_index` / `local_dictionary_index` layer remains the right boundary.
+- `local_dictionary_index_root_for_settings(...)` now derives the native index root from `SettingsSnapshot.cache_dir` when configured, using `<cache_dir>/mdx_index`; blank values reuse the shared cache-dir normalization and fall back to the legacy-compatible default.
+- `run_local_dictionary_suggestion_request_with_native_index(...)` now uses that settings-aware root. The no-settings `LocalDictionaryIndexService::new()` default remains `%LOCALAPPDATA%/Easydict/mdx_index` for explicit .NET/Rust cache coexistence, but the first rs portable can keep suggestion indexes under its portable cache root.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior native_local_dictionary_index_root_for_settings -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_dictionary_suggestion_runner_uses_settings_cache_dir_for_native_index -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test local_dictionary_index_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Hardened retained worker source-file feature gates
+
+- Added file-level `retained-dotnet-workers` cfg gates to the retained .NET worker IPC client and protocol modules, so the default rs build cannot compile those source files even if a future module declaration accidentally changes shape.
+- Extended `default_api_boundary_behavior` to assert that retained worker source files carry their own file-level cfg in addition to the crate-root export gate. This keeps the default rs surface free of retained `.NET` worker process-spawn and IPC protocol code.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Aligned layout-model and CJK-font downloads with SettingsSnapshot cache roots
+
+- Rechecked reusable library options before touching the download path. No new crate was needed: the Rust app already owns the `resource_download`, `layout_model_download`, and `font_download` layers using `reqwest`, `zip`, mirror probing, retry, temp-file publishing, and proxy-aware settings.
+- `font_download::ensure_font_with_settings(...)` now resolves its cache base from `SettingsSnapshot.cache_dir` before falling back to `%LOCALAPPDATA%/Easydict`, so the settings-aware CJK font download entry writes to the same root that status checks and native PDF overlay font lookup can inspect.
+- `layout_model_download::ensure_layout_model_available(...)`, `ensure_tatr_model_available(...)`, and `ensure_full_layout_model_available(...)` now use the same `SettingsSnapshot.cache_dir` root. This closes the mismatch where a portable/test cache root could report missing layout assets even after a settings-aware ensure call.
+- LongDoc PDF overlay font fallback now also reads cached CJK fonts from `SettingsSnapshot.cache_dir/Fonts` when that root is configured, instead of silently falling back to the default `%LOCALAPPDATA%/Easydict` font cache. Explicit `cjk_font_path` remains the highest-priority override.
+- `SettingsSnapshot` now exposes shared `cache_dir_str()` / `cache_dir_path()` helpers that trim and ignore blank cache roots. Font downloads, layout-model downloads, OpenVINO status/download, Quick Translate OpenVINO, retained-feature OpenVINO cache passing, and LongDoc cache/layout/font lookups all use that normalization, so `"   "` behaves the same as an unconfigured cache root.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test protocol_behavior settings_snapshot_cache_dir_helpers_trim_and_ignore_blank_values -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test resource_download_behavior font_download_settings_entry_treats_blank_cache_dir_as_default -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test layout_model_download_behavior layout_model_settings_entry_treats_blank_cache_dir_as_default -- --nocapture`
+- `cd rs; cargo test -p easydict_app open_vino_cache_status_for_settings_treats_blank_cache_dir_as_default --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test resource_download_behavior font_download_settings_entry_uses_configured_cache_dir -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test layout_model_download_behavior layout_model_settings_entry_uses_configured_cache_dir -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test resource_download_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test layout_model_download_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app native_pdf_overlay_font_fallback_uses_settings_cache_dir --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app native_pdf_ --lib -- --nocapture`
+
+## 2026-06-12: Added LongDoc request-timeout parity on the native route
+
+- Rechecked the LongDoc timeout gap before changing code. No new third-party library was needed: the fix is protocol/settings plumbing over the existing `serde` DTOs and Rust `reqwest` provider clients.
+- `SettingsSnapshot` and `TranslateDocumentParams` now carry the worker-compatible `requestTimeoutMs` field. Rust LongDoc request construction sets the normal profile to 30 seconds and the Foundry Local profile to 120 seconds, matching the `.NET` in-process LongDoc policy.
+- Native Quick Translate HTTP executors for OpenAI-compatible, custom streaming, traditional HTTP providers, and Bing now honor `settings.request_timeout_ms`; LongDoc native chunk requests also merge `params.requestTimeoutMs` into the per-chunk settings snapshot so params-only callers get the same timeout behavior.
+- The retained `.NET` worker C# protocol can still lag this field as coexistence-only compatibility surface, but the default rs portable path no longer depends on retained worker timeout behavior.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test protocol_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_ -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_long_document_params_timeout_flows_to_chunk_requests -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
 ## 2026-06-12: Added CLI grammar and batch native OpenAI contracts
 
 - Rechecked the remaining CLI core gaps after the provider and LongDoc work. No new third-party library was needed: grammar and batch already reuse the Rust OpenAI-compatible request planner, settings loader, Reqwest/SSE executor, and grammar parser.
@@ -1802,7 +1881,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - Rechecked reusable library options before changing the LocalAI/LongDoc boundary: no new crate is needed because this slice only preserves `.NET LongDocumentTranslationService.CreateCoreTranslationOptions(...)` policy using existing `SettingsSnapshot` provider fields. The larger LocalAI runtime replacements still point to `foundry-local-sdk` for future Foundry wrapping and `ort`/OpenVINO/WinRT APIs for future in-proc inference work.
   - Rust LongDoc requests for `windows-local-ai` with Auto or FoundryLocal provider now force `long_doc_max_concurrency=1` and set `long_doc_enable_document_context_pass=false`, matching the `.NET` Foundry LongDoc profile that avoids two-pass context and high parallelism for local model calls.
   - Explicit WindowsAI/Phi provider requests keep the user concurrency and context-pass setting, so the Foundry profile is not applied too broadly.
-  - The `.NET` profile's longer `RequestTimeoutMs=120000` remains a noted parity gap because the current Rust/worker `SettingsSnapshot` and `TranslateDocumentParams` contract do not expose a request-timeout field.
+  - Follow-up note: the Rust-native/default route now closes the earlier `RequestTimeoutMs=120000` parity gap through `SettingsSnapshot.requestTimeoutMs`, `TranslateDocumentParams.requestTimeoutMs`, and native provider client timeout wiring. Any retained `.NET` worker protocol lag is compatibility-only and does not affect the default rs portable path.
 - 2026-06-03: Added per-chunk retry parity to the Rust-native LongDoc text runner.
   - Rechecked reusable retry libraries before replacing this `.NET MaxRetriesPerBlock=1` behavior: `retry`, `backoff`, and `backon` are viable crates for richer retry/backoff policies, but this slice only needs one deterministic synchronous retry for a blocking chunk translation call. The implementation stays local in `long_document.rs` without adding another dependency or async runtime assumption.
   - Native Text/Markdown/simple-PDF-text chunk translation now retries once when the provider fails or returns blank text. Successful retries emit `block_translated.retry_count=1` with no last error, matching the core `.NET` model where `LastError` is only populated for unresolved failures.

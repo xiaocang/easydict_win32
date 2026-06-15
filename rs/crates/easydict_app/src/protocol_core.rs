@@ -1,5 +1,6 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 pub mod local_ai_provider_modes {
     pub const WINDOWS_AI: &str = "WindowsAI";
@@ -277,6 +278,8 @@ pub struct SettingsSnapshot {
     pub long_doc_max_concurrency: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub long_doc_enable_document_context_pass: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requestTimeoutMs")]
+    pub request_timeout_ms: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_translation_cache: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -301,6 +304,19 @@ pub struct SettingsSnapshot {
     pub cjk_font_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_dir: Option<String>,
+}
+
+impl SettingsSnapshot {
+    pub fn cache_dir_str(&self) -> Option<&str> {
+        self.cache_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn cache_dir_path(&self) -> Option<PathBuf> {
+        self.cache_dir_str().map(PathBuf::from)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -347,6 +363,8 @@ pub struct TranslateDocumentParams {
     pub vision_model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result_json_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requestTimeoutMs")]
+    pub request_timeout_ms: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

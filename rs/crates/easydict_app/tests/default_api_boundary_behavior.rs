@@ -465,6 +465,20 @@ fn is_foundry_local_cli_denylist_line(line: &str) -> bool {
 }
 
 fn assert_retained_worker_module_is_feature_gated(path: &str) {
+    let source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path);
+    let source = fs::read_to_string(&source_path).unwrap_or_else(|error| {
+        panic!(
+            "failed to read retained worker source {}: {error}",
+            source_path.display()
+        )
+    });
+    assert!(
+        source
+            .trim_start()
+            .starts_with("#![cfg(feature = \"retained-dotnet-workers\")]"),
+        "{path} must carry its own retained-dotnet-workers file-level cfg"
+    );
+
     let crate_root = include_str!("../src/lib.rs");
     let module_name = path
         .strip_suffix(".rs")

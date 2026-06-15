@@ -2820,7 +2820,10 @@ fn run_windows_ai_client_grammar_request<C: WindowsAiLanguageModelClient>(
 fn run_quick_translate_service_with_native_openai(
     request: QuickTranslateServiceRequest,
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestOpenAiHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestOpenAiHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeOpenAiQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
@@ -2832,7 +2835,10 @@ fn run_quick_translate_streaming_service_with_native_openai(
     request: QuickTranslateServiceRequest,
     on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestOpenAiHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestOpenAiHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeOpenAiQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
@@ -2910,9 +2916,7 @@ fn native_openvino_backend_from_settings(
     QuickTranslateBackendError,
 > {
     let cache_base = settings
-        .cache_dir
-        .as_deref()
-        .map(PathBuf::from)
+        .cache_dir_path()
         .unwrap_or_else(default_openvino_data_directory);
     let paths = NllbModelPaths::from_cache_base(cache_base);
 
@@ -2935,7 +2939,10 @@ fn native_openvino_backend_from_settings(
 fn run_quick_translate_service_with_native_custom_streaming(
     request: QuickTranslateServiceRequest,
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestCustomStreamingHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestCustomStreamingHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeCustomStreamingQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
@@ -2947,7 +2954,10 @@ fn run_quick_translate_streaming_service_with_native_custom_streaming(
     request: QuickTranslateServiceRequest,
     on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestCustomStreamingHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestCustomStreamingHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeCustomStreamingQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
@@ -2978,7 +2988,10 @@ fn run_quick_translate_streaming_service_with_native_custom_streaming(
 fn run_quick_translate_service_with_native_traditional_http(
     request: QuickTranslateServiceRequest,
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestTraditionalHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestTraditionalHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeTraditionalHttpQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
@@ -2990,7 +3003,10 @@ fn run_quick_translate_streaming_service_with_native_traditional_http(
     request: QuickTranslateServiceRequest,
     on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestTraditionalHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestTraditionalHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeTraditionalHttpQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
@@ -3021,12 +3037,19 @@ fn run_quick_translate_streaming_service_with_native_traditional_http(
 fn run_quick_translate_service_with_native_bing(
     request: QuickTranslateServiceRequest,
 ) -> QuickTranslateServiceUpdate {
-    let mut backend = match ReqwestBingHttpClient::from_settings(&request.settings) {
+    let mut backend = match ReqwestBingHttpClient::from_settings_with_timeout(
+        &request.settings,
+        quick_translate_request_timeout_ms(&request),
+    ) {
         Ok(client) => NativeBingQuickTranslateBackend::new(client),
         Err(error) => return service_error_update(request, error.to_string()),
     };
 
     run_quick_translate_service(&mut backend, &request)
+}
+
+fn quick_translate_request_timeout_ms(request: &QuickTranslateServiceRequest) -> Option<u32> {
+    request.settings.request_timeout_ms
 }
 
 fn run_quick_translate_service_with_native_mdx(
@@ -3041,9 +3064,11 @@ fn run_quick_translate_service_with_local_ai_bridge(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
-    let openvino_cache_base = request.settings.cache_dir.as_deref().map(Path::new);
-    match DirectWorkerFacade::spawn_packaged_local_ai_with_cache_base(app_dir, openvino_cache_base)
-    {
+    let openvino_cache_base = request.settings.cache_dir_path();
+    match DirectWorkerFacade::spawn_packaged_local_ai_with_cache_base(
+        app_dir,
+        openvino_cache_base.as_deref(),
+    ) {
         Ok(facade) => {
             let mut backend = LocalAiWorkerQuickTranslateBackend::new(facade);
             run_quick_translate_service(&mut backend, &request)
@@ -3067,10 +3092,10 @@ fn run_quick_translate_streaming_service_with_local_ai_bridge(
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
-    let openvino_cache_base = request.settings.cache_dir.as_deref().map(Path::new);
+    let openvino_cache_base = request.settings.cache_dir_path();
     let mut backend = match DirectWorkerFacade::spawn_packaged_local_ai_with_cache_base(
         app_dir,
-        openvino_cache_base,
+        openvino_cache_base.as_deref(),
     ) {
         Ok(facade) => LocalAiWorkerQuickTranslateBackend::new(facade),
         Err(error) => {

@@ -92,6 +92,8 @@ fn long_document_translate_builds_file_request_and_marks_loading() {
         request.settings.long_doc_enable_document_context_pass,
         Some(false)
     );
+    assert_eq!(request.params.request_timeout_ms, Some(30_000));
+    assert_eq!(request.settings.request_timeout_ms, Some(30_000));
     assert_eq!(
         request.settings.layout_detection_mode.as_deref(),
         Some("VisionLLM")
@@ -153,6 +155,8 @@ fn long_document_foundry_local_profile_forces_sequential_translation_and_skips_c
         request.settings.long_doc_enable_document_context_pass,
         Some(false)
     );
+    assert_eq!(request.params.request_timeout_ms, Some(120_000));
+    assert_eq!(request.settings.request_timeout_ms, Some(120_000));
     assert!(long_document_request_can_route_natively(&request));
 }
 
@@ -186,6 +190,8 @@ fn long_document_windows_ai_profile_preserves_user_concurrency_and_context_pass(
         request.settings.long_doc_enable_document_context_pass,
         Some(true)
     );
+    assert_eq!(request.params.request_timeout_ms, Some(30_000));
+    assert_eq!(request.settings.request_timeout_ms, Some(30_000));
     assert!(!long_document_request_can_route_natively(&request));
 }
 
@@ -854,6 +860,7 @@ fn native_text_long_document_runner_translates_chunks_and_writes_outputs() {
             && call.params.to.as_deref() == Some("zh")
             && call.params.services.as_deref() == Some(&["google".to_string()][..])
             && call.params.custom_prompt.as_deref() == Some("Preserve glossary terms.")
+            && call.settings.request_timeout_ms == Some(30_000)
     }));
 
     let output_path = result.output_path.expect("monolingual output path");
@@ -870,6 +877,51 @@ fn native_text_long_document_runner_translates_chunks_and_writes_outputs() {
         LongDocumentEvent::Status(status)
             if status.message == "Translating text document natively"
     )));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_long_document_params_timeout_flows_to_chunk_requests() {
+    let temp_dir = unique_temp_dir("longdoc-native-text-params-timeout");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A timeout-sensitive document.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        2201,
+    )
+    .expect("native text timeout request");
+    request.params.request_timeout_ms = Some(120_000);
+    request.settings.request_timeout_ms = None;
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    outcome.result.expect("native long document result");
+
+    let calls = translator.calls();
+    assert!(!calls.is_empty());
+    assert!(
+        calls
+            .iter()
+            .all(|call| call.settings.request_timeout_ms == Some(120_000)),
+        "params.requestTimeoutMs should become the native chunk request timeout: {calls:#?}"
+    );
 
     fs::remove_dir_all(&temp_dir).ok();
 }

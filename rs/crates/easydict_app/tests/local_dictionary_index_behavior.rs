@@ -1,7 +1,8 @@
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
-    default_local_dictionary_index_root, LocalDictionaryIndexDescriptor,
-    LocalDictionaryIndexManifest, LocalDictionaryIndexService, CURRENT_INDEX_FORMAT_VERSION,
-    DEFAULT_NORMALIZATION_ID, INDEX_FILE_NAME, MANIFEST_FILE_NAME,
+    default_local_dictionary_index_root, local_dictionary_index_root_for_settings,
+    LocalDictionaryIndexDescriptor, LocalDictionaryIndexManifest, LocalDictionaryIndexService,
+    CURRENT_INDEX_FORMAT_VERSION, DEFAULT_NORMALIZATION_ID, INDEX_FILE_NAME, MANIFEST_FILE_NAME,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -28,6 +29,36 @@ fn native_local_dictionary_index_default_root_uses_legacy_cache_for_dotnet_coexi
         .join("EasydictRs")
         .join("mdx_index")
         .exists());
+}
+
+#[test]
+fn native_local_dictionary_index_root_for_settings_uses_configured_cache_dir() {
+    let cache_root = TempDir::new("local-dictionary-index-settings-cache-root");
+    let settings = SettingsSnapshot {
+        cache_dir: Some(cache_root.path_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    assert_eq!(
+        local_dictionary_index_root_for_settings(&settings),
+        cache_root.path.join("mdx_index")
+    );
+}
+
+#[test]
+fn native_local_dictionary_index_root_for_settings_treats_blank_cache_dir_as_default() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().unwrap();
+    let local_app_data = TempDir::new("local-dictionary-index-blank-cache-root");
+    let _local_app_data_guard = EnvVarGuard::set("LOCALAPPDATA", local_app_data.path_string());
+    let settings = SettingsSnapshot {
+        cache_dir: Some(" \t\r\n ".to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    assert_eq!(
+        local_dictionary_index_root_for_settings(&settings),
+        local_app_data.path.join("Easydict").join("mdx_index")
+    );
 }
 
 #[test]

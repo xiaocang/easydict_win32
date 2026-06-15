@@ -3,16 +3,20 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     cached_font_path_for_directory, delete_all_fonts_for_directory, download_with_retry_and_policy,
-    ensure_font_for_directory, font_asset_for_language, font_cache_dir,
+    ensure_font_for_directory, ensure_font_with_settings, font_asset_for_language, font_cache_dir,
     has_any_cjk_font_for_directory, is_file_valid, ordered_urls_by_probe, requires_cjk_font,
     total_font_size_bytes_for_directory, FontDownloadError, ReqwestResourceDownloadClient,
     ResourceDownloadClient, ResourceDownloadError, ResourceDownloadProgress,
     ResourceDownloadRetryPolicy, ResourceProbeResult, TranslationLanguage,
 };
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default)]
 struct FakeResourceDownloadClient {
@@ -107,6 +111,29 @@ fn temp_dir(name: &str) -> PathBuf {
         "easydict-resource-download-{name}-{}-{nanos}",
         std::process::id()
     ))
+}
+
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    original: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let original = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, original }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(value) = self.original.as_ref() {
+            std::env::set_var(self.name, value);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
 }
 
 #[test]
@@ -328,6 +355,58 @@ fn font_download_ensure_downloads_ordered_asset_and_reports_stage() {
     assert!(stages.iter().all(|stage| stage == "font-zh-Hans"));
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn font_download_settings_entry_uses_configured_cache_dir() {
+    let dir = temp_dir("font-settings-cache-dir");
+    let fonts_dir = font_cache_dir(&dir);
+    fs::create_dir_all(&fonts_dir).expect("create custom fonts dir");
+    let font_path = fonts_dir.join("NotoSansSC-Regular.ttf");
+    fs::write(&font_path, b"cached-font").expect("write cached font");
+    let settings = SettingsSnapshot {
+        cache_dir: Some(dir.display().to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    let result = ensure_font_with_settings(
+        &settings,
+        TranslationLanguage::SimplifiedChinese,
+        &mut |_| {},
+    )
+    .expect("cached font should be found without downloading");
+
+    assert_eq!(result, font_path);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn font_download_settings_entry_treats_blank_cache_dir_as_default() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let local_app_data = temp_dir("font-settings-blank-cache-dir");
+    let default_base = local_app_data.join("Easydict");
+    let fonts_dir = font_cache_dir(&default_base);
+    fs::create_dir_all(&fonts_dir).expect("create default fonts dir");
+    let font_path = fonts_dir.join("NotoSansSC-Regular.ttf");
+    fs::write(&font_path, b"default-cached-font").expect("write default cached font");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &local_app_data.to_string_lossy());
+    let settings = SettingsSnapshot {
+        cache_dir: Some(" \t\r\n ".to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    let result = ensure_font_with_settings(
+        &settings,
+        TranslationLanguage::SimplifiedChinese,
+        &mut |_| {},
+    )
+    .expect("blank cache_dir should use the default font cache");
+
+    assert_eq!(result, font_path);
+
+    let _ = fs::remove_dir_all(&local_app_data);
 }
 
 #[test]

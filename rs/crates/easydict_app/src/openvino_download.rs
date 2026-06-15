@@ -187,9 +187,7 @@ pub fn ensure_openvino_assets_available(
 ) -> Result<OpenVinoDownloadStatus, OpenVinoDownloadError> {
     let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
     let base = settings
-        .cache_dir
-        .as_deref()
-        .map(PathBuf::from)
+        .cache_dir_path()
         .unwrap_or_else(default_openvino_data_directory);
     ensure_openvino_assets_available_for_directory(
         &mut client,

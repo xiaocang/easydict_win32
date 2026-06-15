@@ -1,3 +1,5 @@
+#![cfg(feature = "retained-dotnet-workers")]
+
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

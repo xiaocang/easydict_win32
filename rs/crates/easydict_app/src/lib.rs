@@ -187,7 +187,8 @@ pub use local_dictionary::{
     run_local_dictionary_suggestion_request_with_routed_backends,
 };
 pub use local_dictionary_index::{
-    default_local_dictionary_index_root, escape_data_string, LocalDictionaryIndexDescriptor,
+    default_local_dictionary_index_root, escape_data_string,
+    local_dictionary_index_root_for_settings, LocalDictionaryIndexDescriptor,
     LocalDictionaryIndexError, LocalDictionaryIndexManifest, LocalDictionaryIndexService,
     LocalDictionaryIndexSuggestionItem, CURRENT_INDEX_FORMAT_VERSION, DEFAULT_NORMALIZATION_ID,
     INDEX_FILE_NAME, MANIFEST_FILE_NAME,
@@ -502,6 +503,14 @@ pub use window_options::{
     capture_overlay_window_options, fixed_window_options, main_window_options, mini_window_options,
     pop_button_window_options, settings_window_options,
 };
+
+pub fn clear_persistent_translation_cache_for_settings(settings: &protocol::SettingsSnapshot) {
+    if let Ok(mut cache) = LongDocumentTranslationCache::open(long_document_translation_cache_path(
+        settings.cache_dir_str(),
+    )) {
+        let _ = cache.clear();
+    }
+}
 
 use win_fluent::prelude::*;
 
@@ -1323,11 +1332,9 @@ impl EasydictApp {
     }
 
     fn clear_persistent_translation_cache(&self) {
-        if let Ok(mut cache) =
-            LongDocumentTranslationCache::open(long_document_translation_cache_path(None))
-        {
-            let _ = cache.clear();
-        }
+        clear_persistent_translation_cache_for_settings(&state::settings_snapshot(
+            &self.state.settings,
+        ));
     }
 
     fn tray_task(&mut self, id: &str) -> Task<Message> {

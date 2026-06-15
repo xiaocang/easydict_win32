@@ -68,11 +68,7 @@ fn is_open_vino_supported_current_architecture() -> bool {
 }
 
 pub fn open_vino_cache_status_for_settings(settings: &SettingsSnapshot) -> OpenVinoCacheStatus {
-    let base = settings
-        .cache_dir
-        .as_deref()
-        .map(PathBuf::from)
-        .unwrap_or_else(data_directory);
+    let base = settings.cache_dir_path().unwrap_or_else(data_directory);
     open_vino_cache_status_for_directory(&base)
 }
 
@@ -117,11 +113,7 @@ pub fn load_runtime_status_for_settings_with_windows_ai_probe<P>(
 where
     P: WindowsAiLanguageModelProbe,
 {
-    let dir = settings
-        .cache_dir
-        .as_deref()
-        .map(PathBuf::from)
-        .unwrap_or_else(data_directory);
+    let dir = settings.cache_dir_path().unwrap_or_else(data_directory);
     let foundry_local_status = foundry_local_status_for_settings_without_probe(&settings);
     let windows_ai_status = windows_ai_status_from_probe(windows_ai_probe);
     status_for_directory_with_open_vino_support_and_foundry_status(
@@ -276,7 +268,10 @@ mod tests {
     };
     use std::collections::VecDeque;
     use std::fs;
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
     fn temp_status_dir(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -305,6 +300,29 @@ mod tests {
     fn install_open_vino_runtime(base: &Path) {
         let paths = NllbModelPaths::from_cache_base(base);
         install_complete_file_set(&paths.runtime_dir, OPENVINO_RUNTIME_FILES);
+    }
+
+    struct EnvironmentVariableGuard {
+        name: &'static str,
+        original: Option<String>,
+    }
+
+    impl EnvironmentVariableGuard {
+        fn set(name: &'static str, value: &str) -> Self {
+            let original = std::env::var(name).ok();
+            std::env::set_var(name, value);
+            Self { name, original }
+        }
+    }
+
+    impl Drop for EnvironmentVariableGuard {
+        fn drop(&mut self) {
+            if let Some(value) = self.original.as_ref() {
+                std::env::set_var(self.name, value);
+            } else {
+                std::env::remove_var(self.name);
+            }
+        }
     }
 
     struct FakeFoundryRuntimeController {
@@ -581,6 +599,28 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_vino_cache_status_for_settings_treats_blank_cache_dir_as_default() {
+        let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+        let local_app_data = temp_status_dir("openvino-settings-blank-cache-dir");
+        let default_base = local_app_data.join("Easydict");
+        install_open_vino_model(&default_base);
+        install_open_vino_runtime(&default_base);
+        let _local_app_data_guard =
+            EnvironmentVariableGuard::set("LOCALAPPDATA", &local_app_data.to_string_lossy());
+        let settings = SettingsSnapshot {
+            cache_dir: Some(" \t\r\n ".to_string()),
+            ..SettingsSnapshot::default()
+        };
+
+        assert_eq!(
+            open_vino_cache_status_for_settings(&settings),
+            OpenVinoCacheStatus::Ready
+        );
+
+        let _ = fs::remove_dir_all(&local_app_data);
     }
 
     #[test]

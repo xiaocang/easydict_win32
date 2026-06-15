@@ -1,3 +1,5 @@
+#![cfg(feature = "retained-dotnet-workers")]
+
 use crate::compat_protocol::{
     deserialize_json_line, ipc_error_codes, serialize_json_line_with_newline, worker_events,
     worker_kinds, worker_methods, CancelRequestParams, CancelRequestResult, ChunkEventData,

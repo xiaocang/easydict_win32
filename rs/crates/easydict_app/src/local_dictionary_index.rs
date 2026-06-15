@@ -1,4 +1,5 @@
 use crate::lex_index::{LexIndex, LexIndexError};
+use crate::protocol::SettingsSnapshot;
 use crate::state::ImportedMdxDictionary;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -457,6 +458,13 @@ pub fn default_local_dictionary_index_root() -> PathBuf {
         .unwrap_or_else(std::env::temp_dir)
         .join("Easydict")
         .join("mdx_index")
+}
+
+pub fn local_dictionary_index_root_for_settings(settings: &SettingsSnapshot) -> PathBuf {
+    settings
+        .cache_dir_path()
+        .map(|cache_dir| cache_dir.join("mdx_index"))
+        .unwrap_or_else(default_local_dictionary_index_root)
 }
 
 pub fn escape_data_string(value: &str) -> String {

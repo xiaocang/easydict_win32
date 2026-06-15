@@ -160,7 +160,15 @@ pub struct ReqwestCustomStreamingHttpClient {
 
 impl ReqwestCustomStreamingHttpClient {
     pub fn from_settings(settings: &SettingsSnapshot) -> Result<Self, OpenAiExecutionError> {
-        let mut builder = reqwest::blocking::Client::builder().timeout(Duration::from_secs(120));
+        Self::from_settings_with_timeout(settings, None)
+    }
+
+    pub fn from_settings_with_timeout(
+        settings: &SettingsSnapshot,
+        timeout_ms: Option<u32>,
+    ) -> Result<Self, OpenAiExecutionError> {
+        let timeout = request_timeout_duration(timeout_ms, Duration::from_secs(120));
+        let mut builder = reqwest::blocking::Client::builder().timeout(timeout);
 
         if settings.proxy_enabled.unwrap_or(false) {
             if let Some(proxy_uri) = normalized_optional(settings.proxy_uri.as_deref()) {
@@ -194,6 +202,13 @@ impl ReqwestCustomStreamingHttpClient {
         })?;
         Ok(Self { client })
     }
+}
+
+fn request_timeout_duration(timeout_ms: Option<u32>, default: Duration) -> Duration {
+    timeout_ms
+        .filter(|value| *value > 0)
+        .map(|value| Duration::from_millis(u64::from(value)))
+        .unwrap_or(default)
 }
 
 impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {

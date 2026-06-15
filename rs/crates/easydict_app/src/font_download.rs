@@ -214,7 +214,18 @@ pub fn ensure_font_with_settings(
     progress: &mut dyn FnMut(ResourceDownloadProgress),
 ) -> Result<PathBuf, FontDownloadError> {
     let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
-    ensure_font_for_directory(&mut client, default_data_directory(), language, progress)
+    ensure_font_for_directory(
+        &mut client,
+        data_directory_for_settings(settings),
+        language,
+        progress,
+    )
+}
+
+fn data_directory_for_settings(settings: &SettingsSnapshot) -> PathBuf {
+    settings
+        .cache_dir_path()
+        .unwrap_or_else(default_data_directory)
 }
 
 fn default_data_directory() -> PathBuf {

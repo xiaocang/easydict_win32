@@ -26,10 +26,11 @@ use easydict_app::{
     auto_foundry_local_native_probe_request, begin_local_dictionary_suggestions,
     begin_manual_quick_translate_service, begin_quick_translate, begin_quick_translate_for_surface,
     begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
-    build_quick_translate_plan_for_surface, default_hotkeys, default_named_events,
-    default_protocol_registrations, default_shell_verbs, default_tray_menu,
-    enrich_quick_translate_update_with_youdao_phonetics, local_ai_route_decision,
-    local_dictionary_query_token, local_dictionary_suggestion_request_can_route_natively,
+    build_quick_translate_plan_for_surface, clear_persistent_translation_cache_for_settings,
+    default_hotkeys, default_named_events, default_protocol_registrations, default_shell_verbs,
+    default_tray_menu, enrich_quick_translate_update_with_youdao_phonetics,
+    local_ai_route_decision, local_dictionary_query_token,
+    local_dictionary_suggestion_request_can_route_natively, long_document_translation_cache_path,
     parse_startup_activation, quick_translate_request_can_route_natively,
     resolve_quick_query_language, resolve_startup_activation_disposition,
     run_local_dictionary_suggestion_request, run_local_dictionary_suggestion_request_with_app_dir,
@@ -45,14 +46,14 @@ use easydict_app::{
     FoundryLocalError, FoundryLocalErrorCode, FoundryLocalRuntimeController,
     FoundryLocalRuntimeState, FoundryLocalRuntimeStatus, LocalAiRouteDecision,
     LocalDictionarySuggestion, LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
-    LocalDictionarySuggestionUpdate, Message, NativeBingQuickTranslateBackend,
-    NativeCustomStreamingQuickTranslateBackend, NativeMdxDictionaryReader,
-    NativeMdxDictionaryReaderFactory, NativeMdxLookupError, NativeOpenAiQuickTranslateBackend,
-    NativeOpenVinoQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
-    OpenAiApiFormat, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
-    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, Phonetic,
-    PhoneticFlightTracker, PhoneticMemoryCache, PopButtonAnchor, QuickQueryMode,
-    QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
+    LocalDictionarySuggestionUpdate, LongDocumentTranslationCache, Message,
+    NativeBingQuickTranslateBackend, NativeCustomStreamingQuickTranslateBackend,
+    NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
+    NativeOpenAiQuickTranslateBackend, NativeOpenVinoQuickTranslateBackend,
+    NativeTraditionalHttpQuickTranslateBackend, OpenAiApiFormat, OpenAiExecutionError,
+    OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan,
+    OpenAiHttpTextResponse, Phonetic, PhoneticFlightTracker, PhoneticMemoryCache, PopButtonAnchor,
+    QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
     QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
     QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
     QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
@@ -340,6 +341,38 @@ fn translation_cache_disabled_and_clear_affect_quick_translate_cache() {
     assert_eq!(task_kind(&clear_task), "none");
     assert!(app.state.translation_cache.is_empty());
     assert_eq!(app.state.settings.translation_cache_status, "Cleared");
+}
+
+#[test]
+fn clear_persistent_translation_cache_uses_settings_cache_dir() {
+    let temp_dir = unique_temp_dir("easydict-persistent-cache-clear-settings-root");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let settings = SettingsSnapshot {
+        cache_dir: Some(path_string(&temp_dir)),
+        ..SettingsSnapshot::default()
+    };
+    let db_path = long_document_translation_cache_path(settings.cache_dir_str());
+    let mut cache = LongDocumentTranslationCache::open(&db_path).expect("cache should open");
+    cache
+        .set(
+            "google",
+            "English",
+            "SimplifiedChinese",
+            "SOURCE-HASH",
+            "Hello",
+            "你好",
+        )
+        .expect("cache set should work");
+    assert_eq!(cache.entry_count().expect("count should work"), 1);
+    drop(cache);
+
+    clear_persistent_translation_cache_for_settings(&settings);
+
+    let cache = LongDocumentTranslationCache::open(&db_path).expect("cache should reopen");
+    assert_eq!(cache.entry_count().expect("count should work"), 0);
+    drop(cache);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
 #[test]
@@ -7045,6 +7078,65 @@ fn local_dictionary_suggestion_runner_uses_persistent_native_index_and_skips_fre
     assert!(second_factory.opened.is_empty());
     assert_eq!(second_update.suggestions, first_update.suggestions);
     assert_eq!(second_update.error, None);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn local_dictionary_suggestion_runner_uses_settings_cache_dir_for_native_index() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let temp_dir = unique_temp_dir("easydict-mdx-suggestions-settings-cache-index");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let legacy_local_app_data = temp_dir.join("legacy-localappdata");
+    let portable_cache_root = temp_dir.join("portable-cache");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &path_string(&legacy_local_app_data));
+    let mdx_path = temp_dir.join("Portable Dictionary.mdx");
+    fs::write(
+        &mdx_path,
+        "not a real mdx fixture; fake reader supplies keys",
+    )
+    .expect("source file should be written");
+
+    let mut state = EasydictUiState::default();
+    state.settings.imported_mdx_dictionaries.clear();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
+    state.source_text = "app".to_string();
+    let mut request =
+        begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+    request.settings.cache_dir = Some(path_string(&portable_cache_root));
+
+    let mut factory = RecordingNativeIndexReaderFactory::with_key_sets([vec![
+        "apple".to_string(),
+        "application".to_string(),
+    ]]);
+    let update =
+        easydict_app::local_dictionary::run_local_dictionary_suggestion_request_with_native_index_and_reader_factory(
+            request,
+            &mut factory,
+        );
+
+    assert_eq!(update.error, None);
+    assert_eq!(
+        update
+            .suggestions
+            .iter()
+            .map(|suggestion| suggestion.key.as_str())
+            .collect::<Vec<_>>(),
+        ["apple", "application"]
+    );
+    assert!(portable_cache_root
+        .join("mdx_index")
+        .join("mdx%3A%3Aportable-dictionary")
+        .join("index.bin")
+        .exists());
+    assert!(
+        !legacy_local_app_data
+            .join("Easydict")
+            .join("mdx_index")
+            .exists(),
+        "settings cache_dir should keep native dictionary indexes out of the legacy default root"
+    );
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }

@@ -939,6 +939,7 @@ fn direct_longdoc_worker_facade_waits_ready_and_uses_worker_method() {
             vision_api_key: None,
             vision_model: None,
             result_json_path: None,
+            request_timeout_ms: None,
         })
         .expect("direct worker longdoc should succeed");
 

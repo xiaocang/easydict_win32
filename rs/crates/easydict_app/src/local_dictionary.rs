@@ -1,5 +1,5 @@
 use crate::local_dictionary_index::{
-    default_local_dictionary_index_root, LocalDictionaryIndexDescriptor,
+    local_dictionary_index_root_for_settings, LocalDictionaryIndexDescriptor,
     LocalDictionaryIndexService, LocalDictionaryIndexSuggestionItem,
 };
 use crate::mdx_native::{
@@ -266,10 +266,25 @@ pub fn run_local_dictionary_suggestion_request_with_native_index(
     request: LocalDictionarySuggestionRequest,
 ) -> LocalDictionarySuggestionUpdate {
     let mut reader_factory = RsMdictReaderFactory;
+    run_local_dictionary_suggestion_request_with_native_index_and_reader_factory(
+        request,
+        &mut reader_factory,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_local_dictionary_suggestion_request_with_native_index_and_reader_factory<F>(
+    request: LocalDictionarySuggestionRequest,
+    reader_factory: &mut F,
+) -> LocalDictionarySuggestionUpdate
+where
+    F: NativeMdxDictionaryReaderFactory,
+{
+    let index_root = local_dictionary_index_root_for_settings(&request.settings);
     run_local_dictionary_suggestion_request_with_native_index_root(
         request,
-        default_local_dictionary_index_root(),
-        &mut reader_factory,
+        index_root,
+        reader_factory,
     )
 }
 

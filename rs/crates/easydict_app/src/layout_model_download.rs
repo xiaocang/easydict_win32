@@ -328,7 +328,7 @@ pub fn ensure_layout_model_available(
     let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
     ensure_layout_model_available_for_directory(
         &mut client,
-        default_data_directory(),
+        data_directory_for_settings(settings),
         &LayoutModelDownloadConfig::default(),
         progress,
     )
@@ -341,7 +341,7 @@ pub fn ensure_tatr_model_available(
     let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
     ensure_tatr_model_available_for_directory(
         &mut client,
-        default_data_directory(),
+        data_directory_for_settings(settings),
         &LayoutModelDownloadConfig::default(),
         progress,
     )
@@ -354,10 +354,16 @@ pub fn ensure_full_layout_model_available(
     let mut client = ReqwestResourceDownloadClient::from_settings(settings)?;
     ensure_full_layout_model_available_for_directory(
         &mut client,
-        default_data_directory(),
+        data_directory_for_settings(settings),
         &LayoutModelDownloadConfig::default(),
         progress,
     )
+}
+
+fn data_directory_for_settings(settings: &SettingsSnapshot) -> PathBuf {
+    settings
+        .cache_dir_path()
+        .unwrap_or_else(default_data_directory)
 }
 
 fn download_onnx_runtime_for_directory<C: ResourceDownloadClient>(

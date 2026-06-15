@@ -8,6 +8,7 @@ use easydict_app::compat_protocol::{
     TranslateStreamResult, WORKER_PROTOCOL_VERSION_CURRENT,
 };
 use easydict_app::protocol::*;
+use std::path::PathBuf;
 
 #[test]
 fn local_ai_provider_mode_aliases_normalize_to_protocol_values() {
@@ -59,6 +60,28 @@ fn local_ai_provider_mode_aliases_normalize_to_protocol_values() {
             "alias {alias:?} should normalize to OpenVINO"
         );
     }
+}
+
+#[test]
+fn settings_snapshot_cache_dir_helpers_trim_and_ignore_blank_values() {
+    let settings = SettingsSnapshot {
+        cache_dir: Some("  portable-cache  ".to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    assert_eq!(settings.cache_dir_str(), Some("portable-cache"));
+    assert_eq!(
+        settings.cache_dir_path(),
+        Some(PathBuf::from("portable-cache"))
+    );
+
+    let blank_settings = SettingsSnapshot {
+        cache_dir: Some(" \t\r\n ".to_string()),
+        ..SettingsSnapshot::default()
+    };
+
+    assert_eq!(blank_settings.cache_dir_str(), None);
+    assert_eq!(blank_settings.cache_dir_path(), None);
 }
 
 #[test]
@@ -362,6 +385,7 @@ fn settings_snapshot_preserves_dotnet_json_names() {
         proxy_uri: Some("http://localhost:7890".to_string()),
         long_doc_max_concurrency: Some(8),
         long_doc_enable_document_context_pass: Some(false),
+        request_timeout_ms: Some(120_000),
         imported_mdx_dictionaries: Some(vec![ImportedMdxDictionarySnapshot {
             service_id: "mdx::demo".to_string(),
             display_name: "Demo Dictionary".to_string(),
@@ -397,6 +421,7 @@ fn settings_snapshot_preserves_dotnet_json_names() {
     assert!(json.contains("\"ocrLanguage\":\"ja-JP\""));
     assert!(json.contains("\"longDocMaxConcurrency\":8"));
     assert!(json.contains("\"longDocEnableDocumentContextPass\":false"));
+    assert!(json.contains("\"requestTimeoutMs\":120000"));
     assert!(json.contains("\"importedMdxDictionaries\""));
     assert!(json.contains("\"mddFilePaths\""));
     assert!(!json.contains("ollamaEndpoint"));
@@ -422,6 +447,7 @@ fn settings_snapshot_preserves_dotnet_json_names() {
     assert_eq!(back.proxy_enabled, Some(true));
     assert_eq!(back.long_doc_max_concurrency, Some(8));
     assert_eq!(back.long_doc_enable_document_context_pass, Some(false));
+    assert_eq!(back.request_timeout_ms, Some(120_000));
     assert_eq!(
         back.imported_mdx_dictionaries
             .as_ref()
@@ -448,11 +474,13 @@ fn translate_document_params_and_result_roundtrip() {
         vision_api_key: None,
         vision_model: None,
         result_json_path: Some(r"C:\Temp\easydict-result.json".to_string()),
+        request_timeout_ms: Some(120_000),
     };
 
     let json = serialize_json(&params).expect("params serialize");
     assert!(json.contains("\"inputPath\""));
     assert!(json.contains("\"resultJsonPath\""));
+    assert!(json.contains("\"requestTimeoutMs\":120000"));
     assert!(!json.contains("visionApiKey"));
 
     let back: TranslateDocumentParams = deserialize_json(&json).expect("params deserialize");
@@ -461,6 +489,7 @@ fn translate_document_params_and_result_roundtrip() {
         back.result_json_path.as_deref(),
         Some(r"C:\Temp\easydict-result.json")
     );
+    assert_eq!(back.request_timeout_ms, Some(120_000));
 
     let result = TranslateDocumentResult {
         state: "PartiallyCompleted".to_string(),

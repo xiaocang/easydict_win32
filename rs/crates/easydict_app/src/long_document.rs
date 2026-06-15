@@ -112,6 +112,8 @@ const MAX_HISTORY_ITEMS: usize = 50;
 const NATIVE_TEXT_CHUNK_CHAR_LIMIT: usize = 2_500;
 const NATIVE_PDF_EMPTY_TEXT_ERROR: &str = "Native PDF text extraction found no selectable text";
 const NATIVE_LONG_DOCUMENT_CANCELLED_MESSAGE: &str = "Long document translation was cancelled";
+const DEFAULT_LONG_DOCUMENT_REQUEST_TIMEOUT_MS: u32 = 30_000;
+const FOUNDRY_LOCAL_LONG_DOCUMENT_REQUEST_TIMEOUT_MS: u32 = 120_000;
 const VISION_LAYOUT_GEMINI_OPENAI_ENDPOINT: &str =
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const VISION_LAYOUT_DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-flash";
@@ -398,6 +400,10 @@ pub fn build_long_document_request(
         vision_api_key,
         vision_model,
         result_json_path: None,
+        request_timeout_ms: Some(long_document_request_timeout_ms(
+            &long_doc.service,
+            &state.settings,
+        )),
     };
 
     Ok(LongDocumentServiceRequest {
@@ -2485,7 +2491,7 @@ fn native_long_document_translation_cache(
     }
 
     LongDocumentTranslationCache::open(long_document_translation_cache_path(
-        settings.cache_dir.as_deref(),
+        settings.cache_dir_str(),
     ))
     .ok()
 }
@@ -3135,11 +3141,7 @@ fn native_pdf_managed_layout_model_base(request: &LongDocumentServiceRequest) ->
 
     request
         .settings
-        .cache_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+        .cache_dir_path()
         .or_else(|| default_model_cache_dir().parent().map(Path::to_path_buf))
 }
 
@@ -3240,14 +3242,7 @@ fn native_pdf_doc_layout_yolo_paths(
         });
     }
 
-    let Some(cache_dir) = request
-        .settings
-        .cache_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    else {
+    let Some(cache_dir) = request.settings.cache_dir_path() else {
         let models_dir = default_model_cache_dir();
         return Some(LayoutModelPaths {
             native_lib_path: models_dir.join(ONNX_RUNTIME_FILE_NAME),
@@ -3998,6 +3993,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: Some(result_json_path.display().to_string()),
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot::default(),
         };
@@ -4116,6 +4112,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: Some(result_json_path.display().to_string()),
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot::default(),
         };
@@ -4561,6 +4558,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: None,
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
                 cjk_font_path: Some(test_cjk_font_path().display().to_string()),
@@ -4626,6 +4624,99 @@ mod tests {
     }
 
     #[test]
+    fn native_pdf_overlay_font_fallback_uses_settings_cache_dir() {
+        let temp_dir = unique_longdoc_test_dir("pdf-cjk-overlay-cache-dir");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("paper.pdf");
+        let output_path = temp_dir.join("paper-translated.pdf");
+        fs::write(
+            &input_path,
+            minimal_longdoc_test_pdf_with_pages(&["Original PDF text"]),
+        )
+        .expect("input pdf");
+        let cached_font_path =
+            crate::font_download::font_cache_dir(&temp_dir).join("NotoSansSC-Regular.ttf");
+        fs::create_dir_all(cached_font_path.parent().expect("font parent"))
+            .expect("font cache dir");
+        fs::copy(test_cjk_font_path(), &cached_font_path).expect("cache CJK font fixture");
+
+        let request = LongDocumentServiceRequest {
+            query_id: 96,
+            input: LongDocumentInput::File(input_path.display().to_string()),
+            params: TranslateDocumentParams {
+                input_path: input_path.display().to_string(),
+                output_path: Some(output_path.display().to_string()),
+                input_mode: "Pdf".to_string(),
+                from: "English".to_string(),
+                to: "SimplifiedChinese".to_string(),
+                service_id: "google".to_string(),
+                output_mode: "Monolingual".to_string(),
+                pdf_export_mode: Some("Overlay".to_string()),
+                layout_detection: None,
+                page_range: None,
+                vision_endpoint: None,
+                vision_api_key: None,
+                vision_model: None,
+                result_json_path: None,
+                request_timeout_ms: None,
+            },
+            settings: SettingsSnapshot {
+                cache_dir: Some(temp_dir.display().to_string()),
+                ..SettingsSnapshot::default()
+            },
+        };
+        let source_chunks = vec![NativeTextSourceChunk {
+            text: "Text that does not exist in the PDF stream".to_string(),
+            fallback_text: None,
+            page_number: 1,
+            source_block_id: "pdf-p1-body-b1".to_string(),
+            source_kind: NativeTextSourceKind::PdfSourceBlock,
+            pdf_context: None,
+            pdf_export_metadata: Some(PdfExportChunkMetadata {
+                chunk_index: 0,
+                page_number: 1,
+                source_block_id: "pdf-p1-body-b1".to_string(),
+                source_block_type: PdfExportSourceBlockType::Paragraph,
+                order_in_page: 0,
+                reading_order_score: 1.0,
+                bounding_box: Some(crate::PdfRect::new(96.0, 684.0, 260.0, 48.0)),
+                text_style: Some(crate::pdf_export_blocks::PdfExportBlockTextStyle {
+                    font_size: 14.0,
+                    line_spacing: 16.0,
+                    rotation_angle: 0.0,
+                }),
+                translation_skipped: false,
+                preserve_original_text_in_pdf_export: false,
+                retry_count: 0,
+                fallback_text: None,
+                detected_font_names: Some(vec!["Helvetica".to_string()]),
+            }),
+        }];
+        let translations = vec![Some("缓存字体".to_string())];
+        let text_checkpoint =
+            native_export_checkpoint(NativeTextInputKind::PdfText, &source_chunks, &translations);
+
+        let export = try_export_native_pdf_document(
+            &request,
+            &source_chunks,
+            &translations,
+            "",
+            &BTreeSet::new(),
+            &text_checkpoint,
+        )
+        .expect("cache-dir CJK overlay PDF export should not fail")
+        .expect("cached font should handle native PDF overlay export");
+
+        assert_eq!(export.output_path, output_path.display().to_string());
+        assert!(export.bilingual_output_path.is_none());
+        let extracted =
+            pdf_extract::extract_text(&output_path).expect("overlay text should extract");
+        assert!(extracted.contains("缓存"));
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
     fn native_pdf_export_overlay_mode_uses_overlay_without_content_stream_match() {
         let temp_dir = unique_longdoc_test_dir("pdf-explicit-overlay-export");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -4655,6 +4746,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: None,
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
                 cjk_font_path: Some(test_cjk_font_path().display().to_string()),
@@ -4749,6 +4841,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: None,
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
                 cjk_font_path: Some(test_cjk_font_path().display().to_string()),
@@ -4843,6 +4936,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: None,
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot::default(),
         };
@@ -4920,6 +5014,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: None,
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
                 local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
@@ -4948,6 +5043,7 @@ mod tests {
                 vision_api_key: None,
                 vision_model: None,
                 result_json_path: None,
+                request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
                 ocr_engine: Some("WindowsNative".to_string()),
@@ -5547,6 +5643,12 @@ fn native_quick_translate_request_for_chunk(
         streaming_capable: descriptor.streaming_capable,
     };
 
+    let mut settings = request.settings.clone();
+    settings.request_timeout_ms = request
+        .params
+        .request_timeout_ms
+        .or(settings.request_timeout_ms);
+
     Some(QuickTranslateServiceRequest {
         query_id: request.query_id,
         query_mode: QuickQueryMode::Translation,
@@ -5563,7 +5665,7 @@ fn native_quick_translate_request_for_chunk(
             custom_prompt: request.settings.long_doc_custom_prompt.clone(),
         },
         grammar_params: None,
-        settings: request.settings.clone(),
+        settings,
         service,
     })
 }
@@ -5925,7 +6027,22 @@ fn native_pdf_overlay_font_path(request: &LongDocumentServiceRequest) -> Result<
 
     let target_language =
         TranslationLanguage::from_code(document_language_to_quick_code(&request.params.to));
-    crate::font_download::cached_font_path(target_language).ok_or_else(|| {
+    let cached_font_path = request
+        .settings
+        .cache_dir_path()
+        .and_then(|cache_dir| {
+            crate::font_download::cached_font_path_for_directory(&cache_dir, target_language)
+        })
+        .or_else(|| {
+            request
+                .settings
+                .cache_dir_path()
+                .is_none()
+                .then(|| crate::font_download::cached_font_path(target_language))
+                .flatten()
+        });
+
+    cached_font_path.ok_or_else(|| {
         format!(
             "no cached CJK PDF overlay font is available for target language '{}'",
             request.params.to
@@ -6746,7 +6863,21 @@ fn long_document_settings_snapshot(state: &EasydictUiState) -> SettingsSnapshot 
     };
     settings.long_doc_enable_document_context_pass =
         Some(state.long_document.two_pass_context && !uses_foundry_profile);
+    settings.request_timeout_ms = Some(if uses_foundry_profile {
+        FOUNDRY_LOCAL_LONG_DOCUMENT_REQUEST_TIMEOUT_MS
+    } else {
+        DEFAULT_LONG_DOCUMENT_REQUEST_TIMEOUT_MS
+    });
     settings
+}
+
+fn long_document_request_timeout_ms(service_id: &str, settings: &SettingsState) -> u32 {
+    let snapshot = crate::state::settings_snapshot(settings);
+    if uses_foundry_local_long_document_profile(service_id, &snapshot) {
+        FOUNDRY_LOCAL_LONG_DOCUMENT_REQUEST_TIMEOUT_MS
+    } else {
+        DEFAULT_LONG_DOCUMENT_REQUEST_TIMEOUT_MS
+    }
 }
 
 fn uses_foundry_local_long_document_profile(service_id: &str, settings: &SettingsSnapshot) -> bool {

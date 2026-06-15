@@ -152,25 +152,30 @@ public sealed class DeepLService : BaseTranslationService
             return;
         }
 
-        var url = $"{GetApiHost()}/v2/languages?type=target";
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("DeepL-Auth-Key", _apiKey);
-
-        using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            return; // keep baseline; this is a best-effort enhancement
-        }
-
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
         HashSet<Language> fetched;
         try
         {
+            var url = $"{GetApiHost()}/v2/languages?type=target";
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("DeepL-Auth-Key", _apiKey);
+
+            using var response = await HttpClient.SendAsync(httpRequest, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return; // keep baseline; this is a best-effort enhancement
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             fetched = ParseLanguages(json);
         }
-        catch (JsonException)
+        catch (Exception ex) when (
+            ex is HttpRequestException or JsonException or TaskCanceledException &&
+            !cancellationToken.IsCancellationRequested)
         {
-            return; // malformed/unexpected response; keep baseline (best-effort)
+            // Best-effort: network/timeout/malformed-response failures keep the baseline.
+            // Genuine caller cancellation (token signalled) is allowed to propagate.
+            System.Diagnostics.Debug.WriteLine($"[DeepL] Language refresh failed: {ex.Message}");
+            return;
         }
 
         if (fetched.Count == 0)
@@ -199,7 +204,8 @@ public sealed class DeepLService : BaseTranslationService
         foreach (var element in doc.RootElement.EnumerateArray())
         {
             if (element.ValueKind != JsonValueKind.Object ||
-                !element.TryGetProperty("language", out var codeElement))
+                !element.TryGetProperty("language", out var codeElement) ||
+                codeElement.ValueKind != JsonValueKind.String)
             {
                 continue;
             }

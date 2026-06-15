@@ -152,4 +152,44 @@ public class DeepLServiceLanguageRefreshTests
         result.Should().Contain(Language.Vietnamese);
         result.Should().HaveCount(2); // "XX" skipped, not coerced to English
     }
+
+    [Fact]
+    public void ParseLanguages_NonStringLanguageValue_IsSkipped_DoesNotThrow()
+    {
+        // A valid JSON payload where "language" is non-string/null must not throw
+        // (codeElement.GetString() would otherwise raise InvalidOperationException).
+        const string json = """
+            [
+              {"language":123,"name":"Number"},
+              {"language":null,"name":"Null"},
+              {"name":"Missing"},
+              {"language":"EN-US","name":"English"}
+            ]
+            """;
+
+        var result = DeepLService.ParseLanguages(json);
+
+        result.Should().ContainSingle().Which.Should().Be(Language.English);
+    }
+
+    [Fact]
+    public async Task RefreshSupportedLanguagesAsync_NetworkException_KeepsBaseline_DoesNotThrow()
+    {
+        var service = new DeepLService(new HttpClient(new ThrowingHttpMessageHandler()));
+        service.Configure("test-api-key:fx", useWebFirst: true);
+
+        // A transport failure (DNS/socket) must be a no-op, not propagate (best-effort refresh).
+        await service.RefreshSupportedLanguagesAsync();
+
+        service.SupportedLanguages.Should().Contain(Language.English);
+        service.SupportedLanguages.Should().Contain(Language.Vietnamese);
+    }
+
+    /// <summary>HttpMessageHandler that simulates a transport failure (e.g. DNS/socket error).</summary>
+    private sealed class ThrowingHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("Simulated network failure");
+    }
 }

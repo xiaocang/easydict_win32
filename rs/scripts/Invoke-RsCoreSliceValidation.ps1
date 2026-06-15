@@ -19,6 +19,11 @@
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection -DryRun
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mouse-selection
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-export
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-formula
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mdx-native
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile openai-compatible
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile windows-ai-native
 #>
 
 [CmdletBinding(PositionalBinding = $false)]
@@ -80,9 +85,18 @@ $validationProfiles = [ordered]@{
     "desktop-settings" = [pscustomobject]@{
         Description = "Desktop shell/integration side-effect diagnostics plus settings-save persistence errors."
         Steps = @(
+            (New-ValidationStep "format desktop shell and integration slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-shell\src\lib.rs", "rs\crates\easydict_app\src\desktop_shell.rs", "rs\crates\easydict_app\src\desktop_integration.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs")),
+            (New-ValidationStep "Windows shell helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-shell\Cargo.toml")),
+            (New-ValidationStep "desktop integration registry contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "desktop_integration")),
+            (New-ValidationStep "desktop shell route ownership" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "browser_support_and_external_links_use_rust_owned_desktop_shell_helper")),
+            (New-ValidationStep "desktop integration route ownership" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "uses_rust_owned_desktop_integration_helper")),
             (New-ValidationStep "desktop shell diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "desktop_shell_action")),
             (New-ValidationStep "desktop integration diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "desktop_integration_action")),
-            (New-ValidationStep "settings save diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "settings_save"))
+            (New-ValidationStep "settings save diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "settings_save")),
+            (New-ValidationStep "default bundled helper process boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_bundled_helper_process_boundary_stays_inside_windows_shell_lib")),
+            (New-ValidationStep "default shell URL boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_shell_open_url_boundary_rejects_non_web_and_retained_targets")),
+            (New-ValidationStep "default app shell task boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_app_shell_actions_do_not_bypass_windows_shell_lib")),
+            (New-ValidationStep "default desktop registry boundary scan" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_desktop_registry"))
         )
     }
     "settings-credentials" = [pscustomobject]@{
@@ -103,6 +117,23 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "format Built-in AI registration slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs")),
             (New-ValidationStep "app Built-in AI registration state/lifecycle" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "builtin_device")),
             (New-ValidationStep "OpenAI-compatible Built-in AI registration contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "openai_compatible_behavior", "builtin_device_registration"))
+        )
+    }
+    "openai-compatible" = [pscustomobject]@{
+        Description = "Rust-native OpenAI-compatible request planning, SSE parsing, Quick Translate, and CLI provider contracts."
+        Steps = @(
+            (New-ValidationStep "format OpenAI-compatible slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\openai_compatible.rs", "rs\crates\easydict_app\src\llm_streaming.rs", "rs\crates\easydict_app\src\quick_translate.rs", "rs\crates\easydict_app\src\bin\easydict_cli.rs", "rs\crates\easydict_app\tests\openai_compatible_behavior.rs", "rs\crates\easydict_app\tests\llm_streaming_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\cli_translate_behavior.rs")),
+            (New-ValidationStep "OpenAI SSE parser contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "llm_streaming_behavior")),
+            (New-ValidationStep "OpenAI-compatible planner and executor contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "openai_compatible_behavior")),
+            (New-ValidationStep "Quick Translate OpenAI-compatible routes" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "native_openai_quick_translate")),
+            (New-ValidationStep "CLI OpenAI translate/grammar/batch contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_openai_cli")),
+            (New-ValidationStep "CLI OpenAI streaming latency contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "stream_command_writes_openai_chunks_before_sse_response_completes")),
+            (New-ValidationStep "CLI Ollama native contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_ollama_cli")),
+            (New-ValidationStep "CLI Custom OpenAI native contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_custom_openai_cli")),
+            (New-ValidationStep "CLI DeepSeek native contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_deepseek_cli")),
+            (New-ValidationStep "CLI Groq native contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_groq_cli")),
+            (New-ValidationStep "CLI Zhipu native contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_zhipu_cli")),
+            (New-ValidationStep "CLI GitHub Models native contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_github_models_cli"))
         )
     }
     "custom-streaming" = [pscustomobject]@{
@@ -143,6 +174,20 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "OpenVINO download contracts and diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "openvino_download_behavior", "openvino_"))
         )
     }
+    "windows-ai-native" = [pscustomobject]@{
+        Description = "WindowsAI/Phi Silica native client, prepare/status, Quick Translate, CLI, and LongDoc route contracts."
+        Steps = @(
+            (New-ValidationStep "format WindowsAI native slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-ai\src\lib.rs", "lib\easydict-windows-ai\src\winrt_language_model.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\quick_translate.rs", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\src\bin\easydict_cli.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\cli_translate_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs")),
+            (New-ValidationStep "WindowsAI lib native contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-ai\Cargo.toml")),
+            (New-ValidationStep "app WindowsAI prepare state/lifecycle" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "app_windows_ai_prepare")),
+            (New-ValidationStep "Quick Translate WindowsAI route decisions" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "local_ai_route_decision")),
+            (New-ValidationStep "Quick Translate native WindowsAI client routes" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "windows_ai")),
+            (New-ValidationStep "CLI native WindowsAI route contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "explicit_windows_ai")),
+            (New-ValidationStep "CLI LocalAI native-only boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "local_ai_cli")),
+            (New-ValidationStep "LongDoc native WindowsAI routes" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "windows_ai")),
+            (New-ValidationStep "LongDoc LocalAI route matrix" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "local_ai_long_document_route_matrix"))
+        )
+    }
     "windows-ai-prepare" = [pscustomobject]@{
         Description = "WindowsAI/Phi Silica prepare lifecycle, app status mapping, and lib-owned prepare contracts."
         Steps = @(
@@ -154,16 +199,21 @@ $validationProfiles = [ordered]@{
     "browser-support" = [pscustomobject]@{
         Description = "Rust-owned browser native-messaging registrar routing and app-visible diagnostics."
         Steps = @(
+            (New-ValidationStep "format browser support and extension packaging slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\browser_registrar.rs", "rs\crates\easydict_app\src\bin\easydict_browser_registrar.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\browser_registrar_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_packager\src\lib.rs", "rs\crates\easydict_packager\src\main.rs", "rs\crates\easydict_packager\tests\release_contract_behavior.rs")),
             (New-ValidationStep "browser support app diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "browser_support")),
-            (New-ValidationStep "browser registrar rs host boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "browser_registrar_behavior", "browser_registrar_defaults_to_rs_native_host_without_overwriting_legacy_host")),
-            (New-ValidationStep "extension does not fall back to legacy host" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "browser_registrar_behavior", "browser_extension_defaults_to_rs_native_host_without_legacy_fallback"))
+            (New-ValidationStep "browser registrar behavior contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "browser_registrar_behavior")),
+            (New-ValidationStep "browser registrar binary contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--bin", "easydict_browser_registrar")),
+            (New-ValidationStep "browser extension default release contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "default_browser_extension")),
+            (New-ValidationStep "browser extension package scanning contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--lib", "package_browser_extension"))
         )
     }
     "native-bridge" = [pscustomobject]@{
         Description = "Rust-owned Native Messaging frame parsing, rs OCR named event signaling, and no legacy .NET bridge wording."
         Steps = @(
-            (New-ValidationStep "format native bridge slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\native_bridge.rs", "rs\crates\easydict_app\src\bin\easydict_native_bridge.rs", "rs\crates\easydict_app\tests\native_bridge_behavior.rs")),
-            (New-ValidationStep "native bridge frame parser and binary contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "native_bridge_behavior"))
+            (New-ValidationStep "format native bridge and named-event slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-ipc\src\lib.rs", "rs\crates\easydict_app\src\native_bridge.rs", "rs\crates\easydict_app\src\named_event.rs", "rs\crates\easydict_app\src\bin\easydict_native_bridge.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\native_bridge_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs")),
+            (New-ValidationStep "Windows IPC named-event helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-ipc\Cargo.toml", "--all-targets")),
+            (New-ValidationStep "native bridge frame parser and binary contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "native_bridge_behavior")),
+            (New-ValidationStep "app named-event receiver ownership" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "shell_and_protocol_entries_cover_ocr_activation_contract"))
         )
     }
     "protocol-facade" = [pscustomobject]@{
@@ -179,7 +229,8 @@ $validationProfiles = [ordered]@{
     "input-actions" = [pscustomobject]@{
         Description = "Rust-owned clipboard read/write/monitor and text insertion side-effect contracts."
         Steps = @(
-            (New-ValidationStep "format input action slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\clipboard.rs", "rs\crates\easydict_app\src\text_insertion.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\ocr_behavior.rs")),
+            (New-ValidationStep "format input action slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-text-selection\src\lib.rs", "rs\crates\easydict_app\src\clipboard.rs", "rs\crates\easydict_app\src\text_insertion.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\ocr_behavior.rs")),
+            (New-ValidationStep "Windows text-selection clipboard/insertion helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-text-selection\Cargo.toml")),
             (New-ValidationStep "clipboard facade and monitor contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "clipboard")),
             (New-ValidationStep "text insertion facade contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "text_insertion")),
             (New-ValidationStep "quick translate clipboard actions" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "clipboard")),
@@ -202,14 +253,20 @@ $validationProfiles = [ordered]@{
     "file-dialog" = [pscustomobject]@{
         Description = "Native file/folder dialog Result facade and app-level error surfacing."
         Steps = @(
-            (New-ValidationStep "file dialog result facade" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "file_dialog::tests::dialog_result_api_preserves_backend_error_path")),
+            (New-ValidationStep "format file dialog slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-dialogs\src\lib.rs", "rs\crates\easydict_app\src\file_dialog.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs")),
+            (New-ValidationStep "Windows native dialog helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-dialogs\Cargo.toml", "--all-targets")),
+            (New-ValidationStep "app file dialog facade contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "file_dialog")),
+            (New-ValidationStep "app file dialog route ownership" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "file_dialogs_to_rust_owned_helpers")),
             (New-ValidationStep "MDX import dialog diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "mdx_dictionary_dialog_error")),
+            (New-ValidationStep "LongDoc browse dialog routing" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "app_update_long_document_browse_starts_file_dialog_only_in_long_document_mode")),
             (New-ValidationStep "LongDoc browse dialog diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "long_document_file_dialog_error"))
         )
     }
     "text-selection" = [pscustomobject]@{
         Description = "UIA/clipboard selected-text capture diagnostics and quick-translate task plumbing."
         Steps = @(
+            (New-ValidationStep "format text-selection slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-text-selection\src\lib.rs", "rs\crates\easydict_app\src\text_selection.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\text_selection_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs")),
+            (New-ValidationStep "Windows text-selection selected-text helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-text-selection\Cargo.toml")),
             (New-ValidationStep "backend diagnostic preservation" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "text_selection_behavior", "capture_backend_preserves")),
             (New-ValidationStep "quick translate text-selection capture" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "text_selection_capture")),
             (New-ValidationStep "selected-text capture task" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "selected_text_capture_task")),
@@ -228,8 +285,10 @@ $validationProfiles = [ordered]@{
     "ocr-diagnostics" = [pscustomobject]@{
         Description = "OCR HTTP parser failures, native screen capture errors, and window-snapshot diagnostics."
         Steps = @(
+            (New-ValidationStep "format OCR diagnostics slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-screen-capture\src\lib.rs", "rs\crates\easydict_app\src\screen_capture_native.rs", "rs\crates\easydict_app\src\ocr.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\ocr_behavior.rs")),
+            (New-ValidationStep "Windows screen capture helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-screen-capture\Cargo.toml", "--all-targets")),
             (New-ValidationStep "HTTP backend parse diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "ocr_http_provider")),
-            (New-ValidationStep "screen capture result facade" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "screen_capture_native::tests::capture_region_result_preserves_native_error_diagnostics")),
+            (New-ValidationStep "app screen capture facade contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "screen_capture_native")),
             (New-ValidationStep "app OCR capture diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "app_ocr_capture_failure_surfaces_native_screen_capture_error")),
             (New-ValidationStep "window snapshot diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "capture_window_snapshot_failure_preserves_manual_region_capture")),
             (New-ValidationStep "snapshot startup contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "ocr_hotkey_captures_window_snapshot_for_double_click_detection")),
@@ -239,22 +298,65 @@ $validationProfiles = [ordered]@{
     "longdoc-layout" = [pscustomobject]@{
         Description = "LongDoc DocLayout-YOLO/TATR/Vision layout configuration and backend diagnostics."
         Steps = @(
-            (New-ValidationStep "format LongDoc layout slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\src\vision_layout.rs", "rs\crates\easydict_app\src\table_structure_onnx.rs", "rs\crates\easydict_app\tests\layout_model_download_behavior.rs", "rs\crates\easydict_app\tests\vision_layout_behavior.rs", "rs\crates\easydict_app\tests\table_structure_onnx_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs")),
+            (New-ValidationStep "format LongDoc layout slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\src\layout_model_download.rs", "rs\crates\easydict_app\src\doc_layout_yolo.rs", "rs\crates\easydict_app\src\doc_layout_yolo_onnx.rs", "rs\crates\easydict_app\src\vision_layout.rs", "rs\crates\easydict_app\src\table_structure.rs", "rs\crates\easydict_app\src\table_structure_onnx.rs", "rs\crates\easydict_app\tests\layout_model_download_behavior.rs", "rs\crates\easydict_app\tests\doc_layout_yolo_behavior.rs", "rs\crates\easydict_app\tests\doc_layout_yolo_onnx_behavior.rs", "rs\crates\easydict_app\tests\vision_layout_behavior.rs", "rs\crates\easydict_app\tests\table_structure_behavior.rs", "rs\crates\easydict_app\tests\table_structure_onnx_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs")),
             (New-ValidationStep "layout model download contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "layout_model_download_behavior", "layout_model")),
+            (New-ValidationStep "DocLayout-YOLO preprocessing contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "doc_layout_yolo_behavior", "doc_layout_yolo")),
+            (New-ValidationStep "DocLayout-YOLO ONNX helper contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "doc_layout_yolo_onnx_behavior", "doc_layout_yolo_onnx")),
             (New-ValidationStep "vision layout request/parser/executor contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "vision_layout_behavior", "vision_layout")),
+            (New-ValidationStep "TATR table structure contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "table_structure_behavior", "table_")),
             (New-ValidationStep "TATR ONNX helper contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "table_structure_onnx_behavior", "tatr_onnx")),
             (New-ValidationStep "explicit VisionLLM config errors" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "explicit_vision_layout_config_surfaces_missing_required_settings")),
             (New-ValidationStep "vision backend page diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "vision_layout_backend_errors_preserve_page_number_and_provider_message")),
             (New-ValidationStep "explicit TATR setup diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "tatr"))
         )
     }
+    "longdoc-export" = [pscustomobject]@{
+        Description = "Rust-native LongDoc TXT/Markdown/PDF export, PDF content-stream patching, and source-block export metadata."
+        Steps = @(
+            (New-ValidationStep "format LongDoc export slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\long_document_export.rs", "rs\crates\easydict_app\src\pdf_content_stream.rs", "rs\crates\easydict_app\src\pdf_native_export.rs", "rs\crates\easydict_app\src\pdf_export_blocks.rs", "rs\crates\easydict_app\src\pdf_source_extraction.rs", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\tests\long_document_export_behavior.rs", "rs\crates\easydict_app\tests\pdf_content_stream_behavior.rs", "rs\crates\easydict_app\tests\pdf_native_export_behavior.rs", "rs\crates\easydict_app\tests\pdf_export_blocks_behavior.rs", "rs\crates\easydict_app\tests\pdf_source_extraction_behavior.rs")),
+            (New-ValidationStep "LongDoc text and markdown export composers" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_export_behavior")),
+            (New-ValidationStep "PDF content-stream patch contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "pdf_content_stream_behavior")),
+            (New-ValidationStep "native PDF export contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "pdf_native_export_behavior", "native_pdf_export")),
+            (New-ValidationStep "PDF export block overlay metadata" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "pdf_export_blocks_behavior")),
+            (New-ValidationStep "PDF source extraction export metadata" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "pdf_source_extraction_behavior"))
+        )
+    }
+    "longdoc-formula" = [pscustomobject]@{
+        Description = "Rust-native LongDoc formula preservation, text layout/font metrics, and PDF formula evidence."
+        Steps = @(
+            (New-ValidationStep "format LongDoc formula/layout slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\text_layout.rs", "rs\crates\easydict_app\src\font_metrics.rs", "rs\crates\easydict_app\src\document_layout.rs", "rs\crates\easydict_app\src\latex_formula.rs", "rs\crates\easydict_app\src\formula_protection.rs", "rs\crates\easydict_app\src\content_preservation.rs", "rs\crates\easydict_app\src\formula_text_reconstruction.rs", "rs\crates\easydict_app\src\character_paragraph.rs", "rs\crates\easydict_app\src\pdf_formula_adapter.rs", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\tests\text_layout_behavior.rs", "rs\crates\easydict_app\tests\font_metrics_behavior.rs", "rs\crates\easydict_app\tests\document_layout_behavior.rs", "rs\crates\easydict_app\tests\latex_formula_behavior.rs", "rs\crates\easydict_app\tests\formula_protection_behavior.rs", "rs\crates\easydict_app\tests\content_preservation_behavior.rs", "rs\crates\easydict_app\tests\formula_text_reconstruction_behavior.rs", "rs\crates\easydict_app\tests\character_paragraph_behavior.rs", "rs\crates\easydict_app\tests\pdf_formula_adapter_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs")),
+            (New-ValidationStep "text layout wrapping and fit contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "text_layout_behavior")),
+            (New-ValidationStep "font metrics contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "font_metrics_behavior")),
+            (New-ValidationStep "document layout geometry contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "document_layout_behavior")),
+            (New-ValidationStep "LaTeX render-text simplifier" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "latex_formula_behavior")),
+            (New-ValidationStep "formula protection contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "formula_protection_behavior")),
+            (New-ValidationStep "content preservation service contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "content_preservation_behavior")),
+            (New-ValidationStep "formula-aware text reconstruction contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "formula_text_reconstruction_behavior")),
+            (New-ValidationStep "character paragraph evidence contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "character_paragraph_behavior")),
+            (New-ValidationStep "PDF formula adapter contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "pdf_formula_adapter_behavior")),
+            (New-ValidationStep "native LongDoc formula integration" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "native_text_long_document_formula"))
+        )
+    }
+    "mdx-native" = [pscustomobject]@{
+        Description = "Rust-native MDX/MDD lookup, encrypted dictionary routing, MDD resource inlining, and real-corpus gates."
+        Steps = @(
+            (New-ValidationStep "format rs-mdict crate" @("cargo", "fmt", "--manifest-path", "lib\rs-mdict\Cargo.toml", "--check")),
+            (New-ValidationStep "format app MDX native slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\mdx_native.rs", "rs\crates\easydict_app\tests\mdx_native_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\settings_storage_behavior.rs")),
+            (New-ValidationStep "rs-mdict default contracts" @("cargo", "test", "--manifest-path", "lib\rs-mdict\Cargo.toml")),
+            (New-ValidationStep "rs-mdict env-gated real-corpus resource contract" @("cargo", "test", "--manifest-path", "lib\rs-mdict\Cargo.toml", "--features", "real-corpus-tests", "--test", "integration_test", "test_mdd_locate_configured_resource")),
+            (New-ValidationStep "app native MDX/MDD lookup contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "mdx_native_behavior")),
+            (New-ValidationStep "quick translate MDX service contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "mdx")),
+            (New-ValidationStep "settings MDD companion discovery contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "settings_storage_behavior", "mdd"))
+        )
+    }
     "local-dictionary-suggestions" = [pscustomobject]@{
         Description = "Rust-native MDX suggestion index routing, encrypted dictionaries, and no CompatHost fallback."
         Steps = @(
-            (New-ValidationStep "local dictionary suggestion runner" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "local_dictionary_suggestion_runner")),
-            (New-ValidationStep "encrypted native suggestions" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "encrypted_local_dictionary_suggestions")),
-            (New-ValidationStep "mixed native prefix before bridge" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "mixed_local_dictionary_suggestions")),
-            (New-ValidationStep "stale app-dir markers ignored" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "local_dictionary_suggestions_app_dir_ignores_stale_dotnet_payload_markers"))
+            (New-ValidationStep "format local dictionary suggestion/index slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\local_dictionary.rs", "rs\crates\easydict_app\src\local_dictionary_index.rs", "rs\crates\easydict_app\src\lex_index.rs", "rs\crates\easydict_app\src\bin\easydict_lex_index.rs", "rs\crates\easydict_app\tests\local_dictionary_index_behavior.rs", "rs\crates\easydict_app\tests\lex_index_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs")),
+            (New-ValidationStep "LexIndex LXDX contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "lex_index_behavior")),
+            (New-ValidationStep "LexIndex CLI contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--bin", "easydict-lex-index")),
+            (New-ValidationStep "persistent local dictionary index contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "local_dictionary_index_behavior")),
+            (New-ValidationStep "Quick Translate local dictionary suggestion contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "local_dictionary_suggestion"))
         )
     }
     "rs-portable-release" = [pscustomobject]@{
@@ -305,6 +407,7 @@ $parallelCargoLockFiles = @(
     "rs/Cargo.lock"
 )
 $generatedCargoLockFiles = @(
+    "lib/easydict-windows-dialogs/Cargo.lock",
     "lib/easydict-windows-credentials/Cargo.lock"
 )
 
@@ -319,9 +422,10 @@ $profileRecommendations = [ordered]@{
     "desktop-settings" = [pscustomobject]@{
         PathPatterns = @(
             "lib/easydict-windows-shell/**",
-            "rs/crates/easydict_app/src/desktop*.rs"
+            "rs/crates/easydict_app/src/desktop*.rs",
+            "rs/crates/easydict_app/tests/default_api_boundary_behavior.rs"
         )
-        DiffPatterns = @("DesktopShell", "DesktopIntegration", "desktop_shell", "desktop_integration", "settings_save", "SettingsSave")
+        DiffPatterns = @("DesktopShell", "DesktopIntegration", "desktop_shell", "desktop_integration", "settings_save", "SettingsSave", "WindowsShell", "windows_shell", "OpenUrl", "RunBundledExecutable", "ShellExecuteW", "register_shell_verb", "register_protocol")
     }
     "settings-credentials" = [pscustomobject]@{
         PathPatterns = @(
@@ -341,6 +445,15 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/tests/openai_compatible_behavior.rs"
         )
         DiffPatterns = @("BuiltInAi", "Built-in AI", "builtin_device", "device_registration")
+    }
+    "openai-compatible" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/openai_compatible.rs",
+            "rs/crates/easydict_app/src/llm_streaming.rs",
+            "rs/crates/easydict_app/tests/openai_compatible_behavior.rs",
+            "rs/crates/easydict_app/tests/llm_streaming_behavior.rs"
+        )
+        DiffPatterns = @("OpenAi", "OpenAI-compatible", "openai_compatible", "native_openai", "llm_streaming", "ChatCompletions", "Responses", "SSE", "ollama", "custom-openai", "DeepSeek", "Groq", "Zhipu", "GitHub Models", "github_models", "OpenAiApiFormat", "OpenAiCompatibleConfig", "execute_openai_stream_request")
     }
     "custom-streaming" = [pscustomobject]@{
         PathPatterns = @(
@@ -381,6 +494,12 @@ $profileRecommendations = [ordered]@{
         )
         DiffPatterns = @("OpenVino", "OpenVINO", "openvino_", "open-vino")
     }
+    "windows-ai-native" = [pscustomobject]@{
+        PathPatterns = @(
+            "lib/easydict-windows-ai/**"
+        )
+        DiffPatterns = @("WindowsAi", "WindowsAI", "windows_ai", "windows-ai", "Phi Silica", "PhiSilica", "phi_silica", "windows-local-ai", "LanguageModel", "WindowsAiLanguageModelClient", "DefaultWindowsAiLanguageModelClient", "local_ai_route_decision", "explicit_windows_ai", "auto_windows_ai")
+    }
     "windows-ai-prepare" = [pscustomobject]@{
         PathPatterns = @(
             "lib/easydict-windows-ai/**"
@@ -389,19 +508,22 @@ $profileRecommendations = [ordered]@{
     }
     "browser-support" = [pscustomobject]@{
         PathPatterns = @(
-            "rs/crates/easydict_browser_registrar/**",
+            "rs/crates/easydict_app/src/browser_registrar.rs",
+            "rs/crates/easydict_app/src/bin/easydict_browser_registrar.rs",
             "rs/crates/easydict_app/tests/browser_registrar_behavior.rs",
             "browser-extension/**"
         )
-        DiffPatterns = @("BrowserSupport", "browser_support", "browser_registrar", "native-messaging", "NativeMessaging")
+        DiffPatterns = @("BrowserSupport", "browser_support", "browser_registrar", "native-messaging", "NativeMessaging", "package_browser_extension", "default_browser_extension", "com.easydict.rs.bridge")
     }
     "native-bridge" = [pscustomobject]@{
         PathPatterns = @(
+            "lib/easydict-windows-ipc/**",
             "rs/crates/easydict_app/src/native_bridge.rs",
+            "rs/crates/easydict_app/src/named_event.rs",
             "rs/crates/easydict_app/src/bin/easydict_native_bridge.rs",
             "rs/crates/easydict_app/tests/native_bridge_behavior.rs"
         )
-        DiffPatterns = @("NativeBridge", "native_bridge", "easydict-native-bridge", "easydict_native_bridge", "run_native_bridge", "OCR_TRANSLATE_EVENT_NAME")
+        DiffPatterns = @("NativeBridge", "native_bridge", "easydict-native-bridge", "easydict_native_bridge", "run_native_bridge", "named_event", "easydict_windows_ipc", "OCR_TRANSLATE_EVENT_NAME", "Local\\EasydictRs-OcrTranslate", "Subscription::named_event")
     }
     "protocol-facade" = [pscustomobject]@{
         PathPatterns = @(
@@ -419,7 +541,7 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/tests/quick_translate_behavior.rs",
             "rs/crates/easydict_app/tests/ocr_behavior.rs"
         )
-        DiffPatterns = @("ClipboardOperation", "clipboard_monitor", "monitor_clipboard", "TextInsertion", "text_insertion", "result_action", "silent_ocr_outcome_uses_rust_clipboard_task", "ReadClipboardText", "WriteClipboardText", "PlatformCommand::InsertText")
+        DiffPatterns = @("ClipboardOperation", "clipboard_monitor", "monitor_clipboard", "TextInsertion", "text_insertion", "foreground_text_selection_target", "clipboard_text_snapshot", "set_clipboard_text", "result_action", "silent_ocr_outcome_uses_rust_clipboard_task", "ReadClipboardText", "WriteClipboardText", "PlatformCommand::InsertText")
     }
     "tts" = [pscustomobject]@{
         PathPatterns = @(
@@ -435,14 +557,14 @@ $profileRecommendations = [ordered]@{
             "lib/easydict-windows-dialogs/**",
             "rs/crates/easydict_app/src/file_dialog.rs"
         )
-        DiffPatterns = @("FileDialog", "file_dialog", "dialog_result", "MdxDictionaryDialog", "LongDocumentBrowse")
+        DiffPatterns = @("FileDialog", "file_dialog", "dialog_result", "MdxDictionaryDialog", "LongDocumentBrowse", "open_file_dialog_task", "open_folder_dialog_task", "Task::OpenFileDialog", "Task::OpenFolderDialog", "System.Windows.Forms")
     }
     "text-selection" = [pscustomobject]@{
         PathPatterns = @(
             "rs/crates/easydict_app/src/text_selection.rs",
             "rs/crates/easydict_app/tests/text_selection_behavior.rs"
         )
-        DiffPatterns = @("TextSelection", "text_selection", "selected_text", "capture_native_selected_text", "UIA", "clipboard backend")
+        DiffPatterns = @("TextSelection", "text_selection", "selected_text", "capture_native_selected_text", "capture_native_selected_text_result", "selected_text_from_capture_result", "TextSelectionBackendError", "UIA", "clipboard backend", "clipboard fallback")
     }
     "mouse-selection" = [pscustomobject]@{
         PathPatterns = @(
@@ -464,25 +586,83 @@ $profileRecommendations = [ordered]@{
     "longdoc-layout" = [pscustomobject]@{
         PathPatterns = @(
             "rs/crates/easydict_app/src/long_document.rs",
+            "rs/crates/easydict_app/src/layout_model_download.rs",
+            "rs/crates/easydict_app/src/doc_layout_yolo.rs",
+            "rs/crates/easydict_app/src/doc_layout_yolo_onnx.rs",
+            "rs/crates/easydict_app/src/vision_layout.rs",
+            "rs/crates/easydict_app/src/table_structure.rs",
             "rs/crates/easydict_app/src/table_structure_onnx.rs",
             "rs/crates/easydict_app/tests/layout_model_download_behavior.rs",
+            "rs/crates/easydict_app/tests/doc_layout_yolo_behavior.rs",
+            "rs/crates/easydict_app/tests/doc_layout_yolo_onnx_behavior.rs",
+            "rs/crates/easydict_app/tests/table_structure_behavior.rs",
             "rs/crates/easydict_app/tests/table_structure_onnx_behavior.rs",
             "rs/crates/easydict_app/tests/vision_layout_behavior.rs",
             "rs/crates/easydict_app/tests/long_document_behavior.rs"
         )
-        DiffPatterns = @("DocLayout", "TATR", "VisionLLM", "vision_layout", "layout_model", "recognize_bgra", "LongDocumentBackendError")
+        DiffPatterns = @("DocLayout", "doc_layout_yolo", "TATR", "table_structure", "VisionLLM", "vision_layout", "layout_model", "recognize_bgra", "LongDocumentBackendError")
     }
-    "local-dictionary-suggestions" = [pscustomobject]@{
+    "longdoc-export" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/long_document_export.rs",
+            "rs/crates/easydict_app/src/pdf_content_stream.rs",
+            "rs/crates/easydict_app/src/pdf_native_export.rs",
+            "rs/crates/easydict_app/src/pdf_export_blocks.rs",
+            "rs/crates/easydict_app/src/pdf_source_extraction.rs",
+            "rs/crates/easydict_app/tests/long_document_export_behavior.rs",
+            "rs/crates/easydict_app/tests/pdf_content_stream_behavior.rs",
+            "rs/crates/easydict_app/tests/pdf_native_export_behavior.rs",
+            "rs/crates/easydict_app/tests/pdf_export_blocks_behavior.rs",
+            "rs/crates/easydict_app/tests/pdf_source_extraction_behavior.rs"
+        )
+        DiffPatterns = @("LongDocumentExport", "long_document_export", "PdfExport", "pdf_export", "PdfExportCheckpoint", "pdf_native_export", "pdf_content_stream", "ContentStreamReplacement", "NeedsFontEmbedding", "PdfOcr", "resultJsonPath", "result_json", "sidecar", "pdf_export_mode")
+    }
+    "longdoc-formula" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/text_layout.rs",
+            "rs/crates/easydict_app/src/font_metrics.rs",
+            "rs/crates/easydict_app/src/document_layout.rs",
+            "rs/crates/easydict_app/src/latex_formula.rs",
+            "rs/crates/easydict_app/src/formula_protection.rs",
+            "rs/crates/easydict_app/src/content_preservation.rs",
+            "rs/crates/easydict_app/src/formula_text_reconstruction.rs",
+            "rs/crates/easydict_app/src/character_paragraph.rs",
+            "rs/crates/easydict_app/src/pdf_formula_adapter.rs",
+            "rs/crates/easydict_app/tests/text_layout_behavior.rs",
+            "rs/crates/easydict_app/tests/font_metrics_behavior.rs",
+            "rs/crates/easydict_app/tests/document_layout_behavior.rs",
+            "rs/crates/easydict_app/tests/latex_formula_behavior.rs",
+            "rs/crates/easydict_app/tests/formula_protection_behavior.rs",
+            "rs/crates/easydict_app/tests/content_preservation_behavior.rs",
+            "rs/crates/easydict_app/tests/formula_text_reconstruction_behavior.rs",
+            "rs/crates/easydict_app/tests/character_paragraph_behavior.rs",
+            "rs/crates/easydict_app/tests/pdf_formula_adapter_behavior.rs"
+        )
+        DiffPatterns = @("FormulaProtection", "formula_protection", "content_preservation", "FormulaPreservation", "TextLayout", "text_layout", "FontMetrics", "font_metrics", "DocumentLayout", "document_layout", "latex_formula", "FormulaAwareText", "formula_text_reconstruction", "CharacterParagraph", "character_paragraph", "pdf_formula_adapter", "native_text_long_document_formula")
+    }
+    "mdx-native" = [pscustomobject]@{
         PathPatterns = @(
             "lib/rs-mdict/**",
             "rs/crates/easydict_app/src/mdx_native.rs",
             "rs/crates/easydict_app/tests/mdx_native_behavior.rs"
         )
-        DiffPatterns = @("MDX", "MDD", "mdx", "mdd", "dictionary_suggestion", "local_dictionary")
+        DiffPatterns = @("MDX", "MDD", "mdx", "mdd", "rs-mdict", "rust_mdict", "MdxLookupParams", "NativeMdx", "NativeMdd", "mdd_resources_inlined", "RS_MDICT_TEST", "Collins")
+    }
+    "local-dictionary-suggestions" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/local_dictionary.rs",
+            "rs/crates/easydict_app/src/local_dictionary_index.rs",
+            "rs/crates/easydict_app/src/lex_index.rs",
+            "rs/crates/easydict_app/src/bin/easydict_lex_index.rs",
+            "rs/crates/easydict_app/tests/local_dictionary_index_behavior.rs",
+            "rs/crates/easydict_app/tests/lex_index_behavior.rs"
+        )
+        DiffPatterns = @("dictionary_suggestion", "local_dictionary", "local_dictionary_suggestion", "lex_index", "mdx_index", "fuzzy_hits")
     }
     "rs-portable-release" = [pscustomobject]@{
         PathPatterns = @(
             ".github/workflows/release.yml",
+            ".github/workflows/release-publish.yml",
             "rs/crates/easydict_packager/**",
             "rs/scripts/Package-Portable.ps1",
             "rs/README.md"

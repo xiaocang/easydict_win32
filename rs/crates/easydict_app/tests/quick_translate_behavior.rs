@@ -8200,6 +8200,8 @@ fn encrypted_mdx_service_routes_natively_without_compat_host_spawn() {
     state.results = Vec::new();
     state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
     state.settings.imported_mdx_dictionaries[0].is_encrypted = true;
+    state.settings.imported_mdx_dictionaries[0].regcode = Some(valid_mdx_regcode());
+    state.settings.imported_mdx_dictionaries[0].email = Some("email@example.com".to_string());
     let plan = begin_quick_translate(&mut state).expect("MDX query should begin");
     let mut requests = plan.service_requests();
     let request = requests.remove(0);

@@ -50,8 +50,10 @@ public class DeepLServiceLanguageRefreshTests
 
         await service.RefreshSupportedLanguagesAsync();
 
-        handler.Requests.Should().HaveCount(1);
-        var request = handler.Requests[0];
+        // Capture the snapshot once (Requests returns a fresh copy each call).
+        var requests = handler.Requests;
+        requests.Should().HaveCount(1);
+        var request = requests[0];
         request.Method.Should().Be(HttpMethod.Get);
         request.RequestUri!.ToString().Should().Contain("/v2/languages");
         request.RequestUri!.Query.Should().Contain("type=target");

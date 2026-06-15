@@ -927,6 +927,39 @@ fn native_mdd_html_inline_decodes_utf8_percent_encoded_resource_paths() {
 }
 
 #[test]
+fn native_mdd_html_inline_decodes_html_entities_in_resource_paths() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([
+        (r"\images\logo & mark.png", b"\x89PNG".as_slice()),
+        (r"\images\quoted.png", b"QUOTE".as_slice()),
+        (r"\audio\発音.mp3", b"ID3".as_slice()),
+    ]))]);
+
+    let html = inline_mdd_resources_in_html_with_factory(
+        &mut mdd_factory,
+        &dictionary,
+        r#"<div>
+            <img src="images/logo%20&amp;%20mark.png?cache=1&amp;theme=dark">
+            <source srcset="images/&#x71;uoted.png 1x, https://example.com/keep.png 2x">
+            <audio src="audio/&#30330;&#38899;.mp3"></audio>
+            <span style="background:url(&quot;images/quoted.png&quot;)"></span>
+        </div>"#,
+    )
+    .expect("HTML entity escaped MDD resource references should be rewritten");
+
+    assert_eq!(mdd_factory.opened, [r"C:\Dicts\demo.mdd"]);
+    assert!(html.contains(r#"src="data:image/png;base64,iVBORw==""#));
+    assert!(html.contains(
+        r#"srcset="data:image/png;base64,UVVPVEU= 1x, https://example.com/keep.png 2x""#
+    ));
+    assert!(html.contains(r#"src="data:audio/mpeg;base64,SUQz""#));
+    assert!(html.contains("url('data:image/png;base64,UVVPVEU=')"));
+    assert!(!html.contains("&amp;"));
+    assert!(!html.contains("&#x71;"));
+    assert!(!html.contains("&quot;"));
+}
+
+#[test]
 fn native_mdd_html_inline_rewrites_srcset_poster_and_lazy_resource_attrs() {
     let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
     let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([

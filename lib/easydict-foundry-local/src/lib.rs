@@ -1080,61 +1080,7 @@ where
 }
 
 fn is_retained_dotnet_runtime_or_worker_command(value: &str) -> bool {
-    let normalized = value.trim().trim_matches('"').replace('\\', "/");
-    let lower = normalized.to_ascii_lowercase();
-    let leaf = lower
-        .rsplit('/')
-        .next()
-        .unwrap_or(lower.as_str())
-        .split_whitespace()
-        .next()
-        .unwrap_or("");
-
-    matches!(
-        leaf,
-        "dotnet"
-            | "dotnet.exe"
-            | "dotnet.cmd"
-            | "dotnet.bat"
-            | "dotnet.com"
-            | "powershell"
-            | "powershell.exe"
-            | "powershell.cmd"
-            | "powershell.bat"
-            | "powershell.com"
-            | "pwsh"
-            | "pwsh.exe"
-            | "pwsh.cmd"
-            | "pwsh.bat"
-            | "pwsh.com"
-            | "hostfxr.dll"
-            | "hostpolicy.dll"
-            | "coreclr.dll"
-            | "clrjit.dll"
-            | "singlefilehost.exe"
-            | "system.private.corelib.dll"
-    ) || lower.contains("easydict.compathost")
-        || lower.contains("easydict.workers.")
-        || lower.contains(".runtimeconfig.json")
-        || has_retained_dotnet_runtime_or_worker_path_component(&lower)
-        || lower.contains("/host/fxr/")
-        || lower.contains(".ps1")
-}
-
-fn has_retained_dotnet_runtime_or_worker_path_component(value: &str) -> bool {
-    value
-        .split('/')
-        .filter(|component| !component.is_empty())
-        .any(|component| {
-            matches!(
-                component,
-                "dotnet"
-                    | "workers"
-                    | "microsoft.netcore.app"
-                    | "microsoft.windowsdesktop.app"
-                    | "microsoft.aspnetcore.app"
-            )
-        })
+    easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(value)
 }
 
 fn foundry_local_default_log_dirs() -> Vec<PathBuf> {

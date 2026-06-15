@@ -1200,4 +1200,188 @@ mod tests {
         assert_eq!(current_tick_count_ms(), 0);
         assert!(point_targets_window_root(0, 0, 0).is_err());
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_edit_control_smoke_copies_selection_and_inserts_text_when_enabled() {
+        if !windows_text_selection_smoke_enabled() {
+            return;
+        }
+
+        let _guard = WINDOWS_SMOKE_LOCK.lock().expect("smoke lock");
+        let _clipboard_guard = ClipboardRestoreGuard::capture();
+        let window = TestEditWindow::new("alpha beta gamma");
+        window.focus();
+        window.select_range(6, 10);
+
+        focus_window_and_send_ctrl_c(window.parent_hwnd.0 as isize, 0)
+            .expect("copy selected smoke text");
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let selected = clipboard_text_snapshot().expect("clipboard should contain smoke text");
+        assert_eq!(selected.text.as_deref(), Some("beta"));
+
+        let target =
+            foreground_text_insertion_target().expect("smoke edit control should be foreground");
+        insert_text_into_target(&target, "delta", 0).expect("insert into smoke edit control");
+
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        assert_eq!(window.text(), "alpha delta gamma");
+    }
+
+    #[cfg(windows)]
+    static WINDOWS_SMOKE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[cfg(windows)]
+    struct ClipboardRestoreGuard(Option<ClipboardTextSnapshot>);
+
+    #[cfg(windows)]
+    impl ClipboardRestoreGuard {
+        fn capture() -> Self {
+            Self(clipboard_text_snapshot().ok())
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for ClipboardRestoreGuard {
+        fn drop(&mut self) {
+            match self.0.as_ref().and_then(|snapshot| snapshot.text.as_deref()) {
+                Some(text) => {
+                    let _ = set_clipboard_text(text);
+                }
+                None => {
+                    let _ = clear_clipboard();
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn windows_text_selection_smoke_enabled() -> bool {
+        std::env::var("EASYDICT_WINDOWS_TEXT_SELECTION_SMOKE")
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(windows)]
+    struct TestEditWindow {
+        parent_hwnd: windows::Win32::Foundation::HWND,
+        edit_hwnd: windows::Win32::Foundation::HWND,
+    }
+
+    #[cfg(windows)]
+    impl TestEditWindow {
+        fn new(text: &str) -> Self {
+            use windows::core::PCWSTR;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                CreateWindowExW, ShowWindow, ES_LEFT, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE,
+                WS_CHILD, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+            };
+
+            let parent_class_name = wide_null("STATIC");
+            let parent_title = wide_null("Easydict Text Selection Smoke");
+            let parent_hwnd = unsafe {
+                CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    PCWSTR(parent_class_name.as_ptr()),
+                    PCWSTR(parent_title.as_ptr()),
+                    WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                    64,
+                    64,
+                    520,
+                    160,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            }
+            .expect("create smoke parent window");
+
+            let edit_class_name = wide_null("EDIT");
+            let title = wide_null(text);
+            let edit_hwnd = unsafe {
+                CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    PCWSTR(edit_class_name.as_ptr()),
+                    PCWSTR(title.as_ptr()),
+                    WS_CHILD | WS_VISIBLE | WINDOW_STYLE(ES_LEFT as u32),
+                    16,
+                    24,
+                    480,
+                    32,
+                    Some(parent_hwnd),
+                    None,
+                    None,
+                    None,
+                )
+            }
+            .expect("create smoke edit control");
+            unsafe {
+                let _ = ShowWindow(parent_hwnd, SW_SHOW);
+            }
+
+            Self {
+                parent_hwnd,
+                edit_hwnd,
+            }
+        }
+
+        fn focus(&self) {
+            use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
+            use windows::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
+
+            unsafe {
+                let _ = BringWindowToTop(self.parent_hwnd);
+                let _ = SetForegroundWindow(self.parent_hwnd);
+                let _ = SetActiveWindow(self.parent_hwnd);
+                let _ = SetFocus(Some(self.edit_hwnd));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+
+        fn select_range(&self, start: usize, end: usize) {
+            use windows::Win32::Foundation::{LPARAM, WPARAM};
+            use windows::Win32::UI::WindowsAndMessaging::SendMessageW;
+
+            const EM_SETSEL: u32 = 0x00B1;
+
+            unsafe {
+                let _ = SendMessageW(
+                    self.edit_hwnd,
+                    EM_SETSEL,
+                    Some(WPARAM(start)),
+                    Some(LPARAM(end as isize)),
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        fn text(&self) -> String {
+            use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextLengthW, GetWindowTextW};
+
+            let length = unsafe { GetWindowTextLengthW(self.edit_hwnd) };
+            let mut buffer = vec![0u16; length as usize + 1];
+            let copied = unsafe { GetWindowTextW(self.edit_hwnd, &mut buffer) };
+            String::from_utf16_lossy(&buffer[..copied as usize])
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for TestEditWindow {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(self.parent_hwnd);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn wide_null(value: &str) -> Vec<u16> {
+        value.encode_utf16().chain(std::iter::once(0)).collect()
+    }
 }

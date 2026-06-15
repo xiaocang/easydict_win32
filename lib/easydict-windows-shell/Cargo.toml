@@ -4,6 +4,9 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 version = "0.1.0"
 
+[dependencies]
+easydict_runtime_guards = { path = "../easydict-runtime-guards" }
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",

@@ -5,6 +5,8 @@ use easydict_app::{
     load_settings_file, main_window_options_for_settings, mini_window_options,
     pop_button_view_with_state, pop_button_window_options, preview_control_state_from_id,
     settings_window_options, EasydictApp, EasydictUiState, Message, SettingsState,
+    MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS, MAIN_WINDOW_MIN_HEIGHT_DIPS,
+    MAIN_WINDOW_MIN_WIDTH_DIPS,
 };
 use win_fluent::prelude::*;
 
@@ -97,12 +99,23 @@ fn preview_window_options() -> WindowOptions {
     let (default_width, default_height) = if settings_preview {
         (846.0, 913.0)
     } else {
-        (940.0, 1220.0)
+        (
+            MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
+            MAIN_WINDOW_DEFAULT_HEIGHT_DIPS,
+        )
     };
     let width = preview_env_f32("EASYDICT_PREVIEW_WIDTH_DIPS").unwrap_or(default_width);
     let height = preview_env_f32("EASYDICT_PREVIEW_HEIGHT_DIPS").unwrap_or(default_height);
-    let min_width = if settings_preview { 760.0 } else { 400.0 };
-    let min_height = if settings_preview { 620.0 } else { 500.0 };
+    let min_width = if settings_preview {
+        760.0
+    } else {
+        MAIN_WINDOW_MIN_WIDTH_DIPS
+    };
+    let min_height = if settings_preview {
+        620.0
+    } else {
+        MAIN_WINDOW_MIN_HEIGHT_DIPS
+    };
     let title = if settings_preview {
         "Easydict Settings"
     } else {

@@ -52,10 +52,7 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
         "RETAINED_WORKERS_ENABLED=true",
         "workflow should mark retained worker steps only after explicit hybrid validation",
     );
-    assert!(
-        !workflow.contains("if: env.RUNTIME_PROFILE != 'rust-only'"),
-        "release workflow should not use negative rust-only checks for retained worker/runtime steps"
-    );
+    assert_no_negative_runtime_profile_rust_only_gate(&workflow, "release workflow");
 
     assert_contains(
         &portable_script,
@@ -517,6 +514,11 @@ fn ci_workflow_runs_default_rs_rust_only_boundary_tests() {
     );
     assert_contains(
         rust_only_job,
+        "cargo test -p easydict_app --test sidecar_ipc_e2e -- --nocapture",
+        "default CI should run the Rust-native Sidecar IPC E2E gate instead of the retired .NET E2E console app",
+    );
+    assert_contains(
+        rust_only_job,
         "cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers -- --exact --nocapture",
         "default CI should prove CLI --app-dir ignores stale retained .NET payload markers",
     );
@@ -890,6 +892,16 @@ fn release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects() 
         "build-rust-helpers",
         "Build-RustHelpers shim should use the Rust build-rust-helpers subcommand",
     );
+    assert_contains(
+        &build_helpers,
+        "IncludeLegacyRegistrarAlias",
+        "Build-RustHelpers shim should require an explicit switch for the legacy registrar alias",
+    );
+    assert_contains(
+        &build_helpers,
+        "--include-legacy-registrar-alias",
+        "Build-RustHelpers shim should forward the legacy registrar alias only when explicitly requested",
+    );
 
     for relative_path in [
         ".github/workflows/release-publish.yml",
@@ -919,6 +931,35 @@ fn release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects() 
             );
         }
     }
+
+    for relative_path in [
+        ".github/workflows/release-publish.yml",
+        ".github/workflows/arm64-msix-smoke.yml",
+        "dotnet/Makefile",
+        "dotnet/scripts/publish.ps1",
+        "dotnet/scripts/package-and-install.ps1",
+    ] {
+        let text = read_text(&root.join(relative_path));
+        assert_contains(
+            &text,
+            "IncludeLegacyRegistrarAlias",
+            &format!(
+                "{relative_path} is a legacy/hybrid WinUI packaging path and must explicitly request the BrowserHostRegistrar.exe alias"
+            ),
+        );
+    }
+
+    let package_portable = read_text(&root.join("rs/scripts/Package-Portable.ps1"));
+    assert_not_contains(
+        &package_portable,
+        "IncludeLegacyRegistrarAlias",
+        "first-release rs portable shim must not request the legacy browser registrar alias",
+    );
+    assert_not_contains(
+        &package_portable,
+        "--include-legacy-registrar-alias",
+        "first-release rs portable shim must not pass the legacy browser registrar alias flag",
+    );
 }
 
 #[test]
@@ -954,6 +995,7 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
         platform: "x64".to_string(),
         configuration: "Release".to_string(),
         output_dir: output_dir.clone(),
+        include_legacy_registrar_alias: false,
     })
     .expect("build helpers should run fake cargo and copy generated helpers");
 
@@ -1004,6 +1046,10 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
             "{exe_name} should be copied from fake cargo output"
         );
     }
+    assert!(
+        !output_dir.join("BrowserHostRegistrar.exe").exists(),
+        "default build-rust-helpers should not copy the legacy browser registrar alias"
+    );
 
     let _ = fs::remove_dir_all(test_root);
 }
@@ -1044,6 +1090,7 @@ fn rustup_target_add_is_forced_to_rust_only_runtime_profile() {
         platform: "x64".to_string(),
         configuration: "Release".to_string(),
         output_dir,
+        include_legacy_registrar_alias: false,
     })
     .expect("build helpers should run fake rustup and cargo");
 
@@ -1583,11 +1630,12 @@ fn build_rust_helpers_powershell_shim_delegates_and_forces_runtime_profile() {
         "--features",
         "--all-features",
         "CompatHost",
+        "--include-legacy-registrar-alias",
     ] {
         assert_not_contains(
             &cargo_record,
             forbidden,
-            "Build-RustHelpers shim must not enable retained runtime features",
+            "Build-RustHelpers shim must not enable retained runtime features or legacy aliases by default",
         );
     }
 
@@ -2733,6 +2781,35 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         "RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}",
         "create-bundle should require the caller-provided runtime profile used by bundle payload validation",
     );
+    assert_contains(
+        create_bundle_job,
+        "Require explicit hybrid profile for bundle validation",
+        "create-bundle should guard its own runtime profile before bundle validation",
+    );
+    assert_contains(
+        create_bundle_job,
+        "$profile = \"${{ env.RUNTIME_PROFILE }}\".Trim().ToLowerInvariant().Replace(\"_\", \"-\")",
+        "create-bundle should normalize the caller-provided runtime profile",
+    );
+    assert_contains(
+        create_bundle_job,
+        "if ($profile -ne \"hybrid\")",
+        "create-bundle should reject empty or unknown runtime profiles locally",
+    );
+    assert_contains(
+        create_bundle_job,
+        "\"RUNTIME_PROFILE=hybrid\" | Out-File",
+        "create-bundle should pass only a normalized explicit hybrid profile to bundle validation",
+    );
+    assert!(
+        create_bundle_job
+            .find("Require explicit hybrid profile for bundle validation")
+            .expect("create-bundle guard should exist")
+            < create_bundle_job
+                .find("Validate bundle MinVersion")
+                .expect("bundle validator step should exist"),
+        "create-bundle should validate the runtime profile before running the bundle validator"
+    );
     assert_not_contains(
         create_bundle_job,
         "github.event.inputs.runtime_profile || 'hybrid'",
@@ -2759,10 +2836,7 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
             "if: env.RETAINED_WORKERS_ENABLED == 'true'",
             &format!("{relative_path} should gate retained worker/runtime steps positively"),
         );
-        assert!(
-            !text.contains("if: env.RUNTIME_PROFILE != 'rust-only'"),
-            "{relative_path} should not use negative rust-only checks for retained worker/runtime steps"
-        );
+        assert_no_negative_runtime_profile_rust_only_gate(&text, relative_path);
     }
 
     for relative_path in [
@@ -2826,21 +2900,30 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         "legacy Package-Msix.ps1 should keep prepare-package-inputs on the explicit hybrid path",
     );
 
-    assert_contains(
-        &makefile,
-        "scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)",
-        "Makefile installer-x64 should pass the explicit runtime profile into the legacy installer script",
-    );
-    assert_contains(
-        &makefile,
-        "scripts/Build-Installer.ps1 -Platform x86 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)",
-        "Makefile installer-x86 should pass the explicit runtime profile into the legacy installer script",
-    );
-    assert_contains(
-        &makefile,
-        "scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)",
-        "Makefile installer-arm64 should pass the explicit runtime profile into the legacy installer script",
-    );
+    for shim_name in [
+        "Package-Msix.ps1",
+        "Build-Installer.ps1",
+        "Extract-DotnetRuntime.ps1",
+    ] {
+        let shim_lines = makefile
+            .lines()
+            .filter(|line| line.contains(shim_name) && line.contains("-RuntimeProfile"))
+            .collect::<Vec<_>>();
+        assert!(
+            !shim_lines.is_empty(),
+            "Makefile should call {shim_name} with an explicit runtime profile"
+        );
+        for line in shim_lines {
+            assert!(
+                line.contains(r#"-RuntimeProfile "$$runtime_profile""#),
+                "Makefile {shim_name} calls should pass the normalized explicit profile, not a raw or empty Make variable:\n{line}"
+            );
+            assert!(
+                !line.contains("-RuntimeProfile $(RUNTIME_PROFILE)"),
+                "Makefile {shim_name} calls must not forward an empty raw Make runtime profile:\n{line}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -2848,10 +2931,20 @@ fn legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contra
     let root = repo_root();
     let publish_script = read_text(&root.join("dotnet/scripts/publish.ps1"));
     let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_msix_job = text_between(
+        &release_workflow,
+        "  publish-msix:",
+        "  publish-rs-portable:",
+    );
     let rs_portable_job = text_between(
         &release_workflow,
         "  publish-rs-portable:",
         "  create-bundle:",
+    );
+    let create_bundle_job = text_between(
+        &release_workflow,
+        "  create-bundle:",
+        "  create-rs-portable-release:",
     );
     let create_rs_release_job = text_between(
         &release_workflow,
@@ -2869,6 +2962,36 @@ fn legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contra
         "Easydict-win-$Platform-$Configuration.zip",
         "legacy dotnet publish -CreateZip must not produce the old portable-looking ZIP name",
     );
+    assert_contains(
+        publish_msix_job,
+        r#"$destination = "Easydict-legacy-hybrid-win-${{ matrix.platform }}-${{ needs.prepare.outputs.VERSION }}.zip""#,
+        "release workflow hybrid ZIP output should be visibly separated from the default rs portable ZIP",
+    );
+    assert_contains(
+        publish_msix_job,
+        "name: easydict-legacy-hybrid-zip-${{ matrix.platform }}",
+        "release workflow hybrid ZIP artifact should be named as legacy/hybrid",
+    );
+    assert_contains(
+        publish_msix_job,
+        "path: Easydict-legacy-hybrid-win-${{ matrix.platform }}-${{ needs.prepare.outputs.VERSION }}.zip",
+        "release workflow upload path should match the legacy/hybrid ZIP destination",
+    );
+    assert_not_contains(
+        publish_msix_job,
+        "easydict_win32-",
+        "release workflow hybrid ZIP must not use the old default-looking easydict_win32 prefix",
+    );
+    assert_contains(
+        create_bundle_job,
+        "pattern: easydict-legacy-hybrid-zip-*",
+        "hybrid bundle publishing should download only clearly named legacy/hybrid ZIP artifacts",
+    );
+    assert_not_contains(
+        create_bundle_job,
+        "pattern: easydict-zip-*",
+        "hybrid bundle publishing must not use the old ambiguous ZIP artifact pattern",
+    );
     assert_not_contains(
         rs_portable_job,
         "Easydict-legacy-hybrid-win-",
@@ -2878,6 +3001,73 @@ fn legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contra
         create_rs_release_job,
         "Easydict-legacy-hybrid-win-",
         "first rs release upload job must not include legacy/hybrid dotnet ZIPs",
+    );
+}
+
+#[test]
+fn legacy_publish_installer_uses_guarded_shim_instead_of_inline_iscc_packaging() {
+    let root = repo_root();
+    let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_msix_job = text_between(
+        &release_workflow,
+        "  publish-msix:",
+        "  publish-rs-portable:",
+    );
+    let build_installer_step = text_between(
+        publish_msix_job,
+        "      - name: Build EXE installer",
+        "      - name: Upload legacy hybrid ZIP as artifact",
+    );
+
+    assert_contains(
+        build_installer_step,
+        "./dotnet/scripts/Build-Installer.ps1",
+        "release workflow hybrid installer build should call the guarded installer shim",
+    );
+    assert_contains(
+        build_installer_step,
+        r#"-Platform "${{ matrix.platform }}""#,
+        "release workflow should pass the matrix platform into the installer shim",
+    );
+    assert_contains(
+        build_installer_step,
+        r#"-Version "${{ needs.prepare.outputs.BASE_VERSION }}""#,
+        "release workflow should pass the semantic app version into the installer shim",
+    );
+    assert_contains(
+        build_installer_step,
+        r#"-Tag "${{ needs.prepare.outputs.VERSION }}""#,
+        "release workflow should pass the release tag into the installer shim output name",
+    );
+    assert_contains(
+        build_installer_step,
+        r#"-RuntimeProfile "${{ env.RUNTIME_PROFILE }}""#,
+        "release workflow should keep the explicit Hybrid runtime profile guard on installer packaging",
+    );
+    assert_not_contains(
+        build_installer_step,
+        "& $iscc",
+        "release workflow must not directly invoke ISCC for installer packaging",
+    );
+    assert_not_contains(
+        build_installer_step,
+        "/DAppVersion=",
+        "release workflow must not inline Inno Setup AppVersion defines",
+    );
+    assert_not_contains(
+        build_installer_step,
+        "/DTag=",
+        "release workflow must not inline Inno Setup Tag defines",
+    );
+    assert_not_contains(
+        build_installer_step,
+        "/DPlatform=",
+        "release workflow must not inline Inno Setup Platform defines",
+    );
+    assert_not_contains(
+        build_installer_step,
+        "/DPublishDir=",
+        "release workflow must not inline Inno Setup publish-directory defines",
     );
 }
 
@@ -3483,6 +3673,21 @@ fn assert_contains(haystack: &str, needle: &str, message: &str) {
 
 fn assert_not_contains(haystack: &str, needle: &str, message: &str) {
     assert!(!haystack.contains(needle), "{message}\nforbidden: {needle}");
+}
+
+fn assert_no_negative_runtime_profile_rust_only_gate(text: &str, label: &str) {
+    for (index, line) in text.lines().enumerate() {
+        let normalized = line.to_ascii_lowercase();
+        let mentions_runtime_profile = normalized.contains("runtime_profile");
+        let mentions_rust_only =
+            normalized.contains("rust-only") || normalized.contains("rustonly");
+        let has_negative_comparison = normalized.contains("!=") || normalized.contains("-ne");
+        assert!(
+            !(mentions_runtime_profile && mentions_rust_only && has_negative_comparison),
+            "{label} should not gate retained runtime paths by checking for non-rust-only profiles at line {}:\n{line}",
+            index + 1
+        );
+    }
 }
 
 fn assert_source_line_is_feature_gated(source: &str, needle: &str, message: &str) {

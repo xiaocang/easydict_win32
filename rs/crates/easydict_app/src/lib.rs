@@ -398,7 +398,8 @@ pub use runtime_policy::{
 };
 pub use screen_capture::{
     detected_windows_from_screen_windows, CaptureInteraction, CaptureInteractionState,
-    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, WindowDetector,
+    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, ScreenWindowRect,
+    ScreenWindowSnapshot, WindowDetector,
 };
 pub use settings_migration::{
     migrate_settings_file, migrate_settings_json, migrate_settings_object, resolve_source_path,
@@ -531,7 +532,8 @@ pub use vision_layout::{
 pub use window_options::{
     capture_overlay_window_options, fixed_window_options, main_window_options,
     main_window_options_for_settings, mini_window_options, pop_button_window_options,
-    settings_window_options,
+    settings_window_options, MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
+    MAIN_WINDOW_MIN_HEIGHT_DIPS, MAIN_WINDOW_MIN_WIDTH_DIPS,
 };
 
 pub fn clear_persistent_translation_cache_for_settings(settings: &protocol::SettingsSnapshot) {
@@ -577,6 +579,7 @@ impl Application for EasydictApp {
         };
         let built_in_ai_registration_task = built_in_ai_device_registration_task(&flags.settings);
         let clipboard_monitor_task = clipboard_monitor_task_for_settings(&flags.settings);
+        let mouse_selection_hook_task = mouse_selection_hook_task_for_settings(&flags.settings);
         let protocol_registration_task = protocol_registration_task();
         (
             Self { state: flags },
@@ -584,6 +587,7 @@ impl Application for EasydictApp {
                 startup_activation_task_for_args(std::env::args().skip(1)),
                 built_in_ai_registration_task,
                 clipboard_monitor_task,
+                mouse_selection_hook_task,
                 protocol_registration_task,
             ]),
         )
@@ -647,6 +651,14 @@ impl Application for EasydictApp {
 
         if let Message::ClipboardTextReceived(text) = message {
             return self.translate_clipboard_text(text);
+        }
+
+        if let Message::MouseSelectionInputHookEvent(event) = message {
+            return self.mouse_selection_input_hook_event_task(event);
+        }
+
+        if let Message::MouseSelectionPendingMultiClickElapsed(generation) = message {
+            return self.mouse_selection_pending_multi_click_elapsed_task(generation);
         }
 
         if let Message::SourceTextChanged(text) = message {
@@ -1013,7 +1025,7 @@ impl Application for EasydictApp {
             _ => Task::none(),
         };
 
-        let should_sync_clipboard_monitor = matches!(
+        let should_sync_background_hooks = matches!(
             message,
             Message::SaveSettingsChanges | Message::DiscardSettingsChanges
         );
@@ -1025,10 +1037,11 @@ impl Application for EasydictApp {
             self.state.apply(message);
         }
 
-        if should_sync_clipboard_monitor {
+        if should_sync_background_hooks {
             Task::batch([
                 task,
                 clipboard_monitor_task_for_settings(&self.state.settings),
+                mouse_selection_hook_task_for_settings(&self.state.settings),
             ])
         } else {
             task
@@ -1094,6 +1107,60 @@ impl Application for EasydictApp {
 }
 
 impl EasydictApp {
+    fn mouse_selection_input_hook_event_task(
+        &mut self,
+        event: easydict_windows_text_selection::LowLevelInputHookEvent,
+    ) -> Task<Message> {
+        if !self.state.settings.mouse_selection_translate {
+            return Task::none();
+        }
+
+        let context = self.mouse_selection_producer_context(&event);
+        let actions = self
+            .state
+            .mouse_selection_producer
+            .process_low_level_input_event(event, context);
+        mouse_selection_producer_actions_task(actions)
+    }
+
+    fn mouse_selection_pending_multi_click_elapsed_task(
+        &mut self,
+        generation: u64,
+    ) -> Task<Message> {
+        self.state
+            .mouse_selection_producer
+            .complete_pending_multi_click(generation)
+            .map(mouse_selection_producer_action_task)
+            .unwrap_or_else(Task::none)
+    }
+
+    fn mouse_selection_producer_context(
+        &self,
+        event: &easydict_windows_text_selection::LowLevelInputHookEvent,
+    ) -> MouseSelectionProducerContext {
+        let context = MouseSelectionProducerContext::new(
+            easydict_windows_text_selection::system_double_click_time_ms(),
+        )
+        .current_app_excluded(mouse_selection::foreground_process_matches_excluded_apps(
+            &self.state.settings.mouse_selection_excluded_apps,
+        ));
+
+        let easydict_windows_text_selection::LowLevelInputHookEvent::Mouse(event) = event else {
+            return context;
+        };
+
+        let Some(anchor) = self.state.pop_button.anchor else {
+            return context;
+        };
+        if !self.state.pop_button.visible {
+            return context;
+        }
+
+        let anchor = MouseSelectionPoint::new(anchor.x, anchor.y);
+        let point = MouseSelectionPoint::new(event.x, event.y);
+        context.left_click_is_pop_button(mouse_selection::point_hits_pop_button(anchor, point))
+    }
+
     fn pop_button_selection_text_ready_task(
         &mut self,
         text: String,
@@ -1541,7 +1608,7 @@ impl EasydictApp {
 
 pub fn screen_capture_request_from_selection(
     selection: Option<CaptureRect>,
-) -> Option<ScreenCaptureRequest> {
+) -> Option<easydict_windows_screen_capture::ScreenCaptureRequest> {
     let selection = selection?;
     let selection = selection.normalized();
     if !selection.is_confirmable() {
@@ -1563,17 +1630,22 @@ pub fn screen_capture_request_from_selection(
         return None;
     };
 
-    Some(ScreenCaptureRequest::region(ScreenRect::new(
-        selection.left,
-        selection.top,
-        width,
-        height,
-    )))
+    Some(
+        easydict_windows_screen_capture::ScreenCaptureRequest::region(
+            easydict_windows_screen_capture::ScreenRect::new(
+                selection.left,
+                selection.top,
+                width,
+                height,
+            ),
+        ),
+    )
 }
 
 fn capture_screen_window_snapshot_task() -> Task<Message> {
     screen_capture_native::capture_screen_windows_task(
-        ScreenWindowSnapshotRequest::new().exclude_title("Easydict Capture"),
+        easydict_windows_screen_capture::ScreenWindowSnapshotRequest::new()
+            .exclude_title("Easydict Capture"),
         |windows| Message::CaptureWindowsChanged(detected_windows_from_screen_windows(windows)),
     )
 }
@@ -1704,185 +1776,232 @@ pub fn tray_menu_for_browser_support_locale(
 ) -> TrayMenu<Message> {
     let any_not_installed = !browser.chrome_installed || !browser.firefox_installed;
     let any_installed = browser.chrome_installed || browser.firefox_installed;
+    let tray = TrayMenu::new("Easydict - Dictionary & Translation").default_item(TRAY_SHOW_MAIN);
+    let tray = if let Some(icon_path) = default_tray_icon_path() {
+        tray.icon_path(icon_path)
+    } else {
+        tray
+    };
 
-    TrayMenu::new("Easydict")
-        .item(
-            TrayMenuItem::new(
-                TRAY_SHOW_MAIN,
-                crate::i18n::tr_locale(locale, "tray.show", "Show Easydict"),
-            )
-            .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
+    tray.item(
+        TrayMenuItem::new(
+            TRAY_SHOW_MAIN,
+            crate::i18n::tr_locale(locale, "tray.show", "Show Easydict"),
         )
-        .item(
-            TrayMenuItem::new(
-                TRAY_TRANSLATE_CLIPBOARD,
-                crate::i18n::tr_locale(locale, "tray.translate_clipboard", "Translate Clipboard"),
-            )
-            .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
+        .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
+    )
+    .item(
+        TrayMenuItem::new(
+            TRAY_TRANSLATE_CLIPBOARD,
+            crate::i18n::tr_locale(locale, "tray.translate_clipboard", "Translate Clipboard"),
         )
-        .item(
-            TrayMenuItem::new(
-                TRAY_OCR_TRANSLATE,
-                format!(
-                    "{} (Ctrl+Alt+S)",
-                    crate::i18n::tr_locale(locale, "tray.ocr_translate", "OCR Translate")
-                ),
-            )
-            .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
+        .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
+    )
+    .item(
+        TrayMenuItem::new(
+            TRAY_OCR_TRANSLATE,
+            format!(
+                "{} (Ctrl+Alt+S)",
+                crate::i18n::tr_locale(locale, "tray.ocr_translate", "OCR Translate")
+            ),
         )
-        .item(
-            TrayMenuItem::new(
-                TRAY_SHOW_MINI,
-                format!(
-                    "{} (Ctrl+Alt+M)",
-                    crate::i18n::tr_locale(locale, "tray.show_mini", "Mini Window")
-                ),
-            )
-            .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
+        .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
+    )
+    .item(
+        TrayMenuItem::new(
+            TRAY_SHOW_MINI,
+            format!(
+                "{} (Ctrl+Alt+M)",
+                crate::i18n::tr_locale(locale, "tray.show_mini", "Mini Window")
+            ),
         )
-        .item(
-            TrayMenuItem::new(
-                TRAY_SHOW_FIXED,
-                format!(
-                    "{} (Ctrl+Alt+F)",
-                    crate::i18n::tr_locale(locale, "tray.show_fixed", "Fixed Window")
-                ),
-            )
-            .on_invoke(Message::TrayCommand(TRAY_SHOW_FIXED.to_string())),
+        .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
+    )
+    .item(
+        TrayMenuItem::new(
+            TRAY_SHOW_FIXED,
+            format!(
+                "{} (Ctrl+Alt+F)",
+                crate::i18n::tr_locale(locale, "tray.show_fixed", "Fixed Window")
+            ),
         )
-        .separator()
+        .on_invoke(Message::TrayCommand(TRAY_SHOW_FIXED.to_string())),
+    )
+    .separator()
+    .item(
+        TrayMenuItem::submenu(
+            "browser-support",
+            crate::i18n::tr_locale(locale, "tray.browser_support", "Browser Support"),
+        )
         .item(
             TrayMenuItem::submenu(
-                "browser-support",
-                crate::i18n::tr_locale(locale, "tray.browser_support", "Browser Support"),
-            )
-            .item(
-                TrayMenuItem::submenu(
-                    "browser-chrome",
-                    crate::i18n::tr_locale(locale, "tray.browser.chrome", "Chrome"),
-                )
-                .item(
-                    TrayMenuItem::new(
-                        TRAY_BROWSER_INSTALL_CHROME,
-                        crate::i18n::tr_locale(
-                            locale,
-                            "tray.browser.install_chrome",
-                            "① Install Chrome Support",
-                        ),
-                    )
-                    .enabled(!browser.chrome_installed)
-                    .on_invoke(Message::TrayCommand(
-                        TRAY_BROWSER_INSTALL_CHROME.to_string(),
-                    )),
-                )
-                .item(
-                    TrayMenuItem::new(
-                        TRAY_BROWSER_UNINSTALL_CHROME,
-                        crate::i18n::tr_locale(
-                            locale,
-                            "tray.browser.uninstall_chrome",
-                            "Uninstall Chrome Support",
-                        ),
-                    )
-                    .enabled(browser.chrome_installed)
-                    .on_invoke(Message::TrayCommand(
-                        TRAY_BROWSER_UNINSTALL_CHROME.to_string(),
-                    )),
-                )
-                .item(
-                    TrayMenuItem::new(
-                        TRAY_BROWSER_GET_CHROME_EXTENSION,
-                        crate::i18n::tr_locale(
-                            locale,
-                            "tray.browser.get_chrome_extension",
-                            "② Get Extension",
-                        ),
-                    )
-                    .on_invoke(Message::TrayCommand(
-                        TRAY_BROWSER_GET_CHROME_EXTENSION.to_string(),
-                    )),
-                ),
-            )
-            .item(
-                TrayMenuItem::submenu(
-                    "browser-firefox",
-                    crate::i18n::tr_locale(locale, "tray.browser.firefox", "Firefox"),
-                )
-                .item(
-                    TrayMenuItem::new(
-                        TRAY_BROWSER_INSTALL_FIREFOX,
-                        crate::i18n::tr_locale(
-                            locale,
-                            "tray.browser.install_firefox",
-                            "① Install Firefox Support",
-                        ),
-                    )
-                    .enabled(!browser.firefox_installed)
-                    .on_invoke(Message::TrayCommand(
-                        TRAY_BROWSER_INSTALL_FIREFOX.to_string(),
-                    )),
-                )
-                .item(
-                    TrayMenuItem::new(
-                        TRAY_BROWSER_UNINSTALL_FIREFOX,
-                        crate::i18n::tr_locale(
-                            locale,
-                            "tray.browser.uninstall_firefox",
-                            "Uninstall Firefox Support",
-                        ),
-                    )
-                    .enabled(browser.firefox_installed)
-                    .on_invoke(Message::TrayCommand(
-                        TRAY_BROWSER_UNINSTALL_FIREFOX.to_string(),
-                    )),
-                )
-                .item(
-                    TrayMenuItem::new(
-                        TRAY_BROWSER_GET_FIREFOX_EXTENSION,
-                        crate::i18n::tr_locale(
-                            locale,
-                            "tray.browser.get_firefox_extension",
-                            "② Get Extension",
-                        ),
-                    )
-                    .on_invoke(Message::TrayCommand(
-                        TRAY_BROWSER_GET_FIREFOX_EXTENSION.to_string(),
-                    )),
-                ),
-            )
-            .item(TrayMenuItem::separator())
-            .item(
-                TrayMenuItem::new(
-                    TRAY_BROWSER_INSTALL,
-                    crate::i18n::tr_locale(locale, "tray.browser.install_all", "Install All"),
-                )
-                .enabled(any_not_installed)
-                .on_invoke(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string())),
+                "browser-chrome",
+                crate::i18n::tr_locale(locale, "tray.browser.chrome", "Chrome"),
             )
             .item(
                 TrayMenuItem::new(
-                    TRAY_BROWSER_UNINSTALL,
-                    crate::i18n::tr_locale(locale, "tray.browser.uninstall_all", "Uninstall All"),
+                    TRAY_BROWSER_INSTALL_CHROME,
+                    crate::i18n::tr_locale(
+                        locale,
+                        "tray.browser.install_chrome",
+                        "① Install Chrome Support",
+                    ),
                 )
-                .enabled(any_installed)
-                .on_invoke(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string())),
+                .enabled(!browser.chrome_installed)
+                .on_invoke(Message::TrayCommand(
+                    TRAY_BROWSER_INSTALL_CHROME.to_string(),
+                )),
+            )
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_UNINSTALL_CHROME,
+                    crate::i18n::tr_locale(
+                        locale,
+                        "tray.browser.uninstall_chrome",
+                        "Uninstall Chrome Support",
+                    ),
+                )
+                .enabled(browser.chrome_installed)
+                .on_invoke(Message::TrayCommand(
+                    TRAY_BROWSER_UNINSTALL_CHROME.to_string(),
+                )),
+            )
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_GET_CHROME_EXTENSION,
+                    crate::i18n::tr_locale(
+                        locale,
+                        "tray.browser.get_chrome_extension",
+                        "② Get Extension",
+                    ),
+                )
+                .on_invoke(Message::TrayCommand(
+                    TRAY_BROWSER_GET_CHROME_EXTENSION.to_string(),
+                )),
             ),
         )
         .item(
-            TrayMenuItem::new(
-                TRAY_OPEN_SETTINGS,
-                crate::i18n::tr_locale(locale, "tray.settings", "Settings"),
+            TrayMenuItem::submenu(
+                "browser-firefox",
+                crate::i18n::tr_locale(locale, "tray.browser.firefox", "Firefox"),
             )
-            .on_invoke(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string())),
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_INSTALL_FIREFOX,
+                    crate::i18n::tr_locale(
+                        locale,
+                        "tray.browser.install_firefox",
+                        "① Install Firefox Support",
+                    ),
+                )
+                .enabled(!browser.firefox_installed)
+                .on_invoke(Message::TrayCommand(
+                    TRAY_BROWSER_INSTALL_FIREFOX.to_string(),
+                )),
+            )
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_UNINSTALL_FIREFOX,
+                    crate::i18n::tr_locale(
+                        locale,
+                        "tray.browser.uninstall_firefox",
+                        "Uninstall Firefox Support",
+                    ),
+                )
+                .enabled(browser.firefox_installed)
+                .on_invoke(Message::TrayCommand(
+                    TRAY_BROWSER_UNINSTALL_FIREFOX.to_string(),
+                )),
+            )
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_GET_FIREFOX_EXTENSION,
+                    crate::i18n::tr_locale(
+                        locale,
+                        "tray.browser.get_firefox_extension",
+                        "② Get Extension",
+                    ),
+                )
+                .on_invoke(Message::TrayCommand(
+                    TRAY_BROWSER_GET_FIREFOX_EXTENSION.to_string(),
+                )),
+            ),
         )
-        .separator()
+        .item(TrayMenuItem::separator())
         .item(
             TrayMenuItem::new(
-                TRAY_EXIT,
-                crate::i18n::tr_locale(locale, "tray.exit", "Exit"),
+                TRAY_BROWSER_INSTALL,
+                crate::i18n::tr_locale(locale, "tray.browser.install_all", "Install All"),
             )
-            .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
+            .enabled(any_not_installed)
+            .on_invoke(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string())),
         )
+        .item(
+            TrayMenuItem::new(
+                TRAY_BROWSER_UNINSTALL,
+                crate::i18n::tr_locale(locale, "tray.browser.uninstall_all", "Uninstall All"),
+            )
+            .enabled(any_installed)
+            .on_invoke(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string())),
+        ),
+    )
+    .item(
+        TrayMenuItem::new(
+            TRAY_OPEN_SETTINGS,
+            crate::i18n::tr_locale(locale, "tray.settings", "Settings"),
+        )
+        .on_invoke(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string())),
+    )
+    .separator()
+    .item(
+        TrayMenuItem::new(
+            TRAY_EXIT,
+            crate::i18n::tr_locale(locale, "tray.exit", "Exit"),
+        )
+        .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
+    )
+}
+
+pub fn default_tray_icon_path() -> Option<String> {
+    for candidate in default_tray_icon_path_candidates() {
+        if candidate.is_file() {
+            let path = std::fs::canonicalize(&candidate).unwrap_or(candidate);
+            return Some(path.to_string_lossy().into_owned());
+        }
+    }
+
+    None
+}
+
+fn default_tray_icon_path_candidates() -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(directory) = exe.parent() {
+            push_tray_icon_candidates_from_directory(&mut candidates, directory);
+        }
+    }
+
+    if let Ok(directory) = std::env::current_dir() {
+        push_tray_icon_candidates_from_directory(&mut candidates, &directory);
+    }
+
+    candidates
+}
+
+fn push_tray_icon_candidates_from_directory(
+    candidates: &mut Vec<std::path::PathBuf>,
+    directory: &std::path::Path,
+) {
+    candidates.push(directory.join("AppIcon.ico"));
+    for ancestor in directory.ancestors() {
+        candidates.push(
+            ancestor
+                .join("dotnet")
+                .join("src")
+                .join("Easydict.WinUI")
+                .join("AppIcon.ico"),
+        );
+    }
 }
 
 pub fn default_named_events() -> Vec<NamedEventRegistration<Message>> {
@@ -2128,6 +2247,17 @@ fn clipboard_monitor_task_for_settings(settings: &SettingsState) -> Task<Message
         .unwrap_or_else(Task::none)
 }
 
+fn mouse_selection_hook_task_for_settings(settings: &SettingsState) -> Task<Message> {
+    if !settings.mouse_selection_translate {
+        mouse_selection::stop_mouse_selection_hook();
+        return Task::none();
+    }
+
+    mouse_selection::mouse_selection_hook_stream(Message::MouseSelectionInputHookEvent)
+        .map(Task::stream)
+        .unwrap_or_else(Task::none)
+}
+
 fn clipboard_write_task(text: String) -> Task<Message> {
     Task::perform(
         async move {
@@ -2182,8 +2312,11 @@ pub fn mouse_selection_producer_action_task(action: MouseSelectionProducerAction
         MouseSelectionProducerAction::CaptureSelectionText(request) => {
             mouse_selection_capture_task(request)
         }
-        MouseSelectionProducerAction::CancelPendingMultiClick { .. }
-        | MouseSelectionProducerAction::SchedulePendingMultiClick { .. } => Task::none(),
+        MouseSelectionProducerAction::SchedulePendingMultiClick {
+            pending,
+            generation,
+        } => mouse_selection_pending_multi_click_task(generation, pending.delay_ms),
+        MouseSelectionProducerAction::CancelPendingMultiClick { .. } => Task::none(),
     }
 }
 
@@ -2205,6 +2338,16 @@ pub fn mouse_selection_pending_timer(action: &MouseSelectionProducerAction) -> O
         } => Some((*generation, pending.delay_ms)),
         _ => None,
     }
+}
+
+fn mouse_selection_pending_multi_click_task(generation: u64, delay_ms: u64) -> Task<Message> {
+    Task::perform(
+        async move {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            generation
+        },
+        Message::MouseSelectionPendingMultiClickElapsed,
+    )
 }
 
 fn built_in_ai_device_registration_task(settings: &SettingsState) -> Task<Message> {

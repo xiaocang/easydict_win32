@@ -2369,12 +2369,23 @@ fn service_expander(
         );
 
     if let Some(status) = service_header_status(&service_id, status.into()) {
-        let status_style = if service_id == "windows-local-ai" {
-            TextStyle::Success
-        } else {
-            TextStyle::BodyStrong
+        let status_style = match (service_id.as_str(), status.trim()) {
+            ("windows-local-ai", "✓") => TextStyle::Success,
+            ("windows-local-ai", "⚠") => TextStyle::Warning,
+            _ => TextStyle::BodyStrong,
         };
-        builder = builder.trailing((styled_text_id(status_id, status, status_style),));
+        let status_view = if service_id == "windows-local-ai" {
+            sized_styled_text_id(
+                status_id,
+                status,
+                status_style,
+                Length::Fixed(20),
+                Length::Fixed(19),
+            )
+        } else {
+            styled_text_id(status_id, status, status_style)
+        };
+        builder = builder.trailing((status_view,));
     }
 
     builder.into_view()
@@ -2503,7 +2514,11 @@ fn service_configuration_icon(service_id: &str) -> win_fluent::IconToken {
 
 fn service_header_status(service_id: &str, status: String) -> Option<String> {
     if service_id == "windows-local-ai" {
-        return Some("✓".to_string());
+        return Some(if local_ai_header_status_is_ready(&status) {
+            "✓".to_string()
+        } else {
+            "⚠".to_string()
+        });
     }
 
     let trimmed = status.trim();
@@ -2521,6 +2536,18 @@ fn service_header_status(service_id: &str, status: String) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn local_ai_header_status_is_ready(status: &str) -> bool {
+    let normalized = status.trim().to_ascii_lowercase();
+    if normalized.is_empty() || normalized.contains("not ready") {
+        return false;
+    }
+
+    normalized == "ready"
+        || normalized.contains(" is ready")
+        || normalized.contains(" model ready")
+        || normalized.contains("status_ready")
 }
 
 fn settings_field_stack(
@@ -2771,7 +2798,7 @@ fn local_ai_service_expander(state: &SettingsState) -> View<Message> {
                     tr("settings.services.local_ai.provider", "Provider")
                 ))
                 .width(Length::Fixed(520))
-                .height(Length::Fixed(48))
+                .height(Length::Fixed(40))
                 .selected(state.local_ai_provider.as_str())
                 .on_change(Message::LocalAiProviderChanged)
                 .into_view(),

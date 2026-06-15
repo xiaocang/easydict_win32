@@ -255,6 +255,8 @@ impl FolderDialogOptions {
 #[derive(Clone, Debug)]
 pub struct TrayMenu<Message> {
     pub tooltip: String,
+    pub icon_path: Option<String>,
+    pub default_item_id: Option<String>,
     pub items: Vec<TrayMenuItem<Message>>,
 }
 
@@ -262,8 +264,20 @@ impl<Message> TrayMenu<Message> {
     pub fn new(tooltip: impl Into<String>) -> Self {
         Self {
             tooltip: tooltip.into(),
+            icon_path: None,
+            default_item_id: None,
             items: Vec::new(),
         }
+    }
+
+    pub fn icon_path(mut self, path: impl Into<String>) -> Self {
+        self.icon_path = Some(path.into());
+        self
+    }
+
+    pub fn default_item(mut self, id: impl Into<String>) -> Self {
+        self.default_item_id = Some(id.into());
+        self
     }
 
     pub fn item(mut self, item: TrayMenuItem<Message>) -> Self {

@@ -20,10 +20,10 @@ const PAYLOAD_LAYOUT_VALIDATOR: &str = "PackagePayloadLayoutValidator";
 const REQUIRED_RUST_HELPERS: &[&str] = &[
     "easydict-native-bridge.exe",
     "easydict_browser_registrar.exe",
-    "BrowserHostRegistrar.exe",
     "easydict_cli.exe",
     "easydict_long_doc.exe",
 ];
+const LEGACY_BROWSER_REGISTRAR_ALIAS: &str = "BrowserHostRegistrar.exe";
 const REQUIRED_RETAINED_WORKER_PAYLOADS: &[&str] = &[
     "workers/longdoc/Easydict.Workers.LongDoc.exe",
     "workers/localai/Easydict.Workers.LocalAi.exe",
@@ -47,46 +47,10 @@ const HYBRID_FORBIDDEN_WORKER_RUNTIME_FILE_NAMES: &[&str] = &[
     "system.private.corelib.dll",
 ];
 const RUST_ONLY_FORBIDDEN_PREFIXES: &[&str] = &["workers/", "dotnet/"];
-const RUST_ONLY_FORBIDDEN_RUNTIME_FILE_NAMES: &[&str] = &[
-    "createdump.exe",
-    "dotnet.exe",
-    "hostfxr.dll",
-    "coreclr.dll",
-    "hostpolicy.dll",
-    "clrjit.dll",
-    "mscordaccore.dll",
-    "mscordbi.dll",
-    "mscorlib.dll",
-    "netstandard.dll",
-    "singlefilehost.exe",
-    "system.private.corelib.dll",
-    "windowsbase.dll",
-    "presentationcore.dll",
-    "presentationframework.dll",
-];
 const RUST_ONLY_FORBIDDEN_DOTNET_SHARED_FRAMEWORKS: &[&str] = &[
     "shared/microsoft.netcore.app/",
     "shared/microsoft.windowsdesktop.app/",
     "shared/microsoft.aspnetcore.app/",
-];
-const RUST_ONLY_FORBIDDEN_WORKER_SHARED_FILE_NAMES: &[&str] = &[
-    "microsoft.interactiveexperiences.projection.dll",
-    "microsoft.web.webview2.core.projection.dll",
-    "microsoft.windows.sdk.net.dll",
-    "microsoft.windows.ui.xaml.dll",
-    "microsoft.winui.dll",
-    "winrt.runtime.dll",
-];
-const RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY_FILE_NAMES: &[&str] = &[
-    "easydict.documentexport.dll",
-    "easydict.llm.streaming.dll",
-    "easydict.openvino.dll",
-    "easydict.sidecarclient.dll",
-    "easydict.translationservice.dll",
-    "easydict.windowsai.dll",
-    "lexindex.dll",
-    "mdict.csharp.dll",
-    "polyglot.textlayout.dll",
 ];
 const RUST_ONLY_FORBIDDEN_REASON: &str =
     "Rust-only packages must not ship retained .NET workers or bundled .NET runtime";
@@ -94,59 +58,42 @@ const RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON: &str =
     "Rust-only packages must not ship payload files that contain .NET host/runtime or script runtime markers";
 const RUST_ONLY_FORBIDDEN_LINKED_PAYLOAD_REASON: &str =
     "Rust-only package inputs must not use symlink or reparse-point payload entries";
-const RUST_ONLY_DOTNET_CONTENT_MARKERS: &[&[u8]] = &[
-    b"hostfxr.dll",
-    b"hostpolicy.dll",
-    b"coreclr.dll",
-    b"clrjit.dll",
-    b"singlefilehost.exe",
-    b"System.Private.CoreLib",
-    b"Microsoft.NETCore.App",
-    b".runtimeconfig.json",
-    b".deps.json",
-    b"This application requires .NET",
-    b"Easydict.CompatHost",
-    b"Easydict.Workers.",
-    b"powershell.exe",
-    b"pwsh.exe",
-    b"System.Speech",
-    b"System.Management.Automation",
-    b"WIN_FLUENT_TTS_TEXT",
-];
+const RUST_ONLY_FORBIDDEN_LEGACY_ALIAS_REASON: &str =
+    "Rust-only packages must not ship the legacy BrowserHostRegistrar.exe alias";
 const NO_RETAINED_WORKERS_FORBIDDEN_REASON: &str =
     "Packages without retained .NET workers must not ship retained workers or bundled .NET runtime";
 const HYBRID_STALE_RUNTIME_ROOT_REASON: &str =
     "Hybrid packages may only ship retained workers under workers/longdoc, workers/localai, workers/shared and shared .NET runtime under dotnet/host/fxr or dotnet/shared/Microsoft.NETCore.App";
-const FORBIDDEN_PAYLOAD_FILE_NAMES: &[(&str, &str)] = &[
+const FORBIDDEN_PAYLOAD_FILE_PREFIXES: &[(&str, &str)] = &[
     (
-        "easydict.workers.ocr.exe",
+        "easydict.workers.ocr",
         "OCR is Rust-native and must not ship the retired .NET OCR worker",
     ),
     (
-        "easydict.nativebridge.exe",
+        "easydict.nativebridge",
         "browser Native Messaging host is now easydict-native-bridge.exe",
     ),
     (
-        "easydict.browserregistrar.exe",
+        "easydict.browserregistrar",
         "browser registrar is now easydict_browser_registrar.exe with BrowserHostRegistrar.exe alias",
     ),
     (
-        "msixvalidate.exe",
+        "msixvalidate",
         "MSIX validation is now the Rust easydict_msix_validate tool",
     ),
     (
-        "encryptsecret.exe",
+        "encryptsecret",
         "secret encryption is now the Rust easydict_encrypt_secret tool",
     ),
     (
-        "pdftoimages.exe",
+        "pdftoimages",
         "PDF image conversion is now the Rust easydict_pdf_to_images tool",
     ),
+    (
+        "easydict.compathost",
+        ".NET CompatHost has been removed; Rust must start retained workers directly",
+    ),
 ];
-const FORBIDDEN_PAYLOAD_FILE_PREFIXES: &[(&str, &str)] = &[(
-    "easydict.compathost",
-    ".NET CompatHost has been removed; Rust must start retained workers directly",
-)];
 const FORBIDDEN_ROOT_LONGDOC_PAYLOADS: &[&str] = &[
     "easydict.documentexport.dll",
     "mupdf.net.dll",
@@ -937,6 +884,18 @@ fn validate_prepare_package_runtime_payload(
     let mut entries = Vec::new();
     collect_prepare_package_payload_entries(publish_dir, publish_dir, &mut entries)?;
     entries.sort_by(|left, right| left.normalized.cmp(&right.normalized));
+    if let Some(entry) = entries.iter().find(|entry| {
+        rust_only_forbidden_prepare_payload_root_file(
+            &entry.normalized,
+            LEGACY_BROWSER_REGISTRAR_ALIAS,
+        )
+    }) {
+        return Err(PreparePackageInputsError::ForbiddenPayload {
+            path: entry.normalized.clone(),
+            reason: RUST_ONLY_FORBIDDEN_LEGACY_ALIAS_REASON,
+        });
+    }
+
     if let Some(entry) = entries
         .iter()
         .find(|entry| rust_only_forbidden_prepare_payload_root(&entry.normalized))
@@ -1081,6 +1040,11 @@ fn rust_only_forbidden_prepare_payload_root(path: &str) -> bool {
         let prefix = normalize_archive_path(prefix);
         normalized == prefix.trim_end_matches('/') || normalized.starts_with(&prefix)
     })
+}
+
+fn rust_only_forbidden_prepare_payload_root_file(path: &str, file_name: &str) -> bool {
+    let normalized = normalize_archive_path(path);
+    !normalized.contains('/') && normalized == normalize_archive_path(file_name)
 }
 
 fn rust_only_forbidden_prepare_payload_marker(path: &str) -> bool {
@@ -1745,13 +1709,6 @@ impl ArchivePayloadIndex {
             .find(|entry| entry.normalized.starts_with(&prefix))
     }
 
-    fn first_file_named(&self, file_name: &str) -> Option<&ArchivePayloadEntry> {
-        let file_name = file_name.to_ascii_lowercase();
-        self.entries
-            .iter()
-            .find(|entry| entry.file_name() == Some(file_name.as_str()))
-    }
-
     fn first_file_prefixed(&self, file_prefix: &str) -> Option<&ArchivePayloadEntry> {
         let file_prefix = file_prefix.to_ascii_lowercase();
         self.entries.iter().find(|entry| {
@@ -1846,15 +1803,6 @@ fn validate_payload_layout(
         }
     }
 
-    for (file_name, reason) in FORBIDDEN_PAYLOAD_FILE_NAMES {
-        if let Some(entry) = payload.first_file_named(file_name) {
-            return Err(ValidationError::ForbiddenPayload {
-                path: entry.original.clone(),
-                reason,
-            });
-        }
-    }
-
     if let Some(entry) = payload.first_under("workers/ocr/") {
         return Err(ValidationError::ForbiddenPayload {
             path: entry.original.clone(),
@@ -1872,8 +1820,23 @@ fn validate_payload_layout(
     }
 
     match runtime_profile {
-        PackageRuntimeProfile::Hybrid => validate_hybrid_runtime_payload(manifest, payload)?,
-        PackageRuntimeProfile::RustOnly => validate_rust_only_runtime_payload(payload)?,
+        PackageRuntimeProfile::Hybrid => {
+            if !payload.contains_exact(LEGACY_BROWSER_REGISTRAR_ALIAS) {
+                return Err(ValidationError::MissingRequiredPayload {
+                    path: LEGACY_BROWSER_REGISTRAR_ALIAS.to_string(),
+                });
+            }
+            validate_hybrid_runtime_payload(manifest, payload)?;
+        }
+        PackageRuntimeProfile::RustOnly => {
+            if let Some(entry) = payload.first_root_file_named(LEGACY_BROWSER_REGISTRAR_ALIAS) {
+                return Err(ValidationError::ForbiddenPayload {
+                    path: entry.original.clone(),
+                    reason: RUST_ONLY_FORBIDDEN_LEGACY_ALIAS_REASON,
+                });
+            }
+            validate_rust_only_runtime_payload(payload)?;
+        }
     }
 
     Ok(())
@@ -2064,60 +2027,11 @@ fn validate_retained_runtime_payload_absent(
 }
 
 fn rust_only_forbidden_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
-    let Some(file_name) = entry.file_name() else {
-        return false;
-    };
-
-    file_name.ends_with(".runtimeconfig.json")
-        || file_name.ends_with(".deps.json")
-        || file_name.starts_with("easydict.workers.")
-        || file_name.starts_with("easydict.nativebridge")
-        || file_name.starts_with("easydict.sidecarclient")
-        || is_forbidden_easydict_winui_runtime_file(file_name)
-        || (file_name.starts_with("system.") && file_name.ends_with(".dll"))
-        || file_name.starts_with("microsoft.csharp")
-        || file_name.starts_with("microsoft.visualbasic")
-        || file_name.starts_with("microsoft.win32")
-        || RUST_ONLY_FORBIDDEN_RUNTIME_FILE_NAMES.contains(&file_name)
-        || RUST_ONLY_FORBIDDEN_WORKER_SHARED_FILE_NAMES.contains(&file_name)
-        || RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY_FILE_NAMES.contains(&file_name)
-        || RUST_ONLY_FORBIDDEN_DOTNET_SHARED_FRAMEWORKS
-            .iter()
-            .any(|prefix| entry.normalized.contains(prefix))
-        || entry.normalized.contains("host/fxr/")
-}
-
-fn is_forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
-    let Some(suffix) = file_name.strip_prefix("easydict.winui.") else {
-        return false;
-    };
-    matches!(suffix, "exe" | "dll" | "runtimeconfig.json" | "deps.json")
+    easydict_runtime_guards::path_entry_is_retained_runtime_payload_marker(&entry.normalized)
 }
 
 fn bytes_contain_dotnet_content_marker(bytes: &[u8]) -> bool {
-    RUST_ONLY_DOTNET_CONTENT_MARKERS.iter().any(|marker| {
-        bytes_contain_ascii_case_insensitive(bytes, marker)
-            || bytes_contain_utf16le_ascii_case_insensitive(bytes, marker)
-    })
-}
-
-fn bytes_contain_ascii_case_insensitive(bytes: &[u8], marker: &[u8]) -> bool {
-    !marker.is_empty()
-        && bytes
-            .windows(marker.len())
-            .any(|window| window.eq_ignore_ascii_case(marker))
-}
-
-fn bytes_contain_utf16le_ascii_case_insensitive(bytes: &[u8], marker: &[u8]) -> bool {
-    let marker_len = marker.len().saturating_mul(2);
-    !marker.is_empty()
-        && bytes.len() >= marker_len
-        && bytes.windows(marker_len).any(|window| {
-            window
-                .chunks_exact(2)
-                .zip(marker)
-                .all(|(left, right)| left[1] == 0 && left[0].eq_ignore_ascii_case(right))
-        })
+    easydict_runtime_guards::bytes_contain_retained_runtime_marker(bytes)
 }
 
 fn retained_workers_required(manifest: &ManifestInfo) -> bool {
@@ -2280,6 +2194,43 @@ mod tests {
     }
 
     #[test]
+    fn retained_runtime_marker_scanners_are_lib_owned() {
+        let manifest = include_str!("../Cargo.toml");
+        let source = include_str!("lib.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source section should exist");
+
+        assert!(
+            manifest.contains("easydict_runtime_guards"),
+            "MSIX validator should depend on the shared runtime guard crate"
+        );
+        assert!(
+            production.contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker"),
+            "MSIX validator should reuse the lib-owned byte marker scanner"
+        );
+        assert!(
+            production
+                .contains("easydict_runtime_guards::path_entry_is_retained_runtime_payload_marker"),
+            "MSIX validator should reuse the lib-owned rust-only path marker scanner"
+        );
+        for forbidden in [
+            "const RUST_ONLY_DOTNET_CONTENT_MARKERS",
+            "fn bytes_contain_ascii_case_insensitive",
+            "fn bytes_contain_utf16le_ascii_case_insensitive",
+            concat!("const RUST_ONLY_FORBIDDEN_RUNTIME", "_FILE_NAMES"),
+            concat!("const RUST_ONLY_FORBIDDEN_WORKER_SHARED", "_FILE_NAMES"),
+            concat!("const RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY", "_FILE_NAMES"),
+        ] {
+            assert!(
+                !production.contains(forbidden),
+                "MSIX validator must not re-inline retained runtime byte scanning: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
     fn validates_identity_min_version_and_signature() {
         let path = temp_msix_path("valid");
         write_msix(
@@ -2406,9 +2357,77 @@ mod tests {
     }
 
     #[test]
+    fn rust_only_package_rejects_legacy_browser_registrar_alias() {
+        let path = temp_msix_path("rust-only-legacy-registrar-alias");
+        let mut entries = rust_helper_entries();
+        entries.push((LEGACY_BROWSER_REGISTRAR_ALIAS, b"registrar-alias"));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: LEGACY_BROWSER_REGISTRAR_ALIAS.to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_LEGACY_ALIAS_REASON,
+                }
+            )],
+            "Rust-only MSIX validation should keep the legacy registrar alias out of default package payloads"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn hybrid_package_requires_legacy_browser_registrar_alias() {
+        let path = temp_msix_path("hybrid-missing-legacy-registrar-alias");
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x86",
+            ),
+            Some(b"sig"),
+            &rust_helper_entries(),
+        );
+
+        let options = hybrid_validation_options();
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::MissingRequiredPayload {
+                    path: LEGACY_BROWSER_REGISTRAR_ALIAS.to_string(),
+                }
+            )],
+            "Hybrid MSIX validation should continue requiring the legacy registrar alias for WinUI browser support"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn hybrid_x86_package_rejects_stale_retained_workers_or_dotnet_runtime() {
         let path = temp_msix_path("x86-stale-retained-workers");
-        let mut entries = rust_helper_entries();
+        let mut entries = hybrid_helper_entries();
         entries.push(("workers/longdoc/Easydict.Workers.LongDoc.exe", b"longdoc"));
         entries.push(("dotnet/host/fxr/8.0.11/hostfxr.dll", b"hostfxr"));
         write_msix(
@@ -2451,7 +2470,7 @@ mod tests {
                 "arm64",
             ),
             Some(b"sig"),
-            &rust_helper_entries(),
+            &hybrid_helper_entries(),
         );
 
         let options = hybrid_validation_options();
@@ -2829,7 +2848,7 @@ mod tests {
                 "arm64",
             ),
             Some(b"sig"),
-            &x64_payload_entries(),
+            &rust_only_retained_runtime_entries(),
         );
         let options = MsixValidationOptions {
             runtime_profile: PackageRuntimeProfile::RustOnly,
@@ -3133,6 +3152,18 @@ mod tests {
                 "browser Native Messaging host is now easydict-native-bridge.exe",
             ),
             (
+                "Easydict.NativeBridge.dll",
+                "browser Native Messaging host is now easydict-native-bridge.exe",
+            ),
+            (
+                "Easydict.NativeBridge.deps.json",
+                "browser Native Messaging host is now easydict-native-bridge.exe",
+            ),
+            (
+                "Easydict.BrowserRegistrar.runtimeconfig.json",
+                "browser registrar is now easydict_browser_registrar.exe with BrowserHostRegistrar.exe alias",
+            ),
+            (
                 "Easydict.SidecarClient.exe",
                 "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
             ),
@@ -3212,6 +3243,10 @@ mod tests {
                 "createdump.exe",
                 "Rust-only packages must not ship retained .NET workers or bundled .NET runtime",
             ),
+            (
+                "MSIXValidate.dll",
+                "MSIX validation is now the Rust easydict_msix_validate tool",
+            ),
         ] {
             let path = temp_msix_path(&format!(
                 "rust-only-loose-dotnet-{}",
@@ -3271,23 +3306,66 @@ mod tests {
 
     #[test]
     fn rejects_retired_comphost_ocr_worker_and_dotnet_tool_payloads() {
-        for compat_host_payload in [
-            "Easydict.CompatHost.exe",
-            "Easydict.CompatHost.dll",
-            "Easydict.CompatHost.pdb",
-            "Easydict.CompatHost.runtimeconfig.json",
-            "Easydict.CompatHost.deps.json",
+        for (payload, reason) in [
+            (
+                "Easydict.CompatHost.exe",
+                ".NET CompatHost has been removed; Rust must start retained workers directly",
+            ),
+            (
+                "Easydict.CompatHost.dll",
+                ".NET CompatHost has been removed; Rust must start retained workers directly",
+            ),
+            (
+                "Easydict.CompatHost.pdb",
+                ".NET CompatHost has been removed; Rust must start retained workers directly",
+            ),
+            (
+                "Easydict.CompatHost.runtimeconfig.json",
+                ".NET CompatHost has been removed; Rust must start retained workers directly",
+            ),
+            (
+                "Easydict.CompatHost.deps.json",
+                ".NET CompatHost has been removed; Rust must start retained workers directly",
+            ),
+            (
+                "Easydict.NativeBridge.dll",
+                "browser Native Messaging host is now easydict-native-bridge.exe",
+            ),
+            (
+                "Easydict.NativeBridge.runtimeconfig.json",
+                "browser Native Messaging host is now easydict-native-bridge.exe",
+            ),
+            (
+                "Easydict.BrowserRegistrar.dll",
+                "browser registrar is now easydict_browser_registrar.exe with BrowserHostRegistrar.exe alias",
+            ),
+            (
+                "Easydict.BrowserRegistrar.deps.json",
+                "browser registrar is now easydict_browser_registrar.exe with BrowserHostRegistrar.exe alias",
+            ),
+            (
+                "tools/MsixValidate/MSIXValidate.dll",
+                "MSIX validation is now the Rust easydict_msix_validate tool",
+            ),
+            (
+                "tools/EncryptSecret/EncryptSecret.runtimeconfig.json",
+                "secret encryption is now the Rust easydict_encrypt_secret tool",
+            ),
+            (
+                "tools/PdfToImages/PdfToImages.deps.json",
+                "PDF image conversion is now the Rust easydict_pdf_to_images tool",
+            ),
+            (
+                "workers/ocr/Easydict.Workers.Ocr.dll",
+                "OCR is Rust-native and must not ship the retired .NET OCR worker",
+            ),
         ] {
             let path = temp_msix_path(&format!(
                 "forbidden-runtime-payloads-{}",
-                compat_host_payload.replace('.', "-")
+                payload.replace(['/', '.'], "-")
             ));
             let mut entries = x64_payload_entries();
-            entries.extend([
-                (compat_host_payload, b"compat" as &[u8]),
-                ("workers/ocr/Easydict.Workers.Ocr.exe", b"ocr"),
-                ("tools/MsixValidate/MsixValidate.exe", b"tool"),
-            ]);
+            entries.push((payload, b"retired" as &[u8]));
             write_msix(
                 &path,
                 manifest(
@@ -3308,8 +3386,8 @@ mod tests {
                 vec![(
                     PAYLOAD_LAYOUT_VALIDATOR,
                     ValidationError::ForbiddenPayload {
-                        path: compat_host_payload.to_string(),
-                        reason: ".NET CompatHost has been removed; Rust must start retained workers directly"
+                        path: payload.to_string(),
+                        reason,
                     }
                 )]
             );
@@ -3694,6 +3772,47 @@ mod tests {
     }
 
     #[test]
+    fn prepare_package_inputs_defaults_to_rust_only_and_rejects_legacy_registrar_alias() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-registrar-alias-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(
+            temp.path(),
+            LEGACY_BROWSER_REGISTRAR_ALIAS,
+            b"registrar-alias",
+        );
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "browserhostregistrar.exe".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_LEGACY_ALIAS_REASON
+            }
+        );
+        assert!(
+            !output_manifest.exists(),
+            "rust-only prepare-package-inputs must reject the legacy registrar alias before writing a prepared manifest"
+        );
+    }
+
+    #[test]
     fn prepare_package_inputs_rejects_renamed_dotnet_apphost_marker_before_manifest_write() {
         let temp = tempfile::Builder::new()
             .prefix("easydict-msix-prepare-rust-only-content-marker-")
@@ -3930,6 +4049,14 @@ mod tests {
         ));
         assert!(rust_only_forbidden_prepare_payload_root("dotnet"));
         assert!(rust_only_forbidden_prepare_payload_root("workers"));
+        assert!(rust_only_forbidden_prepare_payload_root_file(
+            "BrowserHostRegistrar.exe",
+            LEGACY_BROWSER_REGISTRAR_ALIAS
+        ));
+        assert!(!rust_only_forbidden_prepare_payload_root_file(
+            "tools/BrowserHostRegistrar.exe",
+            LEGACY_BROWSER_REGISTRAR_ALIAS
+        ));
     }
 
     #[test]
@@ -4088,7 +4215,7 @@ mod tests {
                 "10.0.22621.0",
                 "x64",
             ),
-            &x64_payload_entries(),
+            &rust_only_retained_runtime_entries(),
         );
         write_bundle(&path, &[("Easydict-x64.appx", &package)]);
 
@@ -4320,7 +4447,7 @@ mod tests {
                 "10.0.22621.0",
                 "x64",
             ),
-            &rust_helper_entries(),
+            &hybrid_helper_entries(),
         );
         write_bundle(&path, &[("Easydict-x64.appx", &package)]);
 
@@ -4781,15 +4908,31 @@ mod tests {
         vec![
             ("easydict-native-bridge.exe", b"native-bridge"),
             ("easydict_browser_registrar.exe", b"registrar"),
-            ("BrowserHostRegistrar.exe", b"registrar-alias"),
             ("easydict_cli.exe", b"cli"),
             ("easydict_long_doc.exe", b"longdoc-cli"),
         ]
     }
 
-    fn x64_payload_entries() -> Vec<(&'static str, &'static [u8])> {
+    fn hybrid_helper_entries() -> Vec<(&'static str, &'static [u8])> {
         let mut entries = rust_helper_entries();
-        entries.extend([
+        entries.push((LEGACY_BROWSER_REGISTRAR_ALIAS, b"registrar-alias"));
+        entries
+    }
+
+    fn rust_only_retained_runtime_entries() -> Vec<(&'static str, &'static [u8])> {
+        let mut entries = rust_helper_entries();
+        entries.extend(retained_runtime_entries());
+        entries
+    }
+
+    fn x64_payload_entries() -> Vec<(&'static str, &'static [u8])> {
+        let mut entries = hybrid_helper_entries();
+        entries.extend(retained_runtime_entries());
+        entries
+    }
+
+    fn retained_runtime_entries() -> [(&'static str, &'static [u8]); 4] {
+        [
             (
                 "workers/longdoc/Easydict.Workers.LongDoc.exe",
                 b"longdoc" as &[u8],
@@ -4800,7 +4943,6 @@ mod tests {
                 "dotnet/shared/Microsoft.NETCore.App/8.0.11/coreclr.dll",
                 b"coreclr",
             ),
-        ]);
-        entries
+        ]
     }
 }

@@ -10,6 +10,7 @@ sdk = ["dep:foundry-local-sdk", "dep:tokio"]
 sdk-winml = ["sdk", "foundry-local-sdk/winml"]
 
 [dependencies]
+easydict_runtime_guards = { path = "../easydict-runtime-guards" }
 foundry-local-sdk = { version = "1.2.1", optional = true }
 regex = "1"
 serde_json = "1"

@@ -215,7 +215,8 @@ jobs:
           ./scripts/Build-RustHelpers.ps1 `
             -Platform ${{ matrix.platform }} `
             -Configuration Release `
-            -OutputDir ./publish/${{ matrix.platform }}
+            -OutputDir ./publish/${{ matrix.platform }} `
+            -IncludeLegacyRegistrarAlias
 
       # Publish LongDoc worker (out-of-process PDF + ONNX layout detection).
       # Resolved by host via AppContext.BaseDirectory + "workers/longdoc/Easydict.Workers.LongDoc.exe".
@@ -277,7 +278,8 @@ jobs:
           ./scripts/Build-RustHelpers.ps1 `
             -Platform ${{ matrix.platform }} `
             -Configuration Release `
-            -OutputDir ./publish-msix/${{ matrix.platform }}
+            -OutputDir ./publish-msix/${{ matrix.platform }} `
+            -IncludeLegacyRegistrarAlias
 
       # Publish LongDoc worker into MSIX output. The publish dir becomes a subtree under
       # the package root (workers/longdoc/), and runFullTrust + same-package identity
@@ -373,12 +375,12 @@ jobs:
           path: dotnet/msix/wack-report-${{ matrix.platform }}.xml
           if-no-files-found: warn
 
-      # Also create ZIP archive for portable distribution
-      - name: Create ZIP archive
+      # Also create a legacy/hybrid ZIP archive for retained .NET coexistence.
+      - name: Create legacy hybrid ZIP archive
         shell: pwsh
         run: |
           $source = "dotnet/publish/${{ matrix.platform }}"
-          $destination = "easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip"
+          $destination = "Easydict-legacy-hybrid-win-${{ matrix.platform }}-${{ needs.prepare.outputs.VERSION }}.zip"
 
           cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- `
             zip-directory `
@@ -402,39 +404,17 @@ jobs:
       - name: Build EXE installer
         shell: pwsh
         run: |
-          $publishDir = (Resolve-Path "dotnet/publish/${{ matrix.platform }}").Path
-          $issFile = (Resolve-Path "dotnet/installer/Easydict.iss").Path
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          ./dotnet/scripts/Build-Installer.ps1 `
+            -Platform "${{ matrix.platform }}" `
+            -Version "${{ needs.prepare.outputs.BASE_VERSION }}" `
+            -Tag "${{ needs.prepare.outputs.VERSION }}" `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}"
 
-          # Remove PDB files before packaging (same as ZIP)
-          Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse | Remove-Item -Force
-
-          & $iscc `
-            /DAppVersion=${{ needs.prepare.outputs.BASE_VERSION }} `
-            /DTag=${{ needs.prepare.outputs.VERSION }} `
-            /DPlatform=${{ matrix.platform }} `
-            "/DPublishDir=$publishDir" `
-            $issFile
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Inno Setup compilation failed"
-            exit 1
-          }
-
-          $outputFile = "dotnet/installer-output/Easydict-v${{ needs.prepare.outputs.VERSION }}-${{ matrix.platform }}-setup.unsigned.exe"
-          if (Test-Path $outputFile) {
-            $sizeMB = [math]::Round((Get-Item $outputFile).Length / 1MB, 2)
-            Write-Host "EXE installer created: $outputFile ($sizeMB MB)"
-          } else {
-            Write-Error "Expected installer not found: $outputFile"
-            exit 1
-          }
-
-      - name: Upload ZIP as artifact
+      - name: Upload legacy hybrid ZIP as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: easydict-zip-${{ matrix.platform }}
-          path: easydict_win32-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          name: easydict-legacy-hybrid-zip-${{ matrix.platform }}
+          path: Easydict-legacy-hybrid-win-${{ matrix.platform }}-${{ needs.prepare.outputs.VERSION }}.zip
           retention-days: 7
 
       - name: Upload EXE installer as artifact
@@ -568,6 +548,18 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Require explicit hybrid profile for bundle validation
+        shell: pwsh
+        run: |
+          $profile = "${{ env.RUNTIME_PROFILE }}".Trim().ToLowerInvariant().Replace("_", "-")
+          if ($profile -eq "rust-only" -or $profile -eq "rustonly") {
+            throw "The first rs release is portable-only. Use the create-rs-portable-release job instead of MSIX bundle creation with runtime_profile=${{ env.RUNTIME_PROFILE }}."
+          }
+          if ($profile -ne "hybrid") {
+            throw "runtime_profile=${{ env.RUNTIME_PROFILE }} is not supported for MSIX bundle creation. Use explicit hybrid for retained-worker coexistence, or create-rs-portable-release for the rs package."
+          }
+          "RUNTIME_PROFILE=hybrid" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Download all MSIX artifacts
         uses: actions/download-artifact@v4
         with:
@@ -575,10 +567,10 @@ jobs:
           path: msix-packages
           merge-multiple: true
 
-      - name: Download all ZIP artifacts
+      - name: Download all legacy hybrid ZIP artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: easydict-zip-*
+          pattern: easydict-legacy-hybrid-zip-*
           path: zip-packages
           merge-multiple: true
 

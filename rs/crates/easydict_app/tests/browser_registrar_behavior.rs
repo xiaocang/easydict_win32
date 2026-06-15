@@ -142,6 +142,10 @@ fn browser_registrar_source_uses_lib_owned_retained_runtime_guard() {
         production.contains("easydict_runtime_guards::path_has_retained_runtime_component"),
         "browser registrar should keep retained payload component policy in a lib-owned guard"
     );
+    assert!(
+        production.contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker"),
+        "browser registrar should scan bridge file contents through the lib-owned runtime marker guard"
+    );
     for forbidden_inline_marker in [
         "value == \"dotnet\"",
         "value == \"workers\"",
@@ -272,6 +276,33 @@ fn status_requires_registry_manifest_and_bridge_exe_to_exist() {
     let status = core.status();
     assert!(!status.chrome.installed);
     assert!(!status.bridge_exists);
+}
+
+#[test]
+fn status_rejects_registered_bridge_with_retained_runtime_content() {
+    let sandbox = TestSandbox::new("status_retained_bridge_content");
+    let source_bridge = sandbox.write_source_bridge();
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    core.install(
+        true,
+        false,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    assert!(core.status().chrome.installed);
+    fs::write(
+        core.bridge_exe_path(),
+        b"renamed apphost still references hostfxr.dll and This application requires .NET",
+    )
+    .expect("overwrite bridge with retained runtime marker");
+
+    let status = core.status();
+    assert!(!status.chrome.installed);
+    assert!(status.bridge_exists);
 }
 
 #[test]
@@ -546,6 +577,34 @@ fn install_rejects_renamed_bridge_sources_from_legacy_payload_roots() {
         assert!(error.contains("non-Rust native bridge"));
         assert!(!bridge_dir.exists(), "renamed source should not be staged");
     }
+}
+
+#[test]
+fn install_rejects_native_bridge_name_with_retained_runtime_content() {
+    let sandbox = TestSandbox::new("reject_retained_bridge_content");
+    let source_bridge = sandbox.path("easydict-native-bridge.exe");
+    fs::write(
+        &source_bridge,
+        b"fake bridge apphost references hostfxr.dll and This application requires .NET",
+    )
+    .expect("write renamed retained bridge");
+    let bridge_dir = sandbox.path("browser-bridge");
+    let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+    let output = core.install(
+        true,
+        true,
+        &source_bridge,
+        &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+        DEFAULT_FIREFOX_EXT_ID,
+    );
+
+    assert!(!output.success);
+    let error = output.error.as_deref().expect("error text");
+    assert!(error.contains("retained payload"));
+    assert!(!bridge_dir.exists(), "retained bridge should not be staged");
+    assert!(core.registry().value(&chrome_registry_path()).is_none());
+    assert!(core.registry().value(&firefox_registry_path()).is_none());
 }
 
 #[test]

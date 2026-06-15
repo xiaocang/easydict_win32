@@ -8,7 +8,9 @@ param(
     [string]$Configuration = "Release",
 
     [Parameter(Mandatory = $true)]
-    [string]$OutputDir
+    [string]$OutputDir,
+
+    [switch]$IncludeLegacyRegistrarAlias
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +38,10 @@ $arguments = @(
     "--output-dir",
     $OutputDir
 )
+
+if ($IncludeLegacyRegistrarAlias) {
+    $arguments += "--include-legacy-registrar-alias"
+}
 
 $previousRuntimeProfile = $env:EASYDICT_RUNTIME_PROFILE
 $previousGenericRuntimeProfile = $env:RUNTIME_PROFILE

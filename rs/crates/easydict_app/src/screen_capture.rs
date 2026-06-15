@@ -1,8 +1,6 @@
 const DRAG_THRESHOLD: i32 = 5;
 const MIN_SELECTION_SIZE: i32 = 3;
 
-use win_fluent::platform::{ScreenRect, ScreenWindow};
-
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CapturePoint {
     pub x: i32,
@@ -61,6 +59,49 @@ impl CaptureRect {
     pub const fn is_confirmable(self) -> bool {
         let normalized = self.normalized();
         normalized.width() >= MIN_SELECTION_SIZE && normalized.height() >= MIN_SELECTION_SIZE
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScreenWindowRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl ScreenWindowRect {
+    pub const fn new(x: i32, y: i32, width: u32, height: u32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScreenWindowSnapshot {
+    pub id: isize,
+    pub parent_id: Option<isize>,
+    pub rect: ScreenWindowRect,
+    pub class_name: String,
+}
+
+impl ScreenWindowSnapshot {
+    pub fn new(id: isize, parent_id: Option<isize>, rect: ScreenWindowRect) -> Self {
+        Self {
+            id,
+            parent_id,
+            rect,
+            class_name: String::new(),
+        }
+    }
+
+    pub fn class_name(mut self, class_name: impl Into<String>) -> Self {
+        self.class_name = class_name.into();
+        self
     }
 }
 
@@ -138,9 +179,9 @@ impl WindowDetector {
 }
 
 pub fn detected_windows_from_screen_windows(
-    windows: impl IntoIterator<Item = ScreenWindow>,
+    windows: impl IntoIterator<Item = ScreenWindowSnapshot>,
 ) -> Vec<DetectedWindow> {
-    let windows: Vec<ScreenWindow> = windows.into_iter().collect();
+    let windows: Vec<ScreenWindowSnapshot> = windows.into_iter().collect();
     build_detected_window_tree(None, &windows)
 }
 
@@ -420,7 +461,7 @@ fn build_child_chain<'a>(
 
 fn build_detected_window_tree(
     parent_id: Option<isize>,
-    windows: &[ScreenWindow],
+    windows: &[ScreenWindowSnapshot],
 ) -> Vec<DetectedWindow> {
     windows
         .iter()
@@ -432,7 +473,7 @@ fn build_detected_window_tree(
         .collect()
 }
 
-fn capture_rect_from_screen_rect(rect: ScreenRect) -> CaptureRect {
+fn capture_rect_from_screen_rect(rect: ScreenWindowRect) -> CaptureRect {
     let width = i32::try_from(rect.width).unwrap_or(i32::MAX);
     let height = i32::try_from(rect.height).unwrap_or(i32::MAX);
     CaptureRect::new(

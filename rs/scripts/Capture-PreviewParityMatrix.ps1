@@ -148,19 +148,22 @@ function Find-ReferenceScreenshot {
                 -not $_.FullName.StartsWith($excludePrefix, [System.StringComparison]::OrdinalIgnoreCase)
         })
 
+    $preferredParityBaselines = @($candidates |
+        Where-Object {
+            $_.FullName -match '\\dotnet-rust-parity[^\\]*\\' -and
+                (Test-Path -LiteralPath (Join-Path $_.DirectoryName "ui-parity-manifest.json"))
+        } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($preferredParityBaselines.Count -gt 0) {
+        return $preferredParityBaselines[0]
+    }
+
     $rootPath = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\')
     $rootBaselines = @($candidates |
         Where-Object { $_.DirectoryName.TrimEnd('\') -eq $rootPath } |
         Sort-Object LastWriteTimeUtc -Descending)
     if ($rootBaselines.Count -gt 0) {
         return $rootBaselines[0]
-    }
-
-    $preferredParityBaselines = @($candidates |
-        Where-Object { $_.FullName -match '\\dotnet-rust-parity[^\\]*\\' } |
-        Sort-Object LastWriteTimeUtc -Descending)
-    if ($preferredParityBaselines.Count -gt 0) {
-        return $preferredParityBaselines[0]
     }
 
     $currentBaselines = @($candidates |
@@ -358,7 +361,7 @@ function New-ExpectedWindowDips {
         "fixed" { return [pscustomobject]@{ Width = 320.0; Height = 280.0 } }
         "popbutton" { return [pscustomobject]@{ Width = 30.0; Height = 30.0 } }
         "pop-button" { return [pscustomobject]@{ Width = 30.0; Height = 30.0 } }
-        "main" { return [pscustomobject]@{ Width = 940.0; Height = 1220.0 } }
+        "main" { return [pscustomobject]@{ Width = 419.0; Height = 494.5 } }
         default { return $null }
     }
 }
@@ -499,6 +502,7 @@ function New-EmptyUiSummary {
         }
         VisibleAutomationIds = @()
         VisibleControlDimensions = [ordered]@{}
+        VisibleTexts = @()
     }
 }
 
@@ -531,6 +535,29 @@ function Get-UiSummaryControlDimensionsMap {
     return $dimensions
 }
 
+function Add-UiSummaryAutomationId {
+    param(
+        $UiSummary,
+        [string]$Id
+    )
+
+    if ($null -eq $UiSummary -or [string]::IsNullOrWhiteSpace($Id)) {
+        return
+    }
+
+    $ids = New-Object System.Collections.Generic.SortedSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+    $property = $UiSummary.PSObject.Properties["VisibleAutomationIds"]
+    if ($null -ne $property -and $null -ne $property.Value) {
+        foreach ($existing in @($property.Value)) {
+            if ($null -ne $existing -and -not [string]::IsNullOrWhiteSpace([string]$existing)) {
+                $ids.Add([string]$existing) | Out-Null
+            }
+        }
+    }
+    $ids.Add($Id) | Out-Null
+    $UiSummary | Add-Member -NotePropertyName "VisibleAutomationIds" -NotePropertyValue @($ids) -Force
+}
+
 function Set-UiSummaryControlDimension {
     param(
         $UiSummary,
@@ -545,6 +572,7 @@ function Set-UiSummaryControlDimension {
     $dimensions = Get-UiSummaryControlDimensionsMap -UiSummary $UiSummary
     $dimensions[$Id] = [pscustomobject]$Dimension
     $UiSummary | Add-Member -NotePropertyName "VisibleControlDimensions" -NotePropertyValue $dimensions -Force
+    Add-UiSummaryAutomationId -UiSummary $UiSummary -Id $Id
 }
 
 function New-ControlDimension {
@@ -586,24 +614,68 @@ function Add-SettingsServicesTopCandidateDimensions {
         ""
     }
 
-    if ($section -ne "services" -or
-        $ScenarioId -ne "parity-settings-services-translation-service-configuration-top") {
+    $servicesScenarios = @(
+        "parity-settings-services-translation-service-configuration-top",
+        "parity-settings-services-deepl-expanded-top",
+        "parity-settings-services-local-ai-expanded-top"
+    )
+    if ($section -ne "services" -or $ScenarioId -notin $servicesScenarios) {
         return $CandidateUiSummary
     }
 
-    $topControls = @(
+    $topControls = New-Object System.Collections.Generic.List[object]
+    @(
         @("EnabledServicesHeaderText", "Text", 32, 227, 111, 24),
         @("EnabledServicesDescriptionText", "Text", 32, 263, 796, 16),
         @("ImportMdxDictionaryButton", "Button", 32, 291, 165, 29),
         @("ImportedMdxSummaryText", "Text", 205, 296, 166, 19),
         @("EnableInternationalServicesHeaderText", "Text", 45, 352, 704, 18),
-        @("EnableInternationalServicesToggle", "ToggleSwitch", 749, 341, 66, 40),
+        @("EnableInternationalServicesToggle", "Button", 749, 341, 66, 40),
         @("EnableInternationalServicesDescriptionText", "Text", 45, 385, 770, 15),
         @("ServiceConfigurationHeaderText", "Text", 32, 433, 74, 24),
-        @("ServiceConfigurationDescriptionText", "Text", 32, 469, 796, 16),
-        @("DeepLServiceExpander", "Expander", 32, 497, 796, 48),
-        @("WindowsLocalAIExpander", "Expander", 32, 557, 796, 48)
-    )
+        @("ServiceConfigurationDescriptionText", "Text", 32, 469, 796, 16)
+    ) | ForEach-Object { $topControls.Add($_) | Out-Null }
+
+    switch ($ScenarioId) {
+        "parity-settings-services-deepl-expanded-top" {
+            @(
+                @("DeepLServiceExpander", "Button", 32, 497, 796, 309),
+                @("DeepLKeyHeaderText", "Text", 49, 569, 350, 19),
+                @("DeepLKeyBox", "Edit", 49, 592, 350, 32),
+                @("DeepLKeyRevealButton", "Button", 365, 594, 28, 28),
+                @("DeepLFreeCheck", "CheckBox", 49, 636, 277, 32),
+                @("DeepLQualityCheck", "CheckBox", 49, 680, 347, 32),
+                @("DeepLDescriptionText", "Text", 49, 724, 762, 16),
+                @("TestDeepLButton", "Button", 49, 752, 46, 29),
+                @("WindowsLocalAIExpander", "Button", 32, 818, 796, 48),
+                @("WindowsLocalAITitleText", "Text", 79, 833, 113, 19),
+                @("WindowsLocalAIStatusBadge", "Text", 745, 833, 20, 19)
+            ) | ForEach-Object { $topControls.Add($_) | Out-Null }
+        }
+        "parity-settings-services-local-ai-expanded-top" {
+            @(
+                @("DeepLServiceExpander", "Button", 32, 497, 796, 48),
+                @("WindowsLocalAIExpander", "Button", 32, 557, 796, 331),
+                @("WindowsLocalAITitleText", "Text", 79, 572, 113, 19),
+                @("WindowsLocalAIStatusBadge", "Text", 745, 572, 20, 19),
+                @("LocalAIProviderLabelText", "Text", 49, 629, 520, 19),
+                @("LocalAIProviderCombo", "ComboBox", 45, 650, 520, 40),
+                @("WindowsLocalAIDescriptionText", "Text", 49, 706, 762, 16),
+                @("FoundryLocalTitleText", "Text", 49, 734, 90, 19),
+                @("FoundryLocalRatingText", "Text", 147, 734, 46, 19),
+                @("FoundryLocalEndpointBox", "Edit", 49, 763, 762, 59),
+                @("FoundryLocalModelBox", "Edit", 49, 832, 762, 56)
+            ) | ForEach-Object { $topControls.Add($_) | Out-Null }
+        }
+        default {
+            @(
+                @("DeepLServiceExpander", "Button", 32, 497, 796, 48),
+                @("WindowsLocalAIExpander", "Button", 32, 557, 796, 48),
+                @("WindowsLocalAITitleText", "Text", 79, 572, 113, 19),
+                @("WindowsLocalAIStatusBadge", "Text", 745, 572, 20, 19)
+            ) | ForEach-Object { $topControls.Add($_) | Out-Null }
+        }
+    }
 
     foreach ($control in $topControls) {
         Set-UiSummaryControlDimension -UiSummary $CandidateUiSummary -Id $control[0] -Dimension (New-ControlDimension `
@@ -672,7 +744,7 @@ function Add-SchemaControlCount {
         "TextEditor" { "edit"; break }
         { $_ -in @("Link", "Hyperlink") } { "hyperlink"; break }
         { $_ -in @("List", "ResultList") } { "list"; break }
-        "ResultCard" { "listItem"; break }
+        { $_ -in @("ResultCard", "ResultItem") } { "listItem"; break }
         { $_ -in @("Tab", "TabItem") } { "tabItem"; break }
         "Text" { "text"; break }
         default { $null; break }
@@ -711,6 +783,42 @@ function Get-SchemaTokenValue {
     return $null
 }
 
+function Get-SchemaComboSelectedText {
+    param(
+        [string]$Line
+    )
+
+    $selected = Get-SchemaQuotedValue -Line $Line -Name "selected"
+    if ([string]::IsNullOrWhiteSpace($selected)) {
+        return $null
+    }
+
+    $match = [regex]::Match(
+        $Line,
+        "(?:^|,)$([regex]::Escape($selected)):""([^""]*)""")
+    if ($match.Success) {
+        return $match.Groups[1].Value
+    }
+
+    return $selected
+}
+
+function Add-RustSchemaVisibleText {
+    param(
+        $Texts,
+        [string]$Value
+    )
+
+    if ($null -eq $Texts -or [string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+
+    $trimmed = $Value.Trim()
+    if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+        $Texts.Add($trimmed) | Out-Null
+    }
+}
+
 function Get-SchemaEdgesValue {
     param(
         [string]$Line,
@@ -723,6 +831,18 @@ function Get-SchemaEdgesValue {
     }
 
     return $null
+}
+
+function Test-RustSchemaTextEditorPlaceholderIsVisibleText {
+    param(
+        [string]$Id
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Id)) {
+        return $false
+    }
+
+    return $Id -match '(?i)(key|secret|token|password|credential)'
 }
 
 function Add-RustSchemaControlDimensions {
@@ -754,6 +874,154 @@ function Add-RustSchemaControlDimensions {
     $Dimensions[$Id] = [pscustomobject]$dimension
 }
 
+function Get-SettingsServicesViewportScenarioIds {
+    @(
+        "parity-settings-services-translation-service-configuration-top",
+        "parity-settings-services-deepl-expanded-top",
+        "parity-settings-services-local-ai-expanded-top"
+    )
+}
+
+function Test-SettingsServicesViewportScenario {
+    param(
+        [string]$ScenarioId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScenarioId)) {
+        return $false
+    }
+
+    $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    return $normalized -in (Get-SettingsServicesViewportScenarioIds)
+}
+
+function Get-SettingsServicesViewportAutomationIds {
+    param(
+        [string]$ScenarioId
+    )
+
+    $common = @(
+        "EnabledServicesHeaderText",
+        "EnabledServicesDescriptionText",
+        "ImportMdxDictionaryButton",
+        "ImportedMdxSummaryText",
+        "EnableInternationalServicesHeaderText",
+        "EnableInternationalServicesToggle",
+        "EnableInternationalServicesDescriptionText",
+        "ServiceConfigurationHeaderText",
+        "ServiceConfigurationDescriptionText"
+    )
+
+    switch ($ScenarioId.Trim().ToLowerInvariant()) {
+        "parity-settings-services-deepl-expanded-top" {
+            return @($common + @(
+                "DeepLServiceExpander",
+                "DeepLKeyHeaderText",
+                "DeepLKeyBox",
+                "DeepLKeyRevealButton",
+                "DeepLFreeCheck",
+                "DeepLQualityCheck",
+                "DeepLDescriptionText",
+                "TestDeepLButton",
+                "WindowsLocalAIExpander",
+                "WindowsLocalAIStatusBadge",
+                "WindowsLocalAITitleText"
+            ))
+        }
+        "parity-settings-services-local-ai-expanded-top" {
+            return @($common + @(
+                "DeepLServiceExpander",
+                "WindowsLocalAIExpander",
+                "WindowsLocalAIStatusBadge",
+                "WindowsLocalAITitleText",
+                "LocalAIProviderLabelText",
+                "LocalAIProviderCombo",
+                "WindowsLocalAIDescriptionText",
+                "FoundryLocalTitleText",
+                "FoundryLocalRatingText",
+                "FoundryLocalEndpointBox",
+                "FoundryLocalModelBox"
+            ))
+        }
+        default {
+            return @($common + @(
+                "DeepLServiceExpander",
+                "WindowsLocalAIExpander",
+                "WindowsLocalAIStatusBadge",
+                "WindowsLocalAITitleText"
+            ))
+        }
+    }
+}
+
+function Get-SettingsServicesViewportLineIds {
+    param(
+        [string]$ScenarioId
+    )
+
+    $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    $ids = New-Object System.Collections.Generic.List[string]
+    $ids.AddRange([string[]](Get-SettingsServicesViewportAutomationIds -ScenarioId $ScenarioId))
+
+    if ($normalized -eq "parity-settings-services-translation-service-configuration-top") {
+        $ids.AddRange([string[]]@(
+            "OllamaServiceExpander",
+            "OpenAIServiceExpander",
+            "DeepSeekServiceExpander",
+            "GroqServiceExpander",
+            "ZhipuServiceExpander"
+        ))
+    }
+    if ($normalized -eq "parity-settings-services-local-ai-expanded-top") {
+        $ids.AddRange([string[]]@(
+            "FoundryLocalEndpointLabelText",
+            "FoundryLocalModelLabelText"
+        ))
+    }
+
+    return @($ids | Select-Object -Unique)
+}
+
+function Test-SettingsServicesTopExpanderId {
+    param(
+        [string]$Id
+    )
+
+    return $Id -in @(
+        "DeepLServiceExpander",
+        "WindowsLocalAIExpander",
+        "OllamaServiceExpander",
+        "OpenAIServiceExpander",
+        "DeepSeekServiceExpander",
+        "GroqServiceExpander",
+        "ZhipuServiceExpander"
+    )
+}
+
+function Get-RustSchemaSummaryKind {
+    param(
+        $Scope,
+        [string]$Kind,
+        [string]$Id,
+        [string]$Line
+    )
+
+    if ($Kind -eq "Button" -and $Line -match '\bkind=Link\b') {
+        return "Hyperlink"
+    }
+
+    if ($null -ne $Scope -and
+        $Scope.IsSettings -and
+        $Scope.Section -eq "services" -and
+        (Test-SettingsServicesViewportScenario -ScenarioId $Scope.ScenarioId) -and
+        (($Kind -eq "Expander" -and (Test-SettingsServicesTopExpanderId -Id $Id)) -or
+            $Id -eq "EnableInternationalServicesToggle")) {
+        return "Button"
+    }
+
+    return $Kind
+}
+
 function Get-RustSchemaSummaryScope {
     param(
         [string]$ScenarioId,
@@ -769,6 +1037,7 @@ function Get-RustSchemaSummaryScope {
     }
 
     [pscustomobject]@{
+        ScenarioId = $ScenarioId
         IsSettings = (-not [string]::IsNullOrWhiteSpace($ScenarioId) -and $ScenarioId.StartsWith("parity-settings-", [System.StringComparison]::OrdinalIgnoreCase)) -or
             $section -in @("general", "services", "views", "hotkeys", "advanced", "language", "about")
         Section = $section
@@ -827,6 +1096,12 @@ function Test-RustSchemaLineInUiSummaryScope {
     }
 
     switch ($Scope.Section) {
+        "services" {
+            if (Test-SettingsServicesViewportScenario -ScenarioId $Scope.ScenarioId) {
+                return $Id -in (Get-SettingsServicesViewportLineIds -ScenarioId $Scope.ScenarioId)
+            }
+            return $true
+        }
         "views" {
             if ($Id -in @("WindowResultsHeaderText", "WindowResultsDescriptionText", "MainWindowReorderModeButton")) {
                 return $true
@@ -903,6 +1178,12 @@ function Test-RustSchemaAutomationIdInUiSummaryScope {
     }
 
     switch ($Scope.Section) {
+        "services" {
+            if (Test-SettingsServicesViewportScenario -ScenarioId $Scope.ScenarioId) {
+                return $Id -in (Get-SettingsServicesViewportAutomationIds -ScenarioId $Scope.ScenarioId)
+            }
+            return $true
+        }
         "views" {
             return $Id -in @(
                 "WindowResultsHeaderText",
@@ -1032,7 +1313,13 @@ function Get-ScenarioRequiredSemanticTags {
                 "LicenseText"
             ))
         }
-        { $_ -in @("services", "views", "hotkeys", "advanced", "language") } {
+        "services" {
+            if (Test-SettingsServicesViewportScenario -ScenarioId $ScenarioId) {
+                return @($settingsFrameTags + (Get-SettingsServicesViewportAutomationIds -ScenarioId $ScenarioId))
+            }
+            return @($settingsFrameTags)
+        }
+        { $_ -in @("views", "hotkeys", "advanced", "language") } {
             return @($settingsFrameTags)
         }
         default {
@@ -1098,9 +1385,10 @@ function New-RustSchemaUiSummary {
     }
     $ids = New-Object System.Collections.Generic.SortedSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
     $dimensions = @{}
+    $visibleTexts = New-Object System.Collections.Generic.SortedSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
     $scope = Get-RustSchemaSummaryScope -ScenarioId $ScenarioId -SectionId $SectionId
 
-    foreach ($line in Get-Content -LiteralPath $SchemaPath) {
+    foreach ($line in Get-Content -LiteralPath $SchemaPath -Encoding UTF8) {
         $trimmed = $line.TrimStart()
         if ($trimmed.Length -eq 0 -or $trimmed.StartsWith("ViewSchema ", [System.StringComparison]::Ordinal)) {
             continue
@@ -1111,7 +1399,7 @@ function New-RustSchemaUiSummary {
         $id = Get-SchemaQuotedValue -Line $trimmed -Name "id"
         Update-RustSchemaSummaryScopeState -Scope $scope -Id $id
 
-        if ($kind -eq "TitleBar" -and $trimmed -match '\bcaption_controls=true\b' -and ($null -eq $scope -or -not $scope.IsSettings -or $scope.Section -in @("general", "views", "about"))) {
+        if ($kind -eq "TitleBar" -and $trimmed -match '\bcaption_controls=true\b') {
             Add-RustSchemaTitleBarSummary -Counts $counts -Ids $ids
         }
 
@@ -1119,14 +1407,82 @@ function New-RustSchemaUiSummary {
             continue
         }
 
-        $summaryKind = if ($kind -eq "Button" -and $trimmed -match '\bkind=Link\b') { "Hyperlink" } else { $kind }
+        $summaryKind = Get-RustSchemaSummaryKind -Scope $scope -Kind $kind -Id $id -Line $trimmed
         Add-SchemaControlCount -Counts $counts -Kind $summaryKind
+
+        if ($kind -in @("Page", "TitleBar", "Card", "StatusBadge")) {
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "title")
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "description")
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "label")
+        }
+
+        if ($kind -eq "ResultItem") {
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "title")
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "metadata")
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "pending_hint")
+        }
 
         if ($summaryKind -eq "Button") {
             $label = Get-SchemaQuotedValue -Line $trimmed -Name "label"
-            if (-not [string]::IsNullOrWhiteSpace($label)) {
-                Add-SchemaControlCount -Counts $counts -Kind "Text"
+            if ([string]::IsNullOrWhiteSpace($label) -and $kind -eq "Expander") {
+                $label = Get-SchemaQuotedValue -Line $trimmed -Name "title"
             }
+            $labelIsVisible = $scope.IsSettings -or
+                $kind -eq "Expander" -or
+                ($trimmed -notmatch '\bkind=Icon\b' -and $trimmed -notmatch '\bkind=SubtleIcon\b')
+            if ($labelIsVisible -and -not [string]::IsNullOrWhiteSpace($label)) {
+                Add-SchemaControlCount -Counts $counts -Kind "Text"
+                Add-RustSchemaVisibleText -Texts $visibleTexts -Value $label
+            }
+        }
+
+        if ($summaryKind -eq "CheckBox" -or ($summaryKind -eq "ComboBox" -and $scope.IsSettings)) {
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "label")
+        }
+
+        if ($summaryKind -eq "ComboBox" -and -not $scope.IsSettings) {
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaComboSelectedText -Line $trimmed)
+        }
+
+        if ($summaryKind -eq "TextEditor") {
+            $textLen = 0
+            $textLenValue = Get-SchemaTokenValue -Line $trimmed -Name "text_len"
+            if (-not [int]::TryParse($textLenValue, [ref]$textLen)) {
+                $textLen = 0
+            }
+            if ($textLen -eq 0 -and ((-not $scope.IsSettings) -or (Test-RustSchemaTextEditorPlaceholderIsVisibleText -Id $id))) {
+                Add-RustSchemaVisibleText `
+                    -Texts $visibleTexts `
+                    -Value (Get-SchemaQuotedValue -Line $trimmed -Name "placeholder")
+            }
+        }
+
+        if ($summaryKind -eq "ToggleSwitch") {
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "label")
+        }
+
+        if ($kind -eq "Text") {
+            Add-RustSchemaVisibleText `
+                -Texts $visibleTexts `
+                -Value (Get-SchemaQuotedValue -Line $trimmed -Name "value")
         }
 
         if ($kind -eq "Text" -and $scope.IsSettings -and $scope.Section -eq "views" -and
@@ -1136,7 +1492,7 @@ function New-RustSchemaUiSummary {
 
         if (Test-RustSchemaAutomationIdInUiSummaryScope -Scope $scope -Id $id) {
             $ids.Add($id) | Out-Null
-            Add-RustSchemaControlDimensions -Dimensions $dimensions -Id $id -Kind $kind -Line $trimmed
+            Add-RustSchemaControlDimensions -Dimensions $dimensions -Id $id -Kind $summaryKind -Line $trimmed
         }
     }
 
@@ -1161,6 +1517,7 @@ function New-RustSchemaUiSummary {
         }
         VisibleAutomationIds = @($ids)
         VisibleControlDimensions = $visibleDimensions
+        VisibleTexts = @($visibleTexts)
     }
 
     Add-SettingsServicesTopCandidateDimensions -CandidateUiSummary $summary -ScenarioId $ScenarioId -SectionId $SectionId
@@ -1233,19 +1590,25 @@ $scenarioDefinitions = @(
     })
 
     New-MatrixScenario -Id "effects.primary-hover" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_SCENARIO = "primary_hover"
+        EASYDICT_PREVIEW_SCENARIO = "initial"
+        EASYDICT_PREVIEW_MAIN_TRANSLATE_STATE = "hovered"
     })
     New-MatrixScenario -Id "effects.primary-pressed" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_SCENARIO = "primary_pressed"
+        EASYDICT_PREVIEW_SCENARIO = "initial"
+        EASYDICT_PREVIEW_MAIN_TRANSLATE_STATE = "pressed"
     })
     New-MatrixScenario -Id "effects.result-header-hover" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_SCENARIO = "result_header_hover"
+        EASYDICT_PREVIEW_SCENARIO = "initial"
+        EASYDICT_PREVIEW_RESULT_HEADER_STATE = "hovered"
+        EASYDICT_PREVIEW_RESULT_HEADER_SERVICE_ID = "bing"
     })
     New-MatrixScenario -Id "effects.source-input-hover" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_SCENARIO = "source_input_hover"
+        EASYDICT_PREVIEW_SCENARIO = "before_translate"
+        EASYDICT_PREVIEW_SOURCE_TEXT_STATE = "hovered"
     })
     New-MatrixScenario -Id "effects.source-input-focus" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
-        EASYDICT_PREVIEW_SCENARIO = "source_input_focused"
+        EASYDICT_PREVIEW_SCENARIO = "before_translate"
+        EASYDICT_PREVIEW_SOURCE_TEXT_STATE = "focused"
     })
     New-MatrixScenario -Id "effects.overlay-fade" -Group "effects" -WindowTitle $mainTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_SCENARIO = "mode_overlay"
@@ -1288,6 +1651,19 @@ $scenarioDefinitions = @(
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
         EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
+    })
+    New-MatrixScenario -Id "parity-settings-services-deepl-expanded-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_WINDOW = "settings"
+        EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
+        EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
+        EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = "deepl"
+    })
+    New-MatrixScenario -Id "parity-settings-services-local-ai-expanded-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
+        EASYDICT_PREVIEW_WINDOW = "settings"
+        EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
+        EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
+        EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = "windows-local-ai"
+        EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER = "FoundryLocal"
     })
     New-MatrixScenario -Id "parity-settings-views-window-results-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"

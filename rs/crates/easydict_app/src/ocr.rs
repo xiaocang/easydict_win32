@@ -2,6 +2,7 @@ use crate::protocol::SettingsSnapshot;
 use crate::quick_translate::QuickTranslateSurface;
 use crate::state::{settings_snapshot, EasydictUiState};
 use base64::{engine::general_purpose, Engine as _};
+use easydict_windows_screen_capture::ScreenCaptureResult;
 use image::codecs::jpeg::JpegEncoder;
 use image::ColorType;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,6 @@ use std::fs;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use win_fluent::prelude::ScreenCaptureResult;
 
 const DEFAULT_OCR_SYSTEM_PROMPT: &str = "Extract all the text from this image perfectly. Output ONLY the extracted text, without any conversational filler, markdown formatting, or introductory words.";
 const DEFAULT_OLLAMA_OCR_ENDPOINT: &str = "http://localhost:11434/api/generate";

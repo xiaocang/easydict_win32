@@ -207,7 +207,15 @@ pub fn path_has_retained_runtime_component(path: &Path) -> bool {
 
 pub fn path_component_is_retained_runtime_marker(component: &str) -> bool {
     let value = component.to_ascii_lowercase();
-    value == "workers"
+    let executable_stem = value
+        .strip_suffix(".exe")
+        .or_else(|| value.strip_suffix(".cmd"))
+        .or_else(|| value.strip_suffix(".bat"))
+        .or_else(|| value.strip_suffix(".com"))
+        .unwrap_or(&value);
+
+    matches!(executable_stem, "dotnet" | "powershell" | "pwsh")
+        || value == "workers"
         || value == "dotnet"
         || value == "easydict.compathost"
         || value.starts_with("easydict.compathost.")
@@ -216,11 +224,150 @@ pub fn path_component_is_retained_runtime_marker(component: &str) -> bool {
         || value.starts_with("easydict.workers.")
 }
 
+pub fn path_entry_is_retained_runtime_payload_marker(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    let components = normalized
+        .trim_matches('/')
+        .split('/')
+        .filter(|component| !component.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>();
+    if components.is_empty() {
+        return false;
+    }
+
+    if matches!(components[0].as_str(), "dotnet" | "workers") {
+        return true;
+    }
+
+    if path_entry_contains_retained_runtime_layout(&components) {
+        return true;
+    }
+
+    let Some(file_name) = components.last() else {
+        return false;
+    };
+
+    retained_runtime_payload_file_name_is_forbidden(file_name)
+}
+
+pub fn command_target_is_retained_runtime_or_script_marker(value: &str) -> bool {
+    let normalized = value.trim().trim_matches('"').replace('\\', "/");
+    let lower = normalized.to_ascii_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+
+    let executable_leaf = lower
+        .rsplit('/')
+        .next()
+        .unwrap_or(lower.as_str())
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
+
+    if path_component_is_retained_runtime_marker(executable_leaf)
+        || retained_runtime_payload_file_name_is_forbidden(executable_leaf)
+        || command_leaf_is_retained_script_marker(executable_leaf)
+    {
+        return true;
+    }
+
+    path_entry_is_retained_runtime_payload_marker(&lower)
+        || lower
+            .split('/')
+            .filter(|component| !component.is_empty())
+            .any(path_component_is_retained_runtime_marker)
+        || lower.contains(".ps1")
+}
+
+fn path_entry_contains_retained_runtime_layout(components: &[String]) -> bool {
+    components.windows(2).any(|window| {
+        let parent = window[0].as_str();
+        let child = window[1].as_str();
+        (parent == "host" && child == "fxr")
+            || (parent == "shared" && RETAINED_DOTNET_SHARED_FRAMEWORKS.contains(&child))
+    })
+}
+
+fn retained_runtime_payload_file_name_is_forbidden(file_name: &str) -> bool {
+    RETAINED_RUNTIME_FILE_NAMES.contains(&file_name)
+        || file_name.ends_with(".runtimeconfig.json")
+        || file_name.ends_with(".deps.json")
+        || file_name.starts_with("easydict.compathost")
+        || file_name.starts_with("easydict.nativebridge")
+        || file_name.starts_with("easydict.sidecarclient")
+        || file_name.starts_with("easydict.workers.")
+        || forbidden_easydict_winui_runtime_file(file_name)
+        || (file_name.starts_with("system.") && file_name.ends_with(".dll"))
+        || file_name.starts_with("microsoft.csharp")
+        || file_name.starts_with("microsoft.visualbasic")
+        || file_name.starts_with("microsoft.win32")
+        || RETAINED_DOTNET_ASSEMBLY_FILE_NAMES.contains(&file_name)
+        || RETAINED_WORKER_SHARED_DOTNET_FILE_NAMES.contains(&file_name)
+}
+
+fn command_leaf_is_retained_script_marker(file_name: &str) -> bool {
+    file_name.ends_with(".ps1")
+}
+
+fn forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
+    let Some(suffix) = file_name.strip_prefix("easydict.winui.") else {
+        return false;
+    };
+    matches!(suffix, "exe" | "dll" | "runtimeconfig.json" | "deps.json")
+}
+
 fn path_component_contains_retained_runtime_marker(component: &str) -> bool {
     component
         .split(['\\', '/'])
         .any(path_component_is_retained_runtime_marker)
 }
+
+const RETAINED_DOTNET_SHARED_FRAMEWORKS: &[&str] = &[
+    "microsoft.netcore.app",
+    "microsoft.windowsdesktop.app",
+    "microsoft.aspnetcore.app",
+];
+
+const RETAINED_RUNTIME_FILE_NAMES: &[&str] = &[
+    "createdump.exe",
+    "dotnet.exe",
+    "hostfxr.dll",
+    "coreclr.dll",
+    "hostpolicy.dll",
+    "clrjit.dll",
+    "mscordaccore.dll",
+    "mscordbi.dll",
+    "mscorlib.dll",
+    "netstandard.dll",
+    "singlefilehost.exe",
+    "system.private.corelib.dll",
+    "windowsbase.dll",
+    "presentationcore.dll",
+    "presentationframework.dll",
+];
+
+const RETAINED_DOTNET_ASSEMBLY_FILE_NAMES: &[&str] = &[
+    "easydict.documentexport.dll",
+    "easydict.llm.streaming.dll",
+    "easydict.openvino.dll",
+    "easydict.sidecarclient.dll",
+    "easydict.translationservice.dll",
+    "easydict.windowsai.dll",
+    "lexindex.dll",
+    "mdict.csharp.dll",
+    "polyglot.textlayout.dll",
+];
+
+const RETAINED_WORKER_SHARED_DOTNET_FILE_NAMES: &[&str] = &[
+    "microsoft.interactiveexperiences.projection.dll",
+    "microsoft.web.webview2.core.projection.dll",
+    "microsoft.windows.sdk.net.dll",
+    "microsoft.windows.ui.xaml.dll",
+    "microsoft.winui.dll",
+    "winrt.runtime.dll",
+];
 
 const RETAINED_RUNTIME_CONTENT_MARKERS: &[&[u8]] = &[
     b"hostfxr.dll",
@@ -510,6 +657,10 @@ mod tests {
         for component in [
             "workers",
             "dotnet",
+            "dotnet.exe",
+            "dotnet.cmd",
+            "powershell.exe",
+            "pwsh.cmd",
             "Easydict.CompatHost",
             "Easydict.CompatHost.exe",
             "Easydict.NativeBridge",
@@ -558,6 +709,80 @@ mod tests {
         assert!(!path_has_retained_runtime_component(Path::new(
             r"C:\Tools\EasydictRs\browser-bridge\easydict-native-bridge.exe"
         )));
+    }
+
+    #[test]
+    fn path_entry_classifier_rejects_retained_runtime_payload_entries() {
+        for entry in [
+            "dotnet/host/fxr/8.0.11/hostfxr.dll",
+            "workers/localai/Easydict.Workers.LocalAi.exe",
+            "nested/host/fxr/8.0.11/hostfxr.dll",
+            "nested/shared/Microsoft.WindowsDesktop.App/8.0.11/coreclr.dll",
+            "Easydict.WinUI.deps.json",
+            "Easydict.CompatHost.exe",
+            "System.Private.CoreLib.dll",
+            "Microsoft.Web.WebView2.Core.Projection.dll",
+            "assets/LexIndex.dll",
+        ] {
+            assert!(
+                path_entry_is_retained_runtime_payload_marker(entry),
+                "{entry} should be rejected as retained runtime payload"
+            );
+        }
+    }
+
+    #[test]
+    fn path_entry_classifier_allows_first_release_rust_payload_entries() {
+        for entry in [
+            "Easydict.Rust.exe",
+            "easydict_cli.exe",
+            "easydict_long_doc.exe",
+            "easydict-native-bridge.exe",
+            "easydict_browser_registrar.exe",
+            "README-portable.txt",
+        ] {
+            assert!(
+                !path_entry_is_retained_runtime_payload_marker(entry),
+                "{entry} should be allowed as first-release Rust payload"
+            );
+        }
+    }
+
+    #[test]
+    fn command_target_classifier_rejects_retained_runtime_and_script_targets() {
+        for target in [
+            "dotnet.exe",
+            "dotnet.cmd",
+            r"C:\Program Files\dotnet\dotnet.exe",
+            "powershell -NoProfile",
+            "pwsh.cmd",
+            r"C:\Easydict\workers\localai\Easydict.Workers.LocalAi.exe",
+            r"C:\Easydict\dotnet\host\fxr\8.0.11\hostfxr.dll",
+            r"C:\Easydict\dotnet\shared\Microsoft.NETCore.App\8.0.11\foundry.exe",
+            "scripts/legacy-backend.ps1",
+            "Easydict.CompatHost.exe",
+            "Easydict.WinUI.runtimeconfig.json",
+        ] {
+            assert!(
+                command_target_is_retained_runtime_or_script_marker(target),
+                "{target} should be rejected as a retained runtime or script command target"
+            );
+        }
+    }
+
+    #[test]
+    fn command_target_classifier_allows_native_foundry_targets() {
+        for target in [
+            "foundry",
+            "foundry.exe",
+            r"C:\Program Files\Microsoft Foundry Local\foundry.exe",
+            "/usr/local/bin/foundry",
+        ] {
+            assert!(
+                !command_target_is_retained_runtime_or_script_marker(target),
+                "{target} should be allowed as a native Foundry Local command target"
+            );
+        }
     }
 
     #[test]

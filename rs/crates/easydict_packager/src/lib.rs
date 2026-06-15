@@ -72,6 +72,7 @@ pub struct BuildRustHelpersOptions {
     pub platform: String,
     pub configuration: String,
     pub output_dir: PathBuf,
+    pub include_legacy_registrar_alias: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -689,6 +690,7 @@ pub fn build_rust_helpers(
         cargo_target,
         profile_dir,
         &options.output_dir,
+        options.include_legacy_registrar_alias,
     )
 }
 
@@ -913,23 +915,26 @@ pub fn copy_built_rust_helpers(
     cargo_target: &str,
     profile_dir: &str,
     output_dir: &Path,
+    include_legacy_registrar_alias: bool,
 ) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
     let mut copied_files =
         copy_built_rust_helper_executables(rust_workspace, cargo_target, profile_dir, output_dir)?;
-    let built_dir = rust_workspace
-        .join("target")
-        .join(cargo_target)
-        .join(profile_dir);
-    let registrar_source = built_dir.join("easydict_browser_registrar.exe");
-    ensure_build_artifact_source_within_build_dir(&registrar_source, &built_dir)?;
-    let legacy_name = "BrowserHostRegistrar.exe";
-    fs::copy(&registrar_source, output_dir.join(legacy_name)).map_err(|error| {
-        BuildRustHelpersError::Io {
-            path: output_dir.join(legacy_name),
-            message: error.to_string(),
-        }
-    })?;
-    copied_files.push(legacy_name.to_string());
+    if include_legacy_registrar_alias {
+        let built_dir = rust_workspace
+            .join("target")
+            .join(cargo_target)
+            .join(profile_dir);
+        let registrar_source = built_dir.join("easydict_browser_registrar.exe");
+        ensure_build_artifact_source_within_build_dir(&registrar_source, &built_dir)?;
+        let legacy_name = "BrowserHostRegistrar.exe";
+        fs::copy(&registrar_source, output_dir.join(legacy_name)).map_err(|error| {
+            BuildRustHelpersError::Io {
+                path: output_dir.join(legacy_name),
+                message: error.to_string(),
+            }
+        })?;
+        copied_files.push(legacy_name.to_string());
+    }
 
     Ok(BuildRustHelpersOutcome {
         cargo_target: cargo_target.to_string(),
@@ -2113,54 +2118,7 @@ fn archive_entry_path_is_unsafe(path: &str) -> bool {
 }
 
 fn rust_portable_entry_is_forbidden(entry_name: &str) -> bool {
-    let normalized = entry_name.replace('\\', "/").trim_matches('/').to_string();
-    let components = normalized.split('/').collect::<Vec<_>>();
-    if components.is_empty() {
-        return false;
-    }
-
-    let root = components[0].to_ascii_lowercase();
-    if root == "dotnet" || root == "workers" {
-        return true;
-    }
-    if rust_portable_entry_contains_dotnet_runtime_layout(&components) {
-        return true;
-    }
-
-    let Some(file_name) = components.last() else {
-        return false;
-    };
-    let file_name = file_name.to_ascii_lowercase();
-    matches!(
-        file_name.as_str(),
-        "createdump.exe"
-            | "dotnet.exe"
-            | "hostfxr.dll"
-            | "coreclr.dll"
-            | "hostpolicy.dll"
-            | "clrjit.dll"
-            | "mscordaccore.dll"
-            | "mscordbi.dll"
-            | "mscorlib.dll"
-            | "netstandard.dll"
-            | "singlefilehost.exe"
-            | "system.private.corelib.dll"
-            | "windowsbase.dll"
-            | "presentationcore.dll"
-            | "presentationframework.dll"
-    ) || file_name.ends_with(".runtimeconfig.json")
-        || file_name.ends_with(".deps.json")
-        || file_name.starts_with("easydict.compathost")
-        || file_name.starts_with("easydict.nativebridge")
-        || file_name.starts_with("easydict.sidecarclient")
-        || file_name.starts_with("easydict.workers.")
-        || file_name.starts_with("easydict.winui")
-        || (file_name.starts_with("system.") && file_name.ends_with(".dll"))
-        || file_name.starts_with("microsoft.csharp")
-        || file_name.starts_with("microsoft.visualbasic")
-        || file_name.starts_with("microsoft.win32")
-        || FORBIDDEN_RUST_PORTABLE_DOTNET_ASSEMBLIES.contains(&file_name.as_str())
-        || FORBIDDEN_RUST_PORTABLE_WORKER_SHARED_DOTNET_ASSEMBLIES.contains(&file_name.as_str())
+    easydict_runtime_guards::path_entry_is_retained_runtime_payload_marker(entry_name)
 }
 
 fn rust_portable_entry_is_allowed(entry_name: &str) -> bool {
@@ -2174,43 +2132,6 @@ fn rust_portable_entry_is_allowlisted_executable(entry_name: &str) -> bool {
 fn rust_portable_bytes_contain_dotnet_marker(bytes: &[u8]) -> bool {
     easydict_runtime_guards::bytes_contain_retained_runtime_marker(bytes)
 }
-
-fn rust_portable_entry_contains_dotnet_runtime_layout(components: &[&str]) -> bool {
-    components.windows(2).any(|window| {
-        let parent = window[0].to_ascii_lowercase();
-        let child = window[1].to_ascii_lowercase();
-        (parent == "host" && child == "fxr")
-            || (parent == "shared"
-                && FORBIDDEN_RUST_PORTABLE_DOTNET_SHARED_FRAMEWORKS.contains(&child.as_str()))
-    })
-}
-
-const FORBIDDEN_RUST_PORTABLE_DOTNET_SHARED_FRAMEWORKS: &[&str] = &[
-    "microsoft.netcore.app",
-    "microsoft.windowsdesktop.app",
-    "microsoft.aspnetcore.app",
-];
-
-const FORBIDDEN_RUST_PORTABLE_DOTNET_ASSEMBLIES: &[&str] = &[
-    "easydict.documentexport.dll",
-    "easydict.llm.streaming.dll",
-    "easydict.openvino.dll",
-    "easydict.sidecarclient.dll",
-    "easydict.translationservice.dll",
-    "easydict.windowsai.dll",
-    "lexindex.dll",
-    "mdict.csharp.dll",
-    "polyglot.textlayout.dll",
-];
-
-const FORBIDDEN_RUST_PORTABLE_WORKER_SHARED_DOTNET_ASSEMBLIES: &[&str] = &[
-    "microsoft.interactiveexperiences.projection.dll",
-    "microsoft.web.webview2.core.projection.dll",
-    "microsoft.windows.sdk.net.dll",
-    "microsoft.windows.ui.xaml.dll",
-    "microsoft.winui.dll",
-    "winrt.runtime.dll",
-];
 
 fn read_manifest_json(manifest_path: &Path) -> Result<Value, PackageBrowserExtensionError> {
     if !manifest_path.is_file() {
@@ -2801,6 +2722,32 @@ WIN_FLUENT_TTS_TEXT\n";
     }
 
     #[test]
+    fn rs_portable_path_marker_classifier_is_lib_owned() {
+        let source = include_str!("lib.rs");
+
+        assert!(
+            source.contains(
+                "easydict_runtime_guards::path_entry_is_retained_runtime_payload_marker(entry_name)"
+            ),
+            "rs portable path marker scan should delegate to lib/easydict-runtime-guards"
+        );
+        for forbidden in [
+            concat!("FORBIDDEN_RUST_PORTABLE_DOTNET", "_SHARED_FRAMEWORKS"),
+            concat!("FORBIDDEN_RUST_PORTABLE_DOTNET", "_ASSEMBLIES"),
+            concat!(
+                "FORBIDDEN_RUST_PORTABLE_WORKER_SHARED",
+                "_DOTNET_ASSEMBLIES"
+            ),
+            concat!("fn rust_portable_entry_contains_dotnet", "_runtime_layout"),
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "packager should not re-inline retained runtime path marker {forbidden}"
+            );
+        }
+    }
+
+    #[test]
     fn validate_rs_portable_rejects_retained_dotnet_directory_payload() {
         let package = tempfile_dir("rs-portable-bad-dir");
         write_rust_portable_allowed_payload(&package);
@@ -3139,6 +3086,7 @@ WIN_FLUENT_TTS_TEXT\n";
             platform: "x64".to_string(),
             configuration: "Release".to_string(),
             output_dir,
+            include_legacy_registrar_alias: false,
         })
         .unwrap_err();
 
@@ -3381,7 +3329,7 @@ WIN_FLUENT_TTS_TEXT\n";
     }
 
     #[test]
-    fn copy_built_rust_helpers_copies_helpers_and_legacy_registrar_alias() {
+    fn copy_built_rust_helpers_copies_helpers_without_legacy_registrar_alias_by_default() {
         let workspace = tempfile_dir("rust-helper-workspace");
         let built_dir = workspace
             .join("target")
@@ -3392,17 +3340,50 @@ WIN_FLUENT_TTS_TEXT\n";
         }
         let output = tempfile_dir("rust-helper-output");
 
-        let outcome =
-            copy_built_rust_helpers(&workspace, "x86_64-pc-windows-msvc", "debug", &output)
-                .expect("copy helpers");
+        let outcome = copy_built_rust_helpers(
+            &workspace,
+            "x86_64-pc-windows-msvc",
+            "debug",
+            &output,
+            false,
+        )
+        .expect("copy helpers");
 
-        assert_eq!(outcome.copied_files.len(), 5);
+        assert_eq!(outcome.copied_files.len(), RUST_HELPER_EXECUTABLES.len());
         for exe_name in RUST_HELPER_EXECUTABLES {
             assert_eq!(
                 fs::read(output.join(exe_name)).expect("read copied helper"),
                 exe_name.as_bytes()
             );
         }
+        assert!(
+            !output.join("BrowserHostRegistrar.exe").exists(),
+            "default rust-only helper build should not copy the legacy registrar alias"
+        );
+        let _ = fs::remove_dir_all(workspace);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn copy_built_rust_helpers_copies_legacy_registrar_alias_when_explicit() {
+        let workspace = tempfile_dir("rust-helper-workspace-legacy-alias");
+        let built_dir = workspace
+            .join("target")
+            .join("x86_64-pc-windows-msvc")
+            .join("debug");
+        for exe_name in RUST_HELPER_EXECUTABLES {
+            write_file(&built_dir, exe_name, exe_name.as_bytes());
+        }
+        let output = tempfile_dir("rust-helper-output-legacy-alias");
+
+        let outcome =
+            copy_built_rust_helpers(&workspace, "x86_64-pc-windows-msvc", "debug", &output, true)
+                .expect("copy helpers with legacy alias");
+
+        assert_eq!(
+            outcome.copied_files.len(),
+            RUST_HELPER_EXECUTABLES.len() + 1
+        );
         assert_eq!(
             fs::read(output.join("BrowserHostRegistrar.exe")).expect("read alias"),
             b"easydict_browser_registrar.exe"
@@ -3439,8 +3420,14 @@ WIN_FLUENT_TTS_TEXT\n";
         let workspace = tempfile_dir("rust-helper-missing-workspace");
         let output = tempfile_dir("rust-helper-missing-output");
 
-        let error = copy_built_rust_helpers(&workspace, "x86_64-pc-windows-msvc", "debug", &output)
-            .unwrap_err();
+        let error = copy_built_rust_helpers(
+            &workspace,
+            "x86_64-pc-windows-msvc",
+            "debug",
+            &output,
+            false,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, BuildRustHelpersError::MissingHelper(_)));
         let _ = fs::remove_dir_all(workspace);

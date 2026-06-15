@@ -6,6 +6,7 @@ use crate::local_dictionary::{
     LocalDictionarySuggestionUpdate,
 };
 use crate::mdx_native::{detect_mdx_file_is_encrypted, discover_mdd_file_paths};
+use crate::mouse_selection::MouseSelectionProducer;
 use crate::protocol::{
     local_ai_provider_modes, normalize_local_ai_provider_mode, ImportedMdxDictionarySnapshot,
     SettingsSnapshot, WordResultDto,
@@ -1290,6 +1291,7 @@ pub struct EasydictUiState {
     pub settings: SettingsState,
     pub saved_settings: SettingsState,
     pub pop_button: PopButtonState,
+    pub mouse_selection_producer: MouseSelectionProducer,
     pub mini: FloatingWindowState,
     pub fixed: FloatingWindowState,
 }
@@ -1366,6 +1368,7 @@ impl Default for EasydictUiState {
             settings: SettingsState::default(),
             saved_settings: SettingsState::default(),
             pop_button: PopButtonState::default(),
+            mouse_selection_producer: MouseSelectionProducer::default(),
             mini: FloatingWindowState::mini_demo(),
             fixed: FloatingWindowState::fixed_demo(),
         }
@@ -1384,16 +1387,10 @@ impl EasydictUiState {
 
         match scenario {
             PreviewScenario::Initial => {
-                state.source_text.clear();
-                state.detected_language = None;
-                state.services_completed = 0;
-                state.results = preview_waiting_results();
+                apply_initial_quick_translate_preview(&mut state);
             }
             PreviewScenario::BeforeTranslate => {
-                state.source_text = "Hello from the Rust main window preview".to_string();
-                state.detected_language = None;
-                state.services_completed = 0;
-                state.results = preview_waiting_results();
+                apply_before_translate_preview(&mut state);
             }
             PreviewScenario::Loading => {
                 state.source_text =
@@ -1445,31 +1442,36 @@ impl EasydictUiState {
                 ];
             }
             PreviewScenario::ModeOverlay => {
+                state.mode = AppMode::LongDocument;
                 state.mode_overlay_active = true;
                 state.is_translating = true;
                 state.status_text = "Switching mode".to_string();
             }
             PreviewScenario::PrimaryHover => {
+                apply_initial_quick_translate_preview(&mut state);
                 state.source_text_focused = false;
                 state.source_text_state = ControlState::default();
                 state.main_translate_button_state = ControlState::default().hovered(true);
             }
             PreviewScenario::PrimaryPressed => {
+                apply_initial_quick_translate_preview(&mut state);
                 state.source_text_focused = false;
                 state.source_text_state = ControlState::default();
                 state.main_translate_button_state =
                     ControlState::default().hovered(true).pressed(true);
             }
             PreviewScenario::SourceInputHover => {
+                apply_before_translate_preview(&mut state);
                 state.source_text_focused = false;
                 state.source_text_state = ControlState::default().hovered(true);
             }
             PreviewScenario::SourceInputFocused => {
+                apply_before_translate_preview(&mut state);
                 state.source_text_focused = true;
                 state.source_text_state = ControlState::default().focused(true);
             }
             PreviewScenario::ResultHeaderHover => {
-                state.results = preview_waiting_results();
+                apply_initial_quick_translate_preview(&mut state);
                 state.source_text_focused = false;
                 state.source_text_state = ControlState::default();
                 if let Some(result) = state.results.first_mut() {
@@ -2646,6 +2648,8 @@ impl EasydictUiState {
             | Message::WindowEvent(_)
             | Message::ClipboardTextReceived(_)
             | Message::TrayClipboardTextReceived(_)
+            | Message::MouseSelectionInputHookEvent(_)
+            | Message::MouseSelectionPendingMultiClickElapsed(_)
             | Message::OcrCaptureFinished(_)
             | Message::SilentOcrCaptureFinished(_)
             | Message::OcrCaptureCancelled(_)
@@ -4131,12 +4135,14 @@ pub struct CaptureBackground {
 /// ScreenCaptureWindow's BitBlt-on-open. Returns `None` when the platform
 /// capture fails (the overlay then falls back to the plain dim mask).
 pub fn capture_screen_background() -> Option<CaptureBackground> {
-    crate::screen_capture_native::capture_screen_region(ScreenCaptureRequest::virtual_desktop())
-        .map(|capture| CaptureBackground {
-            bgra_path: capture.pixel_data_path,
-            pixel_width: capture.pixel_width,
-            pixel_height: capture.pixel_height,
-        })
+    crate::screen_capture_native::capture_screen_region(
+        easydict_windows_screen_capture::ScreenCaptureRequest::virtual_desktop(),
+    )
+    .map(|capture| CaptureBackground {
+        bgra_path: capture.pixel_data_path,
+        pixel_width: capture.pixel_width,
+        pixel_height: capture.pixel_height,
+    })
 }
 
 fn preview_waiting_results() -> Vec<TranslationResultPreview> {
@@ -4152,6 +4158,20 @@ fn preview_waiting_results() -> Vec<TranslationResultPreview> {
         TranslationResultPreview::new("google", "Google Translate", "").expanded(false),
         TranslationResultPreview::new("volcano", "Volcano", "").manual_query(),
     ]
+}
+
+fn apply_initial_quick_translate_preview(state: &mut EasydictUiState) {
+    state.source_text.clear();
+    state.detected_language = None;
+    state.services_completed = 0;
+    state.results = preview_waiting_results();
+}
+
+fn apply_before_translate_preview(state: &mut EasydictUiState) {
+    state.source_text = "Hello from the Rust main window preview".to_string();
+    state.detected_language = None;
+    state.services_completed = 0;
+    state.results = preview_waiting_results();
 }
 
 pub fn theme_from_id(id: &str) -> ThemeMode {
@@ -4407,6 +4427,8 @@ pub enum Message {
         anchor_y: i32,
         generation: u64,
     },
+    MouseSelectionInputHookEvent(easydict_windows_text_selection::LowLevelInputHookEvent),
+    MouseSelectionPendingMultiClickElapsed(u64),
     DismissPopButton,
     PopButtonAutoDismiss(u64),
     PopButtonClicked,

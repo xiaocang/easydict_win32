@@ -1,8 +1,8 @@
 use easydict_app::{
     detected_windows_from_screen_windows, CaptureInteraction, CaptureInteractionState,
-    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, WindowDetector,
+    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, ScreenWindowRect,
+    ScreenWindowSnapshot, WindowDetector,
 };
-use win_fluent::prelude::{ScreenRect, ScreenWindow};
 
 #[test]
 fn capture_rect_contains_uses_exclusive_bottom_right_edges() {
@@ -89,10 +89,14 @@ fn capture_interaction_detects_windows_and_scrolls_depth() {
 #[test]
 fn detected_windows_from_screen_windows_restores_parent_child_snapshot_tree() {
     let windows = detected_windows_from_screen_windows([
-        ScreenWindow::new(1, None, ScreenRect::new(0, 0, 800, 600)).class_name("Main"),
-        ScreenWindow::new(2, Some(1), ScreenRect::new(50, 50, 200, 180)).class_name("Child"),
-        ScreenWindow::new(3, Some(2), ScreenRect::new(100, 100, 50, 30)).class_name("Grandchild"),
-        ScreenWindow::new(4, None, ScreenRect::new(900, 20, 120, 90)).class_name("Other"),
+        ScreenWindowSnapshot::new(1, None, ScreenWindowRect::new(0, 0, 800, 600))
+            .class_name("Main"),
+        ScreenWindowSnapshot::new(2, Some(1), ScreenWindowRect::new(50, 50, 200, 180))
+            .class_name("Child"),
+        ScreenWindowSnapshot::new(3, Some(2), ScreenWindowRect::new(100, 100, 50, 30))
+            .class_name("Grandchild"),
+        ScreenWindowSnapshot::new(4, None, ScreenWindowRect::new(900, 20, 120, 90))
+            .class_name("Other"),
     ]);
 
     assert_eq!(

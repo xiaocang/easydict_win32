@@ -347,12 +347,17 @@ dependencies = [
 name = "easydict_foundry_local"
 version = "0.1.0"
 dependencies = [
+ "easydict_runtime_guards",
  "foundry-local-sdk",
  "regex",
  "serde_json",
  "tokio",
  "url",
 ]
+
+[[package]]
+name = "easydict_runtime_guards"
+version = "0.1.0"
 
 [[package]]
 name = "encoding_rs"

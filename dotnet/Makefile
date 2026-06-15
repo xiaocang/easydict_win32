@@ -139,7 +139,7 @@ publish: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --output ./publish --self-contained true -p:BuildWorkerOutputs=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish -IncludeLegacyRegistrarAlias
 
 # Publish legacy .NET/hybrid portable output for a specific platform.
 # Includes Rust NativeBridge/BrowserRegistrar helpers + retained workers.
@@ -170,7 +170,7 @@ publish-x64: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64 -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64; \
@@ -192,7 +192,7 @@ publish-x86: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish/x86 -IncludeLegacyRegistrarAlias
 
 publish-arm64: restore
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
@@ -206,7 +206,7 @@ publish-arm64: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64 -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64; \
@@ -231,13 +231,13 @@ publish-msix-x64: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish-msix/x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64 -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64; \
-		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet -RuntimeProfile $(RUNTIME_PROFILE); \
+		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet -RuntimeProfile "$$runtime_profile"; \
 	else \
 		rm -rf ./publish-msix/x64/workers ./publish-msix/x64/dotnet; \
 		echo "Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile."; \
@@ -255,7 +255,7 @@ publish-msix-x86: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-x86 --self-contained true --output ./publish-msix/x86 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish-msix/x86
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x86 -Configuration Release -OutputDir ./publish-msix/x86 -IncludeLegacyRegistrarAlias
 
 publish-msix-arm64: restore
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
@@ -269,13 +269,13 @@ publish-msix-arm64: restore
 		exit 1; \
 	fi
 	dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish-msix/arm64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:PublishReadyToRun=false -p:WindowsAppSDKSelfContained=false -p:RuntimeProfile=$(RUNTIME_PROFILE)
-	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64
+	pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64 -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
 		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
 		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64; \
-		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet -RuntimeProfile $(RUNTIME_PROFILE); \
+		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet -RuntimeProfile "$$runtime_profile"; \
 	else \
 		rm -rf ./publish-msix/arm64/workers ./publish-msix/arm64/dotnet; \
 		echo "Skipping retained .NET workers and bundled worker runtime for RustOnly runtime profile."; \
@@ -308,7 +308,12 @@ endif
 # Create MSIX package for x64
 msix-x64: publish-msix-x64
 	@mkdir -p msix
-	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x64 -PublishDir ./publish-msix/x64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x64.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by make msix-x64; only hybrid is supported for legacy .NET/MSIX packaging."; \
+		exit 1; \
+	fi; \
+	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x64 -PublishDir ./publish-msix/x64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x64.msix -MsixVersion $(VERSION) -RuntimeProfile "$$runtime_profile"
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ -n "$$runtime_profile" ]; then \
 		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x64.msix --runtime-profile "$$runtime_profile" --allow-unsigned; \
@@ -319,7 +324,12 @@ msix-x64: publish-msix-x64
 # Create MSIX package for x86
 msix-x86: publish-msix-x86
 	@mkdir -p msix
-	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x86 -PublishDir ./publish-msix/x86 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x86.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by make msix-x86; only hybrid is supported for legacy .NET/MSIX packaging."; \
+		exit 1; \
+	fi; \
+	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform x86 -PublishDir ./publish-msix/x86 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-x86.msix -MsixVersion $(VERSION) -RuntimeProfile "$$runtime_profile"
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ -n "$$runtime_profile" ]; then \
 		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-x86.msix --runtime-profile "$$runtime_profile" --allow-unsigned; \
@@ -330,7 +340,12 @@ msix-x86: publish-msix-x86
 # Create MSIX package for ARM64
 msix-arm64: publish-msix-arm64
 	@mkdir -p msix
-	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform arm64 -PublishDir ./publish-msix/arm64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-arm64.msix -MsixVersion $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by make msix-arm64; only hybrid is supported for legacy .NET/MSIX packaging."; \
+		exit 1; \
+	fi; \
+	pwsh -NoProfile -File scripts/Package-Msix.ps1 -Platform arm64 -PublishDir ./publish-msix/arm64 -ManifestPath $(MANIFEST_SRC) -OutputMsixPath ./msix/Easydict-arm64.msix -MsixVersion $(VERSION) -RuntimeProfile "$$runtime_profile"
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ -n "$$runtime_profile" ]; then \
 		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- ./msix/Easydict-arm64.msix --runtime-profile "$$runtime_profile" --allow-unsigned; \
@@ -419,15 +434,30 @@ endif
 
 # Create EXE installer for x64
 installer-x64: publish-x64
-	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by make installer-x64; only hybrid is supported for legacy .NET installer packaging."; \
+		exit 1; \
+	fi; \
+	pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION) -RuntimeProfile "$$runtime_profile"
 
 # Create EXE installer for x86
 installer-x86: publish-x86
-	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x86 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by make installer-x86; only hybrid is supported for legacy .NET installer packaging."; \
+		exit 1; \
+	fi; \
+	pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x86 -Version $(VERSION) -RuntimeProfile "$$runtime_profile"
 
 # Create EXE installer for ARM64
 installer-arm64: publish-arm64
-	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ "$$runtime_profile" != "hybrid" ]; then \
+		echo "RUNTIME_PROFILE=$(RUNTIME_PROFILE) is not supported by make installer-arm64; only hybrid is supported for legacy .NET installer packaging."; \
+		exit 1; \
+	fi; \
+	pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION) -RuntimeProfile "$$runtime_profile"
 
 # Create EXE installer for default platform (x64)
 installer: installer-x64

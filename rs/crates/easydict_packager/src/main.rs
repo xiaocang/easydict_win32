@@ -266,6 +266,7 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
     let mut platform = "x64".to_string();
     let mut configuration = "Release".to_string();
     let mut output_dir = None;
+    let mut include_legacy_registrar_alias = false;
 
     let mut index = 0;
     while index < args.len() {
@@ -293,6 +294,9 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
                     return 2;
                 };
                 output_dir = Some(PathBuf::from(value));
+            }
+            "--include-legacy-registrar-alias" => {
+                include_legacy_registrar_alias = true;
             }
             "-h" | "--help" => {
                 print_usage();
@@ -323,6 +327,7 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
         platform,
         configuration,
         output_dir: output_dir.clone(),
+        include_legacy_registrar_alias,
     }) {
         Ok(outcome) => {
             println!(
@@ -538,7 +543,7 @@ fn print_usage() {
 fn packager_usage_lines() -> &'static [&'static str] {
     &[
         "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
-        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>",
+        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir> [--include-legacy-registrar-alias]",
         "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
         "       easydict_packager validate-rs-portable --package <dir-or-zip>",
         "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
@@ -550,7 +555,7 @@ fn packager_usage_lines() -> &'static [&'static str] {
     &[
         "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
         "       easydict_packager extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>] --runtime-profile hybrid    # hybrid/coexistence packaging only; never used by rs portable",
-        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>",
+        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir> [--include-legacy-registrar-alias]",
         "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
         "       easydict_packager validate-rs-portable --package <dir-or-zip>",
         "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",

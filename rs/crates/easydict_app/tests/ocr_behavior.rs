@@ -10,8 +10,9 @@ use easydict_app::{
     NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult,
     OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
     OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams,
-    OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
+    OcrRectDto, OcrResultDto, ScreenWindowRect, ScreenWindowSnapshot, WindowsNativeOcrRecognizer,
 };
+use easydict_windows_screen_capture::{ScreenCaptureRequest, ScreenRect};
 use serde_json::json;
 use std::{
     collections::VecDeque,
@@ -23,10 +24,7 @@ use std::{
     thread,
     time::Duration,
 };
-use win_fluent::prelude::{
-    Application, PlatformCommand, ScreenCaptureRequest, ScreenRect, ScreenWindow, Task,
-    WindowCommand,
-};
+use win_fluent::prelude::{Application, PlatformCommand, Task, WindowCommand};
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -986,8 +984,10 @@ fn ocr_hotkey_captures_window_snapshot_for_double_click_detection() {
     assert!(contains_future_task(&task));
     app.update(Message::CaptureWindowsChanged(
         easydict_app::detected_windows_from_screen_windows(vec![
-            ScreenWindow::new(1, None, ScreenRect::new(0, 0, 500, 400)).class_name("Top"),
-            ScreenWindow::new(2, Some(1), ScreenRect::new(40, 30, 160, 120)).class_name("Child"),
+            ScreenWindowSnapshot::new(1, None, ScreenWindowRect::new(0, 0, 500, 400))
+                .class_name("Top"),
+            ScreenWindowSnapshot::new(2, Some(1), ScreenWindowRect::new(40, 30, 160, 120))
+                .class_name("Child"),
         ]),
     ));
 
@@ -1024,10 +1024,10 @@ fn capture_window_snapshot_does_not_reset_active_drag_selection() {
 
     assert!(contains_future_task(&task));
     app.update(Message::CaptureWindowsChanged(
-        easydict_app::detected_windows_from_screen_windows(vec![ScreenWindow::new(
+        easydict_app::detected_windows_from_screen_windows(vec![ScreenWindowSnapshot::new(
             1,
             None,
-            ScreenRect::new(0, 0, 500, 400),
+            ScreenWindowRect::new(0, 0, 500, 400),
         )]),
     ));
 
@@ -1179,6 +1179,9 @@ fn capture_overlay_copy_without_selection_waits_for_region() {
 #[test]
 fn app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface() {
     let app_source = include_str!("../src/lib.rs");
+    let screen_capture_source = include_str!("../src/screen_capture.rs");
+    let screen_capture_native_source = include_str!("../src/screen_capture_native.rs");
+    let ocr_source = include_str!("../src/ocr.rs");
     let state_source = include_str!("../src/state.rs");
     let app_manifest = include_str!("../Cargo.toml");
 
@@ -1187,6 +1190,22 @@ fn app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface()
     assert!(
         app_manifest.contains("easydict_windows_screen_capture"),
         "default app should depend on the lib-owned Rust-native screen capture helper"
+    );
+    assert!(
+        !screen_capture_source.contains("win_fluent::"),
+        "OCR window detection core should use app-owned screen-window DTOs"
+    );
+    assert!(
+        !screen_capture_native_source.contains("win_fluent::prelude::ScreenCapture"),
+        "native screen capture facade should use lib-owned capture request/result DTOs"
+    );
+    assert!(
+        !screen_capture_native_source.contains("win_fluent::platform::ScreenWindowSnapshotRequest"),
+        "native screen capture facade should use the lib-owned window snapshot request DTO"
+    );
+    assert!(
+        !ocr_source.contains("win_fluent::prelude::ScreenCaptureResult"),
+        "OCR capture result conversion should use the lib-owned screen capture result DTO"
     );
     assert!(
         state_source.contains("screen_capture_native::capture_screen_region"),

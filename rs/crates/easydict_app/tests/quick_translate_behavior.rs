@@ -5357,6 +5357,17 @@ fn monitor_clipboard_uses_app_owned_stream_not_winfluent_clipboard_subscription(
 }
 
 #[test]
+fn mouse_selection_uses_app_owned_low_level_hook_stream() {
+    let app_source = include_str!("../src/lib.rs");
+
+    assert!(app_source.contains("mouse_selection::mouse_selection_hook_stream"));
+    assert!(
+        !app_source.contains("Subscription::event(SubscriptionKind::Custom"),
+        "mouse selection hook should stay in the app-owned Rust stream path"
+    );
+}
+
+#[test]
 fn app_startup_starts_clipboard_monitor_stream_when_saved_setting_is_enabled() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     easydict_app::clipboard::stop_clipboard_monitor();
@@ -5370,6 +5381,22 @@ fn app_startup_starts_clipboard_monitor_stream_when_saved_setting_is_enabled() {
     assert!(easydict_app::clipboard::clipboard_monitor_is_running());
     drop(task);
     easydict_app::clipboard::stop_clipboard_monitor();
+}
+
+#[test]
+fn app_startup_starts_mouse_selection_hook_stream_when_saved_setting_is_enabled() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    easydict_app::mouse_selection::stop_mouse_selection_hook();
+    let mut state = EasydictUiState::default();
+    state.settings.mouse_selection_translate = true;
+    state.saved_settings.mouse_selection_translate = true;
+
+    let (_app, task) = EasydictApp::new(state);
+
+    assert!(contains_stream_task(&task));
+    assert!(easydict_app::mouse_selection::mouse_selection_hook_is_running());
+    drop(task);
+    easydict_app::mouse_selection::stop_mouse_selection_hook();
 }
 
 #[test]
@@ -5396,6 +5423,32 @@ fn saving_monitor_clipboard_setting_starts_and_stops_rust_owned_monitor() {
 
     assert_eq!(task_kind(&stop_task), "none");
     assert!(!easydict_app::clipboard::clipboard_monitor_is_running());
+}
+
+#[test]
+fn saving_mouse_selection_setting_starts_and_stops_rust_owned_hook_stream() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    easydict_app::mouse_selection::stop_mouse_selection_hook();
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::OpenSettings);
+    let toggle_task = app.update(Message::ToggleMouseSelectionTranslate(true));
+    assert_eq!(task_kind(&toggle_task), "none");
+    assert!(!easydict_app::mouse_selection::mouse_selection_hook_is_running());
+
+    let save_task = app.update(Message::SaveSettingsChanges);
+    assert!(contains_stream_task(&save_task));
+    assert!(easydict_app::mouse_selection::mouse_selection_hook_is_running());
+    drop(save_task);
+
+    app.update(Message::OpenSettings);
+    app.update(Message::ToggleMouseSelectionTranslate(false));
+    let stop_task = app.update(Message::SaveSettingsChanges);
+
+    assert_eq!(task_kind(&stop_task), "none");
+    assert!(!easydict_app::mouse_selection::mouse_selection_hook_is_running());
 }
 
 #[test]
@@ -5576,10 +5629,10 @@ fn mouse_selection_producer_actions_map_immediate_tasks_and_expose_pending_timer
         mouse_selection_pending_timer(&pending_action),
         Some((9, 550))
     );
-    assert!(matches!(
-        mouse_selection_producer_action_task(pending_action),
-        Task::None
-    ));
+    assert_eq!(
+        task_kind(&mouse_selection_producer_action_task(pending_action)),
+        "future"
+    );
 }
 
 #[test]
@@ -5595,6 +5648,87 @@ fn mouse_selection_producer_actions_batch_immediate_tasks() {
 
     assert!(contains_message_task(&task, &Message::DismissPopButton));
     assert!(contains_future_task(&task));
+}
+
+#[test]
+fn mouse_selection_hook_events_are_ignored_when_setting_is_disabled() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let task = app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONDOWN, 100, 100, 1_000),
+    ));
+
+    assert_eq!(task_kind(&task), "none");
+}
+
+#[test]
+fn mouse_selection_hook_events_route_drag_to_existing_capture_task() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.mouse_selection_translate = true;
+    app.state.settings.mouse_selection_excluded_apps.clear();
+
+    let down = app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONDOWN, 100, 100, 1_000),
+    ));
+    assert!(contains_message_task(&down, &Message::DismissPopButton));
+
+    let move_task = app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_MOUSEMOVE, 130, 100, 1_010),
+    ));
+    assert_eq!(task_kind(&move_task), "none");
+
+    let up = app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONUP, 130, 100, 1_020),
+    ));
+    assert!(contains_future_task(&up));
+}
+
+#[test]
+fn mouse_selection_hook_events_suppress_dismiss_for_visible_pop_button_click() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.mouse_selection_translate = true;
+    app.state.settings.mouse_selection_excluded_apps.clear();
+    app.state.pop_button.visible = true;
+    app.state.pop_button.anchor = Some(PopButtonAnchor::new(400, 240));
+
+    let task = app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONDOWN, 408, 208, 1_000),
+    ));
+
+    assert_eq!(task_kind(&task), "none");
+}
+
+#[test]
+fn mouse_selection_pending_multi_click_elapsed_completes_scheduled_selection() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.mouse_selection_translate = true;
+    app.state.settings.mouse_selection_excluded_apps.clear();
+
+    app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONDOWN, 100, 100, 1_000),
+    ));
+    app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONUP, 100, 100, 1_000),
+    ));
+    app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONDOWN, 100, 100, 1_200),
+    ));
+    let scheduled = app.update(Message::MouseSelectionInputHookEvent(
+        low_level_mouse_event(easydict_app::WM_LBUTTONUP, 100, 100, 1_200),
+    ));
+
+    assert!(contains_future_task(&scheduled));
+
+    let completed = app.update(Message::MouseSelectionPendingMultiClickElapsed(1));
+    assert!(contains_future_task(&completed));
 }
 
 #[test]
@@ -5744,6 +5878,25 @@ fn mouse_selection_capture_request(
         },
         generation,
     }
+}
+
+fn low_level_mouse_event(
+    message: u32,
+    x: i32,
+    y: i32,
+    event_time_ms: u32,
+) -> easydict_windows_text_selection::LowLevelInputHookEvent {
+    easydict_windows_text_selection::LowLevelInputHookEvent::Mouse(
+        easydict_windows_text_selection::LowLevelMouseHookEvent {
+            message,
+            x,
+            y,
+            mouse_data: 0,
+            flags: 0,
+            event_time_ms,
+            extra_info: 0,
+        },
+    )
 }
 
 #[test]
@@ -8067,6 +8220,45 @@ fn unencrypted_local_dictionary_suggestions_route_natively_without_compat_host_s
 }
 
 #[test]
+fn local_dictionary_suggestions_app_dir_ignores_stale_dotnet_payload_markers() {
+    let temp_dir = unique_temp_dir("easydict-mdx-suggestions-stale-app-dir");
+    install_stale_retained_runtime_app_dir_markers(&temp_dir);
+
+    let mut state = EasydictUiState::default();
+    state.settings.local_dictionary_suggestions = true;
+    state.apply(Message::MdxDictionarySelected(Some(
+        r"C:\Dicts\Demo Dictionary.mdx".to_string(),
+    )));
+    state.source_text = "app".to_string();
+    let request =
+        begin_local_dictionary_suggestions(&mut state).expect("suggestion request should start");
+
+    assert!(local_dictionary_suggestion_request_can_route_natively(
+        &request
+    ));
+
+    let update = run_local_dictionary_suggestion_request_with_app_dir(request, &temp_dir);
+
+    assert!(update.suggestions.is_empty());
+    let error = update
+        .error
+        .as_deref()
+        .expect("missing native MDX file should fail locally");
+    assert!(
+        error.contains("MDX dictionary file not found"),
+        "unexpected local dictionary error: {error}"
+    );
+    for forbidden in ["CompatHost", "Easydict.Workers", "dotnet", "hostfxr"] {
+        assert!(
+            !error.contains(forbidden),
+            "default local dictionary suggestions must not expose stale app-dir retained payload marker {forbidden}: {error}"
+        );
+    }
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
 fn mixed_local_dictionary_suggestions_with_missing_files_finish_without_compat_host_spawn() {
     let temp_dir = unique_temp_dir("easydict-mdx-suggestions-mixed-missing-no-host");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -8414,7 +8606,17 @@ fn default_tray_menu_covers_migration_contract() {
         .map(|item| item.label.as_str())
         .collect::<Vec<_>>();
 
-    assert_eq!(menu.tooltip, "Easydict");
+    assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
+    let icon_path = menu.icon_path.as_deref().expect("tray icon path");
+    assert!(
+        icon_path.ends_with("AppIcon.ico"),
+        "tray icon should use AppIcon.ico, got {icon_path}"
+    );
+    assert!(
+        std::path::Path::new(icon_path).is_file(),
+        "tray icon path should exist: {icon_path}"
+    );
+    assert_eq!(menu.default_item_id.as_deref(), Some(TRAY_SHOW_MAIN));
     assert_eq!(
         ids,
         vec![
@@ -8847,7 +9049,7 @@ fn runtime_plan_captures_desktop_integration_entries() {
             .as_ref()
             .expect("tray menu")
             .tooltip,
-        "Easydict"
+        "Easydict - Dictionary & Translation"
     );
     assert!(plan.desktop_integration.shell_verbs.is_empty());
     assert_eq!(
@@ -9656,6 +9858,24 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
             .as_nanos()
     ));
     path
+}
+
+fn install_stale_retained_runtime_app_dir_markers(root: &Path) {
+    for relative_path in [
+        "Easydict.CompatHost.exe",
+        "workers/localai/Easydict.Workers.LocalAi.exe",
+        "workers/longdoc/Easydict.Workers.LongDoc.exe",
+        "dotnet/dotnet.exe",
+        "dotnet/host/fxr/8.0.11/hostfxr.dll",
+        "dotnet/shared/Microsoft.NETCore.App/8.0.11/System.Private.CoreLib.dll",
+    ] {
+        let path = root.join(relative_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("stale app-dir marker parent should be created");
+        }
+        fs::write(path, b"stale retained runtime marker")
+            .expect("stale app-dir marker should be written");
+    }
 }
 
 struct EnvironmentVariableGuard {

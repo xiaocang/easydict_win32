@@ -144,7 +144,8 @@ jobs:
           ./scripts/Build-RustHelpers.ps1 `
             -Platform arm64 `
             -Configuration Release `
-            -OutputDir ./publish-msix/arm64
+            -OutputDir ./publish-msix/arm64 `
+            -IncludeLegacyRegistrarAlias
 
       - name: Publish LongDoc Worker (arm64)
         if: env.RETAINED_WORKERS_ENABLED == 'true'

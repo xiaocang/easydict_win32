@@ -3823,6 +3823,11 @@ where
     if token.expanded {
         if let Some(content) = &token.content {
             let content = compile_view_with_text_editors_and_visual(content, provider, visual);
+            let divider = iced_container(iced_space())
+                .width(IcedLength::Fill)
+                .height(IcedLength::Fixed(1.0))
+                .style(move |_| expander_content_divider_style(visual));
+            layout = layout.push(divider);
             layout = layout.push(
                 iced_container(content)
                     .width(IcedLength::Fill)
@@ -5513,6 +5518,7 @@ fn text_size(style: TextStyle, visual: IcedVisualTheme) -> f32 {
         TextStyle::BodyLarge => visual.body_large_size,
         TextStyle::BodyStrong => visual.body_strong_size,
         TextStyle::Success => visual.body_strong_size,
+        TextStyle::Warning => visual.body_strong_size,
         TextStyle::SectionTitle => 18.0,
         TextStyle::Subtitle => visual.subtitle_size,
         TextStyle::Title => visual.title_size,
@@ -5524,6 +5530,7 @@ fn text_font(style: TextStyle) -> Font {
     let weight = match style {
         TextStyle::BodyStrong
         | TextStyle::Success
+        | TextStyle::Warning
         | TextStyle::SectionTitle
         | TextStyle::Subtitle
         | TextStyle::Title
@@ -5553,6 +5560,7 @@ fn text_font_for_value(style: TextStyle, value: &str) -> Font {
             TextStyle::BodyStrong
                 | TextStyle::SectionTitle
                 | TextStyle::Success
+                | TextStyle::Warning
                 | TextStyle::Subtitle
                 | TextStyle::Title
                 | TextStyle::TitleLarge
@@ -6900,9 +6908,17 @@ fn expander_container_style_with_state(
     };
 
     iced::widget::container::Style::default()
-        .background(visual.surface)
+        .background(expander_background_color(visual))
         .color(visual.text_primary)
         .border(control_border(visual, border_color, visual.stroke_control))
+}
+
+fn expander_background_color(visual: IcedVisualTheme) -> Color {
+    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
+        visual.surface
+    } else {
+        Color::from_rgb8(253, 253, 254)
+    }
 }
 
 fn expander_border_color(visual: IcedVisualTheme) -> Color {
@@ -6919,8 +6935,22 @@ fn is_light_surface(color: Color) -> bool {
 
 fn expander_content_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
     iced::widget::container::Style::default()
-        .background(visual.background)
+        .background(expander_content_background_color(visual))
         .color(visual.text_primary)
+}
+
+fn expander_content_divider_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(expander_border_color(visual))
+        .color(visual.text_primary)
+}
+
+fn expander_content_background_color(visual: IcedVisualTheme) -> Color {
+    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
+        visual.background
+    } else {
+        Color::from_rgb8(246, 247, 249)
+    }
 }
 
 fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget::container::Style {
@@ -7009,6 +7039,7 @@ fn text_color(style: TextStyle, visual: IcedVisualTheme) -> Color {
         | TextStyle::Title
         | TextStyle::TitleLarge => visual.text_primary,
         TextStyle::Success => visual.success,
+        TextStyle::Warning => visual.warning,
     }
 }
 
@@ -7298,8 +7329,10 @@ struct NamedEventSubscriptionData {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct TraySubscriptionData {
     tooltip: String,
+    icon_path: Option<String>,
     callback_message: u32,
     item_count: usize,
+    default_command_id: Option<u32>,
     items: Vec<TrayItemSubscriptionData>,
 }
 
@@ -7335,8 +7368,10 @@ impl TraySubscriptionData {
 
         win_fluent_platform_win::WindowsTrayPlan {
             tooltip: self.tooltip.clone(),
+            icon_path: self.icon_path.clone(),
             callback_message: self.callback_message,
             item_count: self.item_count,
+            default_command_id: self.default_command_id,
             items,
         }
     }
@@ -7378,8 +7413,10 @@ impl From<win_fluent_platform_win::WindowsTrayPlan> for TraySubscriptionData {
     fn from(plan: win_fluent_platform_win::WindowsTrayPlan) -> Self {
         Self {
             tooltip: plan.tooltip,
+            icon_path: plan.icon_path,
             callback_message: plan.callback_message,
             item_count: plan.item_count,
+            default_command_id: plan.default_command_id,
             items: plan
                 .items
                 .into_iter()
@@ -8091,7 +8128,7 @@ mod tests {
             expander_container_style_with_state(visual, &ControlState::default().pressed(true));
         assert_eq!(
             optional_background_color(expander_active.background),
-            iced_color(theme.surface)
+            iced::Color::from_rgb8(253, 253, 254)
         );
         assert_eq!(
             expander_active.border.color,
@@ -8109,7 +8146,12 @@ mod tests {
         let expander_content = expander_content_container_style(visual);
         assert_eq!(
             optional_background_color(expander_content.background),
-            iced_color(theme.background)
+            iced::Color::from_rgb8(246, 247, 249)
+        );
+        let expander_content_divider = expander_content_divider_style(visual);
+        assert_eq!(
+            optional_background_color(expander_content_divider.background),
+            iced::Color::from_rgb8(232, 234, 237)
         );
 
         let divider = utility_container_style(&FluentStyle::from_classes("bg-border"), visual);
@@ -8851,8 +8893,10 @@ mod tests {
     fn tray_subscription_data_round_trips_native_plan() {
         let plan = win_fluent_platform_win::WindowsTrayPlan {
             tooltip: "Easydict".to_string(),
+            icon_path: Some("C:\\Easydict\\AppIcon.ico".to_string()),
             callback_message: 1025,
             item_count: 2,
+            default_command_id: Some(1000),
             items: vec![
                 win_fluent_platform_win::WindowsTrayItemPlan {
                     id: "show-main".to_string(),
@@ -8879,8 +8923,10 @@ mod tests {
         let round_trip = data.to_plan();
 
         assert_eq!(round_trip.tooltip, plan.tooltip);
+        assert_eq!(round_trip.icon_path, plan.icon_path);
         assert_eq!(round_trip.callback_message, plan.callback_message);
         assert_eq!(round_trip.item_count, plan.item_count);
+        assert_eq!(round_trip.default_command_id, Some(1000));
         assert_eq!(round_trip.items[0].id, "show-main");
         assert_eq!(round_trip.items[0].command_id, 1000);
         assert!(round_trip.items[0].enabled);
@@ -8893,8 +8939,10 @@ mod tests {
     fn tray_subscription_data_preserves_structured_menu_items() {
         let plan = win_fluent_platform_win::WindowsTrayPlan {
             tooltip: "Easydict".to_string(),
+            icon_path: Some("C:\\Easydict\\AppIcon.ico".to_string()),
             callback_message: 1025,
             item_count: 2,
+            default_command_id: Some(1000),
             items: vec![
                 win_fluent_platform_win::WindowsTrayItemPlan {
                     id: String::new(),
@@ -8938,7 +8986,12 @@ mod tests {
 
         let round_trip = TraySubscriptionData::from(plan).to_plan();
 
+        assert_eq!(
+            round_trip.icon_path.as_deref(),
+            Some("C:\\Easydict\\AppIcon.ico")
+        );
         assert_eq!(round_trip.item_count, 2);
+        assert_eq!(round_trip.default_command_id, Some(1000));
         assert_eq!(
             round_trip.items[0].kind,
             win_fluent_platform_win::WindowsTrayItemKind::Separator

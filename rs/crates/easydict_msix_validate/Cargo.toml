@@ -5,6 +5,7 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+easydict_runtime_guards = { path = "../../../lib/easydict-runtime-guards" }
 quick-xml = "0.40"
 sha2 = "0.10"
 tempfile = "3.14"

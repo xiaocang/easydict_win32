@@ -111,7 +111,8 @@ Write-Host "Publishing Rust helper executables..." -ForegroundColor Green
 & (Join-Path $ScriptDir "Build-RustHelpers.ps1") `
     -Platform $Platform `
     -Configuration $Configuration `
-    -OutputDir $PublishDir
+    -OutputDir $PublishDir `
+    -IncludeLegacyRegistrarAlias
 
 # Calculate size
 $files = Get-ChildItem -Path $PublishDir -Recurse -File

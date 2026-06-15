@@ -274,6 +274,17 @@ where
             ));
         }
 
+        match bridge_file_has_retained_runtime_marker(source_bridge_path) {
+            Ok(false) => {}
+            Ok(true) => {
+                return InstallOutput::error(format!(
+                    "Bridge source contains retained payload or script markers: {}",
+                    source_bridge_path.display()
+                ));
+            }
+            Err(error) => return InstallOutput::error(error.to_string()),
+        }
+
         if let Err(error) = fs::create_dir_all(&self.bridge_directory) {
             return InstallOutput::error(error.to_string());
         }
@@ -281,6 +292,18 @@ where
         let bridge_path = self.bridge_exe_path();
         match fs::copy(source_bridge_path, &bridge_path) {
             Ok(_) => {}
+            Err(error) => return InstallOutput::error(error.to_string()),
+        }
+
+        match bridge_file_has_retained_runtime_marker(&bridge_path) {
+            Ok(false) => {}
+            Ok(true) => {
+                delete_file(&bridge_path);
+                return InstallOutput::error(format!(
+                    "Staged bridge contains retained payload or script markers: {}",
+                    bridge_path.display()
+                ));
+            }
             Err(error) => return InstallOutput::error(error.to_string()),
         }
 
@@ -412,6 +435,7 @@ where
         manifest.name == NATIVE_HOST_NAME
             && manifest.manifest_type == "stdio"
             && path_points_to_bridge(Path::new(&manifest.path), &self.bridge_exe_path())
+            && bridge_file_is_rust_native(&self.bridge_exe_path())
     }
 
     fn uninstall_browser_if_owned(
@@ -617,6 +641,15 @@ fn bridge_source_path_shape_is_allowed(path: &Path) -> bool {
         .unwrap_or(false);
 
     has_expected_name && !easydict_runtime_guards::path_has_retained_runtime_component(path)
+}
+
+fn bridge_file_is_rust_native(path: &Path) -> bool {
+    matches!(bridge_file_has_retained_runtime_marker(path), Ok(false))
+}
+
+fn bridge_file_has_retained_runtime_marker(path: &Path) -> io::Result<bool> {
+    let bytes = fs::read(path)?;
+    Ok(easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes))
 }
 
 fn path_points_to_bridge(path: &Path, bridge_path: &Path) -> bool {

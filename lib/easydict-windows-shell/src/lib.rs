@@ -110,13 +110,17 @@ fn validate_bundled_executable_name(executable_name: &str) -> Result<(), Windows
         && trimmed != "."
         && trimmed != "..";
 
-    if is_plain_file_name {
+    if is_plain_file_name && !bundled_executable_name_is_forbidden(trimmed) {
         Ok(())
     } else {
         Err(WindowsShellError::InvalidBundledExecutableName(
             executable_name.to_string(),
         ))
     }
+}
+
+fn bundled_executable_name_is_forbidden(executable_name: &str) -> bool {
+    easydict_runtime_guards::path_component_is_retained_runtime_marker(executable_name)
 }
 
 fn hide_process_window(command: &mut Command) {
@@ -220,6 +224,42 @@ mod tests {
                     value.to_string()
                 ))
             );
+        }
+    }
+
+    #[test]
+    fn bundled_executable_name_rejects_retained_runtime_and_script_helpers() {
+        for value in [
+            "dotnet.exe",
+            "dotnet.cmd",
+            "powershell.exe",
+            "PowerShell.CMD",
+            "pwsh.exe",
+            "pwsh.bat",
+            "Easydict.CompatHost.exe",
+            "Easydict.NativeBridge.exe",
+            "Easydict.Workers.LongDoc.exe",
+            "Easydict.Workers.LocalAi.exe",
+        ] {
+            assert_eq!(
+                validate_bundled_executable_name(value),
+                Err(WindowsShellError::InvalidBundledExecutableName(
+                    value.to_string()
+                )),
+                "{value} must not be accepted as a bundled Rust helper"
+            );
+        }
+    }
+
+    #[test]
+    fn bundled_executable_name_allows_rust_native_helpers() {
+        for value in [
+            "easydict_browser_registrar.exe",
+            "easydict_native_bridge.exe",
+            "easydict_cli.exe",
+        ] {
+            validate_bundled_executable_name(value)
+                .unwrap_or_else(|error| panic!("{value} should be accepted: {error}"));
         }
     }
 

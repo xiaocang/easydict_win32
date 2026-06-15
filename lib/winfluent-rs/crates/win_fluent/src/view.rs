@@ -190,6 +190,7 @@ pub enum TextStyle {
     BodyLarge,
     BodyStrong,
     Success,
+    Warning,
     SectionTitle,
     Subtitle,
     Title,

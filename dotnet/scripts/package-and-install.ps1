@@ -87,7 +87,8 @@ try {
     & "$scriptDir/Build-RustHelpers.ps1" `
         -Platform $Platform `
         -Configuration $Configuration `
-        -OutputDir $publishDir
+        -OutputDir $publishDir `
+        -IncludeLegacyRegistrarAlias
 
     if ($Platform -ne "x86") {
         Write-Host "  Publishing remaining .NET workers..." -ForegroundColor Gray

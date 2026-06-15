@@ -1316,6 +1316,7 @@ dependencies = [
 name = "easydict_foundry_local"
 version = "0.1.0"
 dependencies = [
+ "easydict_runtime_guards",
  "foundry-local-sdk",
  "regex",
  "serde_json",
@@ -1337,6 +1338,7 @@ dependencies = [
 name = "easydict_msix_validate"
 version = "0.1.0"
 dependencies = [
+ "easydict_runtime_guards",
  "quick-xml",
  "sha2 0.10.9",
  "tempfile",
@@ -1477,6 +1479,7 @@ dependencies = [
 name = "easydict_windows_shell"
 version = "0.1.0"
 dependencies = [
+ "easydict_runtime_guards",
  "windows 0.62.2",
 ]
 

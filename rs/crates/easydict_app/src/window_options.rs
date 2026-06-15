@@ -1,10 +1,18 @@
 use crate::state::SettingsState;
 use win_fluent::prelude::*;
 
+pub const MAIN_WINDOW_DEFAULT_WIDTH_DIPS: f32 = 419.0;
+pub const MAIN_WINDOW_DEFAULT_HEIGHT_DIPS: f32 = 494.5;
+pub const MAIN_WINDOW_MIN_WIDTH_DIPS: f32 = 400.0;
+pub const MAIN_WINDOW_MIN_HEIGHT_DIPS: f32 = 494.5;
+
 pub fn main_window_options() -> WindowOptions {
     WindowOptions::new("main", "Easydict")
-        .size(940.0, 1220.0)
-        .min_size(400.0, 500.0)
+        .size(
+            MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
+            MAIN_WINDOW_DEFAULT_HEIGHT_DIPS,
+        )
+        .min_size(MAIN_WINDOW_MIN_WIDTH_DIPS, MAIN_WINDOW_MIN_HEIGHT_DIPS)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Center)

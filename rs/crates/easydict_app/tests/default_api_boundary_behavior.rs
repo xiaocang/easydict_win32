@@ -92,8 +92,10 @@ fn default_cargo_features_do_not_enable_retained_dotnet_workers() {
         "easydict_app default Cargo features must stay empty for rs portable"
     );
     assert!(
-        app_manifest.contains("\nretained-dotnet-workers = []\n"),
-        "retained-dotnet-workers must remain an explicit opt-in feature"
+        app_manifest.contains(
+            "\nretained-dotnet-workers = [\"easydict_runtime_guards/retained-dotnet-workers\"]\n"
+        ),
+        "retained-dotnet-workers must remain an explicit opt-in feature that only forwards the lib-owned runtime policy feature"
     );
     assert!(
         !preview_manifest.contains("retained-dotnet-workers"),
@@ -523,34 +525,23 @@ fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
         source.contains("fn is_retained_dotnet_runtime_or_worker_command"),
         "{path} should keep a denylist for retained runtime/worker CLI overrides"
     );
+    assert!(
+        source.contains(
+            "easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker"
+        ),
+        "{path} should delegate retained runtime/script command classification to lib/easydict-runtime-guards"
+    );
     for denied_override in [
         "\"dotnet.exe\"",
-        "\"dotnet.cmd\"",
-        "\"dotnet.bat\"",
-        "\"dotnet.com\"",
-        "\"powershell.exe\"",
-        "\"powershell.cmd\"",
-        "\"powershell.bat\"",
-        "\"powershell.com\"",
-        "\"pwsh.exe\"",
-        "\"pwsh.cmd\"",
-        "\"pwsh.bat\"",
-        "\"pwsh.com\"",
         "\"hostfxr.dll\"",
-        "\"hostpolicy.dll\"",
-        "\"coreclr.dll\"",
-        "\"clrjit.dll\"",
-        "\"singlefilehost.exe\"",
-        "\"system.private.corelib.dll\"",
-        "easydict.compathost",
         "easydict.workers.",
         ".runtimeconfig.json",
         "/host/fxr/",
         ".ps1",
     ] {
         assert!(
-            source.contains(denied_override),
-            "{path} should reject Foundry Local CLI overrides containing {denied_override}"
+            !source.contains(denied_override),
+            "{path} should not re-inline retained runtime/script command marker {denied_override}"
         );
     }
 }

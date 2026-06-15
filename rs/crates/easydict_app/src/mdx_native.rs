@@ -303,8 +303,8 @@ pub fn native_mdx_dictionary_can_route_natively(
         .map(|mode| match mode {
             MdxEncryptionMode::None | MdxEncryptionMode::KeyInfoBlock => true,
             MdxEncryptionMode::RecordBlock => {
-                !native_mdx_dictionary_has_credentials(dictionary)
-                    || native_mdx_dictionary_credential_error(dictionary).is_none()
+                native_mdx_dictionary_has_credentials(dictionary)
+                    && native_mdx_dictionary_credential_error(dictionary).is_none()
             }
             MdxEncryptionMode::RecordAndKeyInfoBlock | MdxEncryptionMode::Unknown => false,
         })
@@ -1079,7 +1079,8 @@ fn lookup_mdd_resource_in_readers<R: NativeMddResourceReader>(
 fn mdd_resource_reference_to_key(
     resource_reference: &str,
 ) -> Result<Option<String>, NativeMddResourceError> {
-    let reference = resource_reference.trim();
+    let decoded_reference = decode_html_entities(resource_reference);
+    let reference = trim_wrapping_resource_quotes(decoded_reference.trim());
     if reference.is_empty() || should_skip_mdd_resource_reference(reference) {
         return Ok(None);
     }
@@ -1168,6 +1169,80 @@ fn strip_leading_dot_relative_segments(mut path: &str) -> &str {
             return path;
         }
     }
+}
+
+fn trim_wrapping_resource_quotes(value: &str) -> &str {
+    if value.len() < 2 {
+        return value;
+    }
+
+    if let Some(stripped) = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+    {
+        stripped
+    } else {
+        value
+    }
+}
+
+fn decode_html_entities(value: &str) -> String {
+    if !value.contains('&') {
+        return value.to_string();
+    }
+
+    let mut output = String::with_capacity(value.len());
+    let mut remaining = value;
+    while let Some(entity_start) = remaining.find('&') {
+        output.push_str(&remaining[..entity_start]);
+        remaining = &remaining[entity_start..];
+
+        let Some(entity_end) = remaining.find(';') else {
+            output.push_str(remaining);
+            return output;
+        };
+
+        let entity = &remaining[1..entity_end];
+        if let Some(decoded) = decode_html_entity(entity) {
+            output.push(decoded);
+        } else {
+            output.push_str(&remaining[..=entity_end]);
+        }
+        remaining = &remaining[entity_end + 1..];
+    }
+
+    output.push_str(remaining);
+    output
+}
+
+fn decode_html_entity(entity: &str) -> Option<char> {
+    match entity {
+        "amp" => Some('&'),
+        "lt" => Some('<'),
+        "gt" => Some('>'),
+        "quot" => Some('"'),
+        "apos" => Some('\''),
+        _ => decode_numeric_html_entity(entity),
+    }
+}
+
+fn decode_numeric_html_entity(entity: &str) -> Option<char> {
+    let number = entity
+        .strip_prefix("#x")
+        .or_else(|| entity.strip_prefix("#X"))
+        .and_then(|value| u32::from_str_radix(value, 16).ok())
+        .or_else(|| {
+            entity
+                .strip_prefix('#')
+                .and_then(|value| value.parse::<u32>().ok())
+        })?;
+
+    char::from_u32(number)
 }
 
 fn percent_decode_ascii(value: &str) -> String {

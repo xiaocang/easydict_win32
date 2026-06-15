@@ -914,6 +914,9 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
     fs::create_dir_all(&scenario_dir).map_err(|error| error.to_string())?;
     let normalized_reference_path = scenario_dir.join("reference-normalized.png");
     let normalized_candidate_path = scenario_dir.join("candidate-normalized.png");
+    let dip_normalized_reference_path = scenario_dir.join("reference-dip-normalized.png");
+    let dip_normalized_candidate_path = scenario_dir.join("candidate-dip-normalized.png");
+    let dip_normalized_contact_sheet_path = scenario_dir.join("side-by-side-dip-normalized.png");
     let diff_heatmap_path = scenario_dir.join("diff-heatmap.png");
     let contact_sheet_path = scenario_dir.join("side-by-side-normalized.png");
 
@@ -925,6 +928,26 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         .map_err(|error| error.to_string())?;
     save_diff_heatmap(&reference, &candidate, &diff_heatmap_path)?;
     save_contact_sheet(&reference, &candidate, &contact_sheet_path)?;
+    let dip_normalized = compare_dip_normalized_shared_viewport(
+        &reference,
+        &candidate_original,
+        pair.metadata.as_ref(),
+    );
+    if let Some(dip_normalized) = &dip_normalized {
+        dip_normalized
+            .reference
+            .save(&dip_normalized_reference_path)
+            .map_err(|error| error.to_string())?;
+        dip_normalized
+            .candidate
+            .save(&dip_normalized_candidate_path)
+            .map_err(|error| error.to_string())?;
+        save_contact_sheet(
+            &dip_normalized.reference,
+            &dip_normalized.candidate,
+            &dip_normalized_contact_sheet_path,
+        )?;
+    }
 
     let full_region = RegionSpec::full(reference.width(), reference.height());
     let full_pixel = compare_pixels(&reference, &candidate, &full_region);
@@ -1035,7 +1058,7 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
     let gate = resolve_score_gate(pair, &regions, runtime_score_cap, options);
     let status = ScoreStatus::from_score(final_score, gate.pass_score, gate.warn_score);
 
-    let findings = build_findings(
+    let mut findings = build_findings(
         pair,
         reference.width(),
         reference.height(),
@@ -1059,6 +1082,11 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         control_dimension_missing_evidence_visual_verified,
         &regions,
     );
+    add_dip_normalized_viewport_finding(
+        pair.metadata.as_ref(),
+        dip_normalized.as_ref(),
+        &mut findings,
+    );
 
     Ok(ScenarioResult {
         scenario_id: pair.scenario_id.clone(),
@@ -1068,6 +1096,15 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         candidate_path: relative_path(&options.output_dir, &pair.candidate_path),
         normalized_reference_path: relative_path(&options.output_dir, &normalized_reference_path),
         normalized_candidate_path: relative_path(&options.output_dir, &normalized_candidate_path),
+        dip_normalized_reference_path: dip_normalized
+            .as_ref()
+            .map(|_| relative_path(&options.output_dir, &dip_normalized_reference_path)),
+        dip_normalized_candidate_path: dip_normalized
+            .as_ref()
+            .map(|_| relative_path(&options.output_dir, &dip_normalized_candidate_path)),
+        dip_normalized_contact_sheet_path: dip_normalized
+            .as_ref()
+            .map(|_| relative_path(&options.output_dir, &dip_normalized_contact_sheet_path)),
         diff_heatmap_path: relative_path(&options.output_dir, &diff_heatmap_path),
         contact_sheet_path: relative_path(&options.output_dir, &contact_sheet_path),
         reference_size: ImageSize {
@@ -1137,6 +1174,12 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
             absolute_image_size_delta_percent: round2(absolute_image_size_delta_percent),
             absolute_window_size_delta_percent: absolute_window_size_delta_percent.map(round2),
             dpi_scale_delta: dpi_scale_delta.map(round2),
+            dip_normalized_pixel_error_percent: dip_normalized
+                .as_ref()
+                .map(|value| round4(value.pixel.pixel_error_percent)),
+            dip_normalized_ssim: dip_normalized.as_ref().map(|value| round5(value.ssim)),
+            dip_normalized_viewport_width: dip_normalized.as_ref().map(|value| value.width),
+            dip_normalized_viewport_height: dip_normalized.as_ref().map(|value| value.height),
             absolute_size_score_cap: (absolute_size_score_cap < 100.0)
                 .then_some(round2(absolute_size_score_cap)),
             effect_baseline_scenario_id: None,
@@ -1536,6 +1579,54 @@ fn normalize_to_reference(image: &RgbaImage, width: u32, height: u32) -> RgbaIma
     } else {
         imageops::resize(image, width, height, FilterType::Lanczos3)
     }
+}
+
+fn compare_dip_normalized_shared_viewport(
+    reference: &RgbaImage,
+    candidate: &RgbaImage,
+    metadata: Option<&ManifestScenario>,
+) -> Option<DipNormalizedViewportComparison> {
+    let metadata = metadata?;
+    let reference = normalize_window_image_to_dips(reference, metadata.reference_window.as_ref())?;
+    let candidate = normalize_window_image_to_dips(candidate, metadata.candidate_window.as_ref())?;
+    let width = reference.width().min(candidate.width());
+    let height = reference.height().min(candidate.height());
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    let reference = crop_top_left(&reference, width, height);
+    let candidate = crop_top_left(&candidate, width, height);
+    let region = RegionSpec::full(width, height);
+    let pixel = compare_pixels(&reference, &candidate, &region);
+    let ssim = calculate_ssim(&reference, &candidate, &region);
+
+    Some(DipNormalizedViewportComparison {
+        reference,
+        candidate,
+        width,
+        height,
+        pixel,
+        ssim,
+    })
+}
+
+fn normalize_window_image_to_dips(
+    image: &RgbaImage,
+    window: Option<&ManifestWindow>,
+) -> Option<RgbaImage> {
+    let scale = window?.dpi_scale;
+    if !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+
+    let width = ((image.width() as f64) / scale).round().max(1.0) as u32;
+    let height = ((image.height() as f64) / scale).round().max(1.0) as u32;
+    Some(normalize_to_reference(image, width, height))
+}
+
+fn crop_top_left(image: &RgbaImage, width: u32, height: u32) -> RgbaImage {
+    imageops::crop_imm(image, 0, 0, width, height).to_image()
 }
 
 fn analyze_region(
@@ -2983,21 +3074,18 @@ fn calculate_absolute_size_score_cap(
         .unwrap_or(0.0);
     let reference_target_cap = reference_window_target_score_cap(pair.metadata.as_ref());
     let candidate_target_cap = candidate_window_target_score_cap(pair.metadata.as_ref());
-    let has_target_audit = reference_target_cap.is_some() || candidate_target_cap.is_some();
-    let observed_delta_percent = if has_target_audit {
-        image_delta_percent
-    } else {
-        image_delta_percent.max(window_delta_percent)
-    };
-    let observed_cap = absolute_size_score_cap_from_delta_percent(observed_delta_percent);
-    [
-        Some(observed_cap),
-        reference_target_cap,
-        candidate_target_cap,
-    ]
-    .into_iter()
-    .flatten()
-    .fold(100.0_f64, f64::min)
+    let target_score_cap = [reference_target_cap, candidate_target_cap]
+        .into_iter()
+        .flatten()
+        .fold(None, |cap: Option<f64>, value| {
+            Some(cap.map_or(value, |cap| cap.min(value)))
+        });
+    if let Some(target_score_cap) = target_score_cap {
+        return target_score_cap;
+    }
+
+    let observed_delta_percent = image_delta_percent.max(window_delta_percent);
+    absolute_size_score_cap_from_delta_percent(observed_delta_percent)
 }
 
 fn candidate_window_target_score_cap(metadata: Option<&ManifestScenario>) -> Option<f64> {
@@ -3575,6 +3663,57 @@ fn add_dpi_scale_audit_finding(metadata: Option<&ManifestScenario>, findings: &m
         metric: "referenceCandidateDpiScaleDelta".to_string(),
         value: round2(delta),
     });
+}
+
+fn add_dip_normalized_viewport_finding(
+    metadata: Option<&ManifestScenario>,
+    comparison: Option<&DipNormalizedViewportComparison>,
+    findings: &mut Vec<Finding>,
+) {
+    let Some(comparison) = comparison else {
+        return;
+    };
+    let pixel = comparison.pixel.pixel_error_percent;
+    let ssim = comparison.ssim;
+    if pixel > 5.0 || ssim < 0.82 {
+        findings.push(Finding {
+            severity: "warning".to_string(),
+            layer_hint: "final_effect".to_string(),
+            message: format!(
+                "DPI-normalized shared viewport still differs: {}x{} DIP px, pixel error {:.2}%, SSIM {:.3}. This points to real layout/theme drift after removing DPI scale from the comparison.",
+                comparison.width,
+                comparison.height,
+                pixel,
+                ssim
+            ),
+            metric: "dipNormalizedPixelErrorPercent".to_string(),
+            value: round2(pixel),
+        });
+        return;
+    }
+
+    let has_dpi_delta = metadata
+        .and_then(reference_candidate_dpi_scale_delta)
+        .is_some_and(|delta| delta > 0.01);
+    let clamped_by_work_area = metadata
+        .and_then(|metadata| window_size_audit(metadata, WindowAuditSide::Candidate))
+        .and_then(|audit| audit.expected_larger_than_work_area)
+        .unwrap_or(false);
+    if has_dpi_delta || clamped_by_work_area {
+        findings.push(Finding {
+            severity: "info".to_string(),
+            layer_hint: "evidence_quality".to_string(),
+            message: format!(
+                "DPI-normalized shared viewport is close: {}x{} DIP px, pixel error {:.2}%, SSIM {:.3}. Raw absolute-size gates still apply, but this separates DPI/work-area evidence drift from the Settings page layout.",
+                comparison.width,
+                comparison.height,
+                pixel,
+                ssim
+            ),
+            metric: "dipNormalizedPixelErrorPercent".to_string(),
+            value: round2(pixel),
+        });
+    }
 }
 
 fn add_reference_window_size_audit_finding(
@@ -4188,6 +4327,14 @@ fn markdown_report(report: &ParityReport) -> String {
             "- Contact sheet: [{}]({})\n",
             scenario.contact_sheet_path, scenario.contact_sheet_path
         ));
+        if let Some(path) = &scenario.dip_normalized_contact_sheet_path {
+            out.push_str(&format!(
+                "- DIP-normalized shared viewport: [{}]({}); {}\n",
+                path,
+                path,
+                dip_normalized_viewport_summary(scenario)
+            ));
+        }
         out.push_str(&format!(
             "- Diff heatmap: [{}]({})\n",
             scenario.diff_heatmap_path, scenario.diff_heatmap_path
@@ -4301,6 +4448,21 @@ fn interaction_effect_delta_summary(scenario: &ScenarioResult) -> Option<String>
         ));
     }
     Some(summary)
+}
+
+fn dip_normalized_viewport_summary(scenario: &ScenarioResult) -> String {
+    match (
+        scenario.metrics.dip_normalized_viewport_width,
+        scenario.metrics.dip_normalized_viewport_height,
+        scenario.metrics.dip_normalized_pixel_error_percent,
+        scenario.metrics.dip_normalized_ssim,
+    ) {
+        (Some(width), Some(height), Some(pixel), Some(ssim)) => format!(
+            "{}x{} DIP px, pixel error {:.2}%, SSIM {:.3}",
+            width, height, pixel, ssim
+        ),
+        _ => "unavailable".to_string(),
+    }
 }
 
 fn format_region_bounds(bounds: &RegionBounds) -> String {
@@ -5744,6 +5906,16 @@ struct PixelComparison {
 }
 
 #[derive(Debug, Clone)]
+struct DipNormalizedViewportComparison {
+    reference: RgbaImage,
+    candidate: RgbaImage,
+    width: u32,
+    height: u32,
+    pixel: PixelComparison,
+    ssim: f64,
+}
+
+#[derive(Debug, Clone)]
 struct PaletteComparison {
     #[allow(dead_code)]
     reference_average: ColorVector,
@@ -5923,6 +6095,9 @@ struct ScenarioResult {
     candidate_path: String,
     normalized_reference_path: String,
     normalized_candidate_path: String,
+    dip_normalized_reference_path: Option<String>,
+    dip_normalized_candidate_path: Option<String>,
+    dip_normalized_contact_sheet_path: Option<String>,
     diff_heatmap_path: String,
     contact_sheet_path: String,
     reference_size: ImageSize,
@@ -5988,6 +6163,10 @@ struct ScenarioMetrics {
     absolute_image_size_delta_percent: f64,
     absolute_window_size_delta_percent: Option<f64>,
     dpi_scale_delta: Option<f64>,
+    dip_normalized_pixel_error_percent: Option<f64>,
+    dip_normalized_ssim: Option<f64>,
+    dip_normalized_viewport_width: Option<u32>,
+    dip_normalized_viewport_height: Option<u32>,
     absolute_size_score_cap: Option<f64>,
     effect_baseline_scenario_id: Option<String>,
     reference_effect_pixel_error_percent: Option<f64>,
@@ -8990,7 +9169,12 @@ mod tests {
         create_synthetic_frame(false)
             .save(&reference)
             .expect("save reference");
-        create_synthetic_frame(false)
+        imageops::resize(
+            &create_synthetic_frame(false),
+            520,
+            360,
+            FilterType::Lanczos3,
+        )
             .save(&candidate)
             .expect("save candidate");
 
@@ -9062,6 +9246,7 @@ mod tests {
         assert!(markdown.contains("referenceCandidateDpiScaleDelta"));
         assert!(markdown.contains("different DPI scales"));
         assert!(!markdown.contains("candidateWindowDipSizeDelta"));
+        assert!(!markdown.contains("absoluteSizeScoreCap"));
 
         let report_text =
             fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
@@ -9084,6 +9269,18 @@ mod tests {
                 .and_then(Value::as_f64),
             Some(1.0)
         );
+        assert_eq!(
+            scenario
+                .get("Metrics")
+                .and_then(|metrics| metrics.get("AbsoluteImageSizeDeltaPercent"))
+                .and_then(Value::as_f64),
+            Some(100.0)
+        );
+        assert!(scenario
+            .get("Metrics")
+            .and_then(|metrics| metrics.get("AbsoluteSizeScoreCap"))
+            .and_then(Value::as_f64)
+            .is_none());
         assert!(scenario
             .get("Findings")
             .and_then(Value::as_array)
@@ -9091,6 +9288,12 @@ mod tests {
                 finding.get("Metric").and_then(Value::as_str)
                     == Some("referenceCandidateDpiScaleDelta")
                     && finding.get("LayerHint").and_then(Value::as_str) == Some("evidence_quality")
+            })));
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| !findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str) == Some("absoluteSizeScoreCap")
             })));
         assert!(!report_text.contains("\"candidateWindowDipSizeDelta\""));
     }

@@ -1,7 +1,21 @@
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::RecvTimeoutError;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::task::{Context, Poll};
+use std::time::Duration;
+
+use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use futures_core::Stream;
+
 pub const EASYDICT_SYNTHETIC_KEY: isize = 0x4541_5344;
 pub const MIN_DRAG_DISTANCE: i32 = 10;
 pub const MAX_CLICK_DISTANCE: i32 = 4;
 pub const MULTI_CLICK_DELAY_GRACE_MS: u64 = 50;
+pub const POP_BUTTON_SIZE_PX: i32 = 30;
+pub const POP_BUTTON_OFFSET_X_PX: i32 = 8;
+pub const POP_BUTTON_OFFSET_Y_PX: i32 = -32;
+pub const MOUSE_SELECTION_HOOK_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub const WM_LBUTTONDOWN: u32 = 0x0201;
 pub const WM_LBUTTONUP: u32 = 0x0202;
@@ -483,5 +497,207 @@ impl MouseSelectionHookState {
                 }
             }
         }
+    }
+}
+
+pub struct MouseSelectionHookStream<Message> {
+    running: Arc<AtomicBool>,
+    map: Option<
+        Box<
+            dyn Fn(easydict_windows_text_selection::LowLevelInputHookEvent) -> Message
+                + Send
+                + 'static,
+        >,
+    >,
+    receiver: Option<UnboundedReceiver<Message>>,
+}
+
+impl<Message> Unpin for MouseSelectionHookStream<Message> {}
+
+impl<Message> Drop for MouseSelectionHookStream<Message> {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::SeqCst);
+        clear_mouse_selection_hook_if_current(&self.running);
+    }
+}
+
+impl<Message> Stream for MouseSelectionHookStream<Message>
+where
+    Message: Send + 'static,
+{
+    type Item = Message;
+
+    fn poll_next(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        if this.receiver.is_none() {
+            this.start();
+        }
+
+        let Some(receiver) = this.receiver.as_mut() else {
+            return Poll::Ready(None);
+        };
+        Pin::new(receiver).poll_next(context)
+    }
+}
+
+impl<Message> MouseSelectionHookStream<Message>
+where
+    Message: Send + 'static,
+{
+    fn start(&mut self) {
+        let Some(map) = self.map.take() else {
+            return;
+        };
+
+        let running = self.running.clone();
+        let (sender, receiver) = unbounded();
+        self.receiver = Some(receiver);
+        std::thread::spawn(move || {
+            run_mouse_selection_hook_loop(running, sender, map);
+        });
+    }
+}
+
+pub fn mouse_selection_hook_stream<Message>(
+    map: impl Fn(easydict_windows_text_selection::LowLevelInputHookEvent) -> Message + Send + 'static,
+) -> Option<MouseSelectionHookStream<Message>>
+where
+    Message: Send + 'static,
+{
+    let mut slot = mouse_selection_hook_slot()
+        .lock()
+        .expect("mouse selection hook mutex poisoned");
+    if slot
+        .as_ref()
+        .is_some_and(|running| running.load(Ordering::SeqCst))
+    {
+        return None;
+    }
+
+    let running = Arc::new(AtomicBool::new(true));
+    *slot = Some(running.clone());
+    Some(MouseSelectionHookStream {
+        running,
+        map: Some(Box::new(map)),
+        receiver: None,
+    })
+}
+
+pub fn stop_mouse_selection_hook() {
+    let mut slot = mouse_selection_hook_slot()
+        .lock()
+        .expect("mouse selection hook mutex poisoned");
+    if let Some(running) = slot.take() {
+        running.store(false, Ordering::SeqCst);
+    }
+}
+
+pub fn mouse_selection_hook_is_running() -> bool {
+    mouse_selection_hook_slot()
+        .lock()
+        .expect("mouse selection hook mutex poisoned")
+        .as_ref()
+        .is_some_and(|running| running.load(Ordering::SeqCst))
+}
+
+pub fn process_name_matches_excluded_apps(process_name: &str, excluded_apps: &str) -> bool {
+    let Some(process_name) = normalized_process_name(process_name) else {
+        return false;
+    };
+
+    excluded_apps
+        .split(|character: char| matches!(character, ',' | ';' | '\n' | '\r'))
+        .filter_map(normalized_process_name)
+        .any(|excluded| excluded == process_name)
+}
+
+pub fn foreground_process_matches_excluded_apps(excluded_apps: &str) -> bool {
+    let Ok(target) = easydict_windows_text_selection::foreground_text_selection_target() else {
+        return false;
+    };
+    let Ok(Some(process_name)) =
+        easydict_windows_text_selection::process_name_for_id(target.process_id)
+    else {
+        return false;
+    };
+
+    process_name_matches_excluded_apps(&process_name, excluded_apps)
+}
+
+pub fn point_hits_pop_button(anchor: MouseSelectionPoint, point: MouseSelectionPoint) -> bool {
+    let left = anchor.x.saturating_add(POP_BUTTON_OFFSET_X_PX);
+    let top = anchor.y.saturating_add(POP_BUTTON_OFFSET_Y_PX);
+    let right = left.saturating_add(POP_BUTTON_SIZE_PX);
+    let bottom = top.saturating_add(POP_BUTTON_SIZE_PX);
+
+    point.x >= left && point.x < right && point.y >= top && point.y < bottom
+}
+
+fn run_mouse_selection_hook_loop<Message>(
+    running: Arc<AtomicBool>,
+    sender: UnboundedSender<Message>,
+    map: Box<
+        dyn Fn(easydict_windows_text_selection::LowLevelInputHookEvent) -> Message + Send + 'static,
+    >,
+) where
+    Message: Send + 'static,
+{
+    let hook = match easydict_windows_text_selection::start_low_level_input_hook() {
+        Ok(hook) => hook,
+        Err(_) => {
+            running.store(false, Ordering::SeqCst);
+            clear_mouse_selection_hook_if_current(&running);
+            return;
+        }
+    };
+
+    while running.load(Ordering::SeqCst) {
+        match hook
+            .events()
+            .recv_timeout(MOUSE_SELECTION_HOOK_POLL_INTERVAL)
+        {
+            Ok(event) => {
+                if sender.unbounded_send(map(event)).is_err() {
+                    break;
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+    }
+
+    running.store(false, Ordering::SeqCst);
+    clear_mouse_selection_hook_if_current(&running);
+}
+
+fn normalized_process_name(value: &str) -> Option<String> {
+    let file_name = value
+        .trim()
+        .trim_matches('"')
+        .rsplit(['\\', '/'])
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let stem = file_name
+        .rsplit_once('.')
+        .and_then(|(stem, extension)| extension.eq_ignore_ascii_case("exe").then_some(stem))
+        .unwrap_or(file_name);
+    Some(stem.to_ascii_lowercase())
+}
+
+fn mouse_selection_hook_slot() -> &'static Mutex<Option<Arc<AtomicBool>>> {
+    static SLOT: OnceLock<Mutex<Option<Arc<AtomicBool>>>> = OnceLock::new();
+    SLOT.get_or_init(|| Mutex::new(None))
+}
+
+fn clear_mouse_selection_hook_if_current(running: &Arc<AtomicBool>) {
+    let mut slot = mouse_selection_hook_slot()
+        .lock()
+        .expect("mouse selection hook mutex poisoned");
+    if slot
+        .as_ref()
+        .is_some_and(|current| Arc::ptr_eq(current, running))
+    {
+        *slot = None;
     }
 }

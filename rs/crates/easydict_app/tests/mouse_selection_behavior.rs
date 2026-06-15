@@ -15,6 +15,43 @@ fn point(x: i32, y: i32) -> MouseSelectionPoint {
 }
 
 #[test]
+fn excluded_app_matching_normalizes_paths_extensions_and_separators() {
+    assert!(
+        easydict_app::mouse_selection::process_name_matches_excluded_apps(
+            r"C:\Program Files\Microsoft VS Code\Code.exe",
+            "notepad; code\nslack.exe",
+        )
+    );
+    assert!(
+        easydict_app::mouse_selection::process_name_matches_excluded_apps(
+            "SLACK",
+            "code, slack.exe",
+        )
+    );
+    assert!(
+        !easydict_app::mouse_selection::process_name_matches_excluded_apps("word", "code, slack",)
+    );
+}
+
+#[test]
+fn pop_button_hit_test_uses_anchor_window_offset_and_fixed_size() {
+    let anchor = MouseSelectionPoint::new(400, 240);
+
+    assert!(easydict_app::mouse_selection::point_hits_pop_button(
+        anchor,
+        MouseSelectionPoint::new(408, 208),
+    ));
+    assert!(easydict_app::mouse_selection::point_hits_pop_button(
+        anchor,
+        MouseSelectionPoint::new(437, 237),
+    ));
+    assert!(!easydict_app::mouse_selection::point_hits_pop_button(
+        anchor,
+        MouseSelectionPoint::new(438, 238),
+    ));
+}
+
+#[test]
 fn drag_detector_matches_dotnet_distance_threshold() {
     let mut detector = DragDetector::new();
     detector.on_left_button_down(point(0, 0));

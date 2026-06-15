@@ -866,6 +866,8 @@ fn services_settings_default_view_matches_winui_overview_structure() {
         "WindowsLocalAIExpander",
         "icon=service-windows-local-ai",
     );
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "⚠");
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "style=Warning");
     assert!(!snapshot.contains("description=\"Free API mode\""));
     assert!(!snapshot.contains("description=\"Local OpenAI-compatible endpoint\""));
     assert!(!snapshot.contains("API key required"));
@@ -1061,7 +1063,7 @@ fn services_settings_local_ai_exposes_provider_configuration() {
     assert_control_contains(&snapshot, "LocalAIProviderPanel", "spacing=6");
     assert_control_contains(&snapshot, "LocalAIProviderCombo", "selected=\"Auto\"");
     assert_control_contains(&snapshot, "LocalAIProviderCombo", "width=Fixed(520)");
-    assert_control_contains(&snapshot, "LocalAIProviderCombo", "height=Fixed(48)");
+    assert_control_contains(&snapshot, "LocalAIProviderCombo", "height=Fixed(40)");
     assert_control_contains(
         &snapshot,
         "LocalAIProviderCombo",
@@ -2851,10 +2853,10 @@ fn win_fluent_crates_do_not_contain_app_specific_names() {
 fn main_window_keeps_saved_default_size_contract() {
     let options = main_window_options();
     assert_eq!(options.id.as_str(), "main");
-    assert_eq!(options.width, 940.0);
-    assert_eq!(options.height, 1220.0);
+    assert_eq!(options.width, 419.0);
+    assert_eq!(options.height, 494.5);
     assert_eq!(options.min_width, Some(400.0));
-    assert_eq!(options.min_height, Some(500.0));
+    assert_eq!(options.min_height, Some(494.5));
     assert_eq!(options.frame, WindowFrame::Borderless);
 }
 
@@ -2867,10 +2869,10 @@ fn main_window_startup_tray_options_keep_absolute_size_but_start_hidden() {
     let options = main_window_options_for_settings(&state.settings);
 
     assert_eq!(options.id.as_str(), "main");
-    assert_eq!(options.width, 940.0);
-    assert_eq!(options.height, 1220.0);
+    assert_eq!(options.width, 419.0);
+    assert_eq!(options.height, 494.5);
     assert_eq!(options.min_width, Some(400.0));
-    assert_eq!(options.min_height, Some(500.0));
+    assert_eq!(options.min_height, Some(494.5));
     assert!(!options.visible_on_start);
 
     state.settings.minimize_to_tray = false;

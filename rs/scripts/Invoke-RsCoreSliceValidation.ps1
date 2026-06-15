@@ -18,19 +18,26 @@
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles -Json
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -AllRecommendedProfiles -DryRun
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun -Json
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -AllRecommendedProfiles -CheckTrailingWhitespace
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -CheckTrailingWhitespace -GstepCommitMessage "Preserve selected text diagnostics"
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection -DryRun
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection -DryRun -Json
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection -CheckTrailingWhitespace
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mouse-selection
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-export
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-formula
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-cli
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-script
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mdx-native
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile translation-cache
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile app-core-catalog
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile app-preview-window
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile openai-compatible
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile foundry-local,rust-only-boundary
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile windows-ai-native
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile startup-activation
 #>
 
 [CmdletBinding(PositionalBinding = $false)]
@@ -126,6 +133,75 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "settings path no retained runtime markers" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries"))
         )
     }
+    "settings-runtime-status" = [pscustomobject]@{
+        Description = "Settings runtime-status probes for Rust-owned layout/font/OpenVINO/Foundry/WindowsAI availability and app writeback."
+        Steps = @(
+            (New-ValidationStep "format settings runtime-status slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\settings_status.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs")),
+            (New-ValidationStep "settings runtime-status filesystem/provider contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "settings_status")),
+            (New-ValidationStep "settings runtime-status app writeback contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "settings_runtime_status"))
+        )
+    }
+    "app-core-catalog" = [pscustomobject]@{
+        Description = "Default Rust app-data root, app-visible translation service catalog, and default no-retained-runtime service boundary."
+        Steps = @(
+            (New-ValidationStep "format app data and service catalog slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\app_data.rs", "rs\crates\easydict_app\src\translation_services.rs", "rs\crates\easydict_app\tests\translation_services_behavior.rs")),
+            (New-ValidationStep "app data root contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "app_data")),
+            (New-ValidationStep "translation service catalog contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "translation_services_behavior")),
+            (New-ValidationStep "default CLI translate catalog boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "default_translate_uses_native_google_without_retained_runtime_or_shell_wording")),
+            (New-ValidationStep "default process spawn no-runtime boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries"))
+        )
+    }
+    "app-preview-window" = [pscustomobject]@{
+        Description = "Default Rust app preview binary, view snapshot smoke, window options, and no retained-runtime process boundary."
+        Steps = @(
+            (New-ValidationStep "format app preview/window slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\main.rs", "rs\crates\easydict_app\src\window_options.rs", "rs\crates\easydict_app\tests\ui_contract.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs")),
+            (New-ValidationStep "app preview binary builds" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--bin", "easydict_app")),
+            (New-ValidationStep "main window preview scenarios render" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ui_contract", "main_window_preview_scenarios_cover_translation_states")),
+            (New-ValidationStep "window option and window-specific contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ui_contract", "window_")),
+            (New-ValidationStep "default process spawn no-runtime boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries"))
+        )
+    }
+    "cli-translate" = [pscustomobject]@{
+        Description = "Default Rust CLI argument parser, native translate smoke, legacy flag rejection, and no retained-worker boundary."
+        Steps = @(
+            (New-ValidationStep "format CLI translate slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\cli_translate.rs", "rs\crates\easydict_app\src\bin\easydict_cli.rs", "rs\crates\easydict_app\tests\cli_translate_behavior.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs")),
+            (New-ValidationStep "CLI parser contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "cli_translate")),
+            (New-ValidationStep "default CLI rejects legacy retained-worker flags" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "default_cli_rejects_legacy_retained_worker_options")),
+            (New-ValidationStep "default CLI native Google smoke" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "default_translate_uses_native_google_without_retained_runtime_or_shell_wording")),
+            (New-ValidationStep "CLI LocalAI default no-worker boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "local_ai_cli_without_app_dir_fails_native_only_without_worker_lookup")),
+            (New-ValidationStep "CLI legacy flags stay feature-gated" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_cli_rejects_legacy_retained_worker_options_unless_feature_gated")),
+            (New-ValidationStep "default process spawn no-runtime boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries"))
+        )
+    }
+    "longdoc-cli" = [pscustomobject]@{
+        Description = "Default Rust LongDoc CLI entrypoint, parser smoke, native preflight, and no retained-worker boundary."
+        Steps = @(
+            (New-ValidationStep "format LongDoc CLI slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\long_document_cli.rs", "rs\crates\easydict_app\src\bin\easydict_long_doc.rs", "rs\crates\easydict_app\tests\long_document_cli_behavior.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs")),
+            (New-ValidationStep "LongDoc CLI help omits legacy app-dir" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_cli_behavior", "help_lists_long_document_options")),
+            (New-ValidationStep "LongDoc CLI service list stays native" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_cli_behavior", "list_services_succeeds_without_document_arguments")),
+            (New-ValidationStep "LongDoc CLI stale payload boundaries" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_cli_behavior", "stale_dotnet_payload")),
+            (New-ValidationStep "LongDoc CLI target-auto no-worker boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_cli_behavior", "target_auto_fails_before_native_or_retained_worker_lookup")),
+            (New-ValidationStep "LongDoc CLI LocalAI native preflight boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_cli_behavior", "env_overrides_local_ai_provider_and_openvino_cache_dir_for_native_preflight")),
+            (New-ValidationStep "default process spawn no-runtime boundary" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries"))
+        )
+    }
+    "longdoc-script" = [pscustomobject]@{
+        Description = "Root LongDoc PowerShell shim parser, Rust helper/cargo forwarding, retired legacy switch, and retained-runtime helper guards."
+        Steps = @(
+            (New-ValidationStep "PowerShell parse LongDoc script shim" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile(''scripts\translate-long-doc.ps1'', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }')),
+            (New-ValidationStep "LongDoc script Rust-only and helper forwarding contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "translate_long_doc_script"))
+        )
+    }
+    "asset-downloads" = [pscustomobject]@{
+        Description = "Shared Rust-owned asset download policy, CJK font cache, layout model assets, and OpenVINO asset contracts."
+        Steps = @(
+            (New-ValidationStep "format shared asset download slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\resource_download.rs", "rs\crates\easydict_app\src\font_download.rs", "rs\crates\easydict_app\src\layout_model_download.rs", "rs\crates\easydict_app\src\openvino_download.rs", "rs\crates\easydict_app\tests\resource_download_behavior.rs", "rs\crates\easydict_app\tests\layout_model_download_behavior.rs", "rs\crates\easydict_app\tests\openvino_download_behavior.rs")),
+            (New-ValidationStep "shared resource download policy contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "resource_download_behavior", "resource_download_")),
+            (New-ValidationStep "CJK font download contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "resource_download_behavior", "font_download_")),
+            (New-ValidationStep "LongDoc layout model asset contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "layout_model_download_behavior", "layout_model")),
+            (New-ValidationStep "OpenVINO asset download contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "openvino_download_behavior", "openvino_"))
+        )
+    }
     "builtin-ai-registration" = [pscustomobject]@{
         Description = "Built-in AI proxy device registration request planning, app lifecycle, and visible diagnostics."
         Steps = @(
@@ -157,7 +233,8 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "format custom streaming slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\custom_streaming.rs", "rs\crates\easydict_app\src\quick_translate.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\cli_translate_behavior.rs")),
             (New-ValidationStep "app custom streaming contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "native_custom_streaming")),
             (New-ValidationStep "CLI Doubao local SSE contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_doubao_cli_translate_succeeds_against_local_sse_without_worker_wording")),
-            (New-ValidationStep "CLI Gemini local SSE contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_gemini_cli_translate_succeeds_against_local_sse_without_worker_wording"))
+            (New-ValidationStep "CLI Gemini local SSE contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "native_gemini_cli_translate_succeeds_against_local_sse_without_worker_wording")),
+            (New-ValidationStep "CLI custom streaming latency contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "custom_streaming_stream_command_writes"))
         )
     }
     "traditional-http" = [pscustomobject]@{
@@ -195,7 +272,7 @@ $validationProfiles = [ordered]@{
     "openvino-download" = [pscustomobject]@{
         Description = "OpenVINO/NLLB native asset download contracts and app-visible diagnostics."
         Steps = @(
-            (New-ValidationStep "format OpenVINO download slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\openvino_download_behavior.rs")),
+            (New-ValidationStep "format OpenVINO download slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\openvino_download.rs", "rs\crates\easydict_app\src\resource_download.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\openvino_download_behavior.rs", "rs\crates\easydict_app\tests\resource_download_behavior.rs")),
             (New-ValidationStep "OpenVINO download contracts and diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "openvino_download_behavior", "openvino_"))
         )
     }
@@ -225,10 +302,12 @@ $validationProfiles = [ordered]@{
         Description = "Rust-owned browser native-messaging registrar routing and app-visible diagnostics."
         Steps = @(
             (New-ValidationStep "format browser support and extension packaging slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\browser_registrar.rs", "rs\crates\easydict_app\src\bin\easydict_browser_registrar.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\browser_registrar_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_packager\src\lib.rs", "rs\crates\easydict_packager\src\main.rs", "rs\crates\easydict_packager\tests\release_contract_behavior.rs")),
+            (New-ValidationStep "PowerShell parse browser extension package shim" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile(''browser-extension\scripts\Package-Extension.ps1'', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }')),
             (New-ValidationStep "browser support app diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "browser_support")),
             (New-ValidationStep "browser registrar behavior contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "browser_registrar_behavior")),
             (New-ValidationStep "browser registrar binary contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--bin", "easydict_browser_registrar")),
             (New-ValidationStep "browser extension default release contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "default_browser_extension")),
+            (New-ValidationStep "browser extension PowerShell shim forwarding contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "browser_extension_powershell_shim")),
             (New-ValidationStep "browser extension package scanning contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--lib", "package_browser_extension"))
         )
     }
@@ -241,6 +320,16 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "app named-event receiver ownership" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "shell_and_protocol_entries_cover_ocr_activation_contract"))
         )
     }
+    "startup-activation" = [pscustomobject]@{
+        Description = "Rust-owned shell/protocol OCR startup activation parsing, task routing, and default no-legacy activation boundary."
+        Steps = @(
+            (New-ValidationStep "format startup activation slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\activation.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs")),
+            (New-ValidationStep "startup activation parser contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "activation")),
+            (New-ValidationStep "startup activation app routing" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "startup_activation")),
+            (New-ValidationStep "shell/protocol OCR activation contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "shell_and_protocol_entries_cover_ocr_activation_contract")),
+            (New-ValidationStep "startup activation stays app-core only" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "startup_activation_core_stays_decoupled_from_winfluent_task"))
+        )
+    }
     "protocol-facade" = [pscustomobject]@{
         Description = "Default Rust protocol DTO facade plus retained-worker IPC feature-gating contracts."
         Steps = @(
@@ -249,6 +338,16 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "retained worker protocol feature contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--features", "retained-dotnet-workers", "--test", "protocol_behavior")),
             (New-ValidationStep "crate-root retained protocol exports stay feature-gated" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "crate_root_retained_worker_exports_are_feature_gated")),
             (New-ValidationStep "default manifests do not enable retained protocol workers" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_cargo_features_do_not_enable_retained_dotnet_workers"))
+        )
+    }
+    "retained-worker-ipc" = [pscustomobject]@{
+        Description = "Explicit retained-worker IPC compatibility tests using the Rust mock helper, feature gates, and no PowerShell/.NET mock runtime."
+        Steps = @(
+            (New-ValidationStep "format retained worker IPC slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\compat_client.rs", "rs\crates\easydict_app\src\bin\easydict_ipc_mock.rs", "rs\crates\easydict_app\tests\compat_client.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs")),
+            (New-ValidationStep "retained worker IPC Rust mock binary builds" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--features", "retained-dotnet-workers", "--bin", "easydict-ipc-mock")),
+            (New-ValidationStep "retained worker IPC compatibility contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--features", "retained-dotnet-workers", "--test", "compat_client")),
+            (New-ValidationStep "retained IPC mock helper stays feature gated" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_app_manifest_disables_auto_discovered_binary_entrypoints")),
+            (New-ValidationStep "retained IPC tests avoid shell mock runtime" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries"))
         )
     }
     "input-actions" = [pscustomobject]@{
@@ -386,6 +485,75 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "Quick Translate local dictionary suggestion contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "local_dictionary_suggestion"))
         )
     }
+    "pdf-to-images" = [pscustomobject]@{
+        Description = "Rust PDFium rendering wrapper, PDF-to-images diagnostic CLI, and PowerShell shim forwarding."
+        Steps = @(
+            (New-ValidationStep "format PDF-to-images slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-pdf-render\src\lib.rs", "rs\crates\easydict_pdf_to_images\src\main.rs", "rs\crates\easydict_pdf_to_images\tests\cli_behavior.rs", "rs\crates\easydict_pdf_to_images\tests\pdf_render_contract.rs")),
+            (New-ValidationStep "PowerShell parse PDF-to-images shim" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile(''dotnet\scripts\pdf-to-images.ps1'', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }')),
+            (New-ValidationStep "Rust PDF render helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-pdf-render\Cargo.toml")),
+            (New-ValidationStep "PDF-to-images CLI contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_pdf_to_images"))
+        )
+    }
+    "store-listings" = [pscustomobject]@{
+        Description = "Rust-owned Microsoft Store listing metadata validation, preview/summary payload generation, workflow, and shim."
+        Steps = @(
+            (New-ValidationStep "format Store listing tool slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_store_listings\src\lib.rs", "rs\crates\easydict_store_listings\src\main.rs")),
+            (New-ValidationStep "PowerShell parse Store listing shim" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile(''.winstore\scripts\Sync-StoreListings.ps1'', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }')),
+            (New-ValidationStep "Store listing Rust contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_store_listings")),
+            (New-ValidationStep "Store listing metadata validates" @("cargo", "run", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_store_listings", "--", "validate", "--winstore-root", ".winstore"))
+        )
+    }
+    "encrypt-secret" = [pscustomobject]@{
+        Description = "Rust-compatible built-in secret encryption helper, CLI output, and retired .NET EncryptSecret boundary."
+        Steps = @(
+            (New-ValidationStep "format encrypt-secret slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_encrypt_secret\src\lib.rs", "rs\crates\easydict_encrypt_secret\src\main.rs", "rs\crates\easydict_encrypt_secret\tests\cli_behavior.rs")),
+            (New-ValidationStep "Rust secret encryption contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_encrypt_secret"))
+        )
+    }
+    "msix-validate" = [pscustomobject]@{
+        Description = "Rust MSIX validator, package preparation, bundle min-version, retained payload policy, and maintenance subcommands."
+        Steps = @(
+            (New-ValidationStep "format MSIX validator slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_msix_validate\src\lib.rs", "rs\crates\easydict_msix_validate\src\main.rs")),
+            (New-ValidationStep "MSIX validator Rust contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_msix_validate"))
+        )
+    }
+    "icon-generator" = [pscustomobject]@{
+        Description = "Rust WinUI app icon, Windows asset, and service icon generation plus PowerShell shim forwarding."
+        Steps = @(
+            (New-ValidationStep "format icon generator slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_icon_generator\src\lib.rs", "rs\crates\easydict_icon_generator\src\main.rs")),
+            (New-ValidationStep "PowerShell parse icon generator shims" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$paths = @(''dotnet\scripts\generate-windows-assets.ps1'', ''dotnet\scripts\generate-assets-from-macos-icon.ps1'', ''dotnet\scripts\convert-service-icons.ps1''); foreach ($path in $paths) { $errors = $null; [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error (''{0}: {1}'' -f $path, $_.Message) }; exit 1 } }')),
+            (New-ValidationStep "icon generator Rust contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_icon_generator"))
+        )
+    }
+    "rust-helper-build" = [pscustomobject]@{
+        Description = "Rust helper build shim, child cargo runtime-profile isolation, and legacy registrar alias opt-in guards."
+        Steps = @(
+            (New-ValidationStep "format Rust helper build release-contract slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_packager\src\lib.rs", "rs\crates\easydict_packager\src\main.rs", "rs\crates\easydict_packager\tests\release_contract_behavior.rs")),
+            (New-ValidationStep "PowerShell parse Rust helper build shim" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile(''dotnet\scripts\Build-RustHelpers.ps1'', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }')),
+            (New-ValidationStep "release orchestration uses Rust helpers" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects")),
+            (New-ValidationStep "Rust helper build child env and shim contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "build_rust_helpers"))
+        )
+    }
+    "dotnet-runtime-extract" = [pscustomobject]@{
+        Description = "Hybrid-only .NET runtime extraction shim, feature gate, and Rust extractor contracts."
+        Steps = @(
+            (New-ValidationStep "format .NET runtime extraction release-contract slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_packager\src\lib.rs", "rs\crates\easydict_packager\src\main.rs", "rs\crates\easydict_packager\tests\release_contract_behavior.rs")),
+            (New-ValidationStep "PowerShell parse .NET runtime extraction shim" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile(''dotnet\scripts\Extract-DotnetRuntime.ps1'', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }')),
+            (New-ValidationStep ".NET runtime extraction stays hybrid-gated" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "dotnet_runtime_extraction")),
+            (New-ValidationStep ".NET runtime extraction PowerShell shim contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "extract_dotnet_runtime_powershell_shim")),
+            (New-ValidationStep "Rust .NET runtime extractor contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--features", "hybrid-dotnet-runtime-packaging", "--lib", "extract_dotnet_runtime"))
+        )
+    }
+    "msix-runtime-profile" = [pscustomobject]@{
+        Description = "MSIX diagnostic install, QDC, and UI automation runtime-profile checks that keep default payload validation rust-only."
+        Steps = @(
+            (New-ValidationStep "format MSIX runtime-profile contracts" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_packager\tests\msix_runtime_profile_contract_behavior.rs", "rs\crates\easydict_packager\tests\release_contract_behavior.rs")),
+            (New-ValidationStep "PowerShell parse MSIX/QDC install shims" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", '$paths = @(''dotnet\scripts\sign-and-install.ps1'', ''dotnet\scripts\qdc\Deploy-ToQdc.ps1'', ''dotnet\scripts\qdc\Install-OnQdc.ps1''); foreach ($path in $paths) { $errors = $null; [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error (''{0}: {1}'' -f $path, $_.Message) }; exit 1 } }')),
+            (New-ValidationStep "MSIX runtime-profile static contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "msix_runtime_profile_contract_behavior")),
+            (New-ValidationStep "sign-and-install validator ordering contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "sign_and_install")),
+            (New-ValidationStep "QDC machine install validator ordering contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "qdc_install_machine_scope"))
+        )
+    }
     "rs-portable-release" = [pscustomobject]@{
         Description = "First rs portable release/default packaging gates that keep retained .NET payloads out."
         Steps = @(
@@ -419,10 +587,12 @@ $repoRoot = Resolve-Path -LiteralPath (Join-Path $scriptDir "..\..")
 $parallelUiFiles = @(
     "lib/winfluent-rs/crates/win_fluent/src/a11y.rs",
     "lib/winfluent-rs/crates/win_fluent/src/diff.rs",
+    "lib/winfluent-rs/crates/win_fluent/src/platform.rs",
     "lib/winfluent-rs/crates/win_fluent/src/schema.rs",
     "lib/winfluent-rs/crates/win_fluent/src/theme.rs",
     "lib/winfluent-rs/crates/win_fluent/src/view.rs",
     "lib/winfluent-rs/crates/win_fluent_backend_iced/src/lib.rs",
+    "lib/winfluent-rs/crates/win_fluent_platform_win/src/lib.rs",
     "lib/winfluent-rs/crates/win_fluent_testkit/src/lib.rs",
     "rs/crates/easydict_app/src/theme.rs",
     "rs/crates/easydict_app/src/ui.rs",
@@ -468,6 +638,56 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/tests/settings_migration_behavior.rs"
         )
         DiffPatterns = @("SettingsStorage", "settings_storage", "settings_migration", "CredentialProtection", "credential_protection", "edcred1", "edloc1", "LocalSettingsCredential", "MachineGuid", "UseLocalAiWorker", "UseLongDocWorker", "UseOcrWorker")
+    }
+    "settings-runtime-status" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/settings_status.rs"
+        )
+        DiffPatterns = @("SettingsRuntimeStatus", "settings_runtime_status", "settings_status", "load_runtime_status", "foundry_local_status", "open_vino_status", "windows_ai_status", "OpenVinoCacheStatus")
+    }
+    "app-core-catalog" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/app_data.rs",
+            "rs/crates/easydict_app/src/translation_services.rs",
+            "rs/crates/easydict_app/tests/translation_services_behavior.rs"
+        )
+        DiffPatterns = @("RUST_APP_DATA_ROOT_NAME", "LEGACY_APP_DATA_ROOT_NAME", "default_user_data_directory", "legacy_user_data_directory", "default_translation_service_descriptors", "TranslationServiceDescriptor", "TranslationServiceKind", "DEFAULT_SERVICE_ID", "DEFAULT_MAIN_WINDOW_SERVICE_IDS", "DEFAULT_FLOATING_WINDOW_SERVICE_IDS", "app_visible_translation_service_ids", "openai_compatible_service_ids", "windows-local-ai", "service catalog")
+    }
+    "app-preview-window" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/main.rs",
+            "rs/crates/easydict_app/src/window_options.rs"
+        )
+        DiffPatterns = @("preview_from_env", "PreviewScenario", "view_schema", "main_window_options", "main_window_options_for_settings", "settings_window_options", "mini_window_options", "fixed_window_options", "capture_overlay_window_options", "pop_button_window_options", "visible_on_start", "WindowOptions")
+    }
+    "cli-translate" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/cli_translate.rs",
+            "rs/crates/easydict_app/src/bin/easydict_cli.rs"
+        )
+        DiffPatterns = @("CliOptions", "CliMode", "CliParseError", "parse_args", "usage()", "easydict_cli", "default_cli", "default_translate_uses_native_google", "default CLI", "legacy retained-worker", "local_ai_cli_without_app_dir", "--host", "--host-arg", "--app-dir")
+    }
+    "longdoc-cli" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/long_document_cli.rs",
+            "rs/crates/easydict_app/src/bin/easydict_long_doc.rs",
+            "rs/crates/easydict_app/tests/long_document_cli_behavior.rs"
+        )
+        DiffPatterns = @("LongDocumentCli", "long_document_cli", "easydict_long_doc", "list_services", "retry_failed", "target_auto", "stale_dotnet_payload", "--result-json", "--retry-failed", "--app-dir", "LocalAIProvider", "openvino_cache_dir")
+    }
+    "longdoc-script" = [pscustomobject]@{
+        PathPatterns = @(
+            "scripts/translate-long-doc.ps1"
+        )
+        DiffPatterns = @("translate-long-doc", "UseDotnetLegacy", "RustHelperPath", "UseCargo", "Invoke-WithRustOnlyRuntimeProfile", "Test-RetainedDotnetRuntimeOrWorkerPath", "Assert-RustHelperPathAllowed", "retained .NET runtime or worker", "translate_long_doc_script")
+    }
+    "asset-downloads" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/resource_download.rs",
+            "rs/crates/easydict_app/src/font_download.rs",
+            "rs/crates/easydict_app/tests/resource_download_behavior.rs"
+        )
+        DiffPatterns = @("ResourceDownload", "resource_download", "ResourceDownloadClient", "ResourceDownloadProgress", "ResourceDownloadError", "download_with_retry", "ordered_urls_by_probe", "font_download", "FontDownload", "ensure_font", "cjk font", "truncated content")
     }
     "builtin-ai-registration" = [pscustomobject]@{
         PathPatterns = @(
@@ -515,7 +735,6 @@ $profileRecommendations = [ordered]@{
             "lib/easydict-foundry-local/**",
             "rs/crates/easydict_app/src/quick_translate.rs",
             "rs/crates/easydict_app/src/long_document.rs",
-            "rs/crates/easydict_app/src/bin/easydict_cli.rs",
             "rs/crates/easydict_app/src/openai_compatible.rs",
             "rs/crates/easydict_app/tests/openai_compatible_behavior.rs",
             "rs/crates/easydict_app/tests/quick_translate_behavior.rs",
@@ -560,6 +779,12 @@ $profileRecommendations = [ordered]@{
         )
         DiffPatterns = @("NativeBridge", "native_bridge", "easydict-native-bridge", "easydict_native_bridge", "run_native_bridge", "named_event", "easydict_windows_ipc", "OCR_TRANSLATE_EVENT_NAME", "Local\\EasydictRs-OcrTranslate", "Subscription::named_event")
     }
+    "startup-activation" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/activation.rs"
+        )
+        DiffPatterns = @("StartupActivation", "startup_activation", "parse_startup_activation", "startup_activation_task_for_args", "resolve_startup_activation_disposition", "OCR_TRANSLATE_ARGUMENT", "OCR_TRANSLATE_PROTOCOL_PAYLOAD", "ocr-translate", "easydict-rs://")
+    }
     "protocol-facade" = [pscustomobject]@{
         PathPatterns = @(
             "rs/crates/easydict_app/src/protocol.rs",
@@ -568,6 +793,14 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/tests/protocol_behavior.rs"
         )
         DiffPatterns = @("protocol_core", "compat_protocol", "SettingsSnapshot", "TranslateParams", "TranslateDocumentParams", "MdxLookupParams", "WORKER_PROTOCOL_VERSION_CURRENT", "retained-dotnet-workers")
+    }
+    "retained-worker-ipc" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/compat_client.rs",
+            "rs/crates/easydict_app/src/bin/easydict_ipc_mock.rs",
+            "rs/crates/easydict_app/tests/compat_client.rs"
+        )
+        DiffPatterns = @("WorkerCommand", "WorkerClient", "DirectWorkerFacade", "easydict-ipc-mock", "easydict_ipc_mock", "retained worker IPC", "mock IPC", "MOCK_WORKER_KIND", "MOCK_WORKER_PROTOCOL_VERSION", "retained-dotnet-workers")
     }
     "input-actions" = [pscustomobject]@{
         PathPatterns = @(
@@ -682,7 +915,8 @@ $profileRecommendations = [ordered]@{
         PathPatterns = @(
             "lib/rs-mdict/**",
             "rs/crates/easydict_app/src/mdx_native.rs",
-            "rs/crates/easydict_app/tests/mdx_native_behavior.rs"
+            "rs/crates/easydict_app/tests/mdx_native_behavior.rs",
+            "rs/scripts/Invoke-MdxRealCorpusValidation.ps1"
         )
         DiffPatterns = @("MDX", "MDD", "mdx", "mdd", "rs-mdict", "rust_mdict", "MdxLookupParams", "NativeMdx", "NativeMdd", "mdd_resources_inlined", "RS_MDICT_TEST", "Collins")
     }
@@ -696,6 +930,68 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/tests/lex_index_behavior.rs"
         )
         DiffPatterns = @("dictionary_suggestion", "local_dictionary", "local_dictionary_suggestion", "lex_index", "mdx_index", "fuzzy_hits")
+    }
+    "pdf-to-images" = [pscustomobject]@{
+        PathPatterns = @(
+            "lib/easydict-pdf-render/**",
+            "rs/crates/easydict_pdf_to_images/**",
+            "dotnet/scripts/pdf-to-images.ps1"
+        )
+        DiffPatterns = @("PdfToImages", "pdf-to-images", "pdf_to_images", "easydict_pdf_to_images", "easydict-pdf-render", "PdfImageFormat", "PdfToImagesOptions", "PdfToBgraOptions", "pdfium-render", "render_pdf_to_images", "render_pdf_pages_to_bgra_files")
+    }
+    "store-listings" = [pscustomobject]@{
+        PathPatterns = @(
+            ".github/workflows/store-listings.yml",
+            ".winstore/store-config.json",
+            ".winstore/listings/**",
+            ".winstore/scripts/Sync-StoreListings.ps1",
+            ".winstore/README.md",
+            "rs/crates/easydict_store_listings/**"
+        )
+        DiffPatterns = @("easydict_store_listings", "store-listings", "StoreListing", "Store Listings", "Sync-StoreListings.ps1", "MSStore.CLI", "msstore", "winstore", "powershell-yaml", "ConvertFrom-Yaml", "SUPPORTED_STORE_LANGUAGES", "FORBIDDEN_KEYWORD_NAMES", "third-party product", "shortTitle", "voiceTitle", "releaseNotes")
+    }
+    "encrypt-secret" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_encrypt_secret/**"
+        )
+        DiffPatterns = @("EncryptSecret", "encrypt-secret", "encrypt_secret", "easydict_encrypt_secret", "-p easydict_encrypt_secret", "easydict_encrypt_secret --", "cargo run --manifest-path ../rs/Cargo.toml -p easydict_encrypt_secret", "SECRET=your-secret", "SECRET is required", "EncryptedSecrets.json", "SecretKeyManager", "AES-128-CBC", "PKCS7", "my-api-key", "SNtcOSNOR+8Y18pItZdXlg")
+    }
+    "msix-validate" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_msix_validate/**"
+        )
+        DiffPatterns = @("validate_msix(", "prepare_package_inputs(", "fix_msix_min_version", "verify_bundle_min_version", "dedupe_worker_shared_files", "PackagePayloadLayoutValidator", "AppxManifest", "TargetDeviceFamily", "MinVersion")
+    }
+    "icon-generator" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_icon_generator/**",
+            "dotnet/scripts/generate-windows-assets.ps1",
+            "dotnet/scripts/generate-assets-from-macos-icon.ps1",
+            "dotnet/scripts/convert-service-icons.ps1"
+        )
+        DiffPatterns = @("easydict_icon_generator", "icon-generator", "generate-app-icon-ico.ps1", "generate-windows-assets.ps1", "generate-assets-from-macos-icon.ps1", "convert-service-icons.ps1", "windows-assets", "refresh-assets-from-macos-icon", "service-icons", "System.Drawing", "AppIcon.ico", "TrayIcon.png", "ServiceIcons")
+    }
+    "rust-helper-build" = [pscustomobject]@{
+        PathPatterns = @(
+            "dotnet/scripts/Build-RustHelpers.ps1"
+        )
+        DiffPatterns = @("Build-RustHelpers.ps1", "BuildRustHelpers", "build-rust-helpers", "build_rust_helpers", "IncludeLegacyRegistrarAlias", "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS")
+    }
+    "dotnet-runtime-extract" = [pscustomobject]@{
+        PathPatterns = @(
+            "dotnet/scripts/Extract-DotnetRuntime.ps1"
+        )
+        DiffPatterns = @("Extract-DotnetRuntime.ps1", "extract-dotnet-runtime", "ExtractDotnetRuntime", "extract_dotnet_runtime", "hybrid-dotnet-runtime-packaging", "download_and_extract_dotnet_runtime")
+    }
+    "msix-runtime-profile" = [pscustomobject]@{
+        PathPatterns = @(
+            ".github/workflows/ui-automation.yml",
+            "dotnet/scripts/sign-and-install.ps1",
+            "dotnet/scripts/qdc/Deploy-ToQdc.ps1",
+            "dotnet/scripts/qdc/Install-OnQdc.ps1",
+            "rs/crates/easydict_packager/tests/msix_runtime_profile_contract_behavior.rs"
+        )
+        DiffPatterns = @("msix_runtime_profile_contract_behavior", "ui_automation_msix_path", "Deploy-ToQdc.ps1", "Install-OnQdc.ps1", "sign-and-install.ps1", "sign_and_install", "qdc_install_machine_scope", "RuntimeProfile", "easydict_msix_validate", "Add-AppxPackage", "Add-AppxProvisionedPackage")
     }
     "rs-portable-release" = [pscustomobject]@{
         PathPatterns = @(
@@ -713,11 +1009,8 @@ $profileRecommendations = [ordered]@{
             "dotnet/scripts/**",
             "dotnet/Makefile",
             "rs/crates/easydict_app/src/runtime_policy.rs",
-            "rs/crates/easydict_app/src/bin/easydict_long_doc.rs",
-            "rs/crates/easydict_app/src/long_document_cli.rs",
             "rs/crates/easydict_app/tests/default_api_boundary_behavior.rs",
             "rs/crates/easydict_app/tests/cli_translate_behavior.rs",
-            "rs/crates/easydict_app/tests/long_document_cli_behavior.rs",
             "rs/crates/easydict_app/tests/long_document_behavior.rs",
             "rs/crates/easydict_packager/**",
             "lib/easydict-runtime-guards/**",
@@ -969,7 +1262,9 @@ function Get-GstepDiffText {
 function Get-RecommendationDiffText {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$DiffText
+        [string]$DiffText,
+
+        [string[]]$AllowedPaths
     )
 
     $ignoredPaths = @($parallelUiFiles) + @($parallelCargoLockFiles) + @($generatedCargoLockFiles) + @(
@@ -978,13 +1273,24 @@ function Get-RecommendationDiffText {
         "refactor-progress.md"
     )
     $ignoredPaths = @($ignoredPaths | ForEach-Object { Normalize-RepoRelativePath $_ })
+    $allowedPathSet = $null
+    $expandedAllowedPaths = @(Expand-PathList $AllowedPaths |
+        ForEach-Object { Normalize-RepoRelativePath $_ } |
+        Select-Object -Unique)
+    if ($expandedAllowedPaths.Count -gt 0) {
+        $allowedPathSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($path in $expandedAllowedPaths) {
+            [void]$allowedPathSet.Add($path)
+        }
+    }
 
     $selectedLines = New-Object System.Collections.Generic.List[string]
     $includeCurrentFile = $false
     foreach ($line in ($DiffText -split "`r?`n")) {
         if ($line -match '^diff --git a/(.+?) b/(.+)$') {
             $currentPath = Normalize-RepoRelativePath $matches[2]
-            $includeCurrentFile = $ignoredPaths -notcontains $currentPath
+            $allowedBySelector = $null -eq $allowedPathSet -or $allowedPathSet.Contains($currentPath)
+            $includeCurrentFile = $allowedBySelector -and $ignoredPaths -notcontains $currentPath
         }
 
         if ($includeCurrentFile -and
@@ -1086,7 +1392,21 @@ function Format-PowerShellCommandArgument {
     $Value
 }
 
-function Get-RecommendationSelectorArguments {
+function Format-ValidationWrapperCommand {
+    param(
+        [string[]]$Arguments
+    )
+
+    $scriptCommandPrefix = "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1"
+    $formattedArguments = @($Arguments | ForEach-Object { Format-PowerShellCommandArgument $_ })
+    if ($formattedArguments.Count -eq 0) {
+        return $scriptCommandPrefix
+    }
+
+    "$scriptCommandPrefix $($formattedArguments -join ' ')"
+}
+
+function Get-RecommendationSelectorArgumentList {
     param(
         [string[]]$ChangedPath,
 
@@ -1103,16 +1423,28 @@ function Get-RecommendationSelectorArguments {
         $selectorArgs += "-ChangedPath"
         $selectorArgs += ($expandedChangedPaths -join ",")
     }
-    else {
-        if ($DiffFrom -ne "gstep:@") {
-            $selectorArgs += "-DiffFrom"
-            $selectorArgs += $DiffFrom
-        }
-        if ($DiffTo -ne "worktree") {
-            $selectorArgs += "-DiffTo"
-            $selectorArgs += $DiffTo
-        }
+    if ($DiffFrom -ne "gstep:@") {
+        $selectorArgs += "-DiffFrom"
+        $selectorArgs += $DiffFrom
     }
+    if ($DiffTo -ne "worktree") {
+        $selectorArgs += "-DiffTo"
+        $selectorArgs += $DiffTo
+    }
+
+    @($selectorArgs)
+}
+
+function Get-RecommendationSelectorArguments {
+    param(
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree"
+    )
+
+    $selectorArgs = @(Get-RecommendationSelectorArgumentList -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo)
 
     if ($selectorArgs.Count -eq 0) {
         return ""
@@ -1140,11 +1472,59 @@ function Get-SelectedRecommendationResults {
     }
 
     if ($MaxRecommendedProfiles -eq 0) {
-        $topScore = $Recommendation.Results[0].Score
-        return @($Recommendation.Results | Where-Object { $_.Score -eq $topScore })
+        $nonToolingResults = @($Recommendation.Results | Where-Object { $_.Profile -ne "core-validation-tooling" })
+        if ($nonToolingResults.Count -gt 0) {
+            $topScore = $nonToolingResults[0].Score
+            $selected = @($nonToolingResults | Where-Object { $_.Score -eq $topScore })
+        }
+        else {
+            $topScore = $Recommendation.Results[0].Score
+            $selected = @($Recommendation.Results | Where-Object { $_.Score -eq $topScore })
+        }
+
+        $selectedProfileNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($result in $selected) {
+            [void]$selectedProfileNames.Add($result.Profile)
+        }
+
+        foreach ($result in @($Recommendation.Results | Where-Object { $_.Profile -eq "core-validation-tooling" -and @($_.PathMatches).Count -gt 0 })) {
+            if ($selectedProfileNames.Add($result.Profile)) {
+                $selected += $result
+            }
+        }
+
+        return @($selected)
     }
 
     @($Recommendation.Results | Select-Object -First $MaxRecommendedProfiles)
+}
+
+function New-RecommendedValidationPlan {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Recommendation,
+
+        [switch]$AllRecommendedProfiles,
+
+        [int]$MaxRecommendedProfiles = 0
+    )
+
+    $selectedResults = @(Get-SelectedRecommendationResults `
+            -Recommendation $Recommendation `
+            -AllRecommendedProfiles:$AllRecommendedProfiles `
+            -MaxRecommendedProfiles $MaxRecommendedProfiles)
+
+    $steps = @()
+    foreach ($selectedResult in $selectedResults) {
+        foreach ($step in @($validationProfiles[$selectedResult.Profile].Steps)) {
+            $steps += (New-ValidationStep "$($selectedResult.Profile) / $($step.Name)" $step.Command)
+        }
+    }
+
+    [pscustomobject]@{
+        SelectedResults = $selectedResults
+        Steps = @(Select-UniqueValidationSteps -Steps $steps)
+    }
 }
 
 function New-RecommendationCommandReport {
@@ -1161,16 +1541,121 @@ function New-RecommendationCommandReport {
 
     $profileCsv = (@($Recommendation.Results | ForEach-Object { $_.Profile }) -join ",")
     $recommendationSelectorArgs = Get-RecommendationSelectorArguments -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
-    $scriptCommandPrefix = "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1"
 
     [pscustomobject]@{
-        CombinedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -Profile $profileCsv" }
-        CombinedCloseOutDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -Profile $profileCsv -DryRun" }
-        DefaultRecommendedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -CheckTrailingWhitespace" }
-        DefaultRecommendedCloseOutDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -CheckTrailingWhitespace -DryRun" }
-        AllRecommended = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles" }
-        AllRecommendedDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles -DryRun" }
-        AllRecommendedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles -CheckTrailingWhitespace" }
+        CombinedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { Format-ValidationWrapperCommand @("-Profile", $profileCsv) }
+        CombinedCloseOutDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { Format-ValidationWrapperCommand @("-Profile", $profileCsv, "-DryRun") }
+        DefaultRecommendedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles$recommendationSelectorArgs -CheckTrailingWhitespace" }
+        DefaultRecommendedCloseOutDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles$recommendationSelectorArgs -CheckTrailingWhitespace -DryRun" }
+        AllRecommended = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles" }
+        AllRecommendedDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles -DryRun" }
+        AllRecommendedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles -CheckTrailingWhitespace" }
+    }
+}
+
+function Add-ValidationCloseOutArguments {
+    param(
+        [string[]]$Arguments,
+
+        [bool]$CheckTrailingWhitespace = $false,
+
+        [string]$GstepCommitMessage
+    )
+
+    $result = @($Arguments)
+    if ($CheckTrailingWhitespace) {
+        $result += "-CheckTrailingWhitespace"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($GstepCommitMessage)) {
+        $result += "-GstepCommitMessage"
+        $result += $GstepCommitMessage
+    }
+
+    @($result)
+}
+
+function Add-ValidationDryRunJsonArguments {
+    param(
+        [string[]]$Arguments
+    )
+
+    @($Arguments) + @("-DryRun", "-Json")
+}
+
+function New-ValidationDryRunCommandReport {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Mode,
+
+        [string[]]$SelectedProfiles,
+
+        [bool]$CheckTrailingWhitespace = $false,
+
+        [string]$GstepCommitMessage,
+
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree",
+
+        [bool]$AllRecommendedProfiles = $false,
+
+        [int]$MaxRecommendedProfiles = 0
+    )
+
+    $selectorArgs = @(Get-RecommendationSelectorArgumentList -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo)
+    $currentModeBaseArgs = $null
+    switch ($Mode) {
+        "run-recommended" {
+            $currentModeBaseArgs = @("-RunRecommendedProfiles") + $selectorArgs
+            if ($AllRecommendedProfiles) {
+                $currentModeBaseArgs += "-AllRecommendedProfiles"
+            }
+            if ($MaxRecommendedProfiles -ne 0) {
+                $currentModeBaseArgs += "-MaxRecommendedProfiles"
+                $currentModeBaseArgs += [string]$MaxRecommendedProfiles
+            }
+        }
+        "profile" {
+            if (@($SelectedProfiles).Count -gt 0) {
+                $currentModeBaseArgs = @("-Profile", (@($SelectedProfiles) -join ","))
+                if ($CheckTrailingWhitespace) {
+                    $currentModeBaseArgs += $selectorArgs
+                }
+            }
+        }
+        "trailing-whitespace" {
+            $currentModeBaseArgs = @($selectorArgs)
+        }
+    }
+
+    $selectedProfileBaseArgs = $null
+    if (@($SelectedProfiles).Count -gt 0) {
+        $selectedProfileBaseArgs = @("-Profile", (@($SelectedProfiles) -join ","))
+        if ($CheckTrailingWhitespace) {
+            $selectedProfileBaseArgs += $selectorArgs
+        }
+    }
+
+    $currentModeCloseOutArgs = if ($null -eq $currentModeBaseArgs) {
+        $null
+    }
+    else {
+        Add-ValidationCloseOutArguments -Arguments $currentModeBaseArgs -CheckTrailingWhitespace $CheckTrailingWhitespace -GstepCommitMessage $GstepCommitMessage
+    }
+    $selectedProfileCloseOutArgs = if ($null -eq $selectedProfileBaseArgs) {
+        $null
+    }
+    else {
+        Add-ValidationCloseOutArguments -Arguments $selectedProfileBaseArgs -CheckTrailingWhitespace $CheckTrailingWhitespace -GstepCommitMessage $GstepCommitMessage
+    }
+
+    [pscustomobject]@{
+        CurrentCloseOut = if ($null -eq $currentModeCloseOutArgs) { $null } else { Format-ValidationWrapperCommand $currentModeCloseOutArgs }
+        CurrentDryRunJson = if ($null -eq $currentModeCloseOutArgs) { $null } else { Format-ValidationWrapperCommand (Add-ValidationDryRunJsonArguments $currentModeCloseOutArgs) }
+        SelectedProfileCloseOut = if ($null -eq $selectedProfileCloseOutArgs) { $null } else { Format-ValidationWrapperCommand $selectedProfileCloseOutArgs }
+        SelectedProfileDryRunJson = if ($null -eq $selectedProfileCloseOutArgs) { $null } else { Format-ValidationWrapperCommand (Add-ValidationDryRunJsonArguments $selectedProfileCloseOutArgs) }
     }
 }
 
@@ -1187,9 +1672,9 @@ function New-RecommendationReport {
     )
 
     $expandedChangedPaths = @(Expand-PathList $ChangedPath | ForEach-Object { Normalize-RepoRelativePath $_ } | Select-Object -Unique)
-    $defaultSelectedProfiles = @()
+    $defaultSelectedPlan = $null
     if ($Recommendation.Results.Count -gt 0) {
-        $defaultSelectedProfiles = @(Get-SelectedRecommendationResults -Recommendation $Recommendation | ForEach-Object { $_.Profile })
+        $defaultSelectedPlan = New-RecommendedValidationPlan -Recommendation $Recommendation
     }
 
     [pscustomobject]@{
@@ -1200,7 +1685,19 @@ function New-RecommendationReport {
         }
         IgnoredPaths = @($Recommendation.IgnoredPaths)
         CorePaths = @($Recommendation.CorePaths)
-        DefaultSelectedProfiles = $defaultSelectedProfiles
+        DefaultSelectedProfiles = if ($null -eq $defaultSelectedPlan) { @() } else { @($defaultSelectedPlan.SelectedResults | ForEach-Object { $_.Profile }) }
+        DefaultSelectedStepCount = if ($null -eq $defaultSelectedPlan) { 0 } else { @($defaultSelectedPlan.Steps).Count }
+        DefaultSelectedSteps = if ($null -eq $defaultSelectedPlan) {
+            @()
+        }
+        else {
+            @($defaultSelectedPlan.Steps | ForEach-Object {
+                    [pscustomobject]@{
+                        Name = $_.Name
+                        Command = @($_.Command)
+                    }
+                })
+        }
         Results = @($Recommendation.Results | ForEach-Object {
                 $profileDefinition = $validationProfiles[$_.Profile]
                 [pscustomobject]@{
@@ -1219,6 +1716,96 @@ function New-RecommendationReport {
                 }
             })
         Commands = New-RecommendationCommandReport -Recommendation $Recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
+    }
+}
+
+function New-ValidationDryRunReport {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Mode,
+
+        [string[]]$SelectedProfiles,
+
+        [pscustomobject[]]$Steps,
+
+        [bool]$CheckTrailingWhitespace = $false,
+
+        [string[]]$TrailingWhitespacePaths,
+
+        [string]$GstepCommitMessage,
+
+        [pscustomobject]$Recommendation,
+
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree",
+
+        [bool]$AllRecommendedProfiles = $false,
+
+        [int]$MaxRecommendedProfiles = 0
+    )
+
+    $expandedChangedPaths = @(Expand-PathList $ChangedPath |
+        ForEach-Object { Normalize-RepoRelativePath $_ } |
+        Select-Object -Unique)
+
+    [pscustomobject]@{
+        Mode = $Mode
+        Selector = [pscustomobject]@{
+            ChangedPath = $expandedChangedPaths
+            DiffFrom = $DiffFrom
+            DiffTo = $DiffTo
+        }
+        SelectedProfiles = @($SelectedProfiles)
+        StepCount = @($Steps).Count
+        Steps = @($Steps | ForEach-Object {
+                [pscustomobject]@{
+                    Name = $_.Name
+                    Command = @($_.Command)
+                }
+            })
+        CheckTrailingWhitespace = $CheckTrailingWhitespace
+        TrailingWhitespacePaths = @($TrailingWhitespacePaths)
+        Commands = New-ValidationDryRunCommandReport `
+            -Mode $Mode `
+            -SelectedProfiles $SelectedProfiles `
+            -CheckTrailingWhitespace $CheckTrailingWhitespace `
+            -GstepCommitMessage $GstepCommitMessage `
+            -ChangedPath $ChangedPath `
+            -DiffFrom $DiffFrom `
+            -DiffTo $DiffTo `
+            -AllRecommendedProfiles $AllRecommendedProfiles `
+            -MaxRecommendedProfiles $MaxRecommendedProfiles
+        GstepCheckpoint = if ([string]::IsNullOrWhiteSpace($GstepCommitMessage)) {
+            $null
+        }
+        else {
+            [pscustomobject]@{
+                Message = $GstepCommitMessage
+                Command = @("gstep", "commit", "-m", $GstepCommitMessage)
+                Display = Format-GstepCommitCommandForDisplay -Message $GstepCommitMessage
+            }
+        }
+        Recommendation = if ($null -eq $Recommendation) {
+            $null
+        }
+        else {
+            [pscustomobject]@{
+                CorePaths = @($Recommendation.CorePaths)
+                IgnoredPaths = @($Recommendation.IgnoredPaths)
+                Results = @($Recommendation.Results | ForEach-Object {
+                        [pscustomobject]@{
+                            Profile = $_.Profile
+                            Score = $_.Score
+                            PathMatches = @($_.PathMatches)
+                            FallbackPathMatches = @($_.FallbackPathMatches)
+                            TextMatches = @($_.TextMatches)
+                        }
+                    })
+            }
+        }
     }
 }
 
@@ -1273,6 +1860,12 @@ function Show-ProfileRecommendations {
         Write-Host "    run: powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $($result.Profile)"
     }
 
+    $defaultSelectedPlan = New-RecommendedValidationPlan -Recommendation $Recommendation
+    Write-Host "Default selected profile(s) for -RunRecommendedProfiles:"
+    Write-Host "  $((@($defaultSelectedPlan.SelectedResults | ForEach-Object { $_.Profile })) -join ', ')"
+    Write-Host "Default selected unique validation step count:"
+    Write-Host "  $(@($defaultSelectedPlan.Steps).Count)"
+
     $commandReport = New-RecommendationCommandReport -Recommendation $Recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
     Write-Host "Combined close-out command for listed profile(s):"
     Write-Host "  $($commandReport.CombinedCloseOut)"
@@ -1304,6 +1897,12 @@ function Get-CurrentProfileRecommendation {
     if ($ChangedPath.Count -gt 0) {
         $recommendationPaths = @(Expand-PathList $ChangedPath | ForEach-Object { Normalize-RepoRelativePath $_ })
         $recommendationDiff = ($recommendationPaths -join "`n")
+        $changedPathDiff = Get-RecommendationDiffText `
+            -DiffText (Get-GstepDiffText -From $DiffFrom -To $DiffTo) `
+            -AllowedPaths $recommendationPaths
+        if (-not [string]::IsNullOrWhiteSpace($changedPathDiff)) {
+            $recommendationDiff = "$recommendationDiff`n$changedPathDiff"
+        }
     }
     else {
         $recommendationPaths = Get-GstepDirtyPaths -From $DiffFrom -To $DiffTo
@@ -1323,6 +1922,61 @@ function Format-GstepCommitCommandForDisplay {
     "gstep commit -m ""$escapedMessage"""
 }
 
+function Get-GstepCheckpointAllowedPaths {
+    param(
+        [string[]]$ChangedPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DiffFrom,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DiffTo
+    )
+
+    if ($ChangedPath.Count -gt 0) {
+        return @(Expand-PathList $ChangedPath |
+            ForEach-Object { Normalize-RepoRelativePath $_ } |
+            Select-Object -Unique)
+    }
+
+    @(Get-GstepDirtyPaths -From $DiffFrom -To $DiffTo |
+        ForEach-Object { Normalize-RepoRelativePath $_ } |
+        Select-Object -Unique)
+}
+
+function Get-UnexpectedCheckpointPaths {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$AllowedPaths,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$DirtyPaths
+    )
+
+    $allowed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in @($AllowedPaths)) {
+        [void]$allowed.Add((Normalize-RepoRelativePath $path))
+    }
+
+    @($DirtyPaths |
+        ForEach-Object { Normalize-RepoRelativePath $_ } |
+        Select-Object -Unique |
+        Where-Object { -not $allowed.Contains($_) })
+}
+
+function Assert-GstepCheckpointScope {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$AllowedPaths
+    )
+
+    $dirtyPaths = @(Get-GstepDirtyPaths -From "gstep:@" -To "worktree")
+    $unexpectedPaths = @(Get-UnexpectedCheckpointPaths -AllowedPaths $AllowedPaths -DirtyPaths $dirtyPaths)
+    if ($unexpectedPaths.Count -gt 0) {
+        throw "Refusing to create gstep checkpoint because unexpected path(s) changed during validation: $($unexpectedPaths -join ', '). Include them in -ChangedPath if they belong to this slice, or rerun after isolating parallel work."
+    }
+}
+
 $profileKeys = @(Expand-ProfileList $Profile)
 $hasGstepCommitMessage = $PSBoundParameters.ContainsKey("GstepCommitMessage")
 
@@ -1330,8 +1984,8 @@ if ($hasGstepCommitMessage -and [string]::IsNullOrWhiteSpace($GstepCommitMessage
     throw "-GstepCommitMessage cannot be blank."
 }
 
-if ($Json -and -not $RecommendProfiles) {
-    throw "-Json is only valid with -RecommendProfiles."
+if ($Json -and -not $RecommendProfiles -and -not $DryRun) {
+    throw "-Json is only valid with -RecommendProfiles or -DryRun."
 }
 
 if ($AllRecommendedProfiles -and -not $RunRecommendedProfiles) {
@@ -1404,25 +2058,31 @@ if ($modeCount -gt 1) {
     throw "Use only one of -Profile, -RunRecommendedProfiles, or one validation command. For custom cargo commands with flags such as '-p', pass the child command through a PowerShell argument array splat (for example, `$cmdArgs = @('cargo', 'test', '-p', 'easydict_app'); ...ps1 @cmdArgs`) so wrapper/common parameters do not capture them."
 }
 
+$validationMode = $null
+$selectedValidationProfiles = @()
+$recommendationForDryRun = $null
 $validationSteps = @()
 if ($RunRecommendedProfiles) {
     Set-Location $repoRoot
     $recommendation = Get-CurrentProfileRecommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
-    Show-ProfileRecommendations -Recommendation $recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
+    $recommendationForDryRun = $recommendation
+    if (-not $Json) {
+        Show-ProfileRecommendations -Recommendation $recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
+    }
     if ($recommendation.Results.Count -eq 0) {
         throw "No validation profile matched; run a custom command or add a profile plus recommendation rules for this lane."
     }
 
-    $selectedProfiles = @(Get-SelectedRecommendationResults `
+    $recommendedPlan = New-RecommendedValidationPlan `
             -Recommendation $recommendation `
             -AllRecommendedProfiles:$AllRecommendedProfiles `
-            -MaxRecommendedProfiles $MaxRecommendedProfiles)
-    Write-Host "Selected recommended validation profile(s): $((@($selectedProfiles | ForEach-Object { $_.Profile })) -join ', ')"
-    foreach ($selectedProfile in $selectedProfiles) {
-        foreach ($step in @($validationProfiles[$selectedProfile.Profile].Steps)) {
-            $validationSteps += (New-ValidationStep "$($selectedProfile.Profile) / $($step.Name)" $step.Command)
-        }
+            -MaxRecommendedProfiles $MaxRecommendedProfiles
+    $selectedValidationProfiles = @($recommendedPlan.SelectedResults | ForEach-Object { $_.Profile })
+    if (-not $Json) {
+        Write-Host "Selected recommended validation profile(s): $($selectedValidationProfiles -join ', ')"
     }
+    $validationMode = "run-recommended"
+    $validationSteps = @($recommendedPlan.Steps)
 }
 elseif ($profileKeys.Count -ne 0) {
     foreach ($profileKey in $profileKeys) {
@@ -1441,12 +2101,16 @@ elseif ($profileKeys.Count -ne 0) {
             }
         }
     }
+    $selectedValidationProfiles = @($profileKeys)
+    $validationMode = "profile"
 }
 elseif ($Command.Count -ne 0) {
     $validationSteps = @((New-ValidationStep "custom" $Command))
+    $validationMode = "custom"
 }
 elseif ($CheckTrailingWhitespace) {
     $validationSteps = @()
+    $validationMode = "trailing-whitespace"
 }
 else {
     throw "Provide one validation command, -Profile <name>, -RunRecommendedProfiles, -ListProfiles, -RecommendProfiles, or -CheckTrailingWhitespace."
@@ -1460,6 +2124,24 @@ if ($CheckTrailingWhitespace) {
 }
 
 if ($DryRun) {
+    if ($Json) {
+        New-ValidationDryRunReport `
+            -Mode $validationMode `
+            -SelectedProfiles $selectedValidationProfiles `
+            -Steps $validationSteps `
+            -CheckTrailingWhitespace $CheckTrailingWhitespace.IsPresent `
+            -TrailingWhitespacePaths $trailingWhitespacePaths `
+            -GstepCommitMessage $GstepCommitMessage `
+            -Recommendation $recommendationForDryRun `
+            -ChangedPath $ChangedPath `
+            -DiffFrom $DiffFrom `
+            -DiffTo $DiffTo `
+            -AllRecommendedProfiles $AllRecommendedProfiles.IsPresent `
+            -MaxRecommendedProfiles $MaxRecommendedProfiles |
+            ConvertTo-Json -Depth 16
+        exit 0
+    }
+
     Write-Host "Dry run; validation step(s) that would run:"
     foreach ($step in $validationSteps) {
         Write-Host "  - $($step.Name): $($step.Command -join ' ')"
@@ -1543,6 +2225,11 @@ function Remove-TempTree {
 }
 
 Set-Location $repoRoot
+
+$checkpointAllowedPaths = @()
+if ($hasGstepCommitMessage) {
+    $checkpointAllowedPaths = @(Get-GstepCheckpointAllowedPaths -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo)
+}
 
 $tempBase = [System.IO.Path]::GetTempPath()
 $tempRoot = Join-Path $tempBase ("easydict-rs-core-slice-" + [System.Guid]::NewGuid().ToString("N"))
@@ -1672,6 +2359,7 @@ try {
     }
 
     if ($commandExitCode -eq 0 -and $hasGstepCommitMessage) {
+        Assert-GstepCheckpointScope -AllowedPaths $checkpointAllowedPaths
         Write-Host "Running post-validation checkpoint: $(Format-GstepCommitCommandForDisplay -Message $GstepCommitMessage)"
         Invoke-GstepChecked @("commit", "-m", $GstepCommitMessage)
     }

@@ -597,6 +597,56 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
+    fn build_time_app_icon_generation_uses_rust_tool_not_system_drawing_script() {
+        let workspace_manifest = include_str!("../../../Cargo.toml");
+        assert!(workspace_manifest.contains("crates/easydict_icon_generator"));
+
+        let winui_project =
+            include_str!("../../../../dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj");
+        assert!(winui_project.contains("cargo run --manifest-path"));
+        assert!(winui_project.contains("-p easydict_icon_generator"));
+        assert!(winui_project.contains("--source-png"));
+        assert!(winui_project.contains("--output-ico"));
+        assert!(winui_project.contains("--output-tray-png"));
+        assert!(!winui_project.contains("generate-app-icon-ico.ps1"));
+        assert!(!winui_project.contains("System.Drawing"));
+
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..");
+        assert!(!repo_root
+            .join("dotnet/scripts/generate-app-icon-ico.ps1")
+            .exists());
+    }
+
+    #[test]
+    fn asset_generation_shims_use_rust_icon_generator_not_system_drawing() {
+        let scripts = [
+            (
+                include_str!("../../../../dotnet/scripts/generate-windows-assets.ps1"),
+                "windows-assets",
+            ),
+            (
+                include_str!("../../../../dotnet/scripts/generate-assets-from-macos-icon.ps1"),
+                "refresh-assets-from-macos-icon",
+            ),
+            (
+                include_str!("../../../../dotnet/scripts/convert-service-icons.ps1"),
+                "service-icons",
+            ),
+        ];
+
+        for (script, subcommand) in scripts {
+            assert!(script.contains("cargo run --manifest-path"));
+            assert!(script.contains("-p easydict_icon_generator"));
+            assert!(script.contains(subcommand));
+            assert!(!script.contains("System.Drawing"));
+            assert!(!script.contains("Add-Type -AssemblyName"));
+        }
+    }
+
+    #[test]
     fn generates_png_encoded_ico_entries_and_tray_icon() {
         let dir = tempdir().expect("temp dir");
         let source = dir.path().join("source.png");

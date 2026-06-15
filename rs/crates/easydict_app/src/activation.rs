@@ -93,3 +93,68 @@ fn protocol_scheme_is_supported(scheme: &str) -> bool {
     scheme.eq_ignore_ascii_case(PROTOCOL_EASYDICT)
         || scheme.eq_ignore_ascii_case(LEGACY_PROTOCOL_EASYDICT)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_shell_and_protocol_ocr_activation() {
+        for arg in [
+            "--ocr-translate",
+            "\"--ocr-translate\"",
+            "easydict-rs://ocr-translate",
+            "EASYDICT-RS://OCR-TRANSLATE?source=browser",
+            "easydict://ocr-translate#native-message",
+            "easydict-rs:ocr-translate",
+        ] {
+            assert_eq!(
+                parse_startup_activation([arg]),
+                Some(StartupActivation::OcrTranslate),
+                "{arg}"
+            );
+        }
+    }
+
+    #[test]
+    fn ignores_non_ocr_or_unsupported_protocol_activation() {
+        for arg in [
+            "--unknown",
+            "easydict-rs://settings",
+            "easydict-rs://ocr-translate-extra",
+            "https://ocr-translate",
+            "easydict-worker://ocr-translate",
+        ] {
+            assert_eq!(parse_startup_activation([arg]), None, "{arg}");
+        }
+    }
+
+    #[test]
+    fn startup_activation_disposition_separates_signal_and_cold_launch() {
+        let mut signaled = Vec::new();
+        let disposition =
+            resolve_startup_activation_disposition(["easydict-rs://ocr-translate"], |activation| {
+                signaled.push(activation);
+                Ok::<_, ()>(true)
+            })
+            .expect("disposition should resolve");
+
+        assert_eq!(
+            disposition,
+            StartupActivationDisposition::SignalRunningInstanceAndExit(
+                StartupActivation::OcrTranslate
+            )
+        );
+        assert_eq!(signaled, [StartupActivation::OcrTranslate]);
+
+        let cold =
+            resolve_startup_activation_disposition(["--ocr-translate"], |_| Ok::<_, ()>(false))
+                .expect("cold launch should resolve");
+        assert_eq!(
+            cold,
+            StartupActivationDisposition::ColdLaunchWithPendingActivation(
+                StartupActivation::OcrTranslate
+            )
+        );
+    }
+}

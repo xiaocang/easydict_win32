@@ -1616,6 +1616,308 @@ fn native_gemini_cli_translate_succeeds_against_local_sse_without_worker_wording
 }
 
 #[test]
+fn custom_streaming_stream_command_writes_doubao_chunks_before_sse_response_completes() {
+    let settings_dir = unique_temp_dir("easydict-cli-doubao-stream-live-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("Doubao stream listener should bind");
+    listener
+        .set_nonblocking(true)
+        .expect("listener should become nonblocking");
+    let endpoint = format!("http://{}/api/v3/responses", listener.local_addr().unwrap());
+    fs::write(
+        settings_dir.join("settings.json"),
+        format!(
+            r#"{{
+  "DoubaoApiKey": "doubao-key",
+  "DoubaoEndpoint": "{endpoint}",
+  "DoubaoModel": "doubao-test-model"
+}}"#
+        ),
+    )
+    .expect("settings file should be created");
+
+    let (request_tx, request_rx) = mpsc::channel();
+    let (continue_tx, continue_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = accept_with_timeout(listener);
+        let request = read_http_request(&stream);
+        request_tx.send(request).unwrap();
+
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+        stream
+            .write_all(
+                b"event: response.output_text.delta\n\
+                  data: {\"delta\":\"Bon\"}\n\n",
+            )
+            .unwrap();
+        stream.flush().unwrap();
+        continue_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("test should allow stream completion");
+        stream
+            .write_all(
+                b"event: response.output_text.delta\n\
+                  data: {\"delta\":\"jour\"}\n\n\
+                  data: [DONE]\n\n",
+            )
+            .unwrap();
+        stream.flush().unwrap();
+    });
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_easydict_cli"));
+    command
+        .arg("stream")
+        .args([
+            "--service",
+            "doubao",
+            "--from",
+            "en",
+            "--to",
+            "fr",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command.remove_local_ai_env_overrides();
+    let mut child = command.spawn().expect("CLI should spawn");
+
+    let stdout = child.stdout.take().expect("stdout should be piped");
+    let (line_tx, line_rx) = mpsc::channel::<String>();
+    let stdout_reader = thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line).unwrap();
+            if bytes == 0 {
+                break;
+            }
+            line_tx
+                .send(line.trim_end_matches(['\r', '\n']).to_string())
+                .unwrap();
+        }
+    });
+
+    let first_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("first Doubao chunk should be printed before SSE response completes");
+    assert!(
+        first_line.contains("\"event\":\"chunk\"") && first_line.contains("\"text\":\"Bon\""),
+        "first stdout line should be the first Doubao chunk, got {first_line}"
+    );
+
+    let (request, request_body) = request_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("CLI should call the native Doubao stream endpoint");
+    assert!(request.starts_with("POST /api/v3/responses "));
+    assert!(request
+        .to_ascii_lowercase()
+        .contains("authorization: bearer doubao-key"));
+    assert!(request_body.contains("\"model\":\"doubao-test-model\""));
+    assert!(request_body.contains("\"stream\":true"));
+    assert!(request_body.contains("\"source_language\":\"en\""));
+    assert!(request_body.contains("\"target_language\":\"fr\""));
+
+    continue_tx
+        .send(())
+        .expect("server should still wait for continuation");
+    let second_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("second Doubao chunk should be printed after continuation");
+    let done_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("Doubao done event should be printed after chunks");
+
+    let status = child.wait().expect("CLI should exit");
+    stdout_reader.join().unwrap();
+    server.join().unwrap();
+    let mut stderr_text = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr_text)
+        .unwrap();
+    let stdout_text = [
+        first_line.as_str(),
+        second_line.as_str(),
+        done_line.as_str(),
+    ]
+    .join("\n");
+
+    assert!(status.success(), "Doubao stream CLI failed: {stderr_text}");
+    assert!(
+        second_line.contains("\"event\":\"chunk\"") && second_line.contains("\"text\":\"jour\""),
+        "second stdout line should be the second Doubao chunk, got {second_line}"
+    );
+    assert!(
+        done_line.contains("\"event\":\"done\"")
+            && done_line.contains("\"translatedText\":\"Bonjour\"")
+            && done_line.contains("\"serviceId\":\"doubao\""),
+        "done stdout line should contain final Doubao result, got {done_line}"
+    );
+    assert_no_retained_worker_wording(&stdout_text, &stderr_text, "native Doubao stream CLI");
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn custom_streaming_stream_command_writes_gemini_chunks_before_sse_response_completes() {
+    let settings_dir = unique_temp_dir("easydict-cli-gemini-stream-live-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("Gemini stream listener should bind");
+    listener
+        .set_nonblocking(true)
+        .expect("listener should become nonblocking");
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    fs::write(
+        settings_dir.join("settings.json"),
+        r#"{
+  "GeminiApiKey": "gemini-key",
+  "GeminiModel": "gemini-test-model"
+}"#,
+    )
+    .expect("settings file should be created");
+
+    let (request_tx, request_rx) = mpsc::channel();
+    let (continue_tx, continue_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = accept_with_timeout(listener);
+        let request = read_http_request(&stream);
+        request_tx.send(request).unwrap();
+
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+        stream
+            .write_all(
+                b"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Bon\"}]}}]}\n\n",
+            )
+            .unwrap();
+        stream.flush().unwrap();
+        continue_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("test should allow stream completion");
+        stream
+            .write_all(
+                b"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"jour\"}]}}]}\n\n\
+                  data: [DONE]\n\n",
+            )
+            .unwrap();
+        stream.flush().unwrap();
+    });
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_easydict_cli"));
+    command
+        .arg("stream")
+        .args([
+            "--service",
+            "gemini",
+            "--from",
+            "en",
+            "--to",
+            "fr",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .env(
+            "EASYDICT_TEST_CUSTOM_STREAMING_GEMINI_API_BASE_URL",
+            &base_url,
+        )
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command.remove_local_ai_env_overrides();
+    let mut child = command.spawn().expect("CLI should spawn");
+
+    let stdout = child.stdout.take().expect("stdout should be piped");
+    let (line_tx, line_rx) = mpsc::channel::<String>();
+    let stdout_reader = thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line).unwrap();
+            if bytes == 0 {
+                break;
+            }
+            line_tx
+                .send(line.trim_end_matches(['\r', '\n']).to_string())
+                .unwrap();
+        }
+    });
+
+    let first_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("first Gemini chunk should be printed before SSE response completes");
+    assert!(
+        first_line.contains("\"event\":\"chunk\"") && first_line.contains("\"text\":\"Bon\""),
+        "first stdout line should be the first Gemini chunk, got {first_line}"
+    );
+
+    let (request, request_body) = request_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("CLI should call the native Gemini stream endpoint");
+    assert!(request.starts_with("POST /models/gemini-test-model:streamGenerateContent?"));
+    assert!(request.contains("alt=sse"));
+    assert!(request.contains("key=gemini-key"));
+    assert!(request_body.contains("Hello"));
+    assert!(request_body.contains("Translate the following English text into French text"));
+
+    continue_tx
+        .send(())
+        .expect("server should still wait for continuation");
+    let second_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("second Gemini chunk should be printed after continuation");
+    let done_line = line_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("Gemini done event should be printed after chunks");
+
+    let status = child.wait().expect("CLI should exit");
+    stdout_reader.join().unwrap();
+    server.join().unwrap();
+    let mut stderr_text = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr_text)
+        .unwrap();
+    let stdout_text = [
+        first_line.as_str(),
+        second_line.as_str(),
+        done_line.as_str(),
+    ]
+    .join("\n");
+
+    assert!(status.success(), "Gemini stream CLI failed: {stderr_text}");
+    assert!(
+        second_line.contains("\"event\":\"chunk\"") && second_line.contains("\"text\":\"jour\""),
+        "second stdout line should be the second Gemini chunk, got {second_line}"
+    );
+    assert!(
+        done_line.contains("\"event\":\"done\"")
+            && done_line.contains("\"translatedText\":\"Bonjour\"")
+            && done_line.contains("\"serviceId\":\"gemini\""),
+        "done stdout line should contain final Gemini result, got {done_line}"
+    );
+    assert_no_retained_worker_wording(&stdout_text, &stderr_text, "native Gemini stream CLI");
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
 fn native_niutrans_cli_succeeds_without_worker_or_compat_host_wording() {
     let settings_dir = unique_temp_dir("easydict-cli-niutrans-native-settings");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");

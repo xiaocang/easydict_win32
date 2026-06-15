@@ -140,6 +140,56 @@ fn service_catalog_has_unique_service_ids() {
     }
 }
 
+#[test]
+fn service_catalog_does_not_expose_retained_runtime_entries() {
+    let forbidden_markers = [
+        ".net",
+        "compat",
+        "compathost",
+        "dotnet",
+        "easydict.workers",
+        "hostfxr",
+        "powershell",
+        "pwsh",
+        "retained",
+        "worker",
+    ];
+
+    for descriptor in default_translation_service_descriptors() {
+        let visible_text = format!(
+            "{} {}",
+            descriptor.service_id.to_ascii_lowercase(),
+            descriptor.display_name.to_ascii_lowercase()
+        );
+        for marker in forbidden_markers {
+            assert!(
+                !visible_text.contains(marker),
+                "service catalog entry '{}' / '{}' should not expose retained runtime marker '{}'",
+                descriptor.service_id,
+                descriptor.display_name,
+                marker
+            );
+        }
+    }
+}
+
+#[test]
+fn default_service_ids_resolve_to_catalog_entries() {
+    let catalog_ids = app_visible_translation_service_ids();
+    for service_id in DEFAULT_MAIN_WINDOW_SERVICE_IDS
+        .into_iter()
+        .chain(DEFAULT_FLOATING_WINDOW_SERVICE_IDS)
+        .chain([DEFAULT_SERVICE_ID])
+    {
+        assert!(
+            catalog_ids
+                .iter()
+                .any(|catalog_id| catalog_id.eq_ignore_ascii_case(service_id)),
+            "default service id '{service_id}' should exist in the app-visible catalog"
+        );
+    }
+}
+
 fn window_service_enabled(state: &EasydictUiState, service_id: &str) -> bool {
     state
         .settings

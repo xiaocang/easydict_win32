@@ -61,6 +61,7 @@ fn legacy_secret_key() -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::{decrypt_secret, encrypt_secret};
+    use std::path::Path;
 
     #[test]
     fn encrypt_secret_matches_legacy_dotnet_secret_key_manager_vector() {
@@ -74,5 +75,25 @@ mod tests {
     fn decrypt_secret_rejects_invalid_payloads() {
         assert!(decrypt_secret("not base64").is_err());
         assert!(decrypt_secret("Zm9v").is_err());
+    }
+
+    #[test]
+    fn makefile_encrypt_secret_target_uses_rust_cli_and_retired_dotnet_tool_stays_absent() {
+        let workspace_manifest = include_str!("../../../Cargo.toml");
+        assert!(workspace_manifest.contains("crates/easydict_encrypt_secret"));
+
+        let makefile = include_str!("../../../../dotnet/Makefile");
+        assert!(makefile
+            .contains("cargo run --manifest-path ../rs/Cargo.toml -p easydict_encrypt_secret"));
+        assert!(!makefile.contains("dotnet run --project tools/EncryptSecret"));
+        assert!(!makefile.contains("tools/EncryptSecret/EncryptSecret.csproj"));
+
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..");
+        assert!(!repo_root
+            .join("dotnet/tools/EncryptSecret/EncryptSecret.csproj")
+            .exists());
     }
 }

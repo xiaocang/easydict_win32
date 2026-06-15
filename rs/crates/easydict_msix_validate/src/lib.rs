@@ -1413,7 +1413,7 @@ fn temporary_repack_path(msix_path: &Path) -> PathBuf {
         .file_name()
         .map(OsString::from)
         .unwrap_or_else(|| OsString::from("package.msix"));
-    name.push(format!(".{}.fixed.tmp", std::process::id()));
+    name.push(format!(".{}.fixed.zip", std::process::id()));
     msix_path.with_file_name(name)
 }
 

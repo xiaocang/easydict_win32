@@ -21,6 +21,338 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-15: Added icon generator close-out lane
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because `dotnet/scripts/generate-app-icon-ico.ps1` and related asset-generation scripts were already replaced by `rs/crates/easydict_icon_generator` on the previously selected `image` and `ico` crates.
+- `Invoke-RsCoreSliceValidation.ps1` now has an `icon-generator` profile covering Rust formatter checks, parser validation for `generate-windows-assets.ps1`, `generate-assets-from-macos-icon.ps1`, and `convert-service-icons.ps1`, plus the full `easydict_icon_generator` Rust test suite.
+- The Rust crate now also guards the build/shim boundary that used to require a dotnet test: the workspace manifest must include `crates/easydict_icon_generator`, WinUI's `GenerateAppIconIco` target must invoke `cargo run ... -p easydict_icon_generator` with `--source-png`, `--output-ico`, and `--output-tray-png`, the retired `generate-app-icon-ico.ps1` path must stay absent, and compatibility shims must not reintroduce `System.Drawing` or `Add-Type -AssemblyName`.
+- Recommendation rules now route `rs/crates/easydict_icon_generator/**`, `dotnet/scripts/generate-windows-assets.ps1`, `dotnet/scripts/generate-assets-from-macos-icon.ps1`, and `dotnet/scripts/convert-service-icons.ps1` edits to `icon-generator`.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_icon_generator\src\lib.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile icon-generator`
+
+## 2026-06-15: Added MSIX validator close-out lane
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because `dotnet/tools/MsixValidate` was already replaced by `rs/crates/easydict_msix_validate` on the previously selected `zip`, `quick-xml`, `tempfile`, and shared `lib/easydict-runtime-guards` surface.
+- `Invoke-RsCoreSliceValidation.ps1` now has an `msix-validate` profile covering Rust formatter checks and the full `easydict_msix_validate` Rust contract suite: MSIX payload validation, Rust-only/hybrid runtime-profile defaults, bundle MinVersion validation, prepare-package-inputs, fix-minversion, and retained worker dedupe.
+- Recommendation rules now route `rs/crates/easydict_msix_validate/**` edits to `msix-validate`, so validator body changes no longer default to the adjacent `msix-runtime-profile` lane that only proves QDC/sign-and-install ordering around the validator.
+- The first full profile run exposed a Windows repack regression in the existing fake-MakeAppx test path: `Compress-Archive` refuses destination names ending in `.tmp`. `fix-msix-minversion` now writes its temporary repack output as `*.fixed.zip` before replacing the final `.msix`, matching the ZIP container constraint while preserving the original package on failure.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_msix_validate\src\lib.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile msix-validate`
+
+## 2026-06-15: Added encrypt-secret close-out lane
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because `dotnet/tools/EncryptSecret` was already replaced by `rs/crates/easydict_encrypt_secret` using the previously selected RustCrypto stack (`aes`, `cbc`, `base64`, and `ring`).
+- `Invoke-RsCoreSliceValidation.ps1` now has an `encrypt-secret` profile covering Rust formatter checks and the full `easydict_encrypt_secret` unit/CLI contract suite.
+- The Rust crate now also guards the packaging boundary that used to require a dotnet test: the workspace manifest must include `crates/easydict_encrypt_secret`, `dotnet/Makefile` must invoke `cargo run --manifest-path ../rs/Cargo.toml -p easydict_encrypt_secret`, and the retired `dotnet/tools/EncryptSecret/EncryptSecret.csproj` path must stay absent.
+- Recommendation rules now route `rs/crates/easydict_encrypt_secret/**` edits to `encrypt-secret`, and score Makefile `encrypt-secret` target diffs strongly enough to choose this lane instead of the broad `rust-only-boundary` Makefile fallback.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_encrypt_secret\src\lib.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile encrypt-secret`
+
+## 2026-06-15: Added Store listings close-out lane
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because `.winstore/scripts/Sync-StoreListings.ps1` was already replaced by the Rust `easydict_store_listings` tool using the previously selected `serde-saphyr` YAML parser.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `store-listings` profile covering Rust formatter checks, PowerShell parser validation for `.winstore/scripts/Sync-StoreListings.ps1`, `easydict_store_listings` unit/contract tests, and real `.winstore` metadata validation.
+- Recommendation rules now route `rs/crates/easydict_store_listings/**`, `.winstore/listings/**`, `.winstore/store-config.json`, `.winstore/scripts/Sync-StoreListings.ps1`, `.winstore/README.md`, and `.github/workflows/store-listings.yml` edits to `store-listings`, so Store metadata-only changes close in one wrapper pass instead of relying on release or rust-only boundary lanes.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath .winstore\scripts\Sync-StoreListings.ps1 -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile store-listings`
+
+## 2026-06-15: Added PDF-to-images close-out lane
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because `dotnet/tools/PdfToImages` was already replaced by the existing Rust `lib/easydict-pdf-render` wrapper around the previously researched `pdfium-render` crate and the `rs/crates/easydict_pdf_to_images` CLI.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `pdf-to-images` profile covering Rust formatter checks for the PDF render wrapper and diagnostic CLI, PowerShell parser validation for `dotnet/scripts/pdf-to-images.ps1`, standalone `lib/easydict-pdf-render` contracts, and workspace `easydict_pdf_to_images` CLI contracts.
+- Recommendation rules now route `lib/easydict-pdf-render/**`, `rs/crates/easydict_pdf_to_images/**`, and `dotnet/scripts/pdf-to-images.ps1` edits to `pdf-to-images`, so future helper/shim changes close in one wrapper pass instead of hand-picking separate cargo invocations.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath dotnet\scripts\pdf-to-images.ps1 -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile pdf-to-images`
+
+## 2026-06-15: Preserved dry-run command diff selectors with changed paths
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency fix; no new library was needed because the existing wrapper command reporter already owns selector argument formatting.
+- `Invoke-RsCoreSliceValidation.ps1 -DryRun -Json` now preserves explicit `-DiffFrom` / `-DiffTo` selectors even when `-ChangedPath` is also present, so a post-checkpoint audit such as `gstep:step-339 -> gstep:step-340` emits replay commands for the same slice instead of falling back to `gstep:@ -> worktree`.
+- Added a `core-validation-tooling` self-test that locks the selector-preserving `CurrentCloseOut`, `CurrentDryRunJson`, `SelectedProfileCloseOut`, and `SelectedProfileDryRunJson` command report contract.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DiffFrom gstep:step-339 -DiffTo gstep:step-340 -ChangedPath rs\crates\easydict_app\tests\cli_translate_behavior.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -DryRun -Json`
+
+## 2026-06-15: Locked CLI custom-streaming live stdout delivery
+
+- No production runtime behavior or dependency changed. This closes a verification gap in the existing Rust-owned Gemini/Doubao custom-streaming route, so no new library was needed; the route already uses the blocking `reqwest` line reader plus Easydict's custom SSE parsers.
+- Added `easydict_cli stream --service doubao --json` and `--service gemini --json` regressions with local SSE servers that block after the first parsed chunk. Each test proves the first chunk JSONL reaches stdout before the response completes, then verifies the final done event and absence of retained worker/CompatHost/`.NET` wording.
+- Extended the `custom-streaming` validation profile and self-test so CLI custom-streaming latency contracts run beside the existing app live-chunk and CLI local SSE aggregation contracts.
+- Tightened `-ChangedPath` recommendation scoring so dirty close-out runs also consider the actual diff text for the listed paths. Broad files such as `cli_translate_behavior.rs` now select the custom-streaming lane for Gemini/Doubao stream diffs instead of selecting every profile that path-matches the shared test file.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\cli_translate_behavior.rs`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test cli_translate_behavior custom_streaming_stream_command_writes -- --nocapture`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\tests\cli_translate_behavior.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -DryRun -Json`
+
+## 2026-06-15: Added ready-to-run dry-run validation commands
+
+- No runtime behavior or production dependency changed. This is another close-out tooling efficiency slice; no new library was needed because the wrapper can reuse its existing selector, quoting, profile, and dry-run report helpers.
+- `Invoke-RsCoreSliceValidation.ps1 -DryRun -Json` now includes a `Commands` object with `CurrentCloseOut` / `CurrentDryRunJson` for the active mode and `SelectedProfileCloseOut` / `SelectedProfileDryRunJson` for the fixed selected-profile equivalent.
+- The command report preserves `-ChangedPath` or non-default diff selectors, `-CheckTrailingWhitespace`, `-GstepCommitMessage`, `-AllRecommendedProfiles`, and `-MaxRecommendedProfiles`, so scripts/subagents can move from plan to validation/checkpoint without rebuilding wrapper invocations.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now lock this contract across the shared in-process report helper and the black-box `-RunRecommendedProfiles -DryRun -Json` CLI path.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1 -CheckTrailingWhitespace -DryRun -Json`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1 -CheckTrailingWhitespace -DryRun -Json -GstepCommitMessage "Emit dry-run close-out commands"`
+
+## 2026-06-15: Added machine-readable dry-run validation plans
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because the wrapper can reuse its existing profile, recommendation, and dry-run metadata.
+- `Invoke-RsCoreSliceValidation.ps1 -DryRun -Json` now emits the exact validation plan that the selected mode would run, including selected profiles, de-duplicated step list/count, trailing-whitespace scan paths, checkpoint preview, and recommendation summary for `-RunRecommendedProfiles`.
+- Human `-DryRun` output remains unchanged, while JSON dry-run output stays quiet and parseable so scripts/subagents can align tool test cases without scraping text or recomputing profile expansion.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now lock this contract for both the shared in-process report helper and the black-box `-RunRecommendedProfiles -DryRun -Json` CLI path.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Added MSIX runtime-profile close-out lane
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for MSIX diagnostic install/QDC/UI automation paths; no new library was needed because those paths already rely on the Rust `easydict_msix_validate` contracts and existing PowerShell shims.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `msix-runtime-profile` profile covering packager test formatting, PowerShell parser validation for `sign-and-install.ps1` and QDC deploy/install shims, QDC/UI automation rust-only runtime-profile static contracts, sign/install validator ordering, and QDC machine-scope provision/register ordering.
+- Recommendation rules now route `.github/workflows/ui-automation.yml`, `dotnet/scripts/sign-and-install.ps1`, `dotnet/scripts/qdc/Deploy-ToQdc.ps1`, `dotnet/scripts/qdc/Install-OnQdc.ps1`, and `msix_runtime_profile_contract_behavior.rs` edits to `msix-runtime-profile` instead of the broad `rust-only-boundary` lane.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath dotnet\scripts\qdc\Deploy-ToQdc.ps1 -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile msix-runtime-profile`
+
+## 2026-06-15: Added hybrid .NET runtime extraction close-out lane
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for the retained-runtime extraction shim; no new library was needed because the existing Rust implementation already uses the previously selected `reqwest` + `zip` stack behind the explicit `hybrid-dotnet-runtime-packaging` feature.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `dotnet-runtime-extract` profile covering packager formatting, PowerShell parser validation for `Extract-DotnetRuntime.ps1`, default CLI/library feature gates that hide the runtime downloader from rs builds, explicit-Hybrid shim forwarding, and the Rust extractor contracts behind the hybrid feature.
+- Recommendation rules now route `dotnet/scripts/Extract-DotnetRuntime.ps1` edits to `dotnet-runtime-extract` instead of the broad `rust-only-boundary` lane, while the broad boundary remains available for cross-surface default runtime policy changes.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath dotnet\scripts\Extract-DotnetRuntime.ps1 -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile dotnet-runtime-extract`
+
+## 2026-06-15: Added Rust helper build close-out lane
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for the Rust helper build shim; no new library was needed because `dotnet/scripts/Build-RustHelpers.ps1` already delegates to the Rust `easydict_packager build-rust-helpers` implementation and existing release-contract tests own the fake-cargo, runtime-profile, WindowsAI preflight, and legacy alias coverage.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `rust-helper-build` profile covering packager formatting, PowerShell parser validation for `Build-RustHelpers.ps1`, retired `.NET` helper project scans, child cargo rust-only runtime-profile isolation, and legacy `BrowserHostRegistrar.exe` alias opt-in guards.
+- Recommendation rules now route `dotnet/scripts/Build-RustHelpers.ps1` edits to `rust-helper-build` instead of the broad `rust-only-boundary` lane, while still allowing explicit rust-only boundary expansion when packaging policy changes cross default runtime surfaces.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile('dotnet\scripts\Build-RustHelpers.ps1', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior build_rust_helpers -- --nocapture`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Kept browser extension shim checks inside the browser-support lane
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice; no new library was needed because browser extension packaging already delegates to the Rust `easydict_packager` implementation and the existing release-contract test owns the fake-cargo shim coverage.
+- `Invoke-RsCoreSliceValidation.ps1 -Profile browser-support` now parses `browser-extension/scripts/Package-Extension.ps1` and runs `release_contract_behavior::browser_extension_powershell_shim*` alongside app diagnostics, registrar behavior, default extension release contracts, and package source scanning.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now lock the `Package-Extension.ps1` recommendation/dry-run coverage so future extension shim edits close in the same Rust-owned browser lane instead of relying on hand-picked filters.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile('browser-extension\scripts\Package-Extension.ps1', [ref]$null, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior browser_extension_powershell_shim -- --nocapture`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Shared the close-out recommendation execution plan
+
+- No runtime behavior or production dependency changed. This is a close-out tooling efficiency slice; no new library was needed because the wrapper can reuse its existing profile/recommendation metadata and PowerShell self-test harness.
+- `Invoke-RsCoreSliceValidation.ps1` now builds the default recommended validation plan through one shared helper, including selected profiles plus the de-duplicated step list that `-RunRecommendedProfiles` actually executes.
+- `-RecommendProfiles` human output now shows the default selected profiles and unique step count, while `-RecommendProfiles -Json` exposes `DefaultSelectedProfiles`, `DefaultSelectedStepCount`, and `DefaultSelectedSteps` for subagents/scripts to consume without reimplementing profile expansion.
+- `Test-RsCoreSliceValidation.ps1` now uses the same helper for recommended dry-run text and asserts the human/JSON outputs stay aligned with the selected tool test cases.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Routed MDX real-corpus helper to the MDX native close-out lane
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for the optional MDX/MDD real-corpus helper; no new library was needed because the lane already reuses the local `lib/rs-mdict` reader plus existing app MDX/MDD behavior tests.
+- `Invoke-RsCoreSliceValidation.ps1` now treats `rs/scripts/Invoke-MdxRealCorpusValidation.ps1` as a direct `mdx-native` path match instead of relying on incidental `MDX` / `mdx` text matches in the script body.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now lock this path recommendation and record that real-corpus helper edits should close with `mdx-native`.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-MdxRealCorpusValidation.ps1 -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-MdxRealCorpusValidation.ps1,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Route MDX real corpus helper validation"`
+
+## 2026-06-15: Added LongDoc script shim close-out profile
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for the root `scripts/translate-long-doc.ps1` Rust-only shim; no new library was needed because the script already delegates to the Rust `easydict_long_doc` helper/Cargo route and the existing Rust release-contract tests own the fake helper/fake forbidden-tool coverage.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `longdoc-script` profile covering PowerShell parser validation plus the `release_contract_behavior::translate_long_doc_script*` contract group for Rust-only static checks, helper/Cargo forwarding, forced rust-only child environment, retired `-UseDotnetLegacy`, and retained `-RustHelperPath` / `-AppDir` guard behavior.
+- Recommendation rules now route `scripts/translate-long-doc.ps1` edits to `longdoc-script`, so root LongDoc shim work no longer fails with “no validation profile matched” or requires hand-picked PowerShell parser and packager test filters each iteration.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane, lock the recommendation/dry-run behavior, and execute the lightweight parser step so child PowerShell quoting drift is caught before final close-out.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath scripts\translate-long-doc.ps1 -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath scripts\translate-long-doc.ps1,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -DryRun`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath scripts\translate-long-doc.ps1,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add LongDoc script validation profile"`
+
+## 2026-06-15: Added app preview/window close-out profile
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for the default Rust app preview binary and window option contracts; no new library was needed because the slice reuses the existing `win_fluent` view schema/testkit surface.
+- `Invoke-RsCoreSliceValidation.ps1` now has an `app-preview-window` profile covering `main.rs`/`window_options.rs` formatting, `easydict_app` binary build, main-window preview scenario smoke, window option/window-specific UI contracts, and the default process-spawn retained-runtime scan.
+- Recommendation rules now route `main.rs` and `window_options.rs` edits to `app-preview-window`, so default GUI preview/window startup slices no longer fail with “no validation profile matched”.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane while keeping broad `ui_contract.rs` visual work profile-exempt for the parallel UI/parity track.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\main.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\window_options.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\main.rs,rs\crates\easydict_app\src\window_options.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -DryRun`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\main.rs,rs\crates\easydict_app\src\window_options.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add app preview window validation profile"` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+
+## 2026-06-15: Added LongDoc CLI close-out profile
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for the default Rust LongDoc CLI entrypoint. No new library was needed because `long_document_cli.rs` already uses the mature `clap` parser crate and this slice only aligns existing tests/tooling.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `longdoc-cli` profile covering LongDoc CLI formatting, help text without legacy `--app-dir`, native service listing, stale `.NET` payload boundaries, target Auto preflight, LocalAI native preflight, and the default process-spawn retained-runtime scan.
+- Recommendation rules now route `long_document_cli.rs`, `bin/easydict_long_doc.rs`, and `long_document_cli_behavior.rs` edits to `longdoc-cli` instead of the broader `rust-only-boundary`, so future default LongDoc CLI slices run a smaller aligned matrix by default.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane and lock the recommendation/dry-run behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\long_document_cli.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\bin\easydict_long_doc.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\long_document_cli.rs,rs\crates\easydict_app\src\bin\easydict_long_doc.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -DryRun`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\long_document_cli.rs,rs\crates\easydict_app\src\bin\easydict_long_doc.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add LongDoc CLI validation profile"` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+
+## 2026-06-15: Added retained worker IPC close-out profile
+
+- No runtime behavior or production dependency changed. This is a validation-routing slice for explicit retained-worker compatibility tests; no new library was needed because the existing Rust `easydict-ipc-mock` helper already reuses app-owned `compat_protocol` DTOs and `serde_json`.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `retained-worker-ipc` profile covering retained IPC formatting, `easydict-ipc-mock` feature-on binary build, `compat_client` retained worker IPC contracts, manifest feature-gating for the mock helper, and default boundary scans that prevent PowerShell/`.NET` mock runtimes from returning.
+- Recommendation rules now route `compat_client.rs`, `tests/compat_client.rs`, and `bin/easydict_ipc_mock.rs` edits to `retained-worker-ipc`, so future explicit retained-worker IPC slices do not fail with “no validation profile matched” or accidentally skip the Rust mock helper guard.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane as explicit retained compatibility work, separate from the default rs runtime lanes.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\bin\easydict_ipc_mock.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\bin\easydict_ipc_mock.rs,rs\crates\easydict_app\src\compat_client.rs,rs\crates\easydict_app\tests\compat_client.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add retained worker IPC validation profile"` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+
+## 2026-06-15: Added CLI translate close-out profile
+
+- No runtime behavior or production dependency changed. This is a close-out efficiency slice for the default Rust CLI entrypoint; `clap` remains the high-quality reusable parser candidate if the hand-written parser is later replaced, but this slice does not replace parser behavior and therefore does not add a new dependency.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `cli-translate` profile covering `cli_translate.rs` parser formatting/unit tests, default legacy retained-worker flag rejection, default native Google CLI smoke, LocalAI no-worker diagnostics, feature-gated legacy flag source boundary, and the default process-spawn retained-runtime scan.
+- Recommendation rules now route `cli_translate.rs` edits to `cli-translate`, so default CLI parser/entrypoint changes no longer fail with “no validation profile matched” or depend on incidental Foundry/traditional/OpenAI diff keywords.
+- The generic `bin/easydict_cli.rs` path now also routes to `cli-translate` by default instead of being path-routed straight to `foundry-local`; Foundry-specific CLI diffs still append `foundry-local` through diff keywords without suppressing the default CLI no-runtime close-out lane.
+- `Test-RsCoreSliceValidation.ps1`, `migration-list.md`, and `experience.md` now record this lane so future CLI parser/default translate changes close with the same aligned tests.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\cli_translate.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\bin\easydict_cli.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\cli_translate.rs,rs\crates\easydict_app\src\bin\easydict_cli.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Route CLI binary validation to CLI translate profile"` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+
+## 2026-06-15: Added startup activation close-out profile
+
+- No runtime behavior or production dependency changed. Startup activation is pure argument/protocol parsing plus Rust app message routing, so no new crate was needed.
+- `activation.rs` now has focused unit coverage for shell `--ocr-translate`, rs and legacy protocol OCR payloads, unsupported/non-OCR activation ignoring, and existing-instance signal vs cold-launch disposition.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `startup-activation` profile covering formatter checks, activation parser contracts, Quick Translate startup activation routing, shell/protocol OCR activation registration, and the default boundary guard that keeps activation parsing decoupled from WinFluent `Task` types and legacy runtime helpers.
+- Recommendation rules now route `activation.rs` edits to `startup-activation`, so shell/protocol OCR entrypoint changes no longer fail with “no validation profile matched” or require hand-picked Quick Translate/default-boundary filters. When the same slice also edits the validation wrapper or wrapper self-tests, default `-RunRecommendedProfiles` keeps the highest-scoring feature lane and appends `core-validation-tooling` even if the tooling paths score higher, so tool alignment cannot suppress the feature validation.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\activation.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\activation.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -DryRun`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\activation.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add startup activation validation profile"` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+
+## 2026-06-15: Added app core catalog close-out profile
+
+- No runtime behavior or production dependency changed. This is a close-out efficiency slice for Rust-owned defaults that are touched often near the end of the migration.
+- `app_data.rs` now has focused unit coverage for the default `EasydictRs` app-data root, the separate legacy `Easydict` root, and the no-`LOCALAPPDATA` fallback without mutating process-global environment variables.
+- `translation_services_behavior.rs` now also verifies that default main/floating service IDs resolve to app-visible catalog entries and that visible service IDs/names do not expose retained runtime markers such as `.NET`, `CompatHost`, workers, PowerShell, or `hostfxr`.
+- `Invoke-RsCoreSliceValidation.ps1` now has an `app-core-catalog` profile covering formatter checks, app-data root contracts, service catalog contracts, default native Google CLI smoke, and the default no-retained-runtime process-spawn scan.
+- Recommendation rules now route `app_data.rs`, `translation_services.rs`, and `translation_services_behavior.rs` edits to `app-core-catalog`; direct WinFluent platform/tray dirty files are also profile-exempt in the wrapper isolation list, while core app files remain outside that automatic exemption.
+- No new library research was needed because this slice only aligns tests/tooling around existing Rust-owned constants and catalog data.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\app_data.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\translation_services.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile app-core-catalog` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\app_data.rs,rs\crates\easydict_app\tests\translation_services_behavior.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add app core catalog validation profile"` (with parallel `lib.rs` and `quick_translate_behavior.rs` temporarily isolated to `gstep:@`)
+
+## 2026-06-15: Added shared asset download close-out profile
+
+- No runtime behavior or production dependency changed. This is a validation-efficiency slice for Rust-owned downloadable asset paths used by fonts, layout models, and OpenVINO/NLLB.
+- `Invoke-RsCoreSliceValidation.ps1` now has an `asset-downloads` profile that formats `resource_download.rs`, `font_download.rs`, `layout_model_download.rs`, `openvino_download.rs`, and their focused behavior tests.
+- The new lane runs shared resource download policy coverage, CJK font download/cache coverage, LongDoc layout model asset coverage, and OpenVINO asset download coverage in one UI/parity-isolated pass.
+- Recommendation rules now route direct `resource_download.rs`, `font_download.rs`, and `resource_download_behavior.rs` edits to `asset-downloads`, so those repeated core-simple slices no longer fail with “no validation profile matched” or require hand-picked cargo commands.
+- `-GstepCommitMessage` close-out now performs a checkpoint scope guard: after validation, the wrapper rereads `gstep:@ -> worktree` and refuses to checkpoint paths outside the initial `-ChangedPath`/dirty scope. This prevents long validation runs from absorbing unrelated parallel UI/parity edits that appear before the final `gstep commit`.
+- No new library research was needed because this slice does not replace the downloader implementation; it aligns validation around the existing Rust-owned `reqwest`/filesystem asset download code.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\resource_download.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\font_download.rs -DryRun`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile asset-downloads,core-validation-tooling -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md,lib\winfluent-rs\crates\win_fluent\src\platform.rs,lib\winfluent-rs\crates\win_fluent_platform_win\src\lib.rs,rs\crates\easydict_app\src\lib.rs -CheckTrailingWhitespace -GstepCommitMessage "Add shared asset download validation profile"`
+
+## 2026-06-15: Added settings runtime-status close-out profile
+
+- No runtime behavior or production dependency changed. This is a validation-efficiency slice for an already Rust-owned Settings runtime/status boundary.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `settings-runtime-status` profile covering `settings_status.rs` formatting, `settings_status` lib tests for layout/font/OpenVINO/Foundry/WindowsAI status probes, and Quick Translate behavior tests for `SettingsRuntimeStatusLoaded` writeback.
+- Recommendation rules now route direct `settings_status.rs` edits and reducer diffs mentioning `SettingsRuntimeStatus`, `open_vino_status`, `foundry_local_status`, or `windows_ai_status` to that focused lane instead of failing with no profile or falling back to a broader no-runtime smoke.
+- No new library research was needed for this slice because it does not replace the runtime-status implementation; it aligns validation around existing Rust-owned libraries (`lib/easydict-windows-ai`, `lib/easydict-foundry-local`, `lib/easydict-nllb`, layout-model and font download helpers).
+
+Validation:
+
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile settings-runtime-status,core-validation-tooling -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add settings runtime-status validation profile"`
+
+## 2026-06-15: Kept tooling validation in recommended close-out
+
+- No runtime behavior or production dependency changed. This is a close-out efficiency slice for the Rust-only migration loop.
+- `Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles` now appends `core-validation-tooling` to the default selected profiles whenever the changed paths include the validation wrapper or its self-tests, even if a feature lane scores higher from diff text.
+- Explicit caps still stay explicit: `-MaxRecommendedProfiles` continues to return only the requested number of lanes, and `-AllRecommendedProfiles` continues to return every matched lane.
+- `Test-RsCoreSliceValidation.ps1` now locks the feature-plus-tooling case so future tool edits do not require hand-written `-Profile feature,core-validation-tooling` commands.
+
+Validation:
+
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Keep tooling validation in recommended close-out"`
+
 ## 2026-06-15: Surfaced OCR capture background diagnostics
 
 - No new dependency was needed. The overlay background freeze reuses the existing Rust-owned `lib/easydict-windows-screen-capture` helper through the app `screen_capture_native` Result API.

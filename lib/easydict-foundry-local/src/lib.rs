@@ -983,6 +983,18 @@ fn normalized_optional(value: Option<&str>) -> Option<String> {
 }
 
 fn validate_foundry_local_cli_executable_name(value: String) -> (String, Option<String>) {
+    validate_foundry_local_cli_executable_name_with_canonicalizer(value, |path| {
+        fs::canonicalize(path).ok()
+    })
+}
+
+fn validate_foundry_local_cli_executable_name_with_canonicalizer<F>(
+    value: String,
+    canonicalize: F,
+) -> (String, Option<String>)
+where
+    F: Fn(&Path) -> Option<PathBuf>,
+{
     let trimmed = value.trim().trim_matches('"').to_string();
     if trimmed.is_empty() {
         return (FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(), None);
@@ -993,6 +1005,16 @@ fn validate_foundry_local_cli_executable_name(value: String) -> (String, Option<
             FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(),
             Some(trimmed),
         );
+    }
+
+    if let Some(canonical_path) = canonicalize(Path::new(&trimmed)) {
+        let canonical = canonical_path.to_string_lossy().to_string();
+        if is_retained_dotnet_runtime_or_worker_command(&canonical) {
+            return (
+                FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(),
+                Some(format!("{trimmed} -> {canonical}")),
+            );
+        }
     }
 
     (trimmed, None)
@@ -1018,11 +1040,32 @@ fn is_retained_dotnet_runtime_or_worker_command(value: &str) -> bool {
             | "pwsh"
             | "pwsh.exe"
             | "hostfxr.dll"
+            | "hostpolicy.dll"
+            | "coreclr.dll"
+            | "clrjit.dll"
+            | "system.private.corelib.dll"
     ) || lower.contains("easydict.compathost")
         || lower.contains("easydict.workers.")
         || lower.contains(".runtimeconfig.json")
+        || has_retained_dotnet_runtime_or_worker_path_component(&lower)
         || lower.contains("/host/fxr/")
         || lower.contains(".ps1")
+}
+
+fn has_retained_dotnet_runtime_or_worker_path_component(value: &str) -> bool {
+    value
+        .split('/')
+        .filter(|component| !component.is_empty())
+        .any(|component| {
+            matches!(
+                component,
+                "dotnet"
+                    | "workers"
+                    | "microsoft.netcore.app"
+                    | "microsoft.windowsdesktop.app"
+                    | "microsoft.aspnetcore.app"
+            )
+        })
 }
 
 fn foundry_local_default_log_dirs() -> Vec<PathBuf> {
@@ -1309,6 +1352,25 @@ mod tests {
             assert!(error.message.contains("retained runtime/worker"));
             assert!(error.message.contains(blocked));
         }
+    }
+
+    #[test]
+    fn cli_executable_override_rejects_canonical_retained_dotnet_runtime_target() {
+        let requested = r"C:\Tools\Foundry\foundry.exe".to_string();
+        let canonical =
+            PathBuf::from(r"C:\Easydict\dotnet\shared\Microsoft.NETCore.App\8.0.11\foundry.exe");
+
+        let (executable_name, blocked_executable_name) =
+            validate_foundry_local_cli_executable_name_with_canonicalizer(
+                requested.clone(),
+                |_| Some(canonical.clone()),
+            );
+
+        assert_eq!(executable_name, "foundry");
+        let blocked =
+            blocked_executable_name.expect("canonical retained runtime target should be blocked");
+        assert!(blocked.contains(&requested));
+        assert!(blocked.contains("Microsoft.NETCore.App"));
     }
 
     #[test]

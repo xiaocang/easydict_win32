@@ -1073,7 +1073,7 @@ fn mdd_resource_reference_to_key(
     }
 
     let path = percent_decode_ascii(path);
-    let path = path.trim_start_matches('/');
+    let path = strip_leading_dot_relative_segments(path.trim_start_matches('/'));
     if path.trim().is_empty() {
         return Ok(None);
     }
@@ -1138,6 +1138,16 @@ fn strip_query_and_fragment(reference: &str) -> &str {
         .find(['?', '#'])
         .map(|index| &reference[..index])
         .unwrap_or(reference)
+}
+
+fn strip_leading_dot_relative_segments(mut path: &str) -> &str {
+    loop {
+        if let Some(rest) = path.strip_prefix("./").or_else(|| path.strip_prefix(".\\")) {
+            path = rest;
+        } else {
+            return path;
+        }
+    }
 }
 
 fn percent_decode_ascii(value: &str) -> String {

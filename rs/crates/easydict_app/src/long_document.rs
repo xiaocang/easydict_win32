@@ -4056,16 +4056,25 @@ mod tests {
             .bilingual_output_path
             .as_deref()
             .expect("bilingual fallback output path");
-        assert!(fs::read_to_string(bilingual_path)
-            .expect("bilingual fallback text")
-            .contains("Fallback PDF"));
+        let bilingual_text = fs::read_to_string(bilingual_path).expect("bilingual fallback text");
+        assert!(bilingual_text.contains("Fallback PDF"));
 
         let sidecar_json =
             fs::read_to_string(&result_json_path).expect("result JSON sidecar should be written");
-        assert!(
-            !sidecar_json.contains("Long Document worker"),
-            "native fallback sidecar must not mention retained workers: {sidecar_json}"
-        );
+        for retained_marker in ["Long Document worker", "CompatHost", ".NET"] {
+            assert!(
+                !output_pdf_text.contains(retained_marker),
+                "native fallback PDF output must not mention retained marker {retained_marker}: {output_pdf_text}"
+            );
+            assert!(
+                !bilingual_text.contains(retained_marker),
+                "native fallback bilingual output must not mention retained marker {retained_marker}: {bilingual_text}"
+            );
+            assert!(
+                !sidecar_json.contains(retained_marker),
+                "native fallback sidecar must not mention retained marker {retained_marker}: {sidecar_json}"
+            );
+        }
         let sidecar: serde_json::Value =
             serde_json::from_str(&sidecar_json).expect("sidecar should parse");
         assert_eq!(sidecar["checkpoint"]["inputMode"], "Pdf");

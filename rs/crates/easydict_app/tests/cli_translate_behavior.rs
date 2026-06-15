@@ -795,6 +795,117 @@ fn native_google_cli_succeeds_against_local_endpoint_without_worker_or_compat_ho
 }
 
 #[test]
+fn native_google_cli_batch_succeeds_against_local_endpoint_without_worker_or_compat_host_wording() {
+    let settings_dir = unique_temp_dir("easydict-cli-google-native-batch-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("Google batch listener should bind");
+    listener
+        .set_nonblocking(true)
+        .expect("listener should become nonblocking");
+    let endpoint = format!(
+        "http://{}/translate_a/single",
+        listener.local_addr().unwrap()
+    );
+    let (request_tx, request_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        for response_text in ["Bonjour", "Bonsoir"] {
+            let (mut stream, _) = accept_with_timeout(listener.try_clone().unwrap());
+            let (request, body) = read_http_request(&stream);
+            request_tx.send((request, body)).unwrap();
+
+            let response_body =
+                format!(r#"{{"sentences":[{{"trans":"{response_text}"}}],"src":"en"}}"#);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\n\
+                 Content-Type: application/json\r\n\
+                 Content-Length: {}\r\n\
+                 Connection: close\r\n\r\n\
+                 {}",
+                response_body.len(),
+                response_body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        }
+    });
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("batch")
+        .args([
+            "--service",
+            "google",
+            "--from",
+            "en",
+            "--to",
+            "fr",
+            "--text",
+            "Hello\nGood evening",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .env("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_GOOGLE", &endpoint)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    let requests = (0..2)
+        .map(|_| {
+            request_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("CLI should call the native Google endpoint for every batch line")
+        })
+        .collect::<Vec<_>>();
+    server.join().expect("server should finish");
+
+    assert!(
+        output.status.success(),
+        "Google batch CLI should succeed\nstdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+    assert!(requests[0].0.starts_with("GET /translate_a/single?"));
+    assert!(requests[0].0.contains("client=gtx"));
+    assert!(requests[0].0.contains("sl=en"));
+    assert!(requests[0].0.contains("tl=fr"));
+    assert!(requests[0].0.contains("q=Hello"));
+    assert!(requests[0].1.is_empty());
+    assert!(requests[1].0.starts_with("GET /translate_a/single?"));
+    assert!(requests[1].0.contains("client=gtx"));
+    assert!(requests[1].0.contains("sl=en"));
+    assert!(requests[1].0.contains("tl=fr"));
+    assert!(
+        requests[1].0.contains("q=Good+evening") || requests[1].0.contains("q=Good%20evening"),
+        "second Google batch request should contain encoded source text:\n{}",
+        requests[1].0
+    );
+    assert!(requests[1].1.is_empty());
+
+    let stdout = stdout(&output);
+    let stderr = stderr(&output);
+    let lines = stdout.lines().collect::<Vec<_>>();
+    assert_eq!(
+        lines.len(),
+        2,
+        "batch JSON mode should print one result event per input line:\n{stdout}"
+    );
+    assert!(lines[0].contains("\"event\":\"result\""));
+    assert!(lines[0].contains("\"index\":1"));
+    assert!(lines[0].contains("\"text\":\"Hello\""));
+    assert!(lines[0].contains("\"translatedText\":\"Bonjour\""));
+    assert!(lines[0].contains("\"serviceId\":\"google\""));
+    assert!(lines[1].contains("\"event\":\"result\""));
+    assert!(lines[1].contains("\"index\":2"));
+    assert!(lines[1].contains("\"text\":\"Good evening\""));
+    assert!(lines[1].contains("\"translatedText\":\"Bonsoir\""));
+    assert!(lines[1].contains("\"serviceId\":\"google\""));
+    assert_no_retained_worker_wording(&stdout, &stderr, "native Google batch CLI");
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
 fn native_caiyun_cli_succeeds_against_local_api_without_worker_or_compat_host_wording() {
     let settings_dir = unique_temp_dir("easydict-cli-caiyun-native-settings");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
@@ -1380,6 +1491,89 @@ fn native_niutrans_cli_succeeds_without_worker_or_compat_host_wording() {
             "native NiuTrans CLI should not mention {forbidden}\nstdout:\n{stdout}\nstderr:\n{stderr}"
         );
     }
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[cfg(feature = "enable-linguee-service")]
+#[test]
+fn native_linguee_cli_succeeds_against_local_api_without_worker_or_compat_host_wording() {
+    let settings_dir = unique_temp_dir("easydict-cli-linguee-native-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("Linguee listener should bind");
+    listener
+        .set_nonblocking(true)
+        .expect("listener should become nonblocking");
+    let endpoint = format!(
+        "http://{}/api/v2/translations",
+        listener.local_addr().unwrap()
+    );
+    let (request_tx, request_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = accept_with_timeout(listener);
+        let (request, body) = read_http_request(&stream);
+        request_tx.send((request, body)).unwrap();
+
+        let response_body =
+            r#"[{"featured":true,"translations":[{"text":"Bonjour"},{"text":"Salut"}]}]"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\n\
+             Content-Type: application/json\r\n\
+             Content-Length: {}\r\n\
+             Connection: close\r\n\r\n\
+             {}",
+            response_body.len(),
+            response_body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    });
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "linguee",
+            "--from",
+            "en",
+            "--to",
+            "fr",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .env("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_LINGUEE", &endpoint)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    let (request, request_body) = request_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("CLI should call the native Linguee endpoint");
+    server.join().expect("server should finish");
+
+    assert!(
+        output.status.success(),
+        "Linguee CLI should succeed\nstdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+    assert!(request.starts_with("GET /api/v2/translations?"));
+    assert!(request.contains("query=Hello"));
+    assert!(request.contains("src=en"));
+    assert!(request.contains("dst=fr"));
+    assert!(request_body.is_empty());
+
+    let stdout = stdout(&output);
+    let stderr = stderr(&output);
+    assert!(stdout.contains("\"translatedText\":\"Bonjour\""));
+    assert!(stdout.contains("\"serviceId\":\"linguee\""));
+    assert!(stdout.contains("\"serviceName\":\"Linguee Dictionary\""));
+    assert!(stdout.contains("\"alternatives\":[\"Salut\"]"));
+    assert_no_retained_worker_wording(&stdout, &stderr, "native Linguee CLI");
 
     let _ = fs::remove_dir_all(settings_dir);
 }

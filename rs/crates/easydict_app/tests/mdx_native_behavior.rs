@@ -945,6 +945,38 @@ fn native_mdd_html_inline_rewrites_background_data_srcset_and_sound_variants() {
 }
 
 #[test]
+fn native_mdd_html_inline_normalizes_dot_relative_resource_paths() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([
+        (r"\images\logo.png", b"LOGO".as_slice()),
+        (r"\images\hero.png", b"HERO".as_slice()),
+        (r"\images\bg.webp", b"BG".as_slice()),
+        (r"\audio\pron.mp3", b"ID3".as_slice()),
+    ]))]);
+
+    let html = inline_mdd_resources_in_html_with_factory(
+        &mut mdd_factory,
+        &dictionary,
+        r#"<div>
+            <img src="./images/logo.png">
+            <source srcset="./images/hero.png 1x, .\images\logo.png 2x">
+            <audio src='.\audio\pron.mp3'></audio>
+            <span style="background:url(./images/bg.webp)"></span>
+        </div>"#,
+    )
+    .expect("dot-relative MDD resource references should be rewritten");
+
+    assert!(html.contains(r#"src="data:image/png;base64,TE9HTw==""#));
+    assert!(html.contains(
+        r#"srcset="data:image/png;base64,SEVSTw== 1x, data:image/png;base64,TE9HTw== 2x""#
+    ));
+    assert!(html.contains("src='data:audio/mpeg;base64,SUQz'"));
+    assert!(html.contains("url('data:image/webp;base64,Qkc=')"));
+    assert!(!html.contains("./images/"));
+    assert!(!html.contains(r".\audio\pron.mp3"));
+}
+
+#[test]
 fn mdd_resource_key_and_mime_helpers_match_dictionary_resource_contract() {
     assert_eq!(
         normalize_mdd_resource_key("images/logo.JPG").unwrap(),

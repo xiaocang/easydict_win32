@@ -21,6 +21,100 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Hardened Foundry CLI override canonical target validation
+
+- Rechecked the external-process boundary before changing it. No new dependency was needed: the only default process boundary remains the Rust-owned `lib/easydict-foundry-local` wrapper around the native Foundry Local CLI.
+- `EASYDICT_FOUNDRY_LOCAL_CLI` validation now checks both the requested override string and its filesystem canonical target when one can be resolved. Aliases that point back into retained `.NET` runtime or worker payload roots are rejected before any `Command::new(...)` call.
+- Extended the denylist to cover retained payload path components (`dotnet`, `workers`, shared framework names) and common CoreCLR runtime DLLs in addition to the existing `dotnet.exe`, PowerShell, CompatHost, worker exe, `.runtimeconfig.json`, `host/fxr`, and `.ps1` markers.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml cli_executable_override -- --nocapture`
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml -- --nocapture`
+- `rustfmt --edition 2021 --check lib/easydict-foundry-local/src/lib.rs`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
+## 2026-06-12: Added traditional HTTP CLI batch native coverage
+
+- Rechecked reusable CLI/library options before changing the test contract. No new crate was needed: the existing CLI batch loop, Rust `traditional_http` request planner, debug endpoint override, and Reqwest executor already cover the route.
+- Added a real `easydict_cli batch --service google --json` regression against a local HTTP server. The test proves each input line sends a Rust-native Google GET request, batch JSON mode prints one result per line, and stdout/stderr stay free of retained worker, CompatHost, or `.NET` wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_google_cli_batch_succeeds_against_local_endpoint_without_worker_or_compat_host_wording -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test cli_translate_behavior native_google_cli -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/cli_translate_behavior.rs`
+
+## 2026-06-12: Added feature-on Linguee CLI native contract
+
+- Ran this as a parallel worker slice and rechecked it locally. No new dependency was needed: Linguee continues to use the existing Rust `traditional_http` request planner, Reqwest executor, and parser.
+- Added the debug/test-only `EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_LINGUEE` override so the real `easydict_cli translate --service linguee --json` binary can be tested against a local HTTP server when `enable-linguee-service` is enabled. Release builds keep the normal Linguee endpoint.
+- Added a feature-gated CLI regression proving Linguee sends the expected keyless GET request, returns primary translation plus alternatives, and keeps stdout/stderr free of retained worker, CompatHost, or `.NET` wording.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --features enable-linguee-service --test cli_translate_behavior native_linguee_cli_succeeds_against_local_api_without_worker_or_compat_host_wording -- --exact --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets --features enable-linguee-service`
+
+## 2026-06-12: Extended OCR app-dir no-worker coverage to Ollama
+
+- Rechecked OCR provider reuse before adding the regression. No new OCR library was needed: Ollama OCR already uses the Rust-native blocking HTTP path and the legacy `/api/generate` request/response contract.
+- Added an app-dir regression for Ollama OCR with stale `workers/ocr/Easydict.Workers.Ocr.exe` and `Easydict.CompatHost.exe` markers present. The request still posts to the configured Ollama endpoint, returns native OCR text, and does not mention or probe the legacy OCR worker path.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test ocr_behavior app_dir_runner_uses_ollama_provider_without_legacy_ocr_worker_probe -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test ocr_behavior -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/ocr_behavior.rs`
+
+## 2026-06-12: Completed the dot-relative MDD resource edge
+
+- Rechecked the current MDD route with a parallel subagent audit before changing it. No new parser dependency was needed: the existing MIT `lib/rs-mdict` fork remains the active MDX/MDD implementation, while earlier alternatives either had licensing risk or weaker MDD coverage.
+- Native MDX rich HTML resource rewriting now treats leading `./` and `.\\` path segments as local MDD resource references before canonical key normalization. This covers common dictionary HTML such as `./images/logo.png`, `.\\audio\\pron.mp3`, `srcset` candidates, and CSS `url(./images/bg.webp)` without touching external/data/javascript/entry references.
+- Added `native_mdd_html_inline_normalizes_dot_relative_resource_paths` and re-ran the focused MDD suites for `lib/rs-mdict`, app-level MDX resource inlining, Quick Translate rich HTML retention, and legacy settings companion-MDD discovery.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior native_mdd_html_inline_normalizes_dot_relative_resource_paths -- --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --lib mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_paths -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/mdx_native.rs rs/crates/easydict_app/tests/mdx_native_behavior.rs`
+
+## 2026-06-12: Tightened settings resource readiness status
+
+- Rechecked reusable library options with a parallel subagent audit. No new dependency was needed: the Rust app already owns the strict `layout_model_download` and `font_download` readiness helpers.
+- Settings runtime status no longer treats arbitrary `models/*.onnx` or `fonts/*.{ttf,otf,ttc}` files as `Available`. Layout model status now requires the managed `Models/onnxruntime.dll` + `Models/doclayout_yolo.onnx` files to pass the existing minimum-size checks, and CJK font status now requires one of the managed `Fonts/NotoSans*.ttf` assets.
+- Added regression coverage for unmanaged loose asset files staying `Not downloaded`, plus a managed layout-model positive path so the stricter status still recognizes valid Rust-downloaded assets.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app settings_status --lib -- --nocapture`
+
+## 2026-06-12: Hardened browser bridge source staging against renamed legacy payloads
+
+- Rechecked the browser bridge boundary before changing it. No new library was needed: this is a local path/manifest contract around the existing Rust native messaging host and registrar.
+- `BrowserRegistrarCore::install(...)` still requires the source file name to be `easydict-native-bridge.exe`, and now also rejects sources staged from `workers/` or `dotnet/` payload roots. This prevents a stale retained worker or bundled runtime file from being renamed to the native bridge executable name and copied into the rs browser-bridge root.
+- The registrar parser now rejects the legacy dotnet bridge root name `Easydict`, keeping rs portable browser manifests under the `EasydictRs` root by default and preventing an explicit rs install from overwriting the dotnet legacy bridge directory.
+- Added registrar coverage proving legacy NativeBridge/CompatHost/WinUI/LongDoc/LocalAI source executables and renamed legacy payload sources are rejected before staging, while normal Rust bridge install/status/uninstall behavior remains unchanged.
+- Strengthened the native PDF source-extractor fallback regression so the successful content-stream fallback PDF output, bilingual output, and sidecar cannot contain retained worker, CompatHost, or `.NET` markers.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior install_rejects_renamed_bridge_sources_from_legacy_worker_or_dotnet_payload_roots -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app long_document::tests::native_pdf_runner_source_extractor_error_falls_back_to_content_stream_and_writes_result_json --lib -- --nocapture`
+
+## 2026-06-12: Strengthened Custom API OCR app-dir no-worker coverage
+
+- Rechecked OCR provider reuse before adding the regression. No new OCR library was needed: the Rust OCR route already has Windows Native, Ollama, and Custom API providers, with Custom API using the existing blocking HTTP client and OpenAI-compatible request shapes.
+- Added an app-dir regression for Custom API OCR with stale `workers/ocr/Easydict.Workers.Ocr.exe` and `Easydict.CompatHost.exe` markers present. The request still posts to the configured Custom API endpoint, returns native OCR text, and does not mention or probe the legacy OCR worker path.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test ocr_behavior app_dir_runner_uses_custom_api_provider_without_legacy_ocr_worker_probe -- --nocapture`
+
 ## 2026-06-12: Aligned persistent translation-cache clearing with SettingsSnapshot cache roots
 
 - Rechecked cache-library reuse before changing the route. No new crate was needed: the existing `LongDocumentTranslationCache` SQLite helper already owns the `.NET`-compatible table shape and clear operation.

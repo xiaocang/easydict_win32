@@ -79,6 +79,20 @@ fn parser_rejects_bridge_root_names_that_escape_the_local_app_data_child() {
 }
 
 #[test]
+fn parser_rejects_legacy_dotnet_bridge_root_for_rs_portable() {
+    assert!(matches!(
+        parse_browser_registrar_args(["install", "--bridge-root-name", LEGACY_BRIDGE_ROOT_NAME])
+            .expect_err("legacy dotnet root should be rejected"),
+        BrowserRegistrarParseError::InvalidValue { .. }
+    ));
+    assert!(matches!(
+        parse_browser_registrar_args(["install", "--bridge-root-name", "easydict"])
+            .expect_err("legacy dotnet root should be rejected case-insensitively"),
+        BrowserRegistrarParseError::InvalidValue { .. }
+    ));
+}
+
+#[test]
 fn parser_reports_missing_and_unknown_commands_like_the_registrar_cli() {
     assert_eq!(
         parse_browser_registrar_args(std::iter::empty::<&str>()).expect_err("missing command"),
@@ -409,7 +423,9 @@ fn install_rejects_dotnet_and_compat_host_sources_even_when_they_exist() {
 
     for forbidden_name in [
         "Easydict.CompatHost.exe",
+        "Easydict.NativeBridge.exe",
         "Easydict.WinUI.exe",
+        "Easydict.Workers.LongDoc.exe",
         "Easydict.Workers.LocalAi.exe",
     ] {
         let source = sandbox.path(forbidden_name);
@@ -433,6 +449,46 @@ fn install_rejects_dotnet_and_compat_host_sources_even_when_they_exist() {
             !bridge_dir.exists(),
             "{forbidden_name} should not be staged"
         );
+    }
+}
+
+#[test]
+fn install_rejects_renamed_bridge_sources_from_legacy_worker_or_dotnet_payload_roots() {
+    let sandbox = TestSandbox::new("reject_renamed_payload_sources");
+
+    for forbidden_parent in [
+        Path::new("workers").join("ocr"),
+        Path::new("dotnet").join("host").join("fxr"),
+    ] {
+        let source_dir = sandbox.root.join(&forbidden_parent);
+        fs::create_dir_all(&source_dir).expect("forbidden source dir should be created");
+        let source = source_dir.join("easydict-native-bridge.exe");
+        fs::write(&source, b"renamed legacy payload").expect("write renamed source");
+        let bridge_dir = sandbox.path(&format!(
+            "browser-bridge-{}",
+            forbidden_parent
+                .display()
+                .to_string()
+                .replace(['\\', '/', ':'], "-")
+        ));
+        let mut core = BrowserRegistrarCore::new(&bridge_dir, MemoryBrowserRegistry::default());
+
+        let output = core.install(
+            true,
+            true,
+            &source,
+            &parse_chrome_ext_ids(DEFAULT_CHROME_EXT_IDS),
+            DEFAULT_FIREFOX_EXT_ID,
+        );
+
+        assert!(
+            !output.success,
+            "{} should be rejected even after being renamed to the native bridge exe",
+            source.display()
+        );
+        let error = output.error.as_deref().expect("error text");
+        assert!(error.contains("non-Rust native bridge"));
+        assert!(!bridge_dir.exists(), "renamed source should not be staged");
     }
 }
 

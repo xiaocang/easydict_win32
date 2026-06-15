@@ -605,6 +605,9 @@ fn traditional_http_endpoint_override_env_key(
         TraditionalHttpServiceKind::NiuTrans => {
             Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_NIUTRANS")
         }
+        TraditionalHttpServiceKind::Linguee => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_LINGUEE")
+        }
         TraditionalHttpServiceKind::Volcano => {
             Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_VOLCANO")
         }

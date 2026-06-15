@@ -517,6 +517,89 @@ fn app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
 }
 
 #[test]
+fn app_dir_runner_uses_ollama_provider_without_legacy_ocr_worker_probe() {
+    let (endpoint, server) = serve_one_http_response(r#"{ "response": " ollama native text " }"#);
+    let app_dir = write_temp_legacy_ocr_app_dir("ollama_no_legacy_runtime");
+    let path = write_temp_bgra("ollama_app_dir", &[0, 255, 0, 255]);
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 13,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: path.to_string_lossy().into_owned(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("Ollama".to_string()),
+            ocr_endpoint: Some(endpoint),
+            ocr_model: Some("glm-ocr".to_string()),
+            ocr_system_prompt: Some("Read via Ollama.".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize_with_app_dir(request, &app_dir);
+    let http_request = server.join().expect("HTTP test server should finish");
+
+    fs::remove_file(&path).ok();
+    fs::remove_dir_all(&app_dir).ok();
+    assert_eq!(
+        outcome.result.expect("OCR result").text,
+        "ollama native text"
+    );
+    assert!(http_request.starts_with("POST /api/generate "));
+    assert!(http_request.contains(r#""model":"glm-ocr""#));
+    assert!(http_request.contains(r#""prompt":"Read via Ollama.""#));
+    assert!(!http_request.contains("Easydict.Workers.Ocr"));
+    assert!(!http_request.contains("CompatHost"));
+}
+
+#[test]
+fn app_dir_runner_uses_custom_api_provider_without_legacy_ocr_worker_probe() {
+    let (endpoint, server) = serve_one_http_response(
+        r#"{ "choices": [{ "message": { "content": " custom api native text " } }] }"#,
+    );
+    let custom_endpoint = endpoint.replace("/api/generate", "/v1/chat/completions");
+    let app_dir = write_temp_legacy_ocr_app_dir("custom_api_no_legacy_runtime");
+    let path = write_temp_bgra("custom_api_app_dir", &[255, 0, 0, 255]);
+    let request = easydict_app::OcrRecognizeRequest {
+        query_id: 12,
+        mode: OcrMode::Translate,
+        params: OcrRecognizeParams {
+            pixel_data_path: path.to_string_lossy().into_owned(),
+            pixel_width: 1,
+            pixel_height: 1,
+            preferred_language_tag: None,
+        },
+        settings: SettingsSnapshot {
+            ocr_engine: Some("CustomApi".to_string()),
+            ocr_api_key: Some("sk-ocr".to_string()),
+            ocr_endpoint: Some(custom_endpoint),
+            ocr_model: Some("gpt-vision".to_string()),
+            ocr_system_prompt: Some("Read via custom API.".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let outcome = run_ocr_recognize_with_app_dir(request, &app_dir);
+    let http_request = server.join().expect("HTTP test server should finish");
+
+    fs::remove_file(&path).ok();
+    fs::remove_dir_all(&app_dir).ok();
+    assert_eq!(
+        outcome.result.expect("OCR result").text,
+        "custom api native text"
+    );
+    assert!(http_request.starts_with("POST /v1/chat/completions "));
+    assert!(http_request.contains("Authorization: Bearer sk-ocr"));
+    assert!(http_request.contains(r#""model":"gpt-vision""#));
+    assert!(http_request.contains(r#""content":"Read via custom API.""#));
+    assert!(!http_request.contains("Easydict.Workers.Ocr"));
+    assert!(!http_request.contains("CompatHost"));
+}
+
+#[test]
 fn app_dir_runner_uses_native_windows_ocr_without_legacy_runtime() {
     let app_dir = write_temp_legacy_ocr_app_dir("native_windows_no_legacy_runtime");
     let request = easydict_app::OcrRecognizeRequest {

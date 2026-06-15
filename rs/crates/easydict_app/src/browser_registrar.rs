@@ -561,6 +561,7 @@ fn parse_bridge_root_name(option: &str, value: &str) -> Result<String, BrowserRe
     if value.is_empty()
         || value == "."
         || value == ".."
+        || value.eq_ignore_ascii_case(LEGACY_BRIDGE_ROOT_NAME)
         || value.chars().any(|ch| forbidden_chars.contains(&ch))
     {
         return Err(BrowserRegistrarParseError::InvalidValue {
@@ -585,10 +586,22 @@ fn delete_file(path: impl AsRef<Path>) {
 }
 
 fn source_bridge_path_is_rust_native_bridge(path: &Path) -> bool {
-    path.file_name()
+    let has_expected_name = path
+        .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.eq_ignore_ascii_case(BRIDGE_EXE_NAME))
-        .unwrap_or(false)
+        .unwrap_or(false);
+
+    has_expected_name && !path_has_forbidden_bridge_source_component(path)
+}
+
+fn path_has_forbidden_bridge_source_component(path: &Path) -> bool {
+    path.components().any(|component| {
+        let Some(value) = component.as_os_str().to_str() else {
+            return false;
+        };
+        value.eq_ignore_ascii_case("workers") || value.eq_ignore_ascii_case("dotnet")
+    })
 }
 
 fn path_points_to_bridge(path: &Path, bridge_path: &Path) -> bool {

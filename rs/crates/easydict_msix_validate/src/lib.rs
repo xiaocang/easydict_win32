@@ -334,6 +334,7 @@ pub struct PreparePackageInputsOptions {
     pub output_manifest: PathBuf,
     pub msix_version: Option<String>,
     pub verify_targetsize_icons: bool,
+    pub runtime_profile: PackageRuntimeProfile,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -348,6 +349,7 @@ pub struct PreparePackageInputsOutcome {
 pub enum PreparePackageInputsError {
     PublishDirMissing(PathBuf),
     ManifestMissing(PathBuf),
+    ForbiddenPayload { path: String, reason: &'static str },
     MissingRequiredAssets(Vec<String>),
     NotEnoughTargetsizeIcons { found: usize, required: usize },
     MissingIdentity,
@@ -458,6 +460,12 @@ impl fmt::Display for PreparePackageInputsError {
             }
             Self::ManifestMissing(path) => {
                 write!(formatter, "Manifest not found: {}", path.display())
+            }
+            Self::ForbiddenPayload { path, reason } => {
+                write!(
+                    formatter,
+                    "forbidden package input payload '{path}': {reason}"
+                )
             }
             Self::MissingRequiredAssets(assets) => {
                 write!(
@@ -854,6 +862,7 @@ pub fn prepare_package_inputs(
         ));
     }
 
+    validate_prepare_package_runtime_payload(&options.publish_dir, options.runtime_profile)?;
     verify_required_msix_assets(&options.publish_dir)?;
     let targetsize_icon_count = if options.verify_targetsize_icons {
         Some(verify_targetsize_icons(&options.publish_dir)?)
@@ -892,6 +901,86 @@ pub fn prepare_package_inputs(
         resources_pri_already_present,
         targetsize_icon_count,
     })
+}
+
+fn validate_prepare_package_runtime_payload(
+    publish_dir: &Path,
+    runtime_profile: PackageRuntimeProfile,
+) -> Result<(), PreparePackageInputsError> {
+    if runtime_profile == PackageRuntimeProfile::Hybrid {
+        return Ok(());
+    }
+
+    let mut entries = Vec::new();
+    collect_prepare_package_payload_entries(publish_dir, publish_dir, &mut entries)?;
+    entries.sort();
+    if let Some(path) = entries.iter().find(|path| {
+        RUST_ONLY_FORBIDDEN_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
+    }) {
+        return Err(PreparePackageInputsError::ForbiddenPayload {
+            path: path.clone(),
+            reason: RUST_ONLY_FORBIDDEN_REASON,
+        });
+    }
+
+    if let Some(path) = entries
+        .iter()
+        .find(|path| rust_only_forbidden_prepare_payload_marker(path))
+    {
+        return Err(PreparePackageInputsError::ForbiddenPayload {
+            path: path.clone(),
+            reason: RUST_ONLY_FORBIDDEN_REASON,
+        });
+    }
+
+    Ok(())
+}
+
+fn collect_prepare_package_payload_entries(
+    root: &Path,
+    current: &Path,
+    entries: &mut Vec<String>,
+) -> Result<(), PreparePackageInputsError> {
+    for entry in fs::read_dir(current).map_err(|error| PreparePackageInputsError::Io {
+        path: current.to_path_buf(),
+        message: error.to_string(),
+    })? {
+        let entry = entry.map_err(|error| PreparePackageInputsError::Io {
+            path: current.to_path_buf(),
+            message: error.to_string(),
+        })?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| PreparePackageInputsError::Io {
+                path: path.clone(),
+                message: error.to_string(),
+            })?;
+        let relative = path.strip_prefix(root).unwrap_or(&path);
+        let normalized = relative
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_start_matches("./")
+            .to_ascii_lowercase();
+        if file_type.is_dir() {
+            entries.push(format!("{normalized}/"));
+            collect_prepare_package_payload_entries(root, &path, entries)?;
+        } else if file_type.is_file() {
+            entries.push(normalized);
+        }
+    }
+
+    Ok(())
+}
+
+fn rust_only_forbidden_prepare_payload_marker(path: &str) -> bool {
+    let entry = ArchivePayloadEntry {
+        original: path.to_string(),
+        normalized: normalize_archive_path(path),
+    };
+    rust_only_forbidden_runtime_marker(&entry)
 }
 
 fn verify_required_msix_assets(publish_dir: &Path) -> Result<(), PreparePackageInputsError> {
@@ -1849,7 +1938,7 @@ fn rust_only_forbidden_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
         || file_name.starts_with("easydict.workers.")
         || file_name.starts_with("easydict.nativebridge")
         || file_name.starts_with("easydict.sidecarclient")
-        || file_name.starts_with("easydict.winui")
+        || is_forbidden_easydict_winui_runtime_file(file_name)
         || (file_name.starts_with("system.") && file_name.ends_with(".dll"))
         || file_name.starts_with("microsoft.csharp")
         || file_name.starts_with("microsoft.visualbasic")
@@ -1861,6 +1950,13 @@ fn rust_only_forbidden_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
             .iter()
             .any(|prefix| entry.normalized.contains(prefix))
         || entry.normalized.contains("host/fxr/")
+}
+
+fn is_forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
+    let Some(suffix) = file_name.strip_prefix("easydict.winui.") else {
+        return false;
+    };
+    matches!(suffix, "exe" | "dll" | "runtimeconfig.json" | "deps.json")
 }
 
 fn retained_workers_required(manifest: &ManifestInfo) -> bool {
@@ -3077,6 +3173,7 @@ mod tests {
             output_manifest: output_manifest.clone(),
             msix_version: Some("2.3.4.5".to_string()),
             verify_targetsize_icons: true,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
         })
         .expect("prepare package inputs");
 
@@ -3115,6 +3212,7 @@ mod tests {
             output_manifest: temp.path().join("out.appxmanifest"),
             msix_version: None,
             verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
         })
         .unwrap_err();
 
@@ -3136,6 +3234,7 @@ mod tests {
             output_manifest: temp.path().join("out.appxmanifest"),
             msix_version: None,
             verify_targetsize_icons: true,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
         })
         .unwrap_err();
 
@@ -3146,6 +3245,93 @@ mod tests {
                 required: MIN_TARGETSIZE_ICON_COUNT
             }
         );
+    }
+
+    #[test]
+    fn prepare_package_inputs_defaults_to_rust_only_and_rejects_retained_runtime_payload() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-runtime-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(
+            temp.path(),
+            "workers/longdoc/Easydict.Workers.LongDoc.exe",
+            b"stale longdoc",
+        );
+        write_test_file(
+            temp.path(),
+            "dotnet/host/fxr/8.0.11/hostfxr.dll",
+            b"stale hostfxr",
+        );
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: temp.path().join("out.appxmanifest"),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "dotnet/".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_REASON
+            }
+        );
+        assert!(
+            !temp.path().join("out.appxmanifest").exists(),
+            "rust-only prepare-package-inputs must fail before writing a prepared manifest"
+        );
+    }
+
+    #[test]
+    fn prepare_package_inputs_hybrid_profile_allows_legacy_publish_dir_to_continue_to_validation() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-hybrid-runtime-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(
+            temp.path(),
+            "workers/longdoc/Easydict.Workers.LongDoc.exe",
+            b"longdoc",
+        );
+        write_test_file(
+            temp.path(),
+            "dotnet/host/fxr/8.0.11/hostfxr.dll",
+            b"hostfxr",
+        );
+        write_test_file(
+            temp.path(),
+            "Easydict.WinUI.runtimeconfig.json",
+            b"metadata",
+        );
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let outcome = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::Hybrid,
+        })
+        .expect("hybrid prepare should leave retained payload checks to validation");
+
+        assert_eq!(outcome.output_manifest, output_manifest);
+        assert!(outcome.output_manifest.exists());
     }
 
     #[test]

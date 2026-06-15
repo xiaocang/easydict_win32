@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 
 use easydict_packager::{
-    build_rust_helpers, download_and_extract_dotnet_runtime, pack_rs_portable,
-    validate_rs_portable_payload, zip_directory, BuildRustHelpersOptions,
-    ExtractDotnetRuntimeOptions, PackRustPortableOptions, PackageBrowserExtensionOptions,
-    PackageRuntimeProfile, ValidateRustPortableOptions, ZipDirectoryOptions,
+    build_rust_helpers, pack_rs_portable, validate_rs_portable_payload, zip_directory,
+    BuildRustHelpersOptions, PackRustPortableOptions, PackageBrowserExtensionOptions,
+    ValidateRustPortableOptions, ZipDirectoryOptions,
+};
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+use easydict_packager::{
+    download_and_extract_dotnet_runtime, ExtractDotnetRuntimeOptions, PackageRuntimeProfile,
 };
 
 fn main() {
@@ -19,7 +22,10 @@ fn run(args: Vec<String>) -> i32 {
 
     match args[0].as_str() {
         "zip-directory" => run_zip_directory(&args[1..]),
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         "extract-dotnet-runtime" => run_extract_dotnet_runtime(&args[1..]),
+        #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+        "extract-dotnet-runtime" => run_extract_dotnet_runtime_feature_disabled(),
         "build-rust-helpers" => run_build_rust_helpers(&args[1..]),
         "package-browser-extension" => run_package_browser_extension(&args[1..]),
         "validate-rs-portable" => run_validate_rs_portable(&args[1..]),
@@ -337,6 +343,15 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
     }
 }
 
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+fn run_extract_dotnet_runtime_feature_disabled() -> i32 {
+    eprintln!(
+        "error: extract-dotnet-runtime is only available when easydict_packager is built with --features hybrid-dotnet-runtime-packaging"
+    );
+    2
+}
+
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn run_extract_dotnet_runtime(args: &[String]) -> i32 {
     let mut rid = None;
     let mut output_dir = None;
@@ -529,6 +544,18 @@ fn print_usage() {
     }
 }
 
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+fn packager_usage_lines() -> &'static [&'static str] {
+    &[
+        "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
+        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>",
+        "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
+        "       easydict_packager validate-rs-portable --package <dir-or-zip>",
+        "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
+    ]
+}
+
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn packager_usage_lines() -> &'static [&'static str] {
     &[
         "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
@@ -552,13 +579,24 @@ fn bytes_to_kb(bytes: u64) -> f64 {
 mod tests {
     use std::fs;
     use std::path::Path;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     use std::sync::Mutex;
 
     use super::*;
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    fn extract_dotnet_runtime_command_requires_hybrid_packaging_feature() {
+        let code = run(vec!["extract-dotnet-runtime".to_string()]);
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn extract_dotnet_runtime_rejects_missing_runtime_profile_before_download() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();
@@ -576,6 +614,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn extract_dotnet_runtime_rejects_explicit_rust_only_profile_before_download() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();
@@ -595,6 +634,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn extract_dotnet_runtime_rejects_rust_only_environment_even_with_explicit_hybrid() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = EnvironmentSnapshot::capture();
@@ -615,6 +655,22 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    fn default_usage_hides_dotnet_runtime_extraction_command() {
+        let usage = packager_usage_lines().join("\n");
+
+        assert!(
+            !usage.contains("extract-dotnet-runtime"),
+            "default packager usage must not expose .NET runtime extraction:\n{usage}"
+        );
+        assert!(
+            usage.contains("pack-rs-portable --workspace"),
+            "default usage should keep the rs portable command visible:\n{usage}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn usage_marks_dotnet_runtime_extraction_as_hybrid_only_not_rs_portable() {
         let usage = packager_usage_lines().join("\n");
 
@@ -754,6 +810,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn explicit_runtime_profile_parser_accepts_hybrid_and_rust_only_aliases() {
         assert_eq!(
             PackageRuntimeProfile::parse_explicit("hybrid"),
@@ -770,11 +827,13 @@ mod tests {
         assert_eq!(PackageRuntimeProfile::parse_explicit("dotnet"), None);
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     struct EnvironmentSnapshot {
         easydict_runtime_profile: Option<String>,
         runtime_profile: Option<String>,
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     impl EnvironmentSnapshot {
         fn capture() -> Self {
             Self {
@@ -789,11 +848,13 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn clear_runtime_profile_environment() {
         std::env::remove_var("EASYDICT_RUNTIME_PROFILE");
         std::env::remove_var("RUNTIME_PROFILE");
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn restore_environment_value(name: &str, value: Option<String>) {
         if let Some(value) = value {
             std::env::set_var(name, value);

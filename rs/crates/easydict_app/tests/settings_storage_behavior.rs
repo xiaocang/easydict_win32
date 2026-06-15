@@ -408,6 +408,95 @@ fn settings_storage_load_file_persists_runtime_only_worker_key_cleanup() {
     assert_array_not_contains(&root["MainWindowEnabledServices"], "openvino-local-ai");
 }
 
+#[test]
+fn settings_storage_load_file_migrates_legacy_foundry_local_service() {
+    let temp = TempDir::new("settings-storage-foundry-local-migration");
+    let path = temp.path().join("settings.json");
+    fs::write(
+        &path,
+        r#"{
+  "MainWindowEnabledServices": ["foundry-local", "custom-openai"],
+  "MainWindowServiceEnabledQuery": { "foundry-local": false, "custom-openai": true }
+}"#,
+    )
+    .unwrap();
+
+    let loaded = load_settings_file(&path).expect("settings load").settings;
+    assert_eq!(loaded.local_ai_provider, "FoundryLocal");
+    assert!(loaded
+        .main_window_services
+        .iter()
+        .any(|service| service.service_id == "windows-local-ai"
+            && service.enabled
+            && !service.enabled_query));
+    assert!(loaded
+        .main_window_services
+        .iter()
+        .any(|service| service.service_id == "custom-openai"
+            && service.enabled
+            && service.enabled_query));
+
+    let persisted = fs::read_to_string(&path).unwrap();
+    let root: Value = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(root["LocalAIProvider"], "FoundryLocal");
+    assert_array_contains(&root["MainWindowEnabledServices"], "windows-local-ai");
+    assert_array_contains(&root["MainWindowEnabledServices"], "custom-openai");
+    assert_array_not_contains(&root["MainWindowEnabledServices"], "foundry-local");
+    assert_eq!(
+        root["MainWindowServiceEnabledQuery"]["windows-local-ai"],
+        false
+    );
+    assert!(root["MainWindowServiceEnabledQuery"]
+        .get("foundry-local")
+        .is_none());
+}
+
+#[test]
+fn settings_storage_load_file_merges_multiple_legacy_local_ai_ids_without_guessing_provider() {
+    let temp = TempDir::new("settings-storage-local-ai-legacy-conflict");
+    let path = temp.path().join("settings.json");
+    fs::write(
+        &path,
+        r#"{
+  "MainWindowEnabledServices": ["openvino-local-ai", "foundry-local"],
+  "MainWindowServiceEnabledQuery": {
+    "openvino-local-ai": false,
+    "foundry-local": true
+  }
+}"#,
+    )
+    .unwrap();
+
+    let loaded = load_settings_file(&path).expect("settings load").settings;
+    assert_eq!(
+        loaded.local_ai_provider, "Auto",
+        "conflicting legacy LocalAI service ids should not force a provider preference"
+    );
+    assert!(loaded
+        .main_window_services
+        .iter()
+        .any(|service| service.service_id == "windows-local-ai"
+            && service.enabled
+            && !service.enabled_query));
+
+    let persisted = fs::read_to_string(&path).unwrap();
+    let root: Value = serde_json::from_str(&persisted).unwrap();
+    assert!(root.get("LocalAIProvider").is_none());
+    assert_array_contains(&root["MainWindowEnabledServices"], "windows-local-ai");
+    assert_array_not_contains(&root["MainWindowEnabledServices"], "openvino-local-ai");
+    assert_array_not_contains(&root["MainWindowEnabledServices"], "foundry-local");
+    assert_eq!(
+        root["MainWindowServiceEnabledQuery"]["windows-local-ai"],
+        false
+    );
+    assert!(root["MainWindowServiceEnabledQuery"]
+        .get("openvino-local-ai")
+        .is_none());
+    assert!(root["MainWindowServiceEnabledQuery"]
+        .get("foundry-local")
+        .is_none());
+}
+
 #[cfg(windows)]
 #[test]
 fn settings_storage_roundtrips_file_with_decrypted_runtime_state() {

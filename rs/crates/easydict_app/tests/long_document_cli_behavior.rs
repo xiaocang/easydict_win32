@@ -304,6 +304,134 @@ fn retry_failed_without_failed_chunks_reexports_from_result_json_without_provide
 }
 
 #[test]
+fn retry_failed_pdf_ocr_sidecar_reexports_text_without_pdf_or_worker_lookup() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-pdf-ocr");
+    fs::create_dir_all(&work_dir).expect("work directory should be created");
+    let input_path = work_dir.join("scan.pdf");
+    let output_pdf_path = work_dir.join("scan-translated.pdf");
+    let mut output_text_path = output_pdf_path.clone();
+    output_text_path.set_extension("txt");
+    let bilingual_text_path = work_dir.join("scan-translated-bilingual.txt");
+    let result_json_path = work_dir.join("scan-result.json");
+    fs::write(&input_path, "%PDF-1.7\n% retry uses sidecar OCR chunks\n")
+        .expect("sample input should be written");
+    fs::write(
+        &result_json_path,
+        format!(
+            r#"{{
+  "state": "Completed",
+  "outputPath": "{}",
+  "bilingualOutputPath": "{}",
+  "totalChunks": 1,
+  "succeededChunks": 1,
+  "resultJsonPath": "{}",
+  "checkpoint": {{
+    "routeMetadataVersion": 1,
+    "inputPath": "{}",
+    "outputPath": "{}",
+    "pdfExportMode": "ContentStreamReplacement",
+    "inputMode": "Pdf",
+    "outputMode": "Both",
+    "serviceId": "google",
+    "from": "English",
+    "to": "SimplifiedChinese",
+    "text": {{
+      "sourceChunks": ["Scanned OCR retry"],
+      "chunkMetadata": [
+        {{
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "sourceBlockType": "Paragraph",
+          "orderInPage": 0
+        }}
+      ],
+      "translatedChunks": {{
+        "0": "[zh] Scanned OCR retry"
+      }},
+      "failedChunkIndexes": []
+    }},
+    "pdf": {{
+      "sourceChunks": ["Scanned OCR retry"],
+      "chunkMetadata": [
+        {{
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "sourceBlockId": "pdf-p1-ocr-b1",
+          "sourceBlockType": "Paragraph",
+          "orderInPage": 0,
+          "readingOrderScore": 1.0,
+          "boundingBox": null,
+          "textStyle": null,
+          "translationSkipped": false,
+          "preserveOriginalTextInPdfExport": false,
+          "retryCount": 0,
+          "fallbackText": null,
+          "detectedFontNames": null
+        }}
+      ],
+      "translatedChunks": {{
+        "0": "[zh] Scanned OCR retry"
+      }},
+      "failedChunkIndexes": []
+    }}
+  }}
+}}"#,
+            json_path(&output_text_path),
+            json_path(&bilingual_text_path),
+            json_path(&result_json_path),
+            json_path(&input_path),
+            json_path(&output_pdf_path)
+        ),
+    )
+    .expect("PDF OCR result sidecar should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args(["--target-language", "zh-Hans", "--from", "en"])
+        .arg("--output")
+        .arg(&output_pdf_path)
+        .arg("--result-json")
+        .arg(&result_json_path)
+        .arg("--retry-failed")
+        .output()
+        .expect("long document CLI should run");
+
+    assert_success(&output);
+    assert!(
+        !output_pdf_path.exists(),
+        "retrying a PDF OCR checkpoint should reexport text instead of writing a PDF"
+    );
+    assert_eq!(
+        fs::read_to_string(&output_text_path).expect("retry text output should be written"),
+        "[zh] Scanned OCR retry"
+    );
+    let bilingual_text =
+        fs::read_to_string(&bilingual_text_path).expect("retry bilingual output should be written");
+    assert!(bilingual_text.contains("Scanned OCR retry"));
+    assert!(bilingual_text.contains("[zh] Scanned OCR retry"));
+
+    let rewritten =
+        fs::read_to_string(&result_json_path).expect("retry sidecar should be rewritten");
+    assert!(rewritten.contains(r#""pdf""#));
+    assert!(rewritten.contains("pdf-p1-ocr-b1"));
+    assert!(
+        stdout(&output).contains("State: Completed"),
+        "retry CLI output should report completed state:\n{}",
+        stdout(&output)
+    );
+    let stderr = stderr(&output);
+    for forbidden in ["Long Document worker", "CompatHost", ".NET workers"] {
+        assert!(
+            !stderr.contains(forbidden),
+            "PDF OCR retry should not probe retained worker path {forbidden}:\n{stderr}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
 fn retry_failed_malformed_sidecar_fails_locally_without_worker_wording() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-malformed-sidecar");
     let app_dir = work_dir.join("app");
@@ -609,6 +737,94 @@ fn env_overrides_foundry_local_endpoint_and_model_before_worker_lookup() {
 }
 
 #[test]
+fn local_ai_provider_aliases_route_to_native_preflight_without_worker_lookup() {
+    #[derive(Clone, Copy)]
+    enum ExpectedRoute {
+        WindowsAi,
+        FoundryLocal,
+        OpenVino,
+    }
+
+    let cases = [
+        ("windows_ai", ExpectedRoute::WindowsAi),
+        ("windows-ai", ExpectedRoute::WindowsAi),
+        ("phi_silica", ExpectedRoute::WindowsAi),
+        ("foundry_local", ExpectedRoute::FoundryLocal),
+        ("local-ai", ExpectedRoute::FoundryLocal),
+        ("open_vino", ExpectedRoute::OpenVino),
+        ("open-vino", ExpectedRoute::OpenVino),
+    ];
+
+    for (alias, expected_route) in cases {
+        let work_dir = unique_temp_dir(&format!(
+            "easydict-long-doc-cli-local-ai-alias-{}",
+            alias.replace(['-', '_'], "-")
+        ));
+        let settings_dir = work_dir.join("settings");
+        let cache_dir = work_dir.join("openvino-cache");
+        fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+        fs::create_dir_all(&cache_dir).expect("OpenVINO cache directory should be created");
+        fs::write(
+            settings_dir.join("settings.json"),
+            r#"{"LocalAIProvider":"Auto"}"#,
+        )
+        .expect("settings should be written");
+        let input_path = work_dir.join("sample.txt");
+        fs::write(&input_path, "Hello LocalAI alias long document")
+            .expect("sample input should be written");
+
+        let output = long_doc_cli()
+            .arg("--input")
+            .arg(&input_path)
+            .args([
+                "--target-language",
+                "zh-Hans",
+                "--from",
+                "en",
+                "--service",
+                "windows-local-ai",
+            ])
+            .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+            .env("EASYDICT_LOCAL_AI_PROVIDER", alias)
+            .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
+            .env("EASYDICT_FOUNDRY_LOCAL_ENDPOINT", "foundry-local-invalid")
+            .env("EASYDICT_FOUNDRY_LOCAL_MODEL", "cli-foundry-model")
+            .env("EASYDICT_OPENVINO_CACHE_DIR", &cache_dir)
+            .output()
+            .expect("long document CLI should run");
+
+        assert_failure(&output);
+        let stderr = stderr(&output);
+        match expected_route {
+            ExpectedRoute::WindowsAi => {
+                let normalized = stderr.to_ascii_lowercase();
+                assert!(
+                    normalized.contains("windows ai")
+                        || normalized.contains("phi silica")
+                        || normalized.contains("winrt client is disabled"),
+                    "alias {alias} should route to native WindowsAI/Phi handling:\n{stderr}"
+                );
+            }
+            ExpectedRoute::FoundryLocal => {
+                assert!(
+                    stderr.contains("OpenAI HTTP request failed"),
+                    "alias {alias} should route to native Foundry/OpenAI-compatible handling:\n{stderr}"
+                );
+            }
+            ExpectedRoute::OpenVino => {
+                assert!(
+                    stderr.contains("OpenVINO runtime or NLLB-200 model is not downloaded"),
+                    "alias {alias} should route to native OpenVINO preflight:\n{stderr}"
+                );
+            }
+        }
+        assert_no_retained_longdoc_worker_wording(&stderr, alias);
+
+        let _ = fs::remove_dir_all(work_dir);
+    }
+}
+
+#[test]
 fn foundry_local_cli_override_targeting_retained_worker_is_not_spawned() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-bad-foundry-override");
     let settings_dir = work_dir.join("settings");
@@ -685,6 +901,19 @@ fn assert_failure(output: &Output) {
         "command should fail\nstdout:\n{}\nstderr:\n{}",
         stdout(output),
         stderr(output)
+    );
+}
+
+fn assert_no_retained_longdoc_worker_wording(stderr: &str, context: &str) {
+    for forbidden in ["Long Document worker", "CompatHost", ".NET workers"] {
+        assert!(
+            !stderr.contains(forbidden),
+            "{context} should not probe retained worker path {forbidden}:\n{stderr}"
+        );
+    }
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "{context} should not describe a compat host route:\n{stderr}"
     );
 }
 

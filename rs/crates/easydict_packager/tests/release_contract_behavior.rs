@@ -178,6 +178,52 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
 }
 
 #[test]
+fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
+    let root = repo_root();
+
+    for (relative_path, expected_notice) in [
+        ("README.md", "WinGet is a legacy/hybrid install path"),
+        ("README_ZH.md", "legacy/hybrid"),
+    ] {
+        let text = read_text(&root.join(relative_path));
+        let portable_index = text
+            .find("easydict-rs-portable-vX.Y.Z-win-x64.zip")
+            .unwrap_or_else(|| panic!("{relative_path} should recommend the rs portable ZIP"));
+        let legacy_index = text.find("Legacy/Hybrid").unwrap_or_else(|| {
+            panic!("{relative_path} should keep a Legacy/Hybrid install section")
+        });
+        let winget_index = text
+            .find("winget install xiaocang.EasydictforWindows")
+            .unwrap_or_else(|| panic!("{relative_path} should still document the winget command"));
+
+        assert!(
+            portable_index < legacy_index,
+            "{relative_path} should present the default Rust portable ZIP before legacy/hybrid installs",
+        );
+        assert!(
+            legacy_index < winget_index,
+            "{relative_path} should place WinGet under Legacy/Hybrid, not before the default rs portable install",
+        );
+        assert_contains(
+            &text,
+            expected_notice,
+            &format!("{relative_path} should label WinGet as legacy/hybrid instead of default rs install"),
+        );
+        let legacy_install_section = &text[legacy_index..winget_index];
+        assert_contains(
+            legacy_install_section,
+            ".NET",
+            &format!("{relative_path} should tie WinGet to the retained .NET package"),
+        );
+        assert_contains(
+            legacy_install_section,
+            "Rust",
+            &format!("{relative_path} should say WinGet is not the default Rust portable install"),
+        );
+    }
+}
+
+#[test]
 fn windows_ai_build_script_has_strict_rs_portable_binding_gate() {
     let root = repo_root();
     let build_script = read_text(&root.join("lib/easydict-windows-ai/build.rs"));
@@ -737,6 +783,108 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
 
 #[cfg(windows)]
 #[test]
+fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_tools() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_LONG_DOC_HELPER_RECORD",
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-use-cargo-retry");
+    let fake_bin = test_root.join("bin");
+    let app_dir = test_root.join("app");
+    let cargo_record_path = test_root.join("cargo-args.txt");
+    let forbidden_tool_record = test_root.join("forbidden-tools.txt");
+    let input_path = test_root.join("input.pdf");
+    let output_path = test_root.join("translated.pdf");
+    let result_json_path = test_root.join("translated-result.json");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_long_doc_cargo_script(&fake_bin);
+    write_fake_dotnet_forbidden_tool_script(&fake_bin);
+    write_stale_dotnet_payload_markers(&app_dir);
+    fs::write(&input_path, b"%PDF-1.7\n").expect("write input");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &cargo_record_path);
+    std::env::set_var(
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        &forbidden_tool_record,
+    );
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-InputFile")
+        .arg(&input_path)
+        .args(["-TargetLanguage", "zh-Hans", "-SourceLanguage", "en"])
+        .arg("-OutputFile")
+        .arg(&output_path)
+        .arg("-ResultJsonPath")
+        .arg(&result_json_path)
+        .arg("-RetryFailed")
+        .args(["-ServiceId", "google", "-OutputMode", "both"])
+        .args(["-PdfExportMode", "Overlay", "-PageRange", "2-3"])
+        .arg("-AppDir")
+        .arg(&app_dir)
+        .arg("-UseCargo")
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        output.status.success(),
+        "translate-long-doc -UseCargo shim should invoke fake cargo successfully\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !forbidden_tool_record.exists(),
+        "-UseCargo LongDoc shim must not launch dotnet or retained runtime tools"
+    );
+    let record = read_text(&cargo_record_path);
+    let expected_arguments = vec![
+        "ARGS=run -p easydict_app --bin easydict_long_doc --".to_string(),
+        "--input".to_string(),
+        input_path.display().to_string(),
+        "--target-language".to_string(),
+        "zh-Hans".to_string(),
+        "--from".to_string(),
+        "en".to_string(),
+        "--output".to_string(),
+        output_path.display().to_string(),
+        "--result-json".to_string(),
+        result_json_path.display().to_string(),
+        "--retry-failed".to_string(),
+        "--service".to_string(),
+        "google".to_string(),
+        "--output-mode".to_string(),
+        "both".to_string(),
+        "--pdf-export-mode".to_string(),
+        "Overlay".to_string(),
+        "--page-range".to_string(),
+        "2-3".to_string(),
+        "--app-dir".to_string(),
+        app_dir.display().to_string(),
+    ];
+    for expected in expected_arguments {
+        assert_contains(
+            &record,
+            &expected,
+            "translate-long-doc -UseCargo should pass the expected Rust CLI argument",
+        );
+    }
+    for forbidden in ["dotnet", "Easydict.Workers", "CompatHost"] {
+        assert_not_contains(
+            &record,
+            forbidden,
+            "-UseCargo argument forwarding must stay on the Rust helper path",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
 fn translate_long_doc_script_rejects_retry_failed_without_sidecar_before_helper() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let environment = EnvironmentSnapshot::capture(["EASYDICT_LONG_DOC_HELPER_RECORD"]);
@@ -976,6 +1124,24 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         );
     }
 
+    let package_msix = read_text(&root.join("dotnet/scripts/Package-Msix.ps1"));
+    let prepare_args = text_between(&package_msix, "$prepareArgs = @(", "if ($MsixVersion)");
+    assert_contains(
+        prepare_args,
+        "prepare-package-inputs",
+        "Package-Msix.ps1 should prepare package inputs through the Rust MSIX helper",
+    );
+    assert_contains(
+        prepare_args,
+        "\"--runtime-profile\",",
+        "Package-Msix.ps1 should pass an explicit runtime profile into prepare-package-inputs",
+    );
+    assert_contains(
+        prepare_args,
+        "\"hybrid\"",
+        "legacy Package-Msix.ps1 should keep prepare-package-inputs on the explicit hybrid path",
+    );
+
     assert_contains(
         &makefile,
         "scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)",
@@ -997,6 +1163,7 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
 fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
     let root = repo_root();
     let script = read_text(&root.join("dotnet/scripts/Extract-DotnetRuntime.ps1"));
+    let manifest = read_text(&root.join("rs/crates/easydict_packager/Cargo.toml"));
 
     assert_contains(
         &script,
@@ -1028,6 +1195,130 @@ fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
         "$RuntimeProfile",
         "runtime extraction shim should pass the caller-provided profile value",
     );
+    assert_contains(
+        &script,
+        "--features",
+        "runtime extraction shim should opt into the hybrid-only downloader feature",
+    );
+    assert_contains(
+        &script,
+        "hybrid-dotnet-runtime-packaging",
+        "runtime extraction shim should build the packager with the hybrid-only downloader feature",
+    );
+    assert_contains(
+        &manifest,
+        "reqwest = { version = \"0.12\", default-features = false, features = [\"blocking\", \"rustls-tls\"], optional = true }",
+        "default easydict_packager builds should not compile the .NET runtime downloader HTTP client",
+    );
+    assert_contains(
+        &manifest,
+        "hybrid-dotnet-runtime-packaging = [\"dep:reqwest\"]",
+        ".NET runtime downloading should live behind an explicit hybrid packaging feature",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_tools() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment =
+        EnvironmentSnapshot::capture(["PATH", "EASYDICT_LEGACY_PACKAGING_FORBIDDEN_TOOL_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("legacy-packaging-profile-guard");
+    let fake_bin = test_root.join("bin");
+    let publish_dir = test_root.join("publish");
+    let manifest_path = test_root.join("Package.appxmanifest");
+    let output_msix_path = test_root.join("out").join("Easydict.msix");
+    let runtime_output_dir = test_root.join("dotnet-runtime");
+    let record_path = test_root.join("forbidden-tools.txt");
+
+    fs::create_dir_all(&publish_dir).expect("create fake publish dir");
+    fs::write(&manifest_path, "<Package></Package>").expect("write fake manifest");
+    write_fake_legacy_packaging_forbidden_tool_scripts(&fake_bin);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var(
+        "EASYDICT_LEGACY_PACKAGING_FORBIDDEN_TOOL_RECORD",
+        &record_path,
+    );
+
+    for runtime_profile in [None, Some("rust-only")] {
+        let mut publish = powershell_script_command(&root.join("dotnet/scripts/publish.ps1"));
+        if let Some(profile) = runtime_profile {
+            publish.args(["-RuntimeProfile", profile]);
+        }
+        assert_legacy_packaging_profile_rejected_before_tools(
+            publish,
+            "dotnet/scripts/publish.ps1",
+            runtime_profile,
+            &record_path,
+        );
+
+        let mut package_and_install =
+            powershell_script_command(&root.join("dotnet/scripts/package-and-install.ps1"));
+        package_and_install
+            .args(["-Version", "0.0.0-test"])
+            .arg("-SkipInstall");
+        if let Some(profile) = runtime_profile {
+            package_and_install.args(["-RuntimeProfile", profile]);
+        }
+        assert_legacy_packaging_profile_rejected_before_tools(
+            package_and_install,
+            "dotnet/scripts/package-and-install.ps1",
+            runtime_profile,
+            &record_path,
+        );
+
+        let mut package_msix =
+            powershell_script_command(&root.join("dotnet/scripts/Package-Msix.ps1"));
+        package_msix
+            .args(["-Platform", "x64"])
+            .arg("-PublishDir")
+            .arg(&publish_dir)
+            .arg("-ManifestPath")
+            .arg(&manifest_path)
+            .arg("-OutputMsixPath")
+            .arg(&output_msix_path);
+        if let Some(profile) = runtime_profile {
+            package_msix.args(["-RuntimeProfile", profile]);
+        }
+        assert_legacy_packaging_profile_rejected_before_tools(
+            package_msix,
+            "dotnet/scripts/Package-Msix.ps1",
+            runtime_profile,
+            &record_path,
+        );
+
+        let mut build_installer =
+            powershell_script_command(&root.join("dotnet/scripts/Build-Installer.ps1"));
+        build_installer.args(["-Platform", "x64", "-Version", "0.0.0-test"]);
+        if let Some(profile) = runtime_profile {
+            build_installer.args(["-RuntimeProfile", profile]);
+        }
+        assert_legacy_packaging_profile_rejected_before_tools(
+            build_installer,
+            "dotnet/scripts/Build-Installer.ps1",
+            runtime_profile,
+            &record_path,
+        );
+
+        let mut extract_runtime =
+            powershell_script_command(&root.join("dotnet/scripts/Extract-DotnetRuntime.ps1"));
+        extract_runtime
+            .args(["-Rid", "win-x64"])
+            .arg("-OutputDir")
+            .arg(&runtime_output_dir);
+        if let Some(profile) = runtime_profile {
+            extract_runtime.args(["-RuntimeProfile", profile]);
+        }
+        assert_legacy_packaging_profile_rejected_before_tools(
+            extract_runtime,
+            "dotnet/scripts/Extract-DotnetRuntime.ps1",
+            runtime_profile,
+            &record_path,
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
 }
 
 fn repo_root() -> PathBuf {
@@ -1127,6 +1418,70 @@ fn powershell_literal(path: &Path) -> String {
 }
 
 #[cfg(windows)]
+fn assert_legacy_packaging_profile_rejected_before_tools(
+    mut command: std::process::Command,
+    script_name: &str,
+    runtime_profile: Option<&str>,
+    record_path: &Path,
+) {
+    let output = command.output().expect("run legacy packaging script");
+    let output_text = powershell_output_text(&output);
+    assert!(
+        !output.status.success(),
+        "{script_name} should reject {:?} before external tools\n{output_text}",
+        runtime_profile
+    );
+    assert_contains(
+        &output_text,
+        "RuntimeProfile",
+        &format!("{script_name} should explain the rejected runtime profile"),
+    );
+    if runtime_profile.is_some() {
+        assert!(
+            output_text.to_ascii_lowercase().contains("portable"),
+            "{script_name} should redirect rust-only callers to the rs portable path\n{output_text}",
+        );
+    } else {
+        assert_contains(
+            &output_text,
+            "Hybrid",
+            &format!("{script_name} should require explicit Hybrid"),
+        );
+    }
+    assert!(
+        !record_path.exists(),
+        "{script_name} must reject {:?} before invoking dotnet/cargo/winapp/ISCC; record:\n{}",
+        runtime_profile,
+        read_text(record_path)
+    );
+}
+
+#[cfg(windows)]
+fn powershell_output_text(output: &std::process::Output) -> String {
+    format!(
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
+#[cfg(windows)]
+fn write_fake_legacy_packaging_forbidden_tool_scripts(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake legacy packaging tool dir");
+    for tool in ["dotnet.cmd", "cargo.cmd", "winapp.cmd", "ISCC.cmd"] {
+        fs::write(
+            fake_bin.join(tool),
+            format!(
+                "@echo off\r\n\
+>>\"%EASYDICT_LEGACY_PACKAGING_FORBIDDEN_TOOL_RECORD%\" echo {tool} %*\r\n\
+exit /b 87\r\n"
+            ),
+        )
+        .expect("write fake legacy packaging tool");
+    }
+}
+
+#[cfg(windows)]
 fn write_fake_long_doc_helper(path: &Path) {
     fs::write(
         path,
@@ -1153,6 +1508,32 @@ exit /b 87\r\n"
         )
         .expect("write fake forbidden tool");
     }
+}
+
+#[cfg(windows)]
+fn write_fake_long_doc_cargo_script(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake LongDoc cargo dir");
+    fs::write(
+        fake_bin.join("cargo.cmd"),
+        "@echo off\r\n\
+setlocal\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo CARGO=%~f0\r\n\
+>>\"%EASYDICT_LONG_DOC_HELPER_RECORD%\" echo ARGS=%*\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake LongDoc cargo");
+}
+
+#[cfg(windows)]
+fn write_fake_dotnet_forbidden_tool_script(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake dotnet forbidden tool dir");
+    fs::write(
+        fake_bin.join("dotnet.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD%\" echo dotnet.cmd %*\r\n\
+exit /b 87\r\n",
+    )
+    .expect("write fake dotnet forbidden tool");
 }
 
 #[cfg(windows)]

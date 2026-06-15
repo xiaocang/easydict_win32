@@ -16,10 +16,6 @@
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
 </a>
-<br>
-<a href="#install-via-winget">
-  <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
-</a>
 
 </div>
 
@@ -155,12 +151,6 @@ While the feature set is not yet complete compared to the macOS version, this po
 - Windows 10 version 2004 (build 19041) or later
 - x64 or ARM64 processor
 
-### Install via winget
-
-```powershell
-winget install xiaocang.EasydictforWindows
-```
-
 ### Download
 
 Download from the [Releases](https://github.com/xiaocang/easydict_win32/releases) page.
@@ -180,11 +170,18 @@ Expand-Archive easydict-rs-portable-v1.0.0-win-x64.zip -DestinationPath Easydict
 .\Easydict\Easydict.Rust.exe
 ```
 
-#### Legacy/Hybrid .NET Package
+#### Legacy/Hybrid .NET Package and WinGet
 
 The older `easydict_win32-vX.Y.Z-x64.zip` package and `Easydict.WinUI.exe`
 entry point are retained only for legacy .NET / hybrid coexistence builds. They
 are not the default rs portable package.
+
+WinGet is a legacy/hybrid install path for the retained .NET package, not the
+default Rust portable install path.
+
+```powershell
+winget install xiaocang.EasydictforWindows
+```
 
 #### Verify Download (Optional)
 

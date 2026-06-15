@@ -34,6 +34,8 @@ $arguments = @(
     $cargoManifest,
     "-p",
     "easydict_packager",
+    "--features",
+    "hybrid-dotnet-runtime-packaging",
     "--",
     "extract-dotnet-runtime",
     "--rid",

@@ -21,6 +21,112 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Guarded LocalAI aliases and MSIX package input preparation
+
+- Rechecked the post-MDD core migration gaps with parallel read-only audits. No new third-party library was needed: the next risks were route/packaging boundary regressions over existing Rust code.
+- Added Quick Translate coverage for legacy LocalAI provider mode spellings (`windows_ai`, `windows-ai`, `phi_silica`, `foundry_local`, `foundry-local`, `local-ai`, `open_vino`, `open-vino`) so they normalize to Rust-native WindowsAI/Foundry/OpenVINO boundaries and never silently fall back to retained LocalAI workers.
+- Added the same alias-matrix contract at the `easydict_long_doc` CLI env boundary. `EASYDICT_LOCAL_AI_PROVIDER` values now have coverage for WindowsAI/Phi aliases, Foundry aliases, and OpenVINO aliases routing into native preflight/native endpoint failures without retained LongDoc worker, CompatHost, or `.NET workers` wording.
+- Added LongDoc native-runner coverage for explicit Foundry Local with an empty endpoint. A test-owned OpenAI-compatible translator now proves LongDoc starts the Foundry runtime, loads the configured model, resolves the endpoint, sends the native OpenAI-compatible request, writes the translated output, and does not surface retained worker wording.
+- Added Markdown/PDF/result sidecar LongDoc preflight coverage. The native Markdown runner now has regression evidence that a conflicting bilingual output target is rejected before provider translation starts and before a monolingual `.md` file is written; PDF `resultJsonPath` conflicts and Retry Failed restored output conflicts are also rejected before provider translation.
+- Added settings storage coverage for legacy `foundry-local` LocalAI service ids. The real `load_settings_file` path now proves Foundry-only legacy settings persist as `windows-local-ai` + `LocalAIProvider=FoundryLocal`, while conflicting OpenVINO+Foundry legacy ids merge to one `windows-local-ai` entry without guessing a provider.
+- `easydict_msix_validate prepare-package-inputs` now defaults to Rust-only runtime policy and rejects stale retained `dotnet/` / `workers/` payloads before rewriting manifests or copying resources. Legacy `dotnet/scripts/Package-Msix.ps1` still works only after requiring explicit Hybrid and now passes `--runtime-profile hybrid` into the Rust helper.
+- Release-contract coverage now checks that the legacy MSIX script cannot bypass the Rust-only default of `prepare-package-inputs`.
+- Added a fake-`PATH` execution contract for the legacy PowerShell publish/MSIX/installer/runtime-extraction scripts. Empty or `rust-only` runtime profiles now have test coverage proving they fail before invoking `dotnet`, `cargo`, `winapp`, or `ISCC`.
+- Added browser extension packaging coverage proving `easydict_packager package-browser-extension` stays on its positive file allowlist: stale `Easydict.NativeBridge.exe`, `Easydict.CompatHost.exe`, `BrowserHostRegistrar.exe`, retained workers, and bundled `.NET` runtime residue in the source directory are ignored instead of entering Chrome/Firefox packages.
+- Hardened `validate-rs-portable` ZIP reads to reject unsafe raw archive entry names before payload allowlist checks. The new table covers `../...`, leading `/workers/...`, and Windows drive-prefix `C:/workers/...`, matching the MSIX-side unsafe archive guard.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_provider_aliases_route_to_native_boundaries_without_worker_bridge -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior local_ai_route_decision -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior local_ai_provider_aliases_route_to_native_preflight_without_worker_lookup -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior explicit_foundry_local_long_document_with_empty_endpoint_discovers_endpoint_natively_without_worker -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior foundry -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_markdown_both_output_prechecks_bilingual_path_before_provider_translation -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_result_json_path_prechecked_before_provider_translation -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_result_json_retry_failed_prechecks_restored_output_before_provider_translation -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior output_precheck -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior foundry_local -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior legacy_local_ai -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_migration_behavior foundry_local -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate prepare_package_inputs -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate rust_only -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_tools -- --nocapture`
+- `cd rs; cargo test -p easydict_packager package_browser_extension_ignores_retained_native_host_and_runtime_residue -- --nocapture`
+- `cd rs; cargo test -p easydict_packager package_browser_extension -- --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable_rejects_unsafe_zip_entry_paths_before_payload_allowlist -- --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable -- --nocapture`
+
+## 2026-06-12: Hardened LongDoc retry CLI and Foundry SDK default boundaries
+
+- Re-audited LongDoc CLI/resultJson retry and LocalAI/Foundry boundaries. No new third-party library was needed: the remaining gaps were defense-in-depth contracts over existing Rust sidecar, PowerShell shim, and Cargo feature behavior.
+- Added a CLI regression proving `easydict_long_doc --retry-failed` can re-export a PDF OCR sidecar as TXT + bilingual TXT without writing a fake PDF and without mentioning retained LongDoc workers, CompatHost, or `.NET` workers.
+- Added an execution-level PowerShell shim contract for `scripts/translate-long-doc.ps1 -UseCargo`: it now proves `-ResultJsonPath`, `-RetryFailed`, `-AppDir`, output mode, PDF export mode, and page range are forwarded to `cargo run -p easydict_app --bin easydict_long_doc -- ...`, while fake `dotnet.cmd` / stale app-dir runtime markers are not touched.
+- Strengthened the default API boundary test so `foundry-local-sdk` remains optional and owned by `lib/easydict-foundry-local`; app/workspace Cargo manifests that depend on `easydict_foundry_local` must not enable `sdk` or `sdk-winml` features on the default rs path.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior retry_failed_pdf_ocr_sidecar_reexports_text_without_pdf_or_worker_lookup -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_tools -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test default_api_boundary_behavior default_foundry_local_sdk_features_remain_lib_only_and_not_enabled_by_app_manifests -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script -- --nocapture`
+
+## 2026-06-12: Covered native PDF OCR fallback runner sidecars and default install docs
+
+- Rechecked the LongDoc/PDF fallback chain before changing code. No new crate was needed: the native runner already has PDF source extraction, selectable-text fallback, OCR fallback, TXT/PDF export, and result JSON sidecar support.
+- Added full runner coverage for the case where PDF source extraction returns empty, selectable-text fallback also returns empty, and OCR fallback succeeds. The native runner now proves it completes without retained workers, exports TXT + bilingual TXT instead of a fake PDF, writes `resultJsonPath`, and stores PDF/OCR metadata in the sidecar so retry restores the chunk as `PdfOcr`.
+- Native PDF fallback-to-text exports now keep a `pdf` checkpoint in the sidecar, matching successful native PDF export sidecars and preserving PDF source metadata even when the final artifact is TXT.
+- Updated the root English and Chinese README install flow so the default path points at `easydict-rs-portable-*` / `Easydict.Rust.exe`; WinGet is labeled as a legacy/hybrid retained .NET package path and protected by a release contract test.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --lib native_pdf_runner_empty_source_and_text_fallback_uses_ocr_and_writes_result_json -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib native_pdf_runner_source_extractor_error_falls_back_to_content_stream_and_writes_result_json -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib native_pdf_ocr_chunks_export_as_text_output -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install -- --nocapture`
+
+## 2026-06-11: Added runner-level evidence for native PDF source fallback sidecars
+
+- Rechecked the LongDoc/PDF source fallback route before adding code. No new crate was needed: the runner already has Rust PDFium/source extraction, `pdf-extract`/`lopdf` selectable-text fallback, OCR fallback, native PDF export, and result JSON sidecar infrastructure.
+- `run_native_text_long_document_request_inner(...)` now delegates source reading through a private injectable reader helper. Production still uses the normal source reader, while tests can force the PDF source extractor to fail without depending on machine-specific PDFium behavior.
+- Added a full runner regression proving that when the PDF source extractor fails, native LongDoc falls back to content-stream/selectable text, translates, writes PDF + bilingual TXT output, writes a PDF checkpoint in `resultJsonPath`, and does not mention retained LongDoc workers.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --lib native_pdf_runner_source_extractor_error_falls_back_to_content_stream_and_writes_result_json -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib native_pdf_ -- --nocapture`
+- `cd rs; cargo check -p easydict_app --lib`
+- `cd rs; cargo check -p easydict_app --lib --features retained-dotnet-workers`
+
+## 2026-06-11: Feature-gated the hybrid .NET runtime downloader out of the default packager
+
+- Rechecked the packaging dependency surface before changing libraries. No new dependency was needed; this slice removes `reqwest` from the default `easydict_packager` build and keeps it only behind the explicit `hybrid-dotnet-runtime-packaging` feature.
+- Default `easydict_packager` usage no longer lists `extract-dotnet-runtime`, and invoking that command in a default build fails locally with a feature-gate error. The `download_and_extract_dotnet_runtime(...)` API and HTTP downloader compile only when the hybrid feature is enabled.
+- `dotnet/scripts/Extract-DotnetRuntime.ps1` now opts into `--features hybrid-dotnet-runtime-packaging` after requiring `-RuntimeProfile Hybrid`, so retained-worker coexistence packaging still has an explicit path while the first rs portable packager stays Rust-only by default.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --features hybrid-dotnet-runtime-packaging -- --nocapture`
+- `cd rs; cargo tree -p easydict_packager --no-default-features` (verified no `reqwest`)
+- `cd rs; cargo tree -p easydict_packager --features hybrid-dotnet-runtime-packaging` (verified `reqwest` is present only for the hybrid feature)
+
+## 2026-06-11: Routed unmatched native PDF content-stream export through Rust overlay
+
+- Rechecked the LongDoc/PDF replacement path before changing dependencies. No new library was needed: the native PDF route already combines `lopdf` content-stream replacement with the Rust `easydict_pdf_overlay` wrapper for font/overlay output.
+- `try_export_native_pdf_document(...)` now treats `NoReplacements` from content-stream replacement like the existing font-embedding case: if translated PDF export blocks include usable geometry, Rust overlay PDF export is attempted before falling back to TXT output.
+- This closes another retained-worker expectation from complex/simple-selectable PDFs: a selectable PDF whose source text cannot be patched in-place can still produce a native PDF when overlay metadata and a font are available, without probing the LongDoc worker or `.NET` runtime.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --lib native_pdf_content_stream_no_match_uses_overlay_before_text_fallback -- --nocapture`
+- `cd rs; cargo test -p easydict_app --lib native_pdf_export_ -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test pdf_native_export_behavior native_pdf_export_fails_when_no_text_operator_can_be_patched -- --nocapture`
+
 ## 2026-06-11: Added strict WindowsAI WinMD preflight to rs portable builds
 
 - Rechecked the MDD request before moving on: a read-only subagent and focused tests confirmed the Rust route now covers MDD parsing, raw resource lookup, companion discovery, WebView-ready data URL inlining, first-hit multi-MDD behavior, Quick Translate rich HTML separation, and legacy settings companion MDD discovery. No new parser dependency was added; the MIT `lib/rs-mdict` fork remains the active route.

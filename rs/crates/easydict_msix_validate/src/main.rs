@@ -273,6 +273,7 @@ fn run_prepare_package_inputs(args: &[String]) -> i32 {
     let mut output_manifest = None;
     let mut msix_version = None;
     let mut verify_targetsize_icons = false;
+    let mut runtime_profile = PackageRuntimeProfile::RustOnly;
 
     let mut index = 0;
     while index < args.len() {
@@ -310,6 +311,20 @@ fn run_prepare_package_inputs(args: &[String]) -> i32 {
                 }
             }
             "--verify-targetsize-icons" => verify_targetsize_icons = true,
+            "--runtime-profile" => {
+                let Some(value) = read_value(args, &mut index, "--runtime-profile") else {
+                    return 2;
+                };
+                let Some(profile) = PackageRuntimeProfile::parse(&value) else {
+                    eprintln!(
+                        "error: --runtime-profile must be 'hybrid' or 'rust-only', got '{value}'"
+                    );
+                    print_usage();
+                    return 2;
+                };
+                runtime_profile = profile;
+            }
+            "--rust-only" => runtime_profile = PackageRuntimeProfile::RustOnly,
             "-h" | "--help" => {
                 print_usage();
                 return 2;
@@ -355,8 +370,10 @@ fn run_prepare_package_inputs(args: &[String]) -> i32 {
         output_manifest,
         msix_version,
         verify_targetsize_icons,
+        runtime_profile,
     }) {
         Ok(outcome) => {
+            println!("[MSIX] RuntimeProfile: {}", runtime_profile.as_str());
             println!("[MSIX] Required assets verified");
             match outcome.targetsize_icon_count {
                 Some(count) => println!("[MSIX] Found {count} targetsize icons"),
@@ -468,7 +485,7 @@ fn print_usage() {
     );
     println!("       easydict_msix_validate dedupe-worker-shared <publish-dir>");
     println!(
-        "       easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons]"
+        "       easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons] [--runtime-profile hybrid|rust-only] [--rust-only]"
     );
     println!(
         "  defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}, runtime-profile=rust-only"

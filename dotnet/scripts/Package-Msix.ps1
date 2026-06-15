@@ -85,7 +85,9 @@ $prepareArgs = @(
     "--manifest",
     $ManifestPath,
     "--output-manifest",
-    $tempManifest
+    $tempManifest,
+    "--runtime-profile",
+    "hybrid"
 )
 
 if ($MsixVersion) {

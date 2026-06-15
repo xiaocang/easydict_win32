@@ -998,6 +998,30 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator, 
     request: &LongDocumentServiceRequest,
     should_cancel: &F,
 ) -> NativeLongDocumentRun {
+    run_native_text_long_document_request_inner_with_source_reader(
+        translator,
+        request,
+        should_cancel,
+        read_native_text_source_chunks,
+    )
+}
+
+fn run_native_text_long_document_request_inner_with_source_reader<
+    T: NativeLongDocumentTranslator,
+    F: Fn() -> bool,
+    R,
+>(
+    translator: &mut T,
+    request: &LongDocumentServiceRequest,
+    should_cancel: &F,
+    mut source_reader: R,
+) -> NativeLongDocumentRun
+where
+    R: FnMut(
+        &LongDocumentServiceRequest,
+        NativeTextInputKind,
+    ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>,
+{
     let Some(input_kind) = native_text_input_kind(&request.params.input_mode) else {
         return NativeLongDocumentRun {
             events: Vec::new(),
@@ -1007,7 +1031,7 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator, 
         };
     };
 
-    let chunks = match read_native_text_source_chunks(request, input_kind) {
+    let chunks = match source_reader(request, input_kind) {
         Ok(chunks) => chunks,
         Err(error) => {
             return NativeLongDocumentRun {
@@ -3943,6 +3967,281 @@ mod tests {
     }
 
     #[test]
+    fn native_pdf_runner_source_extractor_error_falls_back_to_content_stream_and_writes_result_json(
+    ) {
+        let temp_dir = unique_longdoc_test_dir("pdf-source-fallback-runner");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("paper.pdf");
+        let output_path = temp_dir.join("paper-translated.pdf");
+        let result_json_path = temp_dir.join("paper-result.json");
+        fs::write(
+            &input_path,
+            minimal_longdoc_test_pdf_with_pages(&["Fallback PDF"]),
+        )
+        .expect("input pdf");
+
+        let request = LongDocumentServiceRequest {
+            query_id: 96,
+            input: LongDocumentInput::File(input_path.display().to_string()),
+            params: TranslateDocumentParams {
+                input_path: input_path.display().to_string(),
+                output_path: Some(output_path.display().to_string()),
+                input_mode: "Pdf".to_string(),
+                from: "English".to_string(),
+                to: "SimplifiedChinese".to_string(),
+                service_id: "google".to_string(),
+                output_mode: "Both".to_string(),
+                pdf_export_mode: Some("ContentStreamReplacement".to_string()),
+                layout_detection: None,
+                page_range: None,
+                vision_endpoint: None,
+                vision_api_key: None,
+                vision_model: None,
+                result_json_path: Some(result_json_path.display().to_string()),
+            },
+            settings: SettingsSnapshot::default(),
+        };
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let source_calls = Arc::clone(&calls);
+        let text_calls = Arc::clone(&calls);
+        let ocr_calls = Arc::clone(&calls);
+        let mut translator = PrefixNativeLongDocTranslator::default();
+
+        let run = run_native_text_long_document_request_inner_with_source_reader(
+            &mut translator,
+            &request,
+            &|| false,
+            move |request, input_kind| {
+                assert_eq!(input_kind, NativeTextInputKind::PdfText);
+                read_native_pdf_source_chunks_with_fallbacks(
+                    request,
+                    &request.params.input_path,
+                    request.params.page_range.as_deref(),
+                    {
+                        let source_calls = Arc::clone(&source_calls);
+                        move |_request, _path, _page_range| {
+                            source_calls.lock().unwrap().push("source".to_string());
+                            Err(LongDocumentBackendError::new(
+                                "source extractor unavailable",
+                            ))
+                        }
+                    },
+                    {
+                        let text_calls = Arc::clone(&text_calls);
+                        move |path, page_range| {
+                            text_calls.lock().unwrap().push("text".to_string());
+                            read_native_pdf_text_source_chunks(path, page_range)
+                        }
+                    },
+                    {
+                        let ocr_calls = Arc::clone(&ocr_calls);
+                        move |_request, _path, _page_range| {
+                            ocr_calls.lock().unwrap().push("ocr".to_string());
+                            Err(LongDocumentBackendError::new("OCR should not run"))
+                        }
+                    },
+                )
+            },
+        );
+
+        let result = run.result.expect("fallback runner should complete");
+        assert_eq!(result.state, "Completed");
+        assert_eq!(
+            result.result_json_path.as_deref(),
+            result_json_path.to_str()
+        );
+        assert_eq!(*calls.lock().unwrap(), vec!["source", "text"]);
+        assert_eq!(translator.calls(), vec!["Fallback PDF".to_string()]);
+
+        let output_pdf_text =
+            pdf_extract::extract_text(&output_path).expect("translated PDF should extract");
+        assert!(output_pdf_text.contains("[zh] Fallback PDF"));
+        let bilingual_path = result
+            .bilingual_output_path
+            .as_deref()
+            .expect("bilingual fallback output path");
+        assert!(fs::read_to_string(bilingual_path)
+            .expect("bilingual fallback text")
+            .contains("Fallback PDF"));
+
+        let sidecar_json =
+            fs::read_to_string(&result_json_path).expect("result JSON sidecar should be written");
+        assert!(
+            !sidecar_json.contains("Long Document worker"),
+            "native fallback sidecar must not mention retained workers: {sidecar_json}"
+        );
+        let sidecar: serde_json::Value =
+            serde_json::from_str(&sidecar_json).expect("sidecar should parse");
+        assert_eq!(sidecar["checkpoint"]["inputMode"], "Pdf");
+        assert!(sidecar["checkpoint"]["pdf"]["sourceChunks"][0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Fallback PDF"));
+        assert!(sidecar["checkpoint"]["pdf"]["translatedChunks"]["0"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("[zh] Fallback PDF"));
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_runner_empty_source_and_text_fallback_uses_ocr_and_writes_result_json() {
+        let temp_dir = unique_longdoc_test_dir("pdf-ocr-fallback-runner");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("scan.pdf");
+        let output_pdf_path = temp_dir.join("scan-translated.pdf");
+        let result_json_path = temp_dir.join("scan-result.json");
+        fs::write(
+            &input_path,
+            minimal_longdoc_test_pdf_with_pages(&["Selectable text intentionally ignored"]),
+        )
+        .expect("input pdf");
+
+        let request = LongDocumentServiceRequest {
+            query_id: 97,
+            input: LongDocumentInput::File(input_path.display().to_string()),
+            params: TranslateDocumentParams {
+                input_path: input_path.display().to_string(),
+                output_path: Some(output_pdf_path.display().to_string()),
+                input_mode: "Pdf".to_string(),
+                from: "English".to_string(),
+                to: "SimplifiedChinese".to_string(),
+                service_id: "google".to_string(),
+                output_mode: "Both".to_string(),
+                pdf_export_mode: Some("ContentStreamReplacement".to_string()),
+                layout_detection: None,
+                page_range: None,
+                vision_endpoint: None,
+                vision_api_key: None,
+                vision_model: None,
+                result_json_path: Some(result_json_path.display().to_string()),
+            },
+            settings: SettingsSnapshot::default(),
+        };
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let source_calls = Arc::clone(&calls);
+        let text_calls = Arc::clone(&calls);
+        let ocr_calls = Arc::clone(&calls);
+        let mut translator = PrefixNativeLongDocTranslator::default();
+
+        let run = run_native_text_long_document_request_inner_with_source_reader(
+            &mut translator,
+            &request,
+            &|| false,
+            move |request, input_kind| {
+                assert_eq!(input_kind, NativeTextInputKind::PdfText);
+                validate_native_pdf_input_file(&request.params.input_path)?;
+                read_native_pdf_source_chunks_with_fallbacks(
+                    request,
+                    &request.params.input_path,
+                    request.params.page_range.as_deref(),
+                    {
+                        let source_calls = Arc::clone(&source_calls);
+                        move |_request, _path, _page_range| {
+                            source_calls.lock().unwrap().push("source".to_string());
+                            Ok(Vec::new())
+                        }
+                    },
+                    {
+                        let text_calls = Arc::clone(&text_calls);
+                        move |_path, _page_range| {
+                            text_calls.lock().unwrap().push("text".to_string());
+                            Ok(Vec::new())
+                        }
+                    },
+                    {
+                        let ocr_calls = Arc::clone(&ocr_calls);
+                        move |_request, _path, _page_range| {
+                            ocr_calls.lock().unwrap().push("ocr".to_string());
+                            Ok(vec![NativeTextSourceChunk::pdf_ocr(
+                                0,
+                                "Scanned OCR source".to_string(),
+                                1,
+                            )])
+                        }
+                    },
+                )
+            },
+        );
+
+        let result = run.result.expect("OCR fallback runner should complete");
+        assert_eq!(result.state, "Completed");
+        assert_eq!(
+            result.result_json_path.as_deref(),
+            result_json_path.to_str()
+        );
+        assert_eq!(*calls.lock().unwrap(), vec!["source", "text", "ocr"]);
+        assert_eq!(translator.calls(), vec!["Scanned OCR source".to_string()]);
+        assert!(
+            !output_pdf_path.exists(),
+            "OCR fallback should export text instead of writing a PDF"
+        );
+
+        let output_text_path = PathBuf::from(
+            result
+                .output_path
+                .as_deref()
+                .expect("text fallback output path"),
+        );
+        assert_eq!(
+            output_text_path
+                .extension()
+                .and_then(|value| value.to_str()),
+            Some("txt")
+        );
+        assert!(fs::read_to_string(&output_text_path)
+            .expect("OCR fallback text output")
+            .contains("[zh] Scanned OCR source"));
+        let bilingual_path = result
+            .bilingual_output_path
+            .as_deref()
+            .expect("OCR fallback bilingual output path");
+        let bilingual_text =
+            fs::read_to_string(bilingual_path).expect("OCR fallback bilingual text");
+        assert!(bilingual_text.contains("Scanned OCR source"));
+        assert!(bilingual_text.contains("[zh] Scanned OCR source"));
+
+        let sidecar_json = fs::read_to_string(&result_json_path)
+            .expect("OCR fallback result JSON sidecar should be written");
+        assert!(
+            !sidecar_json.contains("Long Document worker"),
+            "native OCR fallback sidecar must not mention retained workers: {sidecar_json}"
+        );
+        let sidecar: serde_json::Value =
+            serde_json::from_str(&sidecar_json).expect("sidecar should parse");
+        assert_eq!(sidecar["checkpoint"]["inputMode"], "Pdf");
+        assert!(sidecar["checkpoint"]["text"]["sourceChunks"][0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Scanned OCR source"));
+        assert!(sidecar["checkpoint"]["pdf"]["sourceChunks"][0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Scanned OCR source"));
+        assert!(sidecar["checkpoint"]["pdf"]["translatedChunks"]["0"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("[zh] Scanned OCR source"));
+        assert!(
+            sidecar["checkpoint"]["pdf"]["chunkMetadata"][0]["sourceBlockId"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("-ocr-")
+        );
+        let typed_sidecar =
+            read_native_result_json_sidecar(&result_json_path).expect("typed OCR sidecar");
+        let retry_chunks = native_text_source_chunks_from_retry_checkpoint(
+            NativeTextInputKind::PdfText,
+            &typed_sidecar.checkpoint,
+        )
+        .expect("OCR retry chunks");
+        assert_eq!(retry_chunks[0].source_kind, NativeTextSourceKind::PdfOcr);
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
     fn auto_foundry_local_probe_routes_long_document_to_native_before_worker() {
         let mut resolver =
             TestFoundryEndpointResolver::new(Some("foundry-local-invalid".to_string()));
@@ -4416,6 +4715,100 @@ mod tests {
         let extracted =
             pdf_extract::extract_text(&output_path).expect("overlay text should extract");
         assert!(extracted.contains("显式"));
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_content_stream_no_match_uses_overlay_before_text_fallback() {
+        let temp_dir = unique_longdoc_test_dir("pdf-no-match-overlay-export");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("paper.pdf");
+        let output_path = temp_dir.join("paper-translated.pdf");
+        fs::write(
+            &input_path,
+            minimal_longdoc_test_pdf_with_pages(&["Original PDF text"]),
+        )
+        .expect("input pdf");
+
+        let request = LongDocumentServiceRequest {
+            query_id: 95,
+            input: LongDocumentInput::File(input_path.display().to_string()),
+            params: TranslateDocumentParams {
+                input_path: input_path.display().to_string(),
+                output_path: Some(output_path.display().to_string()),
+                input_mode: "Pdf".to_string(),
+                from: "English".to_string(),
+                to: "SimplifiedChinese".to_string(),
+                service_id: "google".to_string(),
+                output_mode: "Monolingual".to_string(),
+                pdf_export_mode: Some("ContentStreamReplacement".to_string()),
+                layout_detection: None,
+                page_range: None,
+                vision_endpoint: None,
+                vision_api_key: None,
+                vision_model: None,
+                result_json_path: None,
+            },
+            settings: SettingsSnapshot {
+                cjk_font_path: Some(test_cjk_font_path().display().to_string()),
+                ..SettingsSnapshot::default()
+            },
+        };
+        let source_chunks = vec![NativeTextSourceChunk {
+            text: "Text that does not exist in the PDF stream".to_string(),
+            fallback_text: None,
+            page_number: 1,
+            source_block_id: "pdf-p1-body-b1".to_string(),
+            source_kind: NativeTextSourceKind::PdfSourceBlock,
+            pdf_context: None,
+            pdf_export_metadata: Some(PdfExportChunkMetadata {
+                chunk_index: 0,
+                page_number: 1,
+                source_block_id: "pdf-p1-body-b1".to_string(),
+                source_block_type: PdfExportSourceBlockType::Paragraph,
+                order_in_page: 0,
+                reading_order_score: 1.0,
+                bounding_box: Some(crate::PdfRect::new(96.0, 684.0, 260.0, 48.0)),
+                text_style: Some(crate::pdf_export_blocks::PdfExportBlockTextStyle {
+                    font_size: 14.0,
+                    line_spacing: 16.0,
+                    rotation_angle: 0.0,
+                }),
+                translation_skipped: false,
+                preserve_original_text_in_pdf_export: false,
+                retry_count: 0,
+                fallback_text: None,
+                detected_font_names: Some(vec!["Helvetica".to_string()]),
+            }),
+        }];
+        let translations = vec![Some("Overlay fallback translation".to_string())];
+        let text_checkpoint =
+            native_export_checkpoint(NativeTextInputKind::PdfText, &source_chunks, &translations);
+
+        let export = try_export_native_pdf_document(
+            &request,
+            &source_chunks,
+            &translations,
+            "",
+            &BTreeSet::new(),
+            &text_checkpoint,
+        )
+        .expect("content-stream no-match should try native overlay PDF export")
+        .expect("native overlay should produce a PDF before text fallback");
+
+        assert_eq!(export.output_path, output_path.display().to_string());
+        assert!(export.bilingual_output_path.is_none());
+        assert_eq!(
+            lopdf::Document::load(&output_path)
+                .expect("native overlay PDF output should open")
+                .get_pages()
+                .len(),
+            1
+        );
+        let extracted =
+            pdf_extract::extract_text(&output_path).expect("overlay text should extract");
+        assert!(extracted.contains("Overlay fallback translation"));
 
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -4955,6 +5348,30 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct PrefixNativeLongDocTranslator {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl PrefixNativeLongDocTranslator {
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().expect("calls lock").clone()
+        }
+    }
+
+    impl NativeLongDocumentTranslator for PrefixNativeLongDocTranslator {
+        fn translate_chunk(
+            &mut self,
+            request: QuickTranslateServiceRequest,
+        ) -> Result<String, LongDocumentBackendError> {
+            self.calls
+                .lock()
+                .expect("calls lock")
+                .push(request.params.text.clone());
+            Ok(format!("[zh] {}", request.params.text.trim()))
+        }
+    }
+
     struct RecordingPdfOcrRenderer {
         calls: Vec<RecordingPdfOcrRenderCall>,
         pages: Vec<NativePdfOcrPage>,
@@ -5291,6 +5708,9 @@ fn export_native_text_document(
         }
     }
 
+    let pdf_checkpoint = matches!(input_kind, NativeTextInputKind::PdfText).then(|| {
+        native_pdf_export_checkpoint(source_chunks, translations, preserved_chunk_indexes)
+    });
     let output_path = resolve_native_output_path(&request.params, input_kind);
 
     match request.params.output_mode.as_str() {
@@ -5302,7 +5722,7 @@ fn export_native_text_document(
                 output_path: bilingual_path.display().to_string(),
                 bilingual_output_path: Some(bilingual_path.display().to_string()),
                 checkpoint,
-                pdf_checkpoint: None,
+                pdf_checkpoint,
             })
         }
         "Both" => {
@@ -5317,7 +5737,7 @@ fn export_native_text_document(
                 output_path: output_path.display().to_string(),
                 bilingual_output_path: Some(bilingual_path.display().to_string()),
                 checkpoint,
-                pdf_checkpoint: None,
+                pdf_checkpoint,
             })
         }
         _ => {
@@ -5327,7 +5747,7 @@ fn export_native_text_document(
                 output_path: output_path.display().to_string(),
                 bilingual_output_path: None,
                 checkpoint,
-                pdf_checkpoint: None,
+                pdf_checkpoint,
             })
         }
     }
@@ -5401,7 +5821,13 @@ fn try_export_native_pdf_document(
         selected_page_numbers.as_deref(),
     ) {
         Ok(_) => {}
-        Err(error) if error.kind == NativePdfContentStreamExportFailureKind::NeedsFontEmbedding => {
+        Err(error)
+            if matches!(
+                error.kind,
+                NativePdfContentStreamExportFailureKind::NeedsFontEmbedding
+                    | NativePdfContentStreamExportFailureKind::NoReplacements
+            ) =>
+        {
             if export_pdf_with_overlay_text_blocks(
                 request,
                 input_path,
@@ -5757,20 +6183,24 @@ fn native_text_source_chunks_from_retry_checkpoint(
                     .as_ref()
                     .and_then(|metadata| metadata.get(&index))
                 {
+                    let source_block_id = native_retry_source_block_id(
+                        &pdf_metadata.source_block_id,
+                        index,
+                        "pdf-p1-text",
+                    );
+                    let source_kind = if source_block_id.contains("-ocr-") {
+                        NativeTextSourceKind::PdfOcr
+                    } else if pdf_metadata.bounding_box.is_some() {
+                        NativeTextSourceKind::PdfSourceBlock
+                    } else {
+                        NativeTextSourceKind::PdfSelectableText
+                    };
                     return Ok(NativeTextSourceChunk {
                         text: text.clone(),
                         fallback_text: pdf_metadata.fallback_text.clone(),
                         page_number: native_retry_page_number(pdf_metadata.page_number),
-                        source_block_id: native_retry_source_block_id(
-                            &pdf_metadata.source_block_id,
-                            index,
-                            "pdf-p1-text",
-                        ),
-                        source_kind: if pdf_metadata.bounding_box.is_some() {
-                            NativeTextSourceKind::PdfSourceBlock
-                        } else {
-                            NativeTextSourceKind::PdfSelectableText
-                        },
+                        source_block_id,
+                        source_kind,
                         pdf_context: None,
                         pdf_export_metadata: Some(pdf_metadata.clone()),
                     });

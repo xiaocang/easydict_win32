@@ -52,6 +52,7 @@ impl PackageRuntimeProfile {
         runtime_profile_is_rust_only(&normalized).then_some(Self::RustOnly)
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn parse_environment(value: &str) -> Self {
         let normalized = normalize_runtime_profile(value);
         if normalized == "hybrid" {
@@ -562,6 +563,7 @@ pub fn zip_directory(
     Ok(outcome)
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 pub fn download_and_extract_dotnet_runtime(
     options: &ExtractDotnetRuntimeOptions,
 ) -> Result<ExtractDotnetRuntimeOutcome, ExtractDotnetRuntimeError> {
@@ -1017,6 +1019,7 @@ pub fn dotnet_runtime_url(version: &str, rid: &str) -> String {
     )
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn validate_extract_dotnet_runtime_profile(
     runtime_profile: PackageRuntimeProfile,
 ) -> Result<(), ExtractDotnetRuntimeError> {
@@ -1646,14 +1649,19 @@ fn rust_portable_zip_entries(
         let entry = archive
             .by_index(index)
             .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+        let original_name = entry.name().to_string();
+        if archive_entry_path_is_unsafe(&original_name) {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                original_name,
+            ));
+        }
         let Some(enclosed_name) = entry.enclosed_name() else {
             return Err(ValidateRustPortableError::InvalidArchiveEntry(
-                entry.name().to_string(),
+                original_name,
             ));
         };
-        let name = rust_portable_path_entry_name(&enclosed_name).ok_or_else(|| {
-            ValidateRustPortableError::InvalidArchiveEntry(entry.name().to_string())
-        })?;
+        let name = rust_portable_path_entry_name(&enclosed_name)
+            .ok_or_else(|| ValidateRustPortableError::InvalidArchiveEntry(original_name.clone()))?;
         entries.push(name);
     }
 
@@ -1681,6 +1689,18 @@ fn rust_portable_path_entry_name(path: &Path) -> Option<String> {
         })
         .collect::<Vec<_>>();
     (!components.is_empty()).then(|| components.join("/"))
+}
+
+fn archive_entry_path_is_unsafe(path: &str) -> bool {
+    let path = path.replace('\\', "/");
+    if path.is_empty() || path.starts_with('/') {
+        return true;
+    }
+
+    path.split('/').any(|part| {
+        part == ".."
+            || (part.len() == 2 && part.ends_with(':') && part.as_bytes()[0].is_ascii_alphabetic())
+    })
 }
 
 fn rust_portable_entry_is_forbidden(entry_name: &str) -> bool {
@@ -1873,6 +1893,7 @@ fn normalize_extension(extension: &str) -> String {
         .to_ascii_lowercase()
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn validate_runtime_rid(rid: &str) -> Result<(), ExtractDotnetRuntimeError> {
     match rid {
         "win-x64" | "win-arm64" => Ok(()),
@@ -1928,9 +1949,11 @@ fn directory_size(path: &Path) -> Result<u64, ExtractDotnetRuntimeError> {
 mod tests {
     use super::*;
     use std::io::Read;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     use std::sync::Mutex;
     use zip::ZipArchive;
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
@@ -2245,31 +2268,44 @@ mod tests {
     }
 
     #[test]
-    fn validate_rs_portable_rejects_zip_path_traversal_entry() {
-        let package = tempfile_dir("rs-portable-path-traversal");
-        let zip_path = package.with_extension("zip");
-        let file = File::create(&zip_path).expect("test zip should be created");
-        let mut writer = ZipWriter::new(file);
-        let options = FileOptions::<()>::default().compression_method(CompressionMethod::Stored);
-        writer
-            .start_file("../hostfxr.dll", options)
-            .expect("path traversal entry should be written");
-        writer
-            .write_all(b"hostfxr")
-            .expect("path traversal entry contents should be written");
-        writer.finish().expect("test zip should be finalized");
+    fn validate_rs_portable_rejects_unsafe_zip_entry_paths_before_payload_allowlist() {
+        for unsafe_entry in [
+            "../hostfxr.dll",
+            "/workers/localai/Easydict.Workers.LocalAi.exe",
+            "C:/workers/localai/Easydict.Workers.LocalAi.exe",
+        ] {
+            let package = tempfile_dir(&format!(
+                "rs-portable-unsafe-{}",
+                unsafe_entry
+                    .chars()
+                    .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+                    .collect::<String>()
+            ));
+            let zip_path = package.with_extension("zip");
+            let file = File::create(&zip_path).expect("test zip should be created");
+            let mut writer = ZipWriter::new(file);
+            let options =
+                FileOptions::<()>::default().compression_method(CompressionMethod::Stored);
+            writer
+                .start_file(unsafe_entry, options)
+                .expect("unsafe entry should be written");
+            writer
+                .write_all(b"retained runtime residue")
+                .expect("unsafe entry contents should be written");
+            writer.finish().expect("test zip should be finalized");
 
-        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
-            package_path: zip_path.clone(),
-        })
-        .unwrap_err();
+            let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+                package_path: zip_path.clone(),
+            })
+            .unwrap_err();
 
-        assert_eq!(
-            error,
-            ValidateRustPortableError::InvalidArchiveEntry("../hostfxr.dll".to_string())
-        );
-        let _ = fs::remove_dir_all(package);
-        let _ = fs::remove_file(zip_path);
+            assert_eq!(
+                error,
+                ValidateRustPortableError::InvalidArchiveEntry(unsafe_entry.to_string())
+            );
+            let _ = fs::remove_dir_all(package);
+            let _ = fs::remove_file(zip_path);
+        }
     }
 
     #[test]
@@ -2433,6 +2469,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn download_dotnet_runtime_requires_explicit_hybrid_profile_before_network() {
         let output = tempfile_dir("dotnet-runtime-profile-rust-only");
         let error = download_and_extract_dotnet_runtime(&ExtractDotnetRuntimeOptions {
@@ -2451,6 +2488,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn download_dotnet_runtime_rejects_rust_only_environment_before_network() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let snapshot = RuntimeProfileEnvironmentSnapshot::capture();
@@ -2659,6 +2697,59 @@ mod tests {
     }
 
     #[test]
+    fn package_browser_extension_ignores_retained_native_host_and_runtime_residue() {
+        let extension = browser_extension_source("browser-extension-runtime-residue");
+        let output = tempfile_dir("browser-extension-runtime-residue-output");
+        for (relative_path, bytes) in [
+            (
+                "Easydict.NativeBridge.exe",
+                b"legacy native bridge" as &[u8],
+            ),
+            ("Easydict.CompatHost.exe", b"compat host"),
+            ("BrowserHostRegistrar.exe", b"legacy registrar"),
+            ("workers/localai/Easydict.Workers.LocalAi.exe", b"worker"),
+            ("dotnet/host/fxr/8.0.11/hostfxr.dll", b"hostfxr"),
+            (
+                "dotnet/shared/Microsoft.NETCore.App/8.0.11/coreclr.dll",
+                b"coreclr",
+            ),
+        ] {
+            write_file(&extension, relative_path, bytes);
+        }
+
+        package_browser_extension(&PackageBrowserExtensionOptions {
+            extension_dir: extension.clone(),
+            output_dir: Some(output.clone()),
+            target: "All".to_string(),
+        })
+        .expect("package extension");
+
+        for package in [
+            output.join("easydict-ocr-chrome-v1.2.3.zip"),
+            output.join("easydict-ocr-firefox-v1.2.3.xpi"),
+        ] {
+            let entries = zip_entries(&package);
+            assert_eq!(entries, expected_browser_extension_entries());
+            for forbidden in [
+                "Easydict.NativeBridge.exe",
+                "Easydict.CompatHost.exe",
+                "BrowserHostRegistrar.exe",
+                "workers/localai/Easydict.Workers.LocalAi.exe",
+                "dotnet/host/fxr/8.0.11/hostfxr.dll",
+                "dotnet/shared/Microsoft.NETCore.App/8.0.11/coreclr.dll",
+            ] {
+                assert!(
+                    !entries.iter().any(|entry| entry == forbidden),
+                    "browser extension package must ignore retained runtime residue: {forbidden}"
+                );
+            }
+        }
+
+        let _ = fs::remove_dir_all(extension);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
     fn package_browser_extension_reports_missing_common_file() {
         let extension = browser_extension_source("browser-extension-missing");
         fs::remove_file(extension.join("setup.js")).expect("remove setup");
@@ -2720,11 +2811,13 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     struct RuntimeProfileEnvironmentSnapshot {
         easydict_runtime_profile: Option<String>,
         runtime_profile: Option<String>,
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     impl RuntimeProfileEnvironmentSnapshot {
         fn capture() -> Self {
             Self {
@@ -2739,11 +2832,13 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn clear_runtime_profile_environment() {
         std::env::remove_var("EASYDICT_RUNTIME_PROFILE");
         std::env::remove_var("RUNTIME_PROFILE");
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn restore_environment_value(name: &str, value: Option<String>) {
         if let Some(value) = value {
             std::env::set_var(name, value);

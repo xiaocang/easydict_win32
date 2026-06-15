@@ -16,10 +16,6 @@
 <a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
   <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
 </a>
-<br>
-<a href="#通过-winget-安装">
-  <img src="screenshot/winget-install-dark.svg" alt="winget install" width="280" />
-</a>
 
 </div>
 
@@ -155,12 +151,6 @@ Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS N
 - Windows 10 版本 2004（内部版本 19041）或更高版本
 - x64 或 ARM64 处理器
 
-### 通过 winget 安装
-
-```powershell
-winget install xiaocang.EasydictforWindows
-```
-
 ### 下载
 
 从 [Releases](https://github.com/xiaocang/easydict_win32/releases) 页面下载。
@@ -180,10 +170,16 @@ Expand-Archive easydict-rs-portable-v1.0.0-win-x64.zip -DestinationPath Easydict
 .\Easydict\Easydict.Rust.exe
 ```
 
-#### Legacy/Hybrid .NET 包
+#### Legacy/Hybrid .NET 包与 WinGet
 
 旧的 `easydict_win32-vX.Y.Z-x64.zip` 包和 `Easydict.WinUI.exe` 入口只保留给
 legacy .NET / hybrid 共存构建使用，不是默认 rs 便携包。
+
+WinGet 是 legacy/hybrid 安装路径，对应保留的 .NET 包；不是默认 Rust 便携包安装路径。
+
+```powershell
+winget install xiaocang.EasydictforWindows
+```
 
 #### 验证下载（可选）
 

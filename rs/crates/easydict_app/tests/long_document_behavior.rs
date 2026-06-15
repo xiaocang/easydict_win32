@@ -19,8 +19,9 @@ use easydict_app::{
     FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
     LongDocumentBackend, LongDocumentBackendError, LongDocumentEvent, LongDocumentInput,
     LongDocumentOutcome, LongDocumentTranslationCache, Message, NativeLongDocumentTranslator,
-    NativeOpenVinoQuickTranslateBackend, QuickTranslateBackend, QuickTranslateExecutionKind,
-    QuickTranslateServiceRequest, TRANSLATION_LANGUAGE_IDS,
+    NativeOpenAiQuickTranslateBackend, NativeOpenVinoQuickTranslateBackend, OpenAiExecutionError,
+    OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpRequestPlan, QuickTranslateBackend,
+    QuickTranslateExecutionKind, QuickTranslateServiceRequest, TRANSLATION_LANGUAGE_IDS,
 };
 use easydict_nllb::{NllbError, NllbInferenceEngine, NllbTokenizer, NllbTranslator};
 use easydict_windows_ai::{
@@ -3067,6 +3068,61 @@ fn native_text_both_output_prechecks_bilingual_path_before_writing_monolingual_f
 }
 
 #[test]
+fn native_markdown_both_output_prechecks_bilingual_path_before_provider_translation() {
+    let temp_dir = unique_temp_dir("longdoc-native-markdown-both-output-precheck");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let input_path = temp_dir.join("notes.md");
+    let output_path = temp_dir.join("notes-translated.md");
+    let bilingual_path = temp_dir.join("notes-translated-bilingual.md");
+    fs::write(&input_path, "# Title\n\nA short markdown document.")
+        .expect("markdown input should be written");
+    fs::create_dir_all(&bilingual_path).expect("conflicting bilingual directory should exist");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: input_path.to_string_lossy().to_string(),
+                input_mode: "markdown".to_string(),
+                output_mode: "both".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        176,
+    )
+    .expect("native markdown output precheck request");
+    request.params.output_path = Some(output_path.display().to_string());
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let error = outcome
+        .result
+        .expect_err("conflicting markdown bilingual path should fail before provider translation");
+
+    assert!(error.message.contains("Long document output path"));
+    assert!(error.message.contains("is a directory"));
+    assert_eq!(
+        translator.call_count(),
+        0,
+        "invalid markdown output targets should be rejected before provider translation starts"
+    );
+    assert!(
+        !output_path.exists(),
+        "monolingual markdown output should not be partially written when bilingual target is invalid"
+    );
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn native_text_long_document_writes_result_json_sidecar() {
     let temp_dir = unique_temp_dir("longdoc-native-result-json-sidecar");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -3288,6 +3344,65 @@ fn native_text_result_json_retry_failed_retranslates_only_failed_chunks() {
         .as_str()
         .unwrap_or_default()
         .starts_with("[zh] fail-1"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_result_json_retry_failed_prechecks_restored_output_before_provider_translation() {
+    let temp_dir = unique_temp_dir("longdoc-native-result-json-retry-output-precheck");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let output_path = temp_dir.join("translated.txt");
+    let result_json_path = temp_dir.join("translated-result.json");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: native_long_text_markers(&["ok-0", "fail-1", "ok-2"]),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        84,
+    )
+    .expect("native text retry output precheck request");
+    request.params.output_path = Some(output_path.display().to_string());
+    request.params.result_json_path = Some(result_json_path.display().to_string());
+
+    let mut first_translator = RecordingNativeLongDocTranslator::failing_on(["fail-1"]);
+    run_native_text_long_document_request_with_translator(&mut first_translator, request.clone())
+        .result
+        .expect("partial native text run should write checkpoint sidecar");
+    fs::remove_file(&output_path).expect("partial output file should be removable");
+    fs::create_dir_all(&output_path).expect("conflicting restored output directory should exist");
+
+    let mut retry_translator = RecordingNativeLongDocTranslator::default();
+    let outcome = retry_failed_native_text_long_document_from_result_json_with_translator(
+        &mut retry_translator,
+        request,
+        &result_json_path,
+    );
+    let error = outcome
+        .result
+        .expect_err("conflicting restored output path should fail before provider translation");
+
+    assert!(error.message.contains("Long document output path"));
+    assert!(error.message.contains("is a directory"));
+    assert_eq!(
+        retry_translator.call_count(),
+        0,
+        "invalid restored retry output target should be rejected before provider translation starts"
+    );
 
     fs::remove_dir_all(&temp_dir).ok();
 }
@@ -3537,6 +3652,64 @@ fn native_text_result_json_path_prechecked_before_provider_translation() {
         "invalid result JSON target should be rejected before provider translation starts"
     );
     assert!(!output_path.exists());
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_pdf_result_json_path_prechecked_before_provider_translation() {
+    let temp_dir = unique_temp_dir("longdoc-native-pdf-result-json-precheck");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let input_path = temp_dir.join("paper.pdf");
+    let output_path = temp_dir.join("paper-result.pdf");
+    let result_json_path = temp_dir.join("paper-result.json");
+    fs::write(
+        &input_path,
+        minimal_pdf_with_pages(&["PDF sidecar preflight"]),
+    )
+    .expect("pdf should be written");
+    fs::create_dir_all(&result_json_path).expect("conflicting PDF sidecar directory should exist");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: input_path.to_string_lossy().to_string(),
+                input_mode: "pdf".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        179,
+    )
+    .expect("native PDF result sidecar precheck request");
+    request.params.output_path = Some(output_path.display().to_string());
+    request.params.result_json_path = Some(result_json_path.display().to_string());
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let error = outcome
+        .result
+        .expect_err("conflicting PDF result JSON path should fail before provider translation");
+
+    assert!(error.message.contains("Long document output path"));
+    assert!(error.message.contains("is a directory"));
+    assert_eq!(
+        translator.call_count(),
+        0,
+        "invalid PDF result JSON target should be rejected before provider translation starts"
+    );
+    assert!(
+        !output_path.exists(),
+        "PDF output should not be written when result JSON target is invalid"
+    );
 
     fs::remove_dir_all(&temp_dir).ok();
 }
@@ -4123,6 +4296,77 @@ fn auto_windows_ai_not_ready_continues_long_document_foundry_fallback() {
 }
 
 #[test]
+fn explicit_foundry_local_long_document_with_empty_endpoint_discovers_endpoint_natively_without_worker(
+) {
+    let temp_dir = unique_temp_dir("longdoc-explicit-foundry-empty-endpoint");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+    let request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                local_ai_provider: local_ai_provider_modes::FOUNDRY_LOCAL.to_string(),
+                foundry_local_endpoint: String::new(),
+                foundry_local_model: "phi-3-mini".to_string(),
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "Foundry should be discovered for LongDoc.".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                service: "windows-local-ai".to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        58,
+    )
+    .expect("explicit Foundry Local long document request");
+    assert!(long_document_request_can_route_natively(&request));
+
+    let http_client =
+        RecordingFoundryOpenAiHttpClient::with_sse_responses([Ok(chat_completion_sse(&[
+            "Foundry translated LongDoc chunk",
+        ]))]);
+    let resolver = RecordingFoundryLocalEndpointResolver::new(Some(
+        "http://localhost:5273/openai/status".to_string(),
+    ));
+    let mut translator =
+        FoundryOpenAiNativeLongDocTranslator::new(http_client.clone(), resolver.clone());
+
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let result = outcome
+        .result
+        .expect("explicit Foundry Local LongDoc should translate through native OpenAI route");
+
+    assert_eq!(resolver.calls(), 1);
+    assert_eq!(resolver.status_calls(), 2);
+    assert_eq!(resolver.start_calls(), 1);
+    assert_eq!(resolver.load_model_calls(), vec!["phi-3-mini".to_string()]);
+    let requests = http_client.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].endpoint,
+        "http://localhost:5273/v1/chat/completions"
+    );
+    assert_eq!(requests[0].body["model"], "phi-3-mini");
+
+    let output_path = result.output_path.expect("translated output path");
+    let output = fs::read_to_string(&output_path).expect("translated output");
+    assert!(output.contains("Foundry translated LongDoc chunk"));
+
+    let diagnostics = format!("{:?}\n{}", outcome.events, output);
+    assert!(!diagnostics.contains("Long Document worker"));
+    assert!(!diagnostics.contains("CompatHost"));
+    assert!(!diagnostics.contains(".NET workers"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn openvino_local_ai_long_document_cache_miss_reports_native_download_preflight() {
     let temp_dir = unique_temp_dir("longdoc-openvino-cache-missing-native-preflight");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -4589,6 +4833,21 @@ impl RecordingFoundryLocalEndpointResolver {
     fn calls(&self) -> usize {
         *self.calls.lock().expect("resolver calls lock")
     }
+
+    fn status_calls(&self) -> usize {
+        *self.status_calls.lock().expect("status calls lock")
+    }
+
+    fn start_calls(&self) -> usize {
+        *self.start_calls.lock().expect("start calls lock")
+    }
+
+    fn load_model_calls(&self) -> Vec<String> {
+        self.load_model_calls
+            .lock()
+            .expect("load model calls lock")
+            .clone()
+    }
 }
 
 impl FoundryLocalEndpointResolver for RecordingFoundryLocalEndpointResolver {
@@ -4622,6 +4881,97 @@ impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
             .push(model.to_string());
         Ok(())
     }
+}
+
+#[derive(Clone, Default)]
+struct RecordingFoundryOpenAiHttpClient {
+    requests: Arc<Mutex<Vec<OpenAiHttpRequestPlan>>>,
+    responses: Arc<Mutex<VecDeque<Result<String, OpenAiExecutionError>>>>,
+}
+
+impl RecordingFoundryOpenAiHttpClient {
+    fn with_sse_responses(
+        responses: impl IntoIterator<Item = Result<String, OpenAiExecutionError>>,
+    ) -> Self {
+        Self {
+            requests: Arc::new(Mutex::new(Vec::new())),
+            responses: Arc::new(Mutex::new(responses.into_iter().collect())),
+        }
+    }
+
+    fn requests(&self) -> Vec<OpenAiHttpRequestPlan> {
+        self.requests.lock().expect("OpenAI requests lock").clone()
+    }
+}
+
+impl OpenAiHttpClient for RecordingFoundryOpenAiHttpClient {
+    fn post_sse(
+        &mut self,
+        request: &OpenAiHttpRequestPlan,
+    ) -> Result<String, OpenAiExecutionError> {
+        self.requests
+            .lock()
+            .expect("OpenAI requests lock")
+            .push(request.clone());
+        self.responses
+            .lock()
+            .expect("OpenAI responses lock")
+            .pop_front()
+            .unwrap_or_else(|| {
+                Err(OpenAiExecutionError::new(
+                    OpenAiExecutionErrorCode::Unknown,
+                    "test OpenAI response was not queued",
+                ))
+            })
+    }
+}
+
+#[derive(Clone)]
+struct FoundryOpenAiNativeLongDocTranslator {
+    http_client: RecordingFoundryOpenAiHttpClient,
+    resolver: RecordingFoundryLocalEndpointResolver,
+}
+
+impl FoundryOpenAiNativeLongDocTranslator {
+    fn new(
+        http_client: RecordingFoundryOpenAiHttpClient,
+        resolver: RecordingFoundryLocalEndpointResolver,
+    ) -> Self {
+        Self {
+            http_client,
+            resolver,
+        }
+    }
+}
+
+impl NativeLongDocumentTranslator for FoundryOpenAiNativeLongDocTranslator {
+    fn translate_chunk(
+        &mut self,
+        request: QuickTranslateServiceRequest,
+    ) -> Result<String, LongDocumentBackendError> {
+        let mut backend = NativeOpenAiQuickTranslateBackend::with_foundry_local_endpoint_resolver(
+            self.http_client.clone(),
+            self.resolver.clone(),
+        );
+        backend
+            .configure(&request.settings)
+            .map_err(|error| LongDocumentBackendError::new(error.message))?;
+        backend
+            .translate_stream(&request.params)
+            .map(|streamed| streamed.result.translated_text)
+            .map_err(|error| LongDocumentBackendError::new(error.message))
+    }
+}
+
+fn chat_completion_sse(chunks: &[&str]) -> String {
+    let mut sse = String::new();
+    for chunk in chunks {
+        sse.push_str("data: {\"choices\":[{\"delta\":{\"content\":");
+        sse.push_str(&serde_json::to_string(chunk).expect("test chunk should serialize"));
+        sse.push_str("}}]}\n\n");
+    }
+    sse.push_str("data: [DONE]\n\n");
+    sse
 }
 
 #[derive(Clone, Default)]

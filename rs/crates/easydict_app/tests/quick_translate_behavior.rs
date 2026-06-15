@@ -2179,6 +2179,129 @@ fn local_ai_route_decision_matrix_prefers_rust_native_paths_before_worker_bridge
     fs::remove_dir_all(&openvino_cache).expect("OpenVINO cache fixture should be removed");
 }
 
+#[test]
+fn local_ai_provider_aliases_route_to_native_boundaries_without_worker_bridge() {
+    let openvino_missing_cache = unique_temp_dir("easydict-local-ai-provider-alias-openvino");
+    fs::create_dir_all(&openvino_missing_cache).expect("OpenVINO missing cache dir should exist");
+    let openvino_missing_cache_string = path_string(&openvino_missing_cache);
+
+    struct AliasCase<'a> {
+        provider_mode: &'static str,
+        foundry_endpoint: Option<&'static str>,
+        foundry_model: Option<&'static str>,
+        cache_dir: Option<&'a str>,
+        expected: LocalAiRouteDecision,
+    }
+
+    let cases = [
+        AliasCase {
+            provider_mode: "windows_ai",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        AliasCase {
+            provider_mode: "windows-ai",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        AliasCase {
+            provider_mode: "phi_silica",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        AliasCase {
+            provider_mode: "foundry_local",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        AliasCase {
+            provider_mode: "foundry-local",
+            foundry_endpoint: Some("http://127.0.0.1:5273/v1/chat/completions"),
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        AliasCase {
+            provider_mode: "local-ai",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        AliasCase {
+            provider_mode: "open_vino",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: Some(openvino_missing_cache_string.as_str()),
+            expected: LocalAiRouteDecision::LocalError(
+                "OpenVINO runtime or NLLB-200 model is not downloaded. Open Settings -> Services and click \"Download model\".",
+            ),
+        },
+        AliasCase {
+            provider_mode: "open-vino",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: Some(openvino_missing_cache_string.as_str()),
+            expected: LocalAiRouteDecision::LocalError(
+                "OpenVINO runtime or NLLB-200 model is not downloaded. Open Settings -> Services and click \"Download model\".",
+            ),
+        },
+    ];
+
+    for (index, case) in cases.iter().enumerate() {
+        let request = local_ai_route_matrix_request(
+            180 + index as u64,
+            "windows-local-ai",
+            Some(case.provider_mode),
+            QuickTranslateExecutionKind::TranslateStream,
+            "en",
+            "zh-Hans",
+            case.foundry_endpoint,
+            case.foundry_model,
+            case.cache_dir,
+        );
+
+        assert_eq!(
+            local_ai_route_decision(&request),
+            case.expected,
+            "provider alias {}",
+            case.provider_mode
+        );
+
+        #[cfg(feature = "retained-dotnet-workers")]
+        {
+            let retained_decision = local_ai_route_decision_with_worker_policy(
+                &request,
+                RetainedWorkerPolicy::all_enabled(),
+            );
+            assert_eq!(
+                retained_decision, case.expected,
+                "provider alias {}",
+                case.provider_mode
+            );
+            assert!(
+                !matches!(
+                    retained_decision,
+                    LocalAiRouteDecision::RetainedWorkerCompat
+                ),
+                "provider alias {} unexpectedly fell back to retained LocalAI worker",
+                case.provider_mode
+            );
+        }
+    }
+
+    fs::remove_dir_all(&openvino_missing_cache)
+        .expect("OpenVINO missing cache fixture should be removed");
+}
+
 #[cfg(not(feature = "retained-dotnet-workers"))]
 #[test]
 fn local_ai_route_decision_keeps_worker_compat_unreachable_without_retained_feature() {

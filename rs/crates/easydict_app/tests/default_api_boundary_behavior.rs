@@ -116,6 +116,64 @@ fn default_app_keeps_foundry_sdk_adapter_inside_foundry_local_lib() {
 }
 
 #[test]
+fn default_foundry_local_sdk_features_remain_lib_only_and_not_enabled_by_app_manifests() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("app crate should live under rs/crates/easydict_app");
+    let foundry_manifest_path = repo_root.join("lib/easydict-foundry-local/Cargo.toml");
+    let foundry_manifest = fs::read_to_string(&foundry_manifest_path).unwrap_or_else(|error| {
+        panic!(
+            "failed to read {}: {error}",
+            foundry_manifest_path.display()
+        )
+    });
+    assert!(
+        foundry_manifest.contains("\n[features]\ndefault = []\n"),
+        "Foundry Local SDK adapter must remain opt-in in the lib manifest"
+    );
+    assert!(
+        foundry_manifest.contains("foundry-local-sdk = {")
+            && foundry_manifest.contains("optional = true"),
+        "foundry-local-sdk dependency must remain optional and lib-owned"
+    );
+    assert!(
+        foundry_manifest.contains("sdk = [\"dep:foundry-local-sdk\", \"dep:tokio\"]"),
+        "Foundry Local SDK feature should stay explicit in the lib manifest"
+    );
+    assert!(
+        foundry_manifest.contains("sdk-winml = [\"sdk\", \"foundry-local-sdk/winml\"]"),
+        "Foundry Local WinML SDK feature should stay explicit in the lib manifest"
+    );
+
+    for manifest_path in cargo_manifest_files_under(repo_root) {
+        let relative_path = relative_slash_path(repo_root, &manifest_path);
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
+        if relative_path == "lib/easydict-foundry-local/Cargo.toml" {
+            continue;
+        }
+        assert!(
+            !manifest.contains("foundry-local-sdk"),
+            "{relative_path} must not depend on the Foundry SDK directly"
+        );
+        if manifest.contains("easydict_foundry_local") {
+            for forbidden_feature in [
+                "features = [\"sdk\"",
+                "features=[\"sdk\"",
+                "features = [\"sdk-winml\"",
+                "features=[\"sdk-winml\"",
+            ] {
+                assert!(
+                    !manifest.contains(forbidden_feature),
+                    "{relative_path} must not enable Foundry SDK features on the default app/package path"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn default_app_manifests_do_not_link_hybrid_packaging_or_dotnet_runtime_tools() {
     let app_manifest = include_str!("../Cargo.toml");
     let preview_manifest = include_str!("../../easydict_preview_iced/Cargo.toml");
@@ -424,6 +482,38 @@ fn rust_source_files_under(root: &Path) -> Vec<PathBuf> {
     collect_rust_source_files(root, &mut files);
     files.sort();
     files
+}
+
+fn cargo_manifest_files_under(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    collect_cargo_manifest_files(root, &mut files);
+    files.sort();
+    files
+}
+
+fn collect_cargo_manifest_files(root: &Path, files: &mut Vec<PathBuf>) {
+    let Some(name) = root.file_name().and_then(|value| value.to_str()) else {
+        return;
+    };
+    if matches!(name, ".git" | "target") {
+        return;
+    }
+
+    for entry in fs::read_dir(root).unwrap_or_else(|error| {
+        panic!(
+            "failed to read manifest directory {}: {error}",
+            root.display()
+        )
+    }) {
+        let path = entry
+            .unwrap_or_else(|error| panic!("failed to read manifest directory entry: {error}"))
+            .path();
+        if path.is_dir() {
+            collect_cargo_manifest_files(&path, files);
+        } else if path.file_name().and_then(|value| value.to_str()) == Some("Cargo.toml") {
+            files.push(path);
+        }
+    }
 }
 
 fn collect_rust_source_files(root: &Path, files: &mut Vec<PathBuf>) {

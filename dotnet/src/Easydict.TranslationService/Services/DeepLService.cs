@@ -33,7 +33,8 @@ public sealed class DeepLService : BaseTranslationService
         Language.Estonian, Language.Finnish, Language.Greek, Language.Hungarian,
         Language.Indonesian, Language.Latvian, Language.Lithuanian, Language.Norwegian,
         Language.Romanian, Language.Slovak, Language.Slovenian, Language.Swedish,
-        Language.Turkish, Language.Ukrainian
+        Language.Turkish, Language.Ukrainian, Language.Vietnamese, Language.Arabic,
+        Language.Thai, Language.Hebrew, Language.Tamil, Language.Telugu
     ];
 
     public DeepLService(HttpClient httpClient) : base(httpClient)
@@ -427,6 +428,12 @@ public sealed class DeepLService : BaseTranslationService
         Language.Swedish => "SV",
         Language.Turkish => "TR",
         Language.Ukrainian => "UK",
+        Language.Vietnamese => "VI",
+        Language.Arabic => "AR",
+        Language.Thai => "TH",
+        Language.Hebrew => "HE",
+        Language.Tamil => "TA",
+        Language.Telugu => "TE",
         _ => language.ToIso639().ToUpper()
     };
 }

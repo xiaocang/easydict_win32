@@ -36,6 +36,35 @@ public class DeepLServiceTests
             .Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(Language.Vietnamese)]
+    [InlineData(Language.Arabic)]
+    [InlineData(Language.Thai)]
+    [InlineData(Language.Hebrew)]
+    [InlineData(Language.Tamil)]
+    [InlineData(Language.Telugu)]
+    public void SupportedLanguages_ContainsDeepLSupportedLanguages(Language language)
+    {
+        // Regression test for #174: these languages are supported by DeepL but were
+        // missing from the supported-languages list, causing local validation to reject them.
+        _service.SupportedLanguages.Should().Contain(language);
+    }
+
+    [Fact]
+    public void SupportsLanguagePair_JapaneseToVietnamese_ReturnsTrue()
+    {
+        // Exact repro from #174.
+        _service.SupportsLanguagePair(Language.Japanese, Language.Vietnamese)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void SupportsLanguagePair_EnglishToVietnamese_ReturnsTrue()
+    {
+        _service.SupportsLanguagePair(Language.English, Language.Vietnamese)
+            .Should().BeTrue();
+    }
+
     [Fact]
     public void ServiceId_IsDeepL()
     {

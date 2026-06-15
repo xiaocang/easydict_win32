@@ -70,6 +70,9 @@ version = "0.6"
 [dependencies.quick-xml]
 version = "0.40"
 
+[dependencies.ripemd]
+version = "0.2"
+
 [dependencies.thiserror]
 version = "2.0.18"
 

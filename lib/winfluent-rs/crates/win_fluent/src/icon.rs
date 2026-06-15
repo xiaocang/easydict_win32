@@ -2,17 +2,31 @@
 pub struct IconToken {
     pub name: &'static str,
     pub glyph: Option<char>,
+    pub image: Option<&'static [u8]>,
 }
 
 impl IconToken {
     pub const fn named(name: &'static str) -> Self {
-        Self { name, glyph: None }
+        Self {
+            name,
+            glyph: None,
+            image: None,
+        }
     }
 
     pub const fn with_glyph(name: &'static str, glyph: char) -> Self {
         Self {
             name,
             glyph: Some(glyph),
+            image: None,
+        }
+    }
+
+    pub const fn with_image(name: &'static str, image: &'static [u8]) -> Self {
+        Self {
+            name,
+            glyph: None,
+            image: Some(image),
         }
     }
 }

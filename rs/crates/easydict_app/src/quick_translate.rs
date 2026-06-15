@@ -32,9 +32,9 @@ use crate::protocol::{
     SettingsSnapshot, SynonymDto, TranslateParams, TranslationResultDto, WordFormDto,
     WordResultDto,
 };
-use crate::retained_workers::RetainedWorkerPolicy;
+use crate::runtime_policy::RuntimeRoutePolicy;
 #[cfg(not(feature = "retained-dotnet-workers"))]
-use crate::retained_workers::LOCAL_AI_WORKER_DISABLED_MESSAGE;
+use crate::runtime_policy::LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE;
 use crate::settings_status::{open_vino_cache_status_for_settings, OpenVinoCacheStatus};
 use crate::state::{
     settings_snapshot, stable_partition_demoted, ConnectionStatus, EasydictUiState,
@@ -1687,7 +1687,7 @@ pub fn run_quick_translate_service_with_app_dir(
     run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
         app_dir,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
         &mut windows_ai_client,
         &mut foundry_resolver,
     )
@@ -1698,7 +1698,7 @@ pub fn run_quick_translate_service_with_app_dir(
 pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> QuickTranslateServiceUpdate {
     let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
     let mut windows_ai_client = default_windows_ai_language_model_client();
@@ -1718,7 +1718,7 @@ pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy_and_f
 >(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
     foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
     let mut windows_ai_client = default_windows_ai_language_model_client();
@@ -1744,7 +1744,7 @@ pub fn run_quick_translate_service_with_app_dir_and_native_local_ai_probes<
     run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_probes_internal(
         request,
         app_dir,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
         windows_ai_probe,
         foundry_resolver,
     )
@@ -1763,7 +1763,7 @@ pub fn run_quick_translate_service_with_app_dir_and_native_local_ai_client<
     run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
         app_dir,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
         windows_ai_client,
         foundry_resolver,
     )
@@ -1775,7 +1775,7 @@ fn run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_a
 >(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
     windows_ai_probe: &mut P,
     foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
@@ -1821,7 +1821,7 @@ fn run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_a
 >(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
     windows_ai_client: &mut C,
     foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
@@ -1895,7 +1895,7 @@ fn run_quick_translate_streaming_service_with_app_dir(
         request,
         app_dir,
         sender,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
         &mut windows_ai_client,
         &mut foundry_resolver,
     )
@@ -1915,7 +1915,7 @@ pub fn run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver<
         request,
         app_dir,
         sender,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
         &mut windows_ai_client,
         foundry_resolver,
     )
@@ -1936,7 +1936,7 @@ pub fn run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_cl
         request,
         app_dir,
         sender,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
         windows_ai_client,
         foundry_resolver,
     )
@@ -1950,7 +1950,7 @@ pub fn run_quick_translate_streaming_service_with_packaged_app_dir_and_worker_po
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
     foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
     let mut windows_ai_client = default_windows_ai_language_model_client();
@@ -1971,7 +1971,7 @@ fn run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_nati
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
     windows_ai_client: &mut C,
     foundry_resolver: &mut R,
 ) -> QuickTranslateServiceUpdate {
@@ -2720,7 +2720,7 @@ fn run_quick_translate_service_with_local_ai_bridge(
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
     let _ = app_dir;
-    service_error_update(request, LOCAL_AI_WORKER_DISABLED_MESSAGE)
+    service_error_update(request, LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE)
 }
 
 #[cfg(feature = "retained-dotnet-workers")]
@@ -2783,7 +2783,7 @@ fn run_quick_translate_streaming_service_with_local_ai_bridge(
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
     let _ = (app_dir, sender);
-    service_error_update(request, LOCAL_AI_WORKER_DISABLED_MESSAGE)
+    service_error_update(request, LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE)
 }
 
 fn run_quick_translate_streaming_service_with_native_bing(
@@ -2878,14 +2878,14 @@ pub enum LocalAiRouteDecision {
 
 #[doc(hidden)]
 pub fn local_ai_route_decision(request: &QuickTranslateServiceRequest) -> LocalAiRouteDecision {
-    local_ai_route_decision_with_native_probes(request, RetainedWorkerPolicy::all_disabled(), true)
+    local_ai_route_decision_with_native_probes(request, RuntimeRoutePolicy::all_disabled(), true)
 }
 
 #[cfg(feature = "retained-dotnet-workers")]
 #[doc(hidden)]
 pub fn local_ai_route_decision_with_worker_policy(
     request: &QuickTranslateServiceRequest,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> LocalAiRouteDecision {
     local_ai_route_decision_with_native_probes(
         request,
@@ -2896,7 +2896,7 @@ pub fn local_ai_route_decision_with_worker_policy(
 
 fn local_ai_route_decision_with_native_probes(
     request: &QuickTranslateServiceRequest,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
     allow_native_probes: bool,
 ) -> LocalAiRouteDecision {
     if request.service.id != "windows-local-ai" {
@@ -2936,7 +2936,7 @@ fn local_ai_route_decision_with_native_probes(
         #[cfg(not(feature = "retained-dotnet-workers"))]
         {
             let _ = worker_policy;
-            return LocalAiRouteDecision::RustNativeRequired(LOCAL_AI_WORKER_DISABLED_MESSAGE);
+            return LocalAiRouteDecision::RustNativeRequired(LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE);
         }
     }
 
@@ -2955,7 +2955,7 @@ fn request_should_probe_auto_foundry_local(request: &QuickTranslateServiceReques
 fn local_ai_native_probe_route_decision(
     request: &QuickTranslateServiceRequest,
 ) -> LocalAiRouteDecision {
-    local_ai_route_decision_with_native_probes(request, RetainedWorkerPolicy::all_disabled(), true)
+    local_ai_route_decision_with_native_probes(request, RuntimeRoutePolicy::all_disabled(), true)
 }
 
 fn local_ai_request_should_probe_windows_ai(request: &QuickTranslateServiceRequest) -> bool {
@@ -3040,14 +3040,14 @@ fn request_uses_local_ai_worker_bridge(request: &QuickTranslateServiceRequest) -
 pub fn local_ai_quick_translate_local_error(
     request: &QuickTranslateServiceRequest,
 ) -> Option<&'static str> {
-    local_ai_quick_translate_local_error_for_policy(request, RetainedWorkerPolicy::all_disabled())
+    local_ai_quick_translate_local_error_for_policy(request, RuntimeRoutePolicy::all_disabled())
 }
 
 #[cfg(feature = "retained-dotnet-workers")]
 #[doc(hidden)]
 pub fn local_ai_quick_translate_local_error_with_worker_policy(
     request: &QuickTranslateServiceRequest,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> Option<&'static str> {
     local_ai_quick_translate_local_error_for_policy(
         request,
@@ -3057,7 +3057,7 @@ pub fn local_ai_quick_translate_local_error_with_worker_policy(
 
 fn local_ai_quick_translate_local_error_for_policy(
     request: &QuickTranslateServiceRequest,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> Option<&'static str> {
     match local_ai_route_decision_with_native_probes(request, worker_policy, false) {
         LocalAiRouteDecision::LocalError(error)
@@ -3750,8 +3750,6 @@ fn run_service_request<B: QuickTranslateBackend>(
     }
 
     if request.service.id.starts_with("mdx::") {
-        let has_mdd_resources =
-            mdx_service_has_mdd_resources(&request.settings, &request.service.id);
         return match backend.mdx_lookup(&MdxLookupParams {
             dictionary_id: request.service.id.clone(),
             query: request.params.text.clone(),
@@ -3765,7 +3763,6 @@ fn run_service_request<B: QuickTranslateBackend>(
                     &request.service,
                     &request.params.text,
                     result,
-                    has_mdd_resources,
                 )),
             },
             Err(error) => QuickTranslateServiceOutcome {
@@ -3828,7 +3825,6 @@ fn mdx_lookup_result_to_translation_result(
     service: &QuickTranslateService,
     query: &str,
     result: MdxLookupResult,
-    has_mdd_resources: bool,
 ) -> TranslationResultDto {
     if result.entries.is_empty() {
         return TranslationResultDto {
@@ -3858,7 +3854,8 @@ fn mdx_lookup_result_to_translation_result(
         .filter(|text| !text.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\n\n");
-    let raw_html = has_mdd_resources
+    let raw_html = result
+        .mdd_resources_inlined
         .then(|| mdx_entries_raw_html(&result.entries))
         .filter(|html| !html.trim().is_empty());
     let word_result = (!translated_text.trim().is_empty()).then(|| WordResultDto {
@@ -3884,19 +3881,6 @@ fn mdx_lookup_result_to_translation_result(
         word_result,
         raw_html,
     }
-}
-
-fn mdx_service_has_mdd_resources(settings: &SettingsSnapshot, service_id: &str) -> bool {
-    settings
-        .imported_mdx_dictionaries
-        .as_ref()
-        .and_then(|dictionaries| {
-            dictionaries
-                .iter()
-                .find(|dictionary| dictionary.service_id.eq_ignore_ascii_case(service_id))
-        })
-        .map(|dictionary| !dictionary.mdd_file_paths.is_empty())
-        .unwrap_or(false)
 }
 
 fn mdx_entry_readable_text(entry: &MdxLookupEntry) -> String {

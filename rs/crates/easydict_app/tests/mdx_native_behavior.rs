@@ -11,7 +11,7 @@ use easydict_app::{
     run_native_mdx_lookup_with_factories, run_native_mdx_lookup_with_factories_and_mdd_policy,
     run_native_mdx_lookup_with_factory, MdxEncryptionMode, NativeMddResourceError,
     NativeMddResourceReader, NativeMddResourceReaderFactory, NativeMdxDictionaryReader,
-    NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
+    NativeMdxDictionaryReaderFactory, NativeMdxLookupError, RsMdictMddReaderFactory,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use std::collections::{HashMap, VecDeque};
@@ -608,6 +608,44 @@ fn native_mdd_resource_lookup_reads_real_rs_mdict_mdd_fixture() {
 }
 
 #[test]
+fn native_mdx_lookup_inlines_first_hit_from_real_multi_mdd_fixtures() {
+    let temp_dir = unique_temp_dir("easydict-native-mdd-real-first-hit-inline");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let first_mdd_path = temp_dir.join("Demo.mdd");
+    let second_mdd_path = temp_dir.join("Demo.1.mdd");
+    write_minimal_mdd_fixture(&first_mdd_path, &[(r"\images\logo.png", b"FIRST")]);
+    write_minimal_mdd_fixture(&second_mdd_path, &[(r"\images\logo.png", b"SECOND")]);
+
+    let mut dictionary = mdx_dictionary(false, []);
+    dictionary.mdd_file_paths = vec![path_string(&first_mdd_path), path_string(&second_mdd_path)];
+    let settings = mdx_settings_with_dictionary(dictionary);
+    let mut mdx_factory = RecordingMdxReaderFactory::with_readers([RecordingMdxReader::new(
+        [("apple", ("apple", r#"<img src="images/logo.png">"#))],
+        [],
+    )]);
+    let mut mdd_factory = RsMdictMddReaderFactory;
+
+    let result = run_native_mdx_lookup_with_factories(
+        &mut mdx_factory,
+        &mut mdd_factory,
+        &MdxLookupParams {
+            dictionary_id: "mdx::demo".to_string(),
+            query: "apple".to_string(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("MDX lookup should inline the first real MDD resource hit");
+
+    let html = &result.entries[0].html;
+    assert!(html.contains(r#"src="data:image/png;base64,RklSU1Q=""#));
+    assert!(!html.contains("U0VDT05E"));
+    assert!(result.mdd_resources_inlined);
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
 fn native_mdx_lookup_inlines_mdd_resources_into_webview_ready_html() {
     let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd", r"C:\Dicts\demo.1.mdd"]);
     let settings = mdx_settings_with_dictionary(dictionary);
@@ -670,6 +708,7 @@ fn native_mdx_lookup_inlines_mdd_resources_into_webview_ready_html() {
     assert!(html.contains(r#"href="javascript:alert(1)""#));
     assert!(!html.contains("https://dictassets/audio/pron.mp3"));
     assert!(!html.contains("sound://audio/click.mp3"));
+    assert!(result.mdd_resources_inlined);
 }
 
 #[test]
@@ -701,6 +740,40 @@ fn native_mdx_lookup_can_skip_mdd_resource_inline_for_key_only_callers() {
 
     assert_eq!(mdd_factory.opened, Vec::<String>::new());
     assert_eq!(result.entries[0].html, r#"<img src="images/logo.png">"#);
+    assert!(!result.mdd_resources_inlined);
+}
+
+#[test]
+fn native_mdx_lookup_reports_no_mdd_inline_when_all_mdd_files_fail_to_open() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\bad.mdd", r"C:\Dicts\missing.mdd"]);
+    let settings = mdx_settings_with_dictionary(dictionary);
+    let mut mdx_factory = RecordingMdxReaderFactory::with_readers([RecordingMdxReader::new(
+        [("apple", ("apple", r#"<img src="images/logo.png">"#))],
+        [],
+    )]);
+    let mut mdd_factory = RecordingMddReaderFactory::with_readers([
+        Err(NativeMddResourceError::new("bad MDD")),
+        Err(NativeMddResourceError::new("missing MDD")),
+    ]);
+
+    let result = run_native_mdx_lookup_with_factories(
+        &mut mdx_factory,
+        &mut mdd_factory,
+        &MdxLookupParams {
+            dictionary_id: "mdx::demo".to_string(),
+            query: "apple".to_string(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("MDD open failures should not fail the MDX lookup");
+
+    assert_eq!(
+        mdd_factory.opened,
+        [r"C:\Dicts\bad.mdd", r"C:\Dicts\missing.mdd"]
+    );
+    assert_eq!(result.entries[0].html, r#"<img src="images/logo.png">"#);
+    assert!(!result.mdd_resources_inlined);
 }
 
 #[test]
@@ -734,6 +807,7 @@ fn native_mdx_lookup_continues_mdd_inline_after_lookup_error() {
     assert!(result.entries[0]
         .html
         .contains(r#"src="data:image/png;base64,iVBORw==""#));
+    assert!(result.mdd_resources_inlined);
 }
 
 #[test]

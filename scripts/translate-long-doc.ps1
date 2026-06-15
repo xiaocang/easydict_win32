@@ -6,6 +6,7 @@ param(
     [string]$EnvFile,
     [string]$SourceLanguage = "auto",
     [string]$OutputFile,
+    [string]$ResultJsonPath,
     [string]$ServiceId,
     [string]$OutputMode,
     [string]$Layout,
@@ -91,6 +92,7 @@ function New-RustLongDocArguments {
     if ($SourceLanguage) { $longDocArguments += @("--from", $SourceLanguage) }
     if ($EnvFile) { $longDocArguments += @("--env-file", $EnvFile) }
     if ($OutputFile) { $longDocArguments += @("--output", $OutputFile) }
+    if ($ResultJsonPath) { $longDocArguments += @("--result-json", $ResultJsonPath) }
     if ($ServiceId) { $longDocArguments += @("--service", $ServiceId) }
     if ($OutputMode) { $longDocArguments += @("--output-mode", $OutputMode) }
     if ($Layout) { $longDocArguments += @("--layout", $Layout) }
@@ -102,33 +104,6 @@ function New-RustLongDocArguments {
     if ($VisionApiKey) { $longDocArguments += @("--vision-api-key", $VisionApiKey) }
     if ($VisionModel) { $longDocArguments += @("--vision-model", $VisionModel) }
     if ($AppDir) { $longDocArguments += @("--app-dir", $AppDir) }
-
-    return $longDocArguments
-}
-
-function New-LegacyLongDocArguments {
-    $longDocArguments = @()
-
-    if ($ListServices) {
-        $longDocArguments += "--list-services"
-        return $longDocArguments
-    }
-
-    $longDocArguments += @("--input", $InputFile, "--target-language", $TargetLanguage)
-
-    if ($SourceLanguage) { $longDocArguments += @("--from", $SourceLanguage) }
-    if ($EnvFile) { $longDocArguments += @("--env-file", $EnvFile) }
-    if ($OutputFile) { $longDocArguments += @("--output", $OutputFile) }
-    if ($ServiceId) { $longDocArguments += @("--service", $ServiceId) }
-    if ($OutputMode) { $longDocArguments += @("--output-mode", $OutputMode) }
-    if ($Layout) { $longDocArguments += @("--layout", $Layout) }
-    if ($PdfExportMode) { $longDocArguments += @("--pdf-export-mode", $PdfExportMode) }
-    if ($scriptParameters.ContainsKey("Page")) { $longDocArguments += @("--page", $Page) }
-    if ($PageRange) { $longDocArguments += @("--page-range", $PageRange) }
-    if ($scriptParameters.ContainsKey("MaxConcurrency")) { $longDocArguments += @("--max-concurrency", $MaxConcurrency) }
-    if ($VisionEndpoint) { $longDocArguments += @("--vision-endpoint", $VisionEndpoint) }
-    if ($VisionApiKey) { $longDocArguments += @("--vision-api-key", $VisionApiKey) }
-    if ($VisionModel) { $longDocArguments += @("--vision-model", $VisionModel) }
 
     return $longDocArguments
 }
@@ -202,40 +177,11 @@ function Invoke-RustCargo {
     exit $exitCode
 }
 
-function Invoke-DotnetLegacy {
-    param([string[]]$LongDocArguments)
-
-    $projectPath = Join-Path $repoRoot "dotnet\src\Easydict.WinUI\Easydict.WinUI.csproj"
-    $dotnetArguments = @(
-        "run",
-        "--project", $projectPath,
-        "-p:WindowsPackageType=None",
-        "-p:EnableLocalDebugLongDocCli=true",
-        "--",
-        "--translate-long-doc"
-    ) + $LongDocArguments
-
-    & dotnet @dotnetArguments
-    exit $LASTEXITCODE
-}
-
-if ($UseCargo -and $UseDotnetLegacy) {
-    throw "Use either -UseCargo or -UseDotnetLegacy, not both."
-}
-
-if ($UseDotnetLegacy -and $RustHelperPath) {
-    throw "-RustHelperPath is only valid in Rust helper mode."
-}
-
-if ($UseDotnetLegacy -and $AppDir) {
-    throw "-AppDir is only valid in Rust helper mode."
+if ($UseDotnetLegacy) {
+    throw "-UseDotnetLegacy has been retired. scripts/translate-long-doc.ps1 is Rust-only; use -UseCargo for source checkout development mode, or pass -RustHelperPath/-AppDir to select easydict_long_doc.exe."
 }
 
 Assert-RequestArguments
-
-if ($UseDotnetLegacy) {
-    Invoke-DotnetLegacy -LongDocArguments (New-LegacyLongDocArguments)
-}
 
 $rustArguments = New-RustLongDocArguments
 if ($UseCargo) {

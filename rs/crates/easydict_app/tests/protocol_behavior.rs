@@ -495,7 +495,9 @@ fn mdx_lookup_dtos_are_serializable_for_native_mdx_contract() {
             html: "<p>fruit</p>".to_string(),
             dictionary_name: Some("Demo".to_string()),
         }],
+        mdd_resources_inlined: true,
     };
     let entries_json = serialize_json(&entries).expect("entries serialize");
     assert!(entries_json.contains("\"dictionaryName\":\"Demo\""));
+    assert!(entries_json.contains("\"mddResourcesInlined\":true"));
 }

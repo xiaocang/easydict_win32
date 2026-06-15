@@ -27,6 +27,7 @@ fn main() {
             view_schema(&capture_overlay_view_with_state(
                 &state.capture_interaction,
                 state.capture_selection,
+                state.capture_background.as_ref(),
             ))
             .snapshot(),
         ),

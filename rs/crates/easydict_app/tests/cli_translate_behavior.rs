@@ -236,6 +236,47 @@ fn local_ai_stream_cli_host_hint_no_longer_enables_retained_worker_fallback() {
 }
 
 #[test]
+fn local_ai_cli_host_and_app_dir_hints_are_legacy_noops_together() {
+    let app_dir = unique_temp_dir("easydict-cli-local-ai-host-appdir-app");
+    let settings_dir = unique_temp_dir("easydict-cli-local-ai-host-appdir-settings");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--host",
+            "C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe",
+            "--host-arg",
+            "--trace",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
+        .env(
+            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+            "__missing_foundry_cli__.cmd",
+        )
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert_local_ai_cli_does_not_probe_retained_worker(&output, "translate --host --app-dir");
+
+    let _ = fs::remove_dir_all(app_dir);
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
 fn local_ai_batch_cli_app_dir_no_longer_enables_retained_worker_fallback() {
     let app_dir = unique_temp_dir("easydict-cli-local-ai-batch-app");
     let settings_dir = unique_temp_dir("easydict-cli-local-ai-batch-settings");
@@ -526,6 +567,59 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
         !stderr.to_ascii_lowercase().contains("compat host"),
         "Foundry probe should not describe a compat host route:\n{stderr}"
     );
+
+    let _ = fs::remove_dir_all(app_dir);
+    let _ = fs::remove_dir_all(settings_dir);
+    let _ = fs::remove_dir_all(fake_foundry_dir);
+}
+
+#[test]
+fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_retained_worker_before_spawn() {
+    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-bad-override-app");
+    let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-bad-override-settings");
+    let fake_foundry_dir = unique_temp_dir("easydict-cli-bad-foundry-override");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
+    let marker_path = fake_foundry_dir.join("retained-worker-cli-was-spawned.txt");
+    let fake_foundry_path = fake_foundry_dir.join("Easydict.Workers.LocalAi.exe.cmd");
+    fs::write(
+        &fake_foundry_path,
+        format!(
+            "@echo off\r\necho spawned >\"{}\"\r\necho Foundry Local endpoint: http://127.0.0.1:1/v1/chat/completions\r\n",
+            marker_path.display()
+        ),
+    )
+    .expect("fake retained-worker CLI should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        !marker_path.exists(),
+        "Foundry CLI override that points at a retained worker name must not be spawned:\n{stderr}"
+    );
+    assert!(!stderr.contains("Local AI worker executable not found"));
+    assert!(!stderr.to_ascii_lowercase().contains("compat host"));
 
     let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);

@@ -44,7 +44,7 @@ pub mod protocol;
 mod protocol_core;
 pub mod quick_translate;
 pub mod resource_download;
-mod retained_workers;
+mod runtime_policy;
 pub mod screen_capture;
 pub mod settings_migration;
 pub mod settings_status;
@@ -199,7 +199,8 @@ pub use long_document::{
     run_long_document_request, run_long_document_request_with_app_dir,
     run_long_document_request_with_app_dir_and_native_local_ai_client,
     run_long_document_request_with_native_route, run_native_text_long_document_request,
-    run_native_text_long_document_request_with_translator, LongDocumentBackend,
+    run_native_text_long_document_request_with_translator,
+    run_native_text_long_document_request_with_translator_and_cancellation, LongDocumentBackend,
     LongDocumentBackendError, LongDocumentEvent, LongDocumentInput, LongDocumentOutcome,
     LongDocumentServiceRequest, LongDocumentStartError, NativeLongDocumentTranslator,
     QuickTranslateNativeLongDocumentTranslator, WindowsAiNativeLongDocumentTranslator,
@@ -357,7 +358,7 @@ pub use resource_download::{
     ResourceDownloadProgress, ResourceDownloadRetryPolicy, ResourceProbeResult,
 };
 #[cfg(feature = "retained-dotnet-workers")]
-pub use retained_workers::{
+pub use runtime_policy::{
     RetainedWorkerPolicy, DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE,
     DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE, GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
     LOCAL_AI_WORKER_DISABLED_MESSAGE, LONGDOC_WORKER_DISABLED_MESSAGE,
@@ -552,6 +553,7 @@ impl Application for EasydictApp {
             "capture-overlay" => capture_overlay_view_with_state(
                 &self.state.capture_interaction,
                 self.state.capture_selection,
+                self.state.capture_background.as_ref(),
             ),
             "pop-button" => pop_button_view(),
             _ => main_window_view(&self.state),
@@ -1056,6 +1058,9 @@ impl EasydictApp {
                 self.state.pending_ocr_mode = Some(ocr::OcrMode::Translate);
                 self.state.capture_interaction = CaptureInteractionState::new();
                 self.state.capture_selection = None;
+                // Freeze the desktop before the overlay opens, like the WinUI
+                // ScreenCaptureWindow's BitBlt-on-open.
+                self.state.capture_background = crate::state::capture_screen_background();
                 self.state.ocr_status_text = "Select a region for OCR Translate".to_string();
                 Task::batch([
                     capture_screen_window_snapshot_task(),
@@ -1066,6 +1071,7 @@ impl EasydictApp {
                 self.state.pending_ocr_mode = Some(ocr::OcrMode::SilentClipboard);
                 self.state.capture_interaction = CaptureInteractionState::new();
                 self.state.capture_selection = None;
+                self.state.capture_background = crate::state::capture_screen_background();
                 self.state.ocr_status_text = "Select a region for Silent OCR".to_string();
                 Task::batch([
                     capture_screen_window_snapshot_task(),

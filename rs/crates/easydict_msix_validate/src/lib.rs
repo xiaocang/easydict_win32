@@ -28,6 +28,24 @@ const REQUIRED_RETAINED_WORKER_PAYLOADS: &[&str] = &[
     "workers/longdoc/Easydict.Workers.LongDoc.exe",
     "workers/localai/Easydict.Workers.LocalAi.exe",
 ];
+const HYBRID_ALLOWED_WORKER_PREFIXES: &[&str] =
+    &["workers/longdoc/", "workers/localai/", "workers/shared/"];
+const HYBRID_ALLOWED_DOTNET_PREFIXES: &[&str] =
+    &["dotnet/host/fxr/", "dotnet/shared/Microsoft.NETCore.App/"];
+const HYBRID_FORBIDDEN_WORKER_RUNTIME_FILE_NAMES: &[&str] = &[
+    "createdump.exe",
+    "dotnet.exe",
+    "hostfxr.dll",
+    "coreclr.dll",
+    "hostpolicy.dll",
+    "clrjit.dll",
+    "mscordaccore.dll",
+    "mscordbi.dll",
+    "mscorlib.dll",
+    "netstandard.dll",
+    "singlefilehost.exe",
+    "system.private.corelib.dll",
+];
 const RUST_ONLY_FORBIDDEN_PREFIXES: &[&str] = &["workers/", "dotnet/"];
 const RUST_ONLY_FORBIDDEN_RUNTIME_FILE_NAMES: &[&str] = &[
     "createdump.exe",
@@ -74,6 +92,8 @@ const RUST_ONLY_FORBIDDEN_REASON: &str =
     "Rust-only packages must not ship retained .NET workers or bundled .NET runtime";
 const NO_RETAINED_WORKERS_FORBIDDEN_REASON: &str =
     "Packages without retained .NET workers must not ship retained workers or bundled .NET runtime";
+const HYBRID_STALE_RUNTIME_ROOT_REASON: &str =
+    "Hybrid packages may only ship retained workers under workers/longdoc, workers/localai, workers/shared and shared .NET runtime under dotnet/host/fxr or dotnet/shared/Microsoft.NETCore.App";
 const FORBIDDEN_PAYLOAD_FILE_NAMES: &[(&str, &str)] = &[
     (
         "easydict.workers.ocr.exe",
@@ -204,6 +224,9 @@ pub enum ValidationError {
         path: String,
         reason: &'static str,
     },
+    UnsafeArchiveEntry {
+        path: String,
+    },
     Xml(String),
     Zip(String),
     Io(String),
@@ -233,12 +256,14 @@ pub enum FixMinVersionOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BundleMinVersionOptions {
     pub required_min_version: String,
+    pub runtime_profile: Option<PackageRuntimeProfile>,
 }
 
 impl Default for BundleMinVersionOptions {
     fn default() -> Self {
         Self {
             required_min_version: DEFAULT_MIN_VERSION.to_string(),
+            runtime_profile: Some(PackageRuntimeProfile::RustOnly),
         }
     }
 }
@@ -261,6 +286,9 @@ pub struct BundlePackageMinVersion {
 pub enum BundleMinVersionError {
     MissingPackagePayload,
     InvalidRequiredMinVersion(String),
+    UnsafeArchiveEntry {
+        path: String,
+    },
     PackageManifest {
         package: String,
         error: ValidationError,
@@ -397,6 +425,9 @@ impl fmt::Display for BundleMinVersionError {
             Self::InvalidRequiredMinVersion(value) => {
                 write!(formatter, "required MinVersion '{value}' is unparseable")
             }
+            Self::UnsafeArchiveEntry { path } => {
+                write!(formatter, "unsafe MSIX bundle archive entry path: {path}")
+            }
             Self::PackageManifest { package, error } => {
                 write!(formatter, "{package}: {error}")
             }
@@ -487,6 +518,9 @@ impl fmt::Display for ValidationError {
             }
             Self::ForbiddenPayload { path, reason } => {
                 write!(formatter, "forbidden MSIX payload '{path}' is present: {reason}")
+            }
+            Self::UnsafeArchiveEntry { path } => {
+                write!(formatter, "unsafe MSIX archive entry path: {path}")
             }
             Self::Xml(message) | Self::Zip(message) | Self::Io(message) => {
                 write!(formatter, "{message}")
@@ -631,6 +665,9 @@ pub fn verify_bundle_min_version(
             .by_index(index)
             .map_err(|error| BundleMinVersionError::Zip(error.to_string()))?;
         let entry_name = entry.name().to_string();
+        if entry.enclosed_name().is_none() || archive_entry_path_is_unsafe(&entry_name) {
+            return Err(BundleMinVersionError::UnsafeArchiveEntry { path: entry_name });
+        }
         let normalized = normalize_archive_path(&entry_name);
         if normalized == "appxmetadata/appxbundlemanifest.xml" {
             has_bundle_manifest = true;
@@ -658,6 +695,12 @@ pub fn verify_bundle_min_version(
                 package: package.clone(),
                 error: ValidationError::Zip(error.to_string()),
             })?;
+        let payload = archive_payload_index(&mut archive).map_err(|error| {
+            BundleMinVersionError::PackageManifest {
+                package: package.clone(),
+                error,
+            }
+        })?;
         let manifest = read_appx_manifest(&mut archive).map_err(|error| {
             BundleMinVersionError::PackageManifest {
                 package: package.clone(),
@@ -671,6 +714,14 @@ pub fn verify_bundle_min_version(
                 error,
             }
         })?;
+        if let Some(runtime_profile) = options.runtime_profile {
+            validate_payload_layout(&manifest, &payload, runtime_profile).map_err(|error| {
+                BundleMinVersionError::PackageManifest {
+                    package: package.clone(),
+                    error,
+                }
+            })?;
+        }
         let min_version = manifest
             .target_device_family_min_version
             .clone()
@@ -1546,6 +1597,9 @@ fn archive_payload_index<R: Read + Seek>(
             .by_index(index)
             .map_err(|error| ValidationError::Zip(error.to_string()))?;
         let original = entry.name().to_string();
+        if entry.enclosed_name().is_none() || archive_entry_path_is_unsafe(&original) {
+            return Err(ValidationError::UnsafeArchiveEntry { path: original });
+        }
         entries.push(ArchivePayloadEntry {
             normalized: normalize_archive_path(&original),
             original,
@@ -1621,6 +1675,8 @@ fn validate_hybrid_runtime_payload(
         );
     }
 
+    validate_hybrid_runtime_roots(payload)?;
+
     for required in REQUIRED_RETAINED_WORKER_PAYLOADS {
         if !payload.contains_exact(required) {
             return Err(ValidationError::MissingRequiredPayload {
@@ -1642,6 +1698,112 @@ fn validate_hybrid_runtime_payload(
     }
 
     Ok(())
+}
+
+fn validate_hybrid_runtime_roots(payload: &ArchivePayloadIndex) -> Result<(), ValidationError> {
+    for entry in &payload.entries {
+        if entry.normalized.starts_with("workers/shared/") {
+            if !hybrid_worker_shared_payload_allowed(entry) {
+                return Err(ValidationError::ForbiddenPayload {
+                    path: entry.original.clone(),
+                    reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+                });
+            }
+            continue;
+        }
+
+        if hybrid_retained_worker_payload_scope(entry) {
+            if hybrid_retained_worker_runtime_marker(entry) {
+                return Err(ValidationError::ForbiddenPayload {
+                    path: entry.original.clone(),
+                    reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+                });
+            }
+            continue;
+        }
+
+        if entry.normalized.starts_with("workers/") {
+            return Err(ValidationError::ForbiddenPayload {
+                path: entry.original.clone(),
+                reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+            });
+        }
+
+        if entry.normalized.starts_with("dotnet/") && !hybrid_dotnet_runtime_scope(entry) {
+            return Err(ValidationError::ForbiddenPayload {
+                path: entry.original.clone(),
+                reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+            });
+        }
+
+        if !hybrid_dotnet_runtime_scope(entry) && hybrid_forbidden_root_runtime_marker(entry) {
+            return Err(ValidationError::ForbiddenPayload {
+                path: entry.original.clone(),
+                reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn hybrid_worker_shared_payload_allowed(entry: &ArchivePayloadEntry) -> bool {
+    let Some(file_name) = entry.file_name() else {
+        return true;
+    };
+
+    WORKER_SHARED_ALLOWLIST
+        .iter()
+        .any(|allowed| file_name.eq_ignore_ascii_case(allowed))
+}
+
+fn hybrid_retained_worker_payload_scope(entry: &ArchivePayloadEntry) -> bool {
+    HYBRID_ALLOWED_WORKER_PREFIXES
+        .iter()
+        .filter(|prefix| **prefix != "workers/shared/")
+        .any(|prefix| {
+            entry
+                .normalized
+                .starts_with(&normalize_archive_path(prefix))
+        })
+}
+
+fn hybrid_dotnet_runtime_scope(entry: &ArchivePayloadEntry) -> bool {
+    HYBRID_ALLOWED_DOTNET_PREFIXES.iter().any(|prefix| {
+        entry
+            .normalized
+            .starts_with(&normalize_archive_path(prefix))
+    })
+}
+
+fn hybrid_retained_worker_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
+    let Some(file_name) = entry.file_name() else {
+        return false;
+    };
+
+    file_name.starts_with("system.") && file_name.ends_with(".dll")
+        || HYBRID_FORBIDDEN_WORKER_RUNTIME_FILE_NAMES.contains(&file_name)
+        || entry.normalized.contains("/host/fxr/")
+        || RUST_ONLY_FORBIDDEN_DOTNET_SHARED_FRAMEWORKS
+            .iter()
+            .any(|prefix| entry.normalized.contains(prefix))
+}
+
+fn hybrid_forbidden_root_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
+    let Some(file_name) = entry.file_name() else {
+        return false;
+    };
+
+    file_name.starts_with("easydict.workers.")
+        || file_name.starts_with("system.") && file_name.ends_with(".dll")
+        || file_name.starts_with("microsoft.csharp")
+        || file_name.starts_with("microsoft.visualbasic")
+        || file_name.starts_with("microsoft.win32")
+        || HYBRID_FORBIDDEN_WORKER_RUNTIME_FILE_NAMES.contains(&file_name)
+        || RUST_ONLY_FORBIDDEN_DOTNET_SHARED_FRAMEWORKS
+            .iter()
+            .any(|prefix| entry.normalized.contains(prefix))
+        || entry.normalized.contains("host/fxr/")
 }
 
 fn validate_rust_only_runtime_payload(
@@ -1716,6 +1878,18 @@ fn normalize_archive_path(path: &str) -> String {
     let path = path.replace('\\', "/");
     let path = path.trim_start_matches("./");
     path.to_ascii_lowercase()
+}
+
+fn archive_entry_path_is_unsafe(path: &str) -> bool {
+    let path = path.replace('\\', "/");
+    if path.is_empty() || path.starts_with('/') {
+        return true;
+    }
+
+    path.split('/').any(|part| {
+        part == ".."
+            || (part.len() == 2 && part.ends_with(':') && part.as_bytes()[0].is_ascii_alphabetic())
+    })
 }
 
 fn is_bundle_package_payload(normalized_path: &str) -> bool {
@@ -1837,6 +2011,14 @@ mod tests {
         assert_eq!(
             MsixValidationOptions::default().runtime_profile,
             PackageRuntimeProfile::RustOnly
+        );
+    }
+
+    #[test]
+    fn bundle_minversion_options_default_to_rust_only_profile() {
+        assert_eq!(
+            BundleMinVersionOptions::default().runtime_profile,
+            Some(PackageRuntimeProfile::RustOnly)
         );
     }
 
@@ -2031,6 +2213,124 @@ mod tests {
     }
 
     #[test]
+    fn hybrid_x64_package_allows_app_payload_worker_metadata_and_allowlisted_shared_files() {
+        let path = temp_msix_path("hybrid-app-worker-metadata");
+        let mut entries = x64_payload_entries();
+        entries.extend([
+            ("Easydict.WinUI.exe", b"winui-exe" as &[u8]),
+            ("Easydict.WinUI.dll", b"winui-dll"),
+            ("Easydict.WinUI.runtimeconfig.json", b"winui-runtimeconfig"),
+            ("Easydict.WinUI.deps.json", b"winui-deps"),
+            ("Easydict.TranslationService.dll", b"translation-service"),
+            (
+                "workers/longdoc/Easydict.Workers.LongDoc.runtimeconfig.json",
+                b"longdoc-runtimeconfig",
+            ),
+            (
+                "workers/localai/Easydict.Workers.LocalAi.deps.json",
+                b"localai-deps",
+            ),
+            ("workers/shared/Microsoft.WinUI.dll", b"shared-winui"),
+            ("workers/shared/WinRT.Runtime.dll", b"shared-winrt"),
+        ]);
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+
+        let options = hybrid_validation_options();
+        let result = validate_msix(&path, &options);
+
+        assert!(
+            result.is_ok(),
+            "hybrid app payload and framework-dependent worker metadata should remain allowed"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn hybrid_x64_package_rejects_stale_retained_runtime_roots() {
+        for (case_name, payload) in [
+            (
+                "worker-legacy",
+                "workers/legacy/Easydict.Workers.Legacy.exe",
+            ),
+            ("worker-runtime-coreclr", "workers/longdoc/coreclr.dll"),
+            ("worker-runtime-hostfxr", "workers/localai/hostfxr.dll"),
+            (
+                "worker-runtime-system",
+                "workers/longdoc/System.Private.CoreLib.dll",
+            ),
+            (
+                "worker-nested-host-fxr",
+                "workers/longdoc/host/fxr/8.0.11/hostfxr.dll",
+            ),
+            (
+                "worker-nested-core-runtime",
+                "workers/localai/shared/Microsoft.NETCore.App/8.0.11/System.Console.dll",
+            ),
+            ("worker-shared-runtime", "workers/shared/hostfxr.dll"),
+            ("worker-shared-random", "workers/shared/Other.dll"),
+            ("dotnet-sdk", "dotnet/sdk/8.0.400/dotnet.dll"),
+            (
+                "windows-desktop-runtime",
+                "dotnet/shared/Microsoft.WindowsDesktop.App/8.0.11/PresentationCore.dll",
+            ),
+            (
+                "aspnet-runtime",
+                "dotnet/shared/Microsoft.AspNetCore.App/8.0.11/Microsoft.AspNetCore.dll",
+            ),
+            ("root-hostfxr", "hostfxr.dll"),
+            (
+                "root-worker-runtimeconfig",
+                "Easydict.Workers.LocalAi.runtimeconfig.json",
+            ),
+            (
+                "loose-core-runtime",
+                "runtime/shared/Microsoft.NETCore.App/8.0.11/System.Private.CoreLib.dll",
+            ),
+        ] {
+            let path = temp_msix_path(&format!("hybrid-stale-runtime-root-{case_name}"));
+            let mut entries = x64_payload_entries();
+            entries.push((payload, b"stale"));
+            write_msix(
+                &path,
+                manifest(
+                    DEFAULT_EXPECTED_NAME,
+                    DEFAULT_EXPECTED_PUBLISHER,
+                    DEFAULT_MIN_VERSION,
+                    "x64",
+                ),
+                Some(b"sig"),
+                &entries,
+            );
+
+            let options = hybrid_validation_options();
+            let failures = validate_msix(&path, &options).unwrap_err();
+
+            assert_eq!(
+                failures,
+                vec![(
+                    PAYLOAD_LAYOUT_VALIDATOR,
+                    ValidationError::ForbiddenPayload {
+                        path: payload.to_string(),
+                        reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+                    }
+                )],
+                "{payload} should not be allowed in the hybrid retained-runtime layout"
+            );
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    #[test]
     fn rust_only_x64_package_accepts_rust_helpers_without_retained_workers_or_dotnet_runtime() {
         let path = temp_msix_path("rust-only-x64");
         write_msix(
@@ -2087,6 +2387,54 @@ mod tests {
             )]
         );
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_unsafe_archive_entry_before_payload_allowlist() {
+        for (case_name, payload) in [
+            ("parent", "../workers/localai/Easydict.Workers.LocalAi.exe"),
+            (
+                "absolute-root",
+                "/workers/localai/Easydict.Workers.LocalAi.exe",
+            ),
+            (
+                "absolute-drive",
+                "C:/workers/localai/Easydict.Workers.LocalAi.exe",
+            ),
+        ] {
+            let path = temp_msix_path(&format!("rust-only-unsafe-entry-{case_name}"));
+            let mut entries = rust_helper_entries();
+            entries.push((payload, b"unsafe"));
+            write_msix(
+                &path,
+                manifest(
+                    DEFAULT_EXPECTED_NAME,
+                    DEFAULT_EXPECTED_PUBLISHER,
+                    DEFAULT_MIN_VERSION,
+                    "x64",
+                ),
+                Some(b"sig"),
+                &entries,
+            );
+            let options = MsixValidationOptions {
+                runtime_profile: PackageRuntimeProfile::RustOnly,
+                ..MsixValidationOptions::default()
+            };
+
+            let failures = validate_msix(&path, &options).unwrap_err();
+
+            assert_eq!(
+                failures,
+                vec![(
+                    PAYLOAD_LAYOUT_VALIDATOR,
+                    ValidationError::UnsafeArchiveEntry {
+                        path: payload.to_string(),
+                    }
+                )],
+                "{payload} should fail as an unsafe archive entry before retained worker checks"
+            );
+            let _ = fs::remove_file(path);
+        }
     }
 
     #[test]
@@ -2803,18 +3151,24 @@ mod tests {
     #[test]
     fn verify_bundle_minversion_accepts_nested_appx_and_msix_payloads() {
         let path = temp_msix_path("bundle-ok").with_extension("msixbundle");
-        let x64_package = package_bytes(manifest(
-            DEFAULT_EXPECTED_NAME,
-            DEFAULT_EXPECTED_PUBLISHER,
-            DEFAULT_MIN_VERSION,
-            "x64",
-        ));
-        let arm64_package = package_bytes(manifest(
-            DEFAULT_EXPECTED_NAME,
-            DEFAULT_EXPECTED_PUBLISHER,
-            "10.0.22621.0",
-            "arm64",
-        ));
+        let x64_package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            &rust_helper_entries(),
+        );
+        let arm64_package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "arm64",
+            ),
+            &rust_helper_entries(),
+        );
         write_bundle(
             &path,
             &[
@@ -2843,6 +3197,161 @@ mod tests {
         );
         assert_eq!(report.packages[1].path, "nested/Easydict-arm64.msix");
         assert_eq!(report.packages[1].min_version, "10.0.22621.0");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_rejects_unsafe_package_payload_paths() {
+        let path = temp_msix_path("bundle-unsafe-payload").with_extension("msixbundle");
+        let package = package_bytes(manifest(
+            DEFAULT_EXPECTED_NAME,
+            DEFAULT_EXPECTED_PUBLISHER,
+            "10.0.22621.0",
+            "x64",
+        ));
+        write_bundle(&path, &[("../Easydict-x64.appx", &package)]);
+
+        let error = verify_bundle_min_version(&path, &BundleMinVersionOptions::default())
+            .expect_err("unsafe bundle payload path should fail");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::UnsafeArchiveEntry {
+                path: "../Easydict-x64.appx".to_string(),
+            }
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_rejects_unsafe_entries_inside_nested_package() {
+        let path = temp_msix_path("bundle-unsafe-nested").with_extension("msixbundle");
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "x64",
+            ),
+            &[("../workers/localai/Easydict.Workers.LocalAi.exe", b"unsafe")],
+        );
+        write_bundle(&path, &[("Easydict-x64.appx", &package)]);
+
+        let error = verify_bundle_min_version(&path, &BundleMinVersionOptions::default())
+            .expect_err("unsafe nested package path should fail");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::PackageManifest {
+                package: "Easydict-x64.appx".to_string(),
+                error: ValidationError::UnsafeArchiveEntry {
+                    path: "../workers/localai/Easydict.Workers.LocalAi.exe".to_string(),
+                },
+            }
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_rust_only_profile_rejects_nested_retained_runtime_payload() {
+        let path = temp_msix_path("bundle-rust-only-runtime").with_extension("msixbundle");
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "x64",
+            ),
+            &x64_payload_entries(),
+        );
+        write_bundle(&path, &[("Easydict-x64.appx", &package)]);
+
+        let options = BundleMinVersionOptions {
+            runtime_profile: Some(PackageRuntimeProfile::RustOnly),
+            ..BundleMinVersionOptions::default()
+        };
+        let error =
+            verify_bundle_min_version(&path, &options).expect_err("rust-only bundle should fail");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::PackageManifest {
+                package: "Easydict-x64.appx".to_string(),
+                error: ValidationError::ForbiddenPayload {
+                    path: "workers/longdoc/Easydict.Workers.LongDoc.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_REASON,
+                },
+            }
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_hybrid_profile_validates_nested_runtime_payload() {
+        let path = temp_msix_path("bundle-hybrid-runtime").with_extension("msixbundle");
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "x64",
+            ),
+            &rust_helper_entries(),
+        );
+        write_bundle(&path, &[("Easydict-x64.appx", &package)]);
+
+        let options = BundleMinVersionOptions {
+            runtime_profile: Some(PackageRuntimeProfile::Hybrid),
+            ..BundleMinVersionOptions::default()
+        };
+        let error =
+            verify_bundle_min_version(&path, &options).expect_err("hybrid bundle should fail");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::PackageManifest {
+                package: "Easydict-x64.appx".to_string(),
+                error: ValidationError::MissingRequiredPayload {
+                    path: "workers/longdoc/Easydict.Workers.LongDoc.exe".to_string(),
+                },
+            }
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_hybrid_profile_rejects_nested_stale_runtime_root() {
+        let path = temp_msix_path("bundle-hybrid-stale-root").with_extension("msixbundle");
+        let mut package_entries = x64_payload_entries();
+        package_entries.push(("dotnet/sdk/8.0.400/dotnet.dll", b"stale-sdk"));
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "x64",
+            ),
+            &package_entries,
+        );
+        write_bundle(&path, &[("Easydict-x64.appx", &package)]);
+
+        let options = BundleMinVersionOptions {
+            runtime_profile: Some(PackageRuntimeProfile::Hybrid),
+            ..BundleMinVersionOptions::default()
+        };
+        let error = verify_bundle_min_version(&path, &options)
+            .expect_err("hybrid bundle should reject stale nested runtime roots");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::PackageManifest {
+                package: "Easydict-x64.appx".to_string(),
+                error: ValidationError::ForbiddenPayload {
+                    path: "dotnet/sdk/8.0.400/dotnet.dll".to_string(),
+                    reason: HYBRID_STALE_RUNTIME_ROOT_REASON,
+                },
+            }
+        );
         let _ = fs::remove_file(path);
     }
 
@@ -2888,6 +3397,7 @@ mod tests {
 
         let options = BundleMinVersionOptions {
             required_min_version: "bad-version".to_string(),
+            ..BundleMinVersionOptions::default()
         };
         assert_eq!(
             verify_bundle_min_version(&path, &options).unwrap_err(),
@@ -3039,6 +3549,10 @@ mod tests {
     }
 
     fn package_bytes(manifest: String) -> Vec<u8> {
+        package_bytes_with_entries(manifest, &[])
+    }
+
+    fn package_bytes_with_entries(manifest: String, entries: &[(&str, &[u8])]) -> Vec<u8> {
         let cursor = Cursor::new(Vec::new());
         let mut writer = ZipWriter::new(cursor);
         let options: FileOptions<'_, ()> = FileOptions::default();
@@ -3048,6 +3562,9 @@ mod tests {
             manifest.as_bytes(),
             options,
         );
+        for (name, contents) in entries {
+            add_file(&mut writer, name, contents, options);
+        }
         writer.finish().expect("finish test package").into_inner()
     }
 

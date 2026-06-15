@@ -8,7 +8,7 @@ use crate::compat_protocol::{
 use crate::openvino_download::{
     openvino_ep_path_injection_enabled, openvino_runtime_path_with_directory,
 };
-use crate::retained_workers::{
+use crate::runtime_policy::{
     RetainedWorkerPolicy, LOCAL_AI_WORKER_DISABLED_MESSAGE, LONGDOC_WORKER_DISABLED_MESSAGE,
 };
 use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
@@ -25,6 +25,7 @@ pub struct WorkerCommand {
     program: PathBuf,
     args: Vec<String>,
     envs: Vec<(String, String)>,
+    deferred_dotnet_root: Option<PathBuf>,
     retained_worker_kind: Option<RetainedWorkerKind>,
 }
 
@@ -34,6 +35,7 @@ impl WorkerCommand {
             program: program.into(),
             args: Vec::new(),
             envs: Vec::new(),
+            deferred_dotnet_root: None,
             retained_worker_kind: None,
         }
     }
@@ -67,6 +69,27 @@ impl WorkerCommand {
     fn retained_worker(mut self, kind: RetainedWorkerKind) -> Self {
         self.retained_worker_kind = Some(kind);
         self
+    }
+
+    fn deferred_dotnet_root(mut self, dotnet_root: impl Into<PathBuf>) -> Self {
+        self.deferred_dotnet_root = Some(dotnet_root.into());
+        self
+    }
+
+    fn apply_deferred_retained_worker_environment(&mut self) {
+        let Some(dotnet_root) = self.deferred_dotnet_root.take() else {
+            return;
+        };
+
+        if has_bundled_dotnet_runtime(&dotnet_root) {
+            let dotnet_root = dotnet_root.to_string_lossy().to_string();
+            self.envs
+                .push(("DOTNET_ROOT".to_string(), dotnet_root.clone()));
+            self.envs
+                .push(("DOTNET_ROOT_X64".to_string(), dotnet_root.clone()));
+            self.envs
+                .push(("DOTNET_ROOT_ARM64".to_string(), dotnet_root));
+        }
     }
 
     fn ensure_retained_worker_is_enabled(&self) -> Result<(), WorkerClientError> {
@@ -282,8 +305,9 @@ pub struct WorkerClient {
 }
 
 impl WorkerClient {
-    pub fn spawn(command: WorkerCommand) -> Result<Self, WorkerClientError> {
+    pub fn spawn(mut command: WorkerCommand) -> Result<Self, WorkerClientError> {
         command.ensure_retained_worker_is_enabled()?;
+        command.apply_deferred_retained_worker_environment();
 
         let mut process = Command::new(&command.program);
         process
@@ -685,14 +709,7 @@ pub fn packaged_worker_command_with_openvino_cache_base(
         command = command.retained_worker(kind);
     }
 
-    let dotnet_root = app_dir.join("dotnet");
-    if has_bundled_dotnet_runtime(&dotnet_root) {
-        let dotnet_root = dotnet_root.to_string_lossy().to_string();
-        command = command
-            .env("DOTNET_ROOT", dotnet_root.clone())
-            .env("DOTNET_ROOT_X64", dotnet_root.clone())
-            .env("DOTNET_ROOT_ARM64", dotnet_root);
-    }
+    command = command.deferred_dotnet_root(app_dir.join("dotnet"));
 
     if worker_subdir.eq_ignore_ascii_case("localai") {
         let openvino_ep_value =

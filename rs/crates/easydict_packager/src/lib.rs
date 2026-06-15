@@ -840,6 +840,35 @@ pub fn copy_built_rust_helpers(
     profile_dir: &str,
     output_dir: &Path,
 ) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
+    let mut copied_files =
+        copy_built_rust_helper_executables(rust_workspace, cargo_target, profile_dir, output_dir)?;
+    let built_dir = rust_workspace
+        .join("target")
+        .join(cargo_target)
+        .join(profile_dir);
+    let registrar_source = built_dir.join("easydict_browser_registrar.exe");
+    let legacy_name = "BrowserHostRegistrar.exe";
+    fs::copy(&registrar_source, output_dir.join(legacy_name)).map_err(|error| {
+        BuildRustHelpersError::Io {
+            path: output_dir.join(legacy_name),
+            message: error.to_string(),
+        }
+    })?;
+    copied_files.push(legacy_name.to_string());
+
+    Ok(BuildRustHelpersOutcome {
+        cargo_target: cargo_target.to_string(),
+        profile_dir: profile_dir.to_string(),
+        copied_files,
+    })
+}
+
+fn copy_built_rust_helper_executables(
+    rust_workspace: &Path,
+    cargo_target: &str,
+    profile_dir: &str,
+    output_dir: &Path,
+) -> Result<Vec<String>, BuildRustHelpersError> {
     fs::create_dir_all(output_dir).map_err(|error| BuildRustHelpersError::Io {
         path: output_dir.to_path_buf(),
         message: error.to_string(),
@@ -864,21 +893,7 @@ pub fn copy_built_rust_helpers(
         copied_files.push((*exe_name).to_string());
     }
 
-    let registrar_source = built_dir.join("easydict_browser_registrar.exe");
-    let legacy_name = "BrowserHostRegistrar.exe";
-    fs::copy(&registrar_source, output_dir.join(legacy_name)).map_err(|error| {
-        BuildRustHelpersError::Io {
-            path: output_dir.join(legacy_name),
-            message: error.to_string(),
-        }
-    })?;
-    copied_files.push(legacy_name.to_string());
-
-    Ok(BuildRustHelpersOutcome {
-        cargo_target: cargo_target.to_string(),
-        profile_dir: profile_dir.to_string(),
-        copied_files,
-    })
+    Ok(copied_files)
 }
 
 pub fn extract_dotnet_runtime_archive(
@@ -1026,7 +1041,6 @@ const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
     "easydict_browser_registrar.exe",
     "easydict_cli.exe",
     "easydict_long_doc.exe",
-    "BrowserHostRegistrar.exe",
     "README-portable.txt",
 ];
 
@@ -1182,7 +1196,7 @@ fn copy_built_rust_helpers_for_portable(
     profile_dir: &str,
     output_dir: &Path,
 ) -> Result<(), PackRustPortableError> {
-    copy_built_rust_helpers(rust_workspace, cargo_target, profile_dir, output_dir)
+    copy_built_rust_helper_executables(rust_workspace, cargo_target, profile_dir, output_dir)
         .map(|_| ())
         .map_err(pack_error_from_build_error)
 }
@@ -1947,9 +1961,6 @@ mod tests {
         assert!(entries
             .iter()
             .any(|entry| entry == "easydict_browser_registrar.exe"));
-        assert!(entries
-            .iter()
-            .any(|entry| entry == "BrowserHostRegistrar.exe"));
         let _ = fs::remove_dir_all(package);
     }
 
@@ -1958,6 +1969,7 @@ mod tests {
         let package = tempfile_dir("rs-portable-unknown-payload");
         write_rust_portable_allowed_payload(&package);
         write_file(&package, "SomePayload.dll", b"unknown");
+        write_file(&package, "BrowserHostRegistrar.exe", b"legacy-alias");
 
         let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
             package_path: package.clone(),
@@ -1967,7 +1979,7 @@ mod tests {
         let ValidateRustPortableError::UnexpectedEntries(entries) = error else {
             panic!("expected unexpected entries");
         };
-        assert_eq!(entries, vec!["SomePayload.dll"]);
+        assert_eq!(entries, vec!["BrowserHostRegistrar.exe", "SomePayload.dll"]);
         let _ = fs::remove_dir_all(package);
     }
 
@@ -2248,7 +2260,7 @@ mod tests {
     }
 
     #[test]
-    fn stage_rust_portable_payload_copies_preview_helpers_alias_and_readme() {
+    fn stage_rust_portable_payload_copies_preview_helpers_and_readme() {
         let workspace = tempfile_dir("rs-portable-stage-workspace");
         let built_dir = workspace
             .join("target")
@@ -2273,9 +2285,9 @@ mod tests {
                 "{exe_name} should be copied"
             );
         }
-        assert_eq!(
-            fs::read(package.join("BrowserHostRegistrar.exe")).expect("read alias"),
-            b"easydict_browser_registrar.exe"
+        assert!(
+            !package.join("BrowserHostRegistrar.exe").exists(),
+            "first rs portable payload should not carry the legacy registrar alias"
         );
         assert!(fs::read_to_string(package.join("README-portable.txt"))
             .expect("read readme")

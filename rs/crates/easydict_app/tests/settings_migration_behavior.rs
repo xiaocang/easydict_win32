@@ -55,6 +55,31 @@ fn settings_migration_normalizes_legacy_settings_shape() {
 }
 
 #[test]
+fn settings_migration_removes_all_runtime_only_worker_isolation_keys() {
+    let (json, changed) = migrate_settings_json(
+        r#"{
+  "UseLongDocWorker": true,
+  "UseLocalAiWorker": false,
+  "UseOcrWorker": "legacy-disabled",
+  "LocalAIProvider": "Auto",
+  "MainWindowEnabledServices": ["google"]
+}"#,
+    )
+    .unwrap();
+
+    let root = serde_json::from_str::<Value>(&json).unwrap();
+    assert!(changed);
+    for key in ["UseLongDocWorker", "UseLocalAiWorker", "UseOcrWorker"] {
+        assert!(
+            root.get(key).is_none(),
+            "runtime-only retained worker setting {key} must not survive rs migration"
+        );
+    }
+    assert_eq!(root["LocalAIProvider"], "Auto");
+    assert_array_contains(&root["MainWindowEnabledServices"], "google");
+}
+
+#[test]
 fn settings_migration_missing_source_returns_warning_without_writing_target() {
     let temp = TempDir::new("settings-migrate-missing");
     let source = temp.path().join("missing.json");

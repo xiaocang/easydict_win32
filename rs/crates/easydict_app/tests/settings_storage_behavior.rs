@@ -2,7 +2,7 @@ use easydict_app::{
     load_settings_file, load_settings_json_with_machine_id, protect_credential_legacy,
     save_settings_file, save_settings_json, ImportedMdxDictionary, SettingsState,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -222,6 +222,101 @@ fn settings_storage_loads_migrated_legacy_json_and_decrypts_old_credentials() {
         .any(|warning| warning.contains("DeepLApiKey needs credential normalization")));
 }
 
+#[test]
+fn settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_paths() {
+    let temp = TempDir::new("settings-storage-mdd-discovery");
+    let mdx_path = temp.path().join("Legacy Dict.mdx");
+    let mdd_path = temp.path().join("Legacy Dict.mdd");
+    let numbered_mdd_path = temp.path().join("Legacy Dict.2.MDD");
+    let ignored_mdd_path = temp.path().join("Legacy Dict.assets.mdd");
+    fs::write(&mdx_path, b"mdx").expect("MDX file should be created");
+    fs::write(&mdd_path, b"mdd").expect("MDD file should be created");
+    fs::write(&numbered_mdd_path, b"mdd2").expect("numbered MDD file should be created");
+    fs::write(&ignored_mdd_path, b"ignored").expect("ignored MDD file should be created");
+    let json = json!({
+        "ImportedMdxDictionaries": [{
+            "ServiceId": "mdx::legacy-dict",
+            "DisplayName": "Legacy Dict",
+            "FilePath": mdx_path.to_string_lossy(),
+            "IsEncrypted": false
+        }]
+    })
+    .to_string();
+
+    let settings = load_settings_json_with_machine_id(&json, "stable-machine-id")
+        .expect("settings load")
+        .settings;
+
+    assert_eq!(settings.imported_mdx_dictionaries.len(), 1);
+    assert_eq!(
+        settings.imported_mdx_dictionaries[0].mdd_file_paths,
+        vec![
+            mdd_path.to_string_lossy().into_owned(),
+            numbered_mdd_path.to_string_lossy().into_owned()
+        ]
+    );
+}
+
+#[test]
+fn settings_storage_save_never_writes_runtime_only_worker_isolation_keys() {
+    let settings = SettingsState::default();
+
+    let json = save_settings_json(&settings).expect("settings should serialize");
+    let root: Value = serde_json::from_str(&json).unwrap();
+
+    for key in ["UseLongDocWorker", "UseLocalAiWorker", "UseOcrWorker"] {
+        assert!(
+            root.get(key).is_none(),
+            "rs settings storage must not reintroduce retained worker isolation key {key}"
+        );
+        assert!(
+            !json.contains(key),
+            "serialized rs settings must not contain retained worker isolation key {key}"
+        );
+    }
+}
+
+#[test]
+fn settings_storage_load_file_persists_runtime_only_worker_key_cleanup() {
+    let temp = TempDir::new("settings-storage-worker-cleanup");
+    let path = temp.path().join("settings.json");
+    fs::write(
+        &path,
+        r#"{
+  "UseLongDocWorker": true,
+  "UseLocalAiWorker": false,
+  "UseOcrWorker": true,
+  "MainWindowEnabledServices": ["openvino-local-ai"],
+  "MainWindowServiceEnabledQuery": { "openvino-local-ai": false }
+}"#,
+    )
+    .unwrap();
+
+    let loaded = load_settings_file(&path).expect("settings load").settings;
+    assert_eq!(loaded.local_ai_provider, "OpenVINO");
+    assert!(loaded
+        .main_window_services
+        .iter()
+        .any(|service| service.service_id == "windows-local-ai"
+            && service.enabled
+            && !service.enabled_query));
+
+    let persisted = fs::read_to_string(&path).unwrap();
+    let root: Value = serde_json::from_str(&persisted).unwrap();
+    for key in ["UseLongDocWorker", "UseLocalAiWorker", "UseOcrWorker"] {
+        assert!(
+            root.get(key).is_none(),
+            "loading rs settings should persist cleanup for retained worker key {key}"
+        );
+        assert!(
+            !persisted.contains(key),
+            "settings file should not keep stale retained worker key {key} after load"
+        );
+    }
+    assert_array_contains(&root["MainWindowEnabledServices"], "windows-local-ai");
+    assert_array_not_contains(&root["MainWindowEnabledServices"], "openvino-local-ai");
+}
+
 #[cfg(windows)]
 #[test]
 fn settings_storage_roundtrips_file_with_decrypted_runtime_state() {
@@ -249,6 +344,28 @@ fn assert_protected(root: &Value, key: &str, plaintext: &str) {
     let value = root[key].as_str().unwrap();
     assert!(value.starts_with("edcred1:user:"));
     assert!(!value.contains(plaintext));
+}
+
+fn assert_array_contains(value: &Value, expected: &str) {
+    assert!(
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item.as_str() == Some(expected)),
+        "expected array to contain {expected}: {value}"
+    );
+}
+
+fn assert_array_not_contains(value: &Value, expected: &str) {
+    assert!(
+        !value
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item.as_str() == Some(expected)),
+        "expected array not to contain {expected}: {value}"
+    );
 }
 
 struct TempDir {

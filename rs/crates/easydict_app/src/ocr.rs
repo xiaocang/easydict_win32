@@ -1,6 +1,7 @@
 use crate::protocol::SettingsSnapshot;
 use crate::quick_translate::QuickTranslateSurface;
 use crate::state::{settings_snapshot, EasydictUiState};
+use base64::{engine::general_purpose, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::ColorType;
 use serde::{Deserialize, Serialize};
@@ -994,31 +995,7 @@ fn validate_bgra_buffer(
 }
 
 fn base64_encode(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let first = chunk[0];
-        let second = chunk.get(1).copied().unwrap_or(0);
-        let third = chunk.get(2).copied().unwrap_or(0);
-
-        encoded.push(TABLE[(first >> 2) as usize] as char);
-        encoded.push(TABLE[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
-
-        if chunk.len() > 1 {
-            encoded.push(TABLE[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char);
-        } else {
-            encoded.push('=');
-        }
-
-        if chunk.len() > 2 {
-            encoded.push(TABLE[(third & 0x3f) as usize] as char);
-        } else {
-            encoded.push('=');
-        }
-    }
-
-    encoded
+    general_purpose::STANDARD.encode(bytes)
 }
 
 pub fn begin_ocr_recognize(

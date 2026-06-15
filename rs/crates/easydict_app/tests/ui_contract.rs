@@ -2526,7 +2526,11 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     let mut detecting_state = CaptureInteractionState::new();
     detecting_state.detected_region = Some(CaptureRect::new(96, 118, 720, 458));
     let detecting =
-        win_fluent_testkit::view_snapshot(&capture_overlay_view_with_state(&detecting_state, None));
+        win_fluent_testkit::view_snapshot(&capture_overlay_view_with_state(
+            &detecting_state,
+            None,
+            None,
+        ));
     assert!(detecting.contains("CaptureOverlay phase=\"Detecting\""));
     assert!(detecting.contains("detected_rect=(96,118 624x340)"));
     assert!(detecting.contains("handles_visible=false"));
@@ -2539,6 +2543,7 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     let selected = win_fluent_testkit::view_snapshot(&capture_overlay_view_with_state(
         &selected_state,
         selected_state.selection,
+        None,
     ));
     assert!(selected.contains("CaptureOverlay phase=\"Selecting\""));
     assert!(selected.contains("selection_rect=(180,164 424x222)"));
@@ -2557,6 +2562,7 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     let adjusting = win_fluent_testkit::view_snapshot(&capture_overlay_view_with_state(
         &adjusting_state,
         adjusting_state.selection,
+        None,
     ));
     assert!(adjusting.contains("CaptureOverlay phase=\"Adjusting\""));
     assert!(adjusting.contains("selection_rect=(180,164 424x222)"));

@@ -21,7 +21,10 @@ CERT_PATH ?= ./certs/dev.pfx
 VERSION ?= 0.1.0.0
 DPI ?= 144
 FORMAT ?= png
-RUNTIME_PROFILE ?= hybrid
+# Legacy .NET/hybrid publish and MSIX targets must opt in explicitly with
+# RUNTIME_PROFILE=hybrid. Leaving this empty keeps ordinary build/test commands
+# from silently selecting a retained-worker/runtime-producing profile.
+RUNTIME_PROFILE ?=
 
 # WinUI target framework used by Easydict.WinUI.csproj.
 WINUI_TFM ?= net8.0-windows10.0.22621.0
@@ -367,11 +370,17 @@ endif
 
 # Validate MSIX identity, MinVersion, signature presence, and runtime payload profile.
 # Usage: make validate-msix MSIX=./msix/Easydict-x64.msix [RUNTIME_PROFILE=hybrid|rust-only]
+# Omitting RUNTIME_PROFILE lets easydict_msix_validate use its Rust-only default.
 validate-msix:
 ifndef MSIX
 	$(error MSIX is required. Usage: make validate-msix MSIX=./msix/Easydict-x64.msix)
 endif
-	@cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$(MSIX)" --runtime-profile "$(RUNTIME_PROFILE)"
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ -n "$$runtime_profile" ]; then \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$(MSIX)" --runtime-profile "$$runtime_profile"; \
+	else \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$(MSIX)"; \
+	fi
 
 # Encrypt a built-in secret for EncryptedSecrets.json.
 # Usage: make encrypt-secret SECRET=your-secret
@@ -395,15 +404,15 @@ endif
 
 # Create EXE installer for x64
 installer-x64: publish-x64
-	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION)
+	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
 
 # Create EXE installer for x86
 installer-x86: publish-x86
-	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x86 -Version $(VERSION)
+	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform x86 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
 
 # Create EXE installer for ARM64
 installer-arm64: publish-arm64
-	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION)
+	@pwsh -ExecutionPolicy Bypass -File scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)
 
 # Create EXE installer for default platform (x64)
 installer: installer-x64
@@ -462,7 +471,7 @@ help:
 	@echo "  make msix-x86     - Create MSIX package for x86"
 	@echo "  make msix-arm64   - Create MSIX package for ARM64"
 	@echo "  make msix-all     - Create all MSIX packages"
-	@echo "  make validate-msix MSIX=... [RUNTIME_PROFILE=hybrid|rust-only] - Validate package payload"
+	@echo "  make validate-msix MSIX=... [RUNTIME_PROFILE=hybrid|rust-only] - Validate package payload (default: rust-only)"
 	@echo "  make cert-generate CERT_PASSWORD=... - Generate development certificate"
 	@echo "  make cert-install CERT_PASSWORD=...  - Install certificate (requires admin)"
 	@echo "  make sign CERT=... CERT_PASSWORD=... MSIX=... - Sign MSIX package"
@@ -482,7 +491,7 @@ help:
 	@echo "  CERT_PASSWORD=... - Certificate password (required for cert/sign targets)"
 	@echo "  CERT_PATH=...     - Certificate file path (default: ./certs/dev.pfx)"
 	@echo "  SERVICE=...       - Integration test service filter (default: all)"
-	@echo "  RUNTIME_PROFILE=hybrid - Required for dotnet publish/MSIX targets; rs portable uses ../rs/scripts/Package-Portable.ps1"
+	@echo "  RUNTIME_PROFILE=hybrid - Required for dotnet publish/MSIX/installer targets; rs portable uses ../rs/scripts/Package-Portable.ps1"
 	@echo "                      Available: google, openai, deepl, deepseek, groq, zhipu,"
 	@echo "                      github-models, gemini, doubao, caiyun, niutrans,"
 	@echo "                      bing, youdao, phonetic"

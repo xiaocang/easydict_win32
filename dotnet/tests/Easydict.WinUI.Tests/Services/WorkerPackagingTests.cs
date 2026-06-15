@@ -80,6 +80,7 @@ public sealed class WorkerPackagingTests
         workflow.Should().NotContain("AppxBundleManifest.xml");
         workflow.Should().Contain("cargo run --manifest-path ..\\rs\\Cargo.toml -p easydict_msix_validate --");
         workflow.Should().Contain("verify-bundle-minversion");
+        workflow.Should().Contain("--runtime-profile \"${{ env.RUNTIME_PROFILE }}\"");
         workflow.Should().Contain("easydict_msix_validate");
     }
 
@@ -142,7 +143,8 @@ public sealed class WorkerPackagingTests
         workflow.Should().NotContain("System.IO.Compression.ZipFile");
         workflow.Should().NotContain("Add-Type -AssemblyName System.IO.Compression.FileSystem");
         makefile.Should().Contain("cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate");
-        makefile.Should().Contain("RUNTIME_PROFILE ?= hybrid");
+        makefile.Should().Contain("RUNTIME_PROFILE ?=");
+        makefile.Should().NotContain("RUNTIME_PROFILE ?= hybrid");
         makefile.Should().Contain("--runtime-profile \"$(RUNTIME_PROFILE)\"");
         workflow.Should().NotContain("dotnet run --project tools/MsixValidate");
         makefile.Should().NotContain("dotnet run --project tools/MsixValidate");
@@ -635,7 +637,8 @@ public sealed class WorkerPackagingTests
 
         makefile.Should().Contain("Easydict.Workers.LongDoc");
         makefile.Should().Contain("Easydict.Workers.LocalAi");
-        makefile.Should().Contain("RUNTIME_PROFILE ?= hybrid");
+        makefile.Should().Contain("RUNTIME_PROFILE ?=");
+        makefile.Should().NotContain("RUNTIME_PROFILE ?= hybrid");
         makefile.Should().Contain("Publish legacy .NET/hybrid portable distribution.");
         makefile.Should().Contain("Publishing (legacy .NET/hybrid portable, with bundled Windows App SDK):");
         makefile.Should().Contain("make publish      - Publish legacy .NET/hybrid portable output");
@@ -822,6 +825,52 @@ public sealed class WorkerPackagingTests
             "Easydict.SidecarClient",
             "Protocol",
             "CompatHostProtocol.cs")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ReleaseOrchestration_UsesRustHelpersInsteadOfRetiredDotnetHelperProjects()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(ProjectRoot, ".."));
+        var buildScript = File.ReadAllText(Path.Combine(ProjectRoot, "scripts", "Build-RustHelpers.ps1"));
+
+        buildScript.Should().Contain("-p");
+        buildScript.Should().Contain("easydict_packager");
+        buildScript.Should().Contain("build-rust-helpers");
+        buildScript.Should().NotContain("src/Easydict.NativeBridge");
+        buildScript.Should().NotContain("src/Easydict.BrowserRegistrar");
+        buildScript.Should().NotContain("src/Easydict.CompatHost");
+
+        var orchestrationFiles = new[]
+        {
+            Path.Combine(repoRoot, ".github", "workflows", "release-publish.yml"),
+            Path.Combine(repoRoot, ".github", "workflows", "arm64-msix-smoke.yml"),
+            Path.Combine(ProjectRoot, "Makefile"),
+            Path.Combine(ProjectRoot, "scripts", "Build-RustHelpers.ps1"),
+            Path.Combine(ProjectRoot, "scripts", "publish.ps1"),
+            Path.Combine(ProjectRoot, "scripts", "package-and-install.ps1"),
+            Path.Combine(ProjectRoot, "scripts", "Package-Msix.ps1"),
+            Path.Combine(repoRoot, "rs", "scripts", "Package-Portable.ps1"),
+        };
+
+        var retiredProjectMarkers = new[]
+        {
+            "src/Easydict.NativeBridge",
+            "src/Easydict.BrowserRegistrar",
+            "src/Easydict.CompatHost",
+            "Easydict.NativeBridge.csproj",
+            "Easydict.BrowserRegistrar.csproj",
+            "Easydict.CompatHost.csproj",
+        };
+
+        foreach (var orchestrationFile in orchestrationFiles)
+        {
+            var text = File.ReadAllText(orchestrationFile);
+
+            foreach (var marker in retiredProjectMarkers)
+            {
+                text.Should().NotContain(marker, $"{orchestrationFile} must not resurrect retired .NET helper project {marker}");
+            }
+        }
     }
 
     [Fact]
@@ -1117,7 +1166,7 @@ public sealed class WorkerPackagingTests
             "Easydict.WinUI.csproj");
         var csproj = File.ReadAllText(csprojPath);
 
-        csproj.Should().Contain("<RuntimeProfile Condition=\"'$(RuntimeProfile)' == ''\">Hybrid</RuntimeProfile>");
+        csproj.Should().Contain("<RuntimeProfile Condition=\"'$(RuntimeProfile)' == ''\">RustOnly</RuntimeProfile>");
         csproj.Should().Contain("<IsRustOnlyRuntimeProfile Condition=\"'$(RuntimeProfile)' == 'RustOnly' or '$(RuntimeProfile)' == 'rust-only' or '$(RuntimeProfile)' == 'rustonly' or '$(RuntimeProfile)' == 'rust_only'\">true</IsRustOnlyRuntimeProfile>");
         csproj.Should().Contain("<BuildWorkerOutputs Condition=\"'$(IsRustOnlyRuntimeProfile)' == 'true'\">false</BuildWorkerOutputs>");
         csproj.Should().Contain("<EnableInProcLongDocFallback Condition=\"'$(IsRustOnlyRuntimeProfile)' == 'true'\">false</EnableInProcLongDocFallback>");

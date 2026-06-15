@@ -438,6 +438,15 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             ));
             node
         }
+        ViewToken::Image(token) => {
+            let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some("Image".to_string()));
+            node
+        }
         ViewToken::Custom(token) => {
             let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
             node.name = token

@@ -21,6 +21,7 @@ fn help_lists_long_document_options() {
         "--target-language",
         "--from",
         "--output",
+        "--result-json",
         "--service",
         "--output-mode",
         "--layout",
@@ -189,6 +190,45 @@ fn page_and_page_range_are_mutually_exclusive() {
 }
 
 #[test]
+fn result_json_path_is_prechecked_before_provider_lookup() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-result-json-precheck");
+    fs::create_dir_all(&work_dir).expect("work directory should be created");
+    let input_path = work_dir.join("sample.txt");
+    let output_path = work_dir.join("translated.txt");
+    let result_json_path = work_dir.join("translated-result.json");
+    fs::write(&input_path, "Hello long document").expect("sample input should be written");
+    fs::create_dir_all(&result_json_path).expect("conflicting sidecar directory should exist");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args(["--target-language", "zh-Hans", "--from", "en"])
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--result-json")
+        .arg(&result_json_path)
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("Long document output path") && stderr.contains("is a directory"),
+        "stderr should report the result JSON path preflight failure:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&result_json_path.display().to_string()),
+        "stderr should name the conflicting result JSON path:\n{stderr}"
+    );
+    assert!(
+        !output_path.exists(),
+        "provider translation should not run or write output after sidecar preflight failure"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
 fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-appdir-no-worker");
     let app_dir = work_dir.join("app");
@@ -223,9 +263,12 @@ fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
 
     assert_failure(&output);
     let stderr = stderr(&output);
+    let normalized = stderr.to_ascii_lowercase();
     assert!(
-        stderr.contains("requires a Rust-native route"),
-        "stderr should require a Rust-native LongDoc route:\n{stderr}"
+        normalized.contains("rust-native")
+            || normalized.contains("phi silica")
+            || normalized.contains("windows ai"),
+        "stderr should stay on a Rust-native LocalAI failure path:\n{stderr}"
     );
     assert!(
         !stderr.contains(".NET workers"),
@@ -236,7 +279,7 @@ fn app_dir_is_legacy_noop_and_does_not_enable_retained_worker_lookup() {
         "--app-dir must not probe retained LongDoc worker paths:\n{stderr}"
     );
     assert!(
-        !stderr.to_ascii_lowercase().contains("compat host"),
+        !normalized.contains("compat host"),
         "LongDoc CLI should not describe a compat host route:\n{stderr}"
     );
 
@@ -399,6 +442,62 @@ fn env_overrides_foundry_local_endpoint_and_model_before_worker_lookup() {
     assert!(
         !stderr.to_ascii_lowercase().contains("compat host"),
         "Foundry env route should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn foundry_local_cli_override_targeting_retained_worker_is_not_spawned() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-bad-foundry-override");
+    let settings_dir = work_dir.join("settings");
+    let fake_foundry_dir = work_dir.join("fake-foundry");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
+    let marker_path = fake_foundry_dir.join("retained-worker-cli-was-spawned.txt");
+    let fake_foundry_path = fake_foundry_dir.join("Easydict.Workers.LocalAi.exe.cmd");
+    fs::write(
+        &fake_foundry_path,
+        format!(
+            "@echo off\r\necho spawned >\"{}\"\r\necho Foundry Local endpoint: http://127.0.0.1:1/v1/chat/completions\r\n",
+            marker_path.display()
+        ),
+    )
+    .expect("fake retained-worker CLI should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello Foundry Local long document")
+        .expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "zh-Hans",
+            "--from",
+            "en",
+            "--service",
+            "foundry-local",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env("EASYDICT_FOUNDRY_LOCAL_CLI", &fake_foundry_path)
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        !marker_path.exists(),
+        "Foundry CLI override that points at a retained worker name must not be spawned:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Long Document worker"),
+        "bad Foundry CLI override should not probe retained LongDoc workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "bad Foundry CLI override should not describe a compat host:\n{stderr}"
     );
 
     let _ = fs::remove_dir_all(work_dir);

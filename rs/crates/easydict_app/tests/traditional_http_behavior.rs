@@ -1866,6 +1866,82 @@ fn bing_credentials_parse_extracts_session_fields() {
 }
 
 #[test]
+fn bing_credentials_parse_accepts_minified_single_quote_and_escaped_script_values() {
+    let html = r#"
+<html><head>
+<script>
+var ignored={BIG:"wrong"};
+window._G={"IG" : 'IG_SINGLE_QUOTED'};
+window.params_AbusePreventionHelper=[ 123456789 , 'token\u005fwith\'quote' , 90000 ];
+</script>
+<div data-iid = 'translator.777.9'></div>
+</head></html>
+"#;
+
+    let credentials = parse_bing_credentials_from_html(html).unwrap();
+
+    assert_eq!(
+        credentials,
+        BingCredentials {
+            ig: "IG_SINGLE_QUOTED".to_string(),
+            iid: "translator.777.9".to_string(),
+            token: "token_with'quote".to_string(),
+            key: 123_456_789,
+            expiry_interval_ms: 90_000,
+        }
+    );
+}
+
+#[test]
+fn bing_credentials_parse_skips_noise_before_valid_script_fields() {
+    let html = r#"
+<script>var params_AbusePreventionHelperMetadata = "not credentials";</script>
+<div data-iid-warning="wrong"></div>
+<script>window._G = {IG_TOKEN:"wrong", IG : "IG_AFTER_NOISE"};</script>
+<button data-iid=translator.888.4></button>
+<script>params_AbusePreventionHelper = [7,"tok",60000];</script>
+"#;
+
+    let credentials = parse_bing_credentials_from_html(html).unwrap();
+
+    assert_eq!(credentials.ig, "IG_AFTER_NOISE");
+    assert_eq!(credentials.iid, "translator.888.4");
+    assert_eq!(credentials.token, "tok");
+    assert_eq!(credentials.key, 7);
+    assert_eq!(credentials.expiry_interval_ms, 60_000);
+}
+
+#[test]
+fn bing_credentials_parse_skips_invalid_abuse_helper_candidates() {
+    let html = r#"
+<script>window._G={IG:"IG_BOOT"};</script>
+<script>var params_AbusePreventionHelper = ["bad","candidate",0];</script>
+<script>var params_AbusePreventionHelper = [8,"tok-after-bad-candidate",120000];</script>
+"#;
+
+    let credentials = parse_bing_credentials_from_html(html).unwrap();
+
+    assert_eq!(credentials.ig, "IG_BOOT");
+    assert_eq!(credentials.token, "tok-after-bad-candidate");
+    assert_eq!(credentials.key, 8);
+    assert_eq!(credentials.expiry_interval_ms, 120_000);
+}
+
+#[test]
+fn bing_credentials_parse_accepts_boot_data_abuse_helper_property() {
+    let html = r#"
+<script>window.__BING_BOOT__={"params_AbusePreventionHelper":[9,"boot-token",300000]};</script>
+"#;
+
+    let credentials = parse_bing_credentials_from_html(html).unwrap();
+
+    assert_eq!(credentials.iid, "translator.5023.1");
+    assert_eq!(credentials.token, "boot-token");
+    assert_eq!(credentials.key, 9);
+    assert_eq!(credentials.expiry_interval_ms, 300_000);
+}
+
+#[test]
 fn bing_credentials_parse_defaults_iid_and_rejects_missing_token() {
     // No data-iid → legacy default IID; no IG → empty (caller generates one).
     let html = r#"<script>params_AbusePreventionHelper = [42,"tok",60000];</script>"#;

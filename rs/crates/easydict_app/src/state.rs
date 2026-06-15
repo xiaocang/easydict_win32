@@ -671,10 +671,44 @@ fn format_phonetic_text(text: &str) -> String {
 
 fn service_icon(service_id: &str) -> IconToken {
     match service_id {
-        "google" => icon::translate(),
-        "bing" => IconToken::with_glyph("service-bing", '\u{E774}'),
-        "windows-local-ai" => IconToken::with_glyph("service-local-ai", '\u{E950}'),
-        "openai" => IconToken::with_glyph("service-ai", '\u{E8D4}'),
+        "google" | "google_web" => IconToken::with_image(
+            "service-google",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Google.scale-100.png"),
+        ),
+        "bing" => IconToken::with_image(
+            "service-bing",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Bing.scale-100.png"),
+        ),
+        "windows-local-ai" => IconToken::with_image(
+            "service-local-ai",
+            include_bytes!(
+                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-100.png"
+            ),
+        ),
+        "openai" => IconToken::with_image(
+            "service-ai",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenAI.scale-100.png"),
+        ),
+        "deepseek" => IconToken::with_image(
+            "service-deepseek",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepSeek.scale-100.png"),
+        ),
+        "deepl" => IconToken::with_image(
+            "service-deepl",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepL.scale-100.png"),
+        ),
+        "ollama" => IconToken::with_image(
+            "service-ollama",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Ollama.scale-100.png"),
+        ),
+        "zhipu" => IconToken::with_image(
+            "service-zhipu",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Zhipu.scale-100.png"),
+        ),
+        "groq" => IconToken::with_image(
+            "service-groq",
+            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Groq.scale-100.png"),
+        ),
         service_id if service_id.starts_with("mdx::") => {
             IconToken::with_glyph("service-mdx", '\u{E8D5}')
         }
@@ -1017,6 +1051,7 @@ pub struct SettingsState {
     pub open_vino_status: String,
     pub open_vino_download_progress: String,
     pub service_provider_settings: Vec<ServiceProviderSetting>,
+    pub expanded_service_configurations: Vec<String>,
     pub caiyun_api_key: String,
     pub caiyun_status: String,
     pub niu_trans_api_key: String,
@@ -1136,6 +1171,7 @@ impl Default for SettingsState {
             open_vino_status: "Model not downloaded".to_string(),
             open_vino_download_progress: "Idle".to_string(),
             service_provider_settings: default_service_provider_settings(),
+            expanded_service_configurations: Vec::new(),
             caiyun_api_key: String::new(),
             caiyun_status: "Not tested".to_string(),
             niu_trans_api_key: String::new(),
@@ -1181,6 +1217,9 @@ pub struct EasydictUiState {
     pub capture_interaction: crate::screen_capture::CaptureInteractionState,
     pub capture_window_detector: crate::screen_capture::WindowDetector,
     pub capture_selection: Option<crate::screen_capture::CaptureRect>,
+    /// Frozen desktop screenshot shown under the capture overlay's dim mask,
+    /// like the WinUI ScreenCaptureWindow.
+    pub capture_background: Option<CaptureBackground>,
     pub translation_cache: crate::translation_cache::TranslationMemoryCache,
     pub pending_quick_translate_cache_requests:
         HashMap<(u64, String), crate::translation_cache::TranslationCacheRequest>,
@@ -1235,6 +1274,7 @@ impl Default for EasydictUiState {
             capture_interaction: crate::screen_capture::CaptureInteractionState::new(),
             capture_window_detector: crate::screen_capture::WindowDetector::new(),
             capture_selection: None,
+            capture_background: None,
             translation_cache: crate::translation_cache::TranslationMemoryCache::new(),
             pending_quick_translate_cache_requests: HashMap::new(),
             active_query_service_count: 0,
@@ -1316,7 +1356,7 @@ impl EasydictUiState {
             }
             PreviewScenario::BeforeTranslate => {
                 state.source_text = "Hello from the Rust main window preview".to_string();
-                state.detected_language = Some("Detected: English".to_string());
+                state.detected_language = None;
                 state.services_completed = 0;
                 state.results = preview_waiting_results();
             }
@@ -1571,6 +1611,9 @@ impl EasydictUiState {
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_CAPTURE_OVERLAY_STATE") {
             apply_capture_overlay_preview(&mut state, &value);
+            // Freeze the desktop like the real capture flow so the preview
+            // overlay dims a screenshot instead of a flat surface.
+            state.capture_background = capture_screen_background();
         }
         if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_SECTION") {
             state.settings.selected_section = SettingsSection::from_id(&section);
@@ -1609,6 +1652,14 @@ impl EasydictUiState {
             state.settings_open = true;
         }
 
+        if std::env::var("EASYDICT_PREVIEW_SETTINGS_UNSAVED_DIALOG")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.settings.unsaved_changes = true;
+            state.settings.show_unsaved_changes_dialog = true;
+        }
+
         if std::env::var("EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED")
             .ok()
             .is_some_and(|value| env_truthy(&value))
@@ -1629,8 +1680,18 @@ impl EasydictUiState {
             ) {
                 apply_empty_floating_preview(&mut state.mini);
                 apply_empty_floating_preview(&mut state.fixed);
+                // Match the .NET fixed window's initial rows: Bing plus the
+                // imported MDX dictionary expander.
                 state.fixed.results.push(
                     TranslationResultPreview::new("bing", "Bing Translate", "").expanded(false),
+                );
+                state.fixed.results.push(
+                    TranslationResultPreview::new(
+                        "mdx::collins-cobuild-english-usage",
+                        PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
+                        "",
+                    )
+                    .expanded(false),
                 );
             }
         }
@@ -2245,6 +2306,24 @@ impl EasydictUiState {
                             service_provider_default_model(&service_id)
                         )
                     );
+                }
+            }
+            Message::ToggleServiceConfigurationExpanded(service_id, expanded) => {
+                if expanded {
+                    if !self
+                        .settings
+                        .expanded_service_configurations
+                        .iter()
+                        .any(|id| id == &service_id)
+                    {
+                        self.settings
+                            .expanded_service_configurations
+                            .push(service_id);
+                    }
+                } else {
+                    self.settings
+                        .expanded_service_configurations
+                        .retain(|id| id != &service_id);
                 }
             }
             Message::CaiyunApiKeyChanged(value) => {
@@ -3271,6 +3350,7 @@ fn sanitized_settings_snapshot(settings: &SettingsState) -> SettingsState {
     snapshot.show_unsaved_changes_dialog = false;
     snapshot.save_error_message = None;
     snapshot.pending_mdx_delete_service_id = None;
+    snapshot.expanded_service_configurations.clear();
     reset_settings_reorder_modes(&mut snapshot);
     snapshot
 }
@@ -3957,6 +4037,28 @@ fn result_action_language(state: &EasydictUiState, surface: QuickTranslateSurfac
     .clone()
 }
 
+/// Frozen desktop screenshot backing the capture overlay (raw BGRA pixel file
+/// written by the platform screen-capture API).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CaptureBackground {
+    pub bgra_path: String,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+}
+
+/// Freezes the desktop for the capture overlay, mirroring the WinUI
+/// ScreenCaptureWindow's BitBlt-on-open. Returns `None` when the platform
+/// capture fails (the overlay then falls back to the plain dim mask).
+pub fn capture_screen_background() -> Option<CaptureBackground> {
+    win_fluent_platform_win::WindowsPlatformAdapter::capture_screen_region()
+        .ok()
+        .map(|capture| CaptureBackground {
+            bgra_path: capture.pixel_data_path,
+            pixel_width: capture.pixel_width,
+            pixel_height: capture.pixel_height,
+        })
+}
+
 fn preview_waiting_results() -> Vec<TranslationResultPreview> {
     vec![
         TranslationResultPreview::new("bing", "Bing Translate", "").manual_query(),
@@ -3966,7 +4068,9 @@ fn preview_waiting_results() -> Vec<TranslationResultPreview> {
             PREVIEW_DOTNET_REFERENCE_MDX_DISPLAY_NAME,
             "",
         )
-        .manual_query(),
+        .expanded(false),
+        TranslationResultPreview::new("google", "Google Translate", "").expanded(false),
+        TranslationResultPreview::new("volcano", "Volcano", "").manual_query(),
     ]
 }
 
@@ -4103,6 +4207,7 @@ pub enum Message {
     OpenVinoDownloadFinished(Result<crate::openvino_download::OpenVinoDownloadStatus, String>),
     ServiceProviderSettingChanged(String, ServiceProviderField, String),
     TestServiceProvider(String),
+    ToggleServiceConfigurationExpanded(String, bool),
     CaiyunApiKeyChanged(String),
     TestCaiyun,
     NiuTransApiKeyChanged(String),

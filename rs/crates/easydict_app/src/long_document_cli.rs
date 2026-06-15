@@ -50,6 +50,9 @@ pub struct LongDocumentCliOptions {
     #[arg(short = 'o', long = "output", value_name = "FILE")]
     output: Option<PathBuf>,
 
+    #[arg(long = "result-json", alias = "result-json-path", value_name = "FILE")]
+    result_json: Option<PathBuf>,
+
     #[arg(short = 's', long = "service", value_name = "SERVICE_ID")]
     service: Option<String>,
 
@@ -153,6 +156,9 @@ fn run(
 
     if let Some(output) = options.output.as_ref() {
         request.params.output_path = Some(path_string(output));
+    }
+    if let Some(result_json) = options.result_json.as_ref() {
+        request.params.result_json_path = Some(path_string(result_json));
     }
     if let Some(layout) = options.layout.as_deref() {
         request.params.layout_detection = Some(normalize_layout_mode(layout)?);
@@ -374,6 +380,9 @@ fn write_outcome(
                 if result.output_path.as_deref() != Some(bilingual_output_path) {
                     writeln!(stdout, "Bilingual output: {bilingual_output_path}")?;
                 }
+            }
+            if let Some(result_json_path) = result.result_json_path.as_deref() {
+                writeln!(stdout, "Result JSON: {result_json_path}")?;
             }
             writeln!(
                 stdout,

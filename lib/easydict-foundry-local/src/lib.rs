@@ -11,6 +11,7 @@ use url::Url;
 
 pub const FOUNDRY_LOCAL_DEFAULT_MODEL: &str = "qwen2.5-0.5b";
 pub const FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE: &str = "EASYDICT_FOUNDRY_LOCAL_CLI";
+const FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME: &str = "foundry";
 
 pub const FOUNDRY_LOCAL_STATUS_READY: &str = "FoundryLocal_Status_Ready";
 pub const FOUNDRY_LOCAL_STATUS_NOT_INSTALLED: &str = "FoundryLocal_Status_NotInstalled";
@@ -257,6 +258,54 @@ impl FoundryLocalSdkModelProvider for FoundryLocalSdkProvider {
 }
 
 #[cfg(feature = "sdk")]
+impl FoundryLocalEndpointResolver for FoundryLocalSdkProvider {
+    fn resolve_chat_completions_endpoint(&mut self) -> FoundryLocalResult<Option<String>> {
+        let endpoint = self
+            .manager
+            .urls()
+            .map_err(map_sdk_error)?
+            .into_iter()
+            .filter_map(|url| normalized_optional(Some(&url)))
+            .map(|url| normalize_foundry_local_chat_completions_endpoint(&url))
+            .next();
+        Ok(endpoint)
+    }
+}
+
+#[cfg(feature = "sdk")]
+impl FoundryLocalRuntimeController for FoundryLocalSdkProvider {
+    fn get_status(&mut self) -> FoundryLocalResult<FoundryLocalRuntimeStatus> {
+        match self.resolve_chat_completions_endpoint()? {
+            Some(endpoint) => Ok(FoundryLocalRuntimeStatus::with_endpoint(
+                FoundryLocalRuntimeState::Running,
+                endpoint,
+            )),
+            None => Ok(FoundryLocalRuntimeStatus::new(
+                FoundryLocalRuntimeState::NotRunning,
+            )),
+        }
+    }
+
+    fn start_service(&mut self) -> FoundryLocalResult<()> {
+        self.runtime
+            .block_on(self.manager.start_web_service())
+            .map_err(map_sdk_error)
+    }
+
+    fn load_model(&mut self, model: &str) -> FoundryLocalResult<()> {
+        let outcome = prepare_foundry_local_sdk_model(self, Some(model))?;
+        if outcome.ready {
+            return Ok(());
+        }
+
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            outcome.status_message,
+        ))
+    }
+}
+
+#[cfg(feature = "sdk")]
 fn map_sdk_error(error: foundry_local_sdk::FoundryLocalError) -> FoundryLocalError {
     let code = match &error {
         foundry_local_sdk::FoundryLocalError::LibraryLoad { .. }
@@ -279,6 +328,7 @@ fn map_sdk_error(error: foundry_local_sdk::FoundryLocalError) -> FoundryLocalErr
 #[derive(Clone, Debug)]
 pub struct CommandFoundryLocalEndpointResolver {
     executable_name: String,
+    blocked_executable_name: Option<String>,
     status_command_timeout: Duration,
     start_command_timeout: Duration,
     model_load_command_timeout: Duration,
@@ -288,16 +338,14 @@ impl Default for CommandFoundryLocalEndpointResolver {
     fn default() -> Self {
         let executable_name = env::var(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE)
             .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "foundry".to_string());
+            .unwrap_or_else(|| FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string());
 
-        Self {
+        Self::with_timeouts(
             executable_name,
-            status_command_timeout: Duration::from_secs(8),
-            start_command_timeout: Duration::from_secs(15),
-            model_load_command_timeout: Duration::from_secs(180),
-        }
+            Duration::from_secs(8),
+            Duration::from_secs(15),
+            Duration::from_secs(180),
+        )
     }
 }
 
@@ -317,8 +365,13 @@ impl CommandFoundryLocalEndpointResolver {
         start_command_timeout: Duration,
         model_load_command_timeout: Duration,
     ) -> Self {
+        let requested_executable_name = executable_name.into();
+        let (executable_name, blocked_executable_name) =
+            validate_foundry_local_cli_executable_name(requested_executable_name);
+
         Self {
-            executable_name: executable_name.into(),
+            executable_name,
+            blocked_executable_name,
             status_command_timeout,
             start_command_timeout,
             model_load_command_timeout,
@@ -331,6 +384,7 @@ impl CommandFoundryLocalEndpointResolver {
         command_timeout: Duration,
         require_success: bool,
     ) -> FoundryLocalResult<String> {
+        self.ensure_cli_executable_allowed()?;
         let mut child = Command::new(&self.executable_name)
             .args(arguments)
             .stdin(Stdio::null())
@@ -406,6 +460,7 @@ impl CommandFoundryLocalEndpointResolver {
     }
 
     fn run_foundry_service_start_and_wait(&mut self) -> FoundryLocalResult<()> {
+        self.ensure_cli_executable_allowed()?;
         let mut child = Command::new(&self.executable_name)
             .args(["service", "start"])
             .stdin(Stdio::null())
@@ -461,6 +516,19 @@ impl CommandFoundryLocalEndpointResolver {
             let remaining = deadline.saturating_duration_since(Instant::now());
             std::thread::sleep(remaining.min(Duration::from_millis(300)));
         }
+    }
+
+    fn ensure_cli_executable_allowed(&self) -> FoundryLocalResult<()> {
+        if let Some(blocked) = &self.blocked_executable_name {
+            return Err(FoundryLocalError::new(
+                FoundryLocalErrorCode::ServiceUnavailable,
+                format!(
+                    "{FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE} must point to the native Foundry Local CLI; retained runtime/worker command is disabled: {blocked}"
+                ),
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -914,6 +982,49 @@ fn normalized_optional(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
+fn validate_foundry_local_cli_executable_name(value: String) -> (String, Option<String>) {
+    let trimmed = value.trim().trim_matches('"').to_string();
+    if trimmed.is_empty() {
+        return (FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(), None);
+    }
+
+    if is_retained_dotnet_runtime_or_worker_command(&trimmed) {
+        return (
+            FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(),
+            Some(trimmed),
+        );
+    }
+
+    (trimmed, None)
+}
+
+fn is_retained_dotnet_runtime_or_worker_command(value: &str) -> bool {
+    let normalized = value.trim().trim_matches('"').replace('\\', "/");
+    let lower = normalized.to_ascii_lowercase();
+    let leaf = lower
+        .rsplit('/')
+        .next()
+        .unwrap_or(lower.as_str())
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
+
+    matches!(
+        leaf,
+        "dotnet"
+            | "dotnet.exe"
+            | "powershell"
+            | "powershell.exe"
+            | "pwsh"
+            | "pwsh.exe"
+            | "hostfxr.dll"
+    ) || lower.contains("easydict.compathost")
+        || lower.contains("easydict.workers.")
+        || lower.contains(".runtimeconfig.json")
+        || lower.contains("/host/fxr/")
+        || lower.contains(".ps1")
+}
+
 fn foundry_local_default_log_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     for variable in ["USERPROFILE", "HOME"] {
@@ -1068,6 +1179,18 @@ mod tests {
     use super::*;
     use std::collections::VecDeque;
 
+    #[cfg(feature = "sdk")]
+    #[test]
+    fn sdk_provider_stays_inside_lib_owned_runtime_and_model_traits() {
+        fn assert_provider_traits<T>()
+        where
+            T: FoundryLocalRuntimeController + FoundryLocalSdkModelProvider,
+        {
+        }
+
+        assert_provider_traits::<FoundryLocalSdkProvider>();
+    }
+
     #[test]
     fn normalizes_foundry_local_chat_completion_endpoints() {
         assert_eq!(
@@ -1159,6 +1282,47 @@ mod tests {
             ready.endpoint.as_deref(),
             Some("http://localhost:5273/v1/chat/completions")
         );
+    }
+
+    #[test]
+    fn cli_executable_override_rejects_retained_dotnet_runtime_commands() {
+        for blocked in [
+            "dotnet.exe",
+            r"C:\Program Files\dotnet\dotnet.exe",
+            "pwsh",
+            "powershell.exe",
+            "C:/Easydict/Easydict.CompatHost.exe",
+            "C:/Easydict/workers/localai/Easydict.Workers.LocalAi.exe",
+            "C:/Easydict/Easydict.Workers.LocalAi.runtimeconfig.json",
+            "C:/Easydict/dotnet/host/fxr/8.0.11/hostfxr.dll",
+            "C:/Easydict/scripts/launch-localai.ps1",
+        ] {
+            let mut resolver =
+                CommandFoundryLocalEndpointResolver::new(blocked, Duration::from_millis(1));
+            assert_eq!(resolver.executable_name, "foundry");
+            assert_eq!(resolver.blocked_executable_name.as_deref(), Some(blocked));
+
+            let error = resolver
+                .get_status()
+                .expect_err("blocked CLI override should fail before spawning");
+            assert_eq!(error.code, FoundryLocalErrorCode::ServiceUnavailable);
+            assert!(error.message.contains("retained runtime/worker"));
+            assert!(error.message.contains(blocked));
+        }
+    }
+
+    #[test]
+    fn cli_executable_override_allows_native_foundry_names() {
+        for allowed in ["foundry", "foundry.exe", "C:/Tools/Foundry/foundry.exe"] {
+            let resolver =
+                CommandFoundryLocalEndpointResolver::new(allowed, Duration::from_millis(1));
+            assert_eq!(resolver.executable_name, allowed);
+            assert_eq!(resolver.blocked_executable_name, None);
+        }
+
+        let resolver = CommandFoundryLocalEndpointResolver::new("   ", Duration::from_millis(1));
+        assert_eq!(resolver.executable_name, "foundry");
+        assert_eq!(resolver.blocked_executable_name, None);
     }
 
     #[test]

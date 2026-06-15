@@ -645,6 +645,18 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.magnifier_visible
             );
         }
+        ViewToken::Image(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Image id={:?} bgra_path={:?} pixels={}x{} width={:?} height={:?}",
+                token.id,
+                token.bgra_path,
+                token.pixel_width,
+                token.pixel_height,
+                token.width,
+                token.height
+            );
+        }
         ViewToken::Custom(token) => {
             let _ = writeln!(
                 output,

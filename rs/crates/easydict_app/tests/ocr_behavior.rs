@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     apply_ocr_outcome, begin_ocr_recognize, bgra_to_base64_bmp, bgra_to_base64_jpeg_data_url,
@@ -272,7 +273,16 @@ fn bgra_to_base64_bmp_validates_and_encodes_bmp_payload() {
     let encoded = bgra_to_base64_bmp(&[0, 0, 255, 255], 1, 1).expect("BMP should encode");
 
     assert!(encoded.starts_with("Qk0"));
+    assert_eq!(
+        encoded,
+        "Qk06AAAAAAAAADYAAAAoAAAAAQAAAAEAAAABABgAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAD/AA=="
+    );
     assert_eq!(encoded.len(), 80);
+    let decoded = general_purpose::STANDARD
+        .decode(encoded.as_bytes())
+        .expect("BMP base64 should decode with the standard padded engine");
+    assert_eq!(&decoded[..2], b"BM");
+    assert_eq!(decoded.len(), 58);
 
     assert_eq!(
         bgra_to_base64_bmp(&[0, 0, 255, 255], 0, 1).unwrap_err(),
@@ -293,6 +303,14 @@ fn bgra_to_base64_jpeg_data_url_validates_and_encodes_custom_api_payload() {
         bgra_to_base64_jpeg_data_url(&[0, 0, 255, 255], 1, 1).expect("JPEG should encode");
 
     assert!(encoded.starts_with("data:image/jpeg;base64,/9j/"));
+    let payload = encoded
+        .strip_prefix("data:image/jpeg;base64,")
+        .expect("JPEG data URL prefix");
+    let decoded = general_purpose::STANDARD
+        .decode(payload.as_bytes())
+        .expect("JPEG base64 should decode with the standard padded engine");
+    assert_eq!(&decoded[..2], &[0xff, 0xd8]);
+    assert_eq!(&decoded[decoded.len() - 2..], &[0xff, 0xd9]);
 
     assert_eq!(
         bgra_to_base64_jpeg_data_url(&[0, 0, 255, 255], 1, 0).unwrap_err(),
@@ -500,6 +518,7 @@ fn app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
 
 #[test]
 fn app_dir_runner_uses_native_windows_ocr_without_legacy_runtime() {
+    let app_dir = write_temp_legacy_ocr_app_dir("native_windows_no_legacy_runtime");
     let request = easydict_app::OcrRecognizeRequest {
         query_id: 11,
         mode: OcrMode::Translate,
@@ -515,11 +534,13 @@ fn app_dir_runner_uses_native_windows_ocr_without_legacy_runtime() {
         },
     };
 
-    let outcome = run_ocr_recognize_with_app_dir(request, r"C:\MissingWorkerApp");
+    let outcome = run_ocr_recognize_with_app_dir(request, &app_dir);
     let error = outcome.result.unwrap_err().message;
 
+    fs::remove_dir_all(&app_dir).ok();
     assert!(error.contains("Could not read OCR pixel data"));
     assert!(!error.contains("OCR worker"));
+    assert!(!error.contains("CompatHost"));
 }
 
 #[test]
@@ -1211,6 +1232,20 @@ fn write_temp_bgra(name: &str, bytes: &[u8]) -> PathBuf {
     ));
     fs::write(&path, bytes).expect("test BGRA file should be written");
     path
+}
+
+fn write_temp_legacy_ocr_app_dir(name: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("easydict-{name}-{}", std::process::id()));
+    let worker_dir = root.join("workers").join("ocr");
+    fs::create_dir_all(&worker_dir).expect("legacy OCR worker directory should be created");
+    fs::write(root.join("Easydict.CompatHost.exe"), b"legacy compat host")
+        .expect("legacy CompatHost marker should be written");
+    fs::write(
+        worker_dir.join("Easydict.Workers.Ocr.exe"),
+        b"legacy OCR worker",
+    )
+    .expect("legacy OCR worker marker should be written");
+    root
 }
 
 fn serve_one_http_response(body: &'static str) -> (String, thread::JoinHandle<String>) {

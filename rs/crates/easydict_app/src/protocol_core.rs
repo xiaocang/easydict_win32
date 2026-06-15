@@ -412,6 +412,8 @@ pub struct MdxLookupParams {
 #[serde(rename_all = "camelCase")]
 pub struct MdxLookupResult {
     pub entries: Vec<MdxLookupEntry>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mdd_resources_inlined: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -425,6 +427,10 @@ pub struct MdxLookupEntry {
 
 fn default_true() -> bool {
     true
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 pub fn serialize_json<T: Serialize>(value: &T) -> serde_json::Result<String> {

@@ -51,7 +51,6 @@ pub enum CliParseError {
     MissingValue(String),
     MissingText,
     UnknownOption(String),
-    ConflictingHostOptions,
 }
 
 impl fmt::Display for CliParseError {
@@ -65,9 +64,6 @@ impl fmt::Display for CliParseError {
                 formatter.write_str("missing text; pass --text or positional text")
             }
             Self::UnknownOption(option) => write!(formatter, "unknown option: {option}"),
-            Self::ConflictingHostOptions => {
-                formatter.write_str("--host and --app-dir cannot be used together")
-            }
         }
     }
 }
@@ -173,10 +169,6 @@ where
         }
     }
 
-    if host_program.is_some() && app_dir.is_some() {
-        return Err(CliParseError::ConflictingHostOptions);
-    }
-
     let text = text
         .or_else(|| (!positional.is_empty()).then(|| positional.join(" ")))
         .ok_or(CliParseError::MissingText)?;
@@ -273,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_grammar_language_and_rejects_conflicting_hosts() {
+    fn parses_grammar_language_and_ignores_legacy_host_and_app_dir_together() {
         let options = parse_args([
             "grammar",
             "--language",
@@ -291,7 +283,7 @@ mod tests {
         );
         assert_eq!(options.services, ["openai"]);
 
-        let error = parse_args([
+        let options = parse_args([
             "translate",
             "--host",
             "host.exe",
@@ -300,8 +292,9 @@ mod tests {
             "--text",
             "Hello",
         ])
-        .expect_err("conflicting hosts should fail");
-        assert_eq!(error, CliParseError::ConflictingHostOptions);
+        .expect("legacy host/app-dir hints should parse as no-op compatibility flags");
+        assert_eq!(options.mode, CliMode::Translate);
+        assert_eq!(options.text, "Hello");
     }
 
     #[test]

@@ -1427,12 +1427,9 @@ pub fn bing_host(use_china_host: bool) -> &'static str {
 pub fn parse_bing_credentials_from_html(
     html: &str,
 ) -> Result<BingCredentials, OpenAiExecutionError> {
-    let ig = extract_delimited(html, "IG:\"", '"')
-        .unwrap_or_default()
-        .to_string();
-    let iid = extract_delimited(html, "data-iid=\"", '"')
-        .unwrap_or(BING_DEFAULT_IID)
-        .to_string();
+    let ig = extract_js_property_string_value(html, "IG").unwrap_or_default();
+    let iid = extract_html_attribute_value(html, "data-iid")
+        .unwrap_or_else(|| BING_DEFAULT_IID.to_string());
 
     let params = parse_bing_abuse_prevention_params(html);
     match params {
@@ -3432,39 +3429,250 @@ fn form_urlencoded_body(fields: &[(&str, String)]) -> Result<String, OpenAiExecu
     Ok(url.query().unwrap_or_default().to_string())
 }
 
-/// Return the substring of `html` between `prefix` and the next `terminator`
-/// character after it, or `None` if `prefix` is absent or unterminated.
-fn extract_delimited<'a>(html: &'a str, prefix: &str, terminator: char) -> Option<&'a str> {
-    let start = html.find(prefix)? + prefix.len();
-    let rest = &html[start..];
-    let end = rest.find(terminator)?;
-    Some(&rest[..end])
+fn extract_html_attribute_value(html: &str, attribute_name: &str) -> Option<String> {
+    let lower_html = html.to_ascii_lowercase();
+    let lower_attribute = attribute_name.to_ascii_lowercase();
+    let mut cursor = 0;
+
+    while let Some(relative_index) = lower_html[cursor..].find(&lower_attribute) {
+        let start = cursor + relative_index;
+        let after_name = start + lower_attribute.len();
+        cursor = after_name;
+
+        if html[..start]
+            .chars()
+            .next_back()
+            .is_some_and(is_html_attribute_name_character)
+        {
+            continue;
+        }
+        if html[after_name..]
+            .chars()
+            .next()
+            .is_some_and(is_html_attribute_name_character)
+        {
+            continue;
+        }
+
+        let after_name = trim_ascii_start(&html[after_name..]);
+        let Some(after_equals) = after_name.strip_prefix('=') else {
+            continue;
+        };
+        let after_equals = trim_ascii_start(after_equals);
+        if let Some((value, _)) = parse_html_attribute_value(after_equals) {
+            return Some(value);
+        }
+    }
+
+    None
+}
+
+fn parse_html_attribute_value(input: &str) -> Option<(String, &str)> {
+    let input = trim_ascii_start(input);
+    let quote = input.chars().next()?;
+    if quote == '"' || quote == '\'' {
+        let after_quote = &input[quote.len_utf8()..];
+        let end = after_quote.find(quote)?;
+        return Some((
+            after_quote[..end].to_string(),
+            &after_quote[end + quote.len_utf8()..],
+        ));
+    }
+
+    let end = input
+        .char_indices()
+        .find(|(_, ch)| ch.is_ascii_whitespace() || *ch == '>')
+        .map(|(index, _)| index)
+        .unwrap_or(input.len());
+    (end > 0).then(|| (input[..end].to_string(), &input[end..]))
+}
+
+fn is_html_attribute_name_character(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | ':')
+}
+
+fn extract_js_property_string_value(source: &str, property_name: &str) -> Option<String> {
+    let mut cursor = 0;
+    while let Some(relative_index) = source[cursor..].find(property_name) {
+        let start = cursor + relative_index;
+        let bare_name_end = start + property_name.len();
+        cursor = bare_name_end;
+
+        let Some(name_end) = js_property_name_end(source, start, property_name) else {
+            continue;
+        };
+        let after_name = trim_ascii_start(&source[name_end..]);
+        let Some(after_colon) = after_name.strip_prefix(':') else {
+            continue;
+        };
+        let after_colon = trim_ascii_start(after_colon);
+        if let Some((value, _)) = parse_js_string_literal(after_colon) {
+            return Some(value);
+        }
+    }
+
+    None
+}
+
+fn js_property_name_end(source: &str, start: usize, property_name: &str) -> Option<usize> {
+    let bare_name_end = start + property_name.len();
+    let previous = source[..start].chars().next_back();
+    let next = source[bare_name_end..].chars().next();
+
+    if previous.is_some_and(|ch| ch == '"' || ch == '\'') && next == previous {
+        return Some(bare_name_end + next?.len_utf8());
+    }
+
+    if previous.is_some_and(is_js_identifier_character)
+        || next.is_some_and(is_js_identifier_character)
+    {
+        return None;
+    }
+    Some(bare_name_end)
+}
+
+fn is_js_identifier_character(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '$')
 }
 
 /// Parse `params_AbusePreventionHelper = [key,"token",expiry]` into its parts,
 /// mirroring the legacy regex without pulling in a regex dependency.
 fn parse_bing_abuse_prevention_params(html: &str) -> Option<(i64, String, i64)> {
-    let marker = html.find("params_AbusePreventionHelper")?;
-    let after_marker = &html[marker..];
-    let open = after_marker.find('[')?;
-    let inner = &after_marker[open + 1..];
-    let close = inner.find(']')?;
-    let inner = &inner[..close];
+    const MARKER: &str = "params_AbusePreventionHelper";
 
-    let comma1 = inner.find(',')?;
-    let key: i64 = inner[..comma1].trim().parse().ok()?;
+    let mut cursor = 0;
+    while let Some(relative_index) = html[cursor..].find(MARKER) {
+        let marker = cursor + relative_index;
+        let after_marker_index = marker + MARKER.len();
+        cursor = after_marker_index;
 
-    let after_key = &inner[comma1 + 1..];
-    let quote1 = after_key.find('"')?;
-    let after_quote1 = &after_key[quote1 + 1..];
-    let quote2 = after_quote1.find('"')?;
-    let token = after_quote1[..quote2].to_string();
+        if html[..marker]
+            .chars()
+            .next_back()
+            .is_some_and(is_js_identifier_character)
+            || html[after_marker_index..]
+                .chars()
+                .next()
+                .is_some_and(is_js_identifier_character)
+        {
+            continue;
+        }
 
-    let after_token = &after_quote1[quote2 + 1..];
-    let comma2 = after_token.find(',')?;
-    let expiry: i64 = after_token[comma2 + 1..].trim().parse().ok()?;
+        let after_marker = &html[after_marker_index..];
+        let Some(open) = after_marker.find('[') else {
+            continue;
+        };
+        if after_marker[..open].contains(MARKER) {
+            continue;
+        }
 
+        let after_open = &after_marker[open + 1..];
+        if let Some(params) = parse_bing_abuse_prevention_array(after_open) {
+            return Some(params);
+        }
+    }
+
+    None
+}
+
+fn parse_bing_abuse_prevention_array(after_open: &str) -> Option<(i64, String, i64)> {
+    let (key, after_key) = parse_js_i64(after_open)?;
+    let after_comma = consume_js_comma(after_key)?;
+    let (token, after_token) = parse_js_string_literal(after_comma)?;
+    let after_comma = consume_js_comma(after_token)?;
+    let (expiry, _) = parse_js_i64(after_comma)?;
     Some((key, token, expiry))
+}
+
+fn parse_js_i64(input: &str) -> Option<(i64, &str)> {
+    let input = trim_ascii_start(input);
+    let mut end = 0;
+    for (index, ch) in input.char_indices() {
+        if index == 0 && ch == '-' {
+            end = ch.len_utf8();
+            continue;
+        }
+        if ch.is_ascii_digit() {
+            end = index + ch.len_utf8();
+            continue;
+        }
+        break;
+    }
+
+    let value = input[..end].parse().ok()?;
+    Some((value, &input[end..]))
+}
+
+fn consume_js_comma(input: &str) -> Option<&str> {
+    trim_ascii_start(input)
+        .strip_prefix(',')
+        .map(trim_ascii_start)
+}
+
+fn parse_js_string_literal(input: &str) -> Option<(String, &str)> {
+    let input = trim_ascii_start(input);
+    let quote = input.chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+
+    let mut output = String::new();
+    let mut index = quote.len_utf8();
+    while index < input.len() {
+        let ch = input[index..].chars().next()?;
+        if ch == quote {
+            let rest = &input[index + ch.len_utf8()..];
+            return Some((output, rest));
+        }
+        if ch != '\\' {
+            output.push(ch);
+            index += ch.len_utf8();
+            continue;
+        }
+
+        index += ch.len_utf8();
+        let escaped = input[index..].chars().next()?;
+        match escaped {
+            'b' => {
+                output.push('\u{0008}');
+                index += escaped.len_utf8();
+            }
+            'f' => {
+                output.push('\u{000c}');
+                index += escaped.len_utf8();
+            }
+            'n' => {
+                output.push('\n');
+                index += escaped.len_utf8();
+            }
+            'r' => {
+                output.push('\r');
+                index += escaped.len_utf8();
+            }
+            't' => {
+                output.push('\t');
+                index += escaped.len_utf8();
+            }
+            'u' => {
+                let hex_start = index + escaped.len_utf8();
+                let hex_end = hex_start + 4;
+                let hex = input.get(hex_start..hex_end)?;
+                let scalar = u32::from_str_radix(hex, 16).ok()?;
+                output.push(char::from_u32(scalar)?);
+                index = hex_end;
+            }
+            other => {
+                output.push(other);
+                index += other.len_utf8();
+            }
+        }
+    }
+
+    None
+}
+
+fn trim_ascii_start(input: &str) -> &str {
+    input.trim_start_matches(|ch: char| ch.is_ascii_whitespace())
 }
 
 /// Truncate `text` to at most `max` UTF-16 code units on a char boundary,

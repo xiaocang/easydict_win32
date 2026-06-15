@@ -1201,6 +1201,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         }
         ViewToken::PointerRegion(token) => collect_text_editor_values(&token.content, values),
         ViewToken::CaptureOverlay(_) => {}
+        ViewToken::Image(_) => {}
         ViewToken::Custom(token) => {
             for child in &token.children {
                 collect_text_editor_values(child, values);
@@ -1344,6 +1345,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_)
         | ViewToken::CaptureOverlay(_)
+        | ViewToken::Image(_)
         | ViewToken::Custom(_) => None,
     }
 }
@@ -1666,6 +1668,7 @@ where
         ViewToken::ResultList(token) => compile_result_list(token, visual),
         ViewToken::PointerRegion(token) => compile_pointer_region(token, provider, visual),
         ViewToken::CaptureOverlay(token) => compile_capture_overlay(token, visual),
+        ViewToken::Image(token) => compile_image(token, visual),
         ViewToken::Custom(token) => {
             let mut content = iced_column(vec![compile_text(
                 &token.control,
@@ -4854,6 +4857,65 @@ where
     }
 
     icon_element(icon, 20.0, visual.text_secondary)
+}
+
+fn compile_image<'a, Message>(
+    token: &win_fluent::ImageToken,
+    _visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    // Raw BGRA dumps are large (a full screen is tens of MB); cache the decoded
+    // handle per path so view rebuilds reuse the uploaded texture instead of
+    // re-reading and re-swizzling the file every frame.
+    static HANDLES: OnceLock<Mutex<HashMap<String, iced::widget::image::Handle>>> = OnceLock::new();
+
+    let handle = {
+        let mut cache = HANDLES
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .expect("image handle cache poisoned");
+        match cache.get(&token.bgra_path) {
+            Some(handle) => Some(handle.clone()),
+            None => std::fs::read(&token.bgra_path).ok().and_then(|mut bytes| {
+                let expected = (token.pixel_width as usize)
+                    .checked_mul(token.pixel_height as usize)?
+                    .checked_mul(4)?;
+                if bytes.len() < expected {
+                    return None;
+                }
+                bytes.truncate(expected);
+                for pixel in bytes.chunks_exact_mut(4) {
+                    pixel.swap(0, 2); // BGRA -> RGBA
+                    pixel[3] = 0xFF; // GDI leaves alpha undefined
+                }
+                let handle = iced::widget::image::Handle::from_rgba(
+                    token.pixel_width,
+                    token.pixel_height,
+                    bytes,
+                );
+                cache.insert(token.bgra_path.clone(), handle.clone());
+                Some(handle)
+            }),
+        }
+    };
+
+    match handle {
+        Some(handle) => iced_image(handle)
+            .content_fit(iced::ContentFit::Fill)
+            .width(iced_length(token.width))
+            .height(iced_length(token.height))
+            .into(),
+        // Unreadable/incomplete pixel file: keep layout stable with an empty box.
+        None => iced_space()
+            .width(iced_length(token.width))
+            .height(iced_length(token.height))
+            .into(),
+    }
 }
 
 fn service_icon_image<'a, Message>(image: &'static [u8]) -> IcedElement<'a, Message>

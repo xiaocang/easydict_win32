@@ -471,6 +471,8 @@ pub fn build_msstore_payload(
     let mut base_listing = serde_json::Map::new();
     insert_non_empty(&mut base_listing, "title", &listing.title);
     insert_non_empty(&mut base_listing, "shortTitle", &listing.short_title);
+    insert_non_empty(&mut base_listing, "sortTitle", &listing.sort_title);
+    insert_non_empty(&mut base_listing, "voiceTitle", &listing.voice_title);
     insert_non_empty(&mut base_listing, "description", &listing.description);
     insert_non_empty(
         &mut base_listing,
@@ -491,6 +493,11 @@ pub fn build_msstore_payload(
         &mut base_listing,
         "copyrightAndTrademarkInfo",
         &listing.copyright_and_trademark_info,
+    );
+    insert_non_empty(
+        &mut base_listing,
+        "additionalLicenseTerms",
+        &listing.additional_license_terms,
     );
     insert_non_empty(&mut base_listing, "developedBy", &listing.developed_by);
     insert_non_empty(&mut base_listing, "releaseNotes", &listing.release_notes);
@@ -691,6 +698,8 @@ keywords:
         let listing = StoreListing {
             title: "Easydict".to_string(),
             short_title: "Easy".to_string(),
+            sort_title: "Easydict Sort".to_string(),
+            voice_title: "Easy Dict".to_string(),
             short_description: "Translate quickly".to_string(),
             description: "Long description".to_string(),
             features: vec!["Fast".to_string()],
@@ -706,6 +715,7 @@ keywords:
             ],
             release_notes: "New release".to_string(),
             copyright_and_trademark_info: "Copyright".to_string(),
+            additional_license_terms: "GPL-3.0 applies.".to_string(),
             developed_by: "xiaocang".to_string(),
             ..StoreListing::default()
         };
@@ -718,11 +728,23 @@ keywords:
             "Easydict"
         );
         assert_eq!(
+            value["listings"]["en-us"]["baseListing"]["sortTitle"],
+            "Easydict Sort"
+        );
+        assert_eq!(
+            value["listings"]["en-us"]["baseListing"]["voiceTitle"],
+            "Easy Dict"
+        );
+        assert_eq!(
             value["listings"]["en-us"]["baseListing"]["keywords"]
                 .as_array()
                 .expect("keywords")
                 .len(),
             7
+        );
+        assert_eq!(
+            value["listings"]["en-us"]["baseListing"]["additionalLicenseTerms"],
+            "GPL-3.0 applies."
         );
         assert_eq!(
             value["listings"]["en-us"]["baseListing"]["releaseNotes"],
@@ -785,6 +807,40 @@ description: Good description
         assert!(report.errors.iter().any(|error| error
             .contains("[en-us] Keyword contains third-party product name 'OpenAI': OpenAI")));
         let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn workflow_and_shim_keep_yaml_processing_on_rust_tool() {
+        let workflow =
+            include_str!("../../../../.github/workflows/store-listings.yml").replace("\r\n", "\n");
+        let shim = include_str!("../../../../.winstore/scripts/Sync-StoreListings.ps1")
+            .replace("\r\n", "\n");
+        let combined = format!("{workflow}\n{shim}");
+
+        for forbidden in [
+            "powershell-yaml",
+            "ConvertFrom-Yaml",
+            "ConvertFrom-Json",
+            "powershell-yml",
+        ] {
+            assert!(
+                !combined.contains(forbidden),
+                "store listing validate/preview/summary must not reintroduce {forbidden}"
+            );
+        }
+
+        assert!(
+            shim.contains("-p\", \"easydict_store_listings\""),
+            "PowerShell shim should delegate listing YAML parsing to the Rust crate"
+        );
+        assert!(
+            workflow.contains("-p\",\n            \"easydict_store_listings\""),
+            "GitHub summary step should use the Rust crate"
+        );
+        assert!(
+            workflow.contains("if: github.event.inputs.action == 'submit'\n        run: dotnet tool install -g MSStore.CLI"),
+            "msstore CLI installation must stay submit-only so validate/preview/summary do not need a .NET tool"
+        );
     }
 
     fn temp_winstore(label: &str) -> PathBuf {

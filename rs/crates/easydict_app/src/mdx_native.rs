@@ -682,6 +682,7 @@ pub fn run_native_mdx_lookup_with_factories_and_mdd_policy<
     let Some(dictionary) = find_dictionary(settings, &params.dictionary_id) else {
         return Ok(MdxLookupResult {
             entries: Vec::new(),
+            mdd_resources_inlined: false,
         });
     };
 
@@ -715,12 +716,17 @@ pub fn run_native_mdx_lookup_with_factories_and_mdd_policy<
         lookup_exact(&mut reader, query, &dictionary.display_name)?
     };
 
+    let mut mdd_resources_inlined = false;
     if include_mdd_resources {
-        inline_mdd_resources_for_entries(mdd_factory, dictionary, &mut entries)
-            .map_err(|error| NativeMdxLookupError::new(error.to_string()))?;
+        mdd_resources_inlined =
+            inline_mdd_resources_for_entries(mdd_factory, dictionary, &mut entries)
+                .map_err(|error| NativeMdxLookupError::new(error.to_string()))?;
     }
 
-    Ok(MdxLookupResult { entries })
+    Ok(MdxLookupResult {
+        entries,
+        mdd_resources_inlined,
+    })
 }
 
 pub fn inline_mdd_resources_in_html(
@@ -835,21 +841,26 @@ fn inline_mdd_resources_for_entries<F: NativeMddResourceReaderFactory>(
     factory: &mut F,
     dictionary: &ImportedMdxDictionarySnapshot,
     entries: &mut [MdxLookupEntry],
-) -> Result<(), NativeMddResourceError> {
+) -> Result<bool, NativeMddResourceError> {
     if dictionary.mdd_file_paths.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     let mut readers = open_mdd_readers(factory, dictionary);
     if readers.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
+    let mut changed = false;
     for entry in entries {
-        entry.html = inline_mdd_resources_in_html_with_readers(&mut readers, &entry.html)?;
+        let rewritten = inline_mdd_resources_in_html_with_readers(&mut readers, &entry.html)?;
+        if rewritten != entry.html {
+            changed = true;
+        }
+        entry.html = rewritten;
     }
 
-    Ok(())
+    Ok(changed)
 }
 
 fn open_mdd_readers<F: NativeMddResourceReaderFactory>(

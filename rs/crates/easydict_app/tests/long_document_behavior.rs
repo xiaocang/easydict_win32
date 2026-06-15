@@ -12,13 +12,16 @@ use easydict_app::{
     run_long_document_request_with_app_dir,
     run_long_document_request_with_app_dir_and_native_local_ai_client,
     run_long_document_request_with_native_route,
-    run_native_text_long_document_request_with_translator, AppMode, EasydictApp, EasydictUiState,
-    FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalRuntimeController,
-    FoundryLocalRuntimeState, FoundryLocalRuntimeStatus, LongDocumentBackend,
-    LongDocumentBackendError, LongDocumentEvent, LongDocumentInput, LongDocumentOutcome,
-    LongDocumentTranslationCache, Message, NativeLongDocumentTranslator,
+    run_native_text_long_document_request_with_translator,
+    run_native_text_long_document_request_with_translator_and_cancellation, AppMode, EasydictApp,
+    EasydictUiState, FoundryLocalEndpointResolver, FoundryLocalError,
+    FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
+    LongDocumentBackend, LongDocumentBackendError, LongDocumentEvent, LongDocumentInput,
+    LongDocumentOutcome, LongDocumentTranslationCache, Message, NativeLongDocumentTranslator,
+    NativeOpenVinoQuickTranslateBackend, QuickTranslateBackend, QuickTranslateExecutionKind,
     QuickTranslateServiceRequest, TRANSLATION_LANGUAGE_IDS,
 };
+use easydict_nllb::{NllbError, NllbInferenceEngine, NllbTokenizer, NllbTranslator};
 use easydict_windows_ai::{
     WindowsAiError, WindowsAiGenerationOptions, WindowsAiLanguageModelClient,
     WindowsAiLanguageModelProbe, WindowsAiReadyState, WindowsAiResponse,
@@ -26,7 +29,10 @@ use easydict_windows_ai::{
 use std::collections::VecDeque;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use win_fluent::prelude::{Application, ResultStatus, Task};
@@ -1422,6 +1428,69 @@ fn native_text_long_document_runner_respects_clamped_max_concurrency() {
 }
 
 #[test]
+fn native_text_long_document_runner_stops_before_export_when_cancelled_after_first_chunk() {
+    let temp_dir = unique_temp_dir("longdoc-native-text-cancel-after-first");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let output_path = temp_dir.join("cancelled-output.txt");
+    let cancelled = Arc::new(AtomicBool::new(false));
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: native_long_text_markers(&["chunk-0", "chunk-1", "chunk-2"]),
+                input_mode: "plaintext".to_string(),
+                output_mode: "monolingual".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                concurrency: "1".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        78,
+    )
+    .expect("plain text cancellation request should build");
+    request.params.output_path = Some(output_path.display().to_string());
+
+    let mut translator = CancellingNativeLongDocTranslator::after_calls(1, cancelled.clone());
+    let outcome = run_native_text_long_document_request_with_translator_and_cancellation(
+        &mut translator,
+        request,
+        || cancelled.load(Ordering::SeqCst),
+    );
+    let error = outcome
+        .result
+        .expect_err("cancelled native run should report an error");
+
+    assert!(error.message.contains("cancelled"));
+    assert_eq!(
+        translator.call_count(),
+        1,
+        "native runner should not schedule later chunks after cancellation"
+    );
+    assert!(
+        !outcome.events.iter().any(|event| matches!(
+            event,
+            LongDocumentEvent::Progress(progress) if progress.stage == "Exporting"
+        )),
+        "cancelled run should not enter export stage"
+    );
+    assert!(
+        !output_path.exists(),
+        "cancelled native run should not write partial output"
+    );
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn native_text_long_document_runner_preserves_output_order_when_chunks_complete_out_of_order() {
     let temp_dir = unique_temp_dir("longdoc-native-text-concurrency-out-of-order");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -2761,10 +2830,116 @@ fn native_text_both_output_prechecks_bilingual_path_before_writing_monolingual_f
 
     assert!(error.message.contains("Long document output path"));
     assert!(error.message.contains("is a directory"));
+    assert_eq!(
+        translator.call_count(),
+        0,
+        "invalid native output targets should be rejected before provider translation starts"
+    );
     assert!(
         !output_path.exists(),
         "monolingual output should not be partially written when bilingual target is invalid"
     );
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_long_document_writes_result_json_sidecar() {
+    let temp_dir = unique_temp_dir("longdoc-native-result-json-sidecar");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let output_path = temp_dir.join("translated.txt");
+    let result_json_path = temp_dir.join("translated-result.json");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A short document".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        78,
+    )
+    .expect("native text result sidecar request");
+    request.params.output_path = Some(output_path.display().to_string());
+    request.params.result_json_path = Some(result_json_path.display().to_string());
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let result = outcome
+        .result
+        .expect("native text translation should succeed");
+
+    assert_eq!(
+        result.result_json_path.as_deref(),
+        Some(result_json_path.to_str().unwrap())
+    );
+    assert!(output_path.exists());
+    let sidecar: TranslateDocumentResult = serde_json::from_str(
+        &fs::read_to_string(&result_json_path).expect("result JSON sidecar should be written"),
+    )
+    .expect("result JSON sidecar should deserialize");
+    assert_eq!(sidecar, result);
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_result_json_path_prechecked_before_provider_translation() {
+    let temp_dir = unique_temp_dir("longdoc-native-result-json-precheck");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let output_path = temp_dir.join("translated.txt");
+    let result_json_path = temp_dir.join("translated-result.json");
+    fs::create_dir_all(&result_json_path).expect("conflicting sidecar directory should exist");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: "A short document".to_string(),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        79,
+    )
+    .expect("native text result sidecar precheck request");
+    request.params.output_path = Some(output_path.display().to_string());
+    request.params.result_json_path = Some(result_json_path.display().to_string());
+
+    let mut translator = RecordingNativeLongDocTranslator::default();
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let error = outcome
+        .result
+        .expect_err("conflicting result JSON path should fail before provider translation");
+
+    assert!(error.message.contains("Long document output path"));
+    assert!(error.message.contains("is a directory"));
+    assert_eq!(
+        translator.call_count(),
+        0,
+        "invalid result JSON target should be rejected before provider translation starts"
+    );
+    assert!(!output_path.exists());
 
     fs::remove_dir_all(&temp_dir).ok();
 }
@@ -2810,6 +2985,11 @@ fn native_pdf_both_output_prechecks_bilingual_text_path_before_writing_pdf_file(
 
     assert!(error.message.contains("Long document output path"));
     assert!(error.message.contains("is a directory"));
+    assert_eq!(
+        translator.call_count(),
+        0,
+        "invalid native PDF output targets should be rejected before provider translation starts"
+    );
     assert!(
         !output_path.exists(),
         "PDF output should not be partially written when bilingual text target is invalid"
@@ -3425,6 +3605,56 @@ fn openvino_local_ai_long_document_unknown_target_reports_native_language_prefli
 }
 
 #[test]
+fn openvino_local_ai_long_document_translates_with_injected_native_nllb_translator() {
+    let temp_dir = unique_temp_dir("longdoc-openvino-native-nllb-success");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = openvino_local_ai_long_document_request(&temp_dir, "en", "zh-Hans", 57);
+    let mut translator = RecordingOpenVinoNllbLongDocTranslator::with_generated([200, 201, 202]);
+
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let result = outcome
+        .result
+        .expect("OpenVINO NLLB long document route should translate natively");
+
+    assert_eq!(result.state, "Completed");
+    assert_eq!(result.total_chunks, 1);
+    assert_eq!(result.succeeded_chunks, 1);
+    let output_path = result.output_path.expect("monolingual output path");
+    let output = fs::read_to_string(&output_path).expect("translated output");
+    assert!(output.contains("你好"));
+
+    let requests = translator.requests();
+    assert_eq!(requests.len(), 1);
+    let request = &requests[0];
+    assert_eq!(request.service.id, "windows-local-ai");
+    assert_eq!(
+        request.execution_kind,
+        QuickTranslateExecutionKind::TranslateStream
+    );
+    assert_eq!(request.params.from.as_deref(), Some("en"));
+    assert_eq!(request.params.to.as_deref(), Some("zh"));
+    assert_eq!(
+        request.params.services.as_deref(),
+        Some(&["windows-local-ai".to_string()][..])
+    );
+    assert_eq!(
+        request.settings.local_ai_provider.as_deref(),
+        Some(local_ai_provider_modes::OPENVINO)
+    );
+
+    assert_eq!(
+        translator.engine_calls(),
+        vec![RecordingLongDocNllbEngineCall {
+            input_ids: vec![101, 42, 2],
+            forced_bos: 256001,
+            max_new_tokens: 3,
+        }]
+    );
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn legacy_local_ai_long_document_service_id_maps_to_native_windows_local_ai_route() {
     let temp_dir = unique_temp_dir("longdoc-native-local-ai-legacy-id");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -3797,6 +4027,150 @@ impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
 }
 
 #[derive(Clone, Default)]
+struct RecordingLongDocNllbTokenizer {
+    encoded_sources: Arc<Mutex<Vec<(String, String)>>>,
+    target_language_codes: Arc<Mutex<Vec<String>>>,
+}
+
+impl NllbTokenizer for RecordingLongDocNllbTokenizer {
+    fn encode_source(&self, text: &str, source_flores_code: &str) -> Result<Vec<i32>, NllbError> {
+        self.encoded_sources
+            .lock()
+            .expect("encoded sources lock")
+            .push((text.to_string(), source_flores_code.to_string()));
+        assert_eq!(text, "A local AI long document chunk.");
+        assert_eq!(source_flores_code, "eng_Latn");
+        Ok(vec![101, 42, 2])
+    }
+
+    fn decode(&self, token_ids: &[i32]) -> Result<String, NllbError> {
+        match token_ids {
+            [200] => Ok("你".to_string()),
+            [200, 201] => Ok("你".to_string()),
+            [200, 201, 202] => Ok("你好".to_string()),
+            _ => Err(NllbError::new("unexpected long document NLLB token ids")),
+        }
+    }
+
+    fn language_token_id(&self, flores_code: &str) -> Result<i32, NllbError> {
+        self.target_language_codes
+            .lock()
+            .expect("target language codes lock")
+            .push(flores_code.to_string());
+        assert_eq!(flores_code, "zho_Hans");
+        Ok(256001)
+    }
+}
+
+#[derive(Clone)]
+struct RecordingLongDocNllbEngine {
+    generated: Arc<Vec<i32>>,
+    calls: Arc<Mutex<Vec<RecordingLongDocNllbEngineCall>>>,
+}
+
+impl RecordingLongDocNllbEngine {
+    fn with_generated(generated: impl IntoIterator<Item = i32>) -> Self {
+        Self {
+            generated: Arc::new(generated.into_iter().collect()),
+            calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn calls(&self) -> Vec<RecordingLongDocNllbEngineCall> {
+        self.calls.lock().expect("NLLB engine calls lock").clone()
+    }
+}
+
+impl Default for RecordingLongDocNllbEngine {
+    fn default() -> Self {
+        Self::with_generated([])
+    }
+}
+
+impl NllbInferenceEngine for RecordingLongDocNllbEngine {
+    fn generate(
+        &mut self,
+        encoder_input_ids: &[i32],
+        forced_bos_token_id: i32,
+        max_new_tokens: usize,
+    ) -> Result<Vec<i32>, NllbError> {
+        self.calls
+            .lock()
+            .expect("NLLB engine calls lock")
+            .push(RecordingLongDocNllbEngineCall {
+                input_ids: encoder_input_ids.to_vec(),
+                forced_bos: forced_bos_token_id,
+                max_new_tokens,
+            });
+        Ok((*self.generated).clone())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RecordingLongDocNllbEngineCall {
+    input_ids: Vec<i32>,
+    forced_bos: i32,
+    max_new_tokens: usize,
+}
+
+#[derive(Clone)]
+struct RecordingOpenVinoNllbLongDocTranslator {
+    tokenizer: RecordingLongDocNllbTokenizer,
+    engine: RecordingLongDocNllbEngine,
+    requests: Arc<Mutex<Vec<QuickTranslateServiceRequest>>>,
+}
+
+impl RecordingOpenVinoNllbLongDocTranslator {
+    fn with_generated(generated: impl IntoIterator<Item = i32>) -> Self {
+        Self {
+            tokenizer: RecordingLongDocNllbTokenizer::default(),
+            engine: RecordingLongDocNllbEngine::with_generated(generated),
+            requests: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn requests(&self) -> Vec<QuickTranslateServiceRequest> {
+        self.requests
+            .lock()
+            .expect("OpenVINO LongDoc requests lock")
+            .clone()
+    }
+
+    fn engine_calls(&self) -> Vec<RecordingLongDocNllbEngineCall> {
+        self.engine.calls()
+    }
+}
+
+impl NativeLongDocumentTranslator for RecordingOpenVinoNllbLongDocTranslator {
+    fn translate_chunk(
+        &mut self,
+        request: QuickTranslateServiceRequest,
+    ) -> Result<String, LongDocumentBackendError> {
+        if is_native_document_context_request(&request) {
+            return Err(LongDocumentBackendError::new(
+                "OpenVINO NLLB test translator ignores document context probes",
+            ));
+        }
+
+        self.requests
+            .lock()
+            .expect("OpenVINO LongDoc requests lock")
+            .push(request.clone());
+
+        let translator =
+            NllbTranslator::new(self.tokenizer.clone(), self.engine.clone()).with_max_new_tokens(3);
+        let mut backend = NativeOpenVinoQuickTranslateBackend::new(translator);
+        backend
+            .configure(&request.settings)
+            .map_err(|error| LongDocumentBackendError::new(error.message))?;
+        let stream = backend
+            .translate_stream(&request.params)
+            .map_err(|error| LongDocumentBackendError::new(error.message))?;
+        Ok(stream.result.translated_text)
+    }
+}
+
+#[derive(Clone, Default)]
 struct RecordingNativeLongDocTranslator {
     calls: Arc<Mutex<Vec<QuickTranslateServiceRequest>>>,
     active_calls: Arc<Mutex<usize>>,
@@ -3936,6 +4310,40 @@ impl RecordingNativeLongDocTranslator {
             .lock()
             .expect("completion order lock")
             .clone()
+    }
+}
+
+#[derive(Clone)]
+struct CancellingNativeLongDocTranslator {
+    inner: RecordingNativeLongDocTranslator,
+    cancel_after_calls: usize,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CancellingNativeLongDocTranslator {
+    fn after_calls(cancel_after_calls: usize, cancelled: Arc<AtomicBool>) -> Self {
+        Self {
+            inner: RecordingNativeLongDocTranslator::default(),
+            cancel_after_calls,
+            cancelled,
+        }
+    }
+
+    fn call_count(&self) -> usize {
+        self.inner.call_count()
+    }
+}
+
+impl NativeLongDocumentTranslator for CancellingNativeLongDocTranslator {
+    fn translate_chunk(
+        &mut self,
+        request: QuickTranslateServiceRequest,
+    ) -> Result<String, LongDocumentBackendError> {
+        let result = self.inner.translate_chunk(request);
+        if self.inner.call_count() >= self.cancel_after_calls {
+            self.cancelled.store(true, Ordering::SeqCst);
+        }
+        result
     }
 }
 

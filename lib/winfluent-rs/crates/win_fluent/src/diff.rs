@@ -156,6 +156,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         }
         ViewToken::PointerRegion(token) => vec![token.content.as_ref()],
         ViewToken::CaptureOverlay(_) => Vec::new(),
+        ViewToken::Image(_) => Vec::new(),
         ViewToken::Custom(token) => token.children.iter().collect(),
         ViewToken::Text(_)
         | ViewToken::Button(_)
@@ -208,6 +209,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::ResultList(_) => "ResultList",
         ViewToken::PointerRegion(_) => "PointerRegion",
         ViewToken::CaptureOverlay(_) => "CaptureOverlay",
+        ViewToken::Image(_) => "Image",
         ViewToken::Custom(_) => "Custom",
     }
 }
@@ -244,6 +246,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::ResultList(token) => token.id.as_deref(),
         ViewToken::PointerRegion(token) => token.id.as_deref(),
         ViewToken::CaptureOverlay(token) => token.id.as_deref(),
+        ViewToken::Image(token) => token.id.as_deref(),
         ViewToken::Custom(token) => token.id.as_deref(),
     }
 }
@@ -481,6 +484,10 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.selection_rect,
             token.handles_visible,
             token.magnifier_visible
+        ),
+        ViewToken::Image(token) => format!(
+            "bgra_path={:?}|{}x{} px|{:?}|{:?}",
+            token.bgra_path, token.pixel_width, token.pixel_height, token.width, token.height
         ),
         ViewToken::Custom(token) => token.control.clone(),
     }

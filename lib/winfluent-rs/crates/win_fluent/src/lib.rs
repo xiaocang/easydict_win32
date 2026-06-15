@@ -53,12 +53,14 @@ pub use theme::{
 };
 pub use view::{
     adaptive_switch, busy_overlay, button, capture_overlay, card, checkbox, column, combo_box,
-    command_bar, dialog, expander, flyout_button, lazy, navigation_view, overlay, page,
+    command_bar, dialog, expander, flyout_button, image_bgra_file, lazy, navigation_view, overlay,
+    page,
     pointer_region, primary_button, progress_ring, result_card, result_list, row, scroll_view,
     service_result_card, service_result_list, settings_row, slider, spacer, status_badge, text,
     text_editor, title_bar, toggle_switch, wrap, AdaptiveSwitchBuilder, AdaptiveSwitchToken,
     Alignment, BusyOverlayBuilder, BusyOverlayToken, ButtonKind, CaptureOverlayBuilder,
     CaptureOverlayPhase, CaptureOverlayRect, CaptureOverlayToken, CardKind, CheckBoxBuilder,
+    ImageBuilder, ImageToken,
     CheckBoxToken, CollapseTraceDirection, CollapseTraceSample, CollapseTransition, ComboBoxItem,
     DialogKind, Edges, ExpanderBuilder, ExpanderToken, FlyoutButtonBuilder, FlyoutButtonToken,
     FlyoutMenuItem, FlyoutMenuItemKind, IntoChildren, IntoView, LayoutDistribution, LayoutKind,

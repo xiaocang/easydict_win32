@@ -254,6 +254,7 @@ fn extension_for_mdd_resource_key(resource_key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use flate2::{write::ZlibEncoder, Compression};
     use std::io::{Seek, SeekFrom, Write};
 
@@ -339,6 +340,55 @@ mod tests {
             mime_type_for_mdd_resource_key(r"\styles\dict.css"),
             "text/css"
         );
+    }
+
+    #[test]
+    fn mdd_new_can_read_zlib_record_block_with_non_ascii_and_large_resources() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp compressed MDD file");
+        let logo = large_patterned_payload(b"\x89PNG", 8192);
+        let audio = large_patterned_payload(b"ID3", 4096);
+        write_minimal_mdd_with_record_block(
+            file.as_file_mut(),
+            &[
+                (r"\audio\発音.mp3", audio.as_slice()),
+                (r"\images\标志.png", logo.as_slice()),
+                (
+                    r"\styles\主题.css",
+                    "body{font-family:\"Noto Sans\"}".as_bytes(),
+                ),
+            ],
+            zlib_block,
+        );
+        file.as_file_mut().flush().expect("flush MDD file");
+
+        let mut mdd = Mdd::new(file.path()).expect("compressed MDD should open");
+
+        assert_eq!(mdd.resource_count(), 3);
+        assert!(mdd.contains("images/标志.png"));
+        assert_eq!(mdd.prefix_keys("images/标"), vec![r"\images\标志.png"]);
+
+        let image = mdd
+            .locate_resource_result("images/标志.png")
+            .expect("non-ASCII image lookup should not fail")
+            .expect("non-ASCII image resource should exist");
+        assert_eq!(image.key, r"\images\标志.png");
+        assert_eq!(image.mime_type, "image/png");
+        assert_eq!(image.data, logo);
+
+        let audio_result = mdd.locate("audio/発音.mp3").expect("audio should exist");
+        assert_eq!(audio_result.key_text, r"\audio\発音.mp3");
+        assert_eq!(
+            BASE64
+                .decode(audio_result.definition.as_bytes())
+                .expect("MDD locate output should be standard base64"),
+            audio
+        );
+
+        let css_info = mdd
+            .get_resource_info("styles/主题.css")
+            .expect("CSS resource info should exist");
+        assert_eq!(css_info.key, r"\styles\主题.css");
+        assert_eq!(css_info.mime_type, "text/css");
     }
 
     #[test]
@@ -433,6 +483,14 @@ mod tests {
     }
 
     fn write_minimal_mdd(file: &mut std::fs::File, resources: &[(&str, &[u8])]) {
+        write_minimal_mdd_with_record_block(file, resources, uncompressed_record_block);
+    }
+
+    fn write_minimal_mdd_with_record_block(
+        file: &mut std::fs::File,
+        resources: &[(&str, &[u8])],
+        record_block_builder: fn(&[u8]) -> Vec<u8>,
+    ) {
         assert!(!resources.is_empty());
 
         let header_text = r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" KeyCaseSensitive="No" StripKey="Yes" />"#;
@@ -470,7 +528,7 @@ mod tests {
         file.write_all(&key_info).expect("key info");
         file.write_all(&key_block).expect("key block");
 
-        let record_block = uncompressed_record_block(&record_payload);
+        let record_block = record_block_builder(&record_payload);
         write_u64_be(file, 1);
         write_u64_be(file, resources.len() as u64);
         write_u64_be(file, 16);
@@ -478,6 +536,15 @@ mod tests {
         write_u64_be(file, record_block.len() as u64);
         write_u64_be(file, record_payload.len() as u64);
         file.write_all(&record_block).expect("record block");
+    }
+
+    fn large_patterned_payload(prefix: &[u8], len: usize) -> Vec<u8> {
+        let mut payload = Vec::with_capacity(len.max(prefix.len()));
+        payload.extend_from_slice(prefix);
+        while payload.len() < len {
+            payload.push((payload.len() % 251) as u8);
+        }
+        payload
     }
 
     fn key_info_payload(

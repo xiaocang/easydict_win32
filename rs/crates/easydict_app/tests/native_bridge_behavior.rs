@@ -4,6 +4,23 @@ use easydict_app::native_bridge::{
     encode_native_message, parse_native_action, run_native_bridge, BridgeResponse,
     MAX_NATIVE_MESSAGE_BYTES, NATIVE_HOST_NAME, OCR_TRANSLATE_ACTION,
 };
+use easydict_app::OCR_TRANSLATE_EVENT_NAME;
+
+#[test]
+fn native_bridge_binary_signals_rs_ocr_event_not_legacy_dotnet_event() {
+    let bridge_bin = include_str!("../src/bin/easydict_native_bridge.rs");
+
+    assert_eq!(OCR_TRANSLATE_EVENT_NAME, r"Local\EasydictRs-OcrTranslate");
+    assert_ne!(OCR_TRANSLATE_EVENT_NAME, r"Local\Easydict-OcrTranslate");
+    assert!(
+        bridge_bin.contains("OCR_TRANSLATE_EVENT_NAME"),
+        "NativeBridge binary should signal the rs-specific OCR named event constant"
+    );
+    assert!(
+        !bridge_bin.contains(r"Local\Easydict-OcrTranslate"),
+        "NativeBridge binary must not hard-code the legacy dotnet OCR event"
+    );
+}
 
 #[test]
 fn native_bridge_defaults_invalid_or_missing_action_to_ocr_translate() {
@@ -63,29 +80,40 @@ fn native_bridge_reports_false_for_unknown_actions_without_signal() {
 
 #[test]
 fn native_bridge_stops_without_response_for_invalid_lengths_or_incomplete_frames() {
+    let mut signal_count = 0usize;
     let mut zero_output = Vec::new();
     let responses = run_native_bridge(Cursor::new(0u32.to_le_bytes()), &mut zero_output, || {
+        signal_count += 1;
         Ok(true)
     })
     .expect("zero length");
     assert_eq!(responses, 0);
+    assert_eq!(signal_count, 0);
     assert!(zero_output.is_empty());
 
     let mut too_large = Vec::new();
     too_large.extend_from_slice(&(MAX_NATIVE_MESSAGE_BYTES + 1).to_le_bytes());
     let mut large_output = Vec::new();
-    let responses = run_native_bridge(Cursor::new(too_large), &mut large_output, || Ok(true))
-        .expect("too large");
+    let responses = run_native_bridge(Cursor::new(too_large), &mut large_output, || {
+        signal_count += 1;
+        Ok(true)
+    })
+    .expect("too large");
     assert_eq!(responses, 0);
+    assert_eq!(signal_count, 0);
     assert!(large_output.is_empty());
 
     let mut incomplete = Vec::new();
     incomplete.extend_from_slice(&16u32.to_le_bytes());
     incomplete.extend_from_slice(b"{}");
     let mut incomplete_output = Vec::new();
-    let responses = run_native_bridge(Cursor::new(incomplete), &mut incomplete_output, || Ok(true))
-        .expect("incomplete");
+    let responses = run_native_bridge(Cursor::new(incomplete), &mut incomplete_output, || {
+        signal_count += 1;
+        Ok(true)
+    })
+    .expect("incomplete");
     assert_eq!(responses, 0);
+    assert_eq!(signal_count, 0);
     assert!(incomplete_output.is_empty());
 }
 

@@ -5,18 +5,18 @@ pub const GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE: &str = "RUNTIME_PROFILE"
 pub const DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE: &str = "EASYDICT_DISABLE_LOCALAI_WORKER";
 pub const DISABLE_LONGDOC_WORKER_ENVIRONMENT_VARIABLE: &str = "EASYDICT_DISABLE_LONGDOC_WORKER";
 
-pub const LOCAL_AI_WORKER_DISABLED_MESSAGE: &str =
+pub const LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE: &str =
     "Windows Local AI requires a Rust-native route for this request.";
-pub const LONGDOC_WORKER_DISABLED_MESSAGE: &str =
+pub const LONGDOC_RUST_NATIVE_REQUIRED_MESSAGE: &str =
     "Long Document translation requires a Rust-native route for this request.";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RetainedWorkerPolicy {
+pub struct RuntimeRoutePolicy {
     pub local_ai_worker_enabled: bool,
     pub longdoc_worker_enabled: bool,
 }
 
-impl RetainedWorkerPolicy {
+impl RuntimeRoutePolicy {
     pub const fn all_enabled() -> Self {
         Self {
             local_ai_worker_enabled: true,
@@ -93,19 +93,27 @@ impl RetainedWorkerPolicy {
     }
 
     pub fn local_ai_worker_disabled_message(self) -> Option<&'static str> {
-        (!self.local_ai_worker_enabled).then_some(LOCAL_AI_WORKER_DISABLED_MESSAGE)
+        (!self.local_ai_worker_enabled).then_some(LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE)
     }
 
     pub fn longdoc_worker_disabled_message(self) -> Option<&'static str> {
-        (!self.longdoc_worker_enabled).then_some(LONGDOC_WORKER_DISABLED_MESSAGE)
+        (!self.longdoc_worker_enabled).then_some(LONGDOC_RUST_NATIVE_REQUIRED_MESSAGE)
     }
 }
 
-impl Default for RetainedWorkerPolicy {
+impl Default for RuntimeRoutePolicy {
     fn default() -> Self {
         Self::all_disabled()
     }
 }
+
+#[cfg(feature = "retained-dotnet-workers")]
+pub type RetainedWorkerPolicy = RuntimeRoutePolicy;
+
+#[cfg(feature = "retained-dotnet-workers")]
+pub const LOCAL_AI_WORKER_DISABLED_MESSAGE: &str = LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE;
+#[cfg(feature = "retained-dotnet-workers")]
+pub const LONGDOC_WORKER_DISABLED_MESSAGE: &str = LONGDOC_RUST_NATIVE_REQUIRED_MESSAGE;
 
 #[cfg(feature = "retained-dotnet-workers")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -193,16 +201,16 @@ mod tests {
         let snapshot = EnvironmentSnapshot::capture();
         clear_retained_worker_environment();
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
         assert_eq!(
             policy.local_ai_worker_disabled_message(),
-            Some(LOCAL_AI_WORKER_DISABLED_MESSAGE)
+            Some(LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE)
         );
         assert_eq!(
             policy.longdoc_worker_disabled_message(),
-            Some(LONGDOC_WORKER_DISABLED_MESSAGE)
+            Some(LONGDOC_RUST_NATIVE_REQUIRED_MESSAGE)
         );
         snapshot.restore();
     }
@@ -210,8 +218,8 @@ mod tests {
     #[test]
     fn default_policy_is_rust_only_to_avoid_accidental_retained_worker_startup() {
         assert_eq!(
-            RetainedWorkerPolicy::default(),
-            RetainedWorkerPolicy::all_disabled()
+            RuntimeRoutePolicy::default(),
+            RuntimeRoutePolicy::all_disabled()
         );
     }
 
@@ -222,16 +230,16 @@ mod tests {
         clear_retained_worker_environment();
         std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
         assert_eq!(
             policy.local_ai_worker_disabled_message(),
-            Some(LOCAL_AI_WORKER_DISABLED_MESSAGE)
+            Some(LOCAL_AI_RUST_NATIVE_REQUIRED_MESSAGE)
         );
         assert_eq!(
             policy.longdoc_worker_disabled_message(),
-            Some(LONGDOC_WORKER_DISABLED_MESSAGE)
+            Some(LONGDOC_RUST_NATIVE_REQUIRED_MESSAGE)
         );
         snapshot.restore();
     }
@@ -243,9 +251,9 @@ mod tests {
         clear_retained_worker_environment();
         std::env::set_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
         snapshot.restore();
     }
 
@@ -256,9 +264,9 @@ mod tests {
         clear_retained_worker_environment();
 
         let policy =
-            RetainedWorkerPolicy::all_enabled().with_hybrid_runtime_profile_from_environment();
+            RuntimeRoutePolicy::all_enabled().with_hybrid_runtime_profile_from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
         snapshot.restore();
     }
 
@@ -270,10 +278,10 @@ mod tests {
         clear_retained_worker_environment();
         std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
-        assert_eq!(RetainedWorkerPolicy::hybrid_from_environment(), policy);
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
+        assert_eq!(RuntimeRoutePolicy::hybrid_from_environment(), policy);
         snapshot.restore();
     }
 
@@ -286,11 +294,11 @@ mod tests {
         std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
         std::env::set_var(DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE, "yes");
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
         assert_eq!(
             policy,
-            RetainedWorkerPolicy {
+            RuntimeRoutePolicy {
                 local_ai_worker_enabled: false,
                 longdoc_worker_enabled: true,
             }
@@ -309,21 +317,21 @@ mod tests {
             std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, value);
 
             let policy =
-                RetainedWorkerPolicy::all_enabled().with_hybrid_runtime_profile_from_environment();
+                RuntimeRoutePolicy::all_enabled().with_hybrid_runtime_profile_from_environment();
 
             assert_eq!(
                 policy,
-                RetainedWorkerPolicy::all_disabled(),
+                RuntimeRoutePolicy::all_disabled(),
                 "{value:?} must not let injected policies enable retained workers"
             );
         }
 
         std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
         assert_eq!(
-            RetainedWorkerPolicy::all_enabled()
+            RuntimeRoutePolicy::all_enabled()
                 .without_local_ai_worker()
                 .with_hybrid_runtime_profile_from_environment(),
-            RetainedWorkerPolicy {
+            RuntimeRoutePolicy {
                 local_ai_worker_enabled: false,
                 longdoc_worker_enabled: true,
             }
@@ -341,9 +349,9 @@ mod tests {
         std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
         std::env::set_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only");
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_disabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_disabled());
         snapshot.restore();
     }
 
@@ -355,9 +363,9 @@ mod tests {
         clear_retained_worker_environment();
         std::env::set_var(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
 
-        let policy = RetainedWorkerPolicy::from_environment();
+        let policy = RuntimeRoutePolicy::from_environment();
 
-        assert_eq!(policy, RetainedWorkerPolicy::all_enabled());
+        assert_eq!(policy, RuntimeRoutePolicy::all_enabled());
         snapshot.restore();
     }
 
@@ -371,11 +379,11 @@ mod tests {
         for value in ["dotnet", "dotnet-hybrid"] {
             std::env::set_var(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, value);
 
-            let policy = RetainedWorkerPolicy::from_environment();
+            let policy = RuntimeRoutePolicy::from_environment();
 
             assert_eq!(
                 policy,
-                RetainedWorkerPolicy::all_disabled(),
+                RuntimeRoutePolicy::all_disabled(),
                 "{value} must not opt the first rs package into retained .NET workers"
             );
         }

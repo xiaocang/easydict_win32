@@ -16,8 +16,9 @@ use easydict_app::{
 use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
 use serde_json::Value;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -86,6 +87,33 @@ impl Drop for EnvVarGuard {
         } else {
             std::env::remove_var(self.key);
         }
+    }
+}
+
+struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    fn new(label: &str) -> Self {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("easydict-{label}-{}-{unique}", std::process::id()));
+        std::fs::create_dir_all(&path).expect("temp dir should be created");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 
@@ -447,6 +475,28 @@ fn packaged_worker_command_sets_shared_worker_environment() {
             .map(|(_, value)| value.as_str()),
         Some("1")
     );
+}
+
+#[test]
+fn packaged_worker_command_defers_bundled_dotnet_runtime_probe_until_spawn() {
+    let temp = TempDir::new("compat-client-deferred-dotnet-root");
+    let app_dir = temp.path();
+    std::fs::create_dir_all(app_dir.join("dotnet").join("host").join("fxr"))
+        .expect("fake host fxr directory");
+    std::fs::create_dir_all(
+        app_dir
+            .join("dotnet")
+            .join("shared")
+            .join("Microsoft.NETCore.App"),
+    )
+    .expect("fake shared runtime directory");
+
+    let command = packaged_worker_command(app_dir, "longdoc", "Easydict.Workers.LongDoc.exe");
+
+    assert!(command
+        .envs()
+        .iter()
+        .all(|(key, _)| !key.starts_with("DOTNET_ROOT")));
 }
 
 #[test]

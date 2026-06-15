@@ -130,6 +130,7 @@ pub enum ViewToken<Message> {
     ResultList(ResultListToken<Message>),
     PointerRegion(PointerRegionToken<Message>),
     CaptureOverlay(CaptureOverlayToken),
+    Image(ImageToken),
     Custom(CustomToken<Message>),
 }
 
@@ -187,6 +188,8 @@ pub enum TextStyle {
     Body,
     BodyLarge,
     BodyStrong,
+    Success,
+    SectionTitle,
     Subtitle,
     Title,
     TitleLarge,
@@ -495,6 +498,8 @@ pub struct ToggleSwitchToken<Message> {
     pub header: Option<String>,
     pub label: String,
     pub checked: bool,
+    pub width: Option<Length>,
+    pub height: Option<Length>,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -1076,6 +1081,21 @@ pub struct CaptureOverlayToken {
     pub a11y: A11yHint,
 }
 
+/// A bitmap image. The only supported source today is a raw 32-bit BGRA pixel
+/// file (the format written by the platform screen-capture API), which lets the
+/// OCR capture overlay show the frozen desktop like the WinUI implementation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImageToken {
+    pub id: Option<String>,
+    /// Path to a raw BGRA8 pixel dump (no header).
+    pub bgra_path: String,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+    pub width: Length,
+    pub height: Length,
+    pub a11y: A11yHint,
+}
+
 #[derive(Clone, Debug)]
 pub struct CustomToken<Message> {
     pub id: Option<String>,
@@ -1336,6 +1356,8 @@ pub fn toggle_switch<Message>(
         header: None,
         label: label.into(),
         checked,
+        width: None,
+        height: None,
         state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
@@ -2410,6 +2432,8 @@ pub struct ToggleSwitchBuilder<Message> {
     header: Option<String>,
     label: String,
     checked: bool,
+    width: Option<Length>,
+    height: Option<Length>,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -2423,6 +2447,16 @@ impl<Message> ToggleSwitchBuilder<Message> {
 
     pub fn header(mut self, header: impl Into<String>) -> Self {
         self.header = Some(header.into());
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = Some(height);
         self
     }
 
@@ -2477,6 +2511,8 @@ impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
             header: self.header,
             label: self.label,
             checked: self.checked,
+            width: self.width,
+            height: self.height,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -3511,6 +3547,71 @@ impl<Message> IntoView<Message> for CaptureOverlayBuilder {
             selection_rect: self.selection_rect,
             handles_visible: self.handles_visible,
             magnifier_visible: self.magnifier_visible,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+/// Builds an image view from a raw BGRA8 pixel file written by the platform
+/// screen-capture API.
+pub fn image_bgra_file(
+    path: impl Into<String>,
+    pixel_width: u32,
+    pixel_height: u32,
+) -> ImageBuilder {
+    ImageBuilder {
+        id: None,
+        bgra_path: path.into(),
+        pixel_width,
+        pixel_height,
+        width: Length::Fill,
+        height: Length::Fill,
+        a11y: A11yHint::default(),
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ImageBuilder {
+    id: Option<String>,
+    bgra_path: String,
+    pixel_width: u32,
+    pixel_height: u32,
+    width: Length,
+    height: Length,
+    a11y: A11yHint,
+}
+
+impl ImageBuilder {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for ImageBuilder {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Image(ImageToken {
+            id: self.id,
+            bgra_path: self.bgra_path,
+            pixel_width: self.pixel_width,
+            pixel_height: self.pixel_height,
+            width: self.width,
+            height: self.height,
             a11y: self.a11y,
         }))
     }

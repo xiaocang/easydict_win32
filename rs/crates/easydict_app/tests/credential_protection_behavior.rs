@@ -146,6 +146,52 @@ fn credential_protection_legacy_value_with_different_machine_id_fails() {
 }
 
 #[test]
+fn credential_protection_malformed_base64_payloads_fail_locally() {
+    for protected_value in [
+        "edloc1:not base64!!!",
+        "edloc1:AA",
+        "edcred1:user:not base64!!!",
+        "edcred1:user:AA",
+    ] {
+        assert_eq!(
+            try_unprotect_credential_legacy(protected_value, "stable-machine-id"),
+            None
+        );
+        let value = unprotect_or_return_plaintext_with_machine_id(
+            Some(protected_value),
+            "stable-machine-id",
+        );
+        assert_eq!(value.value, None);
+        assert!(!value.needs_migration);
+        assert!(value.decrypt_failed);
+    }
+}
+
+#[test]
+fn credential_protection_legacy_base64_requires_padding() {
+    let protected_value = protect_credential_legacy("x", "stable-machine-id").unwrap();
+    let unpadded = protected_value.trim_end_matches('=');
+
+    assert_ne!(unpadded, protected_value);
+    assert_eq!(
+        try_unprotect_credential_legacy(unpadded, "stable-machine-id"),
+        None
+    );
+}
+
+#[test]
+fn credential_protection_legacy_base64_allows_historical_trailing_bits() {
+    let protected_value = protect_credential_legacy("x", "stable-machine-id").unwrap();
+    let noncanonical = flip_last_base64_trailing_bit(&protected_value);
+
+    assert_ne!(noncanonical, protected_value);
+    assert_eq!(
+        try_unprotect_credential_legacy(&noncanonical, "stable-machine-id").as_deref(),
+        Some("x")
+    );
+}
+
+#[test]
 fn credential_protection_machine_id_reads_existing_file() {
     let temp = TempDir::new("credential-machine-id-existing");
     let path = temp
@@ -212,6 +258,26 @@ impl TempDir {
     fn path(&self) -> &Path {
         &self.path
     }
+}
+
+fn flip_last_base64_trailing_bit(value: &str) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut bytes = value.as_bytes().to_vec();
+    let base64_start = value.rfind(':').map(|index| index + 1).unwrap_or(0);
+    let index = bytes
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(index, byte)| (*byte != b'=' && index >= base64_start).then_some(index))
+        .expect("base64 payload should contain a non-padding symbol");
+    let value = ALPHABET
+        .iter()
+        .position(|byte| *byte == bytes[index])
+        .expect("payload should use the standard base64 alphabet");
+
+    bytes[index] = ALPHABET[value ^ 1];
+    String::from_utf8(bytes).expect("mutated payload should remain UTF-8")
 }
 
 impl Drop for TempDir {

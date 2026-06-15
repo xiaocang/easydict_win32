@@ -64,7 +64,7 @@ use crate::quick_translate::{
     QuickTranslateService, QuickTranslateServiceRequest,
 };
 use crate::resource_download::ReqwestResourceDownloadClient;
-use crate::retained_workers::RetainedWorkerPolicy;
+use crate::runtime_policy::RuntimeRoutePolicy;
 use crate::state::{EasydictUiState, SettingsState, TranslationResultPreview};
 use crate::table_structure_onnx::TatrOnnxSession;
 use crate::translation_cache::{
@@ -110,6 +110,7 @@ const NO_FILE_SELECTED: &str = "No file selected";
 const MAX_HISTORY_ITEMS: usize = 50;
 const NATIVE_TEXT_CHUNK_CHAR_LIMIT: usize = 2_500;
 const NATIVE_PDF_EMPTY_TEXT_ERROR: &str = "Native PDF text extraction found no selectable text";
+const NATIVE_LONG_DOCUMENT_CANCELLED_MESSAGE: &str = "Long document translation was cancelled";
 const VISION_LAYOUT_GEMINI_OPENAI_ENDPOINT: &str =
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const VISION_LAYOUT_DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-flash";
@@ -411,13 +412,13 @@ pub fn run_long_document_request_with_current_app_dir(
 ) -> LongDocumentOutcome {
     run_long_document_request_with_current_app_dir_and_worker_policy(
         request,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
     )
 }
 
 fn run_long_document_request_with_current_app_dir_and_worker_policy(
     request: LongDocumentServiceRequest,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> LongDocumentOutcome {
     if let Some(error) = local_long_document_route_preflight_error(&request) {
         return long_document_backend_error_outcome(request, error);
@@ -496,7 +497,7 @@ fn run_long_document_request_with_native_route_and_local_ai_client<
     };
 
     if let Some(error) =
-        local_long_document_worker_preflight_error(&request, RetainedWorkerPolicy::all_disabled())
+        local_long_document_worker_preflight_error(&request, RuntimeRoutePolicy::all_disabled())
     {
         return long_document_backend_error_outcome(request, error);
     }
@@ -534,7 +535,7 @@ fn run_long_document_request_with_native_route_and_foundry_resolver<
     };
 
     if let Some(error) =
-        local_long_document_worker_preflight_error(&request, RetainedWorkerPolicy::all_disabled())
+        local_long_document_worker_preflight_error(&request, RuntimeRoutePolicy::all_disabled())
     {
         return long_document_backend_error_outcome(request, error);
     }
@@ -549,7 +550,7 @@ pub fn run_long_document_request_with_app_dir(
     run_long_document_request_with_app_dir_and_worker_policy_internal(
         request,
         app_dir,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
     )
 }
 
@@ -558,7 +559,7 @@ pub fn run_long_document_request_with_app_dir(
 pub fn run_long_document_request_with_packaged_app_dir_and_worker_policy(
     request: LongDocumentServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> LongDocumentOutcome {
     run_long_document_request_with_app_dir_and_worker_policy_internal(
         request,
@@ -570,7 +571,7 @@ pub fn run_long_document_request_with_packaged_app_dir_and_worker_policy(
 fn run_long_document_request_with_app_dir_and_worker_policy_internal(
     request: LongDocumentServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> LongDocumentOutcome {
     if let Some(error) = local_long_document_route_preflight_error(&request) {
         return long_document_backend_error_outcome(request, error);
@@ -626,7 +627,7 @@ pub fn run_long_document_request_with_app_dir_and_native_local_ai_client<
     run_long_document_request_with_app_dir_after_native_probe(
         request,
         app_dir,
-        RetainedWorkerPolicy::all_disabled(),
+        RuntimeRoutePolicy::all_disabled(),
     )
 }
 
@@ -736,7 +737,7 @@ where
 fn run_long_document_request_with_app_dir_after_native_probe(
     request: LongDocumentServiceRequest,
     app_dir: impl AsRef<Path>,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> LongDocumentOutcome {
     if let Some(error) = local_long_document_worker_preflight_error(&request, worker_policy) {
         return long_document_backend_error_outcome(request, error);
@@ -748,7 +749,7 @@ fn run_long_document_request_with_app_dir_after_native_probe(
         return long_document_backend_error_outcome(
             request,
             LongDocumentBackendError::new(
-                RetainedWorkerPolicy::all_disabled()
+                RuntimeRoutePolicy::all_disabled()
                     .longdoc_worker_disabled_message()
                     .unwrap_or(
                         "Long Document translation requires a Rust-native route for this request.",
@@ -825,8 +826,24 @@ pub fn run_native_text_long_document_request_with_translator<T: NativeLongDocume
     translator: &mut T,
     request: LongDocumentServiceRequest,
 ) -> LongDocumentOutcome {
+    run_native_text_long_document_request_with_translator_and_cancellation(
+        translator,
+        request,
+        || false,
+    )
+}
+
+#[doc(hidden)]
+pub fn run_native_text_long_document_request_with_translator_and_cancellation<
+    T: NativeLongDocumentTranslator,
+    F: Fn() -> bool,
+>(
+    translator: &mut T,
+    request: LongDocumentServiceRequest,
+    should_cancel: F,
+) -> LongDocumentOutcome {
     let input_label = input_label(&request);
-    let result = run_native_text_long_document_request_inner(translator, &request);
+    let result = run_native_text_long_document_request_inner(translator, &request, &should_cancel);
 
     LongDocumentOutcome {
         query_id: request.query_id,
@@ -940,9 +957,10 @@ struct NativeLongDocumentRun {
     result: Result<TranslateDocumentResult, LongDocumentBackendError>,
 }
 
-fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
+fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator, F: Fn() -> bool>(
     translator: &mut T,
     request: &LongDocumentServiceRequest,
+    should_cancel: &F,
 ) -> NativeLongDocumentRun {
     let Some(input_kind) = native_text_input_kind(&request.params.input_mode) else {
         return NativeLongDocumentRun {
@@ -974,12 +992,25 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
         };
     }
 
+    if let Err(error) = preflight_native_text_output_paths(request, input_kind) {
+        return NativeLongDocumentRun {
+            events: Vec::new(),
+            result: Err(error),
+        };
+    }
+
     let total_chunks = chunks.len() as u32;
     let mut events = vec![LongDocumentEvent::Status(StatusEventData {
         message: "Translating text document natively".to_string(),
     })];
+    if should_cancel() {
+        return native_long_document_cancelled_run(events);
+    }
     let document_context_plan =
         extract_native_document_context_plan(translator, request, &chunks, &mut events);
+    if should_cancel() {
+        return native_long_document_cancelled_run(events);
+    }
     let mut translations = Vec::with_capacity(chunks.len());
     translations.resize_with(chunks.len(), || None);
     let mut failed_chunk_indexes = Vec::new();
@@ -994,9 +1025,15 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
     let mut next_index = 0;
 
     while next_index < chunks.len() {
+        if should_cancel() {
+            return native_long_document_cancelled_run(events);
+        }
         let mut batch = Vec::new();
 
         while next_index < chunks.len() && batch.len() < max_concurrency {
+            if should_cancel() {
+                return native_long_document_cancelled_run(events);
+            }
             let index = next_index;
             next_index += 1;
             let chunk = &chunks[index];
@@ -1091,6 +1128,9 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
             });
         }
 
+        if should_cancel() {
+            return native_long_document_cancelled_run(events);
+        }
         let batch_results = translate_native_text_chunk_batch(translator, batch);
         for result in batch_results {
             apply_native_text_chunk_result(
@@ -1105,6 +1145,9 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
         }
     }
 
+    if should_cancel() {
+        return native_long_document_cancelled_run(events);
+    }
     events.push(LongDocumentEvent::Progress(ProgressEventData {
         stage: "Exporting".to_string(),
         current_block: total_chunks,
@@ -1128,24 +1171,38 @@ fn run_native_text_long_document_request_inner<T: NativeLongDocumentTranslator>(
             &translations,
             &document_context_plan.preserve_chunk_indexes,
         )
-        .map(|export| TranslateDocumentResult {
-            state: if failed_chunk_indexes.is_empty() {
-                "Completed".to_string()
-            } else {
-                "PartiallyCompleted".to_string()
-            },
-            output_path: Some(export.output_path),
-            bilingual_output_path: export.bilingual_output_path,
-            total_chunks,
-            succeeded_chunks,
-            failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
-                .then(|| failed_chunk_indexes.to_vec()),
-            quality_report: None,
-            result_json_path: None,
+        .and_then(|export| {
+            let result_json_path = normalized_result_json_path(request);
+            let result = TranslateDocumentResult {
+                state: if failed_chunk_indexes.is_empty() {
+                    "Completed".to_string()
+                } else {
+                    "PartiallyCompleted".to_string()
+                },
+                output_path: Some(export.output_path),
+                bilingual_output_path: export.bilingual_output_path,
+                total_chunks,
+                succeeded_chunks,
+                failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
+                    .then(|| failed_chunk_indexes.to_vec()),
+                quality_report: None,
+                result_json_path: result_json_path.clone(),
+            };
+            write_native_result_json_sidecar(result_json_path.as_deref(), &result)?;
+            Ok(result)
         })
     };
 
     NativeLongDocumentRun { events, result }
+}
+
+fn native_long_document_cancelled_run(events: Vec<LongDocumentEvent>) -> NativeLongDocumentRun {
+    NativeLongDocumentRun {
+        events,
+        result: Err(LongDocumentBackendError::new(
+            NATIVE_LONG_DOCUMENT_CANCELLED_MESSAGE,
+        )),
+    }
 }
 
 struct NativeTextChunkWork {
@@ -2141,21 +2198,11 @@ fn read_native_text_source_chunks(
         LongDocumentInput::File(path) => match input_kind {
             NativeTextInputKind::PdfText => {
                 validate_native_pdf_input_file(path)?;
-
-                if let Ok(chunks) = try_read_native_pdf_source_chunks(
+                read_native_pdf_source_chunks_with_fallbacks(
                     request,
                     path,
                     request.params.page_range.as_deref(),
-                ) {
-                    if !chunks.is_empty() {
-                        return Ok(chunks);
-                    }
-                }
-
-                read_native_pdf_text_or_ocr_source_chunks(
-                    request,
-                    path,
-                    request.params.page_range.as_deref(),
+                    try_read_native_pdf_source_chunks,
                     read_native_pdf_text_source_chunks,
                     read_native_pdf_ocr_source_chunks,
                 )
@@ -2178,6 +2225,36 @@ fn read_native_text_source_chunks(
             }
         },
     }
+}
+
+fn read_native_pdf_source_chunks_with_fallbacks<SR, TR, OR>(
+    request: &LongDocumentServiceRequest,
+    path: &str,
+    page_range: Option<&str>,
+    mut source_reader: SR,
+    text_reader: TR,
+    ocr_reader: OR,
+) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>
+where
+    SR: FnMut(
+        &LongDocumentServiceRequest,
+        &str,
+        Option<&str>,
+    ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>,
+    TR: FnMut(&str, Option<&str>) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>,
+    OR: FnMut(
+        &LongDocumentServiceRequest,
+        &str,
+        Option<&str>,
+    ) -> Result<Vec<NativeTextSourceChunk>, LongDocumentBackendError>,
+{
+    if let Ok(chunks) = source_reader(request, path, page_range) {
+        if !chunks.is_empty() {
+            return Ok(chunks);
+        }
+    }
+
+    read_native_pdf_text_or_ocr_source_chunks(request, path, page_range, text_reader, ocr_reader)
 }
 
 fn read_native_pdf_text_or_ocr_source_chunks<TR, OR>(
@@ -3026,7 +3103,7 @@ fn local_long_document_file_input_error(
 
 fn local_long_document_worker_preflight_error(
     request: &LongDocumentServiceRequest,
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> Option<LongDocumentBackendError> {
     local_long_document_file_input_error(request)
         .or_else(|| local_long_document_route_preflight_error(request))
@@ -3111,7 +3188,7 @@ fn local_long_document_local_ai_worker_bridge_error(
 }
 
 fn local_long_document_retained_worker_disabled_error(
-    worker_policy: RetainedWorkerPolicy,
+    worker_policy: RuntimeRoutePolicy,
 ) -> Option<LongDocumentBackendError> {
     worker_policy
         .longdoc_worker_disabled_message()
@@ -3470,6 +3547,53 @@ mod tests {
                 (false, Some("4".to_string())),
                 (true, Some("4".to_string()))
             ]
+        );
+    }
+
+    #[test]
+    fn native_pdf_source_extractor_error_uses_text_fallback_before_ocr() {
+        let request = test_pdf_long_document_request(None);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let source_calls = Arc::clone(&calls);
+        let text_calls = Arc::clone(&calls);
+        let ocr_calls = Arc::clone(&calls);
+
+        let chunks = read_native_pdf_source_chunks_with_fallbacks(
+            &request,
+            "paper.pdf",
+            Some("1"),
+            move |_request, path, page_range| {
+                source_calls
+                    .lock()
+                    .unwrap()
+                    .push(format!("source:{path}:{}", page_range.unwrap_or_default()));
+                Err(LongDocumentBackendError::new("source extractor failed"))
+            },
+            move |path, page_range| {
+                text_calls
+                    .lock()
+                    .unwrap()
+                    .push(format!("text:{path}:{}", page_range.unwrap_or_default()));
+                Ok(vec![NativeTextSourceChunk::plain(
+                    0,
+                    "fallback text".to_string(),
+                )])
+            },
+            move |_request, path, page_range| {
+                ocr_calls
+                    .lock()
+                    .unwrap()
+                    .push(format!("ocr:{path}:{}", page_range.unwrap_or_default()));
+                Err(LongDocumentBackendError::new("ocr should not run"))
+            },
+        )
+        .expect("text fallback should recover from source extractor errors");
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].text, "fallback text");
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["source:paper.pdf:1", "text:paper.pdf:1"]
         );
     }
 
@@ -5110,6 +5234,63 @@ fn ensure_native_output_paths_can_be_written<'a>(
     }
 
     Ok(())
+}
+
+fn preflight_native_text_output_paths(
+    request: &LongDocumentServiceRequest,
+    input_kind: NativeTextInputKind,
+) -> Result<(), LongDocumentBackendError> {
+    let text_output_path = resolve_native_output_path(&request.params, input_kind);
+    let mut output_paths = match request.params.output_mode.as_str() {
+        "Bilingual" => vec![build_bilingual_output_path(&text_output_path)],
+        "Both" => vec![
+            text_output_path.clone(),
+            build_bilingual_output_path(&text_output_path),
+        ],
+        _ => vec![text_output_path],
+    };
+
+    if matches!(input_kind, NativeTextInputKind::PdfText)
+        && request.params.output_mode != "Bilingual"
+    {
+        let pdf_output_path = resolve_native_pdf_output_path(&request.params);
+        if path_extension_is(&pdf_output_path, "pdf") {
+            if request.params.output_mode == "Both" {
+                output_paths.push(native_pdf_bilingual_text_output_path(&pdf_output_path));
+            }
+            output_paths.push(pdf_output_path);
+        }
+    }
+    if let Some(result_json_path) = normalized_result_json_path(request) {
+        output_paths.push(PathBuf::from(result_json_path));
+    }
+
+    ensure_native_output_paths_can_be_written(output_paths.iter().map(PathBuf::as_path))
+}
+
+fn normalized_result_json_path(request: &LongDocumentServiceRequest) -> Option<String> {
+    request
+        .params
+        .result_json_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn write_native_result_json_sidecar(
+    result_json_path: Option<&str>,
+    result: &TranslateDocumentResult,
+) -> Result<(), LongDocumentBackendError> {
+    let Some(path) = result_json_path else {
+        return Ok(());
+    };
+    let json = serde_json::to_vec_pretty(result).map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not serialize long document result JSON: {error}"
+        ))
+    })?;
+    fs::write(path, json).map_err(native_write_error)
 }
 
 fn native_export_checkpoint(

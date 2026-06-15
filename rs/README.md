@@ -72,8 +72,8 @@ retained-worker entries such as `dotnet/`, `workers/`, `hostfxr.dll`,
 `coreclr.dll`, `hostpolicy.dll`, `clrjit.dll`, `System.Private.CoreLib.dll`,
 `*.runtimeconfig.json`, `*.deps.json`, or `Easydict.Workers.*`. After those
 diagnostics, the validator applies the first-release allowlist: only
-`Easydict.Rust.exe`, the Rust helper executables, `BrowserHostRegistrar.exe`,
-and `README-portable.txt` may be present at the package root.
+`Easydict.Rust.exe`, the Rust helper executables, and `README-portable.txt` may
+be present at the package root.
 
 The retained `.NET` LongDoc/LocalAI worker bridge is compiled only with the
 explicit `retained-dotnet-workers` feature. Default rs builds and portable
@@ -128,7 +128,9 @@ license/notice files, and verifies `host/fxr` plus `shared/Microsoft.NETCore.App
 
 `dotnet/scripts/Build-RustHelpers.ps1` is likewise only a shim to
 `build-rust-helpers`. The Rust packager owns target triple mapping, helper bin
-selection, copy validation, and the legacy `BrowserHostRegistrar.exe` alias.
+selection, copy validation, and the legacy `BrowserHostRegistrar.exe` alias
+used by dotnet/hybrid packaging. The first rs portable package does not stage
+that alias.
 
 UI parity analyzer smoke checks:
 

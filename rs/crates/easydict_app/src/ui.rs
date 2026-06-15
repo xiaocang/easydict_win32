@@ -341,21 +341,33 @@ pub fn fixed_window_view_with_settings(
 }
 
 pub fn capture_overlay_view() -> View<Message> {
-    capture_overlay_view_with_state(&CaptureInteractionState::new(), None)
+    capture_overlay_view_with_state(&CaptureInteractionState::new(), None, None)
 }
 
 pub fn capture_overlay_view_with_state(
     state: &CaptureInteractionState,
     selection_override: Option<CaptureRect>,
+    background: Option<&crate::state::CaptureBackground>,
 ) -> View<Message> {
     let selection = selection_override
         .or(state.selection)
         .map(CaptureRect::normalized);
     let detected = state.detected_region.map(CaptureRect::normalized);
-    // The base is a bare input-capture surface: the .NET overlay paints only
-    // the dim mask here, so no visible content belongs in it.
+    // The base shows the frozen desktop under the dim mask like the WinUI
+    // overlay; without a screenshot it stays a bare input-capture surface.
+    let base_content = match background {
+        Some(bg) => image_bgra_file(&bg.bgra_path, bg.pixel_width, bg.pixel_height)
+            .id("capture.background")
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into_view(),
+        None => column((spacer().width(Length::Fill).height(Length::Fill),))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into_view(),
+    };
     let base = pointer_region(
-        column((spacer().width(Length::Fill).height(Length::Fill),))
+        column((base_content,))
             .id("capture.pointer.content")
             .width(Length::Fill)
             .height(Length::Fill),

@@ -2,6 +2,7 @@ use crate::credential_protection::{
     get_or_create_persisted_machine_id, protect_credential,
     unprotect_or_return_plaintext_with_machine_id,
 };
+use crate::mdx_native::discover_mdd_file_paths;
 use crate::settings_migration::{
     migrate_settings_json, resolve_source_path, SettingsMigrationError,
 };
@@ -67,8 +68,14 @@ pub fn default_settings_storage_path() -> PathBuf {
 pub fn load_settings_file(
     path: impl AsRef<Path>,
 ) -> Result<SettingsLoadResult, SettingsStorageError> {
+    let path = path.as_ref();
     let json = fs::read_to_string(path)?;
-    load_settings_json(&json)
+    let (migrated_json, changed) = migrate_settings_json(&json)?;
+    if changed {
+        fs::write(path, &migrated_json)?;
+    }
+
+    load_settings_json(&migrated_json)
 }
 
 pub fn save_settings_file(
@@ -104,6 +111,7 @@ pub fn load_settings_json_with_machine_id(
     apply_scalar_settings(&root, &mut settings);
     apply_sensitive_settings(&root, machine_id, &mut settings, &mut warnings);
     settings.imported_mdx_dictionaries = imported_mdx_dictionaries(&root);
+    discover_missing_mdd_file_paths(&mut settings.imported_mdx_dictionaries);
     apply_window_service_settings(&root, &mut settings);
 
     Ok(SettingsLoadResult { settings, warnings })
@@ -722,6 +730,14 @@ fn imported_mdx_dictionaries(root: &Map<String, Value>) -> Vec<ImportedMdxDictio
             })
         })
         .collect()
+}
+
+fn discover_missing_mdd_file_paths(dictionaries: &mut [ImportedMdxDictionary]) {
+    for dictionary in dictionaries {
+        if dictionary.mdd_file_paths.is_empty() {
+            dictionary.mdd_file_paths = discover_mdd_file_paths(&dictionary.file_path);
+        }
+    }
 }
 
 fn sensitive_value(

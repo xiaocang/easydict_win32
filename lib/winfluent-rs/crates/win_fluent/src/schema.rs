@@ -182,9 +182,20 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("header", optional_string(token.header.as_deref()))
             .property(
                 "width",
-                toggle_switch_evidence_width(token.header.as_deref(), &token.label),
+                token
+                    .width
+                    .map(|width| format!("{width:?}"))
+                    .unwrap_or_else(|| {
+                        toggle_switch_evidence_width(token.header.as_deref(), &token.label)
+                    }),
             )
-            .property("height", "Fixed(32)")
+            .property(
+                "height",
+                token
+                    .height
+                    .map(|height| format!("{height:?}"))
+                    .unwrap_or_else(|| "Fixed(32)".to_string()),
+            )
             .property(
                 "labeled_height",
                 toggle_switch_labeled_evidence_height(token.header.as_deref()),
@@ -360,6 +371,12 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             )
             .property("handles_visible", token.handles_visible.to_string())
             .property("magnifier_visible", token.magnifier_visible.to_string()),
+        ViewToken::Image(token) => SchemaNode::new("Image", token.id.clone())
+            .property("bgra_path", quoted(&token.bgra_path))
+            .property("pixel_width", token.pixel_width.to_string())
+            .property("pixel_height", token.pixel_height.to_string())
+            .property("width", format!("{:?}", token.width))
+            .property("height", format!("{:?}", token.height)),
         ViewToken::Custom(token) => SchemaNode::new("Custom", token.id.clone())
             .property("control", quoted(&token.control))
             .property("children", token.children.len().to_string())

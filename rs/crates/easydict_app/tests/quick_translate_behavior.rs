@@ -65,6 +65,7 @@ use easydict_app::{
     TRAY_EXIT, TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI,
     TRAY_TRANSLATE_CLIPBOARD,
 };
+use easydict_app::{find_translation_service_descriptor, TranslationServiceKind};
 #[cfg(feature = "retained-dotnet-workers")]
 use easydict_app::{
     run_local_dictionary_suggestion_request_with_lazy_bridge,
@@ -1810,6 +1811,297 @@ fn local_ai_route_decision_marks_explicit_windows_ai_for_native_probe() {
     );
 }
 
+#[test]
+fn local_ai_route_decision_matrix_prefers_rust_native_paths_before_worker_bridge() {
+    #[cfg(feature = "retained-dotnet-workers")]
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    #[cfg(feature = "retained-dotnet-workers")]
+    let _runtime_profile = EnvironmentVariableGuard::set("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    #[cfg(feature = "retained-dotnet-workers")]
+    let _generic_runtime_profile = EnvironmentVariableGuard::remove("RUNTIME_PROFILE");
+
+    let openvino_missing_cache = unique_temp_dir("easydict-local-ai-route-matrix-openvino-missing");
+    fs::create_dir_all(&openvino_missing_cache).expect("OpenVINO missing cache dir should exist");
+    let openvino_missing_cache_string = path_string(&openvino_missing_cache);
+    let openvino_cache = unique_temp_dir("easydict-local-ai-route-matrix-openvino");
+    install_open_vino_cache(&openvino_cache);
+    let openvino_cache_string = path_string(&openvino_cache);
+
+    struct RouteCase<'a> {
+        name: &'static str,
+        service_id: &'static str,
+        provider_mode: Option<&'static str>,
+        execution_kind: QuickTranslateExecutionKind,
+        from: &'static str,
+        to: &'static str,
+        foundry_endpoint: Option<&'static str>,
+        foundry_model: Option<&'static str>,
+        cache_dir: Option<&'a str>,
+        expected: LocalAiRouteDecision,
+    }
+
+    let cases = [
+        RouteCase {
+            name: "non LocalAI service is ignored",
+            service_id: "google",
+            provider_mode: Some(local_ai_provider_modes::AUTO),
+            execution_kind: QuickTranslateExecutionKind::Translate,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NotLocalAi,
+        },
+        RouteCase {
+            name: "Auto translate probes WindowsAI first",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::AUTO),
+            execution_kind: QuickTranslateExecutionKind::Translate,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        RouteCase {
+            name: "Auto streaming probes WindowsAI first",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::AUTO),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        RouteCase {
+            name: "explicit WindowsAI streaming uses native probe",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::WINDOWS_AI),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        RouteCase {
+            name: "Auto grammar correction probes WindowsAI first",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::AUTO),
+            execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+            from: "en",
+            to: "en",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        RouteCase {
+            name: "Auto configured Foundry endpoint routes natively",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::AUTO),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: Some("http://127.0.0.1:5273/v1/chat/completions"),
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        RouteCase {
+            name: "explicit Foundry endpoint routes natively",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::FOUNDRY_LOCAL),
+            execution_kind: QuickTranslateExecutionKind::Translate,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: Some("http://127.0.0.1:5273/v1/chat/completions"),
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        RouteCase {
+            name: "explicit Foundry without endpoint stays native for resolver",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::FOUNDRY_LOCAL),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        RouteCase {
+            name: "explicit Foundry grammar correction stays native",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::FOUNDRY_LOCAL),
+            execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+            from: "en",
+            to: "en",
+            foundry_endpoint: Some("http://127.0.0.1:5273/v1/chat/completions"),
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::NativeFoundry,
+        },
+        RouteCase {
+            name: "explicit WindowsAI grammar correction uses native probe",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::WINDOWS_AI),
+            execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+            from: "en",
+            to: "en",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::ProbeWindowsAi,
+        },
+        RouteCase {
+            name: "OpenVINO cache miss fails locally",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::OPENVINO),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: Some(openvino_missing_cache_string.as_str()),
+            expected: LocalAiRouteDecision::LocalError(
+                "OpenVINO runtime or NLLB-200 model is not downloaded. Open Settings -> Services and click \"Download model\".",
+            ),
+        },
+        RouteCase {
+            name: "OpenVINO with ready cache routes to native runtime",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::OPENVINO),
+            execution_kind: QuickTranslateExecutionKind::Translate,
+            from: "en",
+            to: "zh-Hans",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: Some(openvino_cache_string.as_str()),
+            expected: LocalAiRouteDecision::NativeOpenVino,
+        },
+        RouteCase {
+            name: "OpenVINO grammar fails locally",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::OPENVINO),
+            execution_kind: QuickTranslateExecutionKind::GrammarCorrection,
+            from: "en",
+            to: "en",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: Some(openvino_cache_string.as_str()),
+            expected: LocalAiRouteDecision::LocalError(
+                "No local AI provider supports grammar correction for this language",
+            ),
+        },
+        RouteCase {
+            name: "Auto target Auto fails locally before worker fallback",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::AUTO),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "auto",
+            foundry_endpoint: None,
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::LocalError(
+                "No local AI provider supports this language pair",
+            ),
+        },
+        RouteCase {
+            name: "WindowsAI target Auto fails locally before worker fallback",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::WINDOWS_AI),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "auto",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: None,
+            expected: LocalAiRouteDecision::LocalError(
+                "No local AI provider supports this language pair",
+            ),
+        },
+        RouteCase {
+            name: "Foundry target Auto fails locally before worker fallback",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::FOUNDRY_LOCAL),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "auto",
+            foundry_endpoint: Some("http://127.0.0.1:5273/v1/chat/completions"),
+            foundry_model: Some("qwen2.5-0.5b"),
+            cache_dir: None,
+            expected: LocalAiRouteDecision::LocalError(
+                "No local AI provider supports this language pair",
+            ),
+        },
+        RouteCase {
+            name: "OpenVINO target Auto fails locally before worker fallback",
+            service_id: "windows-local-ai",
+            provider_mode: Some(local_ai_provider_modes::OPENVINO),
+            execution_kind: QuickTranslateExecutionKind::TranslateStream,
+            from: "en",
+            to: "auto",
+            foundry_endpoint: None,
+            foundry_model: None,
+            cache_dir: Some(openvino_cache_string.as_str()),
+            expected: LocalAiRouteDecision::LocalError(
+                "No local AI provider supports this language pair",
+            ),
+        },
+    ];
+
+    for (index, case) in cases.iter().enumerate() {
+        let request = local_ai_route_matrix_request(
+            140 + index as u64,
+            case.service_id,
+            case.provider_mode,
+            case.execution_kind,
+            case.from,
+            case.to,
+            case.foundry_endpoint,
+            case.foundry_model,
+            case.cache_dir,
+        );
+
+        assert_eq!(
+            local_ai_route_decision(&request),
+            case.expected,
+            "{}",
+            case.name
+        );
+
+        #[cfg(feature = "retained-dotnet-workers")]
+        {
+            let retained_decision = local_ai_route_decision_with_worker_policy(
+                &request,
+                RetainedWorkerPolicy::all_enabled(),
+            );
+            assert_eq!(retained_decision, case.expected, "{}", case.name);
+            assert!(
+                !matches!(
+                    retained_decision,
+                    LocalAiRouteDecision::RetainedWorkerCompat
+                ),
+                "{} unexpectedly fell back to retained LocalAI worker",
+                case.name
+            );
+        }
+    }
+
+    fs::remove_dir_all(&openvino_missing_cache)
+        .expect("OpenVINO missing cache fixture should be removed");
+    fs::remove_dir_all(&openvino_cache).expect("OpenVINO cache fixture should be removed");
+}
+
 #[cfg(not(feature = "retained-dotnet-workers"))]
 #[test]
 fn local_ai_route_decision_keeps_worker_compat_unreachable_without_retained_feature() {
@@ -2956,6 +3248,66 @@ fn native_traditional_http_quick_translate_supports_google_and_google_web() {
     assert!(!web_plan.endpoint.contains("dj=1"));
 }
 
+#[cfg(feature = "enable-linguee-service")]
+#[test]
+fn feature_enabled_linguee_catalog_entry_routes_to_native_traditional_http() {
+    let descriptor =
+        find_translation_service_descriptor("linguee").expect("Linguee feature should register");
+    assert_eq!(descriptor.kind, TranslationServiceKind::Dictionary);
+
+    let request = QuickTranslateServiceRequest {
+        query_id: 30,
+        service: quick_service(
+            descriptor.service_id,
+            descriptor.display_name,
+            descriptor.grammar_capable,
+            descriptor.streaming_capable,
+        ),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("fr".to_string()),
+            services: Some(vec![descriptor.service_id.to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot::default(),
+    };
+
+    assert!(
+        quick_translate_request_can_route_natively(&request),
+        "feature-enabled Linguee should dispatch through the native traditional HTTP route"
+    );
+
+    let mut backend = NativeTraditionalHttpQuickTranslateBackend::new(
+        RecordingTraditionalHttpClient::with_responses([Ok(
+            r#"[{"translations":[{"text":"Bonjour"}]}]"#.to_string(),
+        )]),
+    );
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let result = update
+        .outcome
+        .result
+        .expect("feature-enabled Linguee native route should succeed");
+    assert_eq!(result.translated_text, "Bonjour");
+    assert_eq!(result.service_id.as_deref(), Some("linguee"));
+    assert_eq!(result.service_name.as_deref(), Some("Linguee Dictionary"));
+
+    let plan = &backend.http_client().requests[0];
+    assert_eq!(plan.service_kind, TraditionalHttpServiceKind::Linguee);
+    assert_eq!(plan.method, "GET");
+    assert!(plan
+        .endpoint
+        .contains("linguee-api.fly.dev/api/v2/translations"));
+    assert!(plan.endpoint.contains("query=Hello"));
+    assert!(plan.endpoint.contains("src=en"));
+    assert!(plan.endpoint.contains("dst=fr"));
+}
+
 #[test]
 fn native_traditional_http_quick_translate_rejects_unsupported_language_without_http_request() {
     let request = QuickTranslateServiceRequest {
@@ -3351,6 +3703,67 @@ impl BingHttpClient for FakeBingClient {
 }
 
 #[test]
+fn default_bing_catalog_entry_routes_to_native_two_phase_backend() {
+    let descriptor =
+        find_translation_service_descriptor("bing").expect("Bing should be in default catalog");
+    assert_eq!(descriptor.kind, TranslationServiceKind::TextTranslation);
+
+    let request = QuickTranslateServiceRequest {
+        query_id: 39,
+        service: quick_service(
+            descriptor.service_id,
+            descriptor.display_name,
+            descriptor.grammar_capable,
+            descriptor.streaming_capable,
+        ),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec![descriptor.service_id.to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot::default(),
+    };
+
+    assert!(
+        quick_translate_request_can_route_natively(&request),
+        "default Bing catalog entry should dispatch through the native Bing route"
+    );
+
+    let client = FakeBingClient {
+        html: r#"<script>var _G={IG:"IGTOKEN1234"};</script>
+            <div data-iid="translator.5028.3"></div>
+            <script>params_AbusePreventionHelper=[1700000000000,"tok",3600000];</script>"#
+            .to_string(),
+        response_body:
+            r#"[{"detectedLanguage":{"language":"en"},"translations":[{"text":"你好"}]}]"#
+                .to_string(),
+        requested_hosts: Vec::new(),
+        translate_plans: Vec::new(),
+    };
+    let mut backend = NativeBingQuickTranslateBackend::new(client);
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let result = update
+        .outcome
+        .result
+        .expect("default Bing native route should succeed");
+    assert_eq!(result.translated_text, "你好");
+    assert_eq!(result.service_id.as_deref(), Some("bing"));
+    assert_eq!(result.service_name.as_deref(), Some("Bing Translate"));
+    assert_eq!(backend.http_client().requested_hosts, ["www.bing.com"]);
+    assert_eq!(backend.http_client().translate_plans.len(), 1);
+    assert!(backend.http_client().translate_plans[0]
+        .endpoint
+        .starts_with("https://www.bing.com/ttranslatev3"));
+}
+
+#[test]
 fn native_bing_quick_translate_backend_runs_two_phase_flow() {
     let client = FakeBingClient {
         html: r#"<script>var _G={IG:"IGTOKEN1234"};</script>
@@ -3438,6 +3851,51 @@ fn native_bing_quick_translate_backend_uses_china_host_when_international_servic
     assert!(backend.http_client().translate_plans[0]
         .endpoint
         .starts_with("https://cn.bing.com/ttranslatev3"));
+}
+
+#[test]
+fn native_bing_rejects_unsupported_language_before_fetching_session_page() {
+    let client = FakeBingClient {
+        html: String::new(),
+        response_body: String::new(),
+        requested_hosts: Vec::new(),
+        translate_plans: Vec::new(),
+    };
+    let mut backend = NativeBingQuickTranslateBackend::new(client);
+    let request = QuickTranslateServiceRequest {
+        query_id: 42,
+        service: quick_service("bing", "Bing Translate", false, false),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::Translate,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("auto".to_string()),
+            services: Some(vec!["bing".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot::default(),
+    };
+
+    let update = run_quick_translate_service(&mut backend, &request);
+
+    let error = update
+        .outcome
+        .result
+        .expect_err("unsupported Bing language should fail locally");
+    assert_eq!(
+        error.message,
+        "Language pair not supported: English -> Auto"
+    );
+    assert!(
+        backend.http_client().requested_hosts.is_empty(),
+        "Bing session page should not be fetched for an invalid language pair"
+    );
+    assert!(
+        backend.http_client().translate_plans.is_empty(),
+        "Bing translate request should not be built for an invalid language pair"
+    );
 }
 
 #[test]
@@ -4693,6 +5151,7 @@ fn mdx_service_requests_configure_settings_and_use_mdx_lookup() {
             html: "<div>A fruit</div>".to_string(),
             dictionary_name: Some("Demo Dictionary".to_string()),
         }],
+        mdd_resources_inlined: false,
     })]);
 
     let outcome = run_quick_translate(&mut backend, &plan);
@@ -4748,6 +5207,7 @@ fn mdx_service_result_keeps_rich_html_only_when_mdd_resources_are_attached() {
                 .to_string(),
             dictionary_name: Some("Demo Dictionary".to_string()),
         }],
+        mdd_resources_inlined: true,
     })]);
 
     let outcome = run_quick_translate(&mut backend, &plan);
@@ -4780,6 +5240,33 @@ fn mdx_service_result_keeps_rich_html_only_when_mdd_resources_are_attached() {
 }
 
 #[test]
+fn mdx_service_result_drops_rich_html_when_mdd_resources_were_not_inlined() {
+    let mut state = EasydictUiState::default();
+    state.source_text = "apple".to_string();
+    state.results = Vec::new();
+    state.apply(Message::MdxDictionarySelected(Some(
+        r"C:\Dicts\Demo Dictionary.mdx".to_string(),
+    )));
+    state.settings.imported_mdx_dictionaries[0].mdd_file_paths =
+        vec![r"C:\Dicts\missing.mdd".to_string()];
+    let plan = begin_quick_translate(&mut state).expect("MDX query should begin");
+    let mut backend = RecordingBackend::with_mdx_responses([Ok(MdxLookupResult {
+        entries: vec![MdxLookupEntry {
+            key: "apple".to_string(),
+            html: r#"<div><span>A fruit</span><img src="images/logo.png"></div>"#.to_string(),
+            dictionary_name: Some("Demo Dictionary".to_string()),
+        }],
+        mdd_resources_inlined: false,
+    })]);
+
+    let outcome = run_quick_translate(&mut backend, &plan);
+    let result = outcome.results[0].result.as_ref().expect("MDX result");
+
+    assert_eq!(result.translated_text, "A fruit");
+    assert_eq!(result.raw_html, None);
+}
+
+#[test]
 fn mdx_service_lookup_miss_returns_no_result_dto() {
     let mut state = EasydictUiState::default();
     state.source_text = "missing-word".to_string();
@@ -4790,6 +5277,7 @@ fn mdx_service_lookup_miss_returns_no_result_dto() {
     let plan = begin_quick_translate(&mut state).expect("MDX query should begin");
     let mut backend = RecordingBackend::with_mdx_responses([Ok(MdxLookupResult {
         entries: Vec::new(),
+        mdd_resources_inlined: false,
     })]);
 
     let outcome = run_quick_translate(&mut backend, &plan);
@@ -6024,6 +6512,7 @@ fn local_dictionary_suggestion_runner_configures_settings_and_deduplicates_fuzzy
                     dictionary_name: Some("Demo Dictionary".to_string()),
                 },
             ],
+            mdd_resources_inlined: false,
         }),
         Ok(MdxLookupResult {
             entries: vec![MdxLookupEntry {
@@ -6031,6 +6520,7 @@ fn local_dictionary_suggestion_runner_configures_settings_and_deduplicates_fuzzy
                 html: "<div>application</div>".to_string(),
                 dictionary_name: None,
             }],
+            mdd_resources_inlined: false,
         }),
     ]);
 
@@ -6286,6 +6776,7 @@ fn local_dictionary_suggestions_route_plain_and_credential_encrypted_mdx_nativel
                 html: "<div>app</div>".to_string(),
                 dictionary_name: Some("Secure Dictionary".to_string()),
             }],
+            mdd_resources_inlined: false,
         }),
         Ok(MdxLookupResult {
             entries: vec![MdxLookupEntry {
@@ -6293,6 +6784,7 @@ fn local_dictionary_suggestions_route_plain_and_credential_encrypted_mdx_nativel
                 html: "<div>application</div>".to_string(),
                 dictionary_name: None,
             }],
+            mdd_resources_inlined: false,
         }),
     ]);
     let mut bridge_backend =
@@ -6302,6 +6794,7 @@ fn local_dictionary_suggestions_route_plain_and_credential_encrypted_mdx_nativel
                 html: "<div>app</div>".to_string(),
                 dictionary_name: Some("Secure Dictionary".to_string()),
             }],
+            mdd_resources_inlined: false,
         })]);
 
     let update = run_local_dictionary_suggestion_request_with_routed_backends(
@@ -6466,6 +6959,7 @@ fn mixed_local_dictionary_suggestions_skip_bridge_when_native_prefix_fills_resul
     let mut native_backend =
         RecordingSuggestionBackend::with_mdx_responses([Ok(MdxLookupResult {
             entries: native_entries,
+            mdd_resources_inlined: false,
         })]);
     let bridge_factory_called = Cell::new(false);
 
@@ -8454,6 +8948,60 @@ fn quick_service(
         enabled_query: true,
         grammar_capable,
         streaming_capable,
+    }
+}
+
+fn local_ai_route_matrix_request(
+    query_id: u64,
+    service_id: &str,
+    provider_mode: Option<&str>,
+    execution_kind: QuickTranslateExecutionKind,
+    from: &str,
+    to: &str,
+    foundry_endpoint: Option<&str>,
+    foundry_model: Option<&str>,
+    cache_dir: Option<&str>,
+) -> QuickTranslateServiceRequest {
+    let is_grammar = execution_kind == QuickTranslateExecutionKind::GrammarCorrection;
+    let service_name = if service_id == "windows-local-ai" {
+        "Windows Local AI"
+    } else {
+        service_id
+    };
+
+    QuickTranslateServiceRequest {
+        query_id,
+        service: quick_service(service_id, service_name, true, true),
+        query_mode: if is_grammar {
+            QuickQueryMode::GrammarCorrection
+        } else {
+            QuickQueryMode::Translation
+        },
+        execution_kind,
+        params: TranslateParams {
+            text: if is_grammar {
+                "He go home.".to_string()
+            } else {
+                "Hello".to_string()
+            },
+            from: Some(from.to_string()),
+            to: Some(to.to_string()),
+            services: Some(vec![service_id.to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: is_grammar.then(|| GrammarCorrectParams {
+            text: "He go home.".to_string(),
+            language: Some(from.to_string()),
+            services: Some(vec![service_id.to_string()]),
+            include_explanations: true,
+        }),
+        settings: SettingsSnapshot {
+            local_ai_provider: provider_mode.map(str::to_string),
+            foundry_local_endpoint: foundry_endpoint.map(str::to_string),
+            foundry_local_model: foundry_model.map(str::to_string),
+            cache_dir: cache_dir.map(str::to_string),
+            ..SettingsSnapshot::default()
+        },
     }
 }
 

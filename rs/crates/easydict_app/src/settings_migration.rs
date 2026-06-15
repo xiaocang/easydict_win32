@@ -8,6 +8,8 @@ const LEGACY_OPENVINO_SERVICE_ID: &str = "openvino-local-ai";
 const LEGACY_FOUNDRY_LOCAL_SERVICE_ID: &str = "foundry-local";
 const WINDOWS_LOCAL_AI_SERVICE_ID: &str = "windows-local-ai";
 const SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE: &str = "EASYDICT_SETTINGS_DIR";
+const RUNTIME_ONLY_WORKER_ISOLATION_SETTINGS: &[&str] =
+    &["UseLongDocWorker", "UseLocalAiWorker", "UseOcrWorker"];
 
 #[derive(Debug)]
 pub enum SettingsMigrationError {
@@ -171,9 +173,9 @@ fn set_position_saved_from_coordinates(root: &mut Map<String, Value>, prefix: &s
 
 fn remove_runtime_only_worker_isolation_settings(root: &mut Map<String, Value>) -> bool {
     let mut changed = false;
-    changed |= root.remove("UseLongDocWorker").is_some();
-    changed |= root.remove("UseLocalAiWorker").is_some();
-    changed |= root.remove("UseOcrWorker").is_some();
+    for key in RUNTIME_ONLY_WORKER_ISOLATION_SETTINGS {
+        changed |= root.remove(*key).is_some();
+    }
     changed
 }
 

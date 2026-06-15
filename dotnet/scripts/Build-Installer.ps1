@@ -6,10 +6,10 @@
 #   - A completed dotnet publish output
 #
 # Usage:
-#   .\Build-Installer.ps1 -Platform x64
-#   .\Build-Installer.ps1 -Platform arm64 -Version 1.0.0
-#   .\Build-Installer.ps1 -Platform x64 -Tag 1.0.0-rc.1 -Version 1.0.0
-#   .\Build-Installer.ps1 -Platform x64 -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+#   .\Build-Installer.ps1 -Platform x64 -RuntimeProfile Hybrid
+#   .\Build-Installer.ps1 -Platform arm64 -Version 1.0.0 -RuntimeProfile Hybrid
+#   .\Build-Installer.ps1 -Platform x64 -Tag 1.0.0-rc.1 -Version 1.0.0 -RuntimeProfile Hybrid
+#   .\Build-Installer.ps1 -Platform x64 -RuntimeProfile Hybrid -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
 param(
     [ValidateSet("x64", "x86", "arm64")]
@@ -20,7 +20,9 @@ param(
     # Tag for the output filename (e.g. "1.0.0-rc.1"). Defaults to Version.
     [string]$Tag = "",
 
-    [string]$IsccPath = ""
+    [string]$IsccPath = "",
+
+    [string]$RuntimeProfile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +31,28 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SolutionDir = Split-Path -Parent $ScriptDir
 $IssFile = Join-Path $SolutionDir "installer\Easydict.iss"
 $PublishDir = Join-Path $SolutionDir "publish\$Platform"
+
+function Test-RustOnlyRuntimeProfile {
+    param([string]$Value)
+    $normalized = $Value.Trim().ToLowerInvariant().Replace("_", "-")
+    return $normalized -eq "rust-only" -or $normalized -eq "rustonly"
+}
+
+function Test-HybridRuntimeProfile {
+    param([string]$Value)
+    return $Value.Trim().ToLowerInvariant() -eq "hybrid"
+}
+
+if ([string]::IsNullOrWhiteSpace($RuntimeProfile)) {
+    throw "RuntimeProfile must be explicitly set to Hybrid for dotnet/scripts/Build-Installer.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+}
+$IsRustOnlyRuntime = Test-RustOnlyRuntimeProfile $RuntimeProfile
+if ($IsRustOnlyRuntime) {
+    throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/Build-Installer.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
+}
+if (-not (Test-HybridRuntimeProfile $RuntimeProfile)) {
+    throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/Build-Installer.ps1. Only Hybrid is supported for legacy .NET/hybrid installer packaging."
+}
 
 # Auto-detect version from csproj if not provided
 if (-not $Version) {
@@ -79,6 +103,7 @@ Write-Host ""
 Write-Host "Platform:    $Platform"
 Write-Host "Version:     $Version"
 Write-Host "Tag:         $Tag"
+Write-Host "Runtime:     $RuntimeProfile"
 Write-Host "Publish Dir: $PublishDir"
 Write-Host "ISCC:        $IsccPath"
 Write-Host ""

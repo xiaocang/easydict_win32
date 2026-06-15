@@ -426,6 +426,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Verify Rust-only release contracts
+        shell: pwsh
+        working-directory: rs
+        run: |
+          cargo test -p easydict_packager --test release_contract_behavior
+          cargo test -p easydict_app --test default_api_boundary_behavior
+          cargo test -p easydict_app --test protocol_behavior
+
       - name: Build Rust portable ZIP
         shell: pwsh
         working-directory: rs
@@ -456,6 +464,8 @@ jobs:
     if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'hybrid' }}
     runs-on: windows-latest
     needs: [prepare, publish-msix, publish-rs-portable]
+    env:
+      RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}
 
     steps:
       - name: Checkout code
@@ -544,7 +554,8 @@ jobs:
         run: |
           cargo run --manifest-path ..\rs\Cargo.toml -p easydict_msix_validate -- `
             verify-bundle-minversion `
-            "..\Easydict-${{ github.ref_name }}.unsigned.msixbundle"
+            "..\Easydict-${{ github.ref_name }}.unsigned.msixbundle" `
+            --runtime-profile "${{ env.RUNTIME_PROFILE }}"
 
       - name: Upload all release assets
         uses: softprops/action-gh-release@v1

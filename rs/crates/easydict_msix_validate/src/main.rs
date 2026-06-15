@@ -144,6 +144,19 @@ fn run_verify_bundle_minversion(args: &[String]) -> i32 {
                 };
                 options.required_min_version = value;
             }
+            "--runtime-profile" => {
+                let Some(value) = read_value(args, &mut index, "--runtime-profile") else {
+                    return 2;
+                };
+                let Some(profile) = PackageRuntimeProfile::parse(&value) else {
+                    eprintln!(
+                        "error: --runtime-profile must be 'hybrid' or 'rust-only', got '{value}'"
+                    );
+                    print_usage();
+                    return 2;
+                };
+                options.runtime_profile = Some(profile);
+            }
             unknown => {
                 eprintln!("error: unknown argument: {unknown}");
                 print_usage();
@@ -174,6 +187,12 @@ fn run_verify_bundle_minversion(args: &[String]) -> i32 {
                 if let Some(max_version_tested) = &package.max_version_tested {
                     println!("         MaxVersionTested: {max_version_tested}");
                 }
+            }
+            if let Some(runtime_profile) = options.runtime_profile {
+                println!(
+                    "  [info] Nested package runtime payload profile: {}",
+                    runtime_profile.as_str()
+                );
             }
             println!(
                 "OK: {} package(s) in {} satisfy MinVersion >= {}",
@@ -445,7 +464,7 @@ fn print_usage() {
         "       easydict_msix_validate fix-minversion <path-to-msix> [--min-version <ver>] [--makeappx <path>]"
     );
     println!(
-        "       easydict_msix_validate verify-bundle-minversion <path-to-msixbundle> [--required-min-version <ver>]"
+        "       easydict_msix_validate verify-bundle-minversion <path-to-msixbundle> [--required-min-version <ver>] [--runtime-profile hybrid|rust-only]"
     );
     println!("       easydict_msix_validate dedupe-worker-shared <publish-dir>");
     println!(

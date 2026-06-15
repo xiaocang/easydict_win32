@@ -141,7 +141,7 @@
              own workflow steps, so WinUI should not also build them through ProjectReference
              in CI; otherwise test/release graphs can compile the same worker into the same
              obj path concurrently. Local dev keeps the default worker-copy behavior. -->
-        <RuntimeProfile Condition="'$(RuntimeProfile)' == ''">Hybrid</RuntimeProfile>
+        <RuntimeProfile Condition="'$(RuntimeProfile)' == ''">RustOnly</RuntimeProfile>
         <IsRustOnlyRuntimeProfile Condition="'$(RuntimeProfile)' == 'RustOnly' or '$(RuntimeProfile)' == 'rust-only' or '$(RuntimeProfile)' == 'rustonly' or '$(RuntimeProfile)' == 'rust_only'">true</IsRustOnlyRuntimeProfile>
         <BuildWorkerOutputs Condition="'$(IsRustOnlyRuntimeProfile)' == 'true'">false</BuildWorkerOutputs>
         <BuildWorkerOutputs Condition="'$(BuildWorkerOutputs)' == '' and '$(CI)' == 'true'">false</BuildWorkerOutputs>

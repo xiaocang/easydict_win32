@@ -3,6 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use base64::{
+    alphabet,
+    engine::general_purpose::{self, GeneralPurpose, GeneralPurposeConfig},
+    Engine as _,
+};
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::digest;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -21,6 +26,10 @@ const LEGACY_MACHINE_ID_FILE_NAME: &str = "local-machine-id";
 const LEGACY_NONCE_SIZE_BYTES: usize = 12;
 const LEGACY_TAG_SIZE_BYTES: usize = 16;
 pub const MAX_NESTED_PROTECTED_VALUE_DEPTH: usize = 4;
+const COMPAT_BASE64: GeneralPurpose = GeneralPurpose::new(
+    &alphabet::STANDARD,
+    GeneralPurposeConfig::new().with_decode_allow_trailing_bits(true),
+);
 
 static MACHINE_ID: OnceLock<String> = OnceLock::new();
 
@@ -420,75 +429,15 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn base64_encode(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let first = chunk[0];
-        let second = chunk.get(1).copied().unwrap_or(0);
-        let third = chunk.get(2).copied().unwrap_or(0);
-
-        encoded.push(TABLE[(first >> 2) as usize] as char);
-        encoded.push(TABLE[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
-
-        if chunk.len() > 1 {
-            encoded.push(TABLE[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char);
-        } else {
-            encoded.push('=');
-        }
-
-        if chunk.len() > 2 {
-            encoded.push(TABLE[(third & 0x3f) as usize] as char);
-        } else {
-            encoded.push('=');
-        }
-    }
-
-    encoded
+    general_purpose::STANDARD.encode(bytes)
 }
 
 fn base64_decode(value: &str) -> Result<Vec<u8>, CredentialProtectionError> {
-    let bytes = value.as_bytes();
-    if bytes.is_empty() || bytes.len() % 4 != 0 {
+    if value.is_empty() {
         return Err(CredentialProtectionError::InvalidProtectedValue);
     }
 
-    let mut decoded = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
-        let first = decode_base64_char(chunk[0])?;
-        let second = decode_base64_char(chunk[1])?;
-        let third = if chunk[2] == b'=' {
-            None
-        } else {
-            Some(decode_base64_char(chunk[2])?)
-        };
-        let fourth = if chunk[3] == b'=' {
-            None
-        } else {
-            Some(decode_base64_char(chunk[3])?)
-        };
-
-        decoded.push((first << 2) | (second >> 4));
-        if let Some(third) = third {
-            decoded.push(((second & 0x0f) << 4) | (third >> 2));
-            if let Some(fourth) = fourth {
-                decoded.push(((third & 0x03) << 6) | fourth);
-            }
-        } else if fourth.is_some() {
-            return Err(CredentialProtectionError::InvalidProtectedValue);
-        }
-    }
-
-    Ok(decoded)
-}
-
-fn decode_base64_char(value: u8) -> Result<u8, CredentialProtectionError> {
-    match value {
-        b'A'..=b'Z' => Ok(value - b'A'),
-        b'a'..=b'z' => Ok(value - b'a' + 26),
-        b'0'..=b'9' => Ok(value - b'0' + 52),
-        b'+' => Ok(62),
-        b'/' => Ok(63),
-        _ => Err(CredentialProtectionError::InvalidProtectedValue),
-    }
+    COMPAT_BASE64
+        .decode(value.as_bytes())
+        .map_err(|_| CredentialProtectionError::InvalidProtectedValue)
 }

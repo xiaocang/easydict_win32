@@ -8,6 +8,7 @@ version.workspace = true
 iced = { version = "0.14.0", default-features = false, features = [
     "advanced",
     "crisp",
+    "image",
     "svg",
     "thread-pool",
     "tiny-skia",

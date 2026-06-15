@@ -14,6 +14,7 @@ use crate::runtime_policy::{
     RetainedWorkerPolicy, LOCAL_AI_WORKER_DISABLED_MESSAGE, LONGDOC_WORKER_DISABLED_MESSAGE,
 };
 use easydict_nllb::{NllbModelPaths, OPENVINO_EP_ENABLE_ENVIRONMENT_VARIABLE};
+use easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -98,6 +99,7 @@ impl WorkerCommand {
         let Some(kind) = self
             .retained_worker_kind
             .or_else(|| RetainedWorkerKind::from_program_path(&self.program))
+            .or_else(|| RetainedWorkerKind::from_command_args(&self.args))
         else {
             return Ok(());
         };
@@ -119,6 +121,11 @@ enum RetainedWorkerKind {
 }
 
 impl RetainedWorkerKind {
+    fn from_command_args(args: &[String]) -> Option<Self> {
+        args.iter()
+            .find_map(|arg| Self::from_program_path(Path::new(arg)))
+    }
+
     fn from_program_path(program: &Path) -> Option<Self> {
         let filename = program
             .file_name()
@@ -136,6 +143,10 @@ impl RetainedWorkerKind {
             if filename.starts_with("easydict.workers.") || is_dotnet_runtime_program(filename) {
                 return Some(Self::Other);
             }
+        }
+
+        if command_target_is_retained_runtime_or_script_marker(&program.to_string_lossy()) {
+            return Some(Self::Other);
         }
 
         retained_worker_kind_from_path_components(program)

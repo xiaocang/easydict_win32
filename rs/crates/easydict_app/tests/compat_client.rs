@@ -23,14 +23,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 fn mock_jsonl_client() -> WorkerClient {
-    WorkerCommand::new("powershell.exe")
-        .arg("-NoProfile")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-Command")
-        .arg(MOCK_HOST_SCRIPT)
-        .spawn()
-        .expect("mock worker client must spawn")
+    spawn_worker_command_with_hybrid_profile(
+        WorkerCommand::new("powershell.exe")
+            .arg("-NoProfile")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-Command")
+            .arg(MOCK_HOST_SCRIPT),
+    )
+    .expect("mock worker client must spawn")
 }
 
 fn mock_worker_command(worker_kind: &str, protocol_version: u32) -> WorkerCommand {
@@ -54,7 +55,7 @@ fn mock_worker_command_with_capabilities(
 }
 
 fn mock_worker(worker_kind: &str) -> DirectWorkerFacade {
-    DirectWorkerFacade::spawn_worker(
+    spawn_direct_worker_with_hybrid_profile(
         mock_worker_command(worker_kind, WORKER_PROTOCOL_VERSION_CURRENT),
         worker_kind,
     )
@@ -130,6 +131,27 @@ fn retained_worker_disabled_error(error: WorkerClientError, expected_prefix: &st
         }
         other => panic!("expected retained worker protocol guard, got {other:?}"),
     }
+}
+
+fn spawn_worker_command_with_hybrid_profile(
+    command: WorkerCommand,
+) -> Result<WorkerClient, WorkerClientError> {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    command.spawn()
+}
+
+fn spawn_direct_worker_with_hybrid_profile(
+    command: WorkerCommand,
+    worker_kind: &str,
+) -> Result<DirectWorkerFacade, WorkerClientError> {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    DirectWorkerFacade::spawn_worker(command, worker_kind)
 }
 
 const MOCK_HOST_SCRIPT: &str = r#"
@@ -586,9 +608,53 @@ fn raw_worker_command_to_retained_worker_requires_hybrid_runtime_profile_before_
             r"C:\EasydictMissingPortable\dotnet\dotnet.exe",
             "Retained .NET worker",
         ),
+        ("powershell.exe", "Retained .NET worker"),
+        ("pwsh.cmd", "Retained .NET worker"),
+        (
+            r"C:\EasydictMissingPortable\scripts\legacy-worker.ps1",
+            "Retained .NET worker",
+        ),
     ] {
         let error = match WorkerCommand::new(program).spawn() {
-            Ok(_) => panic!("raw retained worker/runtime command must require hybrid runtime"),
+            Ok(_) => {
+                panic!("raw retained worker/runtime/script command must require hybrid runtime")
+            }
+            Err(error) => error,
+        };
+
+        retained_worker_disabled_error(error, expected_prefix);
+    }
+
+    for (command, expected_prefix) in [
+        (
+            WorkerCommand::new("native-helper.exe").arg("--runtime=dotnet.exe"),
+            "Retained .NET worker",
+        ),
+        (
+            WorkerCommand::new("native-helper.exe")
+                .arg("--")
+                .arg("Easydict.Workers.LocalAi.exe"),
+            "Windows Local AI",
+        ),
+        (
+            WorkerCommand::new("native-helper.exe")
+                .arg("--script")
+                .arg("legacy-backend.ps1"),
+            "Retained .NET worker",
+        ),
+        (
+            WorkerCommand::new("native-helper.exe")
+                .arg("--target")
+                .arg(r"C:\Easydict\dotnet\host\fxr\8.0.11\hostfxr.dll"),
+            "Retained .NET worker",
+        ),
+    ] {
+        let error = match command.spawn() {
+            Ok(_) => {
+                panic!(
+                    "raw retained worker/runtime/script command args must require hybrid runtime"
+                )
+            }
             Err(error) => error,
         };
 
@@ -699,7 +765,7 @@ fn packaged_local_ai_worker_command_uses_custom_openvino_cache_base() {
 
 #[test]
 fn direct_worker_rejects_protocol_mismatch_before_configure() {
-    let error = match DirectWorkerFacade::spawn_worker(
+    let error = match spawn_direct_worker_with_hybrid_profile(
         mock_worker_command(worker_kinds::LONGDOC, WORKER_PROTOCOL_VERSION_CURRENT + 1),
         worker_kinds::LONGDOC,
     ) {
@@ -717,7 +783,7 @@ fn direct_worker_rejects_protocol_mismatch_before_configure() {
 
 #[test]
 fn direct_longdoc_worker_rejects_missing_required_capability_before_configure() {
-    let error = match DirectWorkerFacade::spawn_worker(
+    let error = match spawn_direct_worker_with_hybrid_profile(
         mock_worker_command_with_capabilities(
             worker_kinds::LONGDOC,
             WORKER_PROTOCOL_VERSION_CURRENT,
@@ -740,7 +806,7 @@ fn direct_longdoc_worker_rejects_missing_required_capability_before_configure() 
 
 #[test]
 fn direct_longdoc_worker_rejects_missing_lifecycle_capability_before_configure() {
-    let error = match DirectWorkerFacade::spawn_worker(
+    let error = match spawn_direct_worker_with_hybrid_profile(
         mock_worker_command_with_capabilities(
             worker_kinds::LONGDOC,
             WORKER_PROTOCOL_VERSION_CURRENT,
@@ -767,7 +833,7 @@ fn direct_longdoc_worker_rejects_missing_lifecycle_capability_before_configure()
 
 #[test]
 fn direct_local_ai_worker_rejects_missing_translate_stream_capability_before_configure() {
-    let error = match DirectWorkerFacade::spawn_worker(
+    let error = match spawn_direct_worker_with_hybrid_profile(
         mock_worker_command_with_capabilities(
             worker_kinds::LOCAL_AI,
             WORKER_PROTOCOL_VERSION_CURRENT,
@@ -795,7 +861,7 @@ fn direct_local_ai_worker_rejects_missing_translate_stream_capability_before_con
 
 #[test]
 fn direct_local_ai_worker_rejects_missing_grammar_stream_capability_before_configure() {
-    let error = match DirectWorkerFacade::spawn_worker(
+    let error = match spawn_direct_worker_with_hybrid_profile(
         mock_worker_command_with_capabilities(
             worker_kinds::LOCAL_AI,
             WORKER_PROTOCOL_VERSION_CURRENT,
@@ -821,7 +887,7 @@ fn direct_local_ai_worker_rejects_missing_grammar_stream_capability_before_confi
 
 #[test]
 fn direct_local_ai_worker_rejects_missing_lifecycle_capability_before_configure() {
-    let error = match DirectWorkerFacade::spawn_worker(
+    let error = match spawn_direct_worker_with_hybrid_profile(
         mock_worker_command_with_capabilities(
             worker_kinds::LOCAL_AI,
             WORKER_PROTOCOL_VERSION_CURRENT,
@@ -849,7 +915,7 @@ fn direct_local_ai_worker_rejects_missing_lifecycle_capability_before_configure(
 
 #[test]
 fn direct_worker_allows_extra_ready_capabilities() {
-    let mut facade = DirectWorkerFacade::spawn_worker(
+    let mut facade = spawn_direct_worker_with_hybrid_profile(
         mock_worker_command_with_capabilities(
             worker_kinds::LONGDOC,
             WORKER_PROTOCOL_VERSION_CURRENT,
@@ -897,9 +963,11 @@ fn direct_worker_facade_sends_shutdown_without_params() {
 
 #[test]
 fn worker_client_reports_request_id_for_plain_requests() {
-    let mut client = mock_worker_command(worker_kinds::LONGDOC, WORKER_PROTOCOL_VERSION_CURRENT)
-        .spawn()
-        .expect("mock worker client should spawn");
+    let mut client = spawn_worker_command_with_hybrid_profile(mock_worker_command(
+        worker_kinds::LONGDOC,
+        WORKER_PROTOCOL_VERSION_CURRENT,
+    ))
+    .expect("mock worker client should spawn");
     client
         .wait_for_worker_ready(worker_kinds::LONGDOC)
         .expect("mock worker should emit ready");
@@ -921,9 +989,11 @@ fn worker_client_reports_request_id_for_plain_requests() {
 
 #[test]
 fn worker_client_reports_request_id_for_observed_event_requests() {
-    let mut client = mock_worker_command(worker_kinds::LOCAL_AI, WORKER_PROTOCOL_VERSION_CURRENT)
-        .spawn()
-        .expect("mock worker client should spawn");
+    let mut client = spawn_worker_command_with_hybrid_profile(mock_worker_command(
+        worker_kinds::LOCAL_AI,
+        WORKER_PROTOCOL_VERSION_CURRENT,
+    ))
+    .expect("mock worker client should spawn");
     client
         .wait_for_worker_ready(worker_kinds::LOCAL_AI)
         .expect("mock worker should emit ready");

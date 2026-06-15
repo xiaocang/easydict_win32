@@ -36,7 +36,13 @@ jobs:
         working-directory: rs
         run: |
           cargo test -p easydict_packager --test release_contract_behavior ci_workflow_runs_default_rs_rust_only_boundary_tests -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior default_browser_extension_sources_do_not_fallback_to_legacy_native_host -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior default_browser_extension_setup_points_to_rs_portable_not_store -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior docs_keep_default_cli_and_browser_extension_retained_fallbacks_retired -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior run_wack_script_validates_msix_payload_before_wack_setup -- --exact --nocapture
           cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture
+          cargo test --manifest-path ../lib/easydict-runtime-guards/Cargo.toml -- --nocapture
+          cargo test -p easydict_msix_validate --lib -- --nocapture
           cargo test -p easydict_app runtime_policy --lib -- --nocapture
           cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture
           cargo test -p easydict_app --test sidecar_ipc_e2e -- --nocapture
@@ -45,6 +51,9 @@ jobs:
 
   build-and-test:
     runs-on: windows-latest
+    env:
+      EASYDICT_RUNTIME_PROFILE: rust-only
+      RUNTIME_PROFILE: rust-only
 
     steps:
       - name: Checkout code
@@ -59,19 +68,19 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore Easydict.Win32.sln -p:Platform=x64 -p:BuildWorkerOutputs=false
+        run: dotnet restore Easydict.Win32.sln -p:Platform=x64 -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Build
         working-directory: dotnet
-        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore -p:Platform=x64 -p:BuildWorkerOutputs=false
+        run: dotnet build Easydict.Win32.sln --configuration Debug --no-restore -p:Platform=x64 -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Run tests
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" -p:Platform=x64 -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false --filter "Category!=WinUI&Category!=Integration&Category!=UIAutomation&Category!=Performance&Category!=UIFreeze"
 
       - name: Run long-document regression gate
         working-directory: dotnet
-        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
+        run: dotnet test Easydict.Win32.sln --no-build --verbosity normal --logger "trx;LogFileName=longdoc-test-results.trx" -p:Platform=x64 -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false --filter "FullyQualifiedName~LongDocument&Category!=UIFreeze"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

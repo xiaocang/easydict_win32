@@ -50,7 +50,7 @@ jobs:
           dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
             --configuration Release `
             --runtime win-x64 `
-            --self-contained true `
+            --self-contained false `
             --no-restore `
             --output ./publish/x64 `
             -p:Platform=x64 `
@@ -204,6 +204,9 @@ jobs:
             --logger "trx;LogFileName=winui-test-results.trx" `
             --logger "console;verbosity=detailed" `
             -p:Platform=x64 `
+            -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             --filter "Category=WinUI"
 
       - name: Surface failed test names as annotations
@@ -375,13 +378,17 @@ jobs:
 
       - name: Restore UI test dependencies
         working-directory: dotnet
-        run: dotnet restore tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj
+        run: dotnet restore tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj -p:Platform=x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
 
       - name: Build UI Automation Tests
         working-directory: dotnet
         run: |
           dotnet build tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
-            --configuration Release --no-restore -p:Platform=x64
+            --configuration Release --no-restore `
+            -p:Platform=x64 `
+            -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
 
       - name: Run UI Automation Tests
         working-directory: dotnet
@@ -398,6 +405,9 @@ jobs:
             --logger "trx;LogFileName=ui-test-results.trx" `
             --logger "console;verbosity=detailed" `
             -p:Platform=x64 `
+            -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             --filter "${{ matrix.shard.filter }}"
 
       - name: Surface failed UI test names as annotations

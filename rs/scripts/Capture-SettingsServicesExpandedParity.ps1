@@ -13,7 +13,10 @@ param(
     [int]$SettlingMilliseconds = 1800,
     [int]$InterScenarioDelayMilliseconds = 500,
     [string]$Theme = "system",
-    [string]$UiLanguage = "zh-CN"
+    [string]$UiLanguage = "zh-CN",
+    [double]$MaxSurfaceDeltaRgb = 3.0,
+    [double]$MaxBoundsDriftDips = 0.5,
+    [switch]$FailOnSurfaceDrift
 )
 
 Set-StrictMode -Version Latest
@@ -52,7 +55,7 @@ $catalog = Get-Content -LiteralPath $catalogPath -Raw -Encoding UTF8 | ConvertFr
 $wantedStates = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
 foreach ($value in @($State)) {
     if ($value -eq "all") {
-        foreach ($stateName in @("base", "hover", "pressed")) {
+        foreach ($stateName in @("base", "hover", "pressed", "mouse-hover")) {
             $wantedStates.Add($stateName) | Out-Null
         }
     } else {
@@ -128,7 +131,16 @@ if (-not $?) {
     exit 1
 }
 
-& $measureScript -ArtifactRoot $OutputRoot
+$measureParams = @{
+    ArtifactRoot = $OutputRoot
+    MaxSurfaceDeltaRgb = $MaxSurfaceDeltaRgb
+    MaxBoundsDriftDips = $MaxBoundsDriftDips
+}
+if ($FailOnSurfaceDrift) {
+    $measureParams["FailOnSurfaceDrift"] = $true
+}
+
+& $measureScript @measureParams
 if (-not $?) {
     exit 1
 }

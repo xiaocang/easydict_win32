@@ -2757,6 +2757,84 @@ mod tests {
     }
 
     #[test]
+    fn rust_only_package_rejects_wsh_hta_script_runtime_markers() {
+        let path = temp_msix_path("rust-only-helper-wsh-hta-marker");
+        let mut entries: Vec<(&str, &[u8])> = rust_helper_entries().into_iter().collect();
+        for entry in &mut entries {
+            if entry.0 == "easydict_cli.exe" {
+                entry.1 = b"stale WSH/HTA helper marker: wscript.exe WScript.Shell HTA:APPLICATION";
+            }
+        }
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "easydict_cli.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON,
+                }
+            )],
+            "Rust-only MSIX validation should reject WSH/HTA script runtime markers in renamed helpers"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_wsh_hta_script_payload_names() {
+        let path = temp_msix_path("rust-only-script-payload-name");
+        let mut entries = rust_helper_entries();
+        entries.push(("native-support/legacy.hta", b"legacy script"));
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "native-support/legacy.hta".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_REASON,
+                }
+            )],
+            "Rust-only MSIX validation should reject standalone WSH/HTA script payload names"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn rust_only_package_rejects_extra_payload_exe_that_contains_dotnet_host_markers() {
         let path = temp_msix_path("rust-only-extra-exe-dotnet-marker");
         let mut entries = rust_helper_entries();
@@ -3932,6 +4010,84 @@ mod tests {
         assert!(
             !output_manifest.exists(),
             "rust-only prepare-package-inputs must reject script/TTS backend bytes before writing a prepared manifest"
+        );
+    }
+
+    #[test]
+    fn prepare_package_inputs_rejects_wsh_hta_script_marker_before_manifest_write() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-wsh-hta-marker-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(
+            temp.path(),
+            "native-support/easydict_support.exe",
+            b"stale WSH/HTA helper marker: mshta.exe WScript.Shell HTA:APPLICATION",
+        );
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "native-support/easydict_support.exe".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON
+            }
+        );
+        assert!(
+            !output_manifest.exists(),
+            "rust-only prepare-package-inputs must reject WSH/HTA script backend bytes before writing a prepared manifest"
+        );
+    }
+
+    #[test]
+    fn prepare_package_inputs_rejects_wsh_hta_script_payload_name_before_manifest_write() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-script-payload-name-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(temp.path(), "native-support/legacy.wsf", b"legacy script");
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "native-support/legacy.wsf".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_REASON
+            }
+        );
+        assert!(
+            !output_manifest.exists(),
+            "rust-only prepare-package-inputs must reject WSH/HTA script payload names before writing a prepared manifest"
         );
     }
 

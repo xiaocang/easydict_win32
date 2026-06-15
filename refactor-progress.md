@@ -21,6 +21,279 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-14: Closed MSIX bundle sign/install and QDC machine-scope gaps
+
+- Closed a local sign/install compatibility gap from the packaging audit. `dotnet/scripts/sign-and-install.ps1` now validates package payloads before `winapp sign`, uninstall, or `Add-AppxPackage`: regular `.msix` / `.appx` packages use Rust `easydict_msix_validate --allow-unsigned`, while `.msixbundle` / `.appxbundle` packages use `easydict_msix_validate verify-bundle-minversion <bundle>`. Explicit `RuntimeProfile=Hybrid` is forwarded to the validator, while omitted/rust-only profile uses the validator's Rust-only default; validator failure now throws before a retained-runtime package can be signed.
+- Locked the legacy one-shot `dotnet/scripts/package-and-install.ps1` Hybrid path with a Windows fake-tool regression. The script already rejects omitted/rust-only profiles before invoking tools; the new contract proves the successful Hybrid path packages through `Package-Msix.ps1`, validates the unsigned MSIX with Rust `easydict_msix_validate --allow-unsigned`, and only then calls `winapp sign`. `Package-Msix.ps1` now also checks the explicit Hybrid profile before validating input paths, so bad local arguments cannot hide the portable-first runtime gate.
+- Tightened the legacy retained worker publish blocks across `dotnet/scripts/publish.ps1`, `dotnet/scripts/package-and-install.ps1`, `dotnet/Makefile`, `.github/workflows/release-publish.yml`, and `.github/workflows/arm64-msix-smoke.yml`. LongDoc and LocalAI worker publishes now also receive the explicit runtime profile (`-p:RuntimeProfile=...`), keeping the verified Hybrid/coexistence profile attached to every retained-worker `dotnet publish` call.
+- Closed a first-release portable masquerade gap. `validate-rs-portable` now scans every allowlisted root payload, including `AppIcon.ico` and `README-portable.txt`, with the shared retained runtime/script byte scanner instead of scanning only the allowlisted executables, so renamed apphost/script content cannot hide in non-exe portable entries.
+- Clarified the remaining MSIX/WACK/QDC helper scripts as legacy/hybrid or QDC sideload validation paths, not the first rs release/install path. `inspect-msix.ps1` now requires an explicit `-MsixPath` instead of advertising a hard-coded old package path.
+- Closed a small CI drift: default CI `dotnet test --no-build` steps now also pass `-p:BuildWorkerOutputs=false`, matching restore/build and keeping retained worker outputs disabled through the whole rust-only diagnostic job.
+- Closed the QDC `-Machine` no-op. `Deploy-ToQdc.ps1` was already forwarding `-Machine`; `Install-OnQdc.ps1` now declares the switch and, when set, skips the direct user-scope `Add-AppxPackage -Path` attempt and goes straight to `Add-AppxProvisionedPackage -Online` plus `Add-AppxPackage -Register` after the Rust MSIX validator succeeds. Non-machine installs keep the existing user-scope-first path with the same provision/register fallback for SSH `0x80070005`.
+- Added a Windows fake-cmdlet regression for QDC machine-scope install order, proving `easydict_msix_validate` runs before provision/register and that `-Machine` does not first touch the direct user-scope install path.
+
+Validation:
+
+- PowerShell parser check for `dotnet/scripts/sign-and-install.ps1`, `dotnet/scripts/qdc/Deploy-ToQdc.ps1`, and `dotnet/scripts/qdc/Install-OnQdc.ps1`
+- PowerShell parser check for `dotnet/scripts/Package-Msix.ps1`
+- PowerShell parser check for `dotnet/scripts/publish.ps1`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior package_msix_rejects_non_hybrid_profile_before_path_validation -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior package_and_install_validates_unsigned_msix_before_signing_in_hybrid_path -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior sign_and_install_validator_failure_stops_before_signing_or_install -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior sign_and_install_uses_bundle_validator_for_msixbundle_before_install -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior msix_tooling_help_keeps_first_rs_release_pointed_at_portable -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior ci_build_and_test_job_keeps_dotnet_build_on_rust_only_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --lib validate_rs_portable_rejects_allowlisted -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior qdc_install_machine_scope_validates_before_provision_and_register -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test msix_runtime_profile_contract_behavior -- --nocapture`
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_packager --check`
+
+## 2026-06-14: Hardened WSH/HTA payload scanning and signed MSIX gates
+
+- Closed the remaining script-host payload gap from the parallel audits. `lib/easydict-runtime-guards` now treats script leaf payloads as retained entries in `path_entry_is_retained_runtime_payload_marker(...)` and scans ASCII/UTF-16LE payload bytes for high-signal WSH/HTA markers such as `wscript.exe`, `cscript.exe`, `mshta.exe`, `WScript.Shell`, `VBScript`, `JScript`, `HTA:APPLICATION`, and non-`.js` WSH/HTA suffixes. The command classifier still covers `.js` execution paths, while the byte scanner avoids bare `.js` to reduce false positives in ordinary `.json`/web strings.
+- Propagated that central guard through default package validators instead of adding local marker tables. `easydict_msix_validate` now has Rust-only tests for WSH/HTA content markers and standalone script payload names, `prepare-package-inputs` fails before writing a manifest for the same cases, and `validate-rs-portable` rejects allowlisted Rust exe names whose bytes still contain WSH/HTA script-host residue.
+- Tightened release gates. The ARM64 MSIX smoke workflow now validates the signed package after `winapp sign` and before `Add-AppxPackage`; `dotnet/Makefile sign` and `sign-all` now use `--allow-unsigned` only for their pre-sign payload validation, while `make validate-msix` continues to require a signed package by default.
+- Added direct CI/release coverage for the shared guard layer: the default `rust-only-boundary` job and rs portable release contract step now run `lib/easydict-runtime-guards` tests and `easydict_msix_validate --lib` tests directly.
+
+Validation:
+
+- `cargo test --manifest-path lib\easydict-runtime-guards\Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_msix_validate --lib -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --lib -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo fmt --manifest-path lib\easydict-runtime-guards\Cargo.toml --check`
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_packager -p easydict_msix_validate -p easydict_app --check`
+
+## 2026-06-14: Rechecked Collins MDX/MDD and guarded Makefile signing
+
+- Rechecked reusable Rust MDict libraries before changing the MDD path. `mdict-rs` is a promising v2.0 MDX/MDD reference, but it does not own Easydict's HTML/MDD resource rewrite surface; `mdict-parser` still lacks MDD/encrypted dictionary support; `readmdict` is a direct-port style reader. No dependency changed; the in-tree MIT `lib/rs-mdict` remains the safest fit for the current app-specific route.
+- Verified the user-provided Collins COBUILD English Usage corpus end to end. `lib/rs-mdict` opens the MDX and companion MDD, the MDD exposes `\cceu.css`, configured resource lookup returns 4579 raw bytes with MIME `text/css`, app-level native MDX lookup rewrites `href="cceu.css"` into `data:text/css;base64,...`, and Quick Translate keeps rich `rawHtml` only after the MDD resource is actually inlined.
+- Closed a packaging hardening gap from a parallel audit. `dotnet/Makefile sign` and `sign-all` now run `cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate` before `winapp sign`; empty `RUNTIME_PROFILE` omits `--runtime-profile` so the validator's Rust-only default applies, while explicit profiles are normalized and forwarded. This prevents stale or externally supplied MSIX files from being signed before the retained-runtime payload contract runs.
+- Closed a shared command-classifier gap from a second parallel audit. `lib/easydict-runtime-guards` now treats Windows Script Host / HTA / script helper suffixes (`.vbs`, `.vbe`, `.js`, `.jse`, `.wsf`, `.wsh`, `.hta`, plus existing PowerShell and batch suffixes) as retained script targets through leaf/token checks, while preserving Rust-native helper names containing words like `script` or `json`.
+
+Validation:
+
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path lib\rs-mdict\Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_MDD_RESOURCE='\cceu.css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIME='text/css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIN_BYTES='4000'; cargo test --manifest-path lib\rs-mdict\Cargo.toml --features real-corpus-tests --test integration_test test_mdd_locate_configured_resource -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `cargo fmt --manifest-path rs\Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior makefile_sign_targets_validate_msix_payload_before_signing -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior -- --nocapture`
+- `cargo test --manifest-path lib\easydict-runtime-guards\Cargo.toml`
+- `cargo test --manifest-path lib\easydict-windows-shell\Cargo.toml bundled_executable_name`
+- `cargo test --manifest-path lib\easydict-foundry-local\Cargo.toml cli_executable_override`
+
+## 2026-06-14: Hardened desktop registry commands and standalone WACK validation
+
+- Closed a default desktop-integration gap found by a parallel audit. `desktop_integration` already rejected obvious retained runtime/script command paths before writing shell verb, protocol, or startup registry values; it now also inspects the target with `symlink_metadata`, rejects links/reparse points/non-files, reads the executable bytes, and rejects retained `.NET` runtime markers before any registry write.
+- Added a regression with a fake `Easydict.Rust.exe` payload containing `hostfxr.dll`, plus a default boundary test proving shell/protocol/startup command target validation runs before registry writes and uses the shared `easydict_runtime_guards` byte scanner.
+- Cleaned two stale documentation contracts: `rs/README.md` now says default CLI builds reject legacy `--host` / `--host-arg` / `--app-dir` retained-worker options, and `migration-list.md` no longer describes the browser extension as having an rs-host-first legacy fallback. A release-contract test now locks both statements and is wired into the CI `rust-only-boundary` job.
+- Closed the packaging gap found by the second parallel audit. Standalone `dotnet/scripts/Run-Wack.ps1` now accepts `-RuntimeProfile`, runs `cargo run --manifest-path rs/Cargo.toml -p easydict_msix_validate -- <msix> --allow-unsigned` immediately after resolving the MSIX, and exits on validator failure before Windows SDK tool lookup, manifest extraction, cert creation/trust, signing, or `appcert` execution. The release workflow now passes `${{ env.RUNTIME_PROFILE }}` into this script, and the CI `rust-only-boundary` job runs the WACK contract self-check so this cannot drift silently.
+- No new dependency was needed. This reuses the existing `lib/easydict-runtime-guards` retained runtime marker scanner and mirrors the file-target guard already used by the Windows shell helper.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app -p easydict_packager`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --lib desktop_integration::tests -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --lib desktop_integration::tests::desktop_registry_commands_reject_retained_runtime_content_targets -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_desktop_registry_command_boundary_scans_targets_before_registry_writes -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior docs_keep_default_cli_and_browser_extension_retained_fallbacks_retired -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior ci_workflow_runs_default_rs_rust_only_boundary_tests -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior run_wack_script_validates_msix_payload_before_wack_setup -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior run_wack_validates_msix_payload_before_cert_trust_or_appcert_with_rust_only_default -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior run_wack_passes_hybrid_profile_to_validator_only_when_explicit -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior -- --nocapture`
+
+## 2026-06-14: Pointed browser extension setup and portable docs at rs portable
+
+- Tightened the default browser-extension setup path for the first rs release. `setup.html`, English/Chinese locale strings, and the extension README now direct users to the Rust portable package on GitHub Releases and document the `com.easydict.rs.bridge` native host instead of Microsoft Store/MSIX/Inno or the legacy `com.easydict.bridge` host.
+- Added a release-contract guard for that setup surface and wired it into the default CI `rust-only-boundary` job, so the extension docs cannot quietly drift back to the retained/dotnet install route.
+- Updated `rs/README.md` to spell out the exact first-release portable root allowlist: `Easydict.Rust.exe`, `easydict-native-bridge.exe`, `easydict_browser_registrar.exe`, `easydict_cli.exe`, `easydict_long_doc.exe`, `AppIcon.ico`, and `README-portable.txt`. It also clarifies that `service-icons/` assets are source resources compiled into Rust binaries, not a portable package directory.
+- No new dependency was needed; this was docs and contract alignment around existing Rust packager/browser-extension code.
+
+Validation:
+
+- `node --check browser-extension/setup.js; node --check browser-extension/background.js`
+- JSON parse smoke for `browser-extension/_locales/en/messages.json`, `browser-extension/_locales/zh_CN/messages.json`, `browser-extension/manifest.json`, and `browser-extension/manifest.v2.json`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior default_browser_extension_setup_points_to_rs_portable_not_store -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior default_browser_extension_sources_do_not_fallback_to_legacy_native_host -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_readme_portable_allowlist_matches_first_release_root_entries -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior ci_workflow_runs_default_rs_rust_only_boundary_tests -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager validate_rs_portable --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture`
+
+## 2026-06-14: Verified Collins MDD on the Rust-native MDX path
+
+- Rechecked MDict reuse options before changing the parser surface. No external Rust crate currently beats the in-tree `lib/rs-mdict` for this app's combination of MIT licensing, MDX/MDD support, encryption/key transform hooks, and Easydict-specific HTML resource inlining. `mdict-rs` is a useful design reference but AGPL-only; `readmdict` and `mdict-parser` do not cover the full MDD/encryption surface needed here.
+- Added an optional real-corpus assertion to `lib/rs-mdict/tests/integration_test.rs`: when `RS_MDICT_TEST_MDD_RESOURCE` is set, the test now locates that exact MDD key, checks resolved key normalization, raw byte size, inferred extension/MIME, and optional expected MIME/min-byte constraints.
+- Verified the user-provided Collins COBUILD English Usage corpus at `C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx` with its companion `.mdd`. Rust reads the MDX as `Encrypted=2`, UTF-8, 1517 keywords; the MDD as `Encrypted=2`, UTF-16LE, one resource `\cceu.css`; the exact resource lookup returns 4579 raw CSS bytes and MIME `text/css`.
+- Re-ran app-level MDX/MDD behavior with the same corpus. The native lookup path inlines `href="cceu.css"` into a `data:text/css;base64,...` URL and reports `mdd_resources_inlined=true`, so the first rs portable path no longer needs a .NET CompatHost/WebResourceRequested fallback for this dictionary.
+- Also fixed a stale release-contract section marker so the full packager `release_contract_behavior` suite matches the current Makefile heading and is green again.
+
+Validation:
+
+- `cargo fmt --manifest-path lib/rs-mdict/Cargo.toml --check`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_MDD_RESOURCE='\cceu.css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIME='text/css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIN_BYTES='4000'; cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test test_mdd_locate_configured_resource -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_MDD_RESOURCE='\cceu.css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIME='text/css'; $env:RS_MDICT_TEST_MDD_RESOURCE_MIN_BYTES='4000'; cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_real_corpus_mdd_from_env_for_legacy_mdx_entry -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior -- --nocapture`
+
+## 2026-06-14: Moved legacy CLI host acceptance into retained-feature tests
+
+- Cleaned up a stale default parser test around legacy `--host` / `--host-arg` options. The default CLI parser already rejects these retained-worker compatibility flags as `UnknownOption`; the remaining acceptance test is now explicitly named and gated under `retained-dotnet-workers`.
+- Strengthened `default_api_boundary_behavior` so default parser tests keep the rejection case and cannot reintroduce an unqualified legacy host acceptance test.
+- No new dependency was needed; this is a test-contract cleanup around the existing CLI parser and feature gates.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --lib cli_translate::tests::default_build_rejects_legacy_host_and_app_dir_options -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers --lib cli_translate::tests::retained_feature_accepts_legacy_host_without_exposing_worker_target -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_cli_rejects_legacy_retained_worker_options_unless_feature_gated -- --exact --nocapture`
+- `git diff --check -- rs/crates/easydict_app/src/cli_translate.rs rs/crates/easydict_app/tests/default_api_boundary_behavior.rs refactor-progress.md`
+
+## 2026-06-14: Tightened diagnostic workflow publish contracts
+
+- Strengthened the Rust release-contract tests around default diagnostic workflows. Every `dotnet publish` block in CI/benchmark/memory/UI automation default workflows is now checked independently for `--self-contained false`, rust-only MSBuild props, and `WindowsAppSDKSelfContained=false`; a future second publish step can no longer be masked by another safe publish in the same file.
+- Added `integration-tests.yml` to the no-runtime workflow scan and pinned its restore/build/test commands to `EASYDICT_RUNTIME_PROFILE=rust-only` / `RUNTIME_PROFILE=rust-only` plus the same rust-only MSBuild props. It currently only restore/build/tests and must not add `dotnet publish`, retained worker features, or runtime extraction.
+- No new dependency was needed; this stays in the existing text-contract test harness.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior default_diagnostic_dotnet_publish_steps_all_use_rust_only_no_runtime_props -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior integration_tests_workflow_does_not_publish_or_extract_dotnet_runtime_payloads -- --exact --nocapture`
+- `git diff --check -- .github/workflows/integration-tests.yml rs/crates/easydict_packager/tests/release_contract_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Guarded retained WorkerCommand args before spawn
+
+- Closed a retained-feature bypass found by the low-level runtime audit. `WorkerCommand::ensure_retained_worker_is_enabled(...)` now classifies both the executable path and its args before any process spawn or deferred `DOTNET_ROOT*` injection.
+- A raw retained worker command such as `native-helper.exe --runtime=dotnet.exe`, `-- Easydict.Workers.LocalAi.exe`, `--script legacy-backend.ps1`, or `--target ...\hostfxr.dll` now requires explicit `EASYDICT_RUNTIME_PROFILE=hybrid` before it can reach the I/O probe.
+- No new dependency was needed. The fix reuses `lib/easydict-runtime-guards::command_target_is_retained_runtime_or_script_marker(...)`, which already owns the retained runtime/script command classifier.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/compat_client.rs rs/crates/easydict_app/tests/compat_client.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers --test compat_client raw_worker_command_to_retained_worker_requires_hybrid_runtime_profile_before_io_probe -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers --test compat_client raw_worker_command_to_retained_worker_allows_hybrid_runtime_profile_to_reach_io_probe -- --exact --nocapture`
+- `git diff --check -- rs/crates/easydict_app/src/compat_client.rs rs/crates/easydict_app/tests/compat_client.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Scanned Foundry Local CLI target bytes before spawn
+
+- Closed the remaining content-level gap on the default rs app's only allowed external process boundary. `CommandFoundryLocalEndpointResolver` still accepts ordinary `foundry` PATH lookup, but whenever the CLI override resolves to an actual file it now reads the target bytes and rejects retained runtime/script markers before `Command::new(...)`.
+- This blocks a renamed apphost or script payload called `foundry.exe` that still embeds strings such as `hostfxr.dll`, even when the path name itself looks native.
+- No new dependency was needed. The implementation reuses `lib/easydict-runtime-guards::bytes_contain_retained_runtime_marker(...)`, matching the existing bundled-helper validation pattern in `lib/easydict-windows-shell`.
+
+Validation:
+
+- `cargo fmt --manifest-path lib/easydict-foundry-local/Cargo.toml --check`
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml tests::cli_executable_override_rejects_retained_runtime_content_before_spawn -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --exact --nocapture`
+- `git diff --check -- lib/easydict-foundry-local/src/lib.rs rs/crates/easydict_app/tests/default_api_boundary_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Pinned local Makefile and diagnostic scripts to rust-only test props
+
+- Closed the remaining local diagnostic path gap from the workflow/script audit. `dotnet/Makefile` now centralizes `RUST_ONLY_MSBUILD_PROPS` and uses it for ordinary restore/build/test, WinUI tests, UI automation tests, and verbose test runs while leaving legacy publish/MSIX/installer targets on their explicit hybrid gates.
+- `run-visual-test.ps1`, `Invoke-PrMemoryGate.ps1`, `Invoke-UiThreadHotspotProbe.ps1`, and `Invoke-ThemeRegressionMemoryProbe.ps1` now pass the same rust-only MSBuild props to local diagnostic build/test commands, including no-build test runs.
+- Added Rust release-contract coverage for the Makefile and local diagnostic PowerShell scripts, so these default validation paths cannot silently drop back to retained worker output or in-proc LongDoc fallback.
+- No new library was needed; this is local command wiring around the existing MSBuild runtime-profile policy.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- PowerShell parser checks for `dotnet/scripts/run-visual-test.ps1`, `dotnet/scripts/memory/Invoke-PrMemoryGate.ps1`, `dotnet/scripts/perf/Invoke-UiThreadHotspotProbe.ps1`, and `dotnet/scripts/perf/Invoke-ThemeRegressionMemoryProbe.ps1`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior local_diagnostic_build_and_test_paths_use_rust_only_msbuild_props -- --exact --nocapture`
+- `git diff --check -- dotnet/Makefile dotnet/scripts/run-visual-test.ps1 dotnet/scripts/memory/Invoke-PrMemoryGate.ps1 dotnet/scripts/perf/Invoke-UiThreadHotspotProbe.ps1 dotnet/scripts/perf/Invoke-ThemeRegressionMemoryProbe.ps1 rs/crates/easydict_packager/tests/release_contract_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Carried rust-only MSBuild props through UI and benchmark test commands
+
+- Closed another default workflow gap from the script/workflow audit. The benchmark workflow now passes `-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}`, `-p:BuildWorkerOutputs=false`, and `-p:EnableInProcLongDocFallback=false` to the WinUI performance `dotnet test --no-build` step, not just restore/build.
+- The UI automation workflow now carries the same rust-only property set through WinUI unit `dotnet test --no-build` and UIA restore/build/test shard commands. Build/package validation remains on the Rust MSIX validator path.
+- Expanded Rust release-contract coverage so future edits cannot leave later `dotnet test --no-build` steps outside the rust-only profile.
+- No new library was needed; this is workflow policy wiring backed by existing Rust text contract tests.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test msix_runtime_profile_contract_behavior ui_automation_msix_path_forces_rust_only_and_validates_before_upload_and_install -- --exact --nocapture`
+- `git diff --check -- .github/workflows/benchmark.yml .github/workflows/ui-automation.yml rs/crates/easydict_packager/tests/release_contract_behavior.rs rs/crates/easydict_packager/tests/msix_runtime_profile_contract_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Guarded ShellExecute URL targets in the Windows shell lib
+
+- Closed the `open_url(...)` ShellExecute boundary found by the Rust/lib audit. `lib/easydict-windows-shell` now accepts only `http://` and `https://` targets, preserves blank URL no-op behavior, and rejects retained runtime/script markers through `lib/easydict-runtime-guards` before calling `ShellExecuteW`.
+- Added lib unit coverage for allowed HTTP/HTTPS URLs and rejected PowerShell/Pwsh, `.ps1`, `file://`, `workers/`, `dotnet/host/fxr`, and `hostfxr.dll` targets. Added default API boundary coverage that requires URL validation before platform delegation.
+- No new dependency was needed; string scheme checks plus the existing shared runtime guard cover this shell edge.
+
+Validation:
+
+- `cargo fmt --manifest-path lib/easydict-windows-shell/Cargo.toml --check`
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml open_url_target -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_shell_open_url_boundary_rejects_non_web_and_retained_targets -- --exact --nocapture`
+- `git diff --check -- lib/easydict-windows-shell/src/lib.rs rs/crates/easydict_app/tests/default_api_boundary_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Rejected retained browser bridge root names
+
+- Closed a native-messaging bridge destination gap found by the Rust/lib audit. `parse_browser_registrar_args --bridge-root-name` now rejects retained runtime/script component names through `lib/easydict-runtime-guards`, so a custom bridge root cannot be `dotnet`, `workers`, `Easydict.CompatHost*`, `Easydict.Workers.*`, PowerShell/Pwsh, `.ps1`, or `hostfxr.dll`.
+- This keeps the browser manifest spawn target under an rs-owned root before the registrar writes Chrome/Firefox Native Messaging registry entries.
+- No new dependency was needed; the registrar already uses `easydict_runtime_guards` for bridge source and payload validation.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior parser_rejects_legacy_dotnet_bridge_root_for_rs_portable -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior browser_registrar_source_uses_lib_owned_retained_runtime_guard -- --exact --nocapture`
+- `git diff --check -- rs/crates/easydict_app/src/browser_registrar.rs rs/crates/easydict_app/tests/browser_registrar_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Removed default browser extension fallback to the legacy native host
+
+- Closed a browser-extension runtime leak found by the workflow/script audit. `browser-extension/background.js` and `setup.js` now send native messages only to `com.easydict.rs.bridge`; the default rs extension no longer falls back to legacy `com.easydict.bridge`.
+- Updated `browser_registrar_behavior` and `release_contract_behavior` so default extension sources cannot reintroduce the legacy/dotnet host name or native-host fallback plumbing. The new packager contract is included in the CI `rust-only-boundary` job.
+- No new library was needed. This is a default distribution policy tightening around the existing rs-specific Native Messaging host.
+
+Validation:
+
+- `node --check browser-extension/background.js`
+- `node --check browser-extension/setup.js`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior browser_extension_defaults_to_rs_native_host_without_legacy_fallback -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior default_browser_extension_sources_do_not_fallback_to_legacy_native_host -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior ci_workflow_runs_default_rs_rust_only_boundary_tests -- --exact --nocapture`
+- `git diff --check -- browser-extension/background.js browser-extension/setup.js rs/crates/easydict_app/tests/browser_registrar_behavior.rs rs/crates/easydict_packager/tests/release_contract_behavior.rs .github/workflows/ci.yml migration-list.md refactor-progress.md`
+
+## 2026-06-14: Locked bundled-helper process boundary into the shell lib contract
+
+- Strengthened default API boundary evidence for the Rust-owned shell wrapper. `default_api_boundary_behavior` now explicitly checks `lib/easydict-windows-shell` as the only bundled-helper process-launch boundary and requires retained runtime/script classification, symlink/reparse rejection, regular-file validation, and retained marker byte scanning before `Command::new(...)`.
+- No new library was needed; the boundary continues to reuse `lib/easydict-runtime-guards` and the existing `easydict-windows-shell` wrapper.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_bundled_helper_process_boundary_stays_inside_windows_shell_lib -- --exact --nocapture`
+- `git diff --check -- rs/crates/easydict_app/tests/default_api_boundary_behavior.rs migration-list.md refactor-progress.md`
+
+## 2026-06-14: Pinned default CI build-and-test to rust-only
+
+- Closed the remaining default `.github/workflows/ci.yml` gap from the parallel workflow audit. The regular `build-and-test` job now explicitly sets `EASYDICT_RUNTIME_PROFILE=rust-only` / `RUNTIME_PROFILE=rust-only`.
+- The job's WinUI restore, build, unit-test, and long-document regression-test steps now pass `-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}` and `-p:EnableInProcLongDocFallback=false`; restore/build also keep `-p:BuildWorkerOutputs=false`.
+- Added release-contract coverage so the default .NET-facing CI build path cannot silently opt back into hybrid retained runtime packaging or the in-proc LongDoc fallback.
+- No third-party library was needed; this reuses the existing Rust release-contract YAML checks.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior ci_build_and_test_job_keeps_dotnet_build_on_rust_only_profile -- --exact --nocapture`
+- `git diff --check -- .github/workflows/ci.yml rs/crates/easydict_packager/tests/release_contract_behavior.rs migration-list.md refactor-progress.md`
+
 ## 2026-06-14: Tightened default CI runtime profiles and desktop registry command targets
 
 - Closed several default CI/diagnostic runtime-profile gaps found by parallel read-only audits. UI automation WinUI unit tests, the performance benchmark workflow, PR memory gate, and nightly memory profile now explicitly set `EASYDICT_RUNTIME_PROFILE=rust-only` / `RUNTIME_PROFILE=rust-only` and pass `-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}` plus `-p:EnableInProcLongDocFallback=false` on WinUI restore/build/publish paths.
@@ -2031,7 +2304,7 @@ Validation:
 ## 2026-06-12: Validated sign-and-install before local MSIX install
 
 - A parallel worker handled this packaging slice. No new dependency was needed; the existing Rust `easydict_msix_validate` CLI already owns MSIX payload policy.
-- `dotnet/scripts/sign-and-install.ps1` now accepts `-RuntimeProfile`, signs first, then runs `cargo run --manifest-path rs/Cargo.toml -p easydict_msix_validate -- <PackagePath>` before uninstalling or calling `Add-AppxPackage`. Empty/default/rust-only profiles let the validator use its Rust-only default; explicit `Hybrid` is the only case that forwards `--runtime-profile hybrid`.
+- `dotnet/scripts/sign-and-install.ps1` accepts `-RuntimeProfile` and now runs `cargo run --manifest-path rs/Cargo.toml -p easydict_msix_validate -- <PackagePath> --allow-unsigned` before signing, uninstalling, or calling `Add-AppxPackage`. Empty/default/rust-only profiles let the validator use its Rust-only default; explicit `Hybrid` is the only case that forwards `--runtime-profile hybrid`.
 - Added fake-tool release-contract coverage for the default Rust-only validator path and the explicit Hybrid forwarding path.
 
 Validation:
@@ -5253,9 +5526,100 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - No replacement library was needed because this slice only narrows exposure. The existing hybrid-only extraction path still uses the already selected `reqwest` + `zip` implementation behind `hybrid-dotnet-runtime-packaging`.
   - Default `easydict_packager` builds no longer recognize `extract-dotnet-runtime` as a named command or keep a feature-disabled fallback. The command is now only compiled in explicit hybrid builds.
   - `ExtractDotnetRuntime*`, `PackageRuntimeProfile`, `extract_dotnet_runtime_archive(...)`, `dotnet_runtime_url(...)`, and extraction-only helpers/tests are now gated behind `hybrid-dotnet-runtime-packaging`, while release-contract coverage ensures they do not leak back into the default rs portable API surface.
+- 2026-06-14: Revalidated Rust MDX/MDD support with the user's Collins COBUILD English Usage real corpus.
+  - No code change was needed. The current MIT `lib/rs-mdict` route opens the sample MDX and companion MDD directly, including `Encrypted=2` key-info-only files, without starting any .NET runtime or CompatHost path.
+  - The real MDD exposes `\cceu.css`; `rs-mdict` loaded it as a raw/base64 resource, and the app-level native MDX lookup inlined the stylesheet into returned HTML through the Rust MDD reader.
+  - This confirms the core MDD path is complete for the current rs route; remaining work is broader Rust-only packaging/default-path hardening rather than MDD parser functionality.
+- 2026-06-14: Closed the retained-feature raw `WorkerCommand` script-target bypass.
+  - No replacement library was needed. The retained compatibility client now reuses `lib/easydict-runtime-guards::command_target_is_retained_runtime_or_script_marker(...)` when classifying raw `WorkerCommand::new(...)` program paths.
+  - Even when the `retained-dotnet-workers` feature is compiled, direct raw commands to PowerShell/Pwsh, `.ps1` scripts, bundled `.NET` runtime files, or legacy worker/runtime roots now hit the Rust-native-required guard before executable probing unless `EASYDICT_RUNTIME_PROFILE=hybrid` is explicitly set.
+  - The retained-worker protocol tests still use a PowerShell mock worker, but only inside a short explicit hybrid-profile wrapper, keeping the default guard behavior covered.
+- 2026-06-14: Tightened the default Foundry Local CLI process boundary with spawn-time target revalidation.
+  - No replacement library was needed. The default rs route already isolates Foundry Local behind `lib/easydict-foundry-local`; this step reused `lib/easydict-runtime-guards` instead of adding another command/path validation dependency.
+  - `CommandFoundryLocalEndpointResolver` now re-canonicalizes and revalidates the configured CLI target immediately before each `Command::new(...)`. If canonicalization succeeds, the process spawn uses that just-validated canonical path; PATH-only names such as `foundry` keep the existing PATH lookup behavior when canonicalization fails.
+  - Added focused coverage for a CLI override that is clean at construction time but resolves to a retained `.NET` runtime target at spawn time, plus a default boundary contract that every Foundry Local spawn is preceded by this revalidation helper.
+- 2026-06-14: Extended the rust-only process boundary audit across default integration tests.
+  - No replacement library was needed. This slice is a static boundary contract over test harness code, and the allowed spawns are existing Rust-owned binaries, the native bridge helper, Python sidecar mock, and a Windows terminal-classified smoke helper.
+  - The Windows text-selection terminal smoke no longer copies the current test executable to `pwsh.exe`; it now uses `WindowsTerminal.exe`, which remains terminal-classified without borrowing a PowerShell/Pwsh shell runtime name.
+  - Added `default_integration_tests_do_not_spawn_retained_runtime_or_shell_helpers`, which scans `rs/crates/easydict_app/tests` so new default integration tests cannot add unreviewed `Command::new(...)` spawns or default-surface `WorkerCommand::new(...)` retained-worker spawns.
+- 2026-06-14: Hardened the shared retained-runtime command classifier against argument-level trampolines.
+  - No replacement library was needed. The existing `lib/easydict-runtime-guards` command-target classifier is the right shared boundary for Foundry Local, shell helpers, registry commands, and retained-worker compatibility guards.
+  - `command_target_is_retained_runtime_or_script_marker(...)` now scans shell-ish command tokens as well as the executable head/path, so values like `foundry.cmd /c dotnet.exe`, `native-helper --runtime=dotnet.exe`, `native-helper -- Easydict.Workers.LocalAi.exe`, and `--script legacy-backend.ps1` are rejected before any caller can spawn them.
+  - Native Foundry command lines such as `foundry --model phi-3 --endpoint http://127.0.0.1:5273/v1` remain allowed, keeping the first rs package's only default external-process boundary usable while closing retained `.NET`/script argument bypasses.
+- 2026-06-14: Locked `pack-rs-portable` as portable-only even under hybrid packager builds.
+  - No code-path change was needed beyond a regression test: `pack-rs-portable` already treats unknown arguments as usage errors and has no runtime-profile field in its options.
+  - Added `pack_rs_portable_rejects_runtime_profile_flag_before_workspace`, which runs in both default and `hybrid-dotnet-runtime-packaging` test builds and proves `pack-rs-portable --runtime-profile hybrid` fails before any workspace lookup or package build.
+  - This prevents the hybrid/coexistence `.NET` runtime packaging switch from being accidentally wired into the first-release rs portable command.
+- 2026-06-14: Removed self-contained `.NET` runtime payloads from rust-only diagnostic CI publish directories.
+  - No replacement library was needed. These UI automation and memory workflows are still legacy/diagnostic WinUI runners, but their rust-only publish output no longer needs to bundle the .NET runtime because GitHub-hosted runners already set up .NET explicitly.
+  - `.github/workflows/ui-automation.yml`, `.github/workflows/memory-gate.yml`, and `.github/workflows/memory-nightly.yml` now publish with `--self-contained false` while keeping `RuntimeProfile=rust-only`, `BuildWorkerOutputs=false`, `EnableInProcLongDocFallback=false`, and `WindowsAppSDKSelfContained=false`.
+  - Contract tests now lock UI automation and PR/nightly memory workflows against `--self-contained true`, so these non-release diagnostic directories cannot quietly reintroduce bundled `.NET` runtime payloads.
+- 2026-06-14: Added a broad no-runtime workflow contract for default and diagnostic paths.
+  - No replacement library was needed. This is a release-contract hardening pass over CI/workflow text after the targeted UI automation and memory workflow fixes.
+  - Added `default_and_diagnostic_workflows_do_not_produce_dotnet_runtime_payloads`, which scans CI, benchmark, memory gate/nightly, and UI automation workflows for fixed rust-only runtime envs and rejects `RUNTIME_PROFILE: hybrid`, retained worker enablement, `retained-dotnet-workers`, `--self-contained true`, `Extract-DotnetRuntime.ps1`, and `extract-dotnet-runtime`.
+  - The same contract requires any diagnostic `dotnet publish` that remains in those workflows to use `--self-contained false` and reject `WindowsAppSDKSelfContained=true`, giving the first rs portable line a wider guard against accidental `.NET` runtime payloads.
+- 2026-06-14: Aligned memory profiling local docs with the rust-only no-runtime diagnostic path.
+  - No replacement library was needed. The stale docs still showed `--self-contained true` for local PR/nightly memory captures even though the workflow path now uses the installed runner .NET runtime.
+  - Updated `dotnet/memory-profiling.md` examples to use `--self-contained false` plus `RuntimeProfile=rust-only`, `BuildWorkerOutputs=false`, `EnableInProcLongDocFallback=false`, and `WindowsAppSDKSelfContained=false`.
+  - Added `memory_profiling_docs_use_rust_only_no_runtime_publish` to keep local diagnostic docs from reintroducing self-contained `.NET` runtime payload guidance.
+- 2026-06-14: Added final-upload validation for the first rs portable release asset.
+  - No replacement library was needed. The release job now reuses the existing Rust `easydict_packager validate-rs-portable` CLI, which already shares the retained payload path/content scanner.
+  - `create-rs-portable-release` now checks out the repository, downloads `easydict-rs-portable-*` artifacts, fails if no ZIP was downloaded, and validates every `rs-portable/*.zip` before `softprops/action-gh-release` uploads it.
+  - This adds a second release-layer guard after the build job's package validation, preventing a broadened artifact pattern or polluted downloaded ZIP from bypassing the Rust-only `.NET` payload validator.
+- 2026-06-14: Locked runtime-producing release workflow steps behind explicit hybrid gates.
+  - No replacement library was needed. This is a release-contract guard over existing legacy/hybrid workflow paths, not a new runtime implementation.
+  - Added `runtime_producing_workflow_steps_run_only_after_explicit_hybrid_gate`, which scans the release and ARM64 MSIX smoke workflows and proves every occurrence of `--self-contained true`, retained worker publish, `.NET 8 Runtime` bundle, and `Extract-DotnetRuntime.ps1` appears only after the explicit hybrid profile guard.
+  - The same contract also keeps `publish-rs-portable` and `create-rs-portable-release` free of `--self-contained true` and runtime extraction, preserving the first rs package as portable-only.
+- 2026-06-14: Pinned Rust-native Bing language preflight to the legacy Bing table.
+  - No replacement library was needed. The existing Rust traditional HTTP planner/parser already owns Bing's two-phase route; this slice only tightens exact `.NET BingTranslateService.SupportedLanguages` parity.
+  - Added a dedicated `BING_SUPPORTED_LANGUAGES` table instead of sharing `GOOGLE_SUPPORTED_LANGUAGES`, so future Google whitelist edits cannot silently change Bing local preflight behavior.
+  - Added `bing_language_preflight_uses_dedicated_legacy_bing_table`, covering supported Bing-only legacy entries such as Filipino/Norwegian and proving an unsupported target fails locally before request construction.
+- 2026-06-14: Rejected drive-relative ZIP entry names in the rs portable validator.
+  - No new dependency was needed. This stays inside the existing `zip`-based `validate-rs-portable` entry-name policy and closes a Windows-specific archive-path edge case.
+  - `archive_entry_path_is_unsafe(...)` now rejects path segments that begin with a drive prefix such as `C:...`, not only absolute `C:/...` entries, before the ZIP enclosed-name normalization or first-release allowlist checks run.
+  - Extended `validate_rs_portable_rejects_unsafe_zip_entry_paths_before_payload_allowlist` so a drive-relative retained-worker path fails as `InvalidArchiveEntry`, preventing polluted first-release portable ZIPs from hiding retained `.NET` payloads behind Windows path syntax.
 
 ## Current Verification
 
+- `rustfmt --edition 2021 --check rs/crates/easydict_packager/src/lib.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager tests::validate_rs_portable_rejects_unsafe_zip_entry_paths_before_payload_allowlist -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager tests::validate_rs_portable_rejects_zip_symlink_entry_before_payload_allowlist -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager tests::validate_rs_portable_rejects_retained_dotnet_zip_payload -- --exact --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/traditional_http.rs rs/crates/easydict_app/tests/traditional_http_behavior.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test traditional_http_behavior bing_language_preflight_uses_dedicated_legacy_bing_table -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test traditional_http_behavior traditional_http_language_preflight_matches_dotnet_supported_language_tables -- --exact --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_packager/tests/release_contract_behavior.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior runtime_producing_workflow_steps_run_only_after_explicit_hybrid_gate -- --exact --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_packager/tests/release_contract_behavior.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior create_rs_portable_release_revalidates_downloaded_zip_before_upload -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts -- --exact --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_packager/tests/msix_runtime_profile_contract_behavior.rs rs/crates/easydict_packager/tests/release_contract_behavior.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior default_and_diagnostic_workflows_do_not_produce_dotnet_runtime_payloads -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior memory_profiling_docs_use_rust_only_no_runtime_publish -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test msix_runtime_profile_contract_behavior ui_automation_msix_path_forces_rust_only_and_validates_before_upload_and_install -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior memory_workflows_publish_winui_under_rust_only_profile -- --exact --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_packager/src/main.rs`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager pack_rs_portable_rejects_runtime_profile -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging pack_rs_portable_rejects_runtime_profile -- --nocapture`
+- `rustfmt --edition 2021 --check lib/easydict-runtime-guards/src/lib.rs`
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml command_target_classifier -- --nocapture`
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml cli_executable_override -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --exact --nocapture`
+- `rustfmt --edition 2021 rs/crates/easydict_app/src/compat_client.rs rs/crates/easydict_app/tests/compat_client.rs`
+- `rustfmt --edition 2021 --check lib/easydict-foundry-local/src/lib.rs rs/crates/easydict_app/tests/default_api_boundary_behavior.rs`
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml cli_executable_override -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_only_allows_foundry_local_cli_boundary -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior terminal_detection_handles_versioned_and_normalized_names -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior capture_backend_keeps_terminal_uia_only_without_clipboard_fallback -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_text_selection_terminal_smoke_helper_uses_non_shell_terminal_name -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_integration_tests_do_not_spawn_retained_runtime_or_shell_helpers -- --exact --nocapture`
+- `git diff --check -- lib/easydict-foundry-local/src/lib.rs rs/crates/easydict_app/tests/default_api_boundary_behavior.rs migration-list.md refactor-progress.md`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers --test compat_client raw_worker_command_to_retained_worker_requires_hybrid_runtime_profile_before_io_probe -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers --test compat_client -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cd rs; cargo test -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
 - `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced -- --nocapture`
 - `cargo check --manifest-path rs/Cargo.toml -p easydict_preview_iced --all-targets`
 - `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell -- --exact --nocapture`

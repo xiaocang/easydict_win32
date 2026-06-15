@@ -588,6 +588,8 @@ fn parse_bridge_root_name(option: &str, value: &str) -> Result<String, BrowserRe
         || value == "."
         || value == ".."
         || value.eq_ignore_ascii_case(LEGACY_BRIDGE_ROOT_NAME)
+        || easydict_runtime_guards::path_has_retained_runtime_component(Path::new(value))
+        || easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(value)
         || value.chars().any(|ch| forbidden_chars.contains(&ch))
     {
         return Err(BrowserRegistrarParseError::InvalidValue {

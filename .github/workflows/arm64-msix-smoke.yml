@@ -159,6 +159,7 @@ jobs:
             --no-self-contained `
             --output ./publish-msix/arm64/workers/longdoc `
             -p:Platform=arm64 `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
@@ -173,6 +174,7 @@ jobs:
             --no-self-contained `
             --output ./publish-msix/arm64/workers/localai `
             -p:Platform=arm64 `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
@@ -229,6 +231,14 @@ jobs:
         run: |
           $pfxPath = Join-Path $HOME "Downloads/dev-signing.pfx"
           winapp sign "dotnet/msix/Easydict-arm64-smoke.msix" $pfxPath --password "password" --verbose
+
+      - name: Validate signed MSIX (runtime payload)
+        shell: pwsh
+        working-directory: dotnet
+        run: |
+          cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- `
+            "msix/Easydict-arm64-smoke.msix" `
+            --runtime-profile "${{ env.RUNTIME_PROFILE }}"
 
       - name: Enable Developer Mode (sideloading)
         shell: pwsh

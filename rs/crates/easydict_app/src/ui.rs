@@ -15,7 +15,7 @@ use crate::{
     HOTKEY_TRANSLATE_CLIPBOARD,
 };
 use win_fluent::prelude::*;
-use win_fluent::view::TextToken;
+use win_fluent::view::{TextToken, TextWrapping, ViewToken};
 
 pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
     let content = match state.mode {
@@ -226,11 +226,17 @@ fn settings_save_bar(locale: &str) -> View<Message> {
     row((
         primary_button(tr_locale(locale, "settings.save", "Save Settings"))
             .id("SaveButton")
-            .icon(icon::check())
+            .width(Length::Fixed(105))
+            .height(Length::Fixed(44))
             .on_press(Message::SaveSettingsChanges),
     ))
     .id("settings.save_floating_bar")
-    .tw("shadow-lg m-6")
+    .tw("shadow-lg")
+    .margin(Edges {
+        right: 32,
+        bottom: 32,
+        ..Edges::ZERO
+    })
     .into_view()
 }
 
@@ -766,6 +772,11 @@ fn quick_translate_content(state: &EasydictUiState) -> View<Message> {
     scroll_view(
         column(content_children)
             .id("QuickTranslateContent.Content")
+            .margin(Edges {
+                left: 6,
+                right: 6,
+                ..Edges::ZERO
+            })
             .tw("p-0 gap-3 w-full"),
     )
     .id("QuickTranslateContent")
@@ -798,6 +809,7 @@ fn main_results_card(state: &EasydictUiState) -> View<Message> {
     card(tr("main.results", "Translation Results"))
         .id("QuickOutputCard")
         .kind(CardKind::Elevated)
+        .content_spacing(4)
         .content(content)
         .into_view()
 }
@@ -832,8 +844,8 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
             "main.source_placeholder",
             "Enter or paste text to translate...",
         ))
-        .min_height(80)
-        .max_height(96)
+        .min_height(88)
+        .max_height(104)
         .text_style(TextStyle::BodyLarge)
         .state(source_text_state)
         .on_key(
@@ -880,9 +892,11 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
             .into_view(),
     );
 
-    let mut source_card = card(tr("main.source_text", "Source Text"))
+    let source_title = format!("{} ?", tr("main.source_text", "Source Text"));
+    let mut source_card = card(source_title)
         .id("QuickInputCard")
         .kind(CardKind::Elevated)
+        .content_spacing(4)
         .content(
             column(source_children)
                 .id("main.quick.source_content")
@@ -1462,7 +1476,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .id("SourceLangCombo")
             .label("Source Language")
             .selected(state.source_language.clone())
-            .width(Length::Fixed(130))
+            .width(Length::Fixed(126))
             .on_change(Message::SourceLanguageChanged),
         button("Swap languages")
             .id("SwapLanguageButton")
@@ -1474,7 +1488,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .id("TargetLangCombo")
             .label("Target Language")
             .selected(state.target_language.clone())
-            .width(Length::Fixed(130))
+            .width(Length::Fixed(126))
             .on_change(Message::TargetLanguageChanged),
     ];
     if state.settings.theme != ThemeMode::Minimal {
@@ -1679,6 +1693,7 @@ fn styled_text(value: impl Into<String>, style: TextStyle) -> View<Message> {
         style,
         width: None,
         height: None,
+        wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1695,6 +1710,24 @@ fn styled_text_id(
         style,
         width: None,
         height: None,
+        wrapping: TextWrapping::Word,
+        selectable: false,
+        a11y: A11yHint::default(),
+    }))
+}
+
+fn single_line_styled_text_id(
+    id: impl Into<String>,
+    value: impl Into<String>,
+    style: TextStyle,
+) -> View<Message> {
+    View::new(ViewToken::Text(TextToken {
+        id: Some(id.into()),
+        value: value.into(),
+        style,
+        width: None,
+        height: None,
+        wrapping: TextWrapping::None,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1713,6 +1746,7 @@ fn sized_styled_text_id(
         style,
         width: Some(width),
         height: Some(height),
+        wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -2370,6 +2404,13 @@ fn service_expander(
                 .width(Length::Fill),
         );
 
+    if let Some(header_style) = settings_service_expander_header_style(&service_id) {
+        builder = builder.header_style(header_style);
+    }
+    if let Some(content_style) = settings_service_expander_content_style(&service_id) {
+        builder = builder.content_style(content_style);
+    }
+
     if let Some(status) = service_header_status(&service_id, status.into()) {
         let status_style = match (service_id.as_str(), status.trim()) {
             ("windows-local-ai", "✓") => TextStyle::Success,
@@ -2393,6 +2434,26 @@ fn service_expander(
     builder.into_view()
 }
 
+fn settings_service_expander_header_style(service_id: &str) -> Option<&'static str> {
+    match service_id {
+        "openai" | "doubao" => Some("header-surface-fafbfd"),
+        "deepseek" | "custom-openai" | "builtin" => Some("header-surface-f9fafc"),
+        "groq" | "gemini" => Some("header-surface-fbfcfd"),
+        "caiyun" => Some("header-surface-fcfcfd"),
+        _ => None,
+    }
+}
+
+fn settings_service_expander_content_style(service_id: &str) -> Option<&'static str> {
+    match service_id {
+        "windows-local-ai" => Some("content-surface-f8f8f7"),
+        "caiyun" => Some("content-surface-f7f8fa"),
+        "niutrans" => Some("content-surface-f8f8fa"),
+        "youdao" => Some("content-surface-f8f9fb"),
+        _ => None,
+    }
+}
+
 fn settings_service_expander_header_state(state: &SettingsState, service_id: &str) -> ControlState {
     if let Some(control_state) = state.service_expander_states.get(service_id) {
         return control_state.clone();
@@ -2401,6 +2462,16 @@ fn settings_service_expander_header_state(state: &SettingsState, service_id: &st
     match service_id {
         "deepl" => state.deepl_service_expander_state.clone(),
         _ => ControlState::default(),
+    }
+}
+
+fn with_expander_content_style(view: View<Message>, classes: impl AsRef<str>) -> View<Message> {
+    match view.into_token() {
+        ViewToken::Expander(mut token) => {
+            token.content_style.extend(classes);
+            View::new(ViewToken::Expander(token))
+        }
+        token => View::new(token),
     }
 }
 
@@ -2537,6 +2608,21 @@ fn settings_field_stack(
         .id(id)
         .spacing(4)
         .width(Length::Fixed(width))
+        .into_view()
+}
+
+fn settings_labeled_control_field(
+    id: impl Into<String>,
+    label_id: impl Into<String>,
+    label: impl Into<String>,
+    width: u16,
+    control: View<Message>,
+) -> View<Message> {
+    column((styled_text_id(label_id, label, TextStyle::Body), control))
+        .id(id)
+        .spacing(4)
+        .width(Length::Fixed(width))
+        .height(Length::Fixed(64))
         .into_view()
 }
 
@@ -3106,12 +3192,19 @@ fn ollama_service_expander(state: &SettingsState, locale: &str) -> View<Message>
                 .width(Length::Fill),
             ),
             row((
-                combo_box(ollama_model_items())
-                    .id("OllamaModelCombo")
-                    .label(tr_locale(locale, "settings.services.ollama.model", "Model"))
-                    .width(Length::Fixed(200))
-                    .selected(state.ollama_model.as_str())
-                    .on_change(Message::OllamaModelChanged),
+                settings_labeled_control_field(
+                    "OllamaModelField",
+                    "OllamaModelHeaderText",
+                    tr_locale(locale, "settings.services.ollama.model", "Model"),
+                    200,
+                    combo_box(ollama_model_items())
+                        .id("OllamaModelCombo")
+                        .label(tr_locale(locale, "settings.services.ollama.model", "Model"))
+                        .width(Length::Fixed(200))
+                        .selected(state.ollama_model.as_str())
+                        .on_change(Message::OllamaModelChanged)
+                        .into_view(),
+                ),
                 button(tr_locale(
                     locale,
                     "settings.services.ollama.refresh",
@@ -3137,6 +3230,91 @@ fn ollama_service_expander(state: &SettingsState, locale: &str) -> View<Message>
 }
 
 fn open_ai_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
+    let mut content = vec![
+        secret_field_stack(
+            "OpenAIKeyField",
+            350,
+            styled_text_id(
+                "OpenAIKeyHeaderText",
+                service_api_key_label(locale),
+                TextStyle::Body,
+            ),
+            text_editor(state.open_ai_api_key.clone())
+                .id("OpenAIKeyBox")
+                .placeholder("sk-...")
+                .max_height(36)
+                .on_input(Message::OpenAIApiKeyChanged)
+                .into_view(),
+            "OpenAIKeyRevealButton",
+            "Reveal API key",
+        ),
+        settings_field_stack(
+            "OpenAIEndpointField",
+            450,
+            vec![
+                styled_text_id(
+                    "OpenAIEndpointHeaderText",
+                    service_endpoint_optional_label(locale),
+                    TextStyle::Body,
+                ),
+                text_editor(state.open_ai_endpoint.clone())
+                    .id("OpenAIEndpointBox")
+                    .placeholder("https://api.openai.com/v1/responses")
+                    .max_height(36)
+                    .on_input(Message::OpenAIEndpointChanged)
+                    .into_view(),
+            ],
+        ),
+        settings_labeled_control_field(
+            "OpenAIApiFormatField",
+            "OpenAIApiFormatHeaderText",
+            "API Format",
+            280,
+            combo_box(open_ai_api_format_items())
+                .id("OpenAIApiFormatCombo")
+                .label("API Format")
+                .width(Length::Fixed(280))
+                .selected(state.open_ai_api_format_override.as_str())
+                .on_change(Message::OpenAIApiFormatChanged)
+                .into_view(),
+        ),
+    ];
+
+    if should_show_open_ai_detected_format(state) {
+        content.push(styled_text_id(
+            "OpenAIDetectedFormatText",
+            open_ai_detected_format_text(state, locale),
+            TextStyle::Caption,
+        ));
+    }
+
+    content.extend([
+        settings_labeled_control_field(
+            "OpenAIModelField",
+            "OpenAIModelHeaderText",
+            service_model_label(locale),
+            280,
+            combo_box(open_ai_model_items())
+                .id("OpenAIModelCombo")
+                .label(service_model_label(locale))
+                .placeholder("")
+                .width(Length::Fixed(280))
+                .selected(state.open_ai_model.as_str())
+                .on_change(Message::OpenAIModelChanged)
+                .into_view(),
+        ),
+        single_line_styled_text_id(
+            "OpenAIHelpText",
+            "Auto-detect picks /responses when the endpoint URL ends with that suffix; otherwise it uses /chat/completions. You can type a custom model name directly.",
+            TextStyle::Caption,
+        ),
+        button(service_test_label(locale))
+            .id("TestOpenAIButton")
+            .height(Length::Fixed(29))
+            .on_press(Message::TestOpenAI)
+            .into_view(),
+    ]);
+
     service_expander(
         state,
         "openai",
@@ -3146,70 +3324,7 @@ fn open_ai_service_expander(state: &SettingsState, locale: &str) -> View<Message
         "OpenAIStatusText",
         state.open_ai_test_status.clone(),
         "settings.services.openai.content",
-        vec![
-            secret_field_stack(
-                "OpenAIKeyField",
-                350,
-                styled_text_id(
-                    "OpenAIKeyHeaderText",
-                    service_api_key_label(locale),
-                    TextStyle::Body,
-                ),
-                text_editor(state.open_ai_api_key.clone())
-                    .id("OpenAIKeyBox")
-                    .placeholder("sk-...")
-                    .max_height(36)
-                    .on_input(Message::OpenAIApiKeyChanged)
-                    .into_view(),
-                "OpenAIKeyRevealButton",
-                "Reveal API key",
-            ),
-            settings_field_stack(
-                "OpenAIEndpointField",
-                450,
-                vec![
-                    styled_text_id(
-                        "OpenAIEndpointHeaderText",
-                        service_endpoint_optional_label(locale),
-                        TextStyle::Body,
-                    ),
-                    text_editor(state.open_ai_endpoint.clone())
-                        .id("OpenAIEndpointBox")
-                        .placeholder("https://api.openai.com/v1/responses")
-                        .max_height(36)
-                        .on_input(Message::OpenAIEndpointChanged)
-                        .into_view(),
-                ],
-            ),
-                combo_box(open_ai_api_format_items())
-                    .id("OpenAIApiFormatCombo")
-                    .label("API Format")
-                    .width(Length::Fixed(280))
-                    .selected(state.open_ai_api_format_override.as_str())
-                    .on_change(Message::OpenAIApiFormatChanged)
-                    .into_view(),
-                styled_text_id(
-                    "OpenAIDetectedFormatText",
-                    open_ai_detected_format_text(state, locale),
-                    TextStyle::Caption,
-                ),
-                combo_box(open_ai_model_items())
-                    .id("OpenAIModelCombo")
-                    .label(service_model_label(locale))
-                    .width(Length::Fixed(280))
-                    .selected(state.open_ai_model.as_str())
-                    .on_change(Message::OpenAIModelChanged)
-                    .into_view(),
-                styled_text(
-                    "Auto-detect picks /responses for Responses API endpoints; otherwise it uses Chat Completions.",
-                    TextStyle::Caption,
-                ),
-                button(service_test_label(locale))
-                    .id("TestOpenAIButton")
-                    .height(Length::Fixed(29))
-                    .on_press(Message::TestOpenAI)
-                    .into_view(),
-        ],
+        content,
     )
 }
 
@@ -3267,43 +3382,57 @@ fn llm_provider_service_expander(
     )];
 
     if let Some(endpoint_box_id) = descriptor.endpoint_box_id {
-        content.push(fixed_width_field(
+        content.push(settings_field_stack(
             format!("{endpoint_box_id}Field"),
             450,
-            text_editor(setting.endpoint.clone())
-                .id(endpoint_box_id)
-                .placeholder(descriptor.endpoint_placeholder)
-                .max_height(36)
-                .on_input({
-                    let service_id = descriptor.service_id.to_string();
-                    move |value| {
-                        Message::ServiceProviderSettingChanged(
-                            service_id.clone(),
-                            ServiceProviderField::Endpoint,
-                            value,
-                        )
-                    }
-                }),
+            vec![
+                styled_text_id(
+                    service_provider_endpoint_header_id(endpoint_box_id),
+                    service_endpoint_optional_label(locale),
+                    TextStyle::Body,
+                ),
+                text_editor(setting.endpoint.clone())
+                    .id(endpoint_box_id)
+                    .placeholder(descriptor.endpoint_placeholder)
+                    .max_height(36)
+                    .on_input({
+                        let service_id = descriptor.service_id.to_string();
+                        move |value| {
+                            Message::ServiceProviderSettingChanged(
+                                service_id.clone(),
+                                ServiceProviderField::Endpoint,
+                                value,
+                            )
+                        }
+                    })
+                    .into_view(),
+            ],
         ));
     }
 
     content.extend([
-        combo_box(provider_model_items(descriptor))
-            .id(descriptor.model_box_id)
-            .label(service_model_label(locale))
-            .width(Length::Fixed(provider_model_width(descriptor)))
-            .selected(setting.model.as_str())
-            .on_change({
-                let service_id = descriptor.service_id.to_string();
-                move |value| {
-                    Message::ServiceProviderSettingChanged(
-                        service_id.clone(),
-                        ServiceProviderField::Model,
-                        value,
-                    )
-                }
-            })
-            .into_view(),
+        settings_labeled_control_field(
+            format!("{}Field", descriptor.model_box_id),
+            service_provider_model_header_id(descriptor.model_box_id),
+            service_model_label(locale),
+            provider_model_width(descriptor),
+            combo_box(provider_model_items(descriptor))
+                .id(descriptor.model_box_id)
+                .label(service_model_label(locale))
+                .width(Length::Fixed(provider_model_width(descriptor)))
+                .selected(setting.model.as_str())
+                .on_change({
+                    let service_id = descriptor.service_id.to_string();
+                    move |value| {
+                        Message::ServiceProviderSettingChanged(
+                            service_id.clone(),
+                            ServiceProviderField::Model,
+                            value,
+                        )
+                    }
+                })
+                .into_view(),
+        ),
         styled_text(descriptor.description, TextStyle::Caption),
         button(service_test_label(locale))
             .id(descriptor.test_button_id)
@@ -3334,23 +3463,29 @@ fn builtin_ai_service_expander(
 ) -> View<Message> {
     let setting = service_provider_setting(state, descriptor);
     let content = vec![
-        builtin_ai_hint_bar(),
-        combo_box(provider_model_items(descriptor))
-            .id(descriptor.model_box_id)
-            .label(service_model_label(locale))
-            .width(Length::Fixed(provider_model_width(descriptor)))
-            .selected(setting.model.as_str())
-            .on_change({
-                let service_id = descriptor.service_id.to_string();
-                move |value| {
-                    Message::ServiceProviderSettingChanged(
-                        service_id.clone(),
-                        ServiceProviderField::Model,
-                        value,
-                    )
-                }
-            })
-            .into_view(),
+        builtin_ai_hint_bar(locale),
+        settings_labeled_control_field(
+            format!("{}Field", descriptor.model_box_id),
+            service_provider_model_header_id(descriptor.model_box_id),
+            service_model_label(locale),
+            provider_model_width(descriptor),
+            combo_box(provider_model_items(descriptor))
+                .id(descriptor.model_box_id)
+                .label(service_model_label(locale))
+                .width(Length::Fixed(provider_model_width(descriptor)))
+                .selected(setting.model.as_str())
+                .on_change({
+                    let service_id = descriptor.service_id.to_string();
+                    move |value| {
+                        Message::ServiceProviderSettingChanged(
+                            service_id.clone(),
+                            ServiceProviderField::Model,
+                            value,
+                        )
+                    }
+                })
+                .into_view(),
+        ),
         secret_field_stack(
             format!("{}Field", descriptor.key_box_id),
             350,
@@ -3391,38 +3526,46 @@ fn builtin_ai_service_expander(
             .into_view(),
     ];
 
-    service_expander(
-        state,
-        descriptor.service_id,
-        service_configuration_expanded(state, descriptor.service_id),
-        descriptor.expander_id,
-        descriptor.title,
-        descriptor.status_id,
-        setting.status,
-        "settings.services.builtin.content",
-        content,
+    with_expander_content_style(
+        service_expander(
+            state,
+            descriptor.service_id,
+            service_configuration_expanded(state, descriptor.service_id),
+            descriptor.expander_id,
+            descriptor.title,
+            descriptor.status_id,
+            setting.status,
+            "settings.services.builtin.content",
+            content,
+        ),
+        "info-bar",
     )
 }
 
-fn builtin_ai_hint_bar() -> View<Message> {
+fn builtin_ai_hint_bar(locale: &str) -> View<Message> {
     row((
         styled_text_id("BuiltInAIHintIcon", "i", TextStyle::BodyStrong),
-        column((
-            styled_text_id("BuiltInAIHintTitleText", "Hint", TextStyle::BodyStrong),
-            styled_text_id(
-                "BuiltInAIHintMessageText",
+        styled_text_id(
+            "BuiltInAIHintTitleText",
+            tr_locale(locale, "settings.services.builtin.hint.title", "Hint"),
+            TextStyle::BodyStrong,
+        ),
+        styled_text_id(
+            "BuiltInAIHintMessageText",
+            tr_locale(
+                locale,
+                "settings.services.builtin.hint.message",
                 "The built-in key has limited free quota and is not guaranteed to always be available. For stable use, get your own free API key.",
-                TextStyle::Caption,
             ),
-        ))
-        .id("BuiltInAIHintText")
-        .spacing(2)
-        .width(Length::Fill)
-        .into_view()
+            TextStyle::Body,
+        ),
     ))
     .id("BuiltInAIHintBar")
-    .spacing(12)
+    .tw("info-bar border rounded-lg w-full")
+    .padding(12)
+    .spacing(10)
     .align(Alignment::Center)
+    .height(Length::Fixed(50))
     .width(Length::Fill)
     .into_view()
 }
@@ -3495,6 +3638,24 @@ fn service_provider_key_label(locale: &str, label: &str) -> String {
         "API Key (Optional)" => service_api_key_optional_label(locale),
         "GitHub Token" => tr_locale(locale, "settings.services.github_token", "GitHub Token"),
         _ => label.to_string(),
+    }
+}
+
+fn service_provider_endpoint_header_id(endpoint_box_id: &str) -> String {
+    if let Some(prefix) = endpoint_box_id.strip_suffix("Box") {
+        format!("{prefix}HeaderText")
+    } else {
+        format!("{endpoint_box_id}HeaderText")
+    }
+}
+
+fn service_provider_model_header_id(model_box_id: &str) -> String {
+    if let Some(prefix) = model_box_id.strip_suffix("Box") {
+        format!("{prefix}HeaderText")
+    } else if let Some(prefix) = model_box_id.strip_suffix("Combo") {
+        format!("{prefix}HeaderText")
+    } else {
+        format!("{model_box_id}HeaderText")
     }
 }
 
@@ -3896,6 +4057,10 @@ fn open_ai_detected_format_text(state: &SettingsState, locale: &str) -> String {
             "Detected format: Chat Completions API",
         ),
     }
+}
+
+fn should_show_open_ai_detected_format(state: &SettingsState) -> bool {
+    state.open_ai_test_status.starts_with("Detected:")
 }
 
 fn mdx_dictionary_summary_locale(state: &SettingsState, locale: &str) -> String {
@@ -5522,7 +5687,7 @@ fn llm_provider_descriptors() -> [LlmProviderDescriptor; 8] {
             endpoint_placeholder: "https://ark.cn-beijing.volces.com/api/v3/responses",
             model_box_id: "DoubaoModelBox",
             test_button_id: "TestDoubaoButton",
-            description: "ByteDance Doubao translation service.",
+            description: "ByteDance's Doubao translation service. Get your API key from console.volcengine.com",
             default_endpoint: "https://ark.cn-beijing.volces.com/api/v3/responses",
             default_model: "doubao-seed-translation-250915",
             model_options: &["doubao-seed-translation-250915"],

@@ -41,6 +41,8 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  EASYDICT_RUNTIME_PROFILE: rust-only
+  RUNTIME_PROFILE: rust-only
 
 jobs:
   integration-tests:
@@ -60,11 +62,11 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj
+        run: dotnet restore tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Build test project
         working-directory: dotnet
-        run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-restore
+        run: dotnet build tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-restore -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Run integration tests
         working-directory: dotnet
@@ -89,7 +91,7 @@ jobs:
             $filter = "Category=Integration&Service=$service"
           }
           Write-Host "Running integration tests with filter: $filter"
-          dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-build --verbosity normal --filter "$filter" --logger "trx;LogFileName=integration-test-results.trx"
+          dotnet test tests/Easydict.TranslationService.Tests/Easydict.TranslationService.Tests.csproj --configuration Release --no-build --verbosity normal --filter "$filter" --logger "trx;LogFileName=integration-test-results.trx" -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

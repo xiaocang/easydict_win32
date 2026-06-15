@@ -32,6 +32,11 @@ fn qdc_deploy_and_install_validate_msix_with_rust_only_default_before_install() 
         "$installFlags = \" -RuntimeProfile '$RuntimeProfile' -ValidatorPath '$remoteValidatorPath'\"",
         "QDC deploy should pass both runtime profile and validator path to remote install",
     );
+    assert_contains(
+        &deploy_script,
+        "if ($Machine)   { $installFlags += \" -Machine\" }",
+        "QDC deploy should forward explicit machine-scope installs to the remote installer",
+    );
     assert_not_contains(
         &deploy_script,
         "[string]$RuntimeProfile = \"hybrid\"",
@@ -42,6 +47,11 @@ fn qdc_deploy_and_install_validate_msix_with_rust_only_default_before_install() 
         &install_script,
         "[string]$RuntimeProfile = \"rust-only\"",
         "QDC remote install should default runtime validation to rust-only",
+    );
+    assert_contains(
+        &install_script,
+        "[switch]$Machine",
+        "QDC remote install should declare the -Machine switch forwarded by Deploy-ToQdc.ps1",
     );
     assert_contains(
         &install_script,
@@ -79,15 +89,72 @@ fn qdc_deploy_and_install_validate_msix_with_rust_only_default_before_install() 
 }
 
 #[test]
+fn qdc_machine_install_switch_uses_machine_scope_provisioning_after_validation() {
+    let root = repo_root();
+    let install_script = read_text(&root.join("dotnet/scripts/qdc/Install-OnQdc.ps1"));
+    let install_step = text_between(
+        &install_script,
+        "Write-Host \"[5/5] Installing MSIX...\"",
+        "if (-not $installed)",
+    );
+
+    assert_contains(
+        install_step,
+        "if ($Machine)",
+        "QDC remote install should branch on the explicit -Machine switch",
+    );
+    assert_contains(
+        install_step,
+        "Install-ProvisionedPackageAndRegister -Path $MsixPath -Name $PackageName",
+        "QDC -Machine installs should provision the package and then register it for validation",
+    );
+    assert_contains(
+        &install_script,
+        "Add-AppxProvisionedPackage -Online -PackagePath $Path -SkipLicense",
+        "QDC machine-scope install should use Add-AppxProvisionedPackage",
+    );
+    assert_order(
+        &install_script,
+        "[1/5] Validating MSIX runtime payload",
+        "if ($Machine)",
+        "QDC remote install should validate payloads before honoring -Machine install mode",
+    );
+}
+
+#[test]
 fn ui_automation_msix_path_forces_rust_only_and_validates_before_upload_and_install() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/ui-automation.yml"));
     let build_job = text_between(&workflow, "  build:", "  winui-tests:");
     let winui_tests_job = text_between(&workflow, "  winui-tests:", "  ui-automation:");
+    let winui_test_run_step = text_between(
+        winui_tests_job,
+        "      - name: Run WinUI Unit Tests",
+        "      - name: Surface failed test names as annotations",
+    );
+    let ui_automation_job = workflow
+        .split_once("  ui-automation:")
+        .unwrap_or_else(|| panic!("missing UI automation job"))
+        .1;
     let install_step = text_between(
         &workflow,
         "      - name: Install MSIX package (register from extracted layout)",
         "      - name: Restore UI test dependencies",
+    );
+    let ui_restore_step = text_between(
+        ui_automation_job,
+        "      - name: Restore UI test dependencies",
+        "      - name: Build UI Automation Tests",
+    );
+    let ui_build_step = text_between(
+        ui_automation_job,
+        "      - name: Build UI Automation Tests",
+        "      - name: Run UI Automation Tests",
+    );
+    let ui_test_step = text_between(
+        ui_automation_job,
+        "      - name: Run UI Automation Tests",
+        "      - name: Surface failed UI test names as annotations",
     );
 
     assert_contains(
@@ -117,6 +184,16 @@ fn ui_automation_msix_path_forces_rust_only_and_validates_before_upload_and_inst
         "UI automation dotnet restore/publish should disable the retained .NET fallback",
     );
     assert_contains(
+        build_job,
+        "--self-contained false",
+        "UI automation rust-only diagnostic publish should not bundle the .NET runtime",
+    );
+    assert_not_contains(
+        build_job,
+        "--self-contained true",
+        "UI automation rust-only diagnostic publish must not create a self-contained .NET runtime payload",
+    );
+    assert_contains(
         winui_tests_job,
         "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
         "UI automation WinUI unit tests should use the workflow rust-only RuntimeProfile",
@@ -126,10 +203,42 @@ fn ui_automation_msix_path_forces_rust_only_and_validates_before_upload_and_inst
         "-p:EnableInProcLongDocFallback=false",
         "UI automation WinUI unit tests should keep the retained .NET fallback disabled",
     );
+    assert_contains(
+        winui_tests_job,
+        "-p:BuildWorkerOutputs=false",
+        "UI automation WinUI unit tests should not build retained worker outputs",
+    );
+    for (step, label) in [
+        (winui_test_run_step, "WinUI dotnet test"),
+        (ui_restore_step, "UIA restore"),
+        (ui_build_step, "UIA build"),
+        (ui_test_step, "UIA dotnet test"),
+    ] {
+        assert_contains(
+            step,
+            "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+            &format!("{label} should carry the workflow rust-only RuntimeProfile"),
+        );
+        assert_contains(
+            step,
+            "-p:EnableInProcLongDocFallback=false",
+            &format!("{label} should keep retained LongDoc fallback disabled"),
+        );
+        assert_contains(
+            step,
+            "-p:BuildWorkerOutputs=false",
+            &format!("{label} should keep retained worker outputs disabled"),
+        );
+    }
     assert_not_contains(
         winui_tests_job,
         "-p:EnableInProcLongDocFallback=true",
         "UI automation WinUI unit tests must not explicitly re-enable the retained .NET fallback",
+    );
+    assert_not_contains(
+        ui_automation_job,
+        "-p:EnableInProcLongDocFallback=true",
+        "UI automation test shards must not explicitly re-enable the retained .NET fallback",
     );
     assert_contains(
         build_job,

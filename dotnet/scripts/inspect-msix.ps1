@@ -1,8 +1,17 @@
-$msixPath = ".\msix\Easydict-v0.3.2-x64.msix"
+# Legacy/debug-only MSIX inspection helper.
+# This is not the first rs release/install path. The first rs release is
+# Rust portable-only; use rs/scripts/Package-Portable.ps1 or
+# `easydict_packager pack-rs-portable` for that package.
+
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$MsixPath
+)
+
 $zipPath = Join-Path $env:TEMP "msix-inspect.zip"
 $extractDir = Join-Path $env:TEMP "msix-inspect"
 
-Copy-Item $msixPath $zipPath -Force
+Copy-Item $MsixPath $zipPath -Force
 if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
 Expand-Archive -Path $zipPath -DestinationPath $extractDir
 

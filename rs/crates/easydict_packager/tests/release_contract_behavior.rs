@@ -146,10 +146,59 @@ fn arm64_msix_smoke_requires_explicit_hybrid_runtime_profile() {
 }
 
 #[test]
+fn arm64_msix_smoke_validates_signed_msix_before_install() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/arm64-msix-smoke.yml"));
+    let signed_validation_step = text_between(
+        &workflow,
+        "      - name: Validate signed MSIX (runtime payload)",
+        "      - name: Enable Developer Mode",
+    );
+
+    assert_contains(
+        signed_validation_step,
+        "-p easydict_msix_validate",
+        "ARM64 MSIX smoke should validate the signed package with the Rust validator",
+    );
+    assert_contains(
+        signed_validation_step,
+        "msix/Easydict-arm64-smoke.msix",
+        "ARM64 signed MSIX validation should inspect the smoke package",
+    );
+    assert_contains(
+        signed_validation_step,
+        "--runtime-profile \"${{ env.RUNTIME_PROFILE }}\"",
+        "ARM64 signed MSIX validation should use the explicit hybrid runtime profile",
+    );
+    assert_not_contains(
+        signed_validation_step,
+        "--allow-unsigned",
+        "ARM64 signed MSIX validation should require the package to remain signed before install",
+    );
+    assert_appears_before(
+        &workflow,
+        "winapp sign \"dotnet/msix/Easydict-arm64-smoke.msix\"",
+        "      - name: Validate signed MSIX (runtime payload)",
+        "ARM64 MSIX smoke should validate after signing",
+    );
+    assert_appears_before(
+        &workflow,
+        "      - name: Validate signed MSIX (runtime payload)",
+        "Add-AppxPackage -Path $msixPath",
+        "ARM64 MSIX smoke should validate the signed package before install",
+    );
+}
+
+#[test]
 fn benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/benchmark.yml"));
     let benchmark_job = text_between(&workflow, "  benchmark:", "  startup-benchmark:");
+    let run_benchmark_step = text_between(
+        benchmark_job,
+        "      - name: Run performance benchmarks",
+        "      - name: Upload benchmark results",
+    );
 
     assert_contains(
         &workflow,
@@ -169,12 +218,42 @@ fn benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile() {
     assert_contains(
         benchmark_job,
         "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
-        "WinUI benchmark restore/build should pass the rust-only RuntimeProfile",
+        "WinUI benchmark restore/build/test should pass the rust-only RuntimeProfile",
     );
     assert_contains(
         benchmark_job,
         "-p:EnableInProcLongDocFallback=false",
-        "WinUI benchmark restore/build should disable the retained .NET fallback",
+        "WinUI benchmark restore/build/test should disable the retained .NET fallback",
+    );
+    assert_contains(
+        benchmark_job,
+        "-p:BuildWorkerOutputs=false",
+        "WinUI benchmark restore/build/test should not build retained worker outputs",
+    );
+    for (marker, description) in [
+        (
+            "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+            "RuntimeProfile",
+        ),
+        (
+            "-p:EnableInProcLongDocFallback=false",
+            "retained LongDoc fallback disable",
+        ),
+        (
+            "-p:BuildWorkerOutputs=false",
+            "retained worker output disable",
+        ),
+    ] {
+        assert_contains(
+            run_benchmark_step,
+            marker,
+            &format!("WinUI benchmark dotnet test should carry {description} even with --no-build"),
+        );
+    }
+    assert_contains(
+        run_benchmark_step,
+        "--no-build",
+        "WinUI benchmark dotnet test should keep no-build while still carrying rust-only MSBuild props",
     );
     assert_not_contains(
         benchmark_job,
@@ -217,10 +296,336 @@ fn memory_workflows_publish_winui_under_rust_only_profile() {
             "-p:EnableInProcLongDocFallback=false",
             &format!("{relative_path} restore/publish should disable retained fallback"),
         );
+        assert_contains(
+            &workflow,
+            "--self-contained false",
+            &format!(
+                "{relative_path} rust-only diagnostic publish should not bundle the .NET runtime"
+            ),
+        );
+        assert_not_contains(
+            &workflow,
+            "--self-contained true",
+            &format!("{relative_path} rust-only diagnostic publish must not create a self-contained .NET runtime payload"),
+        );
         assert_not_contains(
             &workflow,
             "-p:EnableInProcLongDocFallback=true",
             &format!("{relative_path} must not explicitly re-enable retained fallback"),
+        );
+    }
+}
+
+#[test]
+fn default_and_diagnostic_workflows_do_not_produce_dotnet_runtime_payloads() {
+    let root = repo_root();
+
+    for relative_path in [
+        ".github/workflows/ci.yml",
+        ".github/workflows/benchmark.yml",
+        ".github/workflows/memory-gate.yml",
+        ".github/workflows/memory-nightly.yml",
+        ".github/workflows/ui-automation.yml",
+    ] {
+        let workflow = read_text(&root.join(relative_path));
+
+        assert_contains(
+            &workflow,
+            "EASYDICT_RUNTIME_PROFILE: rust-only",
+            &format!("{relative_path} should force the Easydict runtime profile to rust-only"),
+        );
+        assert_contains(
+            &workflow,
+            "RUNTIME_PROFILE: rust-only",
+            &format!("{relative_path} should force the generic runtime profile to rust-only"),
+        );
+        assert_not_contains(
+            &workflow,
+            "RUNTIME_PROFILE: hybrid",
+            &format!("{relative_path} must not opt into hybrid retained runtime packaging"),
+        );
+        assert_not_contains(
+            &workflow,
+            "RETAINED_WORKERS_ENABLED=true",
+            &format!("{relative_path} must not enable retained worker/runtime packaging"),
+        );
+        assert_not_contains(
+            &workflow,
+            "retained-dotnet-workers",
+            &format!("{relative_path} must not enable retained worker compatibility features"),
+        );
+        assert_not_contains(
+            &workflow,
+            "--self-contained true",
+            &format!("{relative_path} must not produce a self-contained .NET runtime payload"),
+        );
+        assert_not_contains(
+            &workflow,
+            "Extract-DotnetRuntime.ps1",
+            &format!("{relative_path} must not extract a .NET runtime"),
+        );
+        assert_not_contains(
+            &workflow,
+            "extract-dotnet-runtime",
+            &format!("{relative_path} must not call the Rust .NET runtime extraction command"),
+        );
+
+        if workflow.contains("dotnet publish") {
+            assert_contains(
+                &workflow,
+                "--self-contained false",
+                &format!("{relative_path} diagnostic publish should use the runner .NET runtime"),
+            );
+            assert_not_contains(
+                &workflow,
+                "WindowsAppSDKSelfContained=true",
+                &format!(
+                    "{relative_path} must not produce a self-contained Windows App SDK payload"
+                ),
+            );
+        }
+    }
+}
+
+#[test]
+fn default_diagnostic_dotnet_publish_steps_all_use_rust_only_no_runtime_props() {
+    let root = repo_root();
+    let mut publish_step_count = 0usize;
+
+    for relative_path in [
+        ".github/workflows/ci.yml",
+        ".github/workflows/benchmark.yml",
+        ".github/workflows/memory-gate.yml",
+        ".github/workflows/memory-nightly.yml",
+        ".github/workflows/ui-automation.yml",
+    ] {
+        let workflow = read_text(&root.join(relative_path));
+        for (line_number, block) in dotnet_publish_blocks(&workflow) {
+            publish_step_count += 1;
+            for required in [
+                "--self-contained false",
+                "-p:BuildWorkerOutputs=false",
+                "-p:EnableInProcLongDocFallback=false",
+                "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+                "-p:WindowsAppSDKSelfContained=false",
+            ] {
+                assert_contains(
+                    &block,
+                    required,
+                    &format!(
+                        "{relative_path}:{line_number} dotnet publish step should carry rust-only no-runtime marker {required}"
+                    ),
+                );
+            }
+            for forbidden in [
+                "--self-contained true",
+                "-p:EnableInProcLongDocFallback=true",
+                "-p:WindowsAppSDKSelfContained=true",
+                "retained-dotnet-workers",
+                "Extract-DotnetRuntime.ps1",
+                "extract-dotnet-runtime",
+            ] {
+                assert_not_contains(
+                    &block,
+                    forbidden,
+                    &format!(
+                        "{relative_path}:{line_number} dotnet publish step must not produce or enable retained .NET runtime payloads"
+                    ),
+                );
+            }
+        }
+    }
+
+    assert!(
+        publish_step_count >= 3,
+        "expected to inspect the existing memory/UI diagnostic dotnet publish steps"
+    );
+}
+
+#[test]
+fn integration_tests_workflow_does_not_publish_or_extract_dotnet_runtime_payloads() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/integration-tests.yml"));
+
+    assert_contains(
+        &workflow,
+        "EASYDICT_RUNTIME_PROFILE: rust-only",
+        "integration tests workflow should force the Easydict runtime profile to rust-only",
+    );
+    assert_contains(
+        &workflow,
+        "RUNTIME_PROFILE: rust-only",
+        "integration tests workflow should force the generic runtime profile to rust-only",
+    );
+    for marker in [
+        "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+        "-p:BuildWorkerOutputs=false",
+        "-p:EnableInProcLongDocFallback=false",
+    ] {
+        assert_contains(
+            &workflow,
+            marker,
+            &format!(
+                "integration tests dotnet commands should carry rust-only MSBuild prop {marker}"
+            ),
+        );
+    }
+    for forbidden in [
+        "dotnet publish",
+        "--self-contained true",
+        "WindowsAppSDKSelfContained=true",
+        "RETAINED_WORKERS_ENABLED=true",
+        "retained-dotnet-workers",
+        "Extract-DotnetRuntime.ps1",
+        "extract-dotnet-runtime",
+    ] {
+        assert_not_contains(
+            &workflow,
+            forbidden,
+            &format!(
+                "integration tests workflow must stay outside .NET runtime packaging: {forbidden}"
+            ),
+        );
+    }
+}
+
+#[test]
+fn memory_profiling_docs_use_rust_only_no_runtime_publish() {
+    let root = repo_root();
+    let document = read_text(&root.join("dotnet/memory-profiling.md"));
+
+    assert_contains(
+        &document,
+        "--self-contained false",
+        "memory profiling local publish examples should use the installed .NET runtime",
+    );
+    assert_not_contains(
+        &document,
+        "--self-contained true",
+        "memory profiling docs must not ask rust-only diagnostics to bundle a .NET runtime",
+    );
+    for marker in [
+        "-p:RuntimeProfile=rust-only",
+        "-p:BuildWorkerOutputs=false",
+        "-p:EnableInProcLongDocFallback=false",
+        "-p:WindowsAppSDKSelfContained=false",
+    ] {
+        assert_contains(
+            &document,
+            marker,
+            &format!("memory profiling docs should carry rust-only publish marker {marker}"),
+        );
+    }
+}
+
+#[test]
+fn local_diagnostic_build_and_test_paths_use_rust_only_msbuild_props() {
+    let root = repo_root();
+    let makefile = read_text(&root.join("dotnet/Makefile"));
+
+    assert_contains(
+        &makefile,
+        "RUST_ONLY_MSBUILD_PROPS := -p:RuntimeProfile=rust-only -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false",
+        "Makefile should centralize default build/test rust-only MSBuild props",
+    );
+
+    for (label, start, end) in [
+        (
+            "restore",
+            "# Restore NuGet packages",
+            "# Build (default: Debug)",
+        ),
+        ("build", "# Build (default: Debug)", "# Build Release"),
+        (
+            "build-release",
+            "# Build Release",
+            "# Build Debug (explicit)",
+        ),
+        ("build-debug", "# Build Debug (explicit)", "# Run all tests"),
+        (
+            "test",
+            "# Run all tests",
+            "# Run TranslationService tests only",
+        ),
+        (
+            "test-winui",
+            "# Run WinUI tests only",
+            "# Run Easydict.Llm.Streaming tests only",
+        ),
+        (
+            "test-ui",
+            "# Run UI automation tests",
+            "# Integration test service filter",
+        ),
+        (
+            "test-verbose",
+            "# Run tests with verbose output",
+            "# NuGet Packaging (for libraries published to NuGet)",
+        ),
+    ] {
+        let target = text_between(&makefile, start, end);
+        assert_contains(
+            target,
+            "$(RUST_ONLY_MSBUILD_PROPS)",
+            &format!("Makefile {label} should use default rust-only MSBuild props"),
+        );
+    }
+
+    for relative_path in [
+        "dotnet/scripts/run-visual-test.ps1",
+        "dotnet/scripts/memory/Invoke-PrMemoryGate.ps1",
+        "dotnet/scripts/perf/Invoke-UiThreadHotspotProbe.ps1",
+        "dotnet/scripts/perf/Invoke-ThemeRegressionMemoryProbe.ps1",
+    ] {
+        let script = read_text(&root.join(relative_path));
+        assert_contains(
+            &script,
+            "$RustOnlyMsBuildProperties = @(",
+            &format!("{relative_path} should centralize rust-only MSBuild props"),
+        );
+        for marker in [
+            "-p:RuntimeProfile=rust-only",
+            "-p:BuildWorkerOutputs=false",
+            "-p:EnableInProcLongDocFallback=false",
+        ] {
+            assert_contains(
+                &script,
+                marker,
+                &format!(
+                    "{relative_path} should pass {marker} to local diagnostic dotnet commands"
+                ),
+            );
+        }
+    }
+
+    let visual_script = read_text(&root.join("dotnet/scripts/run-visual-test.ps1"));
+    assert_contains(
+        &visual_script,
+        "@RustOnlyMsBuildProperties",
+        "visual regression script should splat rust-only MSBuild props into dotnet test",
+    );
+
+    let memory_gate = read_text(&root.join("dotnet/scripts/memory/Invoke-PrMemoryGate.ps1"));
+    assert_contains(
+        &memory_gate,
+        "& dotnet build $TestProject -c $Configuration @RustOnlyMsBuildProperties",
+        "PR memory gate should build UIA tests with rust-only MSBuild props",
+    );
+    assert_contains(
+        &memory_gate,
+        ") + $RustOnlyMsBuildProperties",
+        "PR memory gate should run dotnet test with rust-only MSBuild props even with --no-build",
+    );
+
+    for relative_path in [
+        "dotnet/scripts/perf/Invoke-UiThreadHotspotProbe.ps1",
+        "dotnet/scripts/perf/Invoke-ThemeRegressionMemoryProbe.ps1",
+    ] {
+        let script = read_text(&root.join(relative_path));
+        assert_contains(
+            &script,
+            "$dotnetArgs += $RustOnlyMsBuildProperties",
+            &format!("{relative_path} should append rust-only props to its dotnet test args"),
         );
     }
 }
@@ -550,6 +955,21 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
     );
     assert_contains(
         release_job,
+        "Validate downloaded Rust portable release asset",
+        "first rs release should re-validate downloaded ZIP artifacts before upload",
+    );
+    assert_contains(
+        release_job,
+        "cargo run --manifest-path rs/Cargo.toml -p easydict_packager --",
+        "first rs release should use the Rust packager validator without setup-dotnet",
+    );
+    assert_contains(
+        release_job,
+        "validate-rs-portable",
+        "first rs release should validate downloaded ZIP artifacts before GitHub release upload",
+    );
+    assert_contains(
+        release_job,
         "rs-portable/*.zip",
         "first rs release should upload only rs portable ZIP assets",
     );
@@ -584,6 +1004,150 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
                 ),
             );
         }
+    }
+}
+
+#[test]
+fn create_rs_portable_release_revalidates_downloaded_zip_before_upload() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let release_job = text_between(
+        &workflow,
+        "  create-rs-portable-release:",
+        "  publish-winget:",
+    );
+    let validation_step = text_between(
+        release_job,
+        "      - name: Validate downloaded Rust portable release asset",
+        "      - name: Upload Rust portable release asset",
+    );
+
+    let download_index = release_job
+        .find("      - name: Download Rust portable artifacts")
+        .expect("first rs release should download portable artifacts");
+    let validation_index = release_job
+        .find("      - name: Validate downloaded Rust portable release asset")
+        .expect("first rs release should validate downloaded portable artifacts");
+    let upload_index = release_job
+        .find("      - name: Upload Rust portable release asset")
+        .expect("first rs release should upload portable artifacts");
+    assert!(
+        download_index < validation_index && validation_index < upload_index,
+        "first rs release should download, revalidate, then upload the portable ZIP assets"
+    );
+    assert_contains(
+        validation_step,
+        "Get-ChildItem -Path rs-portable -Filter *.zip -File",
+        "downloaded release validator should enumerate only ZIP artifacts",
+    );
+    assert_contains(
+        validation_step,
+        "No Rust portable ZIP artifacts were downloaded",
+        "downloaded release validator should fail clearly when artifact matching returns no ZIPs",
+    );
+    assert_contains(
+        validation_step,
+        "cargo run --manifest-path rs/Cargo.toml -p easydict_packager --",
+        "downloaded release validator should use the Rust packager CLI",
+    );
+    assert_contains(
+        validation_step,
+        "validate-rs-portable",
+        "downloaded release validator should reject retained .NET payloads before upload",
+    );
+    assert_contains(
+        validation_step,
+        "--package $zip.FullName",
+        "downloaded release validator should validate each downloaded ZIP path",
+    );
+    assert_not_contains(
+        release_job,
+        "actions/setup-dotnet",
+        "first rs release revalidation must not require .NET setup",
+    );
+}
+
+#[test]
+fn runtime_producing_workflow_steps_run_only_after_explicit_hybrid_gate() {
+    let root = repo_root();
+    let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_msix_job = text_between(
+        &release_workflow,
+        "  publish-msix:",
+        "  publish-rs-portable:",
+    );
+    let publish_rs_portable_job = text_between(
+        &release_workflow,
+        "  publish-rs-portable:",
+        "  create-bundle:",
+    );
+    let create_rs_release_job = text_between(
+        &release_workflow,
+        "  create-rs-portable-release:",
+        "  publish-winget:",
+    );
+    let arm64_smoke_workflow = read_text(&root.join(".github/workflows/arm64-msix-smoke.yml"));
+
+    for (section_name, section, guard_name) in [
+        (
+            "publish-msix",
+            publish_msix_job,
+            "Require explicit hybrid profile for dotnet/MSIX artifacts",
+        ),
+        (
+            "arm64-msix-smoke",
+            arm64_smoke_workflow.as_str(),
+            "Require explicit hybrid profile for dotnet/MSIX smoke",
+        ),
+    ] {
+        let guard_index = section
+            .find(guard_name)
+            .unwrap_or_else(|| panic!("{section_name} should require explicit hybrid profile"));
+        assert_contains(
+            section,
+            "\"RUNTIME_PROFILE=hybrid\" | Out-File",
+            &format!("{section_name} should normalize the explicit hybrid profile"),
+        );
+        assert_contains(
+            section,
+            "\"RETAINED_WORKERS_ENABLED=true\" | Out-File",
+            &format!("{section_name} should enable retained workers only after hybrid validation"),
+        );
+
+        for runtime_marker in [
+            "--self-contained true",
+            "Publish LongDoc Worker",
+            "Publish LocalAi Worker",
+            "Bundle .NET 8 Runtime",
+            "Extract-DotnetRuntime.ps1",
+        ] {
+            assert!(
+                section.contains(runtime_marker),
+                "{section_name} should keep expected runtime-producing marker {runtime_marker}"
+            );
+            for (marker_index, _) in section.match_indices(runtime_marker) {
+                assert!(
+                    guard_index < marker_index,
+                    "{section_name} should validate explicit hybrid before every runtime-producing marker {runtime_marker}"
+                );
+            }
+        }
+    }
+
+    for (section_name, section) in [
+        ("publish-rs-portable", publish_rs_portable_job),
+        ("create-rs-portable-release", create_rs_release_job),
+    ] {
+        assert_not_contains(
+            section,
+            "--self-contained true",
+            &format!("{section_name} must never produce a self-contained .NET runtime payload"),
+        );
+        assert_not_contains(
+            section,
+            "Extract-DotnetRuntime.ps1",
+            &format!("{section_name} must never extract a .NET runtime"),
+        );
     }
 }
 
@@ -648,8 +1212,38 @@ fn ci_workflow_runs_default_rs_rust_only_boundary_tests() {
     );
     assert_contains(
         rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior default_browser_extension_sources_do_not_fallback_to_legacy_native_host -- --exact --nocapture",
+        "default CI should prove the browser extension does not fall back to the legacy native host",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior default_browser_extension_setup_points_to_rs_portable_not_store -- --exact --nocapture",
+        "default CI should prove the browser extension setup points to the rs portable release path",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior docs_keep_default_cli_and_browser_extension_retained_fallbacks_retired -- --exact --nocapture",
+        "default CI should keep rs docs aligned with retired retained-worker fallbacks",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior run_wack_script_validates_msix_payload_before_wack_setup -- --exact --nocapture",
+        "default CI should prove standalone WACK validates MSIX payloads before WACK setup",
+    );
+    assert_contains(
+        rust_only_job,
         "cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture",
         "default CI should validate a real rs portable ZIP payload before release tags",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test --manifest-path ../lib/easydict-runtime-guards/Cargo.toml -- --nocapture",
+        "default CI should run the shared runtime/script marker guard tests directly",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_msix_validate --lib -- --nocapture",
+        "default CI should run MSIX rust-only payload validator tests directly",
     );
     assert_contains(
         rust_only_job,
@@ -685,6 +1279,108 @@ fn ci_workflow_runs_default_rs_rust_only_boundary_tests() {
         rust_only_job,
         "setup-dotnet",
         "default CI Rust boundary job must not set up .NET",
+    );
+}
+
+#[test]
+fn rs_portable_release_runs_runtime_guard_and_msix_validator_tests() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_job = text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+    let verify_contracts_step = text_between(
+        publish_job,
+        "      - name: Verify Rust-only release contracts",
+        "      - name: Build Rust portable ZIP",
+    );
+
+    assert_contains(
+        verify_contracts_step,
+        "cargo test --manifest-path ../lib/easydict-runtime-guards/Cargo.toml -- --nocapture",
+        "rs portable release should directly run the shared runtime/script marker guard tests",
+    );
+    assert_contains(
+        verify_contracts_step,
+        "cargo test -p easydict_msix_validate --lib -- --nocapture",
+        "rs portable release should directly run MSIX rust-only payload validator tests",
+    );
+}
+
+#[test]
+fn ci_build_and_test_job_keeps_dotnet_build_on_rust_only_profile() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/ci.yml"));
+    let build_job = workflow
+        .split_once("  build-and-test:")
+        .unwrap_or_else(|| panic!("missing CI build-and-test job"))
+        .1;
+    let restore_step = text_between(
+        build_job,
+        "      - name: Restore dependencies",
+        "      - name: Build",
+    );
+    let build_step = text_between(build_job, "      - name: Build", "      - name: Run tests");
+    let test_step = text_between(
+        build_job,
+        "      - name: Run tests",
+        "      - name: Run long-document regression gate",
+    );
+    let longdoc_step = text_between(
+        build_job,
+        "      - name: Run long-document regression gate",
+        "      - name: Upload test results",
+    );
+
+    assert_contains(
+        build_job,
+        "EASYDICT_RUNTIME_PROFILE: rust-only",
+        "default CI .NET build job should force the Easydict runtime profile",
+    );
+    assert_contains(
+        build_job,
+        "RUNTIME_PROFILE: rust-only",
+        "default CI .NET build job should force the generic runtime profile",
+    );
+
+    for (step, label) in [
+        (restore_step, "restore"),
+        (build_step, "build"),
+        (test_step, "test"),
+        (longdoc_step, "long-document regression test"),
+    ] {
+        assert_contains(
+            step,
+            "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+            &format!("default CI {label} step should pass the rust-only RuntimeProfile"),
+        );
+        assert_contains(
+            step,
+            "-p:EnableInProcLongDocFallback=false",
+            &format!("default CI {label} step should keep retained LongDoc fallback disabled"),
+        );
+    }
+
+    for (step, label) in [
+        (restore_step, "restore"),
+        (build_step, "build"),
+        (test_step, "test"),
+        (longdoc_step, "long-document regression test"),
+    ] {
+        assert_contains(
+            step,
+            "-p:BuildWorkerOutputs=false",
+            &format!("default CI {label} step should not build retained worker outputs"),
+        );
+    }
+
+    assert_not_contains(
+        build_job,
+        "-p:EnableInProcLongDocFallback=true",
+        "default CI .NET build job must not reopen the retained in-proc LongDoc fallback",
+    );
+    assert_not_contains(
+        build_job,
+        "RUNTIME_PROFILE: hybrid",
+        "default CI .NET build job must not opt into hybrid retained runtime packaging",
     );
 }
 
@@ -838,6 +1534,134 @@ fn root_readmes_build_from_source_default_to_rs_portable_before_legacy_dotnet() 
             &format!("{relative_path} default source run should not invoke dotnet"),
         );
     }
+}
+
+#[test]
+fn rs_readme_portable_allowlist_matches_first_release_root_entries() {
+    let root = repo_root();
+    let readme = read_text(&root.join("rs/README.md"));
+    let allowlist_section = text_between(
+        &readme,
+        "diagnostics, the validator applies the first-release allowlist:",
+        "The retained `.NET` LongDoc/LocalAI worker bridge",
+    );
+
+    for required_entry in [
+        "Easydict.Rust.exe",
+        "easydict-native-bridge.exe",
+        "easydict_browser_registrar.exe",
+        "easydict_cli.exe",
+        "easydict_long_doc.exe",
+        "AppIcon.ico",
+        "README-portable.txt",
+    ] {
+        assert_contains(
+            allowlist_section,
+            required_entry,
+            &format!("rs/README.md should document required portable entry {required_entry}"),
+        );
+    }
+
+    for forbidden_entry in [
+        "Easydict.WinUI.exe",
+        "BrowserHostRegistrar.exe",
+        "workers/",
+        "dotnet/",
+    ] {
+        assert_not_contains(
+            allowlist_section,
+            forbidden_entry,
+            &format!(
+                "rs/README.md portable allowlist should not include legacy entry {forbidden_entry}"
+            ),
+        );
+    }
+
+    assert_contains(
+        allowlist_section,
+        "service-icons/",
+        "rs/README.md should explain why service icon resources are not package-root entries",
+    );
+    assert_contains(
+        allowlist_section,
+        "compiled into the Rust",
+        "rs/README.md should say service icons are embedded instead of staged as a directory",
+    );
+    assert_contains(
+        allowlist_section,
+        "not staged as a portable package directory",
+        "rs/README.md should keep service-icons out of the portable root allowlist",
+    );
+}
+
+#[test]
+fn docs_keep_default_cli_and_browser_extension_retained_fallbacks_retired() {
+    let root = repo_root();
+    let rs_readme = read_text(&root.join("rs/README.md"));
+    let cli_section = text_between(
+        &rs_readme,
+        "Command-line translation smoke checks:",
+        "Long document CLI smoke checks:",
+    );
+
+    assert_contains(
+        cli_section,
+        "Default builds reject the legacy `--host`",
+        "rs/README.md should say default CLI builds reject legacy retained-worker options",
+    );
+    assert_contains(
+        cli_section,
+        "`--host-arg`",
+        "rs/README.md should mention the legacy host-arg option in the default rejection",
+    );
+    assert_contains(
+        cli_section,
+        "`--app-dir` retained-worker options",
+        "rs/README.md should mention the legacy app-dir option in the default rejection",
+    );
+    assert_contains(
+        cli_section,
+        "explicit `retained-dotnet-workers` compatibility builds",
+        "rs/README.md should keep legacy CLI parsing tied to the explicit retained feature",
+    );
+    assert_contains(
+        cli_section,
+        "explicit hybrid runtime profile",
+        "rs/README.md should not imply retained workers can be enabled by CLI options alone",
+    );
+    for forbidden_phrase in [
+        "remain accepted only",
+        "legacy no-op compatibility options",
+        "default builds accept legacy",
+    ] {
+        assert_not_contains(
+            cli_section,
+            forbidden_phrase,
+            "rs/README.md should not describe legacy retained-worker CLI options as accepted in default builds",
+        );
+    }
+
+    let migration = read_text(&root.join("migration-list.md"));
+    let browser_section = text_between(
+        &migration,
+        "- Browser Native Messaging",
+        "## 14. 打包、发布和 Store 相关",
+    );
+    assert_contains(
+        browser_section,
+        "默认 Chrome/Firefox extension 必须只尝试 `com.easydict.rs.bridge`",
+        "migration-list.md should keep the default extension on the rs native host",
+    );
+    assert_contains(
+        browser_section,
+        "default extension 只使用 `com.easydict.rs.bridge` 且无 legacy host fallback",
+        "migration-list.md coverage should say default extension fallback is retired",
+    );
+    assert_not_contains(
+        browser_section,
+        "rs-host-first legacy-fallback",
+        "migration-list.md should not keep the superseded legacy fallback coverage wording",
+    );
 }
 
 #[test]
@@ -2089,6 +2913,88 @@ fn browser_extension_powershell_shim_delegates_to_rust_packager() {
 }
 
 #[test]
+fn default_browser_extension_sources_do_not_fallback_to_legacy_native_host() {
+    let root = repo_root();
+    for relative_path in [
+        "browser-extension/background.js",
+        "browser-extension/setup.js",
+    ] {
+        let source = read_text(&root.join(relative_path));
+        assert_contains(
+            &source,
+            "com.easydict.rs.bridge",
+            &format!("{relative_path} should use the rs-specific native messaging host"),
+        );
+        assert_not_contains(
+            &source,
+            "com.easydict.bridge",
+            &format!("{relative_path} must not default to the legacy dotnet native messaging host"),
+        );
+        assert_not_contains(
+            &source,
+            "sendNativeMessageWithFallback",
+            &format!("{relative_path} should not keep legacy-host fallback plumbing"),
+        );
+        assert_not_contains(
+            &source,
+            "sendNativeMessageToHost",
+            &format!("{relative_path} should not iterate native host fallback candidates"),
+        );
+        assert_not_contains(
+            &source,
+            "NATIVE_HOST_NAMES",
+            &format!("{relative_path} should keep a single default rs native host"),
+        );
+    }
+}
+
+#[test]
+fn default_browser_extension_setup_points_to_rs_portable_not_store() {
+    let root = repo_root();
+    let setup_html = read_text(&root.join("browser-extension/setup.html"));
+    let readme = read_text(&root.join("browser-extension/README.md"));
+
+    assert_contains(
+        &setup_html,
+        "https://github.com/xiaocang/easydict_win32/releases",
+        "browser extension setup page should send default users to the rs portable release page",
+    );
+    assert_contains(
+        &readme,
+        "Rust portable package",
+        "browser extension README should describe the default rs portable prerequisite",
+    );
+    assert_contains(
+        &readme,
+        "com.easydict.rs.bridge",
+        "browser extension README should document the rs native messaging host name",
+    );
+
+    for relative_path in [
+        "browser-extension/setup.html",
+        "browser-extension/README.md",
+        "browser-extension/_locales/en/messages.json",
+        "browser-extension/_locales/zh_CN/messages.json",
+    ] {
+        let text = read_text(&root.join(relative_path));
+        for forbidden_marker in [
+            "apps.microsoft.com",
+            "Microsoft Store",
+            "com.easydict.bridge",
+            "MSIX or Inno installer",
+        ] {
+            assert_not_contains(
+                &text,
+                forbidden_marker,
+                &format!(
+                    "{relative_path} should not route the default browser extension setup back to legacy/store installs"
+                ),
+            );
+        }
+    }
+}
+
+#[test]
 fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
     let root = repo_root();
     let script = read_text(&root.join("scripts/translate-long-doc.ps1"));
@@ -2982,6 +3888,7 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
     let root = repo_root();
     let makefile = read_text(&root.join("dotnet/Makefile"));
     let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let arm64_msix_smoke = read_text(&root.join(".github/workflows/arm64-msix-smoke.yml"));
     let winui_csproj = read_text(&root.join("dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj"));
     assert_contains(
         &makefile,
@@ -3214,6 +4121,31 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         );
     }
 
+    let publish_script = read_text(&root.join("dotnet/scripts/publish.ps1"));
+    assert_retained_worker_publish_blocks_forward_runtime_profile(&publish_script, "publish.ps1");
+
+    let package_and_install_script =
+        read_text(&root.join("dotnet/scripts/package-and-install.ps1"));
+    assert_retained_worker_publish_blocks_forward_runtime_profile(
+        &package_and_install_script,
+        "package-and-install.ps1",
+    );
+    assert_retained_worker_publish_commands_forward_runtime_profile(
+        &makefile,
+        "dotnet/Makefile",
+        8,
+    );
+    assert_retained_worker_publish_commands_forward_runtime_profile(
+        &release_workflow,
+        ".github/workflows/release-publish.yml",
+        4,
+    );
+    assert_retained_worker_publish_commands_forward_runtime_profile(
+        &arm64_msix_smoke,
+        ".github/workflows/arm64-msix-smoke.yml",
+        2,
+    );
+
     let package_msix = read_text(&root.join("dotnet/scripts/Package-Msix.ps1"));
     let prepare_args = text_between(&package_msix, "$prepareArgs = @(", "if ($MsixVersion)");
     assert_contains(
@@ -3258,6 +4190,73 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
             );
         }
     }
+}
+
+#[test]
+fn makefile_sign_targets_validate_msix_payload_before_signing() {
+    let root = repo_root();
+    let makefile = read_text(&root.join("dotnet/Makefile"));
+    let sign_target = text_between(&makefile, "sign:", "# Sign all MSIX packages");
+    let sign_all_target = text_between(&makefile, "sign-all:", "# Fix MSIX MinVersion");
+
+    assert_contains(
+        sign_target,
+        "if [ -n \"$$runtime_profile\" ]; then",
+        "Makefile sign should pass runtime profile only when explicitly provided",
+    );
+    assert_contains(
+        sign_target,
+        "easydict_msix_validate -- \"$(MSIX)\" --runtime-profile \"$$runtime_profile\" --allow-unsigned",
+        "Makefile sign should pass a normalized explicit profile and allow the pre-sign package",
+    );
+    assert_contains(
+        sign_target,
+        "easydict_msix_validate -- \"$(MSIX)\" --allow-unsigned;",
+        "Makefile sign should omit --runtime-profile when unset so the validator uses Rust-only default while allowing the pre-sign package",
+    );
+    assert_appears_before(
+        sign_target,
+        "easydict_msix_validate -- \"$(MSIX)\"",
+        "winapp sign",
+        "Makefile sign should validate the MSIX payload before signing it",
+    );
+    assert_not_contains(
+        sign_target,
+        "--runtime-profile \"$(RUNTIME_PROFILE)\"",
+        "Makefile sign must not forward an empty/raw Make runtime profile",
+    );
+
+    assert_contains(
+        sign_all_target,
+        "for msix in ./msix/Easydict-x64.msix ./msix/Easydict-x86.msix ./msix/Easydict-arm64.msix; do",
+        "Makefile sign-all should validate and sign the expected architecture packages",
+    );
+    assert_contains(
+        sign_all_target,
+        "if [ -n \"$$runtime_profile\" ]; then",
+        "Makefile sign-all should pass runtime profile only when explicitly provided",
+    );
+    assert_contains(
+        sign_all_target,
+        "easydict_msix_validate -- \"$$msix\" --runtime-profile \"$$runtime_profile\" --allow-unsigned",
+        "Makefile sign-all should pass a normalized explicit profile and allow pre-sign packages",
+    );
+    assert_contains(
+        sign_all_target,
+        "easydict_msix_validate -- \"$$msix\" --allow-unsigned;",
+        "Makefile sign-all should omit --runtime-profile when unset so the validator uses Rust-only default while allowing pre-sign packages",
+    );
+    assert_appears_before(
+        sign_all_target,
+        "easydict_msix_validate -- \"$$msix\"",
+        "winapp sign --input \"$$msix\"",
+        "Makefile sign-all should validate each MSIX payload before signing it",
+    );
+    assert_not_contains(
+        sign_all_target,
+        "--runtime-profile \"$(RUNTIME_PROFILE)\"",
+        "Makefile sign-all must not forward an empty/raw Make runtime profile",
+    );
 }
 
 #[test]
@@ -3644,6 +4643,57 @@ fn legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_
 
 #[cfg(windows)]
 #[test]
+fn package_msix_rejects_non_hybrid_profile_before_path_validation() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let root = repo_root();
+    let test_root = tempfile_dir("package-msix-profile-before-path");
+    let missing_publish_dir = test_root.join("missing-publish");
+    let missing_manifest_path = test_root.join("missing-manifest.appxmanifest");
+    let output_msix_path = test_root.join("out").join("Easydict.msix");
+
+    for runtime_profile in [None, Some("rust-only"), Some("unexpected")] {
+        let mut command = powershell_script_command(&root.join("dotnet/scripts/Package-Msix.ps1"));
+        command
+            .args(["-Platform", "x64"])
+            .arg("-PublishDir")
+            .arg(&missing_publish_dir)
+            .arg("-ManifestPath")
+            .arg(&missing_manifest_path)
+            .arg("-OutputMsixPath")
+            .arg(&output_msix_path);
+        if let Some(profile) = runtime_profile {
+            command.args(["-RuntimeProfile", profile]);
+        }
+
+        let output = command.output().expect("run Package-Msix profile guard");
+        let output_text = powershell_output_text(&output);
+        assert!(
+            !output.status.success(),
+            "Package-Msix should reject {:?}\n{output_text}",
+            runtime_profile
+        );
+        assert_contains(
+            &output_text,
+            "RuntimeProfile",
+            "Package-Msix should fail on runtime profile before checking paths",
+        );
+        assert_not_contains(
+            &output_text,
+            "PublishDir not found",
+            "Package-Msix must not let path validation hide the hybrid profile gate",
+        );
+        assert_not_contains(
+            &output_text,
+            "Manifest not found",
+            "Package-Msix must not let manifest validation hide the hybrid profile gate",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
 fn extract_dotnet_runtime_powershell_shim_delegates_to_hybrid_rust_packager() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let environment = EnvironmentSnapshot::capture([
@@ -3903,6 +4953,320 @@ fn package_msix_powershell_shim_runs_rust_prepare_winapp_then_rust_fix() {
 
 #[cfg(windows)]
 #[test]
+fn package_and_install_validates_unsigned_msix_before_signing_in_hybrid_path() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_FAKE_CARGO_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("package-and-install-hybrid-validator");
+    let fake_bin = test_root.join("bin");
+    let record_path = test_root.join("package-and-install-record.txt");
+
+    write_fake_package_and_install_success_tool_scripts(&fake_bin);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+    std::env::remove_var("EASYDICT_RUNTIME_PROFILE");
+    std::env::remove_var("RUNTIME_PROFILE");
+
+    let output = powershell_script_command(&root.join("dotnet/scripts/package-and-install.ps1"))
+        .args(["-Version", "9.8.7"])
+        .args(["-Platform", "x64"])
+        .args(["-Configuration", "Debug"])
+        .args(["-RuntimeProfile", "Hybrid"])
+        .arg("-SkipInstall")
+        .output()
+        .expect("run package-and-install shim");
+
+    assert!(
+        output.status.success(),
+        "package-and-install Hybrid shim should complete with fake tools\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    let package_index = record
+        .find("WINAPP_ARGS=package")
+        .expect("package-and-install should package the MSIX before validation");
+    let validate_index = record
+        .find("--allow-unsigned")
+        .expect("package-and-install should validate the unsigned MSIX before signing");
+    let sign_index = record
+        .find("WINAPP_ARGS=sign")
+        .expect("package-and-install should sign only after validation");
+    assert!(
+        package_index < validate_index && validate_index < sign_index,
+        "package-and-install should package, validate unsigned payload, then sign:\n{record}"
+    );
+
+    for expected in [
+        "-p easydict_msix_validate",
+        "msix\\Easydict-v9.8.7-x64.msix",
+        "--runtime-profile Hybrid",
+        "--allow-unsigned",
+        "WINAPP_ARGS=sign",
+    ] {
+        assert_contains(
+            &record,
+            expected,
+            "package-and-install should pass the expected validator/sign arguments",
+        );
+    }
+    assert_not_contains(
+        &record,
+        "ADD_APPX_PACKAGE",
+        "package-and-install -SkipInstall should not install after signing",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[test]
+fn run_wack_script_validates_msix_payload_before_wack_setup() {
+    let root = repo_root();
+    let script = read_text(&root.join("dotnet/scripts/Run-Wack.ps1"));
+    let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let wack_step = text_between(
+        &release_workflow,
+        "      - name: Run Windows App Certification Kit",
+        "      # Always upload the report",
+    );
+
+    assert_contains(
+        &script,
+        "[string]$RuntimeProfile = \"\"",
+        "Run-Wack should not silently default to a runtime-producing profile",
+    );
+    assert_contains(
+        &script,
+        "function Get-ValidatorRuntimeProfile",
+        "Run-Wack should normalize the validator runtime profile locally",
+    );
+    assert_contains(
+        &script,
+        "Use Hybrid for retained .NET payload validation",
+        "Run-Wack should describe Hybrid as the explicit retained payload profile",
+    );
+    assert_contains(
+        &script,
+        "-p",
+        "Run-Wack should invoke cargo with package selection for the Rust MSIX validator",
+    );
+    assert_contains(
+        &script,
+        "easydict_msix_validate",
+        "Run-Wack should validate the MSIX payload before WACK setup",
+    );
+    assert_contains(
+        &script,
+        "--allow-unsigned",
+        "Run-Wack should validate the unsigned release MSIX payload",
+    );
+    assert!(
+        script
+            .find("[Run-Wack] Validating MSIX payload before WACK setup")
+            .expect("Run-Wack should log early validation")
+            < script
+                .find("# 2. Resolve required SDK tools.")
+                .expect("Run-Wack should resolve SDK tools after validation"),
+        "Run-Wack should validate before SDK tool lookup"
+    );
+    assert_contains(
+        wack_step,
+        r#"-RuntimeProfile "${{ env.RUNTIME_PROFILE }}""#,
+        "release workflow should pass the explicit Hybrid runtime profile into Run-Wack",
+    );
+}
+
+#[test]
+fn msix_tooling_help_keeps_first_rs_release_pointed_at_portable() {
+    let root = repo_root();
+
+    for relative_path in [
+        "dotnet/scripts/sign-and-install.ps1",
+        "dotnet/scripts/Run-Wack.ps1",
+        "dotnet/scripts/qdc/Deploy-ToQdc.ps1",
+        "dotnet/scripts/qdc/Install-OnQdc.ps1",
+        "dotnet/scripts/inspect-msix.ps1",
+    ] {
+        let script = read_text(&root.join(relative_path));
+        for marker in [
+            "first rs release",
+            "Rust portable-only",
+            "pack-rs-portable",
+        ] {
+            assert_contains(
+                &script,
+                marker,
+                &format!(
+                    "{relative_path} should steer first rs release/install users to portable"
+                ),
+            );
+        }
+    }
+
+    let run_wack = read_text(&root.join("dotnet/scripts/Run-Wack.ps1"));
+    assert_contains(
+        &run_wack,
+        "legacy/hybrid Store/MSIX",
+        "Run-Wack should describe WACK as the legacy/hybrid Store/MSIX path",
+    );
+
+    for relative_path in [
+        "dotnet/scripts/qdc/Deploy-ToQdc.ps1",
+        "dotnet/scripts/qdc/Install-OnQdc.ps1",
+    ] {
+        let script = read_text(&root.join(relative_path));
+        assert_contains(
+            &script,
+            "QDC sideload validation only",
+            &format!("{relative_path} should not imply QDC MSIX is the rs release path"),
+        );
+        assert_contains(
+            &script,
+            "does not imply a Rust MSIX release",
+            &format!(
+                "{relative_path} should keep rust-only validation separate from a Rust MSIX release"
+            ),
+        );
+    }
+
+    let inspect_msix = read_text(&root.join("dotnet/scripts/inspect-msix.ps1"));
+    assert_contains(
+        &inspect_msix,
+        "Legacy/debug-only MSIX inspection helper.",
+        "inspect-msix should be labeled as legacy/debug-only",
+    );
+    assert_contains(
+        &inspect_msix,
+        "[string]$MsixPath",
+        "inspect-msix should require an explicit package path",
+    );
+    assert_not_contains(
+        &inspect_msix,
+        r#"$msixPath = ".\msix\Easydict-v0.3.2-x64.msix""#,
+        "inspect-msix must not keep a hard-coded old MSIX as the apparent default",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn run_wack_validates_msix_payload_before_cert_trust_or_appcert_with_rust_only_default() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("run-wack-rust-only-validator");
+    let fake_bin = test_root.join("bin");
+    let msix_path = test_root.join("Easydict.msix");
+    let report_path = test_root.join("wack-report.xml");
+    let record_path = test_root.join("run-wack-record.txt");
+
+    fs::create_dir_all(&test_root).expect("create fake WACK root");
+    fs::write(&msix_path, b"fake msix").expect("write fake MSIX path");
+    write_fake_run_wack_validation_tool_scripts(&fake_bin, 23);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&root.join("dotnet/scripts/Run-Wack.ps1"))
+        .arg("-MsixPath")
+        .arg(&msix_path)
+        .args(["-Arch", "x64"])
+        .arg("-ReportPath")
+        .arg(&report_path)
+        .output()
+        .expect("run WACK shim with failing fake validator");
+    assert!(
+        !output.status.success(),
+        "Run-Wack should stop when early payload validation fails\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    for expected in [
+        "-p easydict_msix_validate",
+        msix_path.display().to_string().as_str(),
+        "--allow-unsigned",
+    ] {
+        assert_contains(
+            &record,
+            expected,
+            "Run-Wack should call the Rust MSIX validator before WACK setup",
+        );
+    }
+    assert_not_contains(
+        &record,
+        "--runtime-profile",
+        "omitted RuntimeProfile should let easydict_msix_validate use its rust-only default",
+    );
+    for forbidden_setup in [
+        "appcert.exe not found",
+        "signtool.exe not found",
+        "MakeAppx.exe not found",
+        "New-SelfSignedCertificate",
+    ] {
+        assert_not_contains(
+            &powershell_output_text(&output),
+            forbidden_setup,
+            "Run-Wack should not reach SDK lookup, cert trust, or appcert after validator failure",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn run_wack_passes_hybrid_profile_to_validator_only_when_explicit() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("run-wack-hybrid-validator");
+    let fake_bin = test_root.join("bin");
+    let msix_path = test_root.join("Easydict.msix");
+    let report_path = test_root.join("wack-report.xml");
+    let record_path = test_root.join("run-wack-record.txt");
+
+    fs::create_dir_all(&test_root).expect("create fake WACK root");
+    fs::write(&msix_path, b"fake msix").expect("write fake MSIX path");
+    write_fake_run_wack_validation_tool_scripts(&fake_bin, 23);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&root.join("dotnet/scripts/Run-Wack.ps1"))
+        .arg("-MsixPath")
+        .arg(&msix_path)
+        .args(["-Arch", "arm64"])
+        .arg("-ReportPath")
+        .arg(&report_path)
+        .args(["-RuntimeProfile", "Hybrid"])
+        .output()
+        .expect("run WACK shim with explicit Hybrid profile");
+    assert!(
+        !output.status.success(),
+        "Run-Wack should stop when early payload validation fails\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    assert_contains(
+        &record,
+        "--runtime-profile hybrid",
+        "explicit Hybrid should be forwarded to easydict_msix_validate",
+    );
+    assert_not_contains(
+        &powershell_output_text(&output),
+        "appcert.exe not found",
+        "Run-Wack should not reach appcert lookup after validator failure",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
 fn sign_and_install_runs_rust_msix_validator_before_install_with_rust_only_default() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
@@ -3941,7 +5305,7 @@ fn sign_and_install_runs_rust_msix_validator_before_install_with_rust_only_defau
     let record = read_text(&record_path);
     let sign_index = record
         .find("WINAPP_ARGS=sign")
-        .expect("sign-and-install should sign before validation");
+        .expect("sign-and-install should sign after validation");
     let validator_index = record
         .find("-p easydict_msix_validate")
         .expect("sign-and-install should call the Rust MSIX validator");
@@ -3949,13 +5313,18 @@ fn sign_and_install_runs_rust_msix_validator_before_install_with_rust_only_defau
         .find("ADD_APPX_PACKAGE=")
         .expect("sign-and-install should install after validation");
     assert!(
-        sign_index < validator_index && validator_index < install_index,
-        "sign-and-install should sign, validate, then Add-AppxPackage:\n{record}"
+        validator_index < sign_index && sign_index < install_index,
+        "sign-and-install should validate unsigned payload, sign, then Add-AppxPackage:\n{record}"
     );
     assert_contains(
         &record,
         package_path.display().to_string().as_str(),
         "sign-and-install validator should receive the package path",
+    );
+    assert_contains(
+        &record,
+        "--allow-unsigned",
+        "sign-and-install should validate unsigned MSIX payloads before signing",
     );
     assert_not_contains(
         &record,
@@ -3966,6 +5335,68 @@ fn sign_and_install_runs_rust_msix_validator_before_install_with_rust_only_defau
         &record,
         "FORBIDDEN_DOTNET",
         "sign-and-install should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn sign_and_install_validator_failure_stops_before_signing_or_install() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("sign-and-install-validator-failure");
+    let fake_bin = test_root.join("bin");
+    let package_path = test_root.join("Easydict.msix");
+    let cert_path = test_root.join("dev-signing.pfx");
+    let record_path = test_root.join("sign-install-record.txt");
+    let wrapper_path = test_root.join("invoke-sign-and-install.ps1");
+
+    fs::create_dir_all(&test_root).expect("create fake sign/install root");
+    fs::write(&package_path, b"fake msix").expect("write fake MSIX path");
+    fs::write(&cert_path, b"fake certificate").expect("write fake signing certificate");
+    write_fake_sign_and_install_tool_scripts_with_cargo_exit_code(&fake_bin, 23);
+    write_sign_and_install_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/sign-and-install.ps1"),
+        &package_path,
+        &cert_path,
+        None,
+        &record_path,
+    );
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run sign-and-install shim with failing validator");
+    assert!(
+        !output.status.success(),
+        "sign-and-install should stop when payload validation fails\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    assert_contains(
+        &record,
+        "-p easydict_msix_validate",
+        "sign-and-install should run the Rust validator first",
+    );
+    assert_contains(
+        &record,
+        "--allow-unsigned",
+        "sign-and-install should validate the unsigned MSIX before signing",
+    );
+    assert_not_contains(
+        &record,
+        "WINAPP_ARGS=sign",
+        "sign-and-install must not sign packages that fail retained-runtime validation",
+    );
+    assert_not_contains(
+        &record,
+        "ADD_APPX_PACKAGE=",
+        "sign-and-install must not install packages that fail retained-runtime validation",
     );
 
     let _ = fs::remove_dir_all(test_root);
@@ -4012,22 +5443,171 @@ fn sign_and_install_passes_hybrid_profile_to_validator_only_when_explicit() {
     let validator_index = record
         .find("-p easydict_msix_validate")
         .expect("sign-and-install should call the Rust MSIX validator");
+    let sign_index = record
+        .find("WINAPP_ARGS=sign")
+        .expect("sign-and-install should sign after validation");
     let install_index = record
         .find("ADD_APPX_PACKAGE=")
         .expect("sign-and-install should install after validation");
     assert!(
-        validator_index < install_index,
-        "sign-and-install should validate before Add-AppxPackage:\n{record}"
+        validator_index < sign_index && sign_index < install_index,
+        "sign-and-install should validate before signing and Add-AppxPackage:\n{record}"
     );
     assert_contains(
         &record,
         "--runtime-profile hybrid",
         "explicit Hybrid should be forwarded to easydict_msix_validate",
     );
+    assert_contains(
+        &record,
+        "--allow-unsigned",
+        "sign-and-install should validate Hybrid MSIX payloads before signing",
+    );
     assert_not_contains(
         &record,
         "FORBIDDEN_DOTNET",
         "sign-and-install should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn sign_and_install_uses_bundle_validator_for_msixbundle_before_install() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("sign-and-install-bundle-validator");
+    let fake_bin = test_root.join("bin");
+    let package_path = test_root.join("Easydict.msixbundle");
+    let cert_path = test_root.join("dev-signing.pfx");
+    let record_path = test_root.join("sign-install-record.txt");
+    let wrapper_path = test_root.join("invoke-sign-and-install.ps1");
+
+    fs::create_dir_all(&test_root).expect("create fake sign/install bundle root");
+    fs::write(&package_path, b"fake msixbundle").expect("write fake MSIX bundle path");
+    fs::write(&cert_path, b"fake certificate").expect("write fake signing certificate");
+    write_fake_sign_and_install_tool_scripts(&fake_bin);
+    write_sign_and_install_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/sign-and-install.ps1"),
+        &package_path,
+        &cert_path,
+        Some("Hybrid"),
+        &record_path,
+    );
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run sign-and-install bundle shim");
+    assert!(
+        output.status.success(),
+        "sign-and-install bundle shim should complete with fake tools\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    let sign_index = record
+        .find("WINAPP_ARGS=sign")
+        .expect("sign-and-install should sign bundles after validation");
+    let validator_index = record
+        .find("verify-bundle-minversion")
+        .expect("sign-and-install should validate MSIX bundles with the bundle validator");
+    let install_index = record
+        .find("ADD_APPX_PACKAGE=")
+        .expect("sign-and-install should install bundles after validation");
+    assert!(
+        validator_index < sign_index && sign_index < install_index,
+        "sign-and-install should bundle-validate, sign, then Add-AppxPackage:\n{record}"
+    );
+    assert_contains(
+        &record,
+        package_path.display().to_string().as_str(),
+        "sign-and-install bundle validator should receive the bundle path",
+    );
+    assert_contains(
+        &record,
+        "--runtime-profile hybrid",
+        "explicit Hybrid should be forwarded to the bundle validator",
+    );
+    assert_not_contains(
+        &record,
+        "FORBIDDEN_DOTNET",
+        "sign-and-install bundle validation should not invoke dotnet directly",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn qdc_install_machine_scope_validates_before_provision_and_register() {
+    let test_root = tempfile_dir("qdc-install-machine-scope-validator");
+    let package_path = test_root.join("Easydict.msix");
+    let cert_path = test_root.join("dev-signing.cer");
+    let validator_path = test_root.join("easydict_msix_validate.cmd");
+    let record_path = test_root.join("qdc-install-record.txt");
+    let wrapper_path = test_root.join("invoke-qdc-install.ps1");
+    let root = repo_root();
+
+    fs::create_dir_all(&test_root).expect("create fake QDC install root");
+    fs::write(&package_path, b"fake msix").expect("write fake QDC MSIX");
+    fs::write(&cert_path, b"fake cert").expect("write fake QDC cert");
+    write_fake_qdc_validator_script(&validator_path, &record_path);
+    write_qdc_install_machine_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/qdc/Install-OnQdc.ps1"),
+        &package_path,
+        &cert_path,
+        &validator_path,
+        &record_path,
+    );
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run QDC machine-scope install shim");
+    assert!(
+        output.status.success(),
+        "QDC machine-scope install shim should complete with fake cmdlets\n{}",
+        powershell_output_text(&output)
+    );
+
+    let record = read_text(&record_path);
+    let validator_index = record
+        .find("VALIDATOR_ARGS=")
+        .expect("QDC install should run the Rust MSIX validator");
+    let provision_index = record
+        .find("ADD_APPX_PROVISIONED_PACKAGE=")
+        .expect("QDC -Machine install should provision the package");
+    let register_index = record
+        .find("ADD_APPX_PACKAGE_REGISTER=")
+        .expect("QDC -Machine install should register the provisioned package");
+    assert!(
+        validator_index < provision_index && provision_index < register_index,
+        "QDC -Machine install should validate, provision, then register:\n{record}"
+    );
+    assert_contains(
+        &record,
+        package_path.display().to_string().as_str(),
+        "QDC validator should receive the MSIX path",
+    );
+    assert_contains(
+        &record,
+        "--runtime-profile rust-only",
+        "QDC install should validate with the rust-only default profile",
+    );
+    assert_contains(
+        &record,
+        "--allow-unsigned",
+        "QDC install should allow unsigned validation before certificate trust is installed",
+    );
+    assert_not_contains(
+        &record,
+        "ADD_APPX_PACKAGE_PATH=",
+        "QDC -Machine install should not first try the direct user-scope Add-AppxPackage path",
     );
 
     let _ = fs::remove_dir_all(test_root);
@@ -4052,6 +5632,109 @@ fn assert_contains(haystack: &str, needle: &str, message: &str) {
 
 fn assert_not_contains(haystack: &str, needle: &str, message: &str) {
     assert!(!haystack.contains(needle), "{message}\nforbidden: {needle}");
+}
+
+fn assert_retained_worker_publish_blocks_forward_runtime_profile(script: &str, script_name: &str) {
+    for (worker_name, start_markers, end_marker) in [
+        (
+            "LongDoc",
+            [
+                "src\\Easydict.Workers.LongDoc\\Easydict.Workers.LongDoc.csproj",
+                "src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj",
+            ],
+            "LongDoc worker publish failed",
+        ),
+        (
+            "LocalAI",
+            [
+                "src\\Easydict.Workers.LocalAi\\Easydict.Workers.LocalAi.csproj",
+                "src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj",
+            ],
+            "LocalAI worker publish failed",
+        ),
+    ] {
+        let start_marker = start_markers
+            .into_iter()
+            .find(|marker| script.contains(marker))
+            .unwrap_or_else(|| {
+                panic!("{script_name} should contain the {worker_name} worker project path")
+            });
+        let worker_publish = text_between(script, start_marker, end_marker);
+        assert_contains(
+            worker_publish,
+            "-p:RuntimeProfile=$RuntimeProfile",
+            &format!(
+                "{script_name} {worker_name} retained worker publish should inherit the explicit Hybrid runtime profile"
+            ),
+        );
+    }
+}
+
+fn assert_retained_worker_publish_commands_forward_runtime_profile(
+    text: &str,
+    label: &str,
+    expected_count: usize,
+) {
+    let worker_publish_blocks = text
+        .split("dotnet publish")
+        .skip(1)
+        .filter(|block| {
+            let project_line = block.lines().next().unwrap_or_default();
+            project_line.contains("Easydict.Workers.LongDoc")
+                || project_line.contains("Easydict.Workers.LocalAi")
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        worker_publish_blocks.len(),
+        expected_count,
+        "{label} should have the expected retained worker publish command count"
+    );
+    for block in worker_publish_blocks {
+        assert_contains(
+            block,
+            "RuntimeProfile",
+            &format!("{label} retained worker publish should carry the explicit runtime profile"),
+        );
+    }
+}
+
+fn assert_appears_before(haystack: &str, first: &str, second: &str, message: &str) {
+    let first_index = haystack
+        .find(first)
+        .unwrap_or_else(|| panic!("{message}\nmissing first: {first}"));
+    let second_index = haystack
+        .find(second)
+        .unwrap_or_else(|| panic!("{message}\nmissing second: {second}"));
+    assert!(
+        first_index < second_index,
+        "{message}\nexpected `{first}` before `{second}`"
+    );
+}
+
+fn dotnet_publish_blocks(text: &str) -> Vec<(usize, String)> {
+    let lines = text.lines().collect::<Vec<_>>();
+    let mut blocks = Vec::new();
+
+    for (index, line) in lines.iter().enumerate() {
+        if !line.trim_start().starts_with("dotnet publish ") {
+            continue;
+        }
+
+        let mut block = String::new();
+        for current in &lines[index..] {
+            if !block.is_empty()
+                && (current.trim().is_empty() || current.trim_start().starts_with("- name:"))
+            {
+                break;
+            }
+            block.push_str(current);
+            block.push('\n');
+        }
+        blocks.push((index + 1, block));
+    }
+
+    blocks
 }
 
 fn assert_no_negative_runtime_profile_rust_only_gate(text: &str, label: &str) {
@@ -4271,13 +5954,93 @@ exit /b 0\r\n",
 }
 
 #[cfg(windows)]
-fn write_fake_sign_and_install_tool_scripts(fake_bin: &Path) {
-    fs::create_dir_all(fake_bin).expect("create fake sign/install tool dir");
+fn write_fake_package_and_install_success_tool_scripts(fake_bin: &Path) {
+    fs::create_dir_all(fake_bin).expect("create fake package-and-install tool dir");
     fs::write(
         fake_bin.join("cargo.cmd"),
         "@echo off\r\n\
 >>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo ARGS=%*\r\n\
 exit /b 0\r\n",
+    )
+    .expect("write fake package-and-install cargo");
+    fs::write(
+        fake_bin.join("dotnet.cmd"),
+        "@echo off\r\n\
+setlocal\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo DOTNET_ARGS=%*\r\n\
+set \"out=\"\r\n\
+set \"nextIsOutput=\"\r\n\
+:parse\r\n\
+if \"%~1\"==\"\" goto done\r\n\
+if defined nextIsOutput set \"out=%~1\" & set \"nextIsOutput=\" & shift & goto parse\r\n\
+if /I \"%~1\"==\"--output\" set \"nextIsOutput=1\"\r\n\
+shift\r\n\
+goto parse\r\n\
+:done\r\n\
+if not \"%out%\"==\"\" if not exist \"%out%\" mkdir \"%out%\"\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake package-and-install dotnet");
+    fs::write(
+        fake_bin.join("winapp.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo WINAPP_ARGS=%*\r\n\
+set \"out=\"\r\n\
+set \"nextIsOutput=\"\r\n\
+:parse\r\n\
+if \"%~1\"==\"\" goto done\r\n\
+if defined nextIsOutput set \"out=%~1\" & set \"nextIsOutput=\" & shift & goto parse\r\n\
+if /I \"%~1\"==\"--output\" set \"nextIsOutput=1\"\r\n\
+shift\r\n\
+goto parse\r\n\
+:done\r\n\
+if \"%out%\"==\"\" exit /b 0\r\n\
+for %%I in (\"%out%\") do if not exist \"%%~dpI\" mkdir \"%%~dpI\"\r\n\
+>\"%out%\" echo fake msix\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake package-and-install winapp");
+}
+
+#[cfg(windows)]
+fn write_fake_run_wack_validation_tool_scripts(fake_bin: &Path, cargo_exit_code: i32) {
+    fs::create_dir_all(fake_bin).expect("create fake WACK tool dir");
+    fs::write(
+        fake_bin.join("cargo.cmd"),
+        format!(
+            "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo ARGS=%*\r\n\
+exit /b {cargo_exit_code}\r\n"
+        ),
+    )
+    .expect("write fake WACK cargo");
+    fs::write(
+        fake_bin.join("dotnet.cmd"),
+        "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo FORBIDDEN_DOTNET=%*\r\n\
+exit /b 87\r\n",
+    )
+    .expect("write fake WACK dotnet");
+}
+
+#[cfg(windows)]
+fn write_fake_sign_and_install_tool_scripts(fake_bin: &Path) {
+    write_fake_sign_and_install_tool_scripts_with_cargo_exit_code(fake_bin, 0);
+}
+
+#[cfg(windows)]
+fn write_fake_sign_and_install_tool_scripts_with_cargo_exit_code(
+    fake_bin: &Path,
+    cargo_exit_code: i32,
+) {
+    fs::create_dir_all(fake_bin).expect("create fake sign/install tool dir");
+    fs::write(
+        fake_bin.join("cargo.cmd"),
+        format!(
+            "@echo off\r\n\
+>>\"%EASYDICT_FAKE_CARGO_RECORD%\" echo ARGS=%*\r\n\
+exit /b {cargo_exit_code}\r\n"
+        ),
     )
     .expect("write fake sign-and-install cargo");
     fs::write(
@@ -4336,6 +6099,100 @@ function Add-AppxPackage {{\r\n\
         ),
     )
     .expect("write sign-and-install wrapper");
+}
+
+#[cfg(windows)]
+fn write_fake_qdc_validator_script(validator_path: &Path, record_path: &Path) {
+    fs::write(
+        validator_path,
+        format!(
+            "@echo off\r\n\
+>>{} echo VALIDATOR_ARGS=%*\r\n\
+exit /b 0\r\n",
+            windows_cmd_quoted_path(record_path),
+        ),
+    )
+    .expect("write fake QDC validator");
+}
+
+#[cfg(windows)]
+fn write_qdc_install_machine_wrapper(
+    wrapper_path: &Path,
+    script_path: &Path,
+    package_path: &Path,
+    cert_path: &Path,
+    validator_path: &Path,
+    record_path: &Path,
+) {
+    fs::write(
+        wrapper_path,
+        format!(
+            "$ErrorActionPreference = 'Stop'\r\n\
+$script:Provisioned = $false\r\n\
+$script:Registered = $false\r\n\
+function Add-Record([string]$Value) {{ Add-Content -LiteralPath {} -Value $Value }}\r\n\
+function Test-Path {{\r\n\
+    param([Parameter(ValueFromRemainingArguments = $true)][object[]]$Arguments)\r\n\
+    if ($Arguments.Count -gt 0 -and [string]$Arguments[0] -like 'C:\\Program Files\\WindowsApps\\*\\AppxManifest.xml') {{ return $true }}\r\n\
+    return Microsoft.PowerShell.Management\\Test-Path @Arguments\r\n\
+}}\r\n\
+function Import-Certificate {{\r\n\
+    param([string]$FilePath, [string]$CertStoreLocation)\r\n\
+    Add-Record \"IMPORT_CERT=$CertStoreLocation\"\r\n\
+    [pscustomobject]@{{ Thumbprint = 'FAKE'; Subject = 'CN=fake' }}\r\n\
+}}\r\n\
+function Get-AppxPackage {{\r\n\
+    param([string]$Name, [System.Management.Automation.ActionPreference]$ErrorAction)\r\n\
+    Add-Record \"GET_APPX_PACKAGE=$Name\"\r\n\
+    if ($Name -like 'Microsoft.WindowsAppRuntime.2.*') {{ return [pscustomobject]@{{ PackageFullName = 'Microsoft.WindowsAppRuntime.2.fake'; Name = $Name }} }}\r\n\
+    if ($script:Registered -and $Name -eq 'xiaocang.EasydictforWindows') {{\r\n\
+        return [pscustomobject]@{{\r\n\
+            Name = 'xiaocang.EasydictforWindows'\r\n\
+            PackageFullName = 'xiaocang.EasydictforWindows_1.0.0.0_x64__fake'\r\n\
+            PackageFamilyName = 'xiaocang.EasydictforWindows_fake'\r\n\
+            Version = '1.0.0.0'\r\n\
+            Status = 'Ok'\r\n\
+        }}\r\n\
+    }}\r\n\
+    return $null\r\n\
+}}\r\n\
+function Remove-AppxPackage {{ param([string]$Package, [System.Management.Automation.ActionPreference]$ErrorAction) Add-Record \"REMOVE_APPX_PACKAGE=$Package\" }}\r\n\
+function Get-AppxProvisionedPackage {{\r\n\
+    param([switch]$Online, [System.Management.Automation.ActionPreference]$ErrorAction)\r\n\
+    if ($script:Provisioned) {{\r\n\
+        return [pscustomobject]@{{ DisplayName = 'xiaocang.EasydictforWindows'; PackageName = 'xiaocang.EasydictforWindows_1.0.0.0_x64__fake' }}\r\n\
+    }}\r\n\
+    return @()\r\n\
+}}\r\n\
+function Remove-AppxProvisionedPackage {{ param([switch]$Online, [string]$PackageName, [System.Management.Automation.ActionPreference]$ErrorAction) Add-Record \"REMOVE_APPX_PROVISIONED_PACKAGE=$PackageName\" }}\r\n\
+function Add-AppxProvisionedPackage {{\r\n\
+    param([switch]$Online, [string]$PackagePath, [switch]$SkipLicense, [System.Management.Automation.ActionPreference]$ErrorAction)\r\n\
+    Add-Record \"ADD_APPX_PROVISIONED_PACKAGE=$PackagePath\"\r\n\
+    $script:Provisioned = $true\r\n\
+}}\r\n\
+function Add-AppxPackage {{\r\n\
+    param([string]$Path, [string]$Register, [switch]$DisableDevelopmentMode, [switch]$ForceApplicationShutdown, [switch]$ForceUpdateFromAnyVersion, [System.Management.Automation.ActionPreference]$ErrorAction, [string]$ErrorVariable)\r\n\
+    if ($Register) {{\r\n\
+        Add-Record \"ADD_APPX_PACKAGE_REGISTER=$Register\"\r\n\
+        $script:Registered = $true\r\n\
+    }} elseif ($Path) {{\r\n\
+        Add-Record \"ADD_APPX_PACKAGE_PATH=$Path\"\r\n\
+    }}\r\n\
+}}\r\n\
+& {} -CertPath {} -MsixPath {} -ValidatorPath {} -Machine\r\n",
+            powershell_literal(record_path),
+            powershell_literal(script_path),
+            powershell_literal(cert_path),
+            powershell_literal(package_path),
+            powershell_literal(validator_path),
+        ),
+    )
+    .expect("write QDC install wrapper");
+}
+
+#[cfg(windows)]
+fn windows_cmd_quoted_path(path: &Path) -> String {
+    format!("\"{}\"", path.display())
 }
 
 #[cfg(windows)]

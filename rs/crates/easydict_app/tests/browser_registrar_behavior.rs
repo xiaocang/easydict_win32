@@ -81,16 +81,28 @@ fn parser_rejects_bridge_root_names_that_escape_the_local_app_data_child() {
 
 #[test]
 fn parser_rejects_legacy_dotnet_bridge_root_for_rs_portable() {
-    assert!(matches!(
-        parse_browser_registrar_args(["install", "--bridge-root-name", LEGACY_BRIDGE_ROOT_NAME])
-            .expect_err("legacy dotnet root should be rejected"),
-        BrowserRegistrarParseError::InvalidValue { .. }
-    ));
-    assert!(matches!(
-        parse_browser_registrar_args(["install", "--bridge-root-name", "easydict"])
-            .expect_err("legacy dotnet root should be rejected case-insensitively"),
-        BrowserRegistrarParseError::InvalidValue { .. }
-    ));
+    for value in [
+        LEGACY_BRIDGE_ROOT_NAME,
+        "easydict",
+        "dotnet",
+        "workers",
+        "Easydict.CompatHost",
+        "Easydict.Workers.LocalAi",
+        "Easydict.Workers.LongDoc.exe",
+        "powershell.exe",
+        "pwsh.cmd",
+        "legacy-backend.ps1",
+        "hostfxr.dll",
+    ] {
+        assert!(
+            matches!(
+                parse_browser_registrar_args(["install", "--bridge-root-name", value])
+                    .expect_err("legacy/retained bridge root should be rejected"),
+                BrowserRegistrarParseError::InvalidValue { .. }
+            ),
+            "{value} must not be accepted as a browser bridge root for the rs portable"
+        );
+    }
 }
 
 #[test]
@@ -131,7 +143,7 @@ fn browser_registrar_defaults_to_rs_native_host_without_overwriting_legacy_host(
 }
 
 #[test]
-fn browser_extension_tries_rs_native_host_before_legacy_fallback() {
+fn browser_extension_defaults_to_rs_native_host_without_legacy_fallback() {
     for (name, source) in [
         (
             "background.js",
@@ -142,20 +154,18 @@ fn browser_extension_tries_rs_native_host_before_legacy_fallback() {
             include_str!("../../../../browser-extension/setup.js"),
         ),
     ] {
-        let rs_index = source
-            .find(RUST_NATIVE_HOST_NAME)
-            .unwrap_or_else(|| panic!("{name} should contain the rs native host name"));
-        let legacy_index = source
-            .find(LEGACY_NATIVE_HOST_NAME)
-            .unwrap_or_else(|| panic!("{name} should keep the legacy native host fallback"));
-
         assert!(
-            rs_index < legacy_index,
-            "{name} should try the rs native host before legacy fallback"
+            source.contains(RUST_NATIVE_HOST_NAME),
+            "{name} should contain the rs native host name"
         );
         assert!(
-            source.contains("sendNativeMessageWithFallback"),
-            "{name} should route native messages through the fallback helper"
+            !source.contains(LEGACY_NATIVE_HOST_NAME),
+            "{name} must not fall back to the legacy dotnet native host in the default extension"
+        );
+        assert!(
+            !source.contains("sendNativeMessageWithFallback")
+                && !source.contains("sendNativeMessageToHost"),
+            "{name} should not keep fallback helper plumbing on the default rs path"
         );
     }
 }
@@ -186,6 +196,11 @@ fn browser_registrar_source_uses_lib_owned_retained_runtime_guard() {
     assert!(
         production.contains("easydict_runtime_guards::path_has_retained_runtime_component"),
         "browser registrar should keep retained payload component policy in a lib-owned guard"
+    );
+    assert!(
+        production
+            .contains("easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker"),
+        "browser registrar should reject script/shell bridge root names through the lib-owned runtime guard"
     );
     assert!(
         production.contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker"),

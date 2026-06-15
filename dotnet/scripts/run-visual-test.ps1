@@ -42,6 +42,12 @@ if ($ClearCache) {
 }
 
 $testProject = Join-Path $repoRoot "dotnet\tests\Easydict.WinUI.Tests"
+$RustOnlyMsBuildProperties = @(
+    "-p:RuntimeProfile=rust-only",
+    "-p:BuildWorkerOutputs=false",
+    "-p:EnableInProcLongDocFallback=false"
+)
 dotnet test $testProject `
     --filter "FullyQualifiedName~PdfTranslationVisualTest" `
-    -v normal
+    -v normal `
+    @RustOnlyMsBuildProperties

@@ -85,6 +85,15 @@ fn default_cli_rejects_legacy_retained_worker_options_unless_feature_gated() {
         cli_translate.contains("default_build_rejects_legacy_host_and_app_dir_options"),
         "parser unit tests should lock default rejection of legacy retained-worker CLI options"
     );
+    assert!(
+        cli_translate
+            .contains("retained_feature_accepts_legacy_host_without_exposing_worker_target"),
+        "legacy host acceptance should only be documented by an explicitly retained-feature test"
+    );
+    assert!(
+        !cli_translate.contains("fn accepts_legacy_host_without_exposing_worker_target"),
+        "default parser tests must not keep an unqualified legacy host acceptance test"
+    );
 }
 
 #[test]
@@ -457,6 +466,147 @@ fn default_process_spawn_surface_has_no_retained_dotnet_runtime_entries() {
 }
 
 #[test]
+fn default_bundled_helper_process_boundary_stays_inside_windows_shell_lib() {
+    let source = include_str!("../../../../lib/easydict-windows-shell/src/lib.rs");
+    let production = production_source(source);
+
+    assert!(
+        production.contains("pub fn run_bundled_executable("),
+        "Windows shell lib should own the app's bundled-helper launch boundary"
+    );
+    assert!(
+        production.contains("fn validate_bundled_executable_name("),
+        "bundled-helper launch should validate helper names before resolving next to the app exe"
+    );
+    assert!(
+        production.contains("fn validate_bundled_executable_target("),
+        "bundled-helper launch should validate the resolved target before spawning"
+    );
+    assert!(
+        production.contains(
+            "easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(executable_name)"
+        ),
+        "bundled-helper names should delegate retained runtime/script detection to lib/easydict-runtime-guards"
+    );
+    assert!(
+        production.contains("fs::symlink_metadata(executable)"),
+        "bundled-helper target validation should inspect link/reparse metadata before spawn"
+    );
+    assert!(
+        production.contains("file_type.is_symlink()")
+            && production.contains("bundled_executable_target_is_reparse_point(&metadata)"),
+        "bundled-helper target validation should reject symlinks and Windows reparse points"
+    );
+    assert!(
+        production.contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes)"),
+        "bundled-helper target validation should scan helper bytes for retained .NET/script markers"
+    );
+
+    let command_lines: Vec<_> = non_comment_lines(production)
+        .filter(|(_, line)| line.contains("Command::new("))
+        .collect();
+    assert_eq!(
+        command_lines.len(),
+        1,
+        "Windows shell lib should keep a single process-spawn boundary for bundled Rust helpers"
+    );
+    let (line_number, line) = command_lines[0];
+    assert!(
+        line.contains("Command::new(executable)"),
+        "lib/easydict-windows-shell/src/lib.rs:{line_number} should spawn only the already-validated bundled helper path"
+    );
+
+    let validation_offset = production
+        .find("validate_bundled_executable_target(executable)?")
+        .expect("run_executable should validate target before spawn");
+    let spawn_offset = production
+        .find("Command::new(executable)")
+        .expect("run_executable should contain the bundled helper spawn");
+    assert!(
+        validation_offset < spawn_offset,
+        "bundled-helper target validation must run before Command::new"
+    );
+}
+
+#[test]
+fn default_shell_open_url_boundary_rejects_non_web_and_retained_targets() {
+    let source = include_str!("../../../../lib/easydict-windows-shell/src/lib.rs");
+    let production = production_source(source);
+
+    assert!(
+        production.contains("fn validate_open_url_target("),
+        "Windows shell lib should validate URL targets before ShellExecuteW"
+    );
+    assert!(
+        production.contains("lower.starts_with(\"https://\") || lower.starts_with(\"http://\")"),
+        "open_url should only allow web URL schemes on the default rs shell boundary"
+    );
+    assert!(
+        production.contains(
+            "easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(trimmed)"
+        ),
+        "open_url should reject retained runtime/script markers through lib/easydict-runtime-guards"
+    );
+
+    let validation_offset = production
+        .find("let url = validate_open_url_target(url)?")
+        .expect("open_url should validate its target");
+    let shell_offset = production
+        .find("platform::open_url(url)")
+        .expect("open_url should delegate to the platform wrapper");
+    assert!(
+        validation_offset < shell_offset,
+        "open_url target validation must run before ShellExecuteW delegation"
+    );
+}
+
+#[test]
+fn default_desktop_registry_command_boundary_scans_targets_before_registry_writes() {
+    let source = include_str!("../src/desktop_integration.rs");
+    let production = production_source(source);
+
+    assert!(
+        production.contains("command_target_is_retained_runtime_or_script_marker(executable_path)"),
+        "desktop integration should reject retained runtime/script command targets by path"
+    );
+    assert!(
+        production.contains("fs::symlink_metadata(executable)"),
+        "desktop integration should inspect shell/protocol/startup command target metadata"
+    );
+    assert!(
+        production.contains("desktop_command_target_is_reparse_point(&metadata)"),
+        "desktop integration should reject reparse-point command targets before registry writes"
+    );
+    assert!(
+        production
+            .contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes)"),
+        "desktop integration should scan command target bytes for retained .NET runtime markers"
+    );
+
+    for register_fn in [
+        "register_shell_verb_with_executable_path",
+        "register_protocol_with_executable_path",
+        "register_startup_with_executable_path",
+    ] {
+        let function_declaration = format!("pub fn {register_fn}");
+        let section = production
+            .split(&function_declaration)
+            .nth(1)
+            .unwrap_or_else(|| panic!("desktop integration should define {register_fn}"));
+        let validation_offset = section
+            .find("validate_desktop_command_executable_path(executable_path)?")
+            .unwrap_or_else(|| panic!("{register_fn} should validate command target"));
+        let registry_write_offset = section
+            .find("write_registry_string")
+            .unwrap_or_else(|| panic!("{register_fn} should write registry values"));
+        assert!(
+            validation_offset < registry_write_offset,
+            "{register_fn} must validate command target before registry writes"
+        );
+    }
+}
+
+#[test]
 fn production_source_scan_continues_past_early_cfg_test_items() {
     let long_document = include_str!("../src/long_document.rs");
     let production = production_source(long_document);
@@ -480,6 +630,62 @@ fn startup_activation_core_stays_decoupled_from_winfluent_task() {
             !activation.contains(forbidden),
             "startup activation parsing should stay pure Rust app core and let lib.rs wrap messages into WinFluent tasks; found {forbidden}"
         );
+    }
+}
+
+#[test]
+fn default_text_selection_terminal_smoke_helper_uses_non_shell_terminal_name() {
+    let text_selection_tests = include_str!("text_selection_behavior.rs");
+
+    assert!(
+        text_selection_tests.contains("temp_dir.join(\"WindowsTerminal.exe\")"),
+        "terminal smoke test should use a terminal-classified helper name without borrowing a shell runtime name"
+    );
+    for forbidden_helper in [
+        "temp_dir.join(\"pwsh.exe\")",
+        "temp_dir.join(\"powershell.exe\")",
+    ] {
+        assert!(
+            !text_selection_tests.contains(forbidden_helper),
+            "terminal smoke test must not copy the test binary to shell runtime helper name {forbidden_helper}"
+        );
+    }
+}
+
+#[test]
+fn default_integration_tests_do_not_spawn_retained_runtime_or_shell_helpers() {
+    let tests_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    for path in rust_source_files_under(&tests_dir) {
+        let relative_path = relative_slash_path(&tests_dir, &path);
+        if matches!(
+            relative_path.as_str(),
+            "compat_client.rs" | "default_api_boundary_behavior.rs"
+        ) {
+            continue;
+        }
+
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
+        let lines: Vec<_> = source.lines().collect();
+        for (index, line) in lines.iter().enumerate() {
+            let line_number = index + 1;
+            if line.contains("Command::new(")
+                && !line.contains("WorkerCommand::new(")
+                && !default_test_process_spawn_is_allowlisted(&relative_path, line)
+            {
+                panic!(
+                    "{relative_path}:{line_number} must not add an unreviewed default-test process spawn: {line}"
+                );
+            }
+
+            if line.contains("WorkerCommand::new(")
+                && !line_is_near_retained_worker_feature_gate(&lines, index)
+            {
+                panic!(
+                    "{relative_path}:{line_number} must keep WorkerCommand test spawns behind retained-dotnet-workers cfg: {line}"
+                );
+            }
+        }
     }
 }
 
@@ -556,7 +762,19 @@ fn assert_no_retained_dotnet_runtime_entry_markers(path: &str, source: &str) {
         "PowerShell",
         "powershell",
         "pwsh",
+        "wscript",
+        "cscript",
+        "mshta",
+        "WScript.Shell",
+        "VBScript",
+        "JScript",
         ".ps1",
+        ".vbs",
+        ".vbe",
+        ".jse",
+        ".wsf",
+        ".wsh",
+        ".hta",
         "Compress-Archive",
         "BrowserHostRegistrar",
         "Easydict NativeBridge",
@@ -601,6 +819,30 @@ fn is_text_selection_terminal_classifier_line(path: &str, line: &str, marker: &s
         && matches!(line.trim(), "\"powershell\"," | "\"pwsh\",")
 }
 
+fn default_test_process_spawn_is_allowlisted(path: &str, line: &str) -> bool {
+    let trimmed = line.trim();
+    match path {
+        "cli_translate_behavior.rs" => {
+            trimmed.contains("Command::new(env!(\"CARGO_BIN_EXE_easydict_cli\"))")
+        }
+        "long_document_cli_behavior.rs" => trimmed.contains("Command::new(binary)"),
+        "native_bridge_behavior.rs" => trimmed.contains("Command::new(bridge_bin)"),
+        "sidecar_ipc_e2e.rs" => {
+            trimmed.contains("Command::new(python_executable())")
+                || trimmed.contains("Command::new(candidate)")
+        }
+        "text_selection_behavior.rs" => trimmed.contains("std::process::Command::new(&helper_exe)"),
+        _ => false,
+    }
+}
+
+fn line_is_near_retained_worker_feature_gate(lines: &[&str], index: usize) -> bool {
+    let start = index.saturating_sub(8);
+    lines[start..=index]
+        .iter()
+        .any(|line| line.contains("#[cfg(feature = \"retained-dotnet-workers\")]"))
+}
+
 fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
     assert_no_foundry_local_runtime_markers_outside_cli_denylist(path, source);
     assert!(
@@ -615,17 +857,35 @@ fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
     let command_lines: Vec<_> = non_comment_lines(source)
         .filter(|(_, line)| line.contains("Command::new("))
         .collect();
+    let validation_lines: Vec<_> = non_comment_lines(source)
+        .filter(|(_, line)| line.contains("self.validated_cli_executable_for_spawn()?"))
+        .collect();
     assert_eq!(
         command_lines.len(),
         2,
         "{path} should only spawn the Foundry Local status/load and service-start CLI commands"
     );
-    for (line_number, line) in command_lines {
+    assert_eq!(
+        validation_lines.len(),
+        command_lines.len(),
+        "{path} should revalidate the Foundry Local CLI target immediately before every spawn"
+    );
+    for ((validation_line_number, _), (line_number, line)) in
+        validation_lines.iter().zip(command_lines.iter())
+    {
         assert!(
-            line.contains("Command::new(&self.executable_name)"),
-            "{path}:{line_number} must spawn only the configured Foundry Local CLI boundary"
+            validation_line_number < line_number,
+            "{path}:{line_number} must validate the configured Foundry Local CLI target before spawning it"
+        );
+        assert!(
+            line.contains("Command::new(executable.as_ref())"),
+            "{path}:{line_number} must spawn only the just-validated Foundry Local CLI target"
         );
     }
+    assert!(
+        source.contains("fn validated_cli_executable_for_spawn("),
+        "{path} should keep spawn-time Foundry Local CLI target revalidation explicit"
+    );
     assert!(
         source.contains("fn is_retained_dotnet_runtime_or_worker_command"),
         "{path} should keep a denylist for retained runtime/worker CLI overrides"
@@ -636,6 +896,10 @@ fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
         ),
         "{path} should delegate retained runtime/script command classification to lib/easydict-runtime-guards"
     );
+    assert!(
+        source.contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes)"),
+        "{path} should scan the resolved Foundry Local CLI target bytes for retained runtime/script markers before spawning"
+    );
     for denied_override in [
         "\"dotnet.exe\"",
         "\"hostfxr.dll\"",
@@ -643,6 +907,15 @@ fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
         ".runtimeconfig.json",
         "/host/fxr/",
         ".ps1",
+        ".vbs",
+        ".vbe",
+        ".jse",
+        ".wsf",
+        ".wsh",
+        ".hta",
+        "wscript.exe",
+        "cscript.exe",
+        "mshta.exe",
     ] {
         assert!(
             !source.contains(denied_override),
@@ -666,7 +939,19 @@ fn assert_no_foundry_local_runtime_markers_outside_cli_denylist(path: &str, sour
         "PowerShell",
         "powershell",
         "pwsh",
+        "wscript",
+        "cscript",
+        "mshta",
+        "WScript.Shell",
+        "VBScript",
+        "JScript",
         ".ps1",
+        ".vbs",
+        ".vbe",
+        ".jse",
+        ".wsf",
+        ".wsh",
+        ".hta",
         "Compress-Archive",
         "BrowserHostRegistrar",
         "Easydict NativeBridge",
@@ -710,6 +995,15 @@ fn is_foundry_local_cli_denylist_line(line: &str) -> bool {
         "\"pwsh.cmd\"",
         "\"pwsh.bat\"",
         "\"pwsh.com\"",
+        "\"wscript\"",
+        "\"wscript.exe\"",
+        "\"wscript.com\"",
+        "\"cscript\"",
+        "\"cscript.exe\"",
+        "\"cscript.com\"",
+        "\"mshta\"",
+        "\"mshta.exe\"",
+        "\"mshta.com\"",
         "\"hostfxr.dll\"",
         "\"hostpolicy.dll\"",
         "\"coreclr.dll\"",
@@ -721,6 +1015,12 @@ fn is_foundry_local_cli_denylist_line(line: &str) -> bool {
         ".runtimeconfig.json",
         "/host/fxr/",
         ".ps1",
+        ".vbs",
+        ".vbe",
+        ".jse",
+        ".wsf",
+        ".wsh",
+        ".hta",
     ]
     .iter()
     .any(|marker| lower.contains(marker))

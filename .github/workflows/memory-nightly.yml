@@ -67,7 +67,7 @@ jobs:
           dotnet publish src/Easydict.WinUI/Easydict.WinUI.csproj `
             --configuration Release `
             --runtime win-x64 `
-            --self-contained true `
+            --self-contained false `
             --no-restore `
             --output ./publish/x64 `
             -p:Platform=x64 `

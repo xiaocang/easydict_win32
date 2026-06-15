@@ -104,6 +104,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             let mut node = SchemaNode::new("Text", token.id.clone())
                 .property("value", quoted(&token.value))
                 .property("style", format!("{:?}", token.style))
+                .property("wrapping", format!("{:?}", token.wrapping))
                 .property("selectable", token.selectable.to_string());
             if let Some(width) = token.width {
                 node = node.property("width", optional_length(Some(width)));
@@ -164,6 +165,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("description", optional_string(token.description.as_deref()))
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("kind", format!("{:?}", token.kind))
+                .property("content_spacing", token.content_spacing.to_string())
                 .property("trailing", token.trailing.len().to_string());
             if let Some(content) = &token.content {
                 node = node.child(schema_node(content));
@@ -185,6 +187,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                         .map(|width| format!("{width:?}"))
                         .unwrap_or_else(|| "auto".to_string()),
                 )
+                .property("height", text_editor_evidence_height(token))
                 .property("min_height", optional_u16(token.min_height))
                 .property("max_height", optional_u16(token.max_height))
                 .property("text_style", format!("{:?}", token.text_style))
@@ -255,6 +258,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::ComboBox(token) => SchemaNode::new("ComboBox", token.id.clone())
             .property("label", optional_string(token.label.as_deref()))
+            .property("placeholder", optional_string(token.placeholder.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", combo_items(&token.items))
             .property("width", format!("{:?}", token.width))
@@ -349,6 +353,8 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("expanded", token.expanded.to_string())
                 .property("state", format!("{}", token.header_state))
+                .property("header_style", token.header_style.summary())
+                .property("content_style", token.content_style.summary())
                 .property("action", format!("{:?}", token.action.kind()))
                 .property("trailing", token.trailing.len().to_string());
             if token.expanded {
@@ -648,6 +654,14 @@ fn combo_box_labeled_evidence_width(label: Option<&str>, width: crate::view::Len
         crate::view::Length::Fixed(value) => format!("Fixed({})", value.saturating_add(8)),
         _ => "none".to_string(),
     }
+}
+
+fn text_editor_evidence_height<Message>(token: &crate::view::TextEditorToken<Message>) -> String {
+    token
+        .min_height
+        .or(token.max_height)
+        .map(|height| format!("Fixed({height})"))
+        .unwrap_or_else(|| "auto".to_string())
 }
 
 fn toggle_switch_labeled_evidence_height(header: Option<&str>) -> &'static str {

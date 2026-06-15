@@ -1,5 +1,6 @@
 use regex::Regex;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::env;
 use std::fmt;
 use std::fs;
@@ -443,8 +444,8 @@ impl CommandFoundryLocalEndpointResolver {
         command_timeout: Duration,
         require_success: bool,
     ) -> FoundryLocalResult<String> {
-        self.ensure_cli_executable_allowed()?;
-        let mut child = Command::new(&self.executable_name)
+        let executable = self.validated_cli_executable_for_spawn()?;
+        let mut child = Command::new(executable.as_ref())
             .args(arguments)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -519,8 +520,8 @@ impl CommandFoundryLocalEndpointResolver {
     }
 
     fn run_foundry_service_start_and_wait(&mut self) -> FoundryLocalResult<()> {
-        self.ensure_cli_executable_allowed()?;
-        let mut child = Command::new(&self.executable_name)
+        let executable = self.validated_cli_executable_for_spawn()?;
+        let mut child = Command::new(executable.as_ref())
             .args(["service", "start"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -577,17 +578,28 @@ impl CommandFoundryLocalEndpointResolver {
         }
     }
 
-    fn ensure_cli_executable_allowed(&self) -> FoundryLocalResult<()> {
+    fn validated_cli_executable_for_spawn(&self) -> FoundryLocalResult<Cow<'_, Path>> {
+        self.validated_cli_executable_for_spawn_with_canonicalizer(|path| {
+            fs::canonicalize(path).ok()
+        })
+    }
+
+    fn validated_cli_executable_for_spawn_with_canonicalizer<F>(
+        &self,
+        canonicalize: F,
+    ) -> FoundryLocalResult<Cow<'_, Path>>
+    where
+        F: Fn(&Path) -> Option<PathBuf>,
+    {
         if let Some(blocked) = &self.blocked_executable_name {
-            return Err(FoundryLocalError::new(
-                FoundryLocalErrorCode::ServiceUnavailable,
-                format!(
-                    "{FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE} must point to the native Foundry Local CLI; retained runtime/worker command is disabled: {blocked}"
-                ),
-            ));
+            return Err(foundry_local_cli_retained_target_error(blocked));
         }
 
-        Ok(())
+        let executable =
+            executable_for_allowed_foundry_local_cli_target(&self.executable_name, canonicalize)
+                .map_err(|blocked| foundry_local_cli_retained_target_error(&blocked))?;
+        validate_foundry_local_cli_executable_file_content(executable.as_ref())?;
+        Ok(executable)
     }
 }
 
@@ -1059,28 +1071,87 @@ where
         return (FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(), None);
     }
 
-    if is_retained_dotnet_runtime_or_worker_command(&trimmed) {
-        return (
+    match executable_for_allowed_foundry_local_cli_target(&trimmed, canonicalize) {
+        Ok(_) => (trimmed, None),
+        Err(blocked) => (
             FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(),
-            Some(trimmed),
-        );
+            Some(blocked),
+        ),
+    }
+}
+
+fn executable_for_allowed_foundry_local_cli_target<F>(
+    executable_name: &str,
+    canonicalize: F,
+) -> Result<Cow<'_, Path>, String>
+where
+    F: Fn(&Path) -> Option<PathBuf>,
+{
+    if is_retained_dotnet_runtime_or_worker_command(executable_name) {
+        return Err(executable_name.to_string());
     }
 
-    if let Some(canonical_path) = canonicalize(Path::new(&trimmed)) {
+    let executable_path = Path::new(executable_name);
+    if let Some(canonical_path) = canonicalize(executable_path) {
         let canonical = canonical_path.to_string_lossy().to_string();
         if is_retained_dotnet_runtime_or_worker_command(&canonical) {
-            return (
-                FOUNDRY_LOCAL_DEFAULT_CLI_EXECUTABLE_NAME.to_string(),
-                Some(format!("{trimmed} -> {canonical}")),
-            );
+            return Err(format!("{executable_name} -> {canonical}"));
         }
+
+        return Ok(Cow::Owned(canonical_path));
     }
 
-    (trimmed, None)
+    Ok(Cow::Borrowed(executable_path))
+}
+
+fn foundry_local_cli_retained_target_error(blocked: &str) -> FoundryLocalError {
+    FoundryLocalError::new(
+        FoundryLocalErrorCode::ServiceUnavailable,
+        format!(
+            "{FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE} must point to the native Foundry Local CLI; retained runtime/worker command is disabled: {blocked}"
+        ),
+    )
 }
 
 fn is_retained_dotnet_runtime_or_worker_command(value: &str) -> bool {
     easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(value)
+}
+
+fn validate_foundry_local_cli_executable_file_content(path: &Path) -> FoundryLocalResult<()> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(FoundryLocalError::new(
+                FoundryLocalErrorCode::ServiceUnavailable,
+                format!(
+                    "Could not validate Foundry Local CLI target {}: {error}",
+                    path.display()
+                ),
+            ));
+        }
+    };
+    if !metadata.is_file() {
+        return Ok(());
+    }
+
+    let bytes = fs::read(path).map_err(|error| {
+        FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            format!(
+                "Could not validate Foundry Local CLI target {}: {error}",
+                path.display()
+            ),
+        )
+    })?;
+    if easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes) {
+        return Err(foundry_local_cli_retained_target_error(&format!(
+            "{} contains retained runtime marker",
+            path.display()
+        )));
+    }
+
+    Ok(())
 }
 
 fn foundry_local_default_log_dirs() -> Vec<PathBuf> {
@@ -1366,6 +1437,11 @@ mod tests {
             "pwsh.cmd",
             "powershell.exe",
             "powershell.bat",
+            "wscript.exe",
+            "cscript.exe",
+            "mshta.exe",
+            "foundry.cmd",
+            "foundry.bat",
             "C:/Easydict/Easydict.CompatHost.exe",
             "C:/Easydict/workers/localai/Easydict.Workers.LocalAi.exe",
             "C:/Easydict/Easydict.Workers.LocalAi.runtimeconfig.json",
@@ -1375,6 +1451,16 @@ mod tests {
             "clrjit.dll",
             "singlefilehost.exe",
             "C:/Easydict/scripts/launch-localai.ps1",
+            "C:/Easydict/scripts/launch-localai.psm1",
+            "C:/Easydict/scripts/launch-localai.cmd",
+            "C:/Easydict/scripts/launch-localai.bat",
+            "C:/Easydict/scripts/launch-localai.vbs",
+            "C:/Easydict/scripts/launch-localai.vbe",
+            "C:/Easydict/scripts/launch-localai.js",
+            "C:/Easydict/scripts/launch-localai.jse",
+            "C:/Easydict/scripts/launch-localai.wsf",
+            "C:/Easydict/scripts/launch-localai.wsh",
+            "C:/Easydict/scripts/launch-localai.hta",
         ] {
             let mut resolver =
                 CommandFoundryLocalEndpointResolver::new(blocked, Duration::from_millis(1));
@@ -1407,6 +1493,56 @@ mod tests {
             blocked_executable_name.expect("canonical retained runtime target should be blocked");
         assert!(blocked.contains(&requested));
         assert!(blocked.contains("Microsoft.NETCore.App"));
+    }
+
+    #[test]
+    fn cli_executable_override_revalidates_canonical_target_before_spawn() {
+        let requested = r"C:\Tools\Foundry\foundry.exe";
+        let resolver =
+            CommandFoundryLocalEndpointResolver::new(requested, Duration::from_millis(1));
+
+        assert_eq!(resolver.executable_name, requested);
+        assert_eq!(resolver.blocked_executable_name, None);
+
+        let canonical =
+            PathBuf::from(r"C:\Easydict\dotnet\shared\Microsoft.NETCore.App\8.0.11\foundry.exe");
+        let error = resolver
+            .validated_cli_executable_for_spawn_with_canonicalizer(|_| Some(canonical.clone()))
+            .expect_err("spawn-time canonical retained runtime target should be blocked");
+
+        assert_eq!(error.code, FoundryLocalErrorCode::ServiceUnavailable);
+        assert!(error.message.contains("retained runtime/worker"));
+        assert!(error.message.contains(requested));
+        assert!(error.message.contains("Microsoft.NETCore.App"));
+    }
+
+    #[test]
+    fn cli_executable_override_rejects_retained_runtime_content_before_spawn() {
+        let temp_dir = unique_temp_dir("easydict-foundry-local-retained-content");
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        let cli_path = temp_dir.join("foundry.exe");
+        fs::write(
+            &cli_path,
+            b"renamed apphost still references hostfxr.dll before native startup",
+        )
+        .expect("fake CLI should be written");
+
+        let requested = cli_path.to_string_lossy().to_string();
+        let resolver =
+            CommandFoundryLocalEndpointResolver::new(requested.clone(), Duration::from_millis(1));
+
+        assert_eq!(resolver.executable_name, requested);
+        assert_eq!(resolver.blocked_executable_name, None);
+
+        let error = resolver
+            .validated_cli_executable_for_spawn()
+            .expect_err("retained runtime content marker should be blocked before spawn");
+
+        assert_eq!(error.code, FoundryLocalErrorCode::ServiceUnavailable);
+        assert!(error.message.contains("retained runtime/worker"));
+        assert!(error.message.contains("contains retained runtime marker"));
+        assert!(error.message.contains("foundry.exe"));
+        fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
     }
 
     #[test]

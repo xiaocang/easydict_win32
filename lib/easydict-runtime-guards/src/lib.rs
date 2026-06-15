@@ -285,12 +285,15 @@ pub fn command_target_is_retained_runtime_or_script_marker(value: &str) -> bool 
         return true;
     }
 
+    if command_target_contains_retained_marker_token(&lower) {
+        return true;
+    }
+
     path_entry_is_retained_runtime_payload_marker(&lower)
         || lower
             .split('/')
             .filter(|component| !component.is_empty())
             .any(path_component_is_retained_runtime_marker)
-        || lower.contains(".ps1")
 }
 
 fn command_target_head_token(value: &str) -> &str {
@@ -317,6 +320,27 @@ fn command_path_leaf(value: &str) -> &str {
         .trim_matches('"')
 }
 
+fn command_target_contains_retained_marker_token(value: &str) -> bool {
+    value
+        .split(command_target_token_separator)
+        .filter(|token| !token.is_empty())
+        .any(|token| {
+            let leaf = command_path_leaf(token);
+            path_component_is_retained_runtime_marker(leaf)
+                || retained_runtime_payload_file_name_is_forbidden(leaf)
+                || command_leaf_is_retained_script_marker(leaf)
+                || path_entry_is_retained_runtime_payload_marker(token)
+        })
+}
+
+fn command_target_token_separator(value: char) -> bool {
+    value.is_ascii_whitespace()
+        || matches!(
+            value,
+            '"' | '\'' | '`' | ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}' | '=' | '|' | '&'
+        )
+}
+
 fn path_entry_contains_retained_runtime_layout(components: &[String]) -> bool {
     components.windows(2).any(|window| {
         let parent = window[0].as_str();
@@ -341,19 +365,35 @@ fn retained_runtime_payload_file_name_is_forbidden(file_name: &str) -> bool {
             RETAINED_WORKER_SHARED_DOTNET_FILE_NAMES_XOR,
             file_name,
         )
+        || command_leaf_is_retained_script_marker(file_name)
 }
 
 fn command_leaf_is_retained_script_marker(file_name: &str) -> bool {
     let value = file_name.to_ascii_lowercase();
-    let executable_stem = value
-        .strip_suffix(".exe")
-        .or_else(|| value.strip_suffix(".cmd"))
-        .or_else(|| value.strip_suffix(".bat"))
-        .or_else(|| value.strip_suffix(".com"))
-        .unwrap_or(&value);
-
-    executable_stem == "cmd" || value.ends_with(".ps1")
+    command_leaf_has_retained_script_suffix(&value) || command_leaf_is_retained_script_host(&value)
 }
+
+fn command_leaf_has_retained_script_suffix(file_name: &str) -> bool {
+    RETAINED_SCRIPT_FILE_SUFFIXES
+        .iter()
+        .any(|suffix| file_name.ends_with(suffix))
+}
+
+fn command_leaf_is_retained_script_host(file_name: &str) -> bool {
+    let executable_stem = file_name
+        .strip_suffix(".exe")
+        .or_else(|| file_name.strip_suffix(".com"))
+        .unwrap_or(file_name);
+
+    RETAINED_SCRIPT_HOST_STEMS.contains(&executable_stem)
+}
+
+const RETAINED_SCRIPT_FILE_SUFFIXES: &[&str] = &[
+    ".ps1", ".psm1", ".cmd", ".bat", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta",
+];
+
+const RETAINED_SCRIPT_HOST_STEMS: &[&str] =
+    &["cmd", "powershell", "pwsh", "wscript", "cscript", "mshta"];
 
 fn forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
     let Some(suffix) =
@@ -635,6 +675,27 @@ const RETAINED_RUNTIME_CONTENT_MARKERS_XOR: &[&[u8]] = &[
         0xf4, 0xde, 0xd4, 0xd3, 0xc2, 0xca, 0x89, 0xf0, 0xce, 0xc9, 0xc3, 0xc8, 0xd0, 0xd4, 0x89,
         0xe1, 0xc8, 0xd5, 0xca, 0xd4,
     ],
+    &[
+        0xd0, 0xd4, 0xc4, 0xd5, 0xce, 0xd7, 0xd3, 0x89, 0xc2, 0xdf, 0xc2,
+    ],
+    &[
+        0xc4, 0xd4, 0xc4, 0xd5, 0xce, 0xd7, 0xd3, 0x89, 0xc2, 0xdf, 0xc2,
+    ],
+    &[0xca, 0xd4, 0xcf, 0xd3, 0xc6, 0x89, 0xc2, 0xdf, 0xc2],
+    &[
+        0xf0, 0xf4, 0xc4, 0xd5, 0xce, 0xd7, 0xd3, 0x89, 0xf4, 0xcf, 0xc2, 0xcb, 0xcb,
+    ],
+    &[0xf1, 0xe5, 0xf4, 0xc4, 0xd5, 0xce, 0xd7, 0xd3],
+    &[0xed, 0xf4, 0xc4, 0xd5, 0xce, 0xd7, 0xd3],
+    &[
+        0xef, 0xf3, 0xe6, 0x9d, 0xe6, 0xf7, 0xf7, 0xeb, 0xee, 0xe4, 0xe6, 0xf3, 0xee, 0xe8, 0xe9,
+    ],
+    &[0x89, 0xd1, 0xc5, 0xd4],
+    &[0x89, 0xd1, 0xc5, 0xc2],
+    &[0x89, 0xcd, 0xd4, 0xc2],
+    &[0x89, 0xd0, 0xd4, 0xc1],
+    &[0x89, 0xd0, 0xd4, 0xcf],
+    &[0x89, 0xcf, 0xd3, 0xc6],
 ];
 
 pub fn bytes_contain_retained_runtime_marker(bytes: &[u8]) -> bool {
@@ -1035,6 +1096,17 @@ mod tests {
             "System.Private.CoreLib.dll",
             "Microsoft.Web.WebView2.Core.Projection.dll",
             "assets/LexIndex.dll",
+            "scripts/legacy-backend.ps1",
+            "scripts/legacy-backend.vbs",
+            "scripts/legacy-backend.vbe",
+            "scripts/legacy-backend.js",
+            "scripts/legacy-backend.jse",
+            "scripts/legacy-backend.wsf",
+            "scripts/legacy-backend.wsh",
+            "scripts/legacy-backend.hta",
+            "bin/wscript.exe",
+            "bin/cscript.exe",
+            "bin/mshta.exe",
         ] {
             assert!(
                 path_entry_is_retained_runtime_payload_marker(entry),
@@ -1071,10 +1143,23 @@ mod tests {
             r"C:\Windows\System32\cmd.exe /c C:\Easydict\dotnet\dotnet.exe",
             "powershell -NoProfile",
             "pwsh.cmd",
+            "wscript.exe",
+            "cscript.exe //nologo scripts/legacy-backend.vbs",
+            "mshta.exe scripts/legacy-ui.hta",
             r"C:\Easydict\workers\localai\Easydict.Workers.LocalAi.exe",
             r"C:\Easydict\dotnet\host\fxr\8.0.11\hostfxr.dll",
             r"C:\Easydict\dotnet\shared\Microsoft.NETCore.App\8.0.11\foundry.exe",
             "scripts/legacy-backend.ps1",
+            "scripts/legacy-backend.psm1",
+            "scripts/legacy-backend.cmd",
+            "scripts/legacy-backend.bat",
+            "scripts/legacy-backend.vbs",
+            "scripts/legacy-backend.vbe",
+            "scripts/legacy-backend.js",
+            "scripts/legacy-backend.jse",
+            "scripts/legacy-backend.wsf",
+            "scripts/legacy-backend.wsh",
+            "scripts/legacy-backend.hta",
             "Easydict.CompatHost.exe",
             "Easydict.WinUI.runtimeconfig.json",
         ] {
@@ -1086,17 +1171,62 @@ mod tests {
     }
 
     #[test]
+    fn command_target_classifier_rejects_retained_runtime_and_script_arguments() {
+        for target in [
+            "foundry.cmd /c dotnet.exe --info",
+            "native-helper --runtime=dotnet.exe",
+            "native-helper -- Easydict.Workers.LocalAi.exe",
+            "native-helper --script legacy-backend.ps1",
+            "native-helper --script legacy-backend.psm1",
+            "native-helper --script legacy-backend.cmd",
+            "native-helper --script legacy-backend.bat",
+            "native-helper --script legacy-backend.vbs",
+            "native-helper --script legacy-backend.vbe",
+            "native-helper --script legacy-backend.js",
+            "native-helper --script legacy-backend.jse",
+            "native-helper --script legacy-backend.wsf",
+            "native-helper --script legacy-backend.wsh",
+            "native-helper --script legacy-backend.hta",
+            "native-helper --target dotnet/host/fxr/8.0.11/hostfxr.dll",
+        ] {
+            assert!(
+                command_target_is_retained_runtime_or_script_marker(target),
+                "{target} should be rejected when a retained runtime/script marker appears in arguments"
+            );
+        }
+    }
+
+    #[test]
     fn command_target_classifier_allows_native_foundry_targets() {
         for target in [
             "foundry",
             "foundry.exe",
-            "foundry.cmd",
             r"C:\Program Files\Microsoft Foundry Local\foundry.exe",
             "/usr/local/bin/foundry",
+            "foundry --model phi-3 --endpoint http://127.0.0.1:5273/v1",
         ] {
             assert!(
                 !command_target_is_retained_runtime_or_script_marker(target),
                 "{target} should be allowed as a native Foundry Local command target"
+            );
+        }
+    }
+
+    #[test]
+    fn command_target_classifier_allows_native_helper_names_with_script_words() {
+        for target in [
+            "easydict_browser_registrar.exe",
+            "easydict_native_bridge.exe",
+            "easydict_cli.exe",
+            "easydict_js_native_helper.exe",
+            "easydict_hta_script_helper.exe",
+            "easydict_json_helper.exe",
+            r"C:\Easydict\helpers\easydict_windows_script_host_helper.exe",
+            "native-helper --mode=json --script-host=disabled",
+        ] {
+            assert!(
+                !command_target_is_retained_runtime_or_script_marker(target),
+                "{target} should be allowed as a Rust native helper name"
             );
         }
     }
@@ -1107,6 +1237,12 @@ mod tests {
             b"native apphost still references hostfxr.dll".as_slice(),
             b"bootstrap says This application requires .NET".as_slice(),
             b"legacy script backend: powershell.exe".as_slice(),
+            b"legacy WSH backend: wscript.exe //nologo legacy.vbs".as_slice(),
+            b"legacy CScript backend: cscript.exe //nologo legacy.wsf".as_slice(),
+            b"legacy HTA backend: mshta.exe legacy.hta".as_slice(),
+            b"ActiveXObject(\"WScript.Shell\") from old helper".as_slice(),
+            b"<HTA:APPLICATION ID=\"legacy-ui\">".as_slice(),
+            b"legacy script engines: VBScript and JScript".as_slice(),
             b"old TTS command environment WIN_FLUENT_TTS_TEXT".as_slice(),
             b"old TTS backend: System.Speech.Synthesis".as_slice(),
             b"old dialog backend: System.Windows.Forms".as_slice(),
@@ -1128,6 +1264,9 @@ mod tests {
             "System.Speech.Synthesis",
             "System.Windows.Forms",
             "This application requires .NET",
+            "WScript.Shell",
+            "HTA:APPLICATION",
+            "mshta.exe",
         ] {
             let bytes = marker
                 .encode_utf16()

@@ -75,6 +75,9 @@ jobs:
           --no-build
           -c Release
           -p:Platform=x64
+          -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
+          -p:BuildWorkerOutputs=false
+          -p:EnableInProcLongDocFallback=false
           --filter "Category=Performance"
           --verbosity normal
           --logger "trx;LogFileName=benchmark-results.trx"

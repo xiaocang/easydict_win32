@@ -303,8 +303,9 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "retained-dotnet-workers")]
     #[test]
-    fn accepts_legacy_host_without_exposing_worker_target() {
+    fn retained_feature_accepts_legacy_host_without_exposing_worker_target() {
         let options = parse_args([
             "stream",
             "--json",

@@ -38,8 +38,10 @@ For permanent install, package as `.xpi`:
 
 ## Prerequisites
 
-- **Easydict for Windows** must be installed (MSIX or Inno installer)
-- **Native host** must be installed via tray menu: 浏览器支持 → 安装 Chrome/Firefox 支持
+- **Easydict for Windows** must be installed from the Rust portable package on the
+  [Releases](https://github.com/xiaocang/easydict_win32/releases) page.
+- **Native host** must be installed via tray menu: 浏览器支持 → 安装 Chrome/Firefox 支持.
+  The default host name is `com.easydict.rs.bridge`.
 
 ## Files
 

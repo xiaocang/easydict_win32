@@ -99,6 +99,7 @@ try {
             --no-self-contained `
             --output "$publishDir/workers/longdoc" `
             -p:Platform=$Platform `
+            -p:RuntimeProfile=$RuntimeProfile `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
         if ($LASTEXITCODE -ne 0) { throw "LongDoc worker publish failed" }
@@ -109,6 +110,7 @@ try {
             --no-self-contained `
             --output "$publishDir/workers/localai" `
             -p:Platform=$Platform `
+            -p:RuntimeProfile=$RuntimeProfile `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
         if ($LASTEXITCODE -ne 0) { throw "LocalAI worker publish failed" }

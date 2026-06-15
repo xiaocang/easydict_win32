@@ -268,9 +268,10 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.toggle_maximize_action.kind(),
             token.close_action.kind()
         ),
-        ViewToken::Text(token) => {
-            format!("{:?}|{:?}|{}", token.value, token.style, token.selectable)
-        }
+        ViewToken::Text(token) => format!(
+            "{:?}|{:?}|{:?}|{}",
+            token.value, token.style, token.wrapping, token.selectable
+        ),
         ViewToken::Button(token) => format!(
             "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}",
             token.label,
@@ -361,8 +362,9 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.action.kind()
         ),
         ViewToken::ComboBox(token) => format!(
-            "{:?}|{:?}|items={}|{:?}|{:?}|{}|{:?}",
+            "{:?}|{:?}|{:?}|items={}|{:?}|{:?}|{}|{:?}",
             token.label,
+            token.placeholder,
             token.selected,
             token.items.len(),
             token.width,
@@ -429,10 +431,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.horizontal, token.vertical, token.scrollbars_visible
         ),
         ViewToken::Expander(token) => format!(
-            "{:?}|{:?}|expanded={}|action={:?}|{:?}",
+            "{:?}|{:?}|expanded={}|header_style={}|content_style={}|action={:?}|{:?}",
             token.title,
             token.description,
             token.expanded,
+            token.header_style.summary(),
+            token.content_style.summary(),
             token.action.kind(),
             token.icon.as_ref().map(|icon| icon.name)
         ),

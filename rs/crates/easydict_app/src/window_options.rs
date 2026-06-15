@@ -5,6 +5,8 @@ pub const MAIN_WINDOW_DEFAULT_WIDTH_DIPS: f32 = 419.0;
 pub const MAIN_WINDOW_DEFAULT_HEIGHT_DIPS: f32 = 494.5;
 pub const MAIN_WINDOW_MIN_WIDTH_DIPS: f32 = 400.0;
 pub const MAIN_WINDOW_MIN_HEIGHT_DIPS: f32 = 494.5;
+pub const SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS: f32 = 846.0;
+pub const SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS: f32 = 913.0;
 
 pub fn main_window_options() -> WindowOptions {
     WindowOptions::new("main", "Easydict")
@@ -29,7 +31,10 @@ pub fn main_window_options_for_settings(settings: &SettingsState) -> WindowOptio
 
 pub fn settings_window_options() -> WindowOptions {
     WindowOptions::new("settings", "Easydict Settings")
-        .size(846.0, 900.0)
+        .size(
+            SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
+            SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
+        )
         .min_size(760.0, 620.0)
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)

@@ -70,10 +70,15 @@ is only a compatibility shim to `pack-rs-portable`. The packager validates both
 the staged directory and final ZIP, rejecting accidental `.NET` runtime or
 retained-worker entries such as `dotnet/`, `workers/`, `hostfxr.dll`,
 `coreclr.dll`, `hostpolicy.dll`, `clrjit.dll`, `System.Private.CoreLib.dll`,
-`*.runtimeconfig.json`, `*.deps.json`, or `Easydict.Workers.*`. After those
-diagnostics, the validator applies the first-release allowlist: only
-`Easydict.Rust.exe`, the Rust helper executables, and `README-portable.txt` may
-be present at the package root.
+`*.runtimeconfig.json`, `*.deps.json`, `Easydict.Workers.*`, or script host
+payload markers such as `wscript.exe`, `cscript.exe`, `mshta.exe`, WSH/HTA
+scripts, and retained PowerShell/batch helpers. After those diagnostics, the validator applies the first-release allowlist: only
+`Easydict.Rust.exe`, `easydict-native-bridge.exe`,
+`easydict_browser_registrar.exe`, `easydict_cli.exe`,
+`easydict_long_doc.exe`, `AppIcon.ico`, and `README-portable.txt` may be present
+at the package root.
+The `service-icons/` image assets are source resources compiled into the Rust
+binaries; they are not staged as a portable package directory.
 
 The retained `.NET` LongDoc/LocalAI worker bridge is compiled only with the
 explicit `retained-dotnet-workers` feature. Default rs builds and portable
@@ -265,8 +270,10 @@ echo Hello | cargo run -p easydict_app --bin easydict_cli -- translate --service
 
 `easydict_cli` runs supported services through Rust-native routes. The rs app
 and CLI no longer start the retained `workers/localai` payload from default
-packaged Quick Translate routes; `--host` and `--app-dir` remain accepted only
-as legacy no-op compatibility options.
+packaged Quick Translate routes. Default builds reject the legacy `--host`,
+`--host-arg`, and `--app-dir` retained-worker options; they are parsed only in
+explicit `retained-dotnet-workers` compatibility builds, and even there they do
+not enable retained worker lookup without the explicit hybrid runtime profile.
 Auto LocalAI still probes a running Foundry Local endpoint first, but requests
 can now fall back to the Rust-native OpenVINO NLLB route when the model/runtime
 cache is complete. Requests that still need the retained `.NET` worker fail

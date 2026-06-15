@@ -235,6 +235,7 @@ jobs:
             --self-contained true `
             --output ./publish/${{ matrix.platform }}/workers/longdoc `
             -p:Platform=${{ matrix.platform }} `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false
 
       - name: Publish LocalAi Worker
@@ -247,6 +248,7 @@ jobs:
             --self-contained true `
             --output ./publish/${{ matrix.platform }}/workers/localai `
             -p:Platform=${{ matrix.platform }} `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false
 
       # OCR recognition is now Rust-native; do not publish the old .NET OCR worker.
@@ -297,6 +299,7 @@ jobs:
             --no-self-contained `
             --output ./publish-msix/${{ matrix.platform }}/workers/longdoc `
             -p:Platform=${{ matrix.platform }} `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
@@ -310,6 +313,7 @@ jobs:
             --no-self-contained `
             --output ./publish-msix/${{ matrix.platform }}/workers/localai `
             -p:Platform=${{ matrix.platform }} `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
@@ -367,7 +371,8 @@ jobs:
           ./scripts/Run-Wack.ps1 `
             -MsixPath "msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix" `
             -Arch "${{ matrix.platform }}" `
-            -ReportPath "msix/wack-report-${{ matrix.platform }}.xml"
+            -ReportPath "msix/wack-report-${{ matrix.platform }}.xml" `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}"
 
       # Always upload the report so we can inspect failures without re-running CI.
       - name: Upload WACK report
@@ -503,6 +508,8 @@ jobs:
         working-directory: rs
         run: |
           cargo test -p easydict_packager --test release_contract_behavior
+          cargo test --manifest-path ../lib/easydict-runtime-guards/Cargo.toml -- --nocapture
+          cargo test -p easydict_msix_validate --lib -- --nocapture
           cargo test -p easydict_app runtime_policy --lib
           cargo test -p easydict_app --features retained-dotnet-workers runtime_policy --lib
           cargo test -p easydict_app --features retained-dotnet-workers --test quick_translate_behavior explicit_worker_policy_without_hybrid_runtime_profile_stays_rust_only -- --exact --nocapture
@@ -669,12 +676,31 @@ jobs:
     needs: [prepare, publish-rs-portable]
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Download Rust portable artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: easydict-rs-portable-*
           path: rs-portable
           merge-multiple: true
+
+      - name: Validate downloaded Rust portable release asset
+        shell: pwsh
+        run: |
+          $zips = @(Get-ChildItem -Path rs-portable -Filter *.zip -File)
+          if ($zips.Count -eq 0) {
+            throw "No Rust portable ZIP artifacts were downloaded"
+          }
+
+          foreach ($zip in $zips) {
+            cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- `
+              validate-rs-portable `
+              --package $zip.FullName
+          }
 
       - name: Upload Rust portable release asset
         uses: softprops/action-gh-release@v1

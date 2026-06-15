@@ -156,6 +156,12 @@ msgstr "端点（可选）"
 msgid "settings.services.model"
 msgstr "模型"
 
+msgid "settings.services.builtin.hint.title"
+msgstr "提示"
+
+msgid "settings.services.builtin.hint.message"
+msgstr "内置密钥有免费额度限制，不保证始终可用。为稳定使用，建议获取自己的免费 API 密钥。"
+
 msgid "settings.services.github_token"
 msgstr "GitHub 令牌"
 

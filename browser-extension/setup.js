@@ -1,8 +1,6 @@
 // Easydict Setup Page — hash-based section switching, i18n, and retry logic.
 
-const RUST_NATIVE_HOST_NAME = "com.easydict.rs.bridge";
-const LEGACY_NATIVE_HOST_NAME = "com.easydict.bridge";
-const NATIVE_HOST_NAMES = [RUST_NATIVE_HOST_NAME, LEGACY_NATIVE_HOST_NAME];
+const NATIVE_HOST_NAME = "com.easydict.rs.bridge";
 
 // Apply i18n strings from _locales
 function applyLocalization() {
@@ -45,7 +43,7 @@ function showStatus(sectionId, type, messageKey) {
 function retry(sectionId) {
   showStatus(sectionId, "", "");
 
-  sendNativeMessageWithFallback({ action: "ocr-translate" }, (response, error) => {
+  sendNativeMessage({ action: "ocr-translate" }, (response, error) => {
     if (error) {
       console.error("[Easydict] Retry: native host not found:", error?.message || error);
       showStatus(sectionId, "error", "setupRetryFailed");
@@ -62,33 +60,12 @@ function retry(sectionId) {
   });
 }
 
-function sendNativeMessageWithFallback(message, callback) {
-  sendNativeMessageToHost(0, message, callback);
-}
-
-function sendNativeMessageToHost(index, message, callback) {
-  const hostName = NATIVE_HOST_NAMES[index];
-  if (!hostName) {
-    callback(undefined, new Error("No Easydict native messaging host configured"));
-    return;
-  }
-
+function sendNativeMessage(message, callback) {
   try {
-    chrome.runtime.sendNativeMessage(hostName, message, (response) => {
-      const error = chrome.runtime.lastError;
-      if (error && index + 1 < NATIVE_HOST_NAMES.length) {
-        sendNativeMessageToHost(index + 1, message, callback);
-        return;
-      }
-
-      callback(response, error);
-    });
+    chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, message, (response) =>
+      callback(response, chrome.runtime.lastError)
+    );
   } catch (error) {
-    if (index + 1 < NATIVE_HOST_NAMES.length) {
-      sendNativeMessageToHost(index + 1, message, callback);
-      return;
-    }
-
     callback(undefined, error);
   }
 }

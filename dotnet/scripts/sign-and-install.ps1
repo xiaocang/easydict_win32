@@ -1,5 +1,8 @@
 #!/usr/bin/env pwsh
-# Sign and install an existing Easydict MSIX/MSIX bundle
+# Sign and install an existing Easydict MSIX/MSIX bundle.
+# This is not the first rs release/install path. The first rs release is
+# Rust portable-only; use rs/scripts/Package-Portable.ps1 or
+# `easydict_packager pack-rs-portable` for that package.
 
 param(
     [Parameter(Mandatory = $true)]
@@ -63,32 +66,39 @@ Write-Host "Package: $PackagePath"
 Write-Host "Cert:    $CertPath"
 Write-Host ""
 
-# Step 1: Sign
-Write-Host "[1/3] Signing package..." -ForegroundColor Yellow
-winapp sign $PackagePath $CertPath --password $CertPassword --verbose
-if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
-Write-Host "Package signed successfully" -ForegroundColor Green
-Write-Host ""
-
-# Step 2: Validate payload before touching the installed app
-Write-Host "[2/3] Validating package payload..." -ForegroundColor Yellow
+# Step 1: Validate payload before signing or touching the installed app
+Write-Host "[1/3] Validating package payload..." -ForegroundColor Yellow
 $validatorArgs = @(
     "run",
     "--manifest-path",
     $cargoManifest,
     "-p",
     "easydict_msix_validate",
-    "--",
-    $PackagePath
+    "--"
 )
+$packageExtension = [System.IO.Path]::GetExtension($PackagePath).ToLowerInvariant()
+if ($packageExtension -eq ".msixbundle" -or $packageExtension -eq ".appxbundle") {
+    $validatorArgs += @("verify-bundle-minversion", $PackagePath)
+} else {
+    $validatorArgs += @($PackagePath)
+    $validatorArgs += @("--allow-unsigned")
+}
 $validatorRuntimeProfile = Get-ValidatorRuntimeProfile $RuntimeProfile
 if ($validatorRuntimeProfile -eq "hybrid") {
     $validatorArgs += @("--runtime-profile", "hybrid")
 }
 
 & cargo @validatorArgs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$validatorExitCode = $LASTEXITCODE
+if ($validatorExitCode -ne 0) { throw "Package payload validation failed with exit code $validatorExitCode" }
 Write-Host "Package payload validated successfully" -ForegroundColor Green
+Write-Host ""
+
+# Step 2: Sign
+Write-Host "[2/3] Signing package..." -ForegroundColor Yellow
+winapp sign $PackagePath $CertPath --password $CertPassword --verbose
+if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
+Write-Host "Package signed successfully" -ForegroundColor Green
 Write-Host ""
 
 # Step 3: Reinstall

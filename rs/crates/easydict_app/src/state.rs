@@ -1604,6 +1604,13 @@ impl EasydictUiState {
             state.settings.ollama_model.clear();
             settings_seed_changed = true;
         }
+        if std::env::var("EASYDICT_PREVIEW_SETTINGS_OPENAI_MODEL_EMPTY")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.settings.open_ai_model.clear();
+            settings_seed_changed = true;
+        }
         if settings_seed_changed {
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
@@ -1770,6 +1777,13 @@ impl EasydictUiState {
         {
             state.settings.unsaved_changes = true;
             state.settings.show_unsaved_changes_dialog = true;
+        }
+        if std::env::var("EASYDICT_PREVIEW_SETTINGS_UNSAVED_CHANGES")
+            .ok()
+            .is_some_and(|value| env_truthy(&value))
+        {
+            state.settings.unsaved_changes = true;
+            state.settings.show_unsaved_changes_dialog = false;
         }
 
         if std::env::var("EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED")
@@ -4207,8 +4221,6 @@ fn preview_waiting_results() -> Vec<TranslationResultPreview> {
             "",
         )
         .expanded(false),
-        TranslationResultPreview::new("google", "Google Translate", "").expanded(false),
-        TranslationResultPreview::new("volcano", "Volcano", "").manual_query(),
     ]
 }
 

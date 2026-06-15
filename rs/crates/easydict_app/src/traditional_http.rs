@@ -97,6 +97,46 @@ const GOOGLE_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
     TranslationLanguage::Hebrew,
 ];
 
+const BING_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
+    TranslationLanguage::SimplifiedChinese,
+    TranslationLanguage::TraditionalChinese,
+    TranslationLanguage::English,
+    TranslationLanguage::Japanese,
+    TranslationLanguage::Korean,
+    TranslationLanguage::French,
+    TranslationLanguage::Spanish,
+    TranslationLanguage::Portuguese,
+    TranslationLanguage::Italian,
+    TranslationLanguage::German,
+    TranslationLanguage::Russian,
+    TranslationLanguage::Arabic,
+    TranslationLanguage::Swedish,
+    TranslationLanguage::Romanian,
+    TranslationLanguage::Thai,
+    TranslationLanguage::Dutch,
+    TranslationLanguage::Hungarian,
+    TranslationLanguage::Greek,
+    TranslationLanguage::Danish,
+    TranslationLanguage::Finnish,
+    TranslationLanguage::Polish,
+    TranslationLanguage::Czech,
+    TranslationLanguage::Turkish,
+    TranslationLanguage::Ukrainian,
+    TranslationLanguage::Bulgarian,
+    TranslationLanguage::Indonesian,
+    TranslationLanguage::Malay,
+    TranslationLanguage::Vietnamese,
+    TranslationLanguage::Persian,
+    TranslationLanguage::Hindi,
+    TranslationLanguage::Telugu,
+    TranslationLanguage::Tamil,
+    TranslationLanguage::Urdu,
+    TranslationLanguage::Filipino,
+    TranslationLanguage::Bengali,
+    TranslationLanguage::Norwegian,
+    TranslationLanguage::Hebrew,
+];
+
 const DEEPL_SUPPORTED_LANGUAGES: &[TranslationLanguage] = &[
     TranslationLanguage::SimplifiedChinese,
     TranslationLanguage::TraditionalChinese,
@@ -334,7 +374,7 @@ fn traditional_http_supported_languages_for_kind(
         }
         TraditionalHttpServiceKind::NiuTrans => NIUTRANS_SUPPORTED_LANGUAGES,
         TraditionalHttpServiceKind::Volcano => VOLCANO_SUPPORTED_LANGUAGES,
-        TraditionalHttpServiceKind::Bing => GOOGLE_SUPPORTED_LANGUAGES,
+        TraditionalHttpServiceKind::Bing => BING_SUPPORTED_LANGUAGES,
         TraditionalHttpServiceKind::Linguee => LINGUEE_SUPPORTED_LANGUAGES,
         TraditionalHttpServiceKind::YoudaoOpenApi
         | TraditionalHttpServiceKind::YoudaoWebDict

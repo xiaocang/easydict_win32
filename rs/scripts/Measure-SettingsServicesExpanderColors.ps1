@@ -3,7 +3,10 @@ param(
     [string]$ArtifactRoot,
     [string[]]$Scenario = @(),
     [string]$OutputJson,
-    [string]$OutputMarkdown
+    [string]$OutputMarkdown,
+    [double]$MaxSurfaceDeltaRgb = 3.0,
+    [double]$MaxBoundsDriftDips = 0.5,
+    [switch]$FailOnSurfaceDrift
 )
 
 Set-StrictMode -Version Latest
@@ -73,7 +76,7 @@ function Get-ServiceDescriptorForScenario {
         @{ Scenario = "parity-settings-services-caiyun-expanded-scroll-88-percent"; Service = "Caiyun"; ServiceId = "caiyun"; ExpanderId = "CaiyunServiceExpander"; AnchorIds = @("CaiyunKeyHeaderText", "CaiyunKeyBox") },
         @{ Scenario = "parity-settings-services-niutrans-expanded-scroll-94-percent"; Service = "NiuTrans"; ServiceId = "niutrans"; ExpanderId = "NiuTransServiceExpander"; AnchorIds = @("NiuTransKeyHeaderText", "NiuTransKeyBox") },
         @{ Scenario = "parity-settings-services-youdao-expanded-scroll-100-percent"; Service = "Youdao"; ServiceId = "youdao"; ExpanderId = "YoudaoServiceExpander"; AnchorIds = @("YoudaoAppKeyHeaderText", "YoudaoAppKeyBox") },
-        @{ Scenario = "parity-settings-services-volcano-expanded-scroll-100-percent"; Service = "Volcano"; ServiceId = "volcano"; ExpanderId = "VolcanoServiceExpander"; AnchorIds = @("VolcanoAccessKeyIdHeaderText", "VolcanoAccessKeyIdBox") }
+        @{ Scenario = "parity-settings-services-volcano-expanded-scroll-100-percent"; Service = "Volcano"; ServiceId = "volcano"; ExpanderId = "VolcanoServiceExpander"; AnchorIds = @("VolcanoAccessKeyIdHeaderText", "VolcanoAccessKeyIdBox"); DotnetReferenceExpected = $false }
     )
 
     foreach ($descriptor in $descriptors) {
@@ -83,6 +86,23 @@ function Get-ServiceDescriptorForScenario {
     }
 
     return $null
+}
+
+function Test-DotnetReferenceExpected {
+    param(
+        $DescriptorOrRow
+    )
+
+    if ($null -eq $DescriptorOrRow) {
+        return $true
+    }
+
+    $property = $DescriptorOrRow.PSObject.Properties["DotnetReferenceExpected"]
+    if ($null -eq $property) {
+        return $true
+    }
+
+    return [bool]$property.Value
 }
 
 function Get-ServiceScenarioInteractionState {
@@ -337,6 +357,21 @@ function Get-BoundsDriftScore {
     [Math]::Round([Math]::Sqrt(($dx * $dx) + ($dy * $dy) + ($dw * $dw) + ($dh * $dh)), 2)
 }
 
+function Get-SizeDriftScore {
+    param(
+        $Reference,
+        $Candidate
+    )
+
+    if ($null -eq $Reference -or $null -eq $Candidate) {
+        return $null
+    }
+
+    $dw = [double]$Candidate.Width - [double]$Reference.Width
+    $dh = [double]$Candidate.Height - [double]$Reference.Height
+    [Math]::Round([Math]::Sqrt(($dw * $dw) + ($dh * $dh)), 2)
+}
+
 function Test-StrongSampleRow {
     param(
         $Row
@@ -429,6 +464,18 @@ function Format-LumaDelta {
     }
 
     "luma {0:+0.##;-0.##;0}" -f [double]$Delta
+}
+
+function Format-PlainDeltaWithVerdict {
+    param(
+        $Delta
+    )
+
+    if ($null -eq $Delta) {
+        return "missing"
+    }
+
+    "{0:0.##} ({1})" -f [double]$Delta, (Format-DeltaVerdict -Delta $Delta)
 }
 
 function Test-ScrolledScenario {
@@ -1217,6 +1264,7 @@ foreach ($record in $recordsByScenario.Values) {
             service = $descriptor.Service
             serviceId = $descriptor.ServiceId
             expanderId = $descriptor.ExpanderId
+            dotnetReferenceExpected = Test-DotnetReferenceExpected -DescriptorOrRow $descriptor
             interactionState = Get-ServiceScenarioInteractionState -ScenarioId $record.ScenarioId
             hasReference = $null -ne $referenceBitmap
             referenceExpanded = $null -ne $referenceRegions
@@ -1334,6 +1382,83 @@ $serviceStateCoverage = @(
             }
         }
 )
+$surfaceSchemeRows = @(
+    $baseExpandedRows |
+        ForEach-Object {
+            $sampleStrength = Get-SampleStrength -Row $_
+            $boundsDrift = Get-BoundsDriftScore -Reference $_.referenceExpanderBoundsDips -Candidate $_.candidateExpanderBoundsDips
+            $windowDrift = Get-SizeDriftScore -Reference $_.referenceWindowDips -Candidate $_.candidateWindowDips
+            $headerDelta = $_.headerBar.deltaRgb
+            $expandedDelta = $_.expandedPart.deltaRgb
+            $maxSurfaceDelta = Get-RowMaxColorDelta -Row $_
+            $issues = New-Object System.Collections.Generic.List[string]
+            $dotnetReferenceExpected = Test-DotnetReferenceExpected -DescriptorOrRow $_
+
+            if (-not $dotnetReferenceExpected -and -not $_.hasReference) {
+                $issues.Add(".NET WinUI has no matching service expander") | Out-Null
+            } elseif (-not $_.hasReference) {
+                $issues.Add("missing .NET reference") | Out-Null
+            } elseif (-not $_.referenceExpanded) {
+                $issues.Add("reference is not expanded") | Out-Null
+            }
+            if (-not $_.candidateExpanded) {
+                $issues.Add("missing Rust candidate") | Out-Null
+            }
+            if ($sampleStrength -eq "weak") {
+                $issues.Add("weak bounds sample") | Out-Null
+            }
+            if ($null -ne $maxSurfaceDelta -and [double]$maxSurfaceDelta -gt [double]$MaxSurfaceDeltaRgb) {
+                $issues.Add("surface delta > $MaxSurfaceDeltaRgb RGB") | Out-Null
+            }
+            if ($null -ne $boundsDrift -and [double]$boundsDrift -gt [double]$MaxBoundsDriftDips) {
+                $issues.Add("header bounds drift > $MaxBoundsDriftDips DIP") | Out-Null
+            }
+            if ($null -ne $windowDrift -and [double]$windowDrift -gt [double]$MaxBoundsDriftDips) {
+                $issues.Add("window size drift > $MaxBoundsDriftDips DIP") | Out-Null
+            }
+
+            $verdict = if (-not $dotnetReferenceExpected -and -not $_.hasReference) {
+                "rust-only"
+            } elseif ($issues.Count -eq 0) {
+                "ok"
+            } elseif (-not $_.hasReference -or -not $_.referenceExpanded -or -not $_.candidateExpanded) {
+                "gap"
+            } elseif ($sampleStrength -eq "weak") {
+                "weak"
+            } elseif ($null -ne $maxSurfaceDelta -and [double]$maxSurfaceDelta -le 8.0) {
+                "watch"
+            } else {
+                "drift"
+            }
+
+            [pscustomobject]@{
+                scenarioId = $_.scenarioId
+                service = $_.service
+                serviceId = $_.serviceId
+                expanderId = $_.expanderId
+                dotnetReferenceExpected = $dotnetReferenceExpected
+                sampleStrength = $sampleStrength
+                hasReference = $_.hasReference
+                referenceExpanded = $_.referenceExpanded
+                candidateExpanded = $_.candidateExpanded
+                referenceScheme = if ($_.referenceExpanded) { Format-SurfacePair -HeaderBar $_.headerBar.reference -ExpandedPart $_.expandedPart.reference } else { "missing" }
+                candidateScheme = if ($_.candidateExpanded) { Format-SurfacePair -HeaderBar $_.headerBar.candidate -ExpandedPart $_.expandedPart.candidate } else { "missing" }
+                headerBarDeltaRgb = $headerDelta
+                expandedPartDeltaRgb = $expandedDelta
+                maxSurfaceDeltaRgb = $maxSurfaceDelta
+                headerBoundsDriftDips = $boundsDrift
+                windowDriftDips = $windowDrift
+                referenceWindowDips = $_.referenceWindowDips
+                candidateWindowDips = $_.candidateWindowDips
+                referenceExpanderBoundsDips = $_.referenceExpanderBoundsDips
+                candidateExpanderBoundsDips = $_.candidateExpanderBoundsDips
+                verdict = $verdict
+                issues = @($issues.ToArray())
+            }
+        }
+)
+$surfaceSchemeIssues = @($surfaceSchemeRows | Where-Object { $_.verdict -ne "ok" -and $_.verdict -ne "rust-only" })
+$surfaceSchemeRustOnly = @($surfaceSchemeRows | Where-Object { $_.verdict -eq "rust-only" })
 
 $summary = [pscustomobject]@{
     scenarioCount = $scenarioRows.Count
@@ -1344,20 +1469,27 @@ $summary = [pscustomobject]@{
     weakSampleCount = $weakSampleRows.Count
     referenceExpandedCount = @($scenarioRows | Where-Object { $_.referenceExpanded }).Count
     referenceGapCount = $referenceGapRows.Count
+    surfaceSchemeComparedCount = @($surfaceSchemeRows | Where-Object { $_.verdict -eq "ok" }).Count
+    surfaceSchemeIssueCount = $surfaceSchemeIssues.Count
+    surfaceSchemeRustOnlyCount = $surfaceSchemeRustOnly.Count
     colorDeltaThresholds = [pscustomobject]@{
         okMaxRgb = 3.0
         watchMaxRgb = 8.0
+        failMaxSurfaceDeltaRgb = $MaxSurfaceDeltaRgb
+        failMaxBoundsDriftDips = $MaxBoundsDriftDips
     }
+    surfaceSchemeIssues = $surfaceSchemeIssues
     largestColorDeltas = $largestColorDeltas
     largestHeaderBoundsDrifts = $largestHeaderBoundsDrifts
     serviceStateCoverage = $serviceStateCoverage
 }
 
 $report = [pscustomobject]@{
-    schemaVersion = "easydict.settings-services-expander-colors.v6"
+    schemaVersion = "easydict.settings-services-expander-colors.v7"
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     artifactRoot = $ArtifactRoot
     summary = $summary
+    surfaceSchemeRows = $surfaceSchemeRows
     scenarios = $orderedScenarioRows
 }
 Write-JsonFile -Path $OutputJson -Value $report -Depth 12
@@ -1367,7 +1499,7 @@ $markdown.Add("# Settings Services Expander Color Report") | Out-Null
 $markdown.Add("") | Out-Null
 $markdown.Add("Artifact root: ``$ArtifactRoot``") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.weakSampleCount) weak/missing samples. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB.") | Out-Null
+$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute size/bounds drift <= $MaxBoundsDriftDips DIP.") | Out-Null
 $markdown.Add("") | Out-Null
 
 $markdown.Add("## Service State Coverage") | Out-Null
@@ -1392,7 +1524,13 @@ if ($referenceGapRows.Count -eq 0) {
     $markdown.Add("| Scenario | Service | State | Reference | Source |") | Out-Null
     $markdown.Add("| --- | --- | --- | --- | --- |") | Out-Null
     foreach ($row in $referenceGapRows) {
-        $reference = if ($row.hasReference) { "not-expanded" } else { "missing" }
+        $reference = if (-not (Test-DotnetReferenceExpected -DescriptorOrRow $row) -and -not $row.hasReference) {
+            "rust-only"
+        } elseif ($row.hasReference) {
+            "not-expanded"
+        } else {
+            "missing"
+        }
         $source = "ref=$($row.referenceSource), rust=$($row.candidateSource)"
         $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $($row.interactionState) | $reference | $source |") | Out-Null
     }
@@ -1409,13 +1547,17 @@ if ($weakSampleRows.Count -eq 0) {
     $markdown.Add("| Scenario | Service | State | Reference | Source | Next action |") | Out-Null
     $markdown.Add("| --- | --- | --- | --- | --- | --- |") | Out-Null
     foreach ($row in $weakSampleRows) {
-        $reference = if ($row.hasReference) {
+        $reference = if (-not (Test-DotnetReferenceExpected -DescriptorOrRow $row) -and -not $row.hasReference) {
+            "rust-only"
+        } elseif ($row.hasReference) {
             if ($row.referenceExpanded) { "expanded" } else { "not-expanded" }
         } else {
             "missing"
         }
         $source = "ref=$($row.referenceSource), rust=$($row.candidateSource)"
-        $nextAction = if (-not $row.hasReference) {
+        $nextAction = if (-not (Test-DotnetReferenceExpected -DescriptorOrRow $row) -and -not $row.hasReference) {
+            "Rust-only; decide parity scope"
+        } elseif (-not $row.hasReference) {
             "capture .NET reference"
         } elseif (-not $row.referenceExpanded) {
             "refresh expanded .NET reference"
@@ -1426,6 +1568,20 @@ if ($weakSampleRows.Count -eq 0) {
         }
         $markdown.Add("| ``$($row.scenarioId)`` | $($row.service) | $($row.interactionState) | $reference | $source | $nextAction |") | Out-Null
     }
+}
+$markdown.Add("") | Out-Null
+
+$markdown.Add("## Surface Scheme Verdict") | Out-Null
+$markdown.Add("") | Out-Null
+$markdown.Add("This is the focused base-state checklist for expanding each Settings > Services item. It treats the header bar and expanded part as the decisive color pair, while also keeping absolute window size and expander bounds in DIP visible.") | Out-Null
+$markdown.Add("") | Out-Null
+$markdown.Add("| Service | Verdict | Sample | Window DIP | Header bounds DIP | Header bar delta | Expanded part delta | Reference scheme | Rust scheme | Issues |") | Out-Null
+$markdown.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |") | Out-Null
+foreach ($row in $surfaceSchemeRows) {
+    $window = "ref $(Format-SizeDips $row.referenceWindowDips) / rust $(Format-SizeDips $row.candidateWindowDips) / drift $(Format-PlainDeltaWithVerdict $row.windowDriftDips)"
+    $bounds = "ref $(Format-BoundsDips $row.referenceExpanderBoundsDips) / rust $(Format-BoundsDips $row.candidateExpanderBoundsDips) / drift $(Format-PlainDeltaWithVerdict $row.headerBoundsDriftDips)"
+    $issues = if ($row.issues.Count -eq 0) { "none" } else { $row.issues -join "; " }
+    $markdown.Add("| $($row.service) | $($row.verdict) | $($row.sampleStrength) | $window | $bounds | $(Format-DeltaWithVerdict $row.headerBarDeltaRgb) | $(Format-DeltaWithVerdict $row.expandedPartDeltaRgb) | $($row.referenceScheme) | $($row.candidateScheme) | $issues |") | Out-Null
 }
 $markdown.Add("") | Out-Null
 
@@ -1606,3 +1762,14 @@ $markdown | Set-Content -LiteralPath $OutputMarkdown -Encoding utf8
 
 Write-Host "Color report JSON: $OutputJson"
 Write-Host "Color report Markdown: $OutputMarkdown"
+
+if ($FailOnSurfaceDrift -and $surfaceSchemeIssues.Count -gt 0) {
+    $issueSummary = @(
+        $surfaceSchemeIssues |
+            ForEach-Object {
+                $issueText = if ($_.issues.Count -eq 0) { $_.verdict } else { $_.issues -join "; " }
+                "$($_.service): $issueText"
+            }
+    ) -join " | "
+    throw "Settings Services surface scheme parity gate failed: $issueSummary"
+}

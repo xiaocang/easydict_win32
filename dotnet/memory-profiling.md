@@ -249,11 +249,18 @@ Local run:
 
 ```powershell
 dotnet publish dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj `
-  -c Release -r win-x64 --self-contained true `
-  -o dotnet/publish/x64 -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
+  -c Release -r win-x64 --self-contained false `
+  -o dotnet/publish/x64 -p:Platform=x64 `
+  -p:RuntimeProfile=rust-only `
+  -p:BuildWorkerOutputs=false `
+  -p:EnableInProcLongDocFallback=false `
+  -p:WindowsAppSDKSelfContained=false
 
 dotnet build dotnet/tests/Easydict.UIAutomation.Tests/Easydict.UIAutomation.Tests.csproj `
-  -c Release -p:Platform=x64
+  -c Release -p:Platform=x64 `
+  -p:RuntimeProfile=rust-only `
+  -p:BuildWorkerOutputs=false `
+  -p:EnableInProcLongDocFallback=false
 
 dotnet/scripts/memory/Invoke-PrMemoryGate.ps1 `
   -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `
@@ -288,8 +295,12 @@ Local baseline capture:
 
 ```powershell
 dotnet publish dotnet/src/Easydict.WinUI/Easydict.WinUI.csproj `
-  -c Release -r win-x64 --self-contained true `
-  -o dotnet/publish/x64 -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
+  -c Release -r win-x64 --self-contained false `
+  -o dotnet/publish/x64 -p:Platform=x64 `
+  -p:RuntimeProfile=rust-only `
+  -p:BuildWorkerOutputs=false `
+  -p:EnableInProcLongDocFallback=false `
+  -p:WindowsAppSDKSelfContained=false
 
 dotnet/scripts/memory/Invoke-NightlyMemoryProfile.ps1 `
   -AppExePath dotnet/publish/x64/Easydict.WinUI.exe `

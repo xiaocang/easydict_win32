@@ -4,17 +4,22 @@
   Run the Windows App Certification Kit (WACK) against a built MSIX package.
 
 .DESCRIPTION
+  This is not the first rs release/install path. The first rs release is
+  Rust portable-only; use rs/scripts/Package-Portable.ps1 or
+  `easydict_packager pack-rs-portable` for that package.
+
   WACK ships with the Windows SDK's "App Certification Kit" component and is
-  required for Microsoft Store certification. This wraps the appcert.exe CLI so
-  CI and local runs share the same invocation and exit-code semantics.
+  required for the legacy/hybrid Store/MSIX certification path. This wraps the
+  appcert.exe CLI so CI and local runs share the same invocation and exit-code
+  semantics.
 
   Test execution time is ~5-15 minutes per package depending on which tests fire.
   Cross-arch validation (e.g. x64 host validating an arm64 MSIX) is supported
   for static checks — appcert auto-skips tests that need the package to launch.
 
   WACK requires a SIGNED MSIX whose signer matches Identity@Publisher in the
-  appxmanifest. The release pipeline ships unsigned MSIX (Microsoft re-signs at
-  Store submission), so this script:
+  appxmanifest. The legacy/hybrid Store/MSIX pipeline ships unsigned MSIX
+  (Microsoft re-signs at Store submission), so this script:
     1. Reads the Publisher CN from the package's AppxManifest.xml
     2. Generates a temporary self-signed cert with that exact subject
     3. Trusts it under LocalMachine\TrustedPeople so sideloading works
@@ -41,6 +46,11 @@
 .PARAMETER AppCertPath
   Override the appcert.exe location. Defaults to the standard SDK install path.
 
+.PARAMETER RuntimeProfile
+  Optional payload validation profile. Omit or use rust-only for the Rust-only
+  validator default; use Hybrid only for explicit retained .NET coexistence MSIX
+  validation.
+
 .EXAMPLE
   ./Run-Wack.ps1 -MsixPath ./msix/Easydict-v0.5.0-x64.msix -Arch x64 -ReportPath ./msix/wack-x64.xml
 #>
@@ -56,18 +66,70 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ReportPath,
 
-    [string]$AppCertPath = ""
+    [string]$AppCertPath = "",
+
+    [string]$RuntimeProfile = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-ValidatorRuntimeProfile {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return ""
+    }
+
+    $normalized = $Value.Trim().ToLowerInvariant().Replace("_", "-")
+    if ($normalized -eq "hybrid") {
+        return "hybrid"
+    }
+    if ($normalized -eq "rust-only" -or $normalized -eq "rustonly") {
+        return ""
+    }
+
+    throw "RuntimeProfile '$Value' is not supported. Use Hybrid for retained .NET payload validation, or omit it for the Rust-only validator default."
+}
 
 if (-not (Test-Path $MsixPath)) {
     throw "MSIX package not found: $MsixPath"
 }
 $msixAbs = (Resolve-Path $MsixPath).Path
 
+$scriptDir = Split-Path -Parent $PSCommandPath
+$dotnetDir = Split-Path -Parent $scriptDir
+$repoRoot = Split-Path -Parent $dotnetDir
+$cargoManifest = Join-Path $repoRoot "rs\Cargo.toml"
+if (-not (Test-Path $cargoManifest)) {
+    throw "Rust workspace manifest not found: $cargoManifest"
+}
+
 # ---------------------------------------------------------------------------
-# 1. Resolve required SDK tools.
+# 1. Validate package payload before SDK lookup, cert trust, signing, or WACK.
+# ---------------------------------------------------------------------------
+
+Write-Host "[Run-Wack] Validating MSIX payload before WACK setup..."
+$validatorArgs = @(
+    "run",
+    "--manifest-path",
+    $cargoManifest,
+    "-p",
+    "easydict_msix_validate",
+    "--",
+    $msixAbs,
+    "--allow-unsigned"
+)
+$validatorRuntimeProfile = Get-ValidatorRuntimeProfile $RuntimeProfile
+if ($validatorRuntimeProfile -eq "hybrid") {
+    $validatorArgs += @("--runtime-profile", "hybrid")
+}
+
+& cargo @validatorArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "[Run-Wack] MSIX payload validated successfully"
+
+# ---------------------------------------------------------------------------
+# 2. Resolve required SDK tools.
 # ---------------------------------------------------------------------------
 
 if (-not $AppCertPath) {
@@ -110,7 +172,7 @@ Write-Host "[Run-Wack] package:   $msixAbs"
 Write-Host "[Run-Wack] arch:      $Arch"
 
 # ---------------------------------------------------------------------------
-# 2. Read Publisher CN from the manifest inside the MSIX.
+# 3. Read Publisher CN from the manifest inside the MSIX.
 # ---------------------------------------------------------------------------
 
 $workDir = Join-Path $env:TEMP ("wack-" + [System.IO.Path]::GetRandomFileName().Replace(".", ""))
@@ -135,7 +197,7 @@ if (-not $publisher) {
 Write-Host "[Run-Wack] Publisher:  $publisher"
 
 # ---------------------------------------------------------------------------
-# 3. Generate ephemeral self-signed cert + trust + sign a copy of the MSIX.
+# 4. Generate ephemeral self-signed cert + trust + sign a copy of the MSIX.
 # ---------------------------------------------------------------------------
 
 # 7 days is comfortably longer than any single CI run; cert is removed in the
@@ -170,7 +232,7 @@ try {
     }
 
     # -----------------------------------------------------------------------
-    # 4. Run WACK against the signed copy.
+    # 5. Run WACK against the signed copy.
     # -----------------------------------------------------------------------
 
     $reportDir = Split-Path $ReportPath -Parent
@@ -194,7 +256,7 @@ try {
     Write-Host "[Run-Wack] appcert exit code: $script:wackExit"
 
     # -----------------------------------------------------------------------
-    # 5. Surface a human-readable summary so CI logs flag failures up-front.
+    # 6. Surface a human-readable summary so CI logs flag failures up-front.
     # -----------------------------------------------------------------------
 
     if (Test-Path $reportAbs) {
@@ -228,7 +290,7 @@ try {
     }
 } finally {
     # -----------------------------------------------------------------------
-    # 6. Cleanup: remove the trust entry, the cert from My, and the work dir.
+    # 7. Cleanup: remove the trust entry, the cert from My, and the work dir.
     # Catch-and-warn — partial cleanup is fine; the temp paths and certs are
     # tied to this runner instance, not the released artifact.
     # -----------------------------------------------------------------------

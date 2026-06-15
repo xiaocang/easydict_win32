@@ -358,6 +358,9 @@ dependencies = [
 [[package]]
 name = "easydict_runtime_guards"
 version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+]
 
 [[package]]
 name = "encoding_rs"

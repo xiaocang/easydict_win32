@@ -7,6 +7,7 @@ use std::process::Command;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum WindowsShellError {
+    InvalidUrlTarget(String),
     InvalidBundledExecutableName(String),
     CurrentExecutableUnavailable(String),
     CurrentExecutableHasNoParent,
@@ -19,6 +20,9 @@ pub enum WindowsShellError {
 impl fmt::Display for WindowsShellError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidUrlTarget(target) => {
+                write!(formatter, "invalid URL target: {target}")
+            }
             Self::InvalidBundledExecutableName(name) => {
                 write!(formatter, "invalid bundled executable name: {name}")
             }
@@ -62,6 +66,11 @@ impl fmt::Display for WindowsShellError {
 impl std::error::Error for WindowsShellError {}
 
 pub fn open_url(url: &str) -> Result<(), WindowsShellError> {
+    let url = validate_open_url_target(url)?;
+    if url.is_empty() {
+        return Ok(());
+    }
+
     platform::open_url(url)
 }
 
@@ -131,6 +140,23 @@ fn validate_bundled_executable_name(executable_name: &str) -> Result<(), Windows
 
 fn bundled_executable_name_is_forbidden(executable_name: &str) -> bool {
     easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(executable_name)
+}
+
+fn validate_open_url_target(url: &str) -> Result<&str, WindowsShellError> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Ok("");
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    let has_allowed_scheme = lower.starts_with("https://") || lower.starts_with("http://");
+    if has_allowed_scheme
+        && !easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker(trimmed)
+    {
+        Ok(trimmed)
+    } else {
+        Err(WindowsShellError::InvalidUrlTarget(url.to_string()))
+    }
 }
 
 fn validate_bundled_executable_target(executable: &Path) -> Result<(), WindowsShellError> {
@@ -303,8 +329,21 @@ mod tests {
             "powershell.exe",
             "PowerShell.CMD",
             "legacy-backend.ps1",
+            "legacy-backend.psm1",
+            "legacy-backend.cmd",
+            "legacy-backend.bat",
+            "legacy-backend.vbs",
+            "legacy-backend.vbe",
+            "legacy-backend.js",
+            "legacy-backend.jse",
+            "legacy-backend.wsf",
+            "legacy-backend.wsh",
+            "legacy-backend.hta",
             "pwsh.exe",
             "pwsh.bat",
+            "wscript.exe",
+            "cscript.exe",
+            "mshta.exe",
             "hostfxr.dll",
             "System.Private.CoreLib.dll",
             "Easydict.WinUI.runtimeconfig.json",
@@ -329,6 +368,9 @@ mod tests {
             "easydict_browser_registrar.exe",
             "easydict_native_bridge.exe",
             "easydict_cli.exe",
+            "easydict_js_native_helper.exe",
+            "easydict_hta_script_helper.exe",
+            "easydict_json_helper.exe",
         ] {
             validate_bundled_executable_name(value)
                 .unwrap_or_else(|error| panic!("{value} should be accepted: {error}"));
@@ -393,6 +435,38 @@ mod tests {
     #[test]
     fn blank_url_is_noop() {
         open_url("   ").expect("blank URL should preserve old no-op behavior");
+    }
+
+    #[test]
+    fn open_url_target_allows_only_http_and_https() {
+        assert_eq!(
+            validate_open_url_target(" https://example.test/path ").expect("https URL allowed"),
+            "https://example.test/path"
+        );
+        assert_eq!(
+            validate_open_url_target("HTTP://example.test").expect("http URL allowed"),
+            "HTTP://example.test"
+        );
+    }
+
+    #[test]
+    fn open_url_target_rejects_local_script_and_retained_runtime_targets() {
+        for value in [
+            "powershell.exe",
+            "pwsh -NoProfile",
+            "legacy-backend.ps1",
+            "file:///C:/Easydict/workers/localai/Easydict.Workers.LocalAi.exe",
+            r"C:\Easydict\dotnet\host\fxr\8.0.11\hostfxr.dll",
+            "https://example.test/scripts/legacy-backend.ps1",
+            "https://example.test/dotnet/host/fxr/8.0.11/hostfxr.dll",
+            "https://example.test/workers/localai/Easydict.Workers.LocalAi.exe",
+        ] {
+            assert_eq!(
+                validate_open_url_target(value),
+                Err(WindowsShellError::InvalidUrlTarget(value.to_string())),
+                "{value} must not be accepted as a ShellExecute URL target"
+            );
+        }
     }
 
     fn unique_temp_dir(label: &str) -> PathBuf {

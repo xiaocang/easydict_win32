@@ -55,8 +55,8 @@ use win_fluent::view::{
     PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken, ProgressRingToken,
     ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowToken,
     SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding,
-    TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken, TitleBarToken, View, ViewToken,
-    WrapToken,
+    TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken, TextWrapping, TitleBarToken,
+    View, ViewToken, WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -1706,6 +1706,7 @@ where
             &token.items,
             token.selected.as_deref(),
             token.label.as_deref(),
+            token.placeholder.as_deref(),
             token.width,
             token.height,
             &token.action,
@@ -2046,7 +2047,8 @@ where
     let text = iced_text(token.value.clone())
         .font(text_font_for_value(token.style, &token.value))
         .size(text_size(token.style, visual))
-        .color(text_color(token.style, visual));
+        .color(text_color(token.style, visual))
+        .wrapping(iced_text_wrapping(token.wrapping));
 
     if token.width.is_none() && token.height.is_none() {
         return text.into();
@@ -2065,6 +2067,13 @@ where
             .align_y(alignment::Vertical::Center);
     }
     container.into()
+}
+
+fn iced_text_wrapping(wrapping: TextWrapping) -> iced::widget::text::Wrapping {
+    match wrapping {
+        TextWrapping::Word => iced::widget::text::Wrapping::Word,
+        TextWrapping::None => iced::widget::text::Wrapping::None,
+    }
 }
 
 fn compile_slider<'a, Message>(
@@ -3370,6 +3379,7 @@ where
 fn layout_style_needs_container(style: &FluentStyle) -> bool {
     style.has("surface-card")
         || style.has("capture-tip")
+        || style.has("info-bar")
         || style.has_prefix("bg-")
         || style.has("border")
         || style.has_prefix("rounded")
@@ -3445,7 +3455,7 @@ where
     };
     let mut layout = iced_column(Vec::new())
         .padding(card_padding)
-        .spacing(12)
+        .spacing(u32::from(token.content_spacing))
         .width(IcedLength::Fill);
 
     if !is_headerless_card {
@@ -3622,6 +3632,7 @@ fn compile_combo_box<'a, Message>(
     items: &[ComboBoxItem],
     selected: Option<&str>,
     label: Option<&str>,
+    placeholder: Option<&str>,
     width: Length,
     height: Length,
     action: &Action<Message>,
@@ -3641,13 +3652,14 @@ where
     let selected = selected.and_then(|id| choices.iter().find(|item| item.id == id).cloned());
 
     if !state.enabled || !matches!(action.kind(), ActionKind::SelectionInput) {
+        let placeholder = placeholder.or(label).unwrap_or("Select");
         return compile_read_only_combo_box(
             selected
                 .as_ref()
                 .map(|item| item.label.as_str())
                 .or(label)
                 .unwrap_or_default(),
-            label.unwrap_or("Select"),
+            placeholder,
             width,
             height,
             state,
@@ -3663,7 +3675,7 @@ where
             .input_text(choice.id)
             .expect("selection action must produce a message")
     })
-    .placeholder(label.unwrap_or("Select"))
+    .placeholder(placeholder.or(label).unwrap_or("Select"))
     .width(iced_length(width))
     .padding(padding)
     .text_size(text_size(TextStyle::Body, visual))
@@ -3812,12 +3824,14 @@ where
 
     let header_state = token.header_state.clone();
     let header: IcedElement<'a, Message> = if let Some(message) = toggle_message {
+        let header_style = token.header_style.clone();
         let header_button = iced_button(header_content)
             .padding([7, 15])
             .width(IcedLength::Fill)
             .style(move |_, status| {
                 expander_header_button_style(
                     visual,
+                    &header_style,
                     button_status_with_state(&header_state, status),
                 )
             })
@@ -3843,6 +3857,7 @@ where
                 .height(IcedLength::Fixed(1.0))
                 .style(move |_| expander_content_divider_style(visual));
             layout = layout.push(divider);
+            let content_style = token.content_style.clone();
             layout = layout.push(
                 iced_container(content)
                     .width(IcedLength::Fill)
@@ -3852,14 +3867,23 @@ where
                         bottom: 18.0,
                         left: 16.0,
                     })
-                    .style(move |_| expander_content_container_style(visual)),
+                    .style(move |_| expander_content_container_style(visual, &content_style)),
             );
         }
     }
 
+    let container_header_state = token.header_state.clone();
+    let container_header_style = token.header_style.clone();
+
     iced_container(layout)
         .width(IcedLength::Fill)
-        .style(move |_| expander_container_style_with_state(visual, &token.header_state))
+        .style(move |_| {
+            expander_container_style_with_state(
+                visual,
+                &container_header_state,
+                &container_header_style,
+            )
+        })
         .into()
 }
 
@@ -3884,10 +3908,11 @@ where
 
 fn expander_header_button_style(
     visual: IcedVisualTheme,
+    style: &FluentStyle,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
     let _ = status;
-    let background = expander_background_color(visual);
+    let background = expander_header_background_color(visual, style);
 
     iced::widget::button::Style {
         background: Some(Background::Color(background)),
@@ -6015,6 +6040,8 @@ fn utility_container_style(
         container = container
             .background(Color::BLACK.scale_alpha(0.78))
             .color(Color::WHITE);
+    } else if style.has("info-bar") {
+        container = container.background(info_bar_background_color(visual));
     } else if style.has("surface-card") {
         container = container.background(visual.surface);
     } else if style.has("bg-app") {
@@ -6036,10 +6063,16 @@ fn utility_container_style(
         0.0
     };
 
+    let border_color = if style.has("info-bar") {
+        info_bar_border_color(visual)
+    } else {
+        visual.border
+    };
+
     container = container.border(Border {
         radius: radius.into(),
         width: border_width,
-        color: visual.border,
+        color: border_color,
     });
 
     if let Some(shadow) = utility_shadow(style, visual) {
@@ -6047,6 +6080,22 @@ fn utility_container_style(
     }
 
     container
+}
+
+fn info_bar_background_color(visual: IcedVisualTheme) -> Color {
+    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
+        visual.surface_alt
+    } else {
+        Color::from_rgb8(238, 239, 240)
+    }
+}
+
+fn info_bar_border_color(visual: IcedVisualTheme) -> Color {
+    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
+        visual.border
+    } else {
+        Color::from_rgb8(224, 226, 230)
+    }
 }
 
 fn utility_radius(style: &FluentStyle, visual: IcedVisualTheme) -> f32 {
@@ -6235,6 +6284,11 @@ fn button_style_with_state(
             }
         },
         ButtonKind::PrimaryRound => match status {
+            iced::widget::button::Status::Pressed => (
+                Some(visual.accent_pressed),
+                visual.text_on_accent,
+                visual.accent_pressed,
+            ),
             iced::widget::button::Status::Disabled => (
                 Some(visual.surface_alt),
                 visual.text_secondary.scale_alpha(visual.disabled_opacity),
@@ -6404,14 +6458,10 @@ fn result_header_button_style(
     visual: IcedVisualTheme,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
-    let background = match status {
-        iced::widget::button::Status::Hovered => Some(visual.result_header_hover),
-        iced::widget::button::Status::Pressed => Some(visual.result_header_hover),
-        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => None,
-    };
+    let _ = status;
 
     iced::widget::button::Style {
-        background: background.map(Background::Color),
+        background: Some(Background::Color(visual.result_header)),
         text_color: visual.text_primary,
         border: control_border_with_radius(Color::TRANSPARENT, 0.0, visual.radius_control),
         shadow: Shadow::default(),
@@ -6966,6 +7016,7 @@ fn settings_row_container_style_with_state(
 fn expander_container_style_with_state(
     visual: IcedVisualTheme,
     state: &ControlState,
+    style: &FluentStyle,
 ) -> iced::widget::container::Style {
     let border_color = if state.focused {
         visual.accent
@@ -6974,14 +7025,18 @@ fn expander_container_style_with_state(
     };
 
     iced::widget::container::Style::default()
-        .background(expander_background_color_with_state(visual, state))
+        .background(expander_background_color_with_state(visual, state, style))
         .color(visual.text_primary)
         .border(control_border(visual, border_color, visual.stroke_control))
 }
 
-fn expander_background_color_with_state(visual: IcedVisualTheme, state: &ControlState) -> Color {
+fn expander_background_color_with_state(
+    visual: IcedVisualTheme,
+    state: &ControlState,
+    style: &FluentStyle,
+) -> Color {
     let _ = state;
-    expander_background_color(visual)
+    expander_header_background_color(visual, style)
 }
 
 fn expander_background_color(visual: IcedVisualTheme) -> Color {
@@ -6989,6 +7044,26 @@ fn expander_background_color(visual: IcedVisualTheme) -> Color {
         visual.surface
     } else {
         Color::from_rgb8(253, 253, 254)
+    }
+}
+
+fn expander_header_background_color(visual: IcedVisualTheme, style: &FluentStyle) -> Color {
+    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
+        return expander_background_color(visual);
+    }
+
+    if style.has("header-surface-f8f9fc") {
+        Color::from_rgb8(248, 249, 252)
+    } else if style.has("header-surface-f9fafc") {
+        Color::from_rgb8(249, 250, 252)
+    } else if style.has("header-surface-fafbfd") {
+        Color::from_rgb8(250, 251, 253)
+    } else if style.has("header-surface-fbfcfd") {
+        Color::from_rgb8(251, 252, 253)
+    } else if style.has("header-surface-fcfcfd") {
+        Color::from_rgb8(252, 252, 253)
+    } else {
+        expander_background_color(visual)
     }
 }
 
@@ -7000,9 +7075,12 @@ fn is_light_surface(color: Color) -> bool {
     ((color.r * 0.299) + (color.g * 0.587) + (color.b * 0.114)) >= 0.72
 }
 
-fn expander_content_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+fn expander_content_container_style(
+    visual: IcedVisualTheme,
+    style: &FluentStyle,
+) -> iced::widget::container::Style {
     iced::widget::container::Style::default()
-        .background(expander_content_background_color(visual))
+        .background(expander_content_background_color(visual, style))
         .color(visual.text_primary)
 }
 
@@ -7012,7 +7090,29 @@ fn expander_content_divider_style(visual: IcedVisualTheme) -> iced::widget::cont
         .color(visual.text_primary)
 }
 
-fn expander_content_background_color(visual: IcedVisualTheme) -> Color {
+fn expander_content_background_color(visual: IcedVisualTheme, style: &FluentStyle) -> Color {
+    if style.has("info-bar") {
+        return info_bar_background_color(visual);
+    }
+
+    if !matches!(visual.mode, ThemeMode::HighContrast) && is_light_surface(visual.surface) {
+        if style.has("content-surface-f5f5f4") {
+            return Color::from_rgb8(245, 245, 244);
+        }
+        if style.has("content-surface-f7f8fa") {
+            return Color::from_rgb8(247, 248, 250);
+        }
+        if style.has("content-surface-f8f8f7") {
+            return Color::from_rgb8(248, 248, 247);
+        }
+        if style.has("content-surface-f8f8fa") {
+            return Color::from_rgb8(248, 248, 250);
+        }
+        if style.has("content-surface-f8f9fb") {
+            return Color::from_rgb8(248, 249, 251);
+        }
+    }
+
     if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
         visual.background
     } else {
@@ -7070,9 +7170,9 @@ fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::contain
         .background(visual.result_surface)
         .color(visual.text_primary)
         .border(control_border(visual, visual.border, visual.stroke_control))
-        // Raised service cards, matching the .NET WinUI result rows which float
-        // above the surface with a subtle drop shadow.
-        .shadow(elevation_shadow(visual, 3.0))
+        // The WinUI reference uses flat outlined result rows in the main list.
+        // Keep them visually quiet so hover/pressed effects are not polluted by elevation.
+        .shadow(Shadow::default())
 }
 
 fn control_border(visual: IcedVisualTheme, color: Color, width: f32) -> Border {
@@ -8213,11 +8313,22 @@ mod tests {
         );
         assert_eq!(settings_row.border.width, theme.stroke.control);
 
-        let expander_active = expander_container_style_with_state(visual, &ControlState::default());
-        let expander_hover =
-            expander_container_style_with_state(visual, &ControlState::default().hovered(true));
-        let expander_pressed =
-            expander_container_style_with_state(visual, &ControlState::default().pressed(true));
+        let default_expander_style = FluentStyle::new();
+        let expander_active = expander_container_style_with_state(
+            visual,
+            &ControlState::default(),
+            &default_expander_style,
+        );
+        let expander_hover = expander_container_style_with_state(
+            visual,
+            &ControlState::default().hovered(true),
+            &default_expander_style,
+        );
+        let expander_pressed = expander_container_style_with_state(
+            visual,
+            &ControlState::default().pressed(true),
+            &default_expander_style,
+        );
         assert_eq!(
             optional_background_color(expander_active.background),
             iced::Color::from_rgb8(253, 253, 254)
@@ -8234,10 +8345,16 @@ mod tests {
             iced::Color::from_rgb8(253, 253, 254),
             "WinUI Settings service expanders keep the header bar fill stable while pressed"
         );
-        let expander_header_hover =
-            expander_header_button_style(visual, iced::widget::button::Status::Hovered);
-        let expander_header_pressed =
-            expander_header_button_style(visual, iced::widget::button::Status::Pressed);
+        let expander_header_hover = expander_header_button_style(
+            visual,
+            &default_expander_style,
+            iced::widget::button::Status::Hovered,
+        );
+        let expander_header_pressed = expander_header_button_style(
+            visual,
+            &default_expander_style,
+            iced::widget::button::Status::Pressed,
+        );
         assert_eq!(
             optional_background_color(expander_header_hover.background),
             iced::Color::from_rgb8(253, 253, 254),
@@ -8249,10 +8366,33 @@ mod tests {
             "WinUI Expander header button does not tint the bar on press"
         );
         assert_eq!(expander_header_hover.border.width, 0.0);
-        let expander_content = expander_content_container_style(visual);
+        let openai_header = expander_header_button_style(
+            visual,
+            &FluentStyle::from_classes("header-surface-fafbfd"),
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(
+            optional_background_color(openai_header.background),
+            iced::Color::from_rgb8(250, 251, 253)
+        );
+        let expander_content = expander_content_container_style(visual, &FluentStyle::new());
         assert_eq!(
             optional_background_color(expander_content.background),
             iced::Color::from_rgb8(246, 247, 249)
+        );
+        let local_ai_expander_content = expander_content_container_style(
+            visual,
+            &FluentStyle::from_classes("content-surface-f5f5f4"),
+        );
+        assert_eq!(
+            optional_background_color(local_ai_expander_content.background),
+            iced::Color::from_rgb8(245, 245, 244)
+        );
+        let info_expander_content =
+            expander_content_container_style(visual, &FluentStyle::from_classes("info-bar"));
+        assert_eq!(
+            optional_background_color(info_expander_content.background),
+            iced::Color::from_rgb8(238, 239, 240)
         );
         let expander_content_divider = expander_content_divider_style(visual);
         assert_eq!(
@@ -8272,8 +8412,8 @@ mod tests {
             optional_background_color(result_card.background),
             iced_color(theme.result_surface)
         );
-        // Result rows are raised over the surface like the WinUI reference.
-        assert_eq!(result_card.shadow, elevation_shadow(visual, 3.0));
+        // Result rows are flat outlined strips like the WinUI reference.
+        assert_eq!(result_card.shadow, Shadow::default());
 
         let floating_action = button_style(
             visual,
@@ -8346,14 +8486,16 @@ mod tests {
             result_header_button_style(visual, iced::widget::button::Status::Hovered);
         assert_eq!(
             optional_background_color(result_header_hover.background),
-            iced_color(theme.result_header_hover)
+            iced_color(theme.result_header),
+            "WinUI result headers keep their resting fill while hovered"
         );
 
         let result_header_pressed =
             result_header_button_style(visual, iced::widget::button::Status::Pressed);
         assert_eq!(
             optional_background_color(result_header_pressed.background),
-            iced_color(theme.result_header_hover)
+            iced_color(theme.result_header),
+            "WinUI result headers keep their resting fill while pressed"
         );
 
         let floating_action_hover = button_style(
@@ -8410,8 +8552,12 @@ mod tests {
         );
         assert_eq!(
             optional_background_color(primary_round_pressed.background),
-            iced_color(theme.accent.base),
-            "WinUI primary round translate buttons keep the accent fill while pressed"
+            iced_color(theme.accent_pressed),
+            "WinUI primary round translate buttons use the pressed accent fill"
+        );
+        assert_eq!(
+            primary_round_pressed.border.color,
+            iced_color(theme.accent_pressed)
         );
         assert_eq!(
             primary_round_pressed.text_color,
@@ -8760,9 +8906,10 @@ mod tests {
 
         let hovered = ControlState::default().hovered(true);
         let active_style = result_header_button_style(visual, iced::widget::button::Status::Active);
-        assert!(
-            active_style.background.is_none(),
-            "resting result rows let the outer result-card border remain visible"
+        assert_eq!(
+            optional_background_color(active_style.background),
+            iced_color(theme.result_header),
+            "resting result rows use the WinUI result header fill"
         );
 
         let hover_style = result_header_button_style(
@@ -8771,7 +8918,7 @@ mod tests {
         );
         assert_eq!(
             optional_background_color(hover_style.background),
-            iced_color(theme.result_header_hover)
+            iced_color(theme.result_header)
         );
         assert_eq!(hover_style.border.radius.top_left, theme.radius.control);
 
@@ -8782,7 +8929,7 @@ mod tests {
         );
         assert_eq!(
             optional_background_color(pressed_style.background),
-            iced_color(theme.result_header_hover)
+            iced_color(theme.result_header)
         );
     }
 

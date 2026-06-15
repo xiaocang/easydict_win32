@@ -27,6 +27,12 @@ $env:EASYDICT_DEBUG_UI_THREAD_HOTSPOT_THRESHOLD_MS = [string]$ThresholdMs
 $env:EASYDICT_UI_THREAD_HOTSPOT_LOG_PATH = $logPath
 $env:EASYDICT_DEBUG_DISABLE_MOUSE_SELECTION_TRANSLATE = "1"
 
+$RustOnlyMsBuildProperties = @(
+    "-p:RuntimeProfile=rust-only",
+    "-p:BuildWorkerOutputs=false",
+    "-p:EnableInProcLongDocFallback=false"
+)
+
 if (-not [string]::IsNullOrWhiteSpace($AppExePath)) {
     $resolvedAppExe = Resolve-Path $AppExePath
     $env:EASYDICT_EXE_PATH = $resolvedAppExe.Path
@@ -46,6 +52,7 @@ $dotnetArgs = @(
     "--results-directory",
     $OutputDirectory
 )
+$dotnetArgs += $RustOnlyMsBuildProperties
 
 if ($NoBuild) {
     $dotnetArgs += "--no-build"

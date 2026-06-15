@@ -25,6 +25,7 @@ FORMAT ?= png
 # RUNTIME_PROFILE=hybrid. Leaving this empty keeps ordinary build/test commands
 # from silently selecting a retained-worker/runtime-producing profile.
 RUNTIME_PROFILE ?=
+RUST_ONLY_MSBUILD_PROPS := -p:RuntimeProfile=rust-only -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false
 
 # WinUI target framework used by Easydict.WinUI.csproj.
 WINUI_TFM ?= net8.0-windows10.0.22621.0
@@ -37,26 +38,26 @@ all: build
 
 # Restore NuGet packages
 restore:
-	dotnet restore
+	dotnet restore $(RUST_ONLY_MSBUILD_PROPS)
 
 # Build (default: Debug)
 build: restore
-	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug -p:RuntimeProfile=$(RUNTIME_PROFILE)
+	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug $(RUST_ONLY_MSBUILD_PROPS)
 
 # Build Release
 build-release: restore
-	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release -p:RuntimeProfile=$(RUNTIME_PROFILE)
+	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Release $(RUST_ONLY_MSBUILD_PROPS)
 
 # Build Debug (explicit)
 build-debug: restore
-	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug -p:RuntimeProfile=$(RUNTIME_PROFILE)
+	dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj --configuration Debug $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run all tests
 test: restore
 	dotnet test tests/Easydict.Llm.Streaming.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Polyglot.TextLayout.Tests --logger "console;verbosity=minimal"
 	dotnet test tests/Easydict.TranslationService.Tests --logger "console;verbosity=minimal"
-	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run TranslationService tests only
 test-translation:
@@ -64,7 +65,7 @@ test-translation:
 
 # Run WinUI tests only
 test-winui:
-	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal"
+	dotnet test tests/Easydict.WinUI.Tests --logger "console;verbosity=minimal" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Run Easydict.Llm.Streaming tests only
 test-streaming:
@@ -76,7 +77,7 @@ test-textlayout:
 
 # Run UI automation tests (requires app to be installed or EASYDICT_EXE_PATH set)
 test-ui:
-	dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation"
+	dotnet test tests/Easydict.UIAutomation.Tests --logger "console;verbosity=detailed" --filter "Category=UIAutomation" $(RUST_ONLY_MSBUILD_PROPS)
 
 # Integration test service filter (default: all)
 # Available services: google, openai, deepl, deepseek, groq, zhipu, github-models,
@@ -97,7 +98,7 @@ endif
 
 # Run tests with verbose output
 test-verbose:
-	dotnet test --logger "console;verbosity=detailed"
+	dotnet test --logger "console;verbosity=detailed" $(RUST_ONLY_MSBUILD_PROPS)
 
 # ============================================================
 # NuGet Packaging (for libraries published to NuGet)
@@ -173,8 +174,8 @@ publish-x64: restore
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish/x64 -RuntimeProfile "$$runtime_profile" -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
-		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64; \
-		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64; \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/longdoc -p:Platform=x64 -p:RuntimeProfile=$$runtime_profile; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish/x64/workers/localai -p:Platform=x64 -p:RuntimeProfile=$$runtime_profile; \
 	else \
 		rm -rf ./publish/x64/workers ./publish/x64/dotnet; \
 		echo "Skipping retained .NET workers for RustOnly runtime profile."; \
@@ -209,8 +210,8 @@ publish-arm64: restore
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish/arm64 -RuntimeProfile "$$runtime_profile" -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
-		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64; \
-		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64; \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/longdoc -p:Platform=arm64 -p:RuntimeProfile=$$runtime_profile; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --self-contained true --output ./publish/arm64/workers/localai -p:Platform=arm64 -p:RuntimeProfile=$$runtime_profile; \
 	else \
 		rm -rf ./publish/arm64/workers ./publish/arm64/dotnet; \
 		echo "Skipping retained .NET workers for RustOnly runtime profile."; \
@@ -234,8 +235,8 @@ publish-msix-x64: restore
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform x64 -Configuration Release -OutputDir ./publish-msix/x64 -RuntimeProfile "$$runtime_profile" -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
-		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
-		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:WindowsAppSDKSelfContained=false; \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/longdoc -p:Platform=x64 -p:RuntimeProfile=$$runtime_profile -p:WindowsAppSDKSelfContained=false; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-x64 --no-self-contained --output ./publish-msix/x64/workers/localai -p:Platform=x64 -p:RuntimeProfile=$$runtime_profile -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/x64 -RuntimeProfile "$$runtime_profile"; \
 		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-x64 -OutputDir ./publish-msix/x64/dotnet -RuntimeProfile "$$runtime_profile"; \
 	else \
@@ -272,8 +273,8 @@ publish-msix-arm64: restore
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); pwsh -NoProfile -File scripts/Build-RustHelpers.ps1 -Platform arm64 -Configuration Release -OutputDir ./publish-msix/arm64 -RuntimeProfile "$$runtime_profile" -IncludeLegacyRegistrarAlias
 	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
 	if [ "$$runtime_profile" = "hybrid" ]; then \
-		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
-		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:WindowsAppSDKSelfContained=false; \
+		dotnet publish src/Easydict.Workers.LongDoc/Easydict.Workers.LongDoc.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/longdoc -p:Platform=arm64 -p:RuntimeProfile=$$runtime_profile -p:WindowsAppSDKSelfContained=false; \
+		dotnet publish src/Easydict.Workers.LocalAi/Easydict.Workers.LocalAi.csproj --configuration Release --runtime win-arm64 --no-self-contained --output ./publish-msix/arm64/workers/localai -p:Platform=arm64 -p:RuntimeProfile=$$runtime_profile -p:WindowsAppSDKSelfContained=false; \
 		pwsh -NoProfile -File scripts/Dedupe-WorkerSharedFiles.ps1 -PublishDir ./publish-msix/arm64 -RuntimeProfile "$$runtime_profile"; \
 		pwsh -NoProfile -File scripts/Extract-DotnetRuntime.ps1 -Rid win-arm64 -OutputDir ./publish-msix/arm64/dotnet -RuntimeProfile "$$runtime_profile"; \
 	else \
@@ -371,6 +372,12 @@ endif
 ifndef MSIX
 	$(error MSIX is required. Usage: make sign CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword MSIX=./msix/Easydict-x64.msix)
 endif
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	if [ -n "$$runtime_profile" ]; then \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$(MSIX)" --runtime-profile "$$runtime_profile" --allow-unsigned; \
+	else \
+		cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$(MSIX)" --allow-unsigned; \
+	fi
 	@winapp sign \
 		--input $(MSIX) \
 		--certificate $(CERT) \
@@ -386,9 +393,15 @@ endif
 ifndef CERT_PASSWORD
 	$(error CERT_PASSWORD is required. Usage: make sign-all CERT=./certs/dev.pfx CERT_PASSWORD=yourpassword)
 endif
-	@winapp sign --input ./msix/Easydict-x64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
-	@winapp sign --input ./msix/Easydict-x86.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
-	@winapp sign --input ./msix/Easydict-arm64.msix --certificate $(CERT) --password "$(CERT_PASSWORD)"
+	@runtime_profile=$$(printf '%s' "$(RUNTIME_PROFILE)" | tr '[:upper:]' '[:lower:]' | tr '_' '-'); \
+	for msix in ./msix/Easydict-x64.msix ./msix/Easydict-x86.msix ./msix/Easydict-arm64.msix; do \
+		if [ -n "$$runtime_profile" ]; then \
+			cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$$msix" --runtime-profile "$$runtime_profile" --allow-unsigned; \
+		else \
+			cargo run --manifest-path ../rs/Cargo.toml -p easydict_msix_validate -- "$$msix" --allow-unsigned; \
+		fi; \
+		winapp sign --input "$$msix" --certificate $(CERT) --password "$(CERT_PASSWORD)"; \
+	done
 
 # Fix MSIX MinVersion (workaround for WindowsAppSDK #5598)
 # Usage: make fix-msix-minversion MSIX=./msix/Easydict-x64.msix

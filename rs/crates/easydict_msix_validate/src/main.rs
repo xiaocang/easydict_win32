@@ -537,7 +537,7 @@ Usage: easydict_msix_validate <path-to-msix> [--expected-name <name>] [--expecte
        easydict_msix_validate prepare-package-inputs --platform x64|x86|arm64 --publish-dir <dir> --manifest <Package.appxmanifest> --output-manifest <temp-manifest> [--msix-version <ver>] [--verify-targetsize-icons] [--runtime-profile hybrid|rust-only] [--rust-only]
   defaults: name={DEFAULT_EXPECTED_NAME}, min-version={DEFAULT_MIN_VERSION}, runtime-profile=rust-only
   --runtime-profile hybrid: validate retained worker/coexistence payloads explicitly
-  --runtime-profile rust-only: reject retained .NET workers and bundled .NET runtime payloads
+  --runtime-profile rust-only: reject retained .NET workers, bundled .NET runtime payloads, and script host payload markers
   --rust-only: shortcut for --runtime-profile rust-only
   --allow-unsigned: skip the AppxSignature.p7x check (use for the release workflow which builds unsigned bundles)
 "

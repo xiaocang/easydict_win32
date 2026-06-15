@@ -42,7 +42,6 @@ fn terminal_detection_handles_versioned_and_normalized_names() {
         "solar-putty",
         "f-secure ssh client",
         "WindowsTerminal",
-        "pwsh",
     ] {
         assert!(
             is_terminal_process_name(Some(process)),
@@ -475,7 +474,7 @@ fn capture_backend_uses_electron_clipboard_first_and_skips_uia_after_success() {
 fn capture_backend_keeps_terminal_uia_only_without_clipboard_fallback() {
     let mut backend = FakeTextSelectionBackend::new().with_uia(None);
     let mut suppression = TextSelectionSuppressionTracker::new();
-    let target = TextSelectionTarget::new(Some("pwsh"), Some(100), 42);
+    let target = TextSelectionTarget::new(Some("WindowsTerminal"), Some(100), 42);
 
     let result = easydict_app::text_selection::capture_text_selection_with_backend(
         &target,
@@ -507,7 +506,7 @@ fn terminal_text_selection_does_not_send_ctrl_c_to_console_when_enabled() {
         std::thread::current().id()
     ));
     std::fs::create_dir_all(&temp_dir).expect("terminal smoke temp dir");
-    let helper_exe = temp_dir.join("pwsh.exe");
+    let helper_exe = temp_dir.join("WindowsTerminal.exe");
     std::fs::copy(
         std::env::current_exe().expect("current test exe"),
         &helper_exe,

@@ -574,9 +574,10 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Card(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Card id={:?} trailing={}",
+                "{pad}Card id={:?} trailing={} content_spacing={}",
                 token.id,
-                token.trailing.len()
+                token.trailing.len(),
+                token.content_spacing
             );
             if let Some(content) = &token.content {
                 write_layout(output, content, indent + 2);

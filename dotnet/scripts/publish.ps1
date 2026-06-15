@@ -84,6 +84,7 @@ if ($Platform -ne "x86") {
         --self-contained true `
         -o (Join-Path $PublishDir "workers\longdoc") `
         -p:Platform=$Platform `
+        -p:RuntimeProfile=$RuntimeProfile `
         -p:PublishTrimmed=false
     if ($LASTEXITCODE -ne 0) {
         Write-Host "LongDoc worker publish failed!" -ForegroundColor Red
@@ -96,6 +97,7 @@ if ($Platform -ne "x86") {
         --self-contained true `
         -o (Join-Path $PublishDir "workers\localai") `
         -p:Platform=$Platform `
+        -p:RuntimeProfile=$RuntimeProfile `
         -p:PublishTrimmed=false
     if ($LASTEXITCODE -ne 0) {
         Write-Host "LocalAI worker publish failed!" -ForegroundColor Red

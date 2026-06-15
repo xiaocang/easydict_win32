@@ -198,6 +198,12 @@ pub enum TextStyle {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TextWrapping {
+    Word,
+    None,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ButtonKind {
     Standard,
     Primary,
@@ -347,6 +353,7 @@ pub struct TextToken {
     pub style: TextStyle,
     pub width: Option<Length>,
     pub height: Option<Length>,
+    pub wrapping: TextWrapping,
     pub selectable: bool,
     pub a11y: A11yHint,
 }
@@ -477,6 +484,7 @@ pub struct CardToken<Message> {
     pub description: Option<String>,
     pub icon: Option<IconToken>,
     pub kind: CardKind,
+    pub content_spacing: u16,
     pub content: Option<Box<View<Message>>>,
     pub trailing: Vec<View<Message>>,
     pub a11y: A11yHint,
@@ -573,6 +581,7 @@ impl ComboBoxItem {
 pub struct ComboBoxToken<Message> {
     pub id: Option<String>,
     pub label: Option<String>,
+    pub placeholder: Option<String>,
     pub items: Vec<ComboBoxItem>,
     pub selected: Option<String>,
     pub width: Length,
@@ -773,6 +782,8 @@ pub struct ExpanderToken<Message> {
     pub icon: Option<IconToken>,
     pub expanded: bool,
     pub header_state: ControlState,
+    pub header_style: FluentStyle,
+    pub content_style: FluentStyle,
     pub content: Option<Box<View<Message>>>,
     pub trailing: Vec<View<Message>>,
     pub action: Action<Message>,
@@ -1252,6 +1263,7 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
         style: TextStyle::Body,
         width: None,
         height: None,
+        wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1355,6 +1367,7 @@ pub fn card<Message>(title: impl Into<String>) -> CardBuilder<Message> {
         description: None,
         icon: None,
         kind: CardKind::Surface,
+        content_spacing: 12,
         content: None,
         trailing: Vec::new(),
         a11y: A11yHint::default(),
@@ -1438,6 +1451,7 @@ pub fn combo_box<Message>(
     ComboBoxBuilder {
         id: None,
         label: None,
+        placeholder: None,
         items: items.into_iter().collect(),
         selected: None,
         width: Length::Shrink,
@@ -1622,6 +1636,8 @@ pub fn expander<Message>(title: impl Into<String>) -> ExpanderBuilder<Message> {
         icon: None,
         expanded: false,
         header_state: ControlState::default(),
+        header_style: FluentStyle::new(),
+        content_style: FluentStyle::new(),
         content: None,
         trailing: Vec::new(),
         action: Action::None,
@@ -2312,6 +2328,7 @@ pub struct CardBuilder<Message> {
     description: Option<String>,
     icon: Option<IconToken>,
     kind: CardKind,
+    content_spacing: u16,
     content: Option<Box<View<Message>>>,
     trailing: Vec<View<Message>>,
     a11y: A11yHint,
@@ -2335,6 +2352,11 @@ impl<Message> CardBuilder<Message> {
 
     pub fn kind(mut self, kind: CardKind) -> Self {
         self.kind = kind;
+        self
+    }
+
+    pub fn content_spacing(mut self, spacing: u16) -> Self {
+        self.content_spacing = spacing;
         self
     }
 
@@ -2362,6 +2384,7 @@ impl<Message> IntoView<Message> for CardBuilder<Message> {
             description: self.description,
             icon: self.icon,
             kind: self.kind,
+            content_spacing: self.content_spacing,
             content: self.content,
             trailing: self.trailing,
             a11y: self.a11y,
@@ -2844,6 +2867,7 @@ impl<Message> IntoView<Message> for SliderBuilder<Message> {
 pub struct ComboBoxBuilder<Message> {
     id: Option<String>,
     label: Option<String>,
+    placeholder: Option<String>,
     items: Vec<ComboBoxItem>,
     selected: Option<String>,
     width: Length,
@@ -2861,6 +2885,11 @@ impl<Message> ComboBoxBuilder<Message> {
 
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
+        self.placeholder = Some(placeholder.into());
         self
     }
 
@@ -2928,6 +2957,7 @@ impl<Message> IntoView<Message> for ComboBoxBuilder<Message> {
         View::new(ViewToken::ComboBox(ComboBoxToken {
             id: self.id,
             label: self.label,
+            placeholder: self.placeholder,
             items: self.items,
             selected: self.selected,
             width: self.width,
@@ -3784,6 +3814,8 @@ pub struct ExpanderBuilder<Message> {
     icon: Option<IconToken>,
     expanded: bool,
     header_state: ControlState,
+    header_style: FluentStyle,
+    content_style: FluentStyle,
     content: Option<Box<View<Message>>>,
     trailing: Vec<View<Message>>,
     action: Action<Message>,
@@ -3826,8 +3858,18 @@ impl<Message> ExpanderBuilder<Message> {
         self
     }
 
+    pub fn header_style(mut self, classes: impl AsRef<str>) -> Self {
+        self.header_style.extend(classes);
+        self
+    }
+
     pub fn content(mut self, content: impl IntoView<Message>) -> Self {
         self.content = Some(Box::new(content.into_view()));
+        self
+    }
+
+    pub fn content_style(mut self, classes: impl AsRef<str>) -> Self {
+        self.content_style.extend(classes);
         self
     }
 
@@ -3856,6 +3898,8 @@ impl<Message> IntoView<Message> for ExpanderBuilder<Message> {
             icon: self.icon,
             expanded: self.expanded,
             header_state: self.header_state,
+            header_style: self.header_style,
+            content_style: self.content_style,
             content: self.content,
             trailing: self.trailing,
             action: self.action,

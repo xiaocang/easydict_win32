@@ -992,10 +992,10 @@ pub fn validate_rs_portable_payload(
         ));
     }
 
-    let dotnet_marker_entries = rust_portable_allowlisted_executable_dotnet_marker_entries(path)?;
-    if !dotnet_marker_entries.is_empty() {
+    let retained_marker_entries = rust_portable_allowlisted_entry_retained_marker_entries(path)?;
+    if !retained_marker_entries.is_empty() {
         return Err(ValidateRustPortableError::ForbiddenEntries(
-            dotnet_marker_entries,
+            retained_marker_entries,
         ));
     }
 
@@ -2192,34 +2192,36 @@ fn rust_portable_zip_invalid_required_entries(
         .collect())
 }
 
-fn rust_portable_allowlisted_executable_dotnet_marker_entries(
+fn rust_portable_allowlisted_entry_retained_marker_entries(
     package_path: &Path,
 ) -> Result<Vec<String>, ValidateRustPortableError> {
     if package_path.is_dir() {
-        rust_portable_directory_dotnet_marker_entries(package_path)
+        rust_portable_directory_retained_marker_entries(package_path)
     } else {
-        rust_portable_zip_dotnet_marker_entries(package_path)
+        rust_portable_zip_retained_marker_entries(package_path)
     }
 }
 
-fn rust_portable_directory_dotnet_marker_entries(
+fn rust_portable_directory_retained_marker_entries(
     package_dir: &Path,
 ) -> Result<Vec<String>, ValidateRustPortableError> {
     let mut entries = Vec::new();
-    for entry_name in rust_portable_allowlisted_executable_entries() {
+    for entry_name in RUST_PORTABLE_REQUIRED_ENTRIES {
         let path = rust_portable_entry_path(package_dir, entry_name);
         let bytes = fs::read(&path).map_err(|error| ValidateRustPortableError::Io {
             path,
             message: error.to_string(),
         })?;
-        if rust_portable_bytes_contain_dotnet_marker(&bytes) {
+        if rust_portable_bytes_contain_retained_marker(&bytes) {
             entries.push((*entry_name).to_string());
         }
     }
+    entries.sort();
+    entries.dedup();
     Ok(entries)
 }
 
-fn rust_portable_zip_dotnet_marker_entries(
+fn rust_portable_zip_retained_marker_entries(
     archive_path: &Path,
 ) -> Result<Vec<String>, ValidateRustPortableError> {
     let file = File::open(archive_path).map_err(|error| ValidateRustPortableError::Io {
@@ -2247,7 +2249,7 @@ fn rust_portable_zip_dotnet_marker_entries(
         };
         let name = rust_portable_path_entry_name(&enclosed_name)
             .ok_or_else(|| ValidateRustPortableError::InvalidArchiveEntry(original_name.clone()))?;
-        if !rust_portable_entry_is_allowlisted_executable(&name) {
+        if !rust_portable_entry_is_allowed(&name) {
             continue;
         }
 
@@ -2255,19 +2257,14 @@ fn rust_portable_zip_dotnet_marker_entries(
         entry
             .read_to_end(&mut bytes)
             .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
-        if rust_portable_bytes_contain_dotnet_marker(&bytes) {
+        if rust_portable_bytes_contain_retained_marker(&bytes) {
             entries.push(name);
         }
     }
 
     entries.sort();
+    entries.dedup();
     Ok(entries)
-}
-
-fn rust_portable_allowlisted_executable_entries() -> impl Iterator<Item = &'static &'static str> {
-    RUST_PORTABLE_REQUIRED_ENTRIES
-        .iter()
-        .filter(|entry_name| rust_portable_entry_is_allowlisted_executable(entry_name))
 }
 
 fn rust_portable_entry_path(root: &Path, entry_name: &str) -> PathBuf {
@@ -2309,7 +2306,9 @@ fn archive_entry_path_is_unsafe(path: &str) -> bool {
 
     path.split('/').any(|part| {
         part == ".."
-            || (part.len() == 2 && part.ends_with(':') && part.as_bytes()[0].is_ascii_alphabetic())
+            || (part.len() >= 2
+                && part.as_bytes()[0].is_ascii_alphabetic()
+                && part.as_bytes()[1] == b':')
     })
 }
 
@@ -2321,11 +2320,7 @@ fn rust_portable_entry_is_allowed(entry_name: &str) -> bool {
     RUST_PORTABLE_REQUIRED_ENTRIES.contains(&entry_name)
 }
 
-fn rust_portable_entry_is_allowlisted_executable(entry_name: &str) -> bool {
-    entry_name == "Easydict.Rust.exe" || RUST_HELPER_EXECUTABLES.contains(&entry_name)
-}
-
-fn rust_portable_bytes_contain_dotnet_marker(bytes: &[u8]) -> bool {
+fn rust_portable_bytes_contain_retained_marker(bytes: &[u8]) -> bool {
     easydict_runtime_guards::bytes_contain_retained_runtime_marker(bytes)
 }
 
@@ -2811,6 +2806,57 @@ WIN_FLUENT_TTS_TEXT\n";
     }
 
     #[test]
+    fn validate_rs_portable_rejects_allowlisted_non_exe_that_contains_retained_markers() {
+        let package = tempfile_dir("rs-portable-allowlisted-non-exe-retained-marker");
+        write_rust_portable_allowed_payload(&package);
+        write_file(
+            &package,
+            "AppIcon.ico",
+            b"renamed retained runtime payload: hostfxr.dll coreclr.dll",
+        );
+        write_file(
+            &package,
+            "README-portable.txt",
+            b"renamed retained script payload: wscript.exe WScript.Shell",
+        );
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert_eq!(
+            entries,
+            vec!["AppIcon.ico".to_string(), "README-portable.txt".to_string()]
+        );
+
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create non-exe retained marker test zip");
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden ZIP entries");
+        };
+        assert_eq!(
+            entries,
+            vec!["AppIcon.ico".to_string(), "README-portable.txt".to_string()]
+        );
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
     fn validate_rs_portable_rejects_allowlisted_exe_that_contains_utf16le_dotnet_markers() {
         let package = tempfile_dir("rs-portable-allowlisted-exe-utf16-dotnet-marker");
         write_rust_portable_allowed_payload(&package);
@@ -2893,6 +2939,51 @@ WIN_FLUENT_TTS_TEXT\n";
             exclude_extensions: Vec::new(),
         })
         .expect("create script marker test zip");
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden ZIP entries");
+        };
+        assert_eq!(entries, vec!["Easydict.Rust.exe", "easydict_cli.exe"]);
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_allowlisted_exe_that_contains_wsh_hta_script_markers() {
+        let package = tempfile_dir("rs-portable-allowlisted-exe-wsh-hta-marker");
+        write_rust_portable_allowed_payload(&package);
+        write_file(
+            &package,
+            "Easydict.Rust.exe",
+            b"stale WSH/HTA helper marker: wscript.exe WScript.Shell HTA:APPLICATION",
+        );
+        write_file(
+            &package,
+            "easydict_cli.exe",
+            &utf16le_ascii_bytes("stale HTA helper marker: mshta.exe VBScript"),
+        );
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert_eq!(entries, vec!["Easydict.Rust.exe", "easydict_cli.exe"]);
+
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create WSH/HTA script marker test zip");
         let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
             package_path: zip_path.clone(),
         })
@@ -3154,6 +3245,7 @@ WIN_FLUENT_TTS_TEXT\n";
             "../hostfxr.dll",
             "/workers/localai/Easydict.Workers.LocalAi.exe",
             "C:/workers/localai/Easydict.Workers.LocalAi.exe",
+            "C:workers/localai/Easydict.Workers.LocalAi.exe",
         ] {
             let package = tempfile_dir(&format!(
                 "rs-portable-unsafe-{}",

@@ -751,6 +751,57 @@ fn traditional_http_language_preflight_matches_dotnet_supported_language_tables(
 }
 
 #[test]
+fn bing_language_preflight_uses_dedicated_legacy_bing_table() {
+    let source = include_str!("../src/traditional_http.rs");
+    assert!(
+        source.contains("const BING_SUPPORTED_LANGUAGES"),
+        "Bing should keep its own .NET BingTranslateService language table"
+    );
+    assert!(
+        !source.contains("TraditionalHttpServiceKind::Bing => GOOGLE_SUPPORTED_LANGUAGES"),
+        "Bing must not inherit future Google whitelist changes implicitly"
+    );
+
+    assert!(traditional_http_supports_language_pair_for_kind(
+        TraditionalHttpServiceKind::Bing,
+        TranslationLanguage::Auto,
+        TranslationLanguage::Filipino,
+    ));
+    assert!(traditional_http_supports_language_pair_for_kind(
+        TraditionalHttpServiceKind::Bing,
+        TranslationLanguage::English,
+        TranslationLanguage::Norwegian,
+    ));
+    assert!(!traditional_http_supports_language_pair_for_kind(
+        TraditionalHttpServiceKind::Bing,
+        TranslationLanguage::English,
+        TranslationLanguage::ClassicalChinese,
+    ));
+
+    let credentials = BingCredentials {
+        ig: "IG".to_string(),
+        iid: "iid".to_string(),
+        token: "t".to_string(),
+        key: 1,
+        expiry_interval_ms: 3_600_000,
+    };
+    let error = build_bing_translate_request_plan(
+        &credentials,
+        BING_GLOBAL_HOST,
+        "Hello",
+        TranslationLanguage::English,
+        TranslationLanguage::ClassicalChinese,
+        1,
+    )
+    .expect_err("unsupported Bing target should fail before request construction");
+    assert_eq!(error.code, OpenAiExecutionErrorCode::UnsupportedLanguage);
+    assert_eq!(
+        error.message,
+        "Language pair not supported: English -> ClassicalChinese"
+    );
+}
+
+#[test]
 fn traditional_http_config_routes_native_traditional_providers() {
     let settings = SettingsSnapshot {
         caiyun_token: Some("caiyun-token".to_string()),

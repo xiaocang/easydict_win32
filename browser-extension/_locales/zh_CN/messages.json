@@ -24,7 +24,7 @@
     "description": "Heading for install instructions section"
   },
   "setupInstallStep1": {
-    "message": "从 Microsoft Store 安装 Easydict",
+    "message": "从 GitHub Releases 下载 Rust 原生便携版 Easydict",
     "description": "Install step 1"
   },
   "setupInstallStep2": {
@@ -48,8 +48,8 @@
     "description": "Retry button label"
   },
   "setupInstallButton": {
-    "message": "从 Microsoft Store 获取 Easydict",
-    "description": "Microsoft Store install link text"
+    "message": "下载 Rust 原生便携版",
+    "description": "Rust portable release link text"
   },
   "setupRetrySuccess": {
     "message": "连接成功！此标签页即将关闭。",

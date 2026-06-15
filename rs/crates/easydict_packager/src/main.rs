@@ -739,6 +739,20 @@ mod tests {
     }
 
     #[test]
+    fn pack_rs_portable_rejects_runtime_profile_flag_before_workspace() {
+        let code = run(vec![
+            "pack-rs-portable".to_string(),
+            "--runtime-profile".to_string(),
+            "hybrid".to_string(),
+        ]);
+
+        assert_eq!(
+            code, 2,
+            "first-release rs portable packaging must not accept hybrid runtime-profile knobs"
+        );
+    }
+
+    #[test]
     #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
     fn default_build_rejects_legacy_zip_directory_command_before_args() {
         let code = run(vec!["zip-directory".to_string()]);

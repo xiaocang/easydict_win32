@@ -1,4 +1,5 @@
 use easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker;
+use std::{fs, path::Path};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopShellVerb {
@@ -270,7 +271,51 @@ fn validate_desktop_command_executable_path(executable_path: &str) -> Result<(),
         ));
     }
 
+    let executable = Path::new(executable_path);
+    let metadata = fs::symlink_metadata(executable).map_err(|error| {
+        format!("failed to inspect desktop integration command target {executable_path}: {error}")
+    })?;
+    let file_type = metadata.file_type();
+    if desktop_command_target_is_unsupported_by_flags(
+        file_type.is_file(),
+        file_type.is_symlink(),
+        desktop_command_target_is_reparse_point(&metadata),
+    ) {
+        return Err(format!(
+            "desktop integration command target must be a regular non-link executable file: {executable_path}"
+        ));
+    }
+
+    let bytes = fs::read(executable).map_err(|error| {
+        format!("failed to read desktop integration command target {executable_path}: {error}")
+    })?;
+    if easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes) {
+        return Err(format!(
+            "desktop integration command target contains retained runtime marker: {executable_path}"
+        ));
+    }
+
     Ok(())
+}
+
+fn desktop_command_target_is_unsupported_by_flags(
+    is_file: bool,
+    is_symlink: bool,
+    is_reparse_point: bool,
+) -> bool {
+    !is_file || is_symlink || is_reparse_point
+}
+
+#[cfg(windows)]
+fn desktop_command_target_is_reparse_point(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn desktop_command_target_is_reparse_point(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 fn write_registry_string(
@@ -427,5 +472,31 @@ mod tests {
         )
         .expect_err("startup registration should reject retained worker targets");
         assert!(startup_error.contains("retained runtime"));
+    }
+
+    #[test]
+    fn desktop_registry_commands_reject_retained_runtime_content_targets() {
+        let temp_dir = unique_temp_dir("desktop-registry-command-content");
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let executable = temp_dir.join("Easydict.Rust.exe");
+        fs::write(
+            &executable,
+            b"MZ fake apphost payload with hostfxr.dll retained runtime marker",
+        )
+        .expect("write fake executable");
+
+        let error = validate_desktop_command_executable_path(&executable.to_string_lossy())
+            .expect_err("desktop command validation should reject retained runtime bytes");
+        assert!(error.contains("contains retained runtime marker"));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    fn unique_temp_dir(label: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("easydict-{label}-{}-{nanos}", std::process::id()))
     }
 }

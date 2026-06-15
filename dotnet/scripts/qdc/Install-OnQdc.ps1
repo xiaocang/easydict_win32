@@ -6,6 +6,11 @@
   the signed MSIX.
 
 .DESCRIPTION
+  QDC sideload validation only. This is not the first rs release/install path,
+  and a rust-only validator profile here does not imply a Rust MSIX release
+  artifact. The first rs release is Rust portable-only; use
+  rs/scripts/Package-Portable.ps1 or `easydict_packager pack-rs-portable`.
+
   Not intended to be invoked manually from the dev machine. Deploy-ToQdc.ps1
   copies this script + cert + MSIX to a staging dir on the remote, then runs it
   over SSH.
@@ -29,6 +34,8 @@ param(
     [string]$ValidatorPath = "",
 
     [string]$PackageName = "xiaocang.EasydictforWindows",
+
+    [switch]$Machine,
 
     [switch]$LaunchApp
 )
@@ -99,6 +106,51 @@ function Invoke-MsixValidator {
 
     & cargo run --manifest-path $cargoManifest -p easydict_msix_validate -- @validatorArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+function Install-ProvisionedPackageAndRegister {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    Add-AppxProvisionedPackage -Online -PackagePath $Path -SkipLicense -ErrorAction Stop | Out-Null
+    Write-Host "  Provisioned (machine scope)" -ForegroundColor Gray
+
+    $prov = Get-AppxProvisionedPackage -Online |
+        Where-Object DisplayName -eq $Name |
+        Select-Object -First 1
+    if ($prov) {
+        $manifest = "C:\Program Files\WindowsApps\$($prov.PackageName)\AppxManifest.xml"
+        # On a fresh QDC reservation, the manifest can pass Test-Path before
+        # the provisioned package is fully staged. Retry Register a few times,
+        # surfacing errors instead of silently swallowing them.
+        for ($attempt = 1; $attempt -le 4; $attempt++) {
+            if (-not (Test-Path $manifest)) {
+                Write-Host "  Manifest not yet at $manifest (attempt $attempt) -- waiting 3s..." -ForegroundColor Yellow
+                Start-Sleep -Seconds 3
+                continue
+            }
+            $regError = $null
+            # Register reports a spurious 0x80070005 but still binds the package
+            # in the success case; treat that one error code as success and
+            # confirm via Get-AppxPackage.
+            Add-AppxPackage -Register $manifest -DisableDevelopmentMode `
+                -ErrorAction SilentlyContinue -ErrorVariable regError
+            $registered = Get-AppxPackage -Name $Name -ErrorAction SilentlyContinue
+            if ($registered) { return $registered }
+            if ($regError) {
+                $regMsg = ($regError[0].Exception.Message -replace "`r?`n", ' | ')
+                Write-Host "  Register attempt $attempt failed: $regMsg" -ForegroundColor Yellow
+            }
+            Start-Sleep -Seconds 3
+        }
+    }
+
+    return Get-AppxPackage -Name $Name -ErrorAction SilentlyContinue
 }
 
 $RuntimeProfile = Normalize-RuntimeProfile $RuntimeProfile
@@ -236,57 +288,30 @@ Write-Host ""
 # Get-AppxPackage afterwards shows Status=Ok).
 Write-Host "[5/5] Installing MSIX..." -ForegroundColor Yellow
 $installError = $null
-Add-AppxPackage -Path $MsixPath `
-    -ForceApplicationShutdown -ForceUpdateFromAnyVersion `
-    -ErrorAction SilentlyContinue -ErrorVariable installError
+$installed = $null
+if ($Machine) {
+    Write-Host "  Machine scope requested; provisioning package before user registration..." -ForegroundColor Yellow
+    $installed = Install-ProvisionedPackageAndRegister -Path $MsixPath -Name $PackageName
+} else {
+    Add-AppxPackage -Path $MsixPath `
+        -ForceApplicationShutdown -ForceUpdateFromAnyVersion `
+        -ErrorAction SilentlyContinue -ErrorVariable installError
 
-$installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
-if ($installError -and -not $installed) {
-    $msg = ($installError[0].Exception.Message -replace "`r?`n", ' | ')
-    if ($msg -match '0x80070005') {
+    $installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
+    if ($installError -and -not $installed) {
+        $msg = ($installError[0].Exception.Message -replace "`r?`n", ' | ')
+        if ($msg -match '0x80070005') {
         Write-Host "  Add-AppxPackage failed with 0x80070005 (typical for SSH sessions)." -ForegroundColor Yellow
         Write-Host "  Falling back to Add-AppxProvisionedPackage + Register..." -ForegroundColor Yellow
 
-        Add-AppxProvisionedPackage -Online -PackagePath $MsixPath -SkipLicense -ErrorAction Stop | Out-Null
-        Write-Host "  Provisioned (machine scope)" -ForegroundColor Gray
-
-        $prov = Get-AppxProvisionedPackage -Online |
-            Where-Object DisplayName -eq $PackageName |
-            Select-Object -First 1
-        if ($prov) {
-            $manifest = "C:\Program Files\WindowsApps\$($prov.PackageName)\AppxManifest.xml"
-            # On a fresh QDC reservation, the manifest can pass Test-Path before
-            # the provisioned package is fully staged. Retry Register a few times,
-            # surfacing errors instead of silently swallowing them.
-            for ($attempt = 1; $attempt -le 4; $attempt++) {
-                if (-not (Test-Path $manifest)) {
-                    Write-Host "  Manifest not yet at $manifest (attempt $attempt) -- waiting 3s..." -ForegroundColor Yellow
-                    Start-Sleep -Seconds 3
-                    continue
-                }
-                $regError = $null
-                # Register reports a spurious 0x80070005 but still binds the package
-                # in the success case; treat that one error code as success and
-                # confirm via Get-AppxPackage.
-                Add-AppxPackage -Register $manifest -DisableDevelopmentMode `
-                    -ErrorAction SilentlyContinue -ErrorVariable regError
-                $installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
-                if ($installed) { break }
-                if ($regError) {
-                    $regMsg = ($regError[0].Exception.Message -replace "`r?`n", ' | ')
-                    Write-Host "  Register attempt $attempt failed: $regMsg" -ForegroundColor Yellow
-                }
-                Start-Sleep -Seconds 3
-            }
-        }
-
-        $installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
+        $installed = Install-ProvisionedPackageAndRegister -Path $MsixPath -Name $PackageName
         if ($installed) {
             Write-Host "  Registered for $env:USERNAME (Status=$($installed.Status))" -ForegroundColor Gray
         }
-    } else {
-        Write-Host "ERROR: $msg" -ForegroundColor Red
-        exit 1
+        } else {
+            Write-Host "ERROR: $msg" -ForegroundColor Red
+            exit 1
+        }
     }
 }
 

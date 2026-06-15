@@ -5,6 +5,11 @@
   machine over SSH.
 
 .DESCRIPTION
+  QDC sideload validation only. This is not the first rs release/install path,
+  and a rust-only validator profile here does not imply a Rust MSIX release
+  artifact. The first rs release is Rust portable-only; use
+  rs/scripts/Package-Portable.ps1 or `easydict_packager pack-rs-portable`.
+
   Local-side orchestrator:
     1. Sanity-check local files (cer, signed MSIX), read the MSIX's
        ProcessorArchitecture from its embedded AppxManifest.xml.

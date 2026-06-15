@@ -228,7 +228,7 @@ function Get-SettingsServiceExpandedAutomationIds {
             return @("OllamaEndpointBox", "OllamaModelCombo", "RefreshOllamaButton", "TestOllamaButton")
         }
         "openai" {
-            return @("OpenAIKeyHeaderText", "OpenAIKeyBox", "OpenAIKeyRevealButton", "OpenAIEndpointHeaderText", "OpenAIEndpointBox", "OpenAIApiFormatCombo", "OpenAIDetectedFormatText", "OpenAIModelCombo", "TestOpenAIButton")
+            return @("OpenAIKeyHeaderText", "OpenAIKeyBox", "OpenAIKeyRevealButton", "OpenAIEndpointHeaderText", "OpenAIEndpointBox", "OpenAIApiFormatCombo", "OpenAIModelCombo", "OpenAIHelpText", "TestOpenAIButton")
         }
         "deepseek" {
             return @("DeepSeekKeyHeaderText", "DeepSeekKeyBox", "DeepSeekKeyRevealButton", "DeepSeekModelCombo", "TestDeepSeekButton")
@@ -452,6 +452,71 @@ function Test-ReferenceManifestEntryMatchesScenarioState {
     return @($ReferenceEntry.ReferenceUiSummary.VisibleTexts) -contains "Switching mode"
 }
 
+function Test-PreferredServiceBarPressedReferenceHasExactManifestMatch {
+    param(
+        [string]$ScenarioId,
+        $ReferenceFile,
+        $ReferenceEntry,
+        [string]$SourceKind
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScenarioId) -or
+        $null -eq $ReferenceFile -or
+        $null -eq $ReferenceEntry -or
+        $SourceKind -ne "preferred-dotnet-rust-parity") {
+        return $false
+    }
+
+    $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    $serviceDescriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $normalized
+    if ($null -eq $serviceDescriptor -or
+        -not [bool]$serviceDescriptor.DotnetReferenceExpected -or
+        -not $normalized.EndsWith("-bar-pressed", [System.StringComparison]::Ordinal)) {
+        return $false
+    }
+
+    if (-not $ReferenceEntry.PSObject.Properties["ScenarioId"] -or
+        [string]$ReferenceEntry.ScenarioId -ne $ScenarioId) {
+        return $false
+    }
+
+    if (-not $ReferenceEntry.PSObject.Properties["ReferenceScreenshot"]) {
+        return $false
+    }
+
+    if ([string]$ReferenceEntry.ReferenceScreenshot -ne $ReferenceFile.Name) {
+        return $false
+    }
+
+    if (-not $ReferenceEntry.PSObject.Properties["WindowKind"] -or
+        [string]$ReferenceEntry.WindowKind -ne "settings") {
+        return $false
+    }
+
+    if (-not $ReferenceEntry.PSObject.Properties["SectionId"] -or
+        [string]$ReferenceEntry.SectionId -ne "services") {
+        return $false
+    }
+
+    if (-not $ReferenceEntry.PSObject.Properties["BaselineScenarioId"] -or
+        [string]$ReferenceEntry.BaselineScenarioId -ne (Get-ScenarioBaselineId -ScenarioId $ScenarioId)) {
+        return $false
+    }
+
+    if (-not $ReferenceEntry.PSObject.Properties["RequiredControlStates"]) {
+        return $false
+    }
+
+    $states = Import-RequiredControlStates -Value $ReferenceEntry.RequiredControlStates
+    $targetId = [string]$serviceDescriptor.RustExpanderId
+    if (-not $states.Contains($targetId)) {
+        return $false
+    }
+
+    $targetStates = @($states[$targetId])
+    return ($targetStates -contains "hovered") -and ($targetStates -contains "pressed")
+}
+
 function Find-ReferenceManifestEntry {
     param(
         $ReferenceFile,
@@ -506,7 +571,12 @@ function Find-CompatibleReferenceScreenshot {
             $hasMatchingManifestEntry = $null -ne $entry -and
                 $entry.PSObject.Properties["ScenarioId"] -and
                 [string]$entry.ScenarioId -eq $ScenarioId
-            if (-not ($isExplicitReferenceRootFile -and $hasMatchingManifestEntry)) {
+            $hasExactPreferredBarPressedManifestEntry = Test-PreferredServiceBarPressedReferenceHasExactManifestMatch `
+                -ScenarioId $ScenarioId `
+                -ReferenceFile $candidate `
+                -ReferenceEntry $entry `
+                -SourceKind $sourceKind
+            if (-not (($isExplicitReferenceRootFile -and $hasMatchingManifestEntry) -or $hasExactPreferredBarPressedManifestEntry)) {
                 continue
             }
         }
@@ -715,7 +785,7 @@ function New-ExpectedWindowDips {
     }
 
     switch ($normalized) {
-        "settings" { return [pscustomobject]@{ Width = 846.0; Height = 900.0 } }
+        "settings" { return [pscustomobject]@{ Width = 846.0; Height = 913.0 } }
         "mini" { return [pscustomobject]@{ Width = 320.0; Height = 200.0 } }
         "fixed" { return [pscustomobject]@{ Width = 320.0; Height = 280.0 } }
         "popbutton" { return [pscustomobject]@{ Width = 30.0; Height = 30.0 } }
@@ -999,6 +1069,46 @@ function Add-SettingsServicesTopCandidateDimensions {
     }
 
     if ($null -ne $descriptor -and [double]$descriptor.ScrollPercent -gt 0) {
+        $scrolledTopControls = New-Object System.Collections.Generic.List[object]
+        @(
+            @("EnabledServicesHeaderText", "Text", 32, 59, 111, 24),
+            @("EnabledServicesDescriptionText", "Text", 32, 95, 796, 16),
+            @("ImportMdxDictionaryButton", "Button", 32, 123, 165, 29),
+            @("ImportedMdxSummaryText", "Text", 205, 128, 189, 19),
+            @("EnableInternationalServicesHeaderText", "Text", 45, 184, 704, 18),
+            @("EnableInternationalServicesToggle", "Button", 749, 173, 66, 40),
+            @("EnableInternationalServicesDescriptionText", "Text", 45, 217, 770, 15),
+            @("ServiceConfigurationHeaderText", "Text", 32, 265, 74, 24),
+            @("ServiceConfigurationDescriptionText", "Text", 32, 301, 796, 16)
+        ) | ForEach-Object { $scrolledTopControls.Add($_) | Out-Null }
+
+        if ($descriptor.ServiceId.Trim().ToLowerInvariant() -eq "openai") {
+            @(
+                @("DeepLServiceExpander", "Button", 32, 329, 796, 48),
+                @("WindowsLocalAIExpander", "Button", 32, 389, 796, 48),
+                @("WindowsLocalAITitleText", "Text", 79, 404, 113, 19),
+                @("WindowsLocalAIStatusBadge", "Text", 745, 404, 14, 19),
+                @("OllamaServiceExpander", "Button", 32, 449, 796, 48),
+                @("OpenAIKeyHeaderText", "Text", 49, 581, 350, 19),
+                @("OpenAIKeyBox", "Edit", 49, 604, 350, 32),
+                @("OpenAIKeyRevealButton", "Button", 365, 606, 28, 28),
+                @("OpenAIEndpointHeaderText", "Text", 49, 648, 450, 19),
+                @("OpenAIEndpointBox", "Edit", 49, 648, 450, 59),
+                @("OpenAIApiFormatCombo", "ComboBox", 45, 719, 288, 64),
+                @("OpenAIModelCombo", "ComboBox", 45, 791, 288, 64),
+                @("SaveButton", "Button", 716, 837, 104, 43)
+            ) | ForEach-Object { $scrolledTopControls.Add($_) | Out-Null }
+        }
+
+        foreach ($control in $scrolledTopControls) {
+            Set-UiSummaryControlDimension -UiSummary $CandidateUiSummary -Id $control[0] -Dimension (New-ControlDimension `
+                    -Kind $control[1] `
+                    -Left $control[2] `
+                    -Top $control[3] `
+                    -Width $control[4] `
+                    -Height $control[5])
+        }
+
         $scrolledExpanderTop = switch ($descriptor.ServiceId.Trim().ToLowerInvariant()) {
             "openai" { 489; break }
             "deepseek" { 463; break }
@@ -1074,6 +1184,19 @@ function Add-SettingsServicesTopCandidateDimensions {
                 @("FoundryLocalRatingText", "Text", 147, 734, 46, 19),
                 @("FoundryLocalEndpointBox", "Edit", 49, 763, 762, 59),
                 @("FoundryLocalModelBox", "Edit", 49, 832, 762, 56)
+            ) | ForEach-Object { $topControls.Add($_) | Out-Null }
+        }
+        "parity-settings-services-ollama-expanded-top" {
+            @(
+                @("DeepLServiceExpander", "Button", 32, 497, 796, 48),
+                @("WindowsLocalAIExpander", "Button", 32, 557, 796, 48),
+                @("WindowsLocalAITitleText", "Text", 79, 572, 113, 19),
+                @("WindowsLocalAIStatusBadge", "Text", 742, 572, 20, 19),
+                @("OllamaServiceExpander", "Button", 32, 617, 796, 48),
+                @("OllamaEndpointBox", "Edit", 49, 689, 450, 59),
+                @("OllamaModelCombo", "ComboBox", 45, 760, 208, 64),
+                @("RefreshOllamaButton", "Button", 257, 787, 54, 33),
+                @("TestOllamaButton", "Button", 319, 791, 46, 29)
             ) | ForEach-Object { $topControls.Add($_) | Out-Null }
         }
         default {
@@ -1271,10 +1394,18 @@ function Add-RustSchemaControlDimensions {
     $dimension = [ordered]@{
         Kind = $Kind
     }
-    foreach ($name in @("width", "height", "max_width", "min_width", "min_height", "max_height", "padding", "spacing", "row_spacing", "column_spacing", "columns", "maximum_rows_or_columns")) {
+    foreach ($name in @("width", "labeled_width", "height", "labeled_height", "max_width", "min_width", "min_height", "max_height", "padding", "spacing", "row_spacing", "column_spacing", "columns", "maximum_rows_or_columns")) {
         $value = Get-SchemaTokenValue -Line $Line -Name $name
         if ($null -ne $value) {
             $dimension[$name] = $value
+        }
+    }
+    if ($Kind -eq "TextEditor" -and -not $dimension.Contains("labeled_height")) {
+        $height = Get-SchemaTokenValue -Line $Line -Name "height"
+        $heightValue = 0
+        if ($height -match 'Fixed\((?<height>\d+)\)' -and
+            [int]::TryParse($Matches["height"], [ref]$heightValue)) {
+            $dimension["labeled_height"] = "Fixed($($heightValue + 23))"
         }
     }
     $state = Get-SchemaTokenValue -Line $Line -Name "state"
@@ -1332,7 +1463,12 @@ function Get-SettingsServicesViewportAutomationIds {
 
     $descriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $ScenarioId
     if ($null -ne $descriptor) {
-        $ids = @($common + @($descriptor.RustExpanderId) + @(Get-SettingsServiceExpandedAutomationIds -ServiceId $descriptor.ServiceId))
+        $ids = @(
+            $common +
+            @(Get-SettingsServicesViewportPeerAutomationIds -ServiceId $descriptor.ServiceId) +
+            @($descriptor.RustExpanderId) +
+            @(Get-SettingsServiceExpandedAutomationIds -ServiceId $descriptor.ServiceId)
+        )
         return @($ids | Select-Object -Unique)
     }
 
@@ -1374,6 +1510,31 @@ function Get-SettingsServicesViewportAutomationIds {
                 "WindowsLocalAIStatusBadge",
                 "WindowsLocalAITitleText"
             ))
+        }
+    }
+}
+
+function Get-SettingsServicesViewportPeerAutomationIds {
+    param(
+        [string]$ServiceId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ServiceId)) {
+        return @()
+    }
+
+    switch ($ServiceId.Trim().ToLowerInvariant()) {
+        "openai" {
+            return @(
+                "DeepLServiceExpander",
+                "WindowsLocalAIExpander",
+                "WindowsLocalAITitleText",
+                "WindowsLocalAIStatusBadge",
+                "OllamaServiceExpander"
+            )
+        }
+        default {
+            return @()
         }
     }
 }
@@ -1511,7 +1672,22 @@ function Test-RustSchemaLineInUiSummaryScope {
         return $true
     }
 
+    if ($Scope.IsSettings -and
+        $Scope.Section -eq "services" -and
+        (Test-SettingsServicesViewportScenario -ScenarioId $Scope.ScenarioId)) {
+        if ($Id -in @("BackButton", "SettingsHeaderText") -or
+            (-not [string]::IsNullOrWhiteSpace($Id) -and $Id.StartsWith("SettingsTab_", [System.StringComparison]::OrdinalIgnoreCase))) {
+            return $false
+        }
+        if ($Id -in @("MainScrollViewer", "settings.content", "SettingsBottomSpacer", "SaveButton")) {
+            return $true
+        }
+    }
+
     if ($Id -in @("BackButton", "SettingsHeaderText", "MainScrollViewer", "settings.content", "SettingsBottomSpacer")) {
+        return $true
+    }
+    if ($Id -eq "SaveButton") {
         return $true
     }
     if (-not [string]::IsNullOrWhiteSpace($Id) -and $Id.StartsWith("SettingsTab_", [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -1595,7 +1771,22 @@ function Test-RustSchemaAutomationIdInUiSummaryScope {
     if ($null -eq $Scope -or -not $Scope.IsSettings) {
         return $true
     }
+    if ($Scope.IsSettings -and
+        $Scope.Section -eq "services" -and
+        (Test-SettingsServicesViewportScenario -ScenarioId $Scope.ScenarioId)) {
+        if ($Id -in @("BackButton", "SettingsHeaderText") -or
+            $Id.StartsWith("SettingsTab_", [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+        if ($Id -in @("MainScrollViewer", "settings.content", "SettingsBottomSpacer", "SaveButton")) {
+            return $true
+        }
+    }
+
     if ($Id -in @("BackButton", "MainScrollViewer", "SettingsHeaderText", "settings.content", "SettingsBottomSpacer")) {
+        return $true
+    }
+    if ($Id -eq "SaveButton") {
         return $true
     }
     if ($Id.StartsWith("SettingsTab_", [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -1711,6 +1902,7 @@ function Get-ScenarioRequiredSemanticTags {
         "SettingsTab_Advanced",
         "SettingsTab_Language",
         "SettingsTab_About"
+        "SaveButton"
     )
 
     switch ($section) {
@@ -1744,7 +1936,11 @@ function Get-ScenarioRequiredSemanticTags {
         }
         "services" {
             if (Test-SettingsServicesViewportScenario -ScenarioId $ScenarioId) {
-                return @($settingsFrameTags + (Get-SettingsServicesViewportAutomationIds -ScenarioId $ScenarioId))
+                return @(
+                    "settings.content",
+                    "SettingsBottomSpacer",
+                    "SaveButton"
+                ) + (Get-SettingsServicesViewportAutomationIds -ScenarioId $ScenarioId)
             }
             return @($settingsFrameTags)
         }
@@ -2360,13 +2556,14 @@ $scenarioDefinitions = @(
     New-MatrixScenario -Id "parity-settings-services-translation-service-configuration-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
-        EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
+        EASYDICT_PREVIEW_SETTINGS_UNSAVED_CHANGES = "1"
+        EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS = "Ready"
     })
     foreach ($serviceDescriptor in Get-SettingsServiceConfigurationDescriptors) {
         $serviceEnvironment = @{
             EASYDICT_PREVIEW_WINDOW = "settings"
             EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
-            EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
+            EASYDICT_PREVIEW_SETTINGS_UNSAVED_CHANGES = "1"
             EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS = $serviceDescriptor.ServiceId
             EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS = "Ready"
         }
@@ -2376,6 +2573,9 @@ $scenarioDefinitions = @(
         }
         if (-not [string]::IsNullOrWhiteSpace([string]$serviceDescriptor.RustLocalAiProvider)) {
             $serviceEnvironment["EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER"] = $serviceDescriptor.RustLocalAiProvider
+        }
+        if ($serviceDescriptor.ServiceId -eq "openai") {
+            $serviceEnvironment["EASYDICT_PREVIEW_SETTINGS_OPENAI_MODEL_EMPTY"] = "1"
         }
 
         New-MatrixScenario -Id $serviceDescriptor.ScenarioId -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain $serviceEnvironment)
@@ -2719,6 +2919,10 @@ foreach ($definition in $selectedScenarios) {
             $referenceUiSummary = $null
             $referenceRequiredSemanticTags = @()
         }
+        if ($summarySectionId.Trim().ToLowerInvariant() -eq "services" -and
+            (Test-SettingsServicesViewportScenario -ScenarioId $definition.Id)) {
+            $referenceRequiredSemanticTags = @()
+        }
         $referenceUiSummary = Add-SettingsReferenceUiSummaryDimensions -ReferenceUiSummary $referenceUiSummary -ScenarioId $definition.Id -SectionId $summarySectionId
         $requiredSemanticTags = @(Normalize-RequiredSemanticTags @(
             @($referenceRequiredSemanticTags) +
@@ -2730,6 +2934,10 @@ foreach ($definition in $selectedScenarios) {
             Import-RequiredControlStates -Value $referenceEntry.RequiredControlStates
         } else {
             New-RequiredControlStatesMap
+        }
+        if ($summarySectionId.Trim().ToLowerInvariant() -eq "services" -and
+            (Test-SettingsServicesViewportScenario -ScenarioId $definition.Id)) {
+            $referenceRequiredControlStates = New-RequiredControlStatesMap
         }
         $requiredControlStates = Merge-RequiredControlStates `
             -First $referenceRequiredControlStates `

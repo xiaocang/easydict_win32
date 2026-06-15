@@ -3,10 +3,13 @@
 //! These tests depend on local MDX/MDD files and are disabled by default through
 //! the `real-corpus-tests` feature in `Cargo.toml`.
 
-use rust_mdict::{Mdd, Mdx};
+use rust_mdict::{normalize_mdd_resource_key, Mdd, Mdx};
 
 const MDX_ENV: &str = "RS_MDICT_TEST_MDX";
 const MDD_ENV: &str = "RS_MDICT_TEST_MDD";
+const MDD_RESOURCE_ENV: &str = "RS_MDICT_TEST_MDD_RESOURCE";
+const MDD_RESOURCE_MIME_ENV: &str = "RS_MDICT_TEST_MDD_RESOURCE_MIME";
+const MDD_RESOURCE_MIN_BYTES_ENV: &str = "RS_MDICT_TEST_MDD_RESOURCE_MIN_BYTES";
 const QUERY_ENV: &str = "RS_MDICT_TEST_QUERY";
 const SECOND_QUERY_ENV: &str = "RS_MDICT_TEST_SECOND_QUERY";
 const THIRD_QUERY_ENV: &str = "RS_MDICT_TEST_THIRD_QUERY";
@@ -34,6 +37,23 @@ fn corpus_value(env_name: &str, default_value: &str) -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| default_value.to_string())
+}
+
+fn optional_corpus_value(env_name: &str, description: &str) -> Option<String> {
+    match std::env::var(env_name) {
+        Ok(value) if !value.trim().is_empty() => Some(value),
+        _ => {
+            eprintln!("Skipping real-corpus {description}; set {env_name} to enable it");
+            None
+        }
+    }
+}
+
+fn optional_corpus_usize(env_name: &str, default_value: usize) -> usize {
+    std::env::var(env_name)
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(default_value)
 }
 
 fn primary_query() -> String {
@@ -355,6 +375,52 @@ fn test_mdd_locate_raw() {
     } else {
         println!("Resource not found");
     }
+}
+
+#[test]
+fn test_mdd_locate_configured_resource() {
+    let Some(mut mdd) = open_mdd() else { return };
+    let Some(resource_key) =
+        optional_corpus_value(MDD_RESOURCE_ENV, "configured MDD resource lookup")
+    else {
+        return;
+    };
+
+    let expected_key = normalize_mdd_resource_key(&resource_key);
+    let resource = mdd
+        .locate_resource_result(&resource_key)
+        .unwrap_or_else(|error| panic!("Configured MDD resource lookup failed: {error:?}"))
+        .unwrap_or_else(|| panic!("Configured MDD resource '{resource_key}' was not found"));
+    let min_bytes = optional_corpus_usize(MDD_RESOURCE_MIN_BYTES_ENV, 1);
+
+    assert_eq!(resource.key, expected_key);
+    assert!(
+        resource.data.len() >= min_bytes,
+        "Configured MDD resource '{}' should be at least {min_bytes} bytes, got {}",
+        resource.key,
+        resource.data.len()
+    );
+    assert!(!resource.mime_type.is_empty());
+
+    if let Some(expected_mime) =
+        optional_corpus_value(MDD_RESOURCE_MIME_ENV, "configured MDD MIME assertion")
+    {
+        assert_eq!(resource.mime_type, expected_mime);
+    }
+
+    let info = mdd
+        .get_resource_info(&resource_key)
+        .expect("configured MDD resource info should exist");
+    assert_eq!(info.key, resource.key);
+    assert_eq!(info.extension, resource.extension);
+    assert_eq!(info.mime_type, resource.mime_type);
+
+    println!(
+        "Configured MDD resource {} -> {} bytes, {}",
+        resource.key,
+        resource.data.len(),
+        resource.mime_type
+    );
 }
 
 #[test]

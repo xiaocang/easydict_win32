@@ -700,8 +700,15 @@ $dotnetGcdump = Join-Path $ToolDir "dotnet-gcdump.exe"
 Install-DotnetTool "dotnet-counters" $dotnetCounters $ToolDir
 Install-DotnetTool "dotnet-gcdump" $dotnetGcdump $ToolDir
 
+$RustOnlyMsBuildProperties = @(
+    "-p:Platform=x64",
+    "-p:RuntimeProfile=rust-only",
+    "-p:BuildWorkerOutputs=false",
+    "-p:EnableInProcLongDocFallback=false"
+)
+
 if (-not $SkipBuild) {
-    & dotnet build $TestProject -c $Configuration -p:Platform=x64
+    & dotnet build $TestProject -c $Configuration @RustOnlyMsBuildProperties
     if ($LASTEXITCODE -ne 0) {
         throw "UIAutomation test build failed."
     }
@@ -748,8 +755,7 @@ $testArgs = @(
     "--results-directory", $OutputDir,
     "--logger", "trx;LogFileName=memory-gate.trx",
     "--logger", "console;verbosity=detailed",
-    "-p:Platform=x64"
-)
+) + $RustOnlyMsBuildProperties
 
 Write-Host "Starting memory gate scenario..."
 $testProcess = Start-Process -FilePath "dotnet" -ArgumentList $testArgs -RedirectStandardOutput $testOut -RedirectStandardError $testErr -PassThru -WindowStyle Hidden

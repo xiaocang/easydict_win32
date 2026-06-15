@@ -6,7 +6,8 @@ use easydict_app::{
     pop_button_view_with_state, pop_button_window_options, preview_control_state_from_id,
     settings_window_options, EasydictApp, EasydictUiState, Message, SettingsState,
     MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS, MAIN_WINDOW_MIN_HEIGHT_DIPS,
-    MAIN_WINDOW_MIN_WIDTH_DIPS,
+    MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
+    SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
 };
 use win_fluent::prelude::*;
 
@@ -120,7 +121,10 @@ fn preview_window_options() -> WindowOptions {
 
     let settings_preview = preview_settings_open();
     let (default_width, default_height) = if settings_preview {
-        (846.0, 900.0)
+        (
+            SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
+            SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
+        )
     } else {
         (
             MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
@@ -402,8 +406,8 @@ mod tests {
         restore_env("EASYDICT_PREVIEW_SETTINGS_OPEN", previous_settings_open);
 
         assert_eq!(options.id.as_str(), "settings");
-        assert_eq!(options.width, 846.0);
-        assert_eq!(options.height, 900.0);
+        assert_eq!(options.width, SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS);
+        assert_eq!(options.height, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS);
         assert_eq!(options.min_width, Some(760.0));
         assert_eq!(options.min_height, Some(620.0));
     }
@@ -491,6 +495,69 @@ mod tests {
     }
 
     #[test]
+    fn production_runtime_plan_keeps_tray_and_real_window_surfaces_when_start_hidden() {
+        let mut settings = SettingsState::default();
+        settings.minimize_to_tray = true;
+        settings.start_minimized = true;
+        let state = production_initial_state_with_settings(Some(settings));
+
+        let plan = RuntimePlan::<PreviewApp>::new(state);
+
+        let tray_menu = plan
+            .desktop_integration
+            .tray_menu
+            .as_ref()
+            .expect("production tray menu should survive preview wrapper");
+        assert_eq!(
+            tray_menu.default_item_id.as_deref(),
+            Some(easydict_app::TRAY_SHOW_MAIN)
+        );
+        let tray_item_ids = tray_menu
+            .items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(tray_item_ids.contains(&easydict_app::TRAY_SHOW_MAIN));
+        assert!(tray_item_ids.contains(&easydict_app::TRAY_TRANSLATE_CLIPBOARD));
+        assert!(tray_item_ids.contains(&easydict_app::TRAY_OCR_TRANSLATE));
+        assert!(tray_item_ids.contains(&easydict_app::TRAY_OPEN_SETTINGS));
+        assert!(tray_item_ids.contains(&easydict_app::TRAY_EXIT));
+        assert!(tray_menu.items.iter().any(|item| item.label == "Show Easydict"));
+
+        let subscription = plan.app.subscription();
+        assert!(subscription_contains_kind(&subscription, |kind| {
+            matches!(kind, SubscriptionKind::Tray)
+        }));
+        assert!(subscription_contains_kind(&subscription, |kind| {
+            matches!(kind, SubscriptionKind::Window(id) if id.as_str() == "main")
+        }));
+
+        let main_options = plan
+            .app
+            .window_options(&WindowId::new("main"))
+            .expect("main window options");
+        assert_eq!(main_options.id.as_str(), "main");
+        assert!(!main_options.visible_on_start);
+
+        let mini_options = plan
+            .app
+            .window_options(&WindowId::new("mini"))
+            .expect("mini window options");
+        assert_eq!(mini_options.id.as_str(), "mini");
+        assert_eq!(mini_options.level, WindowLevel::TopMost);
+        assert!(mini_options.skip_taskbar);
+
+        let pop_button_options = plan
+            .app
+            .window_options(&WindowId::new("pop-button"))
+            .expect("pop-button window options");
+        assert_eq!(pop_button_options.id.as_str(), "pop-button");
+        assert_eq!(pop_button_options.level, WindowLevel::ToolWindow);
+        assert!(pop_button_options.skip_taskbar);
+        assert!(pop_button_options.no_activate);
+    }
+
+    #[test]
     fn preview_window_options_still_use_preview_contract_when_requested() {
         let state = production_initial_state_with_settings(None);
         let options = initial_window_options(true, &state);
@@ -538,6 +605,19 @@ mod tests {
             std::env::set_var(name, value);
         } else {
             std::env::remove_var(name);
+        }
+    }
+
+    fn subscription_contains_kind<Message>(
+        subscription: &Subscription<Message>,
+        predicate: impl Fn(&SubscriptionKind) -> bool + Copy,
+    ) -> bool {
+        match subscription {
+            Subscription::None => false,
+            Subscription::Event { kind, .. } => predicate(kind),
+            Subscription::Batch(items) => items
+                .iter()
+                .any(|item| subscription_contains_kind(item, predicate)),
         }
     }
 }

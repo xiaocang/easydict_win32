@@ -44,12 +44,6 @@ function Test-HybridRuntimeProfile {
     return $Value.Trim().ToLowerInvariant() -eq "hybrid"
 }
 
-if (-not (Test-Path $PublishDir)) {
-    throw "PublishDir not found: $PublishDir"
-}
-if (-not (Test-Path $ManifestPath)) {
-    throw "Manifest not found: $ManifestPath"
-}
 if ([string]::IsNullOrWhiteSpace($RuntimeProfile)) {
     throw "RuntimeProfile must be explicitly set to Hybrid for dotnet/scripts/Package-Msix.ps1. The first rs release is portable-only; use ..\rs\scripts\Package-Portable.ps1 instead."
 }
@@ -58,6 +52,12 @@ if (Test-RustOnlyRuntimeProfile $RuntimeProfile) {
 }
 if (-not (Test-HybridRuntimeProfile $RuntimeProfile)) {
     throw "RuntimeProfile '$RuntimeProfile' is not supported by dotnet/scripts/Package-Msix.ps1. Only Hybrid is supported for legacy .NET/hybrid MSIX packaging."
+}
+if (-not (Test-Path $PublishDir)) {
+    throw "PublishDir not found: $PublishDir"
+}
+if (-not (Test-Path $ManifestPath)) {
+    throw "Manifest not found: $ManifestPath"
 }
 
 Write-Host "[MSIX] PublishDir: $PublishDir"

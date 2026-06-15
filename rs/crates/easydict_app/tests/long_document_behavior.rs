@@ -17,7 +17,7 @@ use easydict_app::{
     run_long_document_request_with_native_route,
     run_native_text_long_document_request_with_translator,
     run_native_text_long_document_request_with_translator_and_cancellation, AppMode, EasydictApp,
-    EasydictUiState, FoundryLocalEndpointResolver, FoundryLocalError,
+    EasydictUiState, FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalErrorCode,
     FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
     LongDocumentBackend, LongDocumentBackendError, LongDocumentEvent, LongDocumentInput,
     LongDocumentOutcome, LongDocumentTranslationCache, Message, NativeLongDocumentTranslator,
@@ -5096,6 +5096,39 @@ fn local_ai_long_document_route_matrix_stays_native_before_worker_fallback() {
 }
 
 #[test]
+fn auto_foundry_local_long_document_probe_backend_error_surfaces_before_worker_fallback() {
+    let temp_dir = unique_temp_dir("longdoc-auto-foundry-probe-backend-error");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let app_dir = temp_dir.join("stale-app-dir");
+    write_stale_longdoc_local_ai_payload_markers(&app_dir);
+    let request =
+        local_ai_long_document_matrix_request(&temp_dir, local_ai_provider_modes::AUTO, "", 86);
+    let mut client =
+        RecordingWindowsAiClient::with_generate_responses([WindowsAiReadyState::NotReady], []);
+    let mut resolver =
+        FailingFoundryLocalRuntimeController::new("Foundry Local status probe failed");
+
+    let outcome = run_long_document_request_with_app_dir_and_native_local_ai_client(
+        request,
+        &app_dir,
+        &mut client,
+        &mut resolver,
+    );
+    let error = outcome
+        .result
+        .expect_err("Auto LongDoc should surface the Foundry probe error");
+
+    assert_eq!(client.ready_state_calls(), 1);
+    assert_eq!(resolver.status_calls, 1);
+    assert!(error.message.contains("Foundry Local status probe failed"));
+    assert!(!error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn legacy_local_ai_long_document_service_id_maps_to_native_windows_local_ai_route() {
     let temp_dir = unique_temp_dir("longdoc-native-local-ai-legacy-id");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -5420,6 +5453,11 @@ struct RecordingFoundryLocalEndpointResolver {
     endpoint: Option<String>,
 }
 
+struct FailingFoundryLocalRuntimeController {
+    status_calls: usize,
+    message: String,
+}
+
 impl RecordingFoundryLocalEndpointResolver {
     fn new(endpoint: Option<String>) -> Self {
         Self {
@@ -5448,6 +5486,15 @@ impl RecordingFoundryLocalEndpointResolver {
             .lock()
             .expect("load model calls lock")
             .clone()
+    }
+}
+
+impl FailingFoundryLocalRuntimeController {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            status_calls: 0,
+            message: message.into(),
+        }
     }
 }
 
@@ -5481,6 +5528,39 @@ impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
             .expect("load model calls lock")
             .push(model.to_string());
         Ok(())
+    }
+}
+
+impl FoundryLocalEndpointResolver for FailingFoundryLocalRuntimeController {
+    fn resolve_chat_completions_endpoint(&mut self) -> Result<Option<String>, FoundryLocalError> {
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            "failing controller should not resolve endpoints",
+        ))
+    }
+}
+
+impl FoundryLocalRuntimeController for FailingFoundryLocalRuntimeController {
+    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
+        self.status_calls += 1;
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            self.message.clone(),
+        ))
+    }
+
+    fn start_service(&mut self) -> Result<(), FoundryLocalError> {
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            "failing controller should not start services",
+        ))
+    }
+
+    fn load_model(&mut self, _model: &str) -> Result<(), FoundryLocalError> {
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            "failing controller should not load models",
+        ))
     }
 }
 

@@ -2024,10 +2024,12 @@ fn run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_a
 
     let _ = auto_windows_ai_native_probe_status(&request, windows_ai_probe);
 
-    if let Some(native_request) =
-        auto_foundry_local_native_probe_request(&request, foundry_resolver)
-    {
-        return run_quick_translate_service_with_native_openai(native_request);
+    match auto_foundry_local_native_probe_request_result(&request, foundry_resolver) {
+        Ok(Some(native_request)) => {
+            return run_quick_translate_service_with_native_openai(native_request);
+        }
+        Ok(None) => {}
+        Err(error) => return service_error_update(request, error.to_string()),
     }
 
     if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
@@ -2074,10 +2076,12 @@ fn run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_a
         return update;
     }
 
-    if let Some(native_request) =
-        auto_foundry_local_native_probe_request(&request, foundry_resolver)
-    {
-        return run_quick_translate_service_with_native_openai(native_request);
+    match auto_foundry_local_native_probe_request_result(&request, foundry_resolver) {
+        Ok(Some(native_request)) => {
+            return run_quick_translate_service_with_native_openai(native_request);
+        }
+        Ok(None) => {}
+        Err(error) => return service_error_update(request, error.to_string()),
     }
 
     if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
@@ -2239,14 +2243,16 @@ pub fn run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_cl
         return update;
     }
 
-    if let Some(native_request) =
-        auto_foundry_local_native_probe_request(&request, foundry_resolver)
-    {
-        return run_quick_translate_streaming_service_with_native_route_observing_chunks(
-            native_request,
-            on_chunk,
-        )
-        .expect("Foundry Local native stream request should route through OpenAI backend");
+    match auto_foundry_local_native_probe_request_result(&request, foundry_resolver) {
+        Ok(Some(native_request)) => {
+            return run_quick_translate_streaming_service_with_native_route_observing_chunks(
+                native_request,
+                on_chunk,
+            )
+            .expect("Foundry Local native stream request should route through OpenAI backend");
+        }
+        Ok(None) => {}
+        Err(error) => return service_error_update(request, error.to_string()),
     }
 
     if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
@@ -2323,11 +2329,13 @@ fn run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_nati
         return update;
     }
 
-    if let Some(native_request) =
-        auto_foundry_local_native_probe_request(&request, foundry_resolver)
-    {
-        return run_quick_translate_streaming_service_with_native_route(native_request, sender)
-            .expect("Foundry Local native stream request should route through OpenAI backend");
+    match auto_foundry_local_native_probe_request_result(&request, foundry_resolver) {
+        Ok(Some(native_request)) => {
+            return run_quick_translate_streaming_service_with_native_route(native_request, sender)
+                .expect("Foundry Local native stream request should route through OpenAI backend");
+        }
+        Ok(None) => {}
+        Err(error) => return service_error_update(request, error.to_string()),
     }
 
     if let Some(native_request) = auto_openvino_native_fallback_request(&request) {
@@ -2361,22 +2369,32 @@ pub fn auto_foundry_local_native_probe_request<R: FoundryLocalRuntimeController>
     request: &QuickTranslateServiceRequest,
     foundry_local_controller: &mut R,
 ) -> Option<QuickTranslateServiceRequest> {
+    auto_foundry_local_native_probe_request_result(request, foundry_local_controller)
+        .ok()
+        .flatten()
+}
+
+pub fn auto_foundry_local_native_probe_request_result<R: FoundryLocalRuntimeController>(
+    request: &QuickTranslateServiceRequest,
+    foundry_local_controller: &mut R,
+) -> Result<Option<QuickTranslateServiceRequest>, OpenAiExecutionError> {
     if !request_should_probe_auto_foundry_local(request) {
-        return None;
+        return Ok(None);
     }
 
-    let outcome =
-        prepare_foundry_local_service(foundry_local_controller, &request.settings).ok()?;
+    let outcome = prepare_foundry_local_service(foundry_local_controller, &request.settings)?;
     if !outcome.ready {
-        return None;
+        return Ok(None);
     }
 
-    let endpoint = outcome.endpoint?;
+    let Some(endpoint) = outcome.endpoint else {
+        return Ok(None);
+    };
 
     let mut native_request = request.clone();
     native_request.settings.foundry_local_endpoint = Some(endpoint);
     native_request.settings.foundry_local_model = Some(outcome.model);
-    Some(native_request)
+    Ok(Some(native_request))
 }
 
 pub fn auto_windows_ai_native_probe_status<P: WindowsAiLanguageModelProbe>(

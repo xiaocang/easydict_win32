@@ -60,7 +60,7 @@ use crate::protocol::{
 #[cfg(test)]
 use crate::quick_translate::auto_windows_ai_native_probe_status;
 use crate::quick_translate::{
-    auto_foundry_local_native_probe_request, auto_openvino_native_fallback_request,
+    auto_foundry_local_native_probe_request_result, auto_openvino_native_fallback_request,
     local_ai_quick_translate_native_preflight_error, quick_translate_request_can_route_natively,
     run_quick_translate_service_with_native_route, QuickQueryMode, QuickTranslateExecutionKind,
     QuickTranslateService, QuickTranslateServiceRequest,
@@ -68,7 +68,8 @@ use crate::quick_translate::{
 use crate::resource_download::ReqwestResourceDownloadClient;
 use crate::runtime_policy::RuntimeRoutePolicy;
 use crate::state::{EasydictUiState, SettingsState, TranslationResultPreview};
-use crate::table_structure_onnx::TatrOnnxSession;
+use crate::table_structure::TableStructure;
+use crate::table_structure_onnx::{TatrOnnxError, TatrOnnxSession};
 use crate::translation_cache::{
     long_document_source_hash, long_document_translation_cache_path, LongDocumentTranslationCache,
 };
@@ -751,10 +752,19 @@ fn try_run_native_text_long_document_request_with_auto_local_ai_fallbacks<R>(
 where
     R: FoundryLocalRuntimeController,
 {
-    let Some(native_probe_request) =
-        auto_foundry_local_native_probe_request(probe_request, foundry_resolver)
-            .or_else(|| auto_openvino_native_fallback_request(probe_request))
-    else {
+    let native_probe_request =
+        match auto_foundry_local_native_probe_request_result(probe_request, foundry_resolver) {
+            Ok(Some(native_probe_request)) => Some(native_probe_request),
+            Ok(None) => auto_openvino_native_fallback_request(probe_request),
+            Err(error) => {
+                return NativeLongDocumentDispatch::Handled(long_document_backend_error_outcome(
+                    request,
+                    LongDocumentBackendError::new(error.to_string()),
+                ));
+            }
+        };
+
+    let Some(native_probe_request) = native_probe_request else {
         return NativeLongDocumentDispatch::NeedsWorker(request);
     };
 
@@ -3051,24 +3061,28 @@ fn detect_native_pdf_doc_layout_yolo_pages_in_directory(
             }
         }
         if let Some(tatr_session) = tatr_session.as_mut() {
-            let tables = detections
+            let mut tables = Vec::new();
+            for detection in detections
                 .iter()
                 .filter(|detection| detection.region_type == DocLayoutRegionType::Table)
-                .filter_map(|detection| {
-                    tatr_session
-                        .recognize_bgra(
-                            &pixels,
-                            pixel_width,
-                            pixel_height,
-                            detection.x,
-                            detection.y,
-                            detection.width,
-                            detection.height,
-                        )
-                        .ok()
-                        .flatten()
-                })
-                .collect::<Vec<_>>();
+            {
+                let table = native_pdf_tatr_recognition_result(
+                    request,
+                    page.page_number,
+                    tatr_session.recognize_bgra(
+                        &pixels,
+                        pixel_width,
+                        pixel_height,
+                        detection.x,
+                        detection.y,
+                        detection.width,
+                        detection.height,
+                    ),
+                )?;
+                if let Some(table) = table {
+                    tables.push(table);
+                }
+            }
             if !tables.is_empty() {
                 table_structures.push(PdfSourcePageTableStructures {
                     page_number: page.page_number,
@@ -3226,7 +3240,7 @@ fn load_or_ensure_native_pdf_tatr_session(
         return Ok(None);
     }
 
-    let fatal_setup_errors = native_pdf_tatr_setup_errors_are_fatal(request);
+    let fatal_setup_errors = native_pdf_tatr_errors_are_fatal(request);
     if !paths.tatr_model_path.is_file() && native_pdf_should_lazy_ensure_tatr(request) {
         let Some(base) = native_pdf_managed_layout_model_base(request) else {
             return Ok(None);
@@ -3274,6 +3288,22 @@ fn load_or_ensure_native_pdf_tatr_session(
     }
 }
 
+fn native_pdf_tatr_recognition_result(
+    request: &LongDocumentServiceRequest,
+    page_number: usize,
+    result: Result<Option<TableStructure>, TatrOnnxError>,
+) -> Result<Option<TableStructure>, LongDocumentBackendError> {
+    match result {
+        Ok(table) => Ok(table),
+        Err(error) if native_pdf_tatr_errors_are_fatal(request) => {
+            Err(LongDocumentBackendError::new(format!(
+                "TATR table structure recognition failed on page {page_number}: {error}"
+            )))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
 fn native_pdf_should_ensure_doc_layout_yolo(request: &LongDocumentServiceRequest) -> bool {
     native_pdf_layout_detection_mode(request) == NativePdfLayoutDetectionMode::OnnxLocal
         && native_pdf_managed_layout_model_base(request).is_some()
@@ -3291,7 +3321,7 @@ fn native_pdf_should_lazy_ensure_tatr(request: &LongDocumentServiceRequest) -> b
         && native_pdf_managed_layout_model_base(request).is_some()
 }
 
-fn native_pdf_tatr_setup_errors_are_fatal(request: &LongDocumentServiceRequest) -> bool {
+fn native_pdf_tatr_errors_are_fatal(request: &LongDocumentServiceRequest) -> bool {
     native_pdf_layout_detection_mode(request) == NativePdfLayoutDetectionMode::OnnxLocal
 }
 
@@ -5720,6 +5750,45 @@ mod tests {
         );
 
         fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn auto_tatr_recognition_errors_remain_best_effort() {
+        let request = test_pdf_long_document_request(None);
+        let result = native_pdf_tatr_recognition_result(
+            &request,
+            7,
+            Err(TatrOnnxError::Session("synthetic TATR failure".to_string())),
+        )
+        .expect("Auto TATR recognition errors should stay best-effort");
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn explicit_onnx_tatr_recognition_errors_surface_page_diagnostics() {
+        let mut request = test_pdf_long_document_request(None);
+        request.params.layout_detection = Some("OnnxLocal".to_string());
+
+        let error = native_pdf_tatr_recognition_result(
+            &request,
+            7,
+            Err(TatrOnnxError::Session("synthetic TATR failure".to_string())),
+        )
+        .expect_err("explicit OnnxLocal TATR inference should surface backend errors");
+
+        assert!(
+            error
+                .message
+                .contains("TATR table structure recognition failed on page 7"),
+            "unexpected error: {}",
+            error.message
+        );
+        assert!(
+            error.message.contains("synthetic TATR failure"),
+            "unexpected error: {}",
+            error.message
+        );
     }
 
     #[test]

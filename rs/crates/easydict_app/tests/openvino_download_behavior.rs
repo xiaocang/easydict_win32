@@ -488,6 +488,32 @@ fn openvino_download_finished_updates_settings_status() {
         "Download failed: network unavailable"
     );
     assert_eq!(state.settings.open_vino_download_progress, "Failed");
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("OpenVINO download failed: network unavailable")
+    );
+
+    state.apply(Message::OpenVinoDownloadFinished(Ok(
+        OpenVinoDownloadStatus {
+            paths: NllbModelPaths::from_cache_base(&dir),
+            model_ready: true,
+            runtime_ready: true,
+        },
+    )));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::OpenVinoDownloadFinished(Ok(
+        OpenVinoDownloadStatus {
+            paths: NllbModelPaths::from_cache_base(&dir),
+            model_ready: false,
+            runtime_ready: false,
+        },
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked")
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }

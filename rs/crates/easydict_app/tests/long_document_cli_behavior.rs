@@ -568,7 +568,10 @@ fn app_dir_is_rejected_before_stale_dotnet_payload_lookup() {
         .env("EASYDICT_RUNTIME_PROFILE", "hybrid")
         .env("RUNTIME_PROFILE", "hybrid")
         .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
-        .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
+        .env(
+            "EASYDICT_FOUNDRY_LOCAL_CLI",
+            "__missing_safe_foundry_cli__.exe",
+        )
         .output()
         .expect("long document CLI should run");
 
@@ -641,7 +644,10 @@ fn current_exe_dir_ignores_stale_dotnet_payload_markers_without_app_dir() {
         .env("EASYDICT_RUNTIME_PROFILE", "hybrid")
         .env("RUNTIME_PROFILE", "hybrid")
         .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
-        .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
+        .env(
+            "EASYDICT_FOUNDRY_LOCAL_CLI",
+            "__missing_safe_foundry_cli__.exe",
+        )
         .output()
         .expect("copied long document CLI should run");
 
@@ -707,7 +713,10 @@ fn target_auto_fails_before_native_or_retained_worker_lookup() {
             "windows-local-ai",
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
+        .env(
+            "EASYDICT_FOUNDRY_LOCAL_CLI",
+            "__missing_safe_foundry_cli__.exe",
+        )
         .output()
         .expect("long document CLI should run");
 

@@ -1311,11 +1311,37 @@ fn builtin_device_registration_result_updates_token_without_dirtying_settings() 
         "network error".to_string(),
     )));
     assert_eq!(state.settings.device_token, "registered-token");
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Built-in AI device registration failed: network error")
+    );
 
     state.apply(Message::BuiltInAiDeviceRegistrationFinished(Ok(Some(
         "   ".to_string(),
     ))));
     assert_eq!(state.settings.device_token, "registered-token");
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Built-in AI device registration failed: network error"),
+        "empty registration token should not clear the previous backend error"
+    );
+
+    state.apply(Message::BuiltInAiDeviceRegistrationFinished(Ok(Some(
+        "registered-token-2".to_string(),
+    ))));
+    assert_eq!(state.settings.device_token, "registered-token-2");
+    assert_eq!(state.saved_settings.device_token, "registered-token-2");
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::BuiltInAiDeviceRegistrationFinished(Ok(Some(
+        "registered-token-3".to_string(),
+    ))));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful Built-in AI registration should only clear its own previous error"
+    );
 }
 
 #[test]
@@ -1419,6 +1445,38 @@ fn app_start_foundry_local_runs_native_prepare_task_and_applies_result() {
     assert_eq!(
         app.state.settings.foundry_local_status,
         "Foundry Local CLI is not installed or is not available on PATH."
+    );
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some(
+            "Foundry Local failed: Foundry Local CLI is not installed or is not available on PATH."
+        )
+    );
+
+    app.update(Message::FoundryLocalPrepareFinished(Ok(
+        easydict_app::FoundryLocalPrepareOutcome {
+            ready: true,
+            status_message: "Foundry Local is ready at http://localhost:5273/v1/chat/completions."
+                .to_string(),
+            endpoint: Some("http://localhost:5273/v1/chat/completions".to_string()),
+            model: "qwen2.5-0.5b".to_string(),
+        },
+    )));
+    assert_eq!(app.state.settings.save_error_message, None);
+
+    app.state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    app.update(Message::FoundryLocalPrepareFinished(Ok(
+        easydict_app::FoundryLocalPrepareOutcome {
+            ready: true,
+            status_message: "Foundry Local is ready at http://localhost:5273/v1/chat/completions."
+                .to_string(),
+            endpoint: Some("http://localhost:5273/v1/chat/completions".to_string()),
+            model: "qwen2.5-0.5b".to_string(),
+        },
+    )));
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked")
     );
 }
 
@@ -1598,6 +1656,8 @@ fn app_windows_ai_prepare_finished_updates_local_ai_status() {
         state: EasydictUiState::default(),
     };
     app.state.settings.local_ai_provider = local_ai_provider_modes::WINDOWS_AI.to_string();
+    app.state.settings.save_error_message =
+        Some("Phi Silica prepare failed: previous prepare error".to_string());
 
     let task = app.update(Message::WindowsAiPrepareFinished(Ok(
         easydict_windows_ai::status_for_ready_state(
@@ -1608,6 +1668,19 @@ fn app_windows_ai_prepare_finished_updates_local_ai_status() {
     assert_eq!(task_kind(&task), "none");
     assert_eq!(app.state.settings.local_ai_status, "Phi Silica is ready.");
     assert_eq!(app.state.settings.local_ai_prepare_progress, "Ready");
+    assert_eq!(app.state.settings.save_error_message, None);
+
+    app.state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    app.update(Message::WindowsAiPrepareFinished(Ok(
+        easydict_windows_ai::status_for_ready_state(
+            easydict_windows_ai::WindowsAiReadyState::Ready,
+        ),
+    )));
+
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked")
+    );
 }
 
 #[test]
@@ -1631,6 +1704,56 @@ fn app_windows_ai_prepare_finished_reports_incompatible_status() {
     assert_eq!(
         app.state.settings.local_ai_prepare_progress,
         "Not compatible"
+    );
+    assert_eq!(app.state.settings.save_error_message, None);
+}
+
+#[test]
+fn app_windows_ai_prepare_finished_surfaces_failed_status_diagnostic() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.local_ai_provider = local_ai_provider_modes::WINDOWS_AI.to_string();
+
+    app.update(Message::WindowsAiPrepareFinished(Ok(
+        easydict_windows_ai::WindowsAiStatus {
+            state: easydict_windows_ai::WindowsAiModelState::Failed,
+            resource_key: "Status_PhiSilica_PrepareFailed",
+            message: "Phi Silica model preparation did not complete.".to_string(),
+            ready_state: easydict_windows_ai::WindowsAiReadyState::NotReady,
+        },
+    )));
+
+    assert_eq!(
+        app.state.settings.local_ai_status,
+        "Phi Silica model preparation did not complete."
+    );
+    assert_eq!(app.state.settings.local_ai_prepare_progress, "Failed");
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Phi Silica prepare failed: Phi Silica model preparation did not complete.")
+    );
+}
+
+#[test]
+fn app_windows_ai_prepare_finished_surfaces_backend_error_diagnostic() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.local_ai_provider = local_ai_provider_modes::WINDOWS_AI.to_string();
+
+    app.update(Message::WindowsAiPrepareFinished(Err(
+        "Windows AI runtime failed while preparing Phi Silica".to_string(),
+    )));
+
+    assert_eq!(
+        app.state.settings.local_ai_status,
+        "Windows AI runtime failed while preparing Phi Silica"
+    );
+    assert_eq!(app.state.settings.local_ai_prepare_progress, "Failed");
+    assert_eq!(
+        app.state.settings.save_error_message.as_deref(),
+        Some("Phi Silica prepare failed: Windows AI runtime failed while preparing Phi Silica")
     );
 }
 
@@ -2552,6 +2675,56 @@ fn auto_local_ai_probes_windows_ai_before_foundry_endpoint_fallback() {
     assert_eq!(windows_ai_probe.ready_state_calls, 1);
     assert_eq!(foundry_resolver.calls, 1);
     assert!(error.message.contains("requires a Rust-native route"));
+    assert!(!error.message.contains(".NET"));
+    assert!(!error.message.to_ascii_lowercase().contains("compat host"));
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn auto_foundry_local_probe_backend_error_surfaces_before_generic_fallback() {
+    let temp_dir = unique_temp_dir("easydict-auto-local-ai-foundry-probe-error");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let request = QuickTranslateServiceRequest {
+        query_id: 139,
+        service: quick_service("windows-local-ai", "Windows Local AI", true, true),
+        query_mode: QuickQueryMode::Translation,
+        execution_kind: QuickTranslateExecutionKind::TranslateStream,
+        params: TranslateParams {
+            text: "Hello".to_string(),
+            from: Some("en".to_string()),
+            to: Some("zh-Hans".to_string()),
+            services: Some(vec!["windows-local-ai".to_string()]),
+            custom_prompt: None,
+        },
+        grammar_params: None,
+        settings: SettingsSnapshot {
+            local_ai_provider: Some(local_ai_provider_modes::AUTO.to_string()),
+            foundry_local_model: Some("qwen2.5-0.5b".to_string()),
+            cache_dir: Some(path_string(&temp_dir)),
+            ..SettingsSnapshot::default()
+        },
+    };
+    let mut windows_ai_probe =
+        RecordingWindowsAiProbe::new([WindowsAiReadyState::NotSupportedOnCurrentSystem]);
+    let mut foundry_resolver =
+        FailingFoundryLocalRuntimeController::new("Foundry Local status probe failed");
+
+    let update = run_quick_translate_service_with_app_dir_and_native_local_ai_probes(
+        request,
+        &temp_dir,
+        &mut windows_ai_probe,
+        &mut foundry_resolver,
+    );
+    let error = update
+        .outcome
+        .result
+        .expect_err("Auto LocalAI should surface the native Foundry probe error");
+
+    assert_eq!(windows_ai_probe.ready_state_calls, 1);
+    assert_eq!(foundry_resolver.status_calls, 1);
+    assert!(error.message.contains("Foundry Local status probe failed"));
+    assert!(!error.message.contains("requires a Rust-native route"));
     assert!(!error.message.contains(".NET"));
     assert!(!error.message.to_ascii_lowercase().contains("compat host"));
 
@@ -3555,6 +3728,47 @@ fn native_custom_streaming_quick_translate_supports_doubao_stream() {
     assert_eq!(
         plan.body["input"][0]["content"][0]["translation_options"]["target_language"],
         "zh"
+    );
+}
+
+#[test]
+fn native_custom_streaming_live_chunks_emit_before_http_returns() {
+    assert_custom_streaming_live_chunks_before_http_returns(
+        "gemini",
+        gemini_settings(),
+        "fr",
+        vec![
+            r#"data: {"candidates":[{"content":{"parts":[{"text":"Bon"}]}}]}"#.to_string(),
+            String::new(),
+            r#"data: {"candidates":[{"content":{"parts":[{"text":"jour"}]}}]}"#.to_string(),
+            String::new(),
+            "data: [DONE]".to_string(),
+            String::new(),
+        ],
+        0,
+        "Bon",
+        &["Bon", "jour"],
+        "Bonjour",
+    );
+
+    assert_custom_streaming_live_chunks_before_http_returns(
+        "doubao",
+        doubao_settings(),
+        "zh-Hans",
+        vec![
+            "event: response.output_text.delta".to_string(),
+            r#"data: {"delta":"'你"}"#.to_string(),
+            String::new(),
+            "event: response.output_text.delta".to_string(),
+            r#"data: {"delta":"好'"}"#.to_string(),
+            String::new(),
+            "data: [DONE]".to_string(),
+            String::new(),
+        ],
+        1,
+        "'你",
+        &["'你", "好'"],
+        "你好",
     );
 }
 
@@ -6353,6 +6567,21 @@ fn browser_support_action_errors_update_browser_support_state() {
             ..BrowserSupportState::default()
         }
     );
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Browser support failed: invalid bundled executable argument: --runtime=dotnet.exe")
+    );
+
+    state.apply(Message::BrowserSupportActionFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Clipboard operation failed: locked".to_string());
+    state.apply(Message::BrowserSupportActionFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Clipboard operation failed: locked"),
+        "successful browser-support action should only clear a previous browser-support error"
+    );
 }
 
 #[test]
@@ -6375,6 +6604,44 @@ fn browser_support_status_errors_update_browser_support_state() {
             loaded: true,
             last_error: Some("failed to read chrome native messaging registry key".to_string()),
         }
+    );
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Browser support failed: failed to read chrome native messaging registry key")
+    );
+
+    state.apply(Message::BrowserSupportStatusLoaded(Ok(StatusOutput {
+        chrome: BrowserStatusEntry { installed: true },
+        firefox: BrowserStatusEntry { installed: true },
+        bridge_exists: true,
+        bridge_directory: "C:/Users/Test/AppData/Local/EasydictRs/browser-bridge".to_string(),
+        error: None,
+    })));
+
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("Text insertion failed: invalid target".to_string());
+    state.apply(Message::BrowserSupportStatusLoaded(Ok(StatusOutput {
+        chrome: BrowserStatusEntry { installed: true },
+        firefox: BrowserStatusEntry { installed: true },
+        bridge_exists: true,
+        bridge_directory: "C:/Users/Test/AppData/Local/EasydictRs/browser-bridge".to_string(),
+        error: None,
+    })));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Text insertion failed: invalid target"),
+        "successful browser-support status should only clear a previous browser-support error"
+    );
+
+    state.apply(Message::BrowserSupportStatusLoaded(Err(
+        "LOCALAPPDATA is not set; cannot resolve browser bridge directory".to_string(),
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some(
+            "Browser support failed: LOCALAPPDATA is not set; cannot resolve browser bridge directory"
+        )
     );
 }
 
@@ -7164,9 +7431,10 @@ fn explicit_worker_policy_without_hybrid_runtime_profile_stays_rust_only() {
 #[test]
 fn packaged_auto_local_ai_with_stale_dotnet_payload_fails_locally_without_worker_probe() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _winrt_disabled = EnvironmentVariableGuard::set("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1");
     let _foundry_cli = EnvironmentVariableGuard::set(
         FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-        "__missing_foundry_cli__.cmd",
+        "__missing_safe_foundry_cli__.exe",
     );
     let temp_dir = unique_temp_dir("easydict-packaged-auto-local-ai-native-only");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");
@@ -10434,6 +10702,11 @@ struct RecordingFoundryLocalEndpointResolver {
     responses: VecDeque<Result<Option<String>, FoundryLocalError>>,
 }
 
+struct FailingFoundryLocalRuntimeController {
+    status_calls: usize,
+    message: String,
+}
+
 struct RecordingWindowsAiProbe {
     ready_state_calls: usize,
     states: VecDeque<WindowsAiReadyState>,
@@ -10521,6 +10794,15 @@ impl RecordingFoundryLocalEndpointResolver {
             start_calls: 0,
             load_model_calls: Vec::new(),
             responses: responses.into_iter().collect(),
+        }
+    }
+}
+
+impl FailingFoundryLocalRuntimeController {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            status_calls: 0,
+            message: message.into(),
         }
     }
 }
@@ -10697,6 +10979,39 @@ impl FoundryLocalRuntimeController for RecordingFoundryLocalEndpointResolver {
     }
 }
 
+impl FoundryLocalEndpointResolver for FailingFoundryLocalRuntimeController {
+    fn resolve_chat_completions_endpoint(&mut self) -> Result<Option<String>, FoundryLocalError> {
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            "failing controller should not resolve endpoints",
+        ))
+    }
+}
+
+impl FoundryLocalRuntimeController for FailingFoundryLocalRuntimeController {
+    fn get_status(&mut self) -> Result<FoundryLocalRuntimeStatus, FoundryLocalError> {
+        self.status_calls += 1;
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            self.message.clone(),
+        ))
+    }
+
+    fn start_service(&mut self) -> Result<(), FoundryLocalError> {
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            "failing controller should not start services",
+        ))
+    }
+
+    fn load_model(&mut self, _model: &str) -> Result<(), FoundryLocalError> {
+        Err(FoundryLocalError::new(
+            FoundryLocalErrorCode::ServiceUnavailable,
+            "failing controller should not load models",
+        ))
+    }
+}
+
 #[derive(Default)]
 struct RecordingCustomStreamingHttpClient {
     requests: Vec<CustomStreamingHttpRequestPlan>,
@@ -10726,6 +11041,65 @@ impl CustomStreamingHttpClient for RecordingCustomStreamingHttpClient {
                 "test custom streaming response was not queued",
             ))
         })
+    }
+}
+
+struct BlockingCustomStreamingHttpClient {
+    requests: Arc<Mutex<Vec<CustomStreamingHttpRequestPlan>>>,
+    lines: Vec<String>,
+    block_after_line_index: usize,
+    release_rx: std::sync::mpsc::Receiver<()>,
+}
+
+impl BlockingCustomStreamingHttpClient {
+    fn new(
+        requests: Arc<Mutex<Vec<CustomStreamingHttpRequestPlan>>>,
+        lines: Vec<String>,
+        block_after_line_index: usize,
+        release_rx: std::sync::mpsc::Receiver<()>,
+    ) -> Self {
+        Self {
+            requests,
+            lines,
+            block_after_line_index,
+            release_rx,
+        }
+    }
+}
+
+impl CustomStreamingHttpClient for BlockingCustomStreamingHttpClient {
+    fn post_sse(
+        &mut self,
+        _request: &CustomStreamingHttpRequestPlan,
+    ) -> Result<String, OpenAiExecutionError> {
+        panic!("live custom streaming test should use post_sse_lines")
+    }
+
+    fn post_sse_lines(
+        &mut self,
+        request: &CustomStreamingHttpRequestPlan,
+        on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
+    ) -> Result<(), OpenAiExecutionError> {
+        self.requests
+            .lock()
+            .expect("custom streaming requests lock")
+            .push(request.clone());
+
+        for (index, line) in self.lines.iter().enumerate() {
+            on_line(line)?;
+            if index == self.block_after_line_index {
+                self.release_rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .map_err(|error| {
+                        OpenAiExecutionError::new(
+                            OpenAiExecutionErrorCode::Timeout,
+                            format!("test custom streaming client was not released: {error}"),
+                        )
+                    })?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -11825,6 +12199,77 @@ fn doubao_stream_sse(chunks: &[&str]) -> String {
     }
     sse.push_str("data: [DONE]\n\n");
     sse
+}
+
+fn assert_custom_streaming_live_chunks_before_http_returns(
+    service_id: &str,
+    settings: SettingsSnapshot,
+    target_language: &str,
+    lines: Vec<String>,
+    block_after_line_index: usize,
+    expected_first_chunk: &str,
+    expected_chunks: &[&str],
+    expected_translated_text: &str,
+) {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (chunk_tx, chunk_rx) = std::sync::mpsc::channel();
+    let client = BlockingCustomStreamingHttpClient::new(
+        Arc::clone(&requests),
+        lines,
+        block_after_line_index,
+        release_rx,
+    );
+    let mut backend = NativeCustomStreamingQuickTranslateBackend::new(client);
+    backend
+        .configure(&settings)
+        .expect("custom streaming backend should configure");
+    let params = TranslateParams {
+        text: "Hello".to_string(),
+        from: Some("en".to_string()),
+        to: Some(target_language.to_string()),
+        services: Some(vec![service_id.to_string()]),
+        custom_prompt: None,
+    };
+
+    let worker = std::thread::spawn(move || {
+        backend.translate_stream_observing_chunks(&params, &mut |chunk| {
+            chunk_tx
+                .send(chunk.to_string())
+                .expect("live chunk should be sent to test thread");
+        })
+    });
+
+    assert_eq!(
+        chunk_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("first custom streaming chunk should arrive before HTTP returns"),
+        expected_first_chunk
+    );
+    release_tx
+        .send(())
+        .expect("test should release blocked custom streaming HTTP client");
+
+    let streamed = worker
+        .join()
+        .expect("custom streaming worker should finish")
+        .expect("custom streaming request should succeed");
+    assert_eq!(
+        streamed.chunks,
+        expected_chunks
+            .iter()
+            .map(|chunk| (*chunk).to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(streamed.result.translated_text, expected_translated_text);
+    assert_eq!(streamed.result.service_id.as_deref(), Some(service_id));
+    assert_eq!(
+        requests
+            .lock()
+            .expect("custom streaming requests lock")
+            .len(),
+        1
+    );
 }
 
 fn task_kind(task: &Task<Message>) -> &'static str {

@@ -2855,9 +2855,10 @@ fn local_ai_cli_without_app_dir_fails_native_only_without_worker_lookup() {
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
+        .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
         .env(
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
+            "__missing_safe_foundry_cli__.exe",
         )
         .remove_local_ai_env_overrides()
         .output()
@@ -2903,9 +2904,10 @@ fn local_ai_cli_host_hint_is_rejected_by_default() {
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
+        .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
         .env(
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
+            "__missing_safe_foundry_cli__.exe",
         )
         .remove_local_ai_env_overrides()
         .output()
@@ -2936,9 +2938,10 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
         .env(DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE, "1")
+        .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
         .env(
             FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
+            "__missing_safe_foundry_cli__.exe",
         )
         .remove_local_ai_env_overrides()
         .output()
@@ -2967,21 +2970,9 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
 }
 
 #[test]
-fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
+fn auto_local_ai_cli_missing_foundry_cli_fails_locally_without_worker_probe() {
     let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-settings");
-    let fake_foundry_dir = unique_temp_dir("easydict-cli-fake-foundry");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-    fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
-    let marker_path = fake_foundry_dir.join("foundry-calls.txt");
-    let fake_foundry_path = fake_foundry_dir.join("foundry.cmd");
-    fs::write(
-        &fake_foundry_path,
-        format!(
-            "@echo off\r\necho %*>>\"{}\"\r\necho Foundry Local endpoint: http://127.0.0.1:1/v1/chat/completions\r\n",
-            marker_path.display()
-        ),
-    )
-    .expect("fake Foundry CLI should be written");
 
     let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
         .arg("translate")
@@ -2997,18 +2988,20 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
         ])
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .remove_local_ai_env_overrides()
-        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
-        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "auto")
+        .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
+        .env(
+            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
+            "__missing_safe_foundry_cli__.exe",
+        )
         .output()
         .expect("CLI should run");
 
     assert!(!output.status.success());
     let stderr = stderr(&output);
     assert!(
-        fs::read_to_string(&marker_path)
-            .expect("fake Foundry CLI should be called")
-            .contains("service status"),
-        "CLI should probe Foundry status before local failure:\n{stderr}"
+        stderr.contains("requires a Rust-native route"),
+        "Auto LocalAI missing native Foundry CLI should stay local and fail with native-required wording:\n{stderr}"
     );
     assert!(
         !stderr.contains("Local AI worker executable not found"),
@@ -3020,7 +3013,33 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
     );
 
     let _ = fs::remove_dir_all(settings_dir);
-    let _ = fs::remove_dir_all(fake_foundry_dir);
+}
+
+#[test]
+fn auto_local_ai_cli_uses_app_dir_route_without_dead_probe_helpers() {
+    let cli_source = include_str!("../src/bin/easydict_cli.rs");
+
+    assert!(
+        cli_source.contains("run_quick_translate_service_with_current_app_dir"),
+        "CLI windows-local-ai translate should enter the app-dir route that owns Result-aware native LocalAI probing"
+    );
+    assert!(
+        cli_source
+            .contains("run_quick_translate_streaming_service_with_current_app_dir_observing_chunks"),
+        "CLI windows-local-ai stream should enter the app-dir route that owns Result-aware native LocalAI probing"
+    );
+    assert!(
+        !cli_source.contains("auto_foundry_local_native_probe_request("),
+        "CLI must not call the compatibility Option-shaped Foundry probe helper directly"
+    );
+    assert!(
+        !cli_source.contains("auto_openvino_native_fallback_request("),
+        "CLI should not keep unreachable LocalAI fallback probes outside the windows-local-ai app-dir route"
+    );
+    assert!(
+        !cli_source.contains("default_foundry_local_runtime_controller"),
+        "CLI should not construct a separate Foundry controller outside the app-dir route"
+    );
 }
 
 #[test]

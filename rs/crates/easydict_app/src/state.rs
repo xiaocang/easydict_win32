@@ -94,6 +94,12 @@ const DEFAULT_CUSTOM_OCR_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_CUSTOM_OCR_MODEL: &str = "gpt-5.4-mini";
 const FILE_DIALOG_ERROR_PREFIX: &str = "File dialog failed: ";
 const CAPTURE_WINDOW_SNAPSHOT_ERROR_PREFIX: &str = "Screen window snapshot failed: ";
+const BROWSER_SUPPORT_ERROR_PREFIX: &str = "Browser support failed: ";
+const BUILT_IN_AI_DEVICE_REGISTRATION_ERROR_PREFIX: &str =
+    "Built-in AI device registration failed: ";
+const WINDOWS_AI_PREPARE_ERROR_PREFIX: &str = "Phi Silica prepare failed: ";
+const FOUNDRY_LOCAL_PREPARE_ERROR_PREFIX: &str = "Foundry Local failed: ";
+const OPENVINO_DOWNLOAD_ERROR_PREFIX: &str = "OpenVINO download failed: ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AppMode {
@@ -2162,14 +2168,28 @@ impl EasydictUiState {
                     self.settings.save_error_message = None;
                 }
             }
-            Message::BuiltInAiDeviceRegistrationFinished(result) => {
-                if let Ok(Some(token)) = result {
-                    if !token.trim().is_empty() {
-                        self.settings.device_token = token.clone();
-                        self.saved_settings.device_token = token;
+            Message::BuiltInAiDeviceRegistrationFinished(result) => match result {
+                Ok(Some(token)) if !token.trim().is_empty() => {
+                    self.settings.device_token = token.clone();
+                    self.saved_settings.device_token = token;
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| {
+                            message.starts_with(BUILT_IN_AI_DEVICE_REGISTRATION_ERROR_PREFIX)
+                        })
+                    {
+                        self.settings.save_error_message = None;
                     }
                 }
-            }
+                Ok(_) => {}
+                Err(error) => {
+                    self.settings.save_error_message = Some(format!(
+                        "{BUILT_IN_AI_DEVICE_REGISTRATION_ERROR_PREFIX}{error}"
+                    ));
+                }
+            },
             Message::Back => {
                 if self.settings.unsaved_changes {
                     self.settings.show_unsaved_changes_dialog = true;
@@ -2480,8 +2500,26 @@ impl EasydictUiState {
                         }
                         easydict_windows_ai::WindowsAiModelState::Failed => "Failed".to_string(),
                     };
+                    if matches!(
+                        status.state,
+                        easydict_windows_ai::WindowsAiModelState::Failed
+                    ) {
+                        self.settings.save_error_message = Some(format!(
+                            "{WINDOWS_AI_PREPARE_ERROR_PREFIX}{}",
+                            status.message
+                        ));
+                    } else if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with(WINDOWS_AI_PREPARE_ERROR_PREFIX))
+                    {
+                        self.settings.save_error_message = None;
+                    }
                 }
                 Err(message) => {
+                    self.settings.save_error_message =
+                        Some(format!("{WINDOWS_AI_PREPARE_ERROR_PREFIX}{message}"));
                     self.settings.local_ai_status = message;
                     self.settings.local_ai_prepare_progress = "Failed".to_string();
                 }
@@ -2509,6 +2547,16 @@ impl EasydictUiState {
             Message::FoundryLocalPrepareFinished(result) => match result {
                 Ok(outcome) => {
                     self.settings.foundry_local_status = outcome.status_message;
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| {
+                            message.starts_with(FOUNDRY_LOCAL_PREPARE_ERROR_PREFIX)
+                        })
+                    {
+                        self.settings.save_error_message = None;
+                    }
                     if self.settings.foundry_local_endpoint.trim().is_empty() {
                         if let Some(endpoint) = outcome.endpoint {
                             if !endpoint.trim().is_empty() {
@@ -2526,6 +2574,8 @@ impl EasydictUiState {
                     }
                 }
                 Err(message) => {
+                    self.settings.save_error_message =
+                        Some(format!("{FOUNDRY_LOCAL_PREPARE_ERROR_PREFIX}{message}"));
                     self.settings.foundry_local_status = message;
                 }
             },
@@ -2553,14 +2603,32 @@ impl EasydictUiState {
                 Ok(status) if status.is_ready() => {
                     self.settings.open_vino_status = "NLLB-200 model ready".to_string();
                     self.settings.open_vino_download_progress = "Idle".to_string();
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with(OPENVINO_DOWNLOAD_ERROR_PREFIX))
+                    {
+                        self.settings.save_error_message = None;
+                    }
                 }
                 Ok(_) => {
                     self.settings.open_vino_status = "Model not downloaded".to_string();
                     self.settings.open_vino_download_progress = "Idle".to_string();
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with(OPENVINO_DOWNLOAD_ERROR_PREFIX))
+                    {
+                        self.settings.save_error_message = None;
+                    }
                 }
                 Err(error) => {
                     self.settings.open_vino_status = format!("Download failed: {error}");
                     self.settings.open_vino_download_progress = "Failed".to_string();
+                    self.settings.save_error_message =
+                        Some(format!("{OPENVINO_DOWNLOAD_ERROR_PREFIX}{error}"));
                 }
             },
             Message::ServiceProviderSettingChanged(service_id, field, value) => {
@@ -2848,12 +2916,42 @@ impl EasydictUiState {
                     Ok(status) => BrowserSupportState::from_status(&status),
                     Err(error) => BrowserSupportState::failed(error.clone()),
                 };
-            }
-            Message::BrowserSupportActionFinished(result) => {
-                if let Err(error) = result {
-                    self.browser_support = BrowserSupportState::failed(error.clone());
+                match &self.browser_support.last_error {
+                    Some(error) => {
+                        self.settings.save_error_message =
+                            Some(format!("{BROWSER_SUPPORT_ERROR_PREFIX}{error}"));
+                    }
+                    None => {
+                        if self
+                            .settings
+                            .save_error_message
+                            .as_deref()
+                            .is_some_and(|message| {
+                                message.starts_with(BROWSER_SUPPORT_ERROR_PREFIX)
+                            })
+                        {
+                            self.settings.save_error_message = None;
+                        }
+                    }
                 }
             }
+            Message::BrowserSupportActionFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with(BROWSER_SUPPORT_ERROR_PREFIX))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.browser_support = BrowserSupportState::failed(error.clone());
+                    self.settings.save_error_message =
+                        Some(format!("{BROWSER_SUPPORT_ERROR_PREFIX}{error}"));
+                }
+            },
             Message::WindowEvent(event) => {
                 apply_window_runtime_event(self, &event);
             }

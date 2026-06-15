@@ -21,6 +21,274 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-15: Added mouse-selection close-out profile
+
+- No production runtime behavior or dependency changed. The mouse-selection path is already Rust-owned through `lib/easydict-windows-text-selection`, `mouse_selection`, app subscription/task wiring, and Quick Translate PopButton mapping; this slice aligns that boundary with the close-out tooling.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile mouse-selection`, covering formatter checks, the Windows low-level hook helper crate, pure mouse-selection reducer/producer behavior, and Quick Translate runtime mapping for hook startup/shutdown, producer actions, pending timers, and capture-result mapping.
+- Extended the validation wrapper recommender and self-test so changes under `lib/easydict-windows-text-selection/**`, `mouse_selection.rs`, `mouse_selection_behavior.rs`, or mouse-selection diff keywords recommend the `mouse-selection` lane.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile mouse-selection`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Preserved explicit TATR inference diagnostics
+
+- No new dependency was needed. This slice keeps the existing Rust-owned `ort`/TATR ONNX session boundary and only tightens the explicit `OnnxLocal` diagnostic contract.
+- `Auto` TATR table-structure inference remains best-effort enrichment: a per-table `recognize_bgra` failure skips that table and preserves existing DocLayout/heuristic output.
+- Explicit `OnnxLocal` now treats per-table TATR inference failures like other explicit local ONNX failures, returning a `LongDocumentBackendError` with the PDF page number and provider error instead of swallowing it through `.ok().flatten()`.
+- Expanded `longdoc-layout` close-out coverage with a formatter step, `table_structure_onnx_behavior` coverage, and recommendation routing for TATR ONNX helper changes.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-layout`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Added settings and credential close-out profile
+
+- No production runtime behavior or dependency changed. The settings storage/migration path is already Rust-owned through `settings_storage`, `settings_migration`, `credential_protection`, and `lib/easydict-windows-credentials`; this slice aligns that core state boundary with the close-out tooling.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile settings-credentials`, covering formatter checks, the Windows DPAPI/registry wrapper, credential protection behavior, settings storage behavior, settings migration behavior, app-visible settings-save diagnostics, and the default source scan that prevents settings paths from reintroducing retained `.NET` runtime markers.
+- Moved `settings_storage.rs` recommendation ownership from `desktop-settings` to `settings-credentials`, while leaving desktop shell/integration and `settings_save` keyword routing intact.
+- Extended the validation wrapper self-test so `settings_storage.rs` changes recommend the `settings-credentials` lane, while standalone helper-crate `Cargo.lock` drift remains profile-exempt.
+- Taught the wrapper to clean `lib/easydict-windows-credentials/Cargo.lock` when the settings credential profile generates it during a standalone helper-crate test run, so later recommendations and `gstep commit` calls do not absorb tool-created lockfile noise.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile settings-credentials`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+- `Test-Path lib\easydict-windows-credentials\Cargo.lock` (returned `False` after the profile run)
+
+## 2026-06-15: Added protocol facade close-out profile
+
+- No production runtime behavior or dependency changed. The default protocol facade is already Rust-owned through `protocol` / `protocol_core`, while retained `.NET` worker IPC DTOs remain isolated behind the explicit `retained-dotnet-workers` feature; this slice aligns that boundary with the close-out tooling.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile protocol-facade`, covering formatter checks for protocol modules/tests, default DTO roundtrips, `SettingsSnapshot` cache-dir normalization, MDX/LongDoc wire shapes, retained-feature JSONL worker envelope/lifecycle DTOs, crate-root retained export gating, and default manifest checks that keep retained worker features disabled.
+- Extended the validation wrapper self-test so `protocol_core.rs` changes recommend the `protocol-facade` lane.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile protocol-facade`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Added NativeBridge close-out profile
+
+- No production runtime behavior or dependency changed. The browser Native Messaging host is already Rust-owned through `easydict_app::native_bridge`, the `easydict-native-bridge` binary, `lib/easydict-windows-ipc`, and the rs-specific `Local\EasydictRs-OcrTranslate` event; this slice aligns that bridge surface with the close-out tooling.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile native-bridge`, covering formatter checks for the bridge module/binary/test plus the full `native_bridge_behavior` suite. That suite covers Native Messaging frame parsing, malformed/unknown actions, binary stdio behavior, rs OCR named-event signaling, and no legacy `.NET` NativeBridge/CompatHost wording.
+- Extended the validation wrapper self-test so `native_bridge.rs` changes recommend the `native-bridge` lane.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile native-bridge`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Added traditional HTTP provider close-out profile
+
+- No production runtime behavior or dependency changed. The traditional HTTP provider cluster is already Rust-owned through `traditional_http`, the Quick Translate native backend, and CLI local-HTTP regressions; this slice aligns that core surface with one close-out profile.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile traditional-http`, covering planner/parser/preflight contracts, Quick Translate native traditional providers, Bing's two-phase backend, and CLI no-worker/CompatHost wording for Google, Google Web, Bing, DeepL, Youdao, Caiyun, NiuTrans, Volcano, and Linguee.
+- Extended the validation wrapper self-test so `traditional_http.rs` changes recommend the `traditional-http` lane.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile traditional-http`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Added TTS close-out profile
+
+- No production runtime behavior or dependency changed. This slice aligns the existing Rust-owned TTS route with the close-out tooling: `lib/easydict-windows-tts` already owns Windows SAPI invocation through the Microsoft `windows` crate, while `easydict_app::tts` owns app-facing trimming, language filtering, speed clamping, and backend-error propagation.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile tts`, covering the Windows SAPI helper contracts, app TTS facade, Quick Translate Speak actions, AutoPlayTranslation speech routing, and the default boundary that keeps WinFluent legacy PowerShell/System.Speech TTS behind explicit features.
+- Extended the validation wrapper self-test so `lib/easydict-windows-tts` changes recommend the `tts` lane.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile tts`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Added input action close-out profile
+
+- No production runtime behavior or dependency changed. This slice aligns an already Rust-owned input lane with the close-out tooling so clipboard/TextInsertion iterations do not need hand-assembled cargo commands.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile input-actions`, covering clipboard facade/monitor contracts, text insertion facade contracts, Quick Translate clipboard and text-insertion actions, result action side effects, and Silent OCR clipboard task routing.
+- Extended the validation wrapper self-test so `clipboard.rs` changes recommend the `input-actions` lane. This keeps the profile wired into the fast recommendation path instead of existing only as a manual list entry.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile input-actions`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Added custom streaming live-chunk close-out profile
+
+- Rechecked the Gemini/Doubao replacement route before changing tests. No new dependency was added: the existing Rust-owned blocking `reqwest` line reader and custom SSE parser already own Gemini `streamGenerateContent` and Doubao `response.output_text.delta` streaming.
+- Added a Quick Translate live-chunk regression that blocks a fake custom-streaming HTTP client after the first parsed Gemini/Doubao chunk and proves the app callback observes that chunk before the HTTP stream method returns. This locks the user-visible streaming behavior, not just full-response parser correctness.
+- Added `Invoke-RsCoreSliceValidation.ps1 -Profile custom-streaming` plus recommendation rules so future Gemini/Doubao changes validate formatter, app live chunks/request planning, and CLI local SSE contracts in one close-out lane.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile custom-streaming`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Removed dead CLI LocalAI auto probe helpers
+
+- Rechecked the CLI LocalAI replacement boundary before changing behavior. No new dependency was added: `easydict_cli` can reuse the existing app-dir Quick Translate helper, which already owns Result-aware WindowsAI/Phi, Foundry Local, and OpenVINO routing.
+- Removed the CLI binary's direct references to the compatibility `auto_foundry_local_native_probe_request(...) -> Option<_>` helper and its standalone OpenVINO/Foundry fallback blocks. Default `windows-local-ai` CLI requests now audit cleanly as entering the shared app-dir route, where Foundry backend errors are preserved and `NotInstalled` / missing endpoint remains best-effort Auto fallback.
+- Added CLI source-boundary coverage so `easydict_cli.rs` cannot reintroduce the Option-shaped Foundry probe, standalone OpenVINO fallback, or a separate Foundry controller. The CLI Auto Foundry tests also now avoid `.cmd` fake helpers, because the Rust runtime guard must reject script/trampoline targets before spawn.
+- Expanded the `foundry-local` validation profile and recommendation rules to include `easydict_cli.rs`, `cli_translate_behavior.rs`, and the packaged Auto LocalAI stale app-dir boundary. Future Foundry Local route changes now cover GUI/app state, Quick Translate, CLI, LongDoc, OpenAI-compatible contracts, and the default rs no-worker-probe boundary in the first recommended close-out pass.
+- Expanded the fast `rust-only-boundary` close-out profile with CLI LocalAI no-worker coverage plus LongDoc CLI stale payload / target-auto no-worker checks. The remaining missing-Foundry fake helpers now use a missing plain `.exe` and deterministic WinRT-disable setup instead of `.cmd`, keeping script/trampoline guard tests separate from native-provider-missing tests.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile foundry-local`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile rust-only-boundary`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Made core close-out validation auto-runnable and self-tested
+
+- No production runtime behavior or dependency changed. This slice tightens the local close-out tooling used to finish Rust-only migration slices while parallel UI/parity work is dirty.
+- `Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles` now computes the same profile recommendation as `-RecommendProfiles`, selects the top lane by default, and runs it under one isolation pass. `-DryRun` prints the selected validation steps without taking the isolation mutex or running cargo, so a slice can preview its close-out matrix cheaply before the final run.
+- Added a `core-validation-tooling` profile plus `rs/scripts/Test-RsCoreSliceValidation.ps1`. The self-test covers profile listing, tooling-path recommendation, docs-only exemption, profile dry-run, auto-run dry-run selection, and the no-match failure path. Tooling-only changes no longer emit unrelated secondary recommendations from profile names embedded in tests.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -DryRun`
+
+## 2026-06-15: Preserved Auto Foundry Local native probe diagnostics
+
+- Rechecked the replacement boundary before changing behavior. No new dependency was added: the existing `lib/easydict-foundry-local` / `openai_compatible` path already owns runtime status/start/load/endpoint resolution and maps backend failures into `OpenAiExecutionError`.
+- Added `auto_foundry_local_native_probe_request_result(...)` and kept the previous `Option` helper as a compatibility wrapper. Default Quick Translate and streaming routes now surface Foundry Local prepare/status backend errors instead of flattening them with `.ok()?` and falling through to OpenVINO, retained-worker, or generic Rust-native-required fallback text.
+- LongDoc Auto LocalAI fallback now uses the Result-shaped Foundry probe too. `NotInstalled` / non-ready outcomes still allow Auto to continue to OpenVINO, while real status/start/load/resolve errors become native LongDoc backend errors before any retained worker path.
+- Expanded the `foundry-local` validation profile so this lane covers the touched Quick/LongDoc routing files and the new Auto Foundry diagnostics tests, not only settings-page prepare state.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile foundry-local`
+
+## 2026-06-15: Surfaced WindowsAI/Phi prepare diagnostics
+
+- Rechecked the existing Rust-owned WindowsAI/Phi boundary before changing behavior. No new dependency was added: `lib/easydict-windows-ai` already owns ready-state mapping, prepare/ensure/warmup behavior, and the injectable probe/client contracts.
+- `WindowsAiPrepareFinished(Err(...))` now surfaces `Phi Silica prepare failed: ...` through the settings diagnostic channel while keeping the Local AI panel status/progress on the same failure message.
+- `WindowsAiPrepareFinished(Ok(status))` now treats `WindowsAiModelState::Failed` as the same diagnostic class, because prepare can return a semantic failure status without using `Err`. Ready, NeedsPreparation, and NotCompatible outcomes clear only a previous Phi prepare diagnostic and preserve unrelated clipboard/TTS/settings errors.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile windows-ai-prepare`
+
+## 2026-06-15: Added profile recommendations for faster core close-out
+
+- No runtime implementation change or new production dependency was needed. This slice tightens the local validation tooling used to finish Rust-only migration slices while parallel UI/parity work is dirty.
+- `Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles` now inspects the current `gstep:@` -> worktree diff, ignores known parallel UI/parity files plus profile-exempt docs/tooling paths, and recommends the aligned validation profile(s) from the same script. Diff keyword matching is limited to actual added/removed lines so nearby context does not recommend unrelated lanes. Planned slices can pass `-ChangedPath` before editing, including comma-separated paths from a shell command.
+- Added a `windows-ai-prepare` profile so WindowsAI/Phi Silica prepare work has the same one-command close-out lane as Foundry Local and OpenVINO: formatter check, app reducer/lifecycle tests, and `lib/easydict-windows-ai` prepare-contract tests.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ListProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles -ChangedPath rs\crates\easydict_app\src\state.rs,rs\crates\easydict_app\tests\quick_translate_behavior.rs,lib\easydict-windows-ai\src\lib.rs`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile windows-ai-prepare`
+
+## 2026-06-15: Surfaced OpenVINO download diagnostics
+
+- Rechecked the existing Rust-owned OpenVINO/NLLB asset path before changing behavior. No new dependency was added: `openvino_download` already owns model/runtime manifest validation, ZIP extraction, cache status, and fake-download behavior tests.
+- `OpenVinoDownloadFinished(Err(...))` now keeps the OpenVINO panel status as `Download failed: ...` and also surfaces `OpenVINO download failed: ...` through the settings diagnostic channel.
+- A later successful or non-error download completion clears only a previous OpenVINO download diagnostic, while preserving unrelated clipboard/TTS/settings errors. Added an `openvino-download` close-out profile for the formatter check plus the OpenVINO/NLLB native asset download contract suite.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ListProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile openvino-download`
+
+## 2026-06-15: Surfaced Foundry Local prepare diagnostics
+
+- Rechecked the existing Rust-owned Foundry Local replacement boundary before changing behavior. No new dependency was added: `lib/easydict-foundry-local` already owns the native CLI/SDK control-plane traits, status parsing, start/load lifecycle, and endpoint normalization; the gap was app-level diagnostic propagation.
+- `FoundryLocalPrepareFinished(Err(...))` now keeps the Foundry panel status text and also surfaces `Foundry Local failed: ...` through the settings diagnostic channel, matching other Rust backend failures.
+- A later successful prepare clears only a previous Foundry Local diagnostic, while preserving unrelated clipboard/TTS/settings errors. Added a `foundry-local` close-out profile that pairs the app lifecycle test with the lower-level OpenAI-compatible Foundry prepare contract.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ListProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile foundry-local`
+
+## 2026-06-15: Added fast Rust-only boundary validation profile
+
+- No runtime implementation change or new dependency was needed. This slice aligns the recurring close-out tools with the migration-list default rs contract so later slices can quickly validate the most common `.NET` runtime regressions.
+- Added an `Invoke-RsCoreSliceValidation.ps1 -Profile rust-only-boundary` matrix covering the lib-owned rust-only runtime policy, default app source scans for retained runtime/process-spawn markers, default CLI native Google routing, GUI Quick Translate stale app-dir LocalAI behavior, and LongDoc current-app-dir routing that ignores inherited `hybrid` env.
+- The profile remains intentionally smaller than the full release gate; release packaging, MSIX validation, and full rs portable ZIP smoke stay in `rs-portable-release` / CI.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ListProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile rust-only-boundary`
+
+## 2026-06-15: Surfaced Built-in AI device registration failures
+
+- Kept this slice on the existing Rust-owned Built-in AI device-registration flow. No new dependency was added: `openai_compatible` already owns the embedded proxy request plan, reqwest-backed HTTP client, response parser, and settings writeback task.
+- `BuiltInAiDeviceRegistrationFinished(Err(...))` now surfaces as `Built-in AI device registration failed: ...` instead of being silently ignored while the device token remains unchanged.
+- A later valid token still writes to both current and saved settings without marking the settings page dirty, and clears only a previous Built-in AI registration error. Empty/no-token outcomes remain non-mutating and do not clear the backend error.
+- Added a `builtin-ai-registration` close-out profile that runs the slice formatter check plus app lifecycle/reducer tests and lower-level OpenAI-compatible registration contract tests in one isolated pass. The validation wrapper now also isolates `rs/Cargo.lock` only when the lock drift is caused solely by known parallel UI/parity manifest changes, so core checkpoints do not accidentally absorb dependency noise.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile builtin-ai-registration`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ListProfiles`
+
+## 2026-06-15: Surfaced Browser Support registrar diagnostics
+
+- Kept the browser support path on the existing Rust-owned native-messaging registrar and shell boundary. No new dependency was added: `easydict_browser_registrar` already owns rs host names, manifest/status/uninstall semantics, registry I/O through `lib/easydict-windows-registry`, and spawn guards through `lib/easydict-windows-shell`.
+- Browser Support action and status failures now surface as `Browser support failed: ...` in the app-visible settings diagnostic channel while still updating `BrowserSupportState.last_error`.
+- Successful Browser Support actions/status refreshes clear only a previous browser-support diagnostic, preserving unrelated clipboard/TTS/text-insertion/settings errors.
+- Added a `browser-support` core validation profile so this lane can be closed without hand-writing cargo `-p` commands through PowerShell.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 rustfmt --edition 2021 --check rs\crates\easydict_app\src\state.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `$cmdArgs = @('cargo','test','--manifest-path','rs\Cargo.toml','-p','easydict_app','--test','quick_translate_behavior','browser_support'); & rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RustTestNocapture @cmdArgs`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile browser-support`
+
+## 2026-06-15: Aligned repeated core-slice validation profiles
+
+- Extended `rs/scripts/Invoke-RsCoreSliceValidation.ps1` with `-ListProfiles` and `-Profile <name>` so repeated migration close-out lanes can run a documented test matrix under one temporary UI/parity isolation pass.
+- Added profiles for `desktop-settings`, `builtin-ai-registration`, `foundry-local`, `openvino-download`, `browser-support`, `file-dialog`, `text-selection`, `ocr-diagnostics`, `longdoc-layout`, `local-dictionary-suggestions`, `rs-portable-release`, and `rust-only-boundary`. Profiles automatically set `RUST_TEST_NOCAPTURE=1`, avoiding the PowerShell cargo test separator trap while keeping individual step names visible in output.
+- The original custom-command mode is preserved for one-off formatter checks or newly discovered slices. When the child command has flags such as cargo's `-p`, pass it through a PowerShell argument array splat so wrapper/common parameters do not capture those flags. The runner now serializes validation/isolation with a named mutex so parallel invocations cannot race while backing up/restoring dirty UI files. No production dependency was added; this is iteration tooling around existing `gstep`, cargo, and PowerShell commands.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ListProfiles`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -NoParallelUiIsolation cargo --version`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile desktop-settings`
+
+## 2026-06-15: Added a core-slice validation wrapper
+
+- Added `rs/scripts/Invoke-RsCoreSliceValidation.ps1` to make late-stage Rust core iterations cheaper and less error-prone while parallel UI/parity work is dirty.
+- The wrapper backs up known parallel UI/parity files, materializes `gstep:@`, temporarily restores those files to the checkpoint version, runs one validation command, and restores the backups in `finally`. Added-file parallel tools are temporarily removed during the command and restored afterward.
+- `-RustTestNocapture` sets `RUST_TEST_NOCAPTURE=1` for the child process, avoiding the PowerShell parameter parsing trap around cargo's `-- --nocapture` test-harness separator.
+- No new production dependency was added; this is a local iteration tool for the existing `gstep` + cargo validation loop.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 cargo --version`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -NoParallelUiIsolation cargo --version`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RustTestNocapture cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior desktop_shell_action`
+
 ## 2026-06-15: Preserved OCR window-snapshot backend diagnostics
 
 - Rechecked the OCR window snapshot boundary before changing behavior. The app already uses local `lib/easydict-windows-screen-capture`, which exposes `Result<Vec<ScreenWindow>, WindowsScreenCaptureError>` for `EnumWindows` / child-window enumeration; no new dependency was added.
@@ -6956,7 +7224,7 @@ Worker fallback must be tested in both available and missing/failed host modes, 
 - `cd rs; cargo run -p easydict_app --bin easydict_long_doc -- --help`
 - `.\scripts\translate-long-doc.ps1 -ListServices -UseCargo`
 - `.\scripts\translate-long-doc.ps1 -ListServices -UseCargo -UseDotnetLegacy` (expected mode-conflict rejection)
-- `cd rs; $env:EASYDICT_FOUNDRY_LOCAL_CLI='__missing_foundry_cli__.cmd'; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
+- `cd rs; $env:EASYDICT_FOUNDRY_LOCAL_CLI='__missing_safe_foundry_cli__.exe'; cargo test -p easydict_app --test long_document_behavior -- --nocapture`
 - `cd rs; cargo test -p easydict_app --lib long_document -- --nocapture`
 - `dotnet test tests\Easydict.WinUI.Tests\Easydict.WinUI.Tests.csproj --filter FullyQualifiedName~WorkerPackagingTests`
 - `rustfmt --edition 2021 --check rs\crates\easydict_app\src\long_document_cli.rs rs\crates\easydict_app\src\bin\easydict_long_doc.rs rs\crates\easydict_app\src\long_document.rs rs\crates\easydict_app\src\lib.rs rs\crates\easydict_msix_validate\src\lib.rs rs\crates\easydict_app\tests\long_document_cli_behavior.rs`

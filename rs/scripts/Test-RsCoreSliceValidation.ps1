@@ -96,6 +96,38 @@ function Assert-NotContains {
     }
 }
 
+function Assert-OccurrenceCount {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Needle,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Expected,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Context
+    )
+
+    $count = 0
+    $offset = 0
+    while ($offset -lt $Text.Length) {
+        $index = $Text.IndexOf($Needle, $offset, [System.StringComparison]::OrdinalIgnoreCase)
+        if ($index -lt 0) {
+            break
+        }
+
+        $count += 1
+        $offset = $index + $Needle.Length
+    }
+
+    if ($count -ne $Expected) {
+        throw "$Context should contain '$Needle' $Expected time(s), got $count. Output:`n$Text"
+    }
+}
+
 function Invoke-TestCase {
     param(
         [Parameter(Mandatory = $true)]
@@ -117,6 +149,14 @@ Invoke-TestCase "profile list includes tooling lane" {
     Assert-Contains -Text $result.Output -Needle "mdx-native" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "openai-compatible" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "windows-ai-native" -Context $result.Command
+}
+
+Invoke-TestCase "cleanup restore path retries transient file-copy locks" {
+    $wrapperText = Get-Content -LiteralPath $wrapper -Raw
+    Assert-Contains -Text $wrapperText -Needle "function Copy-ItemWithRetry" -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle 'Retrying $OperationName after transient file copy failure' -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle "Failed to restore" -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle "cleanupErrors" -Context $wrapper
 }
 
 Invoke-TestCase "tooling changes recommend tooling lane" {
@@ -150,6 +190,23 @@ Invoke-TestCase "input action changes recommend input lane" {
     Assert-ExitCode -Result $result -Expected 0
     Assert-Contains -Text $result.Output -Needle "input-actions" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "-Profile input-actions" -Context $result.Command
+}
+
+Invoke-TestCase "shared text-selection helper changes recommend all dependent input lanes" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-RecommendProfiles",
+        "-ChangedPath",
+        "lib\easydict-windows-text-selection\src\lib.rs"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "input-actions" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "mouse-selection" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "text-selection" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-Profile input-actions" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-Profile mouse-selection" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-Profile text-selection" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-Profile input-actions,mouse-selection,text-selection" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-Profile input-actions,mouse-selection,text-selection -DryRun" -Context $result.Command
 }
 
 Invoke-TestCase "tts changes recommend tts lane" {
@@ -190,6 +247,17 @@ Invoke-TestCase "screen capture changes recommend OCR diagnostics lane" {
         "-RecommendProfiles",
         "-ChangedPath",
         "lib\easydict-windows-screen-capture\src\lib.rs"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "ocr-diagnostics" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-Profile ocr-diagnostics" -Context $result.Command
+}
+
+Invoke-TestCase "Windows OCR helper changes recommend OCR diagnostics lane" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-RecommendProfiles",
+        "-ChangedPath",
+        "rs\crates\easydict_windows_ocr\src\lib.rs"
     )
     Assert-ExitCode -Result $result -Expected 0
     Assert-Contains -Text $result.Output -Needle "ocr-diagnostics" -Context $result.Command
@@ -496,6 +564,21 @@ Invoke-TestCase "profile dry-run avoids isolation and cargo execution" {
     Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
 }
 
+Invoke-TestCase "multi-profile dry-run runs requested lanes in one wrapper pass" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-Profile",
+        "input-actions,text-selection",
+        "-DryRun"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "input-actions / clipboard facade and monitor contracts" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "input-actions / quick translate text insertion actions" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "text-selection / backend diagnostic preservation" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "text-selection / selected-text capture task" -Context $result.Command
+    Assert-OccurrenceCount -Text $result.Output -Needle "cargo test --manifest-path lib\easydict-windows-text-selection\Cargo.toml" -Expected 1 -Context $result.Command
+    Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
+}
+
 Invoke-TestCase "desktop settings profile dry-run includes shell and registry boundary coverage" {
     $result = Invoke-ValidationWrapper -Arguments @(
         "-Profile",
@@ -552,6 +635,7 @@ Invoke-TestCase "OCR diagnostics profile dry-run includes screen capture helper 
     )
     Assert-ExitCode -Result $result -Expected 0
     Assert-Contains -Text $result.Output -Needle "Windows screen capture helper contracts" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "Windows native OCR helper contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "HTTP backend parse diagnostics" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "app screen capture facade contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "window snapshot diagnostics" -Context $result.Command
@@ -597,6 +681,23 @@ Invoke-TestCase "input actions profile dry-run includes helper coverage" {
     Assert-Contains -Text $result.Output -Needle "clipboard facade and monitor contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "text insertion facade contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "silent OCR clipboard task surface" -Context $result.Command
+    Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
+}
+
+Invoke-TestCase "shared text-selection helper dry-run can align all dependent input lanes" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-RunRecommendedProfiles",
+        "-ChangedPath",
+        "lib\easydict-windows-text-selection\src\lib.rs",
+        "-DryRun",
+        "-MaxRecommendedProfiles",
+        "3"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "Selected recommended validation profile(s): input-actions, mouse-selection, text-selection" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "input-actions / clipboard facade and monitor contracts" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "mouse-selection / mouse-selection reducer and producer contracts" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "text-selection / backend diagnostic preservation" -Context $result.Command
     Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
 }
 
@@ -737,6 +838,7 @@ Invoke-TestCase "MDX native profile dry-run includes lookup and resource coverag
     )
     Assert-ExitCode -Result $result -Expected 0
     Assert-Contains -Text $result.Output -Needle "rs-mdict default contracts" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "optional Collins real-corpus MDX/MDD contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "app native MDX/MDD lookup contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "quick translate MDX service contracts" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "settings MDD companion discovery contracts" -Context $result.Command
@@ -852,9 +954,11 @@ Invoke-TestCase "rs portable release profile dry-run includes default packaging 
         "-DryRun"
     )
     Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "format rs portable release slice" -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "release defaults to rs portable" -Context $result.Command
-    Assert-Contains -Text $result.Output -Needle "default packager surface is rust-only" -Context $result.Command
-    Assert-Contains -Text $result.Output -Needle "zip validation excludes retained runtime" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "rs portable release workflow and release-asset contracts" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "zip validation excludes retained runtime for CLI entrypoint" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "zip validation excludes retained runtime for GUI entrypoint" -Context $result.Command
     Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
 }
 

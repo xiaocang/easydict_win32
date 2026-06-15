@@ -23,6 +23,7 @@
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-formula
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mdx-native
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile openai-compatible
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile foundry-local,rust-only-boundary
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile windows-ai-native
 #>
 
@@ -40,7 +41,7 @@ param(
 
     [switch]$DryRun,
 
-    [string]$Profile,
+    [string[]]$Profile,
 
     [string[]]$ChangedPath,
 
@@ -285,8 +286,9 @@ $validationProfiles = [ordered]@{
     "ocr-diagnostics" = [pscustomobject]@{
         Description = "OCR HTTP parser failures, native screen capture errors, and window-snapshot diagnostics."
         Steps = @(
-            (New-ValidationStep "format OCR diagnostics slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-screen-capture\src\lib.rs", "rs\crates\easydict_app\src\screen_capture_native.rs", "rs\crates\easydict_app\src\ocr.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\ocr_behavior.rs")),
+            (New-ValidationStep "format OCR diagnostics slice" @("rustfmt", "--edition", "2021", "--check", "lib\easydict-windows-screen-capture\src\lib.rs", "rs\crates\easydict_windows_ocr\src\lib.rs", "rs\crates\easydict_app\src\screen_capture_native.rs", "rs\crates\easydict_app\src\ocr.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\tests\ocr_behavior.rs")),
             (New-ValidationStep "Windows screen capture helper contracts" @("cargo", "test", "--manifest-path", "lib\easydict-windows-screen-capture\Cargo.toml", "--all-targets")),
+            (New-ValidationStep "Windows native OCR helper contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_windows_ocr")),
             (New-ValidationStep "HTTP backend parse diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "ocr_http_provider")),
             (New-ValidationStep "app screen capture facade contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "screen_capture_native")),
             (New-ValidationStep "app OCR capture diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "app_ocr_capture_failure_surfaces_native_screen_capture_error")),
@@ -343,7 +345,7 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "format rs-mdict crate" @("cargo", "fmt", "--manifest-path", "lib\rs-mdict\Cargo.toml", "--check")),
             (New-ValidationStep "format app MDX native slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\mdx_native.rs", "rs\crates\easydict_app\tests\mdx_native_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\settings_storage_behavior.rs")),
             (New-ValidationStep "rs-mdict default contracts" @("cargo", "test", "--manifest-path", "lib\rs-mdict\Cargo.toml")),
-            (New-ValidationStep "rs-mdict env-gated real-corpus resource contract" @("cargo", "test", "--manifest-path", "lib\rs-mdict\Cargo.toml", "--features", "real-corpus-tests", "--test", "integration_test", "test_mdd_locate_configured_resource")),
+            (New-ValidationStep "optional Collins real-corpus MDX/MDD contracts" @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "rs\scripts\Invoke-MdxRealCorpusValidation.ps1")),
             (New-ValidationStep "app native MDX/MDD lookup contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "mdx_native_behavior")),
             (New-ValidationStep "quick translate MDX service contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "mdx")),
             (New-ValidationStep "settings MDD companion discovery contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "settings_storage_behavior", "mdd"))
@@ -362,9 +364,11 @@ $validationProfiles = [ordered]@{
     "rs-portable-release" = [pscustomobject]@{
         Description = "First rs portable release/default packaging gates that keep retained .NET payloads out."
         Steps = @(
+            (New-ValidationStep "format rs portable release slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_packager\src\lib.rs", "rs\crates\easydict_packager\src\main.rs", "rs\crates\easydict_packager\tests\release_contract_behavior.rs")),
             (New-ValidationStep "release defaults to rs portable" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "migration_list_acceptance_defaults_to_rs_portable_before_legacy_dotnet")),
-            (New-ValidationStep "default packager surface is rust-only" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "rs_portable_release_default_packager_help_exposes_only_rs_portable_no_runtime_paths")),
-            (New-ValidationStep "zip validation excludes retained runtime" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell"))
+            (New-ValidationStep "rs portable release workflow and release-asset contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "rs_portable_release")),
+            (New-ValidationStep "zip validation excludes retained runtime for CLI entrypoint" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell")),
+            (New-ValidationStep "zip validation excludes retained runtime for GUI entrypoint" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_packager", "--test", "release_contract_behavior", "pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell"))
         )
     }
     "rust-only-boundary" = [pscustomobject]@{
@@ -536,6 +540,7 @@ $profileRecommendations = [ordered]@{
     }
     "input-actions" = [pscustomobject]@{
         PathPatterns = @(
+            "lib/easydict-windows-text-selection/**",
             "rs/crates/easydict_app/src/clipboard.rs",
             "rs/crates/easydict_app/src/text_insertion.rs",
             "rs/crates/easydict_app/tests/quick_translate_behavior.rs",
@@ -561,6 +566,7 @@ $profileRecommendations = [ordered]@{
     }
     "text-selection" = [pscustomobject]@{
         PathPatterns = @(
+            "lib/easydict-windows-text-selection/**",
             "rs/crates/easydict_app/src/text_selection.rs",
             "rs/crates/easydict_app/tests/text_selection_behavior.rs"
         )
@@ -577,6 +583,7 @@ $profileRecommendations = [ordered]@{
     "ocr-diagnostics" = [pscustomobject]@{
         PathPatterns = @(
             "lib/easydict-windows-screen-capture/**",
+            "rs/crates/easydict_windows_ocr/**",
             "rs/crates/easydict_app/src/ocr.rs",
             "rs/crates/easydict_app/src/screen_capture_native.rs",
             "rs/crates/easydict_app/tests/ocr_behavior.rs"
@@ -709,6 +716,37 @@ function Expand-PathList {
 
     @($Paths | ForEach-Object {
             $_ -split "," | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        })
+}
+
+function Expand-ProfileList {
+    param(
+        [string[]]$Profiles
+    )
+
+    @($Profiles | ForEach-Object {
+            $_ -split "," | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        } | Select-Object -Unique)
+}
+
+function Get-ValidationStepCommandKey {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Step
+    )
+
+    $Step.Command -join ([char]0)
+}
+
+function Select-UniqueValidationSteps {
+    param(
+        [pscustomobject[]]$Steps
+    )
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    @($Steps | Where-Object {
+            $key = Get-ValidationStepCommandKey -Step $_
+            $seen.Add($key)
         })
 }
 
@@ -915,6 +953,12 @@ function Show-ProfileRecommendations {
         }
         Write-Host "    run: powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $($result.Profile)"
     }
+
+    $profileCsv = (@($Recommendation.Results | ForEach-Object { $_.Profile }) -join ",")
+    Write-Host "Combined close-out command for listed profile(s):"
+    Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $profileCsv"
+    Write-Host "Combined close-out dry-run:"
+    Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $profileCsv -DryRun"
 }
 
 function Get-CurrentProfileRecommendation {
@@ -940,8 +984,10 @@ function Get-CurrentProfileRecommendation {
     Get-ProfileRecommendations -Paths $recommendationPaths -DiffText $recommendationDiff
 }
 
+$profileKeys = @(Expand-ProfileList $Profile)
+
 if ($RecommendProfiles) {
-    if ($ListProfiles -or $RunRecommendedProfiles -or $DryRun -or $Command.Count -ne 0 -or -not [string]::IsNullOrWhiteSpace($Profile)) {
+    if ($ListProfiles -or $RunRecommendedProfiles -or $DryRun -or $Command.Count -ne 0 -or $profileKeys.Count -ne 0) {
         throw "-RecommendProfiles cannot be combined with -ListProfiles, -RunRecommendedProfiles, -DryRun, -Profile, or a validation command."
     }
     if ($MaxRecommendedProfiles -ne 1) {
@@ -955,7 +1001,7 @@ if ($RecommendProfiles) {
 }
 
 if ($ListProfiles) {
-    if ($RunRecommendedProfiles -or $DryRun -or $Command.Count -ne 0 -or -not [string]::IsNullOrWhiteSpace($Profile) -or $ChangedPath.Count -ne 0 -or $DiffFrom -ne "gstep:@" -or $DiffTo -ne "worktree") {
+    if ($RunRecommendedProfiles -or $DryRun -or $Command.Count -ne 0 -or $profileKeys.Count -ne 0 -or $ChangedPath.Count -ne 0 -or $DiffFrom -ne "gstep:@" -or $DiffTo -ne "worktree") {
         throw "-ListProfiles cannot be combined with -RunRecommendedProfiles, -DryRun, -Profile, -ChangedPath, diff selectors, or a validation command."
     }
     if ($MaxRecommendedProfiles -ne 1) {
@@ -987,7 +1033,7 @@ if ($MaxRecommendedProfiles -lt 1) {
 }
 
 $modeCount = 0
-if (-not [string]::IsNullOrWhiteSpace($Profile)) { $modeCount += 1 }
+if ($profileKeys.Count -ne 0) { $modeCount += 1 }
 if ($Command.Count -ne 0) { $modeCount += 1 }
 if ($RunRecommendedProfiles) { $modeCount += 1 }
 if ($modeCount -gt 1) {
@@ -1011,13 +1057,23 @@ if ($RunRecommendedProfiles) {
         }
     }
 }
-elseif (-not [string]::IsNullOrWhiteSpace($Profile)) {
-    $profileKey = $Profile.Trim().ToLowerInvariant()
-    if (-not $validationProfiles.Contains($profileKey)) {
-        throw "Unknown validation profile '$Profile'. Use -ListProfiles to see available profiles."
+elseif ($profileKeys.Count -ne 0) {
+    foreach ($profileKey in $profileKeys) {
+        if (-not $validationProfiles.Contains($profileKey)) {
+            throw "Unknown validation profile '$profileKey'. Use -ListProfiles to see available profiles."
+        }
     }
 
-    $validationSteps = @($validationProfiles[$profileKey].Steps)
+    if ($profileKeys.Count -eq 1) {
+        $validationSteps = @($validationProfiles[$profileKeys[0]].Steps)
+    }
+    else {
+        foreach ($profileKey in $profileKeys) {
+            foreach ($step in @($validationProfiles[$profileKey].Steps)) {
+                $validationSteps += (New-ValidationStep "$profileKey / $($step.Name)" $step.Command)
+            }
+        }
+    }
 }
 elseif ($Command.Count -ne 0) {
     $validationSteps = @((New-ValidationStep "custom" $Command))
@@ -1025,6 +1081,8 @@ elseif ($Command.Count -ne 0) {
 else {
     throw "Provide one validation command, -Profile <name>, -RunRecommendedProfiles, -ListProfiles, or -RecommendProfiles."
 }
+
+$validationSteps = @(Select-UniqueValidationSteps -Steps $validationSteps)
 
 if ($DryRun) {
     Write-Host "Dry run; validation step(s) that would run:"
@@ -1043,6 +1101,36 @@ function Invoke-GstepChecked {
     & gstep @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "gstep $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Copy-ItemWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LiteralPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Destination,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OperationName,
+
+        [int]$MaxAttempts = 5
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            Copy-Item -LiteralPath $LiteralPath -Destination $Destination -Force
+            return
+        }
+        catch {
+            if ($attempt -eq $MaxAttempts) {
+                throw
+            }
+
+            Write-Host "Retrying $OperationName after transient file copy failure: $($_.Exception.Message)"
+            Start-Sleep -Milliseconds (250 * $attempt)
+        }
     }
 }
 
@@ -1079,10 +1167,11 @@ $generatedCargoLockFilesAbsentBeforeRun = @($generatedCargoLockFiles | Where-Obj
         -not (Test-Path -LiteralPath (Join-Path $repoRoot $_) -PathType Leaf)
     })
 $previousRustTestNocapture = $env:RUST_TEST_NOCAPTURE
-$enableRustTestNocapture = $RustTestNocapture.IsPresent -or -not [string]::IsNullOrWhiteSpace($Profile)
+$enableRustTestNocapture = $RustTestNocapture.IsPresent -or $profileKeys.Count -ne 0
 $commandExitCode = 1
 $validationMutex = [System.Threading.Mutex]::new($false, "Local\EasydictRsCoreSliceValidation")
 $validationMutexAcquired = $false
+$cleanupErrors = [System.Collections.Generic.List[string]]::new()
 
 try {
     Write-Host "Waiting for core validation isolation lock."
@@ -1151,9 +1240,9 @@ try {
                 }
 
                 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
-                Copy-Item -LiteralPath $workspacePath -Destination $backupPath -Force
+                Copy-ItemWithRetry -LiteralPath $workspacePath -Destination $backupPath -OperationName "backup $relativePath"
                 if ($materializedFileExists) {
-                    Copy-Item -LiteralPath $materializedPath -Destination $workspacePath -Force
+                    Copy-ItemWithRetry -LiteralPath $materializedPath -Destination $workspacePath -OperationName "isolate $relativePath"
                 }
                 else {
                     Remove-Item -LiteralPath $workspacePath -Force
@@ -1191,18 +1280,33 @@ finally {
         $workspacePath = Join-Path $repoRoot $relativePath
         $backupPath = Join-Path $backupRoot $relativePath
         if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
-            Copy-Item -LiteralPath $backupPath -Destination $workspacePath -Force
+            try {
+                Copy-ItemWithRetry -LiteralPath $backupPath -Destination $workspacePath -OperationName "restore $relativePath"
+            }
+            catch {
+                $cleanupErrors.Add("Failed to restore ${relativePath}: $($_.Exception.Message)")
+            }
         }
     }
 
     foreach ($relativePath in $generatedCargoLockFilesAbsentBeforeRun) {
         $workspacePath = Join-Path $repoRoot $relativePath
         if (Test-Path -LiteralPath $workspacePath -PathType Leaf) {
-            Remove-Item -LiteralPath $workspacePath -Force
+            try {
+                Remove-Item -LiteralPath $workspacePath -Force
+            }
+            catch {
+                $cleanupErrors.Add("Failed to remove generated lock drift ${relativePath}: $($_.Exception.Message)")
+            }
         }
     }
 
-    Remove-TempTree -Path $tempRoot -TempBase $tempBase
+    try {
+        Remove-TempTree -Path $tempRoot -TempBase $tempBase
+    }
+    catch {
+        $cleanupErrors.Add("Failed to remove temporary validation tree ${tempRoot}: $($_.Exception.Message)")
+    }
 
     if ($enableRustTestNocapture) {
         if ($null -eq $previousRustTestNocapture) {
@@ -1217,6 +1321,13 @@ finally {
         $validationMutex.ReleaseMutex()
     }
     $validationMutex.Dispose()
+}
+
+if ($cleanupErrors.Count -gt 0) {
+    foreach ($cleanupError in $cleanupErrors) {
+        Write-Warning $cleanupError
+    }
+    exit 1
 }
 
 if ($commandExitCode -ne 0) {

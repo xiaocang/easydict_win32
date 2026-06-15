@@ -95,6 +95,8 @@ public sealed class WorkerPackagingTests
             "workflows",
             "release-publish.yml"));
         var workflow = File.ReadAllText(workflowPath).Replace("\r\n", "\n");
+        var publishMsixJob = TextBetween(workflow, "  publish-msix:", "  publish-rs-portable:");
+        var publishRustPortableJob = TextBetween(workflow, "  publish-rs-portable:", "  create-bundle:");
 
         workflow.Should().Contain("default: 'rs-portable'");
         workflow.Should().Contain("integration-tests:\n    if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'hybrid' }}");
@@ -104,7 +106,8 @@ public sealed class WorkerPackagingTests
         workflow.Should().NotContain("publish-rs-portable:\n    name: Build Rust Portable Package\n    runs-on: windows-latest\n    needs: [prepare, integration-tests]");
         workflow.Should().Contain("EASYDICT_RUNTIME_PROFILE: rust-only");
         workflow.Should().Contain("RUNTIME_PROFILE: rust-only");
-        workflow.Should().Contain("./scripts/Package-Portable.ps1");
+        publishRustPortableJob.Should().Contain("cargo run --manifest-path Cargo.toml -p easydict_packager --");
+        publishRustPortableJob.Should().Contain("pack-rs-portable");
         workflow.Should().Contain("easydict-rs-portable-${{ github.ref_name }}-win-${{ matrix.platform }}.zip");
         workflow.Should().Contain("create-rs-portable-release:");
         workflow.Should().Contain("Create Rust Portable Release");
@@ -112,10 +115,12 @@ public sealed class WorkerPackagingTests
         workflow.Should().Contain("Upload Rust portable release asset");
         workflow.Should().Contain("rs-portable/*.zip");
         workflow.Should().Contain("easydict_packager");
-        workflow.Should().Contain("zip-directory");
+        publishRustPortableJob.Should().NotContain("zip-directory");
+        publishMsixJob.Should().Contain("cargo run --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging --");
+        publishMsixJob.Should().Contain("zip-directory");
         workflow.Should().Contain("Validate Rust portable ZIP");
         workflow.Should().Contain("validate-rs-portable");
-        workflow.Should().Contain("--exclude-extension .pdb");
+        publishMsixJob.Should().Contain("--exclude-extension .pdb");
         workflow.Should().Contain("release_flavor=hybrid manually to build legacy .NET/MSIX/installer assets");
         workflow.Should().Contain("publish only the Rust portable artifact, without");
         workflow.Should().Contain("dotnet/MSIX/installer assets or WinGet submission");
@@ -965,6 +970,7 @@ public sealed class WorkerPackagingTests
         publishScript.Should().Contain("The first rs release is portable-only");
         publishScript.Should().Contain("..\\rs\\scripts\\Package-Portable.ps1");
         publishScript.Should().Contain("easydict_packager");
+        publishScript.Should().Contain("--features hybrid-dotnet-runtime-packaging");
         publishScript.Should().Contain("zip-directory");
         publishScript.Should().NotContain("Compress-Archive");
         publishScript.Should().Contain("Easydict.Workers.LongDoc");
@@ -1261,5 +1267,17 @@ public sealed class WorkerPackagingTests
         }
 
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..");
+    }
+
+    private static string TextBetween(string text, string start, string end)
+    {
+        var startIndex = text.IndexOf(start, StringComparison.Ordinal);
+        startIndex.Should().BeGreaterThanOrEqualTo(0, $"expected section start '{start}'");
+        startIndex += start.Length;
+
+        var endIndex = text.IndexOf(end, startIndex, StringComparison.Ordinal);
+        endIndex.Should().BeGreaterThanOrEqualTo(0, $"expected section end '{end}'");
+
+        return text[startIndex..endIndex];
     }
 }

@@ -298,7 +298,7 @@ function Invoke-WithPreviewEnvironment {
     }
 }
 
-function Find-ReferenceScreenshot {
+function Find-ReferenceScreenshotCandidates {
     param(
         [string]$Root,
         [string]$ScenarioId,
@@ -321,38 +321,58 @@ function Find-ReferenceScreenshot {
                 -not $_.FullName.StartsWith($excludePrefix, [System.StringComparison]::OrdinalIgnoreCase)
         })
 
-    $preferredParityBaselines = @($candidates |
+    $ordered = New-Object System.Collections.Generic.List[object]
+    $seen = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+    function Add-ReferenceCandidates {
+        param(
+            [object[]]$Items
+        )
+
+        foreach ($item in @($Items)) {
+            if ($null -eq $item) {
+                continue
+            }
+            if ($seen.Add($item.FullName)) {
+                $ordered.Add($item) | Out-Null
+            }
+        }
+    }
+
+    Add-ReferenceCandidates -Items @($candidates |
         Where-Object {
             $_.FullName -match '\\dotnet-rust-parity[^\\]*\\' -and
                 (Test-Path -LiteralPath (Join-Path $_.DirectoryName "ui-parity-manifest.json"))
         } |
         Sort-Object LastWriteTimeUtc -Descending)
-    if ($preferredParityBaselines.Count -gt 0) {
-        return $preferredParityBaselines[0]
-    }
 
     $rootPath = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\')
-    $rootBaselines = @($candidates |
+    Add-ReferenceCandidates -Items @($candidates |
         Where-Object { $_.DirectoryName.TrimEnd('\') -eq $rootPath } |
         Sort-Object LastWriteTimeUtc -Descending)
-    if ($rootBaselines.Count -gt 0) {
-        return $rootBaselines[0]
-    }
 
-    $currentBaselines = @($candidates |
+    Add-ReferenceCandidates -Items @($candidates |
         Where-Object {
             $_.FullName -notmatch '\\rust-preview-[^\\]*\\' -and
                 $_.FullName -notmatch '\\settings-general-schema-[^\\]*\\' -and
                 $_.FullName -notmatch '\\services-page-codex[^\\]*\\'
         } |
         Sort-Object LastWriteTimeUtc -Descending)
-    if ($currentBaselines.Count -gt 0) {
-        return $currentBaselines[0]
-    }
 
-    return $candidates |
+    Add-ReferenceCandidates -Items @($candidates |
         Where-Object { $_.FullName -notmatch '\\rust-preview-[^\\]*\\' } |
-        Sort-Object LastWriteTimeUtc -Descending |
+        Sort-Object LastWriteTimeUtc -Descending)
+
+    return @($ordered.ToArray())
+}
+
+function Find-ReferenceScreenshot {
+    param(
+        [string]$Root,
+        [string]$ScenarioId,
+        [string]$ExcludeRoot
+    )
+
+    return Find-ReferenceScreenshotCandidates -Root $Root -ScenarioId $ScenarioId -ExcludeRoot $ExcludeRoot |
         Select-Object -First 1
 }
 
@@ -457,6 +477,47 @@ function Find-ReferenceManifestEntry {
     return @($manifest.Scenarios) |
         Where-Object { $_.ScenarioId -eq $ScenarioId } |
         Select-Object -First 1
+}
+
+function Find-CompatibleReferenceScreenshot {
+    param(
+        [string]$Root,
+        [string]$ScenarioId,
+        [string]$ExcludeRoot
+    )
+
+    $requiresPreferred = Test-ScenarioRequiresPreferredReference -ScenarioId $ScenarioId
+    $resolvedReferenceRoot = if ([string]::IsNullOrWhiteSpace($Root) -or -not (Test-Path -LiteralPath $Root)) {
+        $null
+    } else {
+        (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\')
+    }
+    foreach ($candidate in @(Find-ReferenceScreenshotCandidates -Root $Root -ScenarioId $ScenarioId -ExcludeRoot $ExcludeRoot)) {
+        $sourceKind = Get-ReferenceSourceKind -ReferenceFile $candidate
+        if ($requiresPreferred -and $sourceKind -ne "preferred-dotnet-rust-parity") {
+            continue
+        }
+
+        $entry = Find-ReferenceManifestEntry -ReferenceFile $candidate -ScenarioId $ScenarioId
+        if (-not (Test-ReferenceManifestEntryMatchesScenarioState -ScenarioId $ScenarioId -ReferenceEntry $entry)) {
+            $candidateDirectory = $candidate.DirectoryName.TrimEnd('\')
+            $isExplicitReferenceRootFile = $null -ne $resolvedReferenceRoot -and
+                $candidateDirectory.Equals($resolvedReferenceRoot, [System.StringComparison]::OrdinalIgnoreCase)
+            $hasMatchingManifestEntry = $null -ne $entry -and
+                $entry.PSObject.Properties["ScenarioId"] -and
+                [string]$entry.ScenarioId -eq $ScenarioId
+            if (-not ($isExplicitReferenceRootFile -and $hasMatchingManifestEntry)) {
+                continue
+            }
+        }
+
+        return [pscustomobject]@{
+            ReferenceFile = $candidate
+            ReferenceEntry = $entry
+        }
+    }
+
+    return $null
 }
 
 function Require-Path {
@@ -938,6 +999,30 @@ function Add-SettingsServicesTopCandidateDimensions {
     }
 
     if ($null -ne $descriptor -and [double]$descriptor.ScrollPercent -gt 0) {
+        $scrolledExpanderTop = switch ($descriptor.ServiceId.Trim().ToLowerInvariant()) {
+            "openai" { 489; break }
+            "deepseek" { 463; break }
+            "groq" { 413; break }
+            "zhipu" { 365; break }
+            "github" { 313; break }
+            "gemini" { 319; break }
+            "custom-openai" { 221; break }
+            "builtin" { 228; break }
+            "doubao" { 224; break }
+            "caiyun" { 316; break }
+            "niutrans" { 315; break }
+            "youdao" { 197; break }
+            "volcano" { 221; break }
+            default { $null; break }
+        }
+        if ($null -ne $scrolledExpanderTop) {
+            Set-UiSummaryControlDimension -UiSummary $CandidateUiSummary -Id $descriptor.RustExpanderId -Dimension (New-ControlDimension `
+                    -Kind "Button" `
+                    -Left 24 `
+                    -Top $scrolledExpanderTop `
+                    -Width 796 `
+                    -Height 48)
+        }
         return $CandidateUiSummary
     }
 
@@ -2573,23 +2658,9 @@ foreach ($definition in $selectedScenarios) {
 
     $referenceCopied = $false
     $referencePath = $null
-    $reference = Find-ReferenceScreenshot -Root $ReferenceRoot -ScenarioId $definition.Id -ExcludeRoot $OutputRoot
-    $referenceEntry = $null
-    if ($null -ne $reference) {
-        $candidateReferenceSourceKind = Get-ReferenceSourceKind -ReferenceFile $reference
-        if ((Test-ScenarioRequiresPreferredReference -ScenarioId $definition.Id) -and
-            $candidateReferenceSourceKind -ne "preferred-dotnet-rust-parity") {
-            Write-Warning "Ignoring $candidateReferenceSourceKind reference for $($definition.Id): this scenario requires a manifest-backed .NET WinUI reference captured in the matching overlay state."
-            $reference = $null
-        } else {
-            $referenceEntry = Find-ReferenceManifestEntry -ReferenceFile $reference -ScenarioId $definition.Id
-            if (-not (Test-ReferenceManifestEntryMatchesScenarioState -ScenarioId $definition.Id -ReferenceEntry $referenceEntry)) {
-                Write-Warning "Ignoring reference for $($definition.Id): manifest UI summary does not show the expected scenario state."
-                $reference = $null
-                $referenceEntry = $null
-            }
-        }
-    }
+    $referenceMatch = Find-CompatibleReferenceScreenshot -Root $ReferenceRoot -ScenarioId $definition.Id -ExcludeRoot $OutputRoot
+    $reference = if ($null -ne $referenceMatch) { $referenceMatch.ReferenceFile } else { $null }
+    $referenceEntry = if ($null -ne $referenceMatch) { $referenceMatch.ReferenceEntry } else { $null }
     if ($null -ne $reference) {
         $referenceSourceKind = Get-ReferenceSourceKind -ReferenceFile $reference
         $referenceSourceIsFallback = -not ($referenceSourceKind -eq "preferred-dotnet-rust-parity")

@@ -58,6 +58,10 @@ param(
 
     [string]$RemoteStagingDir = "",
 
+    [string]$RuntimeProfile = "rust-only",
+
+    [string]$ValidatorPath = "",
+
     [switch]$SkipValidate,
 
     [switch]$LaunchApp,
@@ -78,6 +82,24 @@ $ErrorActionPreference = "Continue"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $dotnetDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
+$repoRoot = Split-Path -Parent $dotnetDir
+
+function Normalize-RuntimeProfile {
+    param([string]$Value)
+
+    $normalized = if ([string]::IsNullOrWhiteSpace($Value)) {
+        "rust-only"
+    } else {
+        $Value.Trim().ToLowerInvariant().Replace("_", "-")
+    }
+
+    if ($normalized -eq "rustonly") { return "rust-only" }
+    if ($normalized -eq "rust-only" -or $normalized -eq "hybrid") { return $normalized }
+
+    throw "RuntimeProfile '$Value' is not supported. Use 'rust-only' (default) or explicit 'hybrid'."
+}
+
+$RuntimeProfile = Normalize-RuntimeProfile $RuntimeProfile
 
 # --- 1. Resolve local files -------------------------------------------------
 
@@ -99,6 +121,21 @@ $InstallScript = Join-Path $scriptDir "Install-OnQdc.ps1"
 $ValidateScript = Join-Path $scriptDir "Validate-QdcDeployment.ps1"
 if (-not (Test-Path $InstallScript)) { throw "Install script missing: $InstallScript" }
 if (-not (Test-Path $ValidateScript)) { throw "Validate script missing: $ValidateScript" }
+
+if (-not $ValidatorPath) {
+    $cargoManifest = Join-Path $repoRoot "rs\Cargo.toml"
+    if (-not (Test-Path $cargoManifest)) {
+        throw "Rust workspace manifest not found: $cargoManifest"
+    }
+
+    Write-Host "Building Rust MSIX validator..." -ForegroundColor Yellow
+    & cargo build --manifest-path $cargoManifest -p easydict_msix_validate --release
+    if ($LASTEXITCODE -ne 0) { throw "Failed to build easydict_msix_validate" }
+
+    $ValidatorPath = Join-Path $repoRoot "rs\target\release\easydict_msix_validate.exe"
+}
+if (-not (Test-Path $ValidatorPath)) { throw "MSIX validator not found: $ValidatorPath" }
+$ValidatorPath = (Resolve-Path $ValidatorPath).Path
 
 # Read MSIX architecture from the embedded AppxManifest.xml
 function Get-MsixArchitecture {
@@ -123,6 +160,8 @@ Write-Host "=== Easydict QDC Deploy ===" -ForegroundColor Cyan
 Write-Host "Local:"
 Write-Host "  MSIX : $MsixPath  (${msixSize} MB, arch=$msixArch)" -ForegroundColor Gray
 Write-Host "  Cert : $CertPath" -ForegroundColor Gray
+Write-Host "  Runtime profile: $RuntimeProfile" -ForegroundColor Gray
+Write-Host "  Validator: $ValidatorPath" -ForegroundColor Gray
 Write-Host "Remote:"
 Write-Host "  Host : $User@${RemoteHost}:$Port" -ForegroundColor Gray
 if ($IdentityFile) {
@@ -260,6 +299,7 @@ $files = @(
     @{ Local = $CertPath;        Label = "cert" },
     @{ Local = $InstallScript;   Label = "install script" },
     @{ Local = $ValidateScript;  Label = "validate script" },
+    @{ Local = $ValidatorPath;   Label = "MSIX validator" },
     @{ Local = $MsixPath;        Label = "MSIX" }
 )
 foreach ($f in $files) {
@@ -277,8 +317,9 @@ Write-Host "[3/5] Installing on remote..." -ForegroundColor Yellow
 $remoteCertPath = Join-Path $RemoteStagingDir (Split-Path -Leaf $CertPath)
 $remoteMsixPath = Join-Path $RemoteStagingDir (Split-Path -Leaf $MsixPath)
 $remoteInstallScript = Join-Path $RemoteStagingDir (Split-Path -Leaf $InstallScript)
+$remoteValidatorPath = Join-Path $RemoteStagingDir (Split-Path -Leaf $ValidatorPath)
 
-$installFlags = ""
+$installFlags = " -RuntimeProfile '$RuntimeProfile' -ValidatorPath '$remoteValidatorPath'"
 if ($Machine)   { $installFlags += " -Machine" }
 if ($LaunchApp) { $installFlags += " -LaunchApp" }
 

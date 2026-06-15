@@ -4,7 +4,7 @@ use easydict_app::FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -28,7 +28,7 @@ const LOCAL_AI_ENVIRONMENT_OVERRIDE_KEYS: &[&str] = &[
 ];
 
 #[test]
-fn translate_command_rejects_retired_generic_worker_route() {
+fn translate_command_rejects_legacy_host_option_by_default() {
     let output = cli_with_missing_host("translate")
         .args([
             "--service",
@@ -43,11 +43,11 @@ fn translate_command_rejects_retired_generic_worker_route() {
         .output()
         .expect("CLI should run");
 
-    assert_retired_generic_route_error(&output);
+    assert_unknown_legacy_option(&output, "--host", "translate");
 }
 
 #[test]
-fn stream_command_rejects_retired_generic_worker_route() {
+fn stream_command_rejects_legacy_host_option_by_default() {
     let output = cli_with_missing_host("stream")
         .args([
             "--service",
@@ -63,11 +63,11 @@ fn stream_command_rejects_retired_generic_worker_route() {
         .output()
         .expect("CLI should run");
 
-    assert_retired_generic_route_error(&output);
+    assert_unknown_legacy_option(&output, "--host", "stream");
 }
 
 #[test]
-fn grammar_command_rejects_retired_generic_worker_route() {
+fn grammar_command_rejects_legacy_host_option_by_default() {
     let output = cli_with_missing_host("grammar")
         .args([
             "--service",
@@ -80,7 +80,7 @@ fn grammar_command_rejects_retired_generic_worker_route() {
         .output()
         .expect("CLI should run");
 
-    assert_retired_generic_route_error(&output);
+    assert_unknown_legacy_option(&output, "--host", "grammar");
 }
 
 #[test]
@@ -2776,316 +2776,64 @@ fn native_openai_cli_batch_succeeds_against_local_server_without_worker_wording(
 }
 
 #[test]
-fn local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-app");
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-settings");
-    write_stale_local_ai_payload_markers(&app_dir);
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("translate")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--from",
-            "en",
-            "--to",
-            "zh-Hans",
-            "--text",
-            "Hello",
-            "--app-dir",
-        ])
-        .arg(&app_dir)
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
-
-    assert!(!output.status.success());
-    let stderr = stderr(&output);
-    assert!(
-        stderr.contains("requires a Rust-native route"),
-        "stderr should require a Rust-native LocalAI route:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains(".NET Local AI workers"),
-        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("Local AI worker executable not found"),
-        "--app-dir should not probe retained worker paths:\n{stderr}"
-    );
-    assert!(
-        !stderr.to_ascii_lowercase().contains("compat host"),
-        "LocalAI CLI should not describe a compat host route:\n{stderr}"
-    );
-    assert!(
-        !stderr.to_ascii_lowercase().contains("dotnet"),
-        "LocalAI CLI should not describe stale dotnet payloads:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("Easydict.Workers"),
-        "LocalAI CLI should not describe retained worker payload names:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("hostfxr"),
-        "LocalAI CLI should not describe bundled runtime payloads:\n{stderr}"
-    );
-
-    let _ = fs::remove_dir_all(app_dir);
-    let _ = fs::remove_dir_all(settings_dir);
-}
-
-#[test]
-fn local_ai_stream_cli_host_hint_no_longer_enables_retained_worker_fallback() {
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-stream-host-settings");
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("stream")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--from",
-            "en",
-            "--to",
-            "zh-Hans",
-            "--text",
-            "Hello",
-            "--json",
+fn default_cli_rejects_legacy_retained_worker_options() {
+    for (mode, option, value) in [
+        ("translate", "--app-dir", "C:/Tools/Easydict"),
+        (
+            "stream",
             "--host",
             "C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe",
-        ])
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
+        ),
+        ("grammar", "--host-arg", "--trace"),
+        ("batch", "--app-dir", "C:/Tools/Easydict"),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_easydict_cli"));
+        command.arg(mode);
+        match mode {
+            "grammar" => {
+                command.args([
+                    "--service",
+                    "windows-local-ai",
+                    "--language",
+                    "en",
+                    "--text",
+                ]);
+                command.arg("I has a apple.");
+            }
+            "batch" => {
+                command.args([
+                    "--service",
+                    "windows-local-ai",
+                    "--from",
+                    "en",
+                    "--to",
+                    "zh-Hans",
+                    "--text",
+                ]);
+                command.arg("Hello\nGood morning");
+            }
+            _ => {
+                command.args([
+                    "--service",
+                    "windows-local-ai",
+                    "--from",
+                    "en",
+                    "--to",
+                    "zh-Hans",
+                    "--text",
+                    "Hello",
+                ]);
+            }
+        }
+        command
+            .arg(option)
+            .arg(value)
+            .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
+            .remove_local_ai_env_overrides();
 
-    assert_local_ai_cli_does_not_probe_retained_worker(&output, "stream --host");
-
-    let _ = fs::remove_dir_all(settings_dir);
-}
-
-#[test]
-fn local_ai_stream_cli_app_dir_no_longer_enables_retained_worker_fallback() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-stream-app");
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-stream-app-settings");
-    write_stale_local_ai_payload_markers(&app_dir);
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("stream")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--from",
-            "en",
-            "--to",
-            "zh-Hans",
-            "--text",
-            "Hello",
-            "--json",
-            "--app-dir",
-        ])
-        .arg(&app_dir)
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
-
-    assert_local_ai_cli_does_not_probe_retained_worker(&output, "stream --app-dir");
-    assert!(
-        stdout(&output).trim().is_empty(),
-        "stream --app-dir should not emit stdout when it fails before native chunks:\n{}",
-        stdout(&output)
-    );
-
-    let _ = fs::remove_dir_all(app_dir);
-    let _ = fs::remove_dir_all(settings_dir);
-}
-
-#[test]
-fn local_ai_grammar_cli_app_dir_no_longer_enables_retained_worker_fallback() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-grammar-app");
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-grammar-app-settings");
-    write_stale_local_ai_payload_markers(&app_dir);
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("grammar")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--language",
-            "en",
-            "--text",
-            "I has a apple.",
-            "--json",
-            "--app-dir",
-        ])
-        .arg(&app_dir)
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
-
-    assert_local_ai_cli_does_not_probe_retained_worker(&output, "grammar --app-dir");
-    assert!(
-        stdout(&output).trim().is_empty(),
-        "grammar --app-dir should not emit stdout when it fails before a native result:\n{}",
-        stdout(&output)
-    );
-
-    let _ = fs::remove_dir_all(app_dir);
-    let _ = fs::remove_dir_all(settings_dir);
-}
-
-#[test]
-fn local_ai_cli_host_and_app_dir_hints_are_legacy_noops_together() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-host-appdir-app");
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-host-appdir-settings");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("translate")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--from",
-            "en",
-            "--to",
-            "zh-Hans",
-            "--text",
-            "Hello",
-            "--host",
-            "C:/Tools/workers/localai/Easydict.Workers.LocalAi.exe",
-            "--host-arg",
-            "--trace",
-            "--app-dir",
-        ])
-        .arg(&app_dir)
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
-
-    assert_local_ai_cli_does_not_probe_retained_worker(&output, "translate --host --app-dir");
-
-    let _ = fs::remove_dir_all(app_dir);
-    let _ = fs::remove_dir_all(settings_dir);
-}
-
-#[test]
-fn local_ai_batch_cli_app_dir_no_longer_enables_retained_worker_fallback() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-batch-app");
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-batch-settings");
-    write_stale_local_ai_payload_markers(&app_dir);
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("batch")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--from",
-            "en",
-            "--to",
-            "zh-Hans",
-            "--text",
-            "Hello\nGood morning",
-            "--app-dir",
-        ])
-        .arg(&app_dir)
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
-
-    assert_local_ai_cli_does_not_probe_retained_worker(&output, "batch --app-dir");
-
-    let _ = fs::remove_dir_all(app_dir);
-    let _ = fs::remove_dir_all(settings_dir);
-}
-
-#[test]
-fn local_ai_cli_default_rs_profile_disables_packaged_worker_fallback() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-default-rust-only-app");
-    let settings_dir = unique_temp_dir("easydict-cli-local-ai-default-rust-only-settings");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
-    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
-        .arg("translate")
-        .args([
-            "--service",
-            "windows-local-ai",
-            "--from",
-            "en",
-            "--to",
-            "zh-Hans",
-            "--text",
-            "Hello",
-            "--app-dir",
-        ])
-        .arg(&app_dir)
-        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env_remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE)
-        .env(
-            FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-            "__missing_foundry_cli__.cmd",
-        )
-        .remove_local_ai_env_overrides()
-        .output()
-        .expect("CLI should run");
-
-    assert!(!output.status.success());
-    let stderr = stderr(&output);
-    assert!(
-        stderr.contains("requires a Rust-native route"),
-        "stderr should report the default Rust-only worker policy:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains(".NET Local AI workers"),
-        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("Local AI worker executable not found"),
-        "default rs profile should not probe retained worker paths:\n{stderr}"
-    );
-
-    let _ = fs::remove_dir_all(app_dir);
-    let _ = fs::remove_dir_all(settings_dir);
+        let output = command.output().expect("CLI should run");
+        assert_unknown_legacy_option(&output, option, mode);
+    }
 }
 
 #[test]
@@ -3135,7 +2883,7 @@ fn local_ai_cli_without_app_dir_fails_native_only_without_worker_lookup() {
 }
 
 #[test]
-fn local_ai_cli_host_hint_no_longer_enables_retained_worker_fallback() {
+fn local_ai_cli_host_hint_is_rejected_by_default() {
     let settings_dir = unique_temp_dir("easydict-cli-local-ai-host-disabled-settings");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
 
@@ -3163,30 +2911,14 @@ fn local_ai_cli_host_hint_no_longer_enables_retained_worker_fallback() {
         .output()
         .expect("CLI should run");
 
-    assert!(!output.status.success());
-    let stderr = stderr(&output);
-    assert!(
-        stderr.contains("requires a Rust-native route"),
-        "stderr should require a Rust-native LocalAI route:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains(".NET Local AI workers"),
-        "default CLI errors should not expose retained .NET worker details:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("Local AI worker executable not found"),
-        "legacy --host should not probe retained worker paths:\n{stderr}"
-    );
-    assert!(!stderr.to_ascii_lowercase().contains("compat host"));
+    assert_unknown_legacy_option(&output, "--host", "translate --host");
 
     let _ = fs::remove_dir_all(settings_dir);
 }
 
 #[test]
 fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
-    let app_dir = unique_temp_dir("easydict-cli-local-ai-disabled-worker-app");
     let settings_dir = unique_temp_dir("easydict-cli-local-ai-disabled-worker-settings");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
 
     let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
@@ -3200,9 +2932,7 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
             "zh-Hans",
             "--text",
             "Hello",
-            "--app-dir",
         ])
-        .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid")
         .env(DISABLE_LOCAL_AI_WORKER_ENVIRONMENT_VARIABLE, "1")
@@ -3233,16 +2963,13 @@ fn local_ai_cli_fallback_honors_disabled_retained_worker_policy() {
         "disabled retained worker policy should not describe a compat host route:\n{stderr}"
     );
 
-    let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);
 }
 
 #[test]
 fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
-    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-app");
     let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-settings");
     let fake_foundry_dir = unique_temp_dir("easydict-cli-fake-foundry");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
     fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
     let marker_path = fake_foundry_dir.join("foundry-calls.txt");
@@ -3267,9 +2994,7 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
             "zh-Hans",
             "--text",
             "Hello",
-            "--app-dir",
         ])
-        .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .remove_local_ai_env_overrides()
         .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
@@ -3294,17 +3019,14 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
         "Foundry probe should not describe a compat host route:\n{stderr}"
     );
 
-    let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);
     let _ = fs::remove_dir_all(fake_foundry_dir);
 }
 
 #[test]
 fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_retained_worker_before_spawn() {
-    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-bad-override-app");
     let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-bad-override-settings");
     let fake_foundry_dir = unique_temp_dir("easydict-cli-bad-foundry-override");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
     fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
     let marker_path = fake_foundry_dir.join("retained-worker-cli-was-spawned.txt");
@@ -3329,9 +3051,7 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_retained_worker_befo
             "zh-Hans",
             "--text",
             "Hello",
-            "--app-dir",
         ])
-        .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .remove_local_ai_env_overrides()
         .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
@@ -3348,17 +3068,14 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_retained_worker_befo
     assert!(!stderr.contains("Local AI worker executable not found"));
     assert!(!stderr.to_ascii_lowercase().contains("compat host"));
 
-    let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);
     let _ = fs::remove_dir_all(fake_foundry_dir);
 }
 
 #[test]
 fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_dotnet_cmd_before_spawn() {
-    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-dotnet-cmd-app");
     let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-dotnet-cmd-settings");
     let fake_foundry_dir = unique_temp_dir("easydict-cli-dotnet-cmd-override");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
     fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
     let marker_path = fake_foundry_dir.join("dotnet-cmd-was-spawned.txt");
@@ -3383,9 +3100,7 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_dotnet_cmd_before_sp
             "zh-Hans",
             "--text",
             "Hello",
-            "--app-dir",
         ])
-        .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .remove_local_ai_env_overrides()
         .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
@@ -3404,16 +3119,13 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_dotnet_cmd_before_sp
     assert!(!stderr.contains("Local AI worker executable not found"));
     assert!(!stderr.to_ascii_lowercase().contains("compat host"));
 
-    let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);
     let _ = fs::remove_dir_all(fake_foundry_dir);
 }
 
 #[test]
 fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_cmd_trampoline_before_spawn() {
-    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-cmd-trampoline-app");
     let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-cmd-trampoline-settings");
-    fs::create_dir_all(&app_dir).expect("app directory should be created");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
 
     let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
@@ -3427,9 +3139,7 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_cmd_trampoline_befor
             "zh-Hans",
             "--text",
             "Hello",
-            "--app-dir",
         ])
-        .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
         .remove_local_ai_env_overrides()
         .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
@@ -3447,7 +3157,6 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_cmd_trampoline_befor
     assert!(!stderr.contains("Local AI worker executable not found"));
     assert!(!stderr.to_ascii_lowercase().contains("compat host"));
 
-    let _ = fs::remove_dir_all(app_dir);
     let _ = fs::remove_dir_all(settings_dir);
 }
 
@@ -3843,28 +3552,6 @@ fn read_http_request(stream: &std::net::TcpStream) -> (String, String) {
     (headers, String::from_utf8(body).unwrap())
 }
 
-fn assert_retired_generic_route_error(output: &Output) {
-    assert!(
-        !output.status.success(),
-        "CLI should fail without retired generic worker route\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
-    );
-    let stderr = stderr(output);
-    assert!(
-        stderr.contains("No Rust-native quick translate route"),
-        "stderr should report retired generic route:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("worker executable not found"),
-        "retired generic route should not spawn the missing worker:\n{stderr}"
-    );
-    assert!(
-        stdout(output).trim().is_empty(),
-        "stdout should stay empty for the unsupported route"
-    );
-}
-
 fn assert_no_retained_worker_wording(stdout: &str, stderr: &str, context: &str) {
     for forbidden in [
         "CompatHost",
@@ -3881,41 +3568,33 @@ fn assert_no_retained_worker_wording(stdout: &str, stderr: &str, context: &str) 
     }
 }
 
-fn assert_local_ai_cli_does_not_probe_retained_worker(output: &Output, context: &str) {
+fn assert_unknown_legacy_option(output: &Output, option: &str, context: &str) {
     assert!(
         !output.status.success(),
-        "{context} should fail locally\nstdout:\n{}\nstderr:\n{}",
+        "{context} should reject legacy retained-worker option {option}\nstdout:\n{}\nstderr:\n{}",
         stdout(output),
         stderr(output)
     );
     let stderr = stderr(output);
     assert!(
-        stderr.contains("requires a Rust-native route"),
-        "{context} should require a Rust-native LocalAI route:\n{stderr}"
+        stderr.contains(&format!("unknown option: {option}")),
+        "{context} should fail in the CLI parser before route selection:\n{stderr}"
     );
+    for forbidden in [
+        "requires a Rust-native route",
+        "Local AI worker executable not found",
+        "CompatHost",
+        "Easydict.Workers",
+        "hostfxr",
+    ] {
+        assert!(
+            !stderr.contains(forbidden),
+            "{context} should reject {option} before retained-worker/runtime wording appears: {forbidden}\n{stderr}"
+        );
+    }
     assert!(
-        !stderr.contains(".NET Local AI workers"),
-        "{context} should not expose retained .NET worker details:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("Local AI worker executable not found"),
-        "{context} should not probe retained LocalAI worker paths:\n{stderr}"
-    );
-    assert!(
-        !stderr.to_ascii_lowercase().contains("compat host"),
-        "{context} should not describe a compat host route:\n{stderr}"
-    );
-    assert!(
-        !stderr.to_ascii_lowercase().contains("dotnet"),
-        "{context} should not describe stale dotnet payloads:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("Easydict.Workers"),
-        "{context} should not describe retained worker payload names:\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("hostfxr"),
-        "{context} should not describe bundled runtime payloads:\n{stderr}"
+        stdout(output).trim().is_empty(),
+        "{context} should not emit stdout when rejecting {option}"
     );
 }
 
@@ -3933,38 +3612,6 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
         .expect("system clock should be after unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("{prefix}-{}-{nanos}", std::process::id()))
-}
-
-fn write_stale_local_ai_payload_markers(app_dir: &Path) {
-    let worker_dir = app_dir.join("workers").join("localai");
-    let dotnet_host_dir = app_dir.join("dotnet").join("host").join("fxr");
-    let dotnet_shared_dir = app_dir
-        .join("dotnet")
-        .join("shared")
-        .join("Microsoft.NETCore.App");
-    fs::create_dir_all(&worker_dir).expect("stale LocalAI worker directory should be created");
-    fs::create_dir_all(&dotnet_host_dir).expect("stale dotnet host directory should be created");
-    fs::create_dir_all(&dotnet_shared_dir)
-        .expect("stale dotnet shared runtime directory should be created");
-    fs::write(
-        app_dir.join("Easydict.CompatHost.exe"),
-        b"stale compat host marker",
-    )
-    .expect("stale CompatHost marker should be written");
-    fs::write(
-        worker_dir.join("Easydict.Workers.LocalAi.exe"),
-        b"stale local ai worker marker",
-    )
-    .expect("stale LocalAI worker marker should be written");
-    fs::write(app_dir.join("dotnet").join("dotnet.exe"), b"stale dotnet")
-        .expect("stale dotnet marker should be written");
-    fs::write(dotnet_host_dir.join("hostfxr.dll"), b"stale hostfxr")
-        .expect("stale hostfxr marker should be written");
-    fs::write(
-        dotnet_shared_dir.join("System.Private.CoreLib.dll"),
-        b"stale corelib",
-    )
-    .expect("stale corelib marker should be written");
 }
 
 trait LocalAiEnvCommandExt {

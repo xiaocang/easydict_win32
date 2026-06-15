@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 
 use easydict_packager::{
-    build_rust_helpers, pack_rs_portable, validate_rs_portable_payload, zip_directory,
-    BuildRustHelpersOptions, PackRustPortableOptions, PackageBrowserExtensionOptions,
-    PackageRuntimeProfile, ValidateRustPortableOptions, ZipDirectoryOptions,
+    build_rust_helpers, pack_rs_portable, validate_rs_portable_payload, BuildRustHelpersOptions,
+    PackRustPortableOptions, PackageBrowserExtensionOptions, ValidateRustPortableOptions,
 };
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
-use easydict_packager::{download_and_extract_dotnet_runtime, ExtractDotnetRuntimeOptions};
+use easydict_packager::{
+    download_and_extract_dotnet_runtime, zip_directory, ExtractDotnetRuntimeOptions,
+    PackageRuntimeProfile, ZipDirectoryOptions,
+};
 
 fn main() {
     std::process::exit(run(std::env::args().skip(1).collect()));
@@ -19,6 +21,7 @@ fn run(args: Vec<String>) -> i32 {
     }
 
     match args[0].as_str() {
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         "zip-directory" => run_zip_directory(&args[1..]),
         #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         "extract-dotnet-runtime" => run_extract_dotnet_runtime(&args[1..]),
@@ -264,7 +267,9 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
     let mut platform = "x64".to_string();
     let mut configuration = "Release".to_string();
     let mut output_dir = None;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     let mut include_legacy_registrar_alias = false;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     let mut runtime_profile = None;
 
     let mut index = 0;
@@ -295,8 +300,19 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
                 output_dir = Some(PathBuf::from(value));
             }
             "--include-legacy-registrar-alias" => {
-                include_legacy_registrar_alias = true;
+                #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+                {
+                    eprintln!(
+                        "error: --include-legacy-registrar-alias requires the hybrid-dotnet-runtime-packaging feature"
+                    );
+                    return 2;
+                }
+                #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+                {
+                    include_legacy_registrar_alias = true;
+                }
             }
+            #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
             "--runtime-profile" => {
                 let Some(value) = read_value(args, &mut index, "--runtime-profile") else {
                     return 2;
@@ -336,7 +352,9 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
         platform,
         configuration,
         output_dir: output_dir.clone(),
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         include_legacy_registrar_alias,
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         runtime_profile,
     }) {
         Ok(outcome) => {
@@ -458,6 +476,7 @@ fn run_extract_dotnet_runtime(args: &[String]) -> i32 {
     }
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn run_zip_directory(args: &[String]) -> i32 {
     let mut source_dir = None;
     let mut destination_zip = None;
@@ -552,8 +571,7 @@ fn print_usage() {
 #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
 fn packager_usage_lines() -> &'static [&'static str] {
     &[
-        "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
-        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir> [--runtime-profile hybrid] [--include-legacy-registrar-alias]",
+        "Usage: easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir>    # Rust helper executables only; legacy registrar alias requires hybrid feature",
         "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
         "       easydict_packager validate-rs-portable --package <dir-or-zip>",
         "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
@@ -563,9 +581,9 @@ fn packager_usage_lines() -> &'static [&'static str] {
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn packager_usage_lines() -> &'static [&'static str] {
     &[
-        "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable",
+        "Usage: easydict_packager zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # legacy/hybrid ZIP helper only; never used by rs portable",
         "       easydict_packager extract-dotnet-runtime --rid win-x64|win-arm64 --output-dir <dir> [--version <ver>] --runtime-profile hybrid    # hybrid/coexistence packaging only; never used by rs portable",
-        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir> [--runtime-profile hybrid] [--include-legacy-registrar-alias]",
+        "       easydict_packager build-rust-helpers --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release --output-dir <dir> [--runtime-profile hybrid --include-legacy-registrar-alias]    # legacy/hybrid alias only; never used by rs portable",
         "       easydict_packager package-browser-extension --extension-dir <dir> [--target Chrome|Firefox|All] [--output-dir <dir>]",
         "       easydict_packager validate-rs-portable --package <dir-or-zip>",
         "       easydict_packager pack-rs-portable --workspace <rs-dir> --platform x64|x86|arm64 --configuration Debug|Release [--output-root <dir>] [--package-version <ver>] [--no-zip]",
@@ -582,6 +600,7 @@ fn bytes_to_kb(bytes: u64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use easydict_packager::PackageRuntimeProfile;
     use std::fs;
     use std::path::Path;
     #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
@@ -675,8 +694,59 @@ mod tests {
             "default packager usage must not expose .NET runtime extraction:\n{usage}"
         );
         assert!(
+            !usage.contains("zip-directory"),
+            "default packager usage must not expose the legacy/hybrid standalone ZIP helper:\n{usage}"
+        );
+        assert!(
             usage.contains("pack-rs-portable --workspace"),
             "default usage should keep the rs portable command visible:\n{usage}"
+        );
+        assert!(
+            !usage.contains("--include-legacy-registrar-alias"),
+            "default usage must not expose the legacy BrowserHostRegistrar alias flag:\n{usage}"
+        );
+        assert!(
+            !usage.contains("--runtime-profile"),
+            "default helper usage must not expose hybrid runtime-profile knobs:\n{usage}"
+        );
+        assert!(
+            usage.contains("legacy registrar alias requires hybrid feature"),
+            "default usage should explain that the legacy alias is hybrid-feature-only:\n{usage}"
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    fn default_build_rejects_legacy_registrar_alias_flag_before_workspace() {
+        let code = run(vec![
+            "build-rust-helpers".to_string(),
+            "--include-legacy-registrar-alias".to_string(),
+        ]);
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    fn default_build_rejects_runtime_profile_flag_before_workspace() {
+        let code = run(vec![
+            "build-rust-helpers".to_string(),
+            "--runtime-profile".to_string(),
+            "hybrid".to_string(),
+        ]);
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    fn default_build_rejects_legacy_zip_directory_command_before_args() {
+        let code = run(vec!["zip-directory".to_string()]);
+
+        assert_eq!(code, 2);
+        assert!(
+            !packager_usage_lines().join("\n").contains("zip-directory"),
+            "default usage must keep zip-directory hidden"
         );
     }
 
@@ -700,12 +770,20 @@ mod tests {
             "usage should steer rs portable callers away from .NET runtime extraction:\n{usage}"
         );
         assert!(
+            usage.contains("[--runtime-profile hybrid --include-legacy-registrar-alias]"),
+            "hybrid-feature usage should keep the legacy alias behind the explicit hybrid profile pair:\n{usage}"
+        );
+        assert!(
+            usage.contains("legacy/hybrid alias only; never used by rs portable"),
+            "hybrid-feature usage should label the legacy alias as non-portable:\n{usage}"
+        );
+        assert!(
             !usage.contains("[--runtime-profile hybrid|rust-only]"),
             "usage must not suggest rust-only can extract .NET runtime:\n{usage}"
         );
         assert!(
-            usage.contains("zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # generic diagnostics / legacy-hybrid ZIP helper; not used by rs portable"),
-            "usage should steer rs portable callers toward pack-rs-portable instead of generic zip-directory:\n{usage}"
+            usage.contains("zip-directory --source <dir> --destination <zip> [--exclude-extension <ext> ...]    # legacy/hybrid ZIP helper only; never used by rs portable"),
+            "hybrid-feature usage should label zip-directory as non-portable legacy packaging:\n{usage}"
         );
     }
 
@@ -746,6 +824,12 @@ mod tests {
         assert!(
             readme.contains("Hybrid-only retained runtime checks:"),
             "README should keep .NET runtime extraction in a separate hybrid-only section"
+        );
+        assert!(
+            readme.contains(
+                "cargo run -p easydict_packager --features hybrid-dotnet-runtime-packaging -- zip-directory"
+            ),
+            "README should keep standalone zip-directory behind the hybrid packager feature"
         );
         assert!(
             readme.contains("Standalone packaging helper diagnostics:"),

@@ -17,6 +17,8 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  EASYDICT_RUNTIME_PROFILE: rust-only
+  RUNTIME_PROFILE: rust-only
 
 jobs:
   pr-memory-gate:
@@ -45,7 +47,7 @@ jobs:
 
       - name: Restore WinUI app
         working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64 -p:BuildWorkerOutputs=false
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
 
       - name: Publish WinUI app
         working-directory: dotnet
@@ -58,6 +60,8 @@ jobs:
             --output ./publish/x64 `
             -p:Platform=x64 `
             -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 

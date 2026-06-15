@@ -24,6 +24,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$MsixPath,
 
+    [string]$RuntimeProfile = "rust-only",
+
+    [string]$ValidatorPath = "",
+
     [string]$PackageName = "xiaocang.EasydictforWindows",
 
     [switch]$LaunchApp
@@ -31,20 +35,98 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Normalize-RuntimeProfile {
+    param([string]$Value)
+
+    $normalized = if ([string]::IsNullOrWhiteSpace($Value)) {
+        "rust-only"
+    } else {
+        $Value.Trim().ToLowerInvariant().Replace("_", "-")
+    }
+
+    if ($normalized -eq "rustonly") { return "rust-only" }
+    if ($normalized -eq "rust-only" -or $normalized -eq "hybrid") { return $normalized }
+
+    throw "RuntimeProfile '$Value' is not supported. Use 'rust-only' (default) or explicit 'hybrid'."
+}
+
+function Find-CargoManifest {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    $candidates = @(
+        (Join-Path $scriptDir "..\..\..\rs\Cargo.toml"),
+        (Join-Path (Get-Location).Path "rs\Cargo.toml")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    return $null
+}
+
+function Invoke-MsixValidator {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Profile
+    )
+
+    $validatorArgs = @(
+        $Path,
+        "--runtime-profile",
+        $Profile,
+        "--allow-unsigned"
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ValidatorPath)) {
+        if (-not (Test-Path $ValidatorPath)) {
+            throw "MSIX validator not found: $ValidatorPath"
+        }
+
+        & $ValidatorPath @validatorArgs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        return
+    }
+
+    $cargoManifest = Find-CargoManifest
+    if (-not $cargoManifest) {
+        throw "MSIX validator unavailable. Pass -ValidatorPath or run from a checkout with rs\Cargo.toml."
+    }
+
+    & cargo run --manifest-path $cargoManifest -p easydict_msix_validate -- @validatorArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+$RuntimeProfile = Normalize-RuntimeProfile $RuntimeProfile
+
 Write-Host "=== Easydict QDC Remote Install ===" -ForegroundColor Cyan
 Write-Host "Cert : $CertPath"
 Write-Host "Msix : $MsixPath"
+Write-Host "Runtime profile : $RuntimeProfile"
+if ($ValidatorPath) {
+    Write-Host "Validator : $ValidatorPath"
+}
 Write-Host "Name : $PackageName"
 Write-Host ""
 
 if (-not (Test-Path $CertPath)) { throw "Cert not found: $CertPath" }
 if (-not (Test-Path $MsixPath)) { throw "MSIX not found: $MsixPath" }
 
-# Step 1: Import cert
+# Step 1: Validate MSIX
+Write-Host "[1/5] Validating MSIX runtime payload..." -ForegroundColor Yellow
+Invoke-MsixValidator -Path $MsixPath -Profile $RuntimeProfile
+Write-Host "  MSIX validation succeeded" -ForegroundColor Green
+Write-Host ""
+
+# Step 2: Import cert
 # Add-AppxPackage requires the cert in LocalMachine\TrustedPeople (or LM\Root).
 # CurrentUser\TrustedPeople is NOT sufficient -- the deployment service runs
 # under a different security context and consults the machine store.
-Write-Host "[1/4] Importing certificate to LocalMachine\TrustedPeople..." -ForegroundColor Yellow
+Write-Host "[2/5] Importing certificate to LocalMachine\TrustedPeople..." -ForegroundColor Yellow
 try {
     $imported = Import-Certificate `
         -FilePath $CertPath `
@@ -64,13 +146,13 @@ try {
 }
 Write-Host ""
 
-# Step 2: Ensure WindowsAppRuntime framework dep is present
+# Step 3: Ensure WindowsAppRuntime framework dep is present
 # The MSIX declares PackageDependency on Microsoft.WindowsAppRuntime.2 >= 2.0.1.0.
 # Fresh QDC devices typically don't ship with it -- Add-AppxPackage will fail
 # with HRESULT 0x80073CF3 if missing. winget covers the install idempotently when
 # it works; on SSH-only sessions winget itself often refuses to launch
 # ("Access is denied") because App Installer isn't initialized for this logon.
-Write-Host "[2/4] Ensuring Microsoft.WindowsAppRuntime.2 (2.0.x) is installed..." -ForegroundColor Yellow
+Write-Host "[3/5] Ensuring Microsoft.WindowsAppRuntime.2 (2.0.x) is installed..." -ForegroundColor Yellow
 $wingetId = "Microsoft.WindowsAppRuntime.2.0"
 # Check both user-scope (Get-AppxPackage) and machine-scope (Get-AppxProvisionedPackage).
 # If a sysadmin installed via RDP with a different user, the package may be provisioned
@@ -105,7 +187,7 @@ if ($userRuntime) {
 }
 Write-Host ""
 
-# Step 3: Remove existing package (best-effort)
+# Step 4: Remove existing package (best-effort)
 # Two scopes to clear:
 #   (a) user-scope registration (Get/Remove-AppxPackage)
 #   (b) machine-scope provisioned copy (Get/Remove-AppxProvisionedPackage)
@@ -114,7 +196,7 @@ Write-Host ""
 # behind. A subsequent Add-AppxPackage of a rebuild with the same version then
 # fails 0x80073CFB ("same identity, different contents") because the
 # provisioned copy has different bits.
-Write-Host "[3/4] Removing prior installation (if any)..." -ForegroundColor Yellow
+Write-Host "[4/5] Removing prior installation (if any)..." -ForegroundColor Yellow
 $existing = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
 if ($existing) {
     foreach ($p in $existing) {
@@ -144,7 +226,7 @@ if ($provisioned) {
 }
 Write-Host ""
 
-# Step 4: Install
+# Step 5: Install
 # Try the clean path first (Add-AppxPackage, user scope). On SSH sessions that
 # is a non-interactive logon, PLM (Package Lifecycle Manager) refuses to init
 # and Add-AppxPackage fails with HRESULT 0x80070005 even when Developer Mode
@@ -152,7 +234,7 @@ Write-Host ""
 # (machine scope, doesn't need PLM) + Add-AppxPackage -Register (binds the
 # staged package to the current user; reports a spurious 0x80070005 but
 # Get-AppxPackage afterwards shows Status=Ok).
-Write-Host "[4/4] Installing MSIX..." -ForegroundColor Yellow
+Write-Host "[5/5] Installing MSIX..." -ForegroundColor Yellow
 $installError = $null
 Add-AppxPackage -Path $MsixPath `
     -ForceApplicationShutdown -ForceUpdateFromAnyVersion `

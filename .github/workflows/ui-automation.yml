@@ -17,6 +17,8 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  EASYDICT_RUNTIME_PROFILE: rust-only
+  RUNTIME_PROFILE: rust-only
 
 jobs:
   # ── Job 1: Shared Build & Package ──
@@ -40,7 +42,7 @@ jobs:
 
       - name: Restore dependencies
         working-directory: dotnet
-        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64 -p:BuildWorkerOutputs=false
+        run: dotnet restore src/Easydict.WinUI/Easydict.WinUI.csproj --runtime win-x64 -p:BuildWorkerOutputs=false -p:EnableInProcLongDocFallback=false -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}
 
       - name: Publish WinUI App (x64)
         working-directory: dotnet
@@ -53,6 +55,8 @@ jobs:
             --output ./publish/x64 `
             -p:Platform=x64 `
             -p:BuildWorkerOutputs=false `
+            -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:PublishTrimmed=false `
             -p:WindowsAppSDKSelfContained=false
 
@@ -125,6 +129,14 @@ jobs:
           dotnet/scripts/Fix-MsixMinVersion.ps1 `
             -MsixPath "dotnet/msix/Easydict-ui-test-x64.msix"
 
+      - name: Validate MSIX (identity, MinVersion, runtime payload)
+        shell: pwsh
+        run: |
+          cargo run --manifest-path rs/Cargo.toml -p easydict_msix_validate -- `
+            "dotnet/msix/Easydict-ui-test-x64.msix" `
+            --runtime-profile "${{ env.RUNTIME_PROFILE }}" `
+            --allow-unsigned
+
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
@@ -178,7 +190,8 @@ jobs:
             --configuration Release `
             -p:Platform=x64 `
             -p:BuildWorkerOutputs=false `
-            -p:EnableInProcLongDocFallback=true `
+            -p:EnableInProcLongDocFallback=false `
+            -p:RuntimeProfile=${{ env.RUNTIME_PROFILE }} `
             -p:WindowsAppSdkAutoInitialize=true
 
       - name: Run WinUI Unit Tests
@@ -318,6 +331,11 @@ jobs:
           $msixPath = "dotnet/msix/Easydict-ui-test-x64.msix"
           $extractDir = "dotnet/msix/extracted"
           Write-Host "Installing MSIX: $msixPath"
+
+          cargo run --manifest-path rs/Cargo.toml -p easydict_msix_validate -- `
+            $msixPath `
+            --runtime-profile "${{ env.RUNTIME_PROFILE }}" `
+            --allow-unsigned
 
           # Remove any previous installation
           $existing = Get-AppxPackage -Name "xiaocang.EasydictforWindows" -ErrorAction SilentlyContinue

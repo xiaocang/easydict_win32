@@ -23,12 +23,24 @@ $repoRoot = Split-Path -Parent $dotnetDir
 $rustWorkspace = Join-Path $repoRoot "rs"
 $cargoManifest = Join-Path $rustWorkspace "Cargo.toml"
 
+$packagerFeatureArguments = @()
+if ($IncludeLegacyRegistrarAlias) {
+    if ($RuntimeProfile -notin @("Hybrid", "hybrid")) {
+        throw "Build-RustHelpers.ps1 requires -RuntimeProfile Hybrid when -IncludeLegacyRegistrarAlias is used. The first rs release portable helper build must not generate BrowserHostRegistrar.exe."
+    }
+    $packagerFeatureArguments += @(
+        "--features",
+        "hybrid-dotnet-runtime-packaging"
+    )
+}
+
 $arguments = @(
     "run",
     "--manifest-path",
     $cargoManifest,
     "-p",
-    "easydict_packager",
+    "easydict_packager"
+) + $packagerFeatureArguments + @(
     "--",
     "build-rust-helpers",
     "--workspace",
@@ -42,9 +54,6 @@ $arguments = @(
 )
 
 if ($IncludeLegacyRegistrarAlias) {
-    if ($RuntimeProfile -notin @("Hybrid", "hybrid")) {
-        throw "Build-RustHelpers.ps1 requires -RuntimeProfile Hybrid when -IncludeLegacyRegistrarAlias is used. The first rs release portable helper build must not generate BrowserHostRegistrar.exe."
-    }
     $arguments += @(
         "--runtime-profile",
         $RuntimeProfile

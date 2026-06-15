@@ -138,7 +138,7 @@ if ($CreateZip) {
         Remove-Item $zipPath -Force
     }
 
-    cargo run --manifest-path $CargoManifest -p easydict_packager -- `
+    cargo run --manifest-path $CargoManifest -p easydict_packager --features hybrid-dotnet-runtime-packaging -- `
         zip-directory `
         --source $PublishDir `
         --destination $zipPath

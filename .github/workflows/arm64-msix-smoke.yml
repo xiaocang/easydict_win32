@@ -34,10 +34,10 @@ jobs:
         run: |
           $profile = "${{ env.RUNTIME_PROFILE }}".Trim().ToLowerInvariant().Replace("_", "-")
           if ($profile -eq "rust-only" -or $profile -eq "rustonly") {
-            throw "The first rs release is portable-only. Use rs/scripts/Package-Portable.ps1 instead of the dotnet/MSIX smoke path with runtime_profile=${{ env.RUNTIME_PROFILE }}."
+            throw "The first rs release is portable-only. Use easydict_packager pack-rs-portable instead of the dotnet/MSIX smoke path with runtime_profile=${{ env.RUNTIME_PROFILE }}."
           }
           if ($profile -ne "hybrid") {
-            throw "runtime_profile=${{ env.RUNTIME_PROFILE }} is not supported for dotnet/MSIX smoke. Use explicit hybrid for retained-worker coexistence, or rs/scripts/Package-Portable.ps1 for the rs package."
+            throw "runtime_profile=${{ env.RUNTIME_PROFILE }} is not supported for dotnet/MSIX smoke. Use explicit hybrid for retained-worker coexistence, or easydict_packager pack-rs-portable for the rs package."
           }
           "RUNTIME_PROFILE=hybrid" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "RETAINED_WORKERS_ENABLED=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append

@@ -164,7 +164,18 @@ function Open-Bitmap {
         return $null
     }
 
-    [System.Drawing.Bitmap]::FromFile((Resolve-Path -LiteralPath $Path).Path)
+    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Path).Path)
+    $stream = [System.IO.MemoryStream]::new($bytes)
+    $image = $null
+    try {
+        $image = [System.Drawing.Bitmap]::FromStream($stream)
+        return [System.Drawing.Bitmap]::new($image)
+    } finally {
+        if ($null -ne $image) {
+            $image.Dispose()
+        }
+        $stream.Dispose()
+    }
 }
 
 function Measure-BitmapRegion {
@@ -705,6 +716,7 @@ function Find-ExpandedHeaderBoundsByChevron {
     $scanRight = [int][Math]::Round($Bitmap.Width * 0.97)
     $scanTop = [int][Math]::Round(70.0 * $Scale)
     $scanBottom = [Math]::Max($scanTop + 1, $Bitmap.Height - [int][Math]::Round(48.0 * $Scale))
+    $darkLumaThreshold = 150.0
     $rows = New-Object System.Collections.Generic.List[object]
 
     for ($y = $scanTop; $y -lt $scanBottom; $y++) {
@@ -715,7 +727,7 @@ function Find-ExpandedHeaderBoundsByChevron {
         for ($x = $scanLeft; $x -lt $scanRight; $x++) {
             $pixel = $Bitmap.GetPixel($x, $y)
             $luma = (0.2126 * $pixel.R) + (0.7152 * $pixel.G) + (0.0722 * $pixel.B)
-            if ($luma -lt 80.0) {
+            if ($luma -lt $darkLumaThreshold) {
                 $count++
                 $sumX += $x
                 $minX = [Math]::Min($minX, $x)
@@ -801,6 +813,49 @@ function Find-ExpandedHeaderBoundsByChevron {
     }
 
     if ($upChevrons.Count -eq 0) {
+        foreach ($cluster in $clusters) {
+            $clusterRows = @($cluster)
+            if ($clusterRows.Count -eq 0) {
+                continue
+            }
+
+            $yStart = [int]($clusterRows | Select-Object -First 1).y
+            $yEnd = [int]($clusterRows | Select-Object -Last 1).y
+            $height = $yEnd - $yStart + 1
+            $totalDark = [int](($clusterRows | Measure-Object -Property count -Sum).Sum)
+            $minX = [int](($clusterRows | Measure-Object -Property minX -Minimum).Minimum)
+            $maxX = [int](($clusterRows | Measure-Object -Property maxX -Maximum).Maximum)
+            $width = $maxX - $minX + 1
+            if ($height -lt 6 -or $height -gt 14 -or $width -lt 8 -or $width -gt 32 -or $totalDark -lt 18 -or $totalDark -gt 140) {
+                continue
+            }
+
+            $topLimit = $yStart + [Math]::Max(1, [int][Math]::Floor($height / 3.0))
+            $bottomLimit = $yEnd - [Math]::Max(1, [int][Math]::Floor($height / 3.0))
+            $topRows = @($clusterRows | Where-Object { [int]$_.y -le $topLimit })
+            $bottomRows = @($clusterRows | Where-Object { [int]$_.y -ge $bottomLimit })
+            if ($topRows.Count -eq 0 -or $bottomRows.Count -eq 0) {
+                continue
+            }
+
+            $topAverageWidth = [double](@($topRows | ForEach-Object { [int]$_.maxX - [int]$_.minX + 1 }) | Measure-Object -Average).Average
+            $bottomAverageWidth = [double](@($bottomRows | ForEach-Object { [int]$_.maxX - [int]$_.minX + 1 }) | Measure-Object -Average).Average
+            if (($bottomAverageWidth - $topAverageWidth) -lt 1.0) {
+                continue
+            }
+
+            $upChevrons.Add([pscustomobject]@{
+                centerY = ($yStart + $yEnd) / 2.0
+                yStart = $yStart
+                yEnd = $yEnd
+                minX = $minX
+                maxX = $maxX
+                totalDark = $totalDark
+            }) | Out-Null
+        }
+    }
+
+    if ($upChevrons.Count -eq 0) {
         return $null
     }
 
@@ -817,6 +872,116 @@ function Find-ExpandedHeaderBoundsByChevron {
         Width = $width
         Height = [int][Math]::Round(48.0 * $Scale)
     }
+}
+
+function Find-ExpandedHeaderBoundsByCompactChevron {
+    param(
+        [System.Drawing.Bitmap]$Bitmap,
+        [double]$Scale = 1.0
+    )
+
+    if ($Scale -le 0) {
+        $Scale = 1.0
+    }
+
+    $scanLeft = [int][Math]::Round($Bitmap.Width * 0.88)
+    $scanRight = [int][Math]::Round($Bitmap.Width * 0.97)
+    $scanTop = [int][Math]::Round(70.0 * $Scale)
+    $scanBottom = [Math]::Max($scanTop + 1, $Bitmap.Height - [int][Math]::Round(48.0 * $Scale))
+    $darkLumaThreshold = 190.0
+    $rows = New-Object System.Collections.Generic.List[object]
+
+    for ($y = $scanTop; $y -lt $scanBottom; $y++) {
+        [int]$count = 0
+        [double]$sumX = 0.0
+        [int]$minX = [int]::MaxValue
+        [int]$maxX = [int]::MinValue
+        for ($x = $scanLeft; $x -lt $scanRight; $x++) {
+            $pixel = $Bitmap.GetPixel($x, $y)
+            $luma = (0.2126 * $pixel.R) + (0.7152 * $pixel.G) + (0.0722 * $pixel.B)
+            if ($luma -lt $darkLumaThreshold) {
+                $count++
+                $sumX += $x
+                $minX = [Math]::Min($minX, $x)
+                $maxX = [Math]::Max($maxX, $x)
+            }
+        }
+
+        if ($count -gt 0) {
+            $rows.Add([pscustomobject]@{
+                y = $y
+                count = $count
+                sumX = $sumX
+                minX = $minX
+                maxX = $maxX
+            }) | Out-Null
+        }
+    }
+
+    $clusters = New-Object System.Collections.Generic.List[object]
+    $current = New-Object System.Collections.Generic.List[object]
+    $previousY = $null
+    foreach ($row in $rows) {
+        if ($null -ne $previousY -and ([int]$row.y - [int]$previousY) -gt 1) {
+            if ($current.Count -gt 0) {
+                $clusters.Add([object[]]$current.ToArray()) | Out-Null
+            }
+            $current = New-Object System.Collections.Generic.List[object]
+        }
+
+        $current.Add($row) | Out-Null
+        $previousY = [int]$row.y
+    }
+    if ($current.Count -gt 0) {
+        $clusters.Add([object[]]$current.ToArray()) | Out-Null
+    }
+
+    foreach ($cluster in @($clusters.ToArray() | Sort-Object { [int]($_ | Select-Object -First 1).y })) {
+        $clusterRows = @($cluster)
+        if ($clusterRows.Count -eq 0) {
+            continue
+        }
+
+        $yStart = [int]($clusterRows | Select-Object -First 1).y
+        $yEnd = [int]($clusterRows | Select-Object -Last 1).y
+        $height = $yEnd - $yStart + 1
+        $totalDark = [int](($clusterRows | Measure-Object -Property count -Sum).Sum)
+        $minX = [int](($clusterRows | Measure-Object -Property minX -Minimum).Minimum)
+        $maxX = [int](($clusterRows | Measure-Object -Property maxX -Maximum).Maximum)
+        $width = $maxX - $minX + 1
+        if ($height -lt 6 -or $height -gt 14 -or $width -lt 8 -or $width -gt 32 -or $totalDark -lt 18 -or $totalDark -gt 140) {
+            continue
+        }
+
+        $topLimit = $yStart + [Math]::Max(1, [int][Math]::Floor($height / 3.0))
+        $bottomLimit = $yEnd - [Math]::Max(1, [int][Math]::Floor($height / 3.0))
+        $topRows = @($clusterRows | Where-Object { [int]$_.y -le $topLimit })
+        $bottomRows = @($clusterRows | Where-Object { [int]$_.y -ge $bottomLimit })
+        if ($topRows.Count -eq 0 -or $bottomRows.Count -eq 0) {
+            continue
+        }
+
+        $topAverageWidth = [double](@($topRows | ForEach-Object { [int]$_.maxX - [int]$_.minX + 1 }) | Measure-Object -Average).Average
+        $bottomAverageWidth = [double](@($bottomRows | ForEach-Object { [int]$_.maxX - [int]$_.minX + 1 }) | Measure-Object -Average).Average
+        if (($bottomAverageWidth - $topAverageWidth) -lt 1.0) {
+            continue
+        }
+
+        $left = [int][Math]::Round(24.0 * $Scale)
+        $availableWidth = $Bitmap.Width - ($left * 2)
+        if ($availableWidth -le 0) {
+            return $null
+        }
+
+        return [pscustomobject]@{
+            Left = $left
+            Top = [Math]::Max(0, [int][Math]::Round((($yStart + $yEnd) / 2.0) - (24.0 * $Scale)))
+            Width = [Math]::Min($availableWidth, [int][Math]::Round(796.0 * $Scale))
+            Height = [int][Math]::Round(48.0 * $Scale)
+        }
+    }
+
+    return $null
 }
 
 function Measure-ExpanderRegions {
@@ -855,7 +1020,10 @@ function Measure-ExpanderRegions {
         $headerY = $y + $headerInsetY
         $bodyTop = $y + $bodyTopOffset
     } else {
-        $chevronBounds = Find-ExpandedHeaderBoundsByChevron -Bitmap $Bitmap -Scale $Scale
+        $chevronBounds = Find-ExpandedHeaderBoundsByCompactChevron -Bitmap $Bitmap -Scale $Scale
+        if ($null -eq $chevronBounds) {
+            $chevronBounds = Find-ExpandedHeaderBoundsByChevron -Bitmap $Bitmap -Scale $Scale
+        }
         if ($null -ne $chevronBounds) {
             $source = "detected-chevron"
             $x = [int]$chevronBounds.Left

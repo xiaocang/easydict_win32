@@ -7,6 +7,7 @@ use serde_json::Value;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ZipDirectoryOptions {
     pub source_dir: PathBuf,
@@ -14,12 +15,30 @@ pub struct ZipDirectoryOptions {
     pub exclude_extensions: Vec<String>,
 }
 
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ZipDirectoryOptions {
+    source_dir: PathBuf,
+    destination_zip: PathBuf,
+    exclude_extensions: Vec<String>,
+}
+
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ZipDirectoryOutcome {
     pub file_count: usize,
     pub directory_count: usize,
     pub skipped_count: usize,
     pub bytes_written: u64,
+}
+
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ZipDirectoryOutcome {
+    file_count: usize,
+    directory_count: usize,
+    skipped_count: usize,
+    bytes_written: u64,
 }
 
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
@@ -71,7 +90,9 @@ pub struct BuildRustHelpersOptions {
     pub platform: String,
     pub configuration: String,
     pub output_dir: PathBuf,
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     pub include_legacy_registrar_alias: bool,
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     pub runtime_profile: Option<PackageRuntimeProfile>,
 }
 
@@ -133,8 +154,27 @@ pub struct BrowserExtensionPackage {
     pub bytes: u64,
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Debug, Eq, PartialEq)]
 pub enum ZipDirectoryError {
+    SourceMissing(PathBuf),
+    SourceNotDirectory(PathBuf),
+    DestinationInsideSource {
+        source: PathBuf,
+        destination: PathBuf,
+    },
+    InvalidEntryPath(PathBuf),
+    UnsupportedDirectoryEntry(PathBuf),
+    Io {
+        path: PathBuf,
+        message: String,
+    },
+    Zip(String),
+}
+
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+#[derive(Debug, Eq, PartialEq)]
+enum ZipDirectoryError {
     SourceMissing(PathBuf),
     SourceNotDirectory(PathBuf),
     DestinationInsideSource {
@@ -169,14 +209,27 @@ pub enum ExtractDotnetRuntimeError {
 pub enum BuildRustHelpersError {
     UnsupportedPlatform(String),
     UnsupportedConfiguration(String),
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+    LegacyRegistrarAliasRequiresHybridPackagingFeature,
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     LegacyRegistrarAliasRequiresHybridProfile(Option<PackageRuntimeProfile>),
     WorkspaceMissing(PathBuf),
     WindowsAiManifestMissing(PathBuf),
-    RustupFailed { exit_code: Option<i32> },
-    CargoFailed { exit_code: Option<i32> },
+    RustupFailed {
+        exit_code: Option<i32>,
+    },
+    CargoFailed {
+        exit_code: Option<i32>,
+    },
     MissingHelper(PathBuf),
-    UnsafeBuildArtifactSource { source: PathBuf, build_dir: PathBuf },
-    Io { path: PathBuf, message: String },
+    UnsafeBuildArtifactSource {
+        source: PathBuf,
+        build_dir: PathBuf,
+    },
+    Io {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -334,9 +387,15 @@ impl fmt::Display for BuildRustHelpersError {
                     "unsupported Rust helper configuration: {configuration}"
                 )
             }
+            #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
             Self::LegacyRegistrarAliasRequiresHybridProfile(_) => write!(
                 formatter,
                 "legacy BrowserHostRegistrar.exe alias requires explicit --runtime-profile hybrid"
+            ),
+            #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+            Self::LegacyRegistrarAliasRequiresHybridPackagingFeature => write!(
+                formatter,
+                "legacy BrowserHostRegistrar.exe alias requires the hybrid-dotnet-runtime-packaging feature"
             ),
             Self::WorkspaceMissing(path) => {
                 write!(formatter, "Rust workspace not found at {}", path.display())
@@ -554,7 +613,19 @@ impl fmt::Display for ValidateRustPortableError {
 
 impl std::error::Error for ValidateRustPortableError {}
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 pub fn zip_directory(
+    options: &ZipDirectoryOptions,
+) -> Result<ZipDirectoryOutcome, ZipDirectoryError> {
+    zip_directory_impl(options)
+}
+
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+fn zip_directory(options: &ZipDirectoryOptions) -> Result<ZipDirectoryOutcome, ZipDirectoryError> {
+    zip_directory_impl(options)
+}
+
+fn zip_directory_impl(
     options: &ZipDirectoryOptions,
 ) -> Result<ZipDirectoryOutcome, ZipDirectoryError> {
     let source_dir = canonicalize_required_dir(&options.source_dir)?;
@@ -669,6 +740,7 @@ pub fn build_rust_helpers(
 ) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
     let cargo_target = cargo_target_for_platform(&options.platform)?;
     let profile_dir = profile_dir_for_configuration(&options.configuration)?;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     validate_legacy_registrar_alias_runtime_profile(
         options.include_legacy_registrar_alias,
         options.runtime_profile,
@@ -694,14 +766,26 @@ pub fn build_rust_helpers(
         &options.rust_workspace,
         rust_helper_cargo_args(cargo_target, &options.configuration),
     )?;
-    copy_built_rust_helpers(
-        &options.rust_workspace,
-        cargo_target,
-        profile_dir,
-        &options.output_dir,
-        options.include_legacy_registrar_alias,
-        options.runtime_profile,
-    )
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+    {
+        copy_built_rust_helpers(
+            &options.rust_workspace,
+            cargo_target,
+            profile_dir,
+            &options.output_dir,
+            options.include_legacy_registrar_alias,
+            options.runtime_profile,
+        )
+    }
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    {
+        copy_built_rust_helpers(
+            &options.rust_workspace,
+            cargo_target,
+            profile_dir,
+            &options.output_dir,
+        )
+    }
 }
 
 pub fn package_browser_extension(
@@ -920,7 +1004,43 @@ pub fn validate_rs_portable_payload(
     })
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 pub fn copy_built_rust_helpers(
+    rust_workspace: &Path,
+    cargo_target: &str,
+    profile_dir: &str,
+    output_dir: &Path,
+    include_legacy_registrar_alias: bool,
+    runtime_profile: Option<PackageRuntimeProfile>,
+) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
+    copy_built_rust_helpers_impl(
+        rust_workspace,
+        cargo_target,
+        profile_dir,
+        output_dir,
+        include_legacy_registrar_alias,
+        runtime_profile,
+    )
+}
+
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+pub fn copy_built_rust_helpers(
+    rust_workspace: &Path,
+    cargo_target: &str,
+    profile_dir: &str,
+    output_dir: &Path,
+) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
+    copy_built_rust_helpers_impl(
+        rust_workspace,
+        cargo_target,
+        profile_dir,
+        output_dir,
+        false,
+        None,
+    )
+}
+
+fn copy_built_rust_helpers_impl(
     rust_workspace: &Path,
     cargo_target: &str,
     profile_dir: &str,
@@ -932,8 +1052,11 @@ pub fn copy_built_rust_helpers(
         include_legacy_registrar_alias,
         runtime_profile,
     )?;
-    let mut copied_files =
+    let copied_files =
         copy_built_rust_helper_executables(rust_workspace, cargo_target, profile_dir, output_dir)?;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+    let mut copied_files = copied_files;
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     if include_legacy_registrar_alias {
         let built_dir = rust_workspace
             .join("target")
@@ -1033,10 +1156,22 @@ fn validate_legacy_registrar_alias_runtime_profile(
     include_legacy_registrar_alias: bool,
     runtime_profile: Option<PackageRuntimeProfile>,
 ) -> Result<(), BuildRustHelpersError> {
-    if include_legacy_registrar_alias && runtime_profile != Some(PackageRuntimeProfile::Hybrid) {
-        return Err(
-            BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridProfile(runtime_profile),
+    #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+    {
+        let _ = runtime_profile;
+        debug_assert!(
+            !include_legacy_registrar_alias,
+            "default helper copy path should not request the legacy registrar alias"
         );
+    }
+
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+    if include_legacy_registrar_alias {
+        if runtime_profile != Some(PackageRuntimeProfile::Hybrid) {
+            return Err(
+                BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridProfile(runtime_profile),
+            );
+        }
     }
     Ok(())
 }
@@ -1443,9 +1578,17 @@ fn pack_error_from_build_error(error: BuildRustHelpersError) -> PackRustPortable
         BuildRustHelpersError::WorkspaceMissing(path) => {
             PackRustPortableError::WorkspaceMissing(path)
         }
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridProfile(_) => {
             PackRustPortableError::Validation(
                 "legacy BrowserHostRegistrar.exe alias requires explicit --runtime-profile hybrid"
+                    .to_string(),
+            )
+        }
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
+        BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridPackagingFeature => {
+            PackRustPortableError::Validation(
+                "legacy BrowserHostRegistrar.exe alias requires the hybrid-dotnet-runtime-packaging feature"
                     .to_string(),
             )
         }
@@ -3152,7 +3295,9 @@ WIN_FLUENT_TTS_TEXT\n";
             platform: "x64".to_string(),
             configuration: "Release".to_string(),
             output_dir,
+            #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
             include_legacy_registrar_alias: false,
+            #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
             runtime_profile: None,
         })
         .unwrap_err();
@@ -3165,6 +3310,7 @@ WIN_FLUENT_TTS_TEXT\n";
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn build_rust_helpers_rejects_legacy_registrar_alias_without_explicit_hybrid_before_workspace()
     {
         for runtime_profile in [None, Some(PackageRuntimeProfile::RustOnly)] {
@@ -3447,6 +3593,7 @@ WIN_FLUENT_TTS_TEXT\n";
         }
         let output = tempfile_dir("rust-helper-output");
 
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         let outcome = copy_built_rust_helpers(
             &workspace,
             "x86_64-pc-windows-msvc",
@@ -3456,6 +3603,10 @@ WIN_FLUENT_TTS_TEXT\n";
             None,
         )
         .expect("copy helpers");
+        #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+        let outcome =
+            copy_built_rust_helpers(&workspace, "x86_64-pc-windows-msvc", "debug", &output)
+                .expect("copy helpers");
 
         assert_eq!(outcome.copied_files.len(), RUST_HELPER_EXECUTABLES.len());
         for exe_name in RUST_HELPER_EXECUTABLES {
@@ -3473,6 +3624,7 @@ WIN_FLUENT_TTS_TEXT\n";
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn copy_built_rust_helpers_copies_legacy_registrar_alias_when_explicit() {
         let workspace = tempfile_dir("rust-helper-workspace-legacy-alias");
         let built_dir = workspace
@@ -3534,6 +3686,7 @@ WIN_FLUENT_TTS_TEXT\n";
         let workspace = tempfile_dir("rust-helper-missing-workspace");
         let output = tempfile_dir("rust-helper-missing-output");
 
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         let error = copy_built_rust_helpers(
             &workspace,
             "x86_64-pc-windows-msvc",
@@ -3543,6 +3696,9 @@ WIN_FLUENT_TTS_TEXT\n";
             None,
         )
         .unwrap_err();
+        #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+        let error = copy_built_rust_helpers(&workspace, "x86_64-pc-windows-msvc", "debug", &output)
+            .unwrap_err();
 
         assert!(matches!(error, BuildRustHelpersError::MissingHelper(_)));
         let _ = fs::remove_dir_all(workspace);

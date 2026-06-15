@@ -445,8 +445,38 @@ function Save-ScreenRegionPng($path, [int]$x, [int]$y, [int]$width, [int]$height
     }
 }
 
+function Open-BitmapWithRetry([string]$path) {
+    $attempts = 8
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        $stream = $null
+        $image = $null
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            $stream = [System.IO.MemoryStream]::new($bytes)
+            $image = [System.Drawing.Bitmap]::FromStream($stream)
+            return [System.Drawing.Bitmap]::new($image)
+        } catch {
+            $lastError = $_
+            if ($attempt -lt $attempts) {
+                Start-Sleep -Milliseconds (160 * $attempt)
+            }
+        } finally {
+            if ($null -ne $image) {
+                $image.Dispose()
+            }
+            if ($null -ne $stream) {
+                $stream.Dispose()
+            }
+        }
+    }
+
+    $message = if ($null -ne $lastError) { [string]$lastError.Exception.Message } else { "unknown error" }
+    throw "Failed to open PNG '$path' after $attempts attempt(s): $message"
+}
+
 function Measure-ImageContent($path) {
-    $bitmap = [System.Drawing.Bitmap]::FromFile($path)
+    $bitmap = Open-BitmapWithRetry $path
     try {
         $sampleLeft = if ($bitmap.Width -gt 160) { 12 } else { 0 }
         $sampleTop = if ($bitmap.Height -gt 220) { 72 } else { 0 }

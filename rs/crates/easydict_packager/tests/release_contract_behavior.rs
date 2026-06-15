@@ -128,6 +128,101 @@ fn arm64_msix_smoke_requires_explicit_hybrid_runtime_profile() {
         "github.event.inputs.runtime_profile || 'hybrid'",
         "ARM64 MSIX smoke must not use a fallback hybrid runtime profile",
     );
+    assert_contains(
+        &workflow,
+        "Use easydict_packager pack-rs-portable instead of the dotnet/MSIX smoke path",
+        "ARM64 MSIX smoke rust-only guidance should point to the direct Rust packager path",
+    );
+    assert_contains(
+        &workflow,
+        "or easydict_packager pack-rs-portable for the rs package",
+        "ARM64 MSIX smoke unknown-profile guidance should point to the direct Rust packager path",
+    );
+    assert_not_contains(
+        &workflow,
+        "Use rs/scripts/Package-Portable.ps1",
+        "ARM64 MSIX smoke should not promote the compatibility PowerShell wrapper as the default rs path",
+    );
+}
+
+#[test]
+fn benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/benchmark.yml"));
+    let benchmark_job = text_between(&workflow, "  benchmark:", "  startup-benchmark:");
+
+    assert_contains(
+        &workflow,
+        "EASYDICT_RUNTIME_PROFILE: rust-only",
+        "benchmark workflow should force the Easydict runtime profile to rust-only",
+    );
+    assert_contains(
+        &workflow,
+        "RUNTIME_PROFILE: rust-only",
+        "benchmark workflow should force the generic runtime profile to rust-only",
+    );
+    assert_not_contains(
+        &workflow,
+        "RUNTIME_PROFILE: hybrid",
+        "benchmark workflow must not default benchmark runs to hybrid",
+    );
+    assert_contains(
+        benchmark_job,
+        "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+        "WinUI benchmark restore/build should pass the rust-only RuntimeProfile",
+    );
+    assert_contains(
+        benchmark_job,
+        "-p:EnableInProcLongDocFallback=false",
+        "WinUI benchmark restore/build should disable the retained .NET fallback",
+    );
+    assert_not_contains(
+        benchmark_job,
+        "-p:EnableInProcLongDocFallback=true",
+        "WinUI benchmarks must not explicitly re-enable the retained .NET fallback",
+    );
+}
+
+#[test]
+fn memory_workflows_publish_winui_under_rust_only_profile() {
+    let root = repo_root();
+    for relative_path in [
+        ".github/workflows/memory-gate.yml",
+        ".github/workflows/memory-nightly.yml",
+    ] {
+        let workflow = read_text(&root.join(relative_path));
+
+        assert_contains(
+            &workflow,
+            "EASYDICT_RUNTIME_PROFILE: rust-only",
+            &format!("{relative_path} should force the Easydict runtime profile to rust-only"),
+        );
+        assert_contains(
+            &workflow,
+            "RUNTIME_PROFILE: rust-only",
+            &format!("{relative_path} should force the generic runtime profile to rust-only"),
+        );
+        assert_not_contains(
+            &workflow,
+            "RUNTIME_PROFILE: hybrid",
+            &format!("{relative_path} must not default memory profiling to hybrid"),
+        );
+        assert_contains(
+            &workflow,
+            "-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}",
+            &format!("{relative_path} restore/publish should pass the rust-only RuntimeProfile"),
+        );
+        assert_contains(
+            &workflow,
+            "-p:EnableInProcLongDocFallback=false",
+            &format!("{relative_path} restore/publish should disable retained fallback"),
+        );
+        assert_not_contains(
+            &workflow,
+            "-p:EnableInProcLongDocFallback=true",
+            &format!("{relative_path} must not explicitly re-enable retained fallback"),
+        );
+    }
 }
 
 #[test]
@@ -991,6 +1086,11 @@ fn release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects() 
     );
     assert_contains(
         &build_helpers,
+        "hybrid-dotnet-runtime-packaging",
+        "Build-RustHelpers shim should enable the hybrid packager feature only for the legacy registrar alias path",
+    );
+    assert_contains(
+        &build_helpers,
         "--runtime-profile",
         "Build-RustHelpers shim should pass the explicit runtime profile to the Rust packager",
     );
@@ -1094,7 +1194,9 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
         platform: "x64".to_string(),
         configuration: "Release".to_string(),
         output_dir: output_dir.clone(),
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         include_legacy_registrar_alias: false,
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         runtime_profile: None,
     })
     .expect("build helpers should run fake cargo and copy generated helpers");
@@ -1190,7 +1292,9 @@ fn rustup_target_add_is_forced_to_rust_only_runtime_profile() {
         platform: "x64".to_string(),
         configuration: "Release".to_string(),
         output_dir,
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         include_legacy_registrar_alias: false,
+        #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         runtime_profile: None,
     })
     .expect("build helpers should run fake rustup and cargo");
@@ -1759,6 +1863,64 @@ fn build_rust_helpers_powershell_shim_delegates_and_forces_runtime_profile() {
 
 #[cfg(windows)]
 #[test]
+fn build_rust_helpers_powershell_shim_enables_hybrid_packager_feature_only_for_legacy_alias() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_FAKE_CARGO_RECORD",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("build-rust-helpers-shim-legacy-alias-feature");
+    let fake_bin = test_root.join("bin");
+    let output_dir = test_root.join("out");
+    let wrapper_path = test_root.join("run-build-rust-helpers-alias.ps1");
+    let cargo_record_path = test_root.join("cargo-record.txt");
+    fs::create_dir_all(&test_root).expect("create test root");
+    fs::create_dir_all(&output_dir).expect("create output dir");
+    write_fake_package_portable_tool_scripts(&fake_bin);
+    write_build_rust_helpers_legacy_alias_wrapper(
+        &wrapper_path,
+        &root.join("dotnet/scripts/Build-RustHelpers.ps1"),
+        &output_dir,
+    );
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "outer-parent");
+    std::env::set_var("RUNTIME_PROFILE", "outer-parent");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+
+    let output = powershell_script_command(&wrapper_path)
+        .output()
+        .expect("run Build-RustHelpers legacy alias wrapper");
+
+    assert!(
+        output.status.success(),
+        "Build-RustHelpers legacy alias wrapper should succeed with fake cargo\n{}",
+        powershell_output_text(&output)
+    );
+    let cargo_record = read_text(&cargo_record_path);
+    for expected in [
+        "--features hybrid-dotnet-runtime-packaging",
+        "build-rust-helpers",
+        "--runtime-profile Hybrid",
+        "--include-legacy-registrar-alias",
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "RUNTIME_PROFILE=rust-only",
+    ] {
+        assert_contains(
+            &cargo_record,
+            expected,
+            "legacy alias helper shim should explicitly use hybrid packager feature while keeping child runtime env rust-only",
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
 fn package_portable_powershell_shim_forces_and_restores_runtime_profile() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let environment = EnvironmentSnapshot::capture([
@@ -1856,6 +2018,72 @@ fn package_portable_powershell_shim_forces_and_restores_runtime_profile() {
         "POST_RUNTIME_PROFILE=hybrid",
         "Package-Portable shim should restore the caller's generic runtime profile",
     );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn browser_extension_powershell_shim_delegates_to_rust_packager() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture(["PATH", "EASYDICT_FAKE_CARGO_RECORD"]);
+    let root = repo_root();
+    let test_root = tempfile_dir("browser-extension-shim-rust-packager");
+    let fake_bin = test_root.join("bin");
+    let output_dir = test_root.join("extension-output");
+    let cargo_record_path = test_root.join("cargo-record.txt");
+
+    fs::create_dir_all(&output_dir).expect("create browser extension output dir");
+    write_fake_package_portable_tool_scripts(&fake_bin);
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+
+    let output =
+        powershell_script_command(&root.join("browser-extension/scripts/Package-Extension.ps1"))
+            .args(["-Target", "Firefox"])
+            .arg("-OutputDir")
+            .arg(&output_dir)
+            .output()
+            .expect("run browser extension packaging shim");
+
+    assert!(
+        output.status.success(),
+        "browser extension packaging shim should delegate to fake cargo\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let cargo_record = read_text(&cargo_record_path);
+    let output_dir_text = output_dir.display().to_string();
+    for expected in [
+        "ARGS=run --manifest-path",
+        "-p easydict_packager",
+        "package-browser-extension",
+        "--extension-dir",
+        "browser-extension",
+        "--target Firefox",
+        "--output-dir",
+        output_dir_text.as_str(),
+    ] {
+        assert_contains(
+            &cargo_record,
+            expected,
+            "browser extension shim should pass packaging work to the Rust packager",
+        );
+    }
+    for forbidden in [
+        "FORBIDDEN_DOTNET",
+        "--features retained-dotnet-workers",
+        "--all-features",
+        "zip-directory",
+        "Compress-Archive",
+    ] {
+        assert_not_contains(
+            &cargo_record,
+            forbidden,
+            "browser extension shim must not reintroduce legacy runtime or archive paths",
+        );
+    }
 
     let _ = fs::remove_dir_all(test_root);
 }
@@ -3063,6 +3291,11 @@ fn legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contra
         "Easydict-legacy-hybrid-win-$Platform-$Configuration.zip",
         "legacy dotnet publish -CreateZip output should be visibly separated from the first rs portable ZIP",
     );
+    assert_contains(
+        &publish_script,
+        "cargo run --manifest-path $CargoManifest -p easydict_packager --features hybrid-dotnet-runtime-packaging --",
+        "legacy dotnet publish -CreateZip should enable the hybrid packager feature before invoking zip-directory",
+    );
     assert_not_contains(
         &publish_script,
         "Easydict-win-$Platform-$Configuration.zip",
@@ -3072,6 +3305,11 @@ fn legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contra
         publish_msix_job,
         r#"$destination = "Easydict-legacy-hybrid-win-${{ matrix.platform }}-${{ needs.prepare.outputs.VERSION }}.zip""#,
         "release workflow hybrid ZIP output should be visibly separated from the default rs portable ZIP",
+    );
+    assert_contains(
+        publish_msix_job,
+        "cargo run --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging --",
+        "release workflow hybrid ZIP should enable the hybrid packager feature before invoking zip-directory",
     );
     assert_contains(
         publish_msix_job,
@@ -3245,6 +3483,16 @@ fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
         "\"extract-dotnet-runtime\" => run_extract_dotnet_runtime",
         "runtime extraction CLI command should exist only in explicit hybrid builds",
     );
+    assert_source_line_is_feature_gated(
+        &packager_main,
+        "\"zip-directory\" => run_zip_directory",
+        "standalone legacy ZIP CLI command should exist only in explicit hybrid builds",
+    );
+    assert_source_line_is_feature_gated(
+        &packager_main,
+        "fn run_zip_directory",
+        "standalone legacy ZIP CLI handler should compile only in explicit hybrid builds",
+    );
     for needle in [
         "pub struct ExtractDotnetRuntimeOptions",
         "pub struct ExtractDotnetRuntimeOutcome",
@@ -3256,6 +3504,30 @@ fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
             &packager_lib,
             needle,
             "default packager library API must not expose .NET runtime extraction symbols",
+        );
+    }
+    for needle in [
+        "pub struct ZipDirectoryOptions",
+        "pub struct ZipDirectoryOutcome",
+        "pub enum ZipDirectoryError",
+        "pub fn zip_directory",
+    ] {
+        assert_source_line_is_feature_gated(
+            &packager_lib,
+            needle,
+            "default packager library API must not expose standalone legacy ZIP symbols",
+        );
+    }
+    for needle in [
+        "pub include_legacy_registrar_alias",
+        "pub runtime_profile: Option<PackageRuntimeProfile>",
+        "LegacyRegistrarAliasRequiresHybridPackagingFeature",
+        "LegacyRegistrarAliasRequiresHybridProfile",
+    ] {
+        assert_source_line_is_feature_gated(
+            &packager_lib,
+            needle,
+            "default build-rust-helpers library API must not expose legacy alias knobs",
         );
     }
 }
@@ -4114,6 +4386,24 @@ Add-Content -LiteralPath {} -Value \"POST_RUNTIME_PROFILE=$env:RUNTIME_PROFILE\"
         ),
     )
     .expect("write Build-RustHelpers wrapper");
+}
+
+#[cfg(windows)]
+fn write_build_rust_helpers_legacy_alias_wrapper(
+    wrapper_path: &Path,
+    build_script: &Path,
+    output_dir: &Path,
+) {
+    fs::write(
+        wrapper_path,
+        format!(
+            "$ErrorActionPreference = 'Stop'\r\n\
+& {} -Platform x64 -Configuration Debug -OutputDir {} -RuntimeProfile Hybrid -IncludeLegacyRegistrarAlias\r\n",
+            powershell_literal(build_script),
+            powershell_literal(output_dir),
+        ),
+    )
+    .expect("write Build-RustHelpers legacy alias wrapper");
 }
 
 #[cfg(windows)]

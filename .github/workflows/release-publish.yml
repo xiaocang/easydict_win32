@@ -385,7 +385,7 @@ jobs:
           $source = "dotnet/publish/${{ matrix.platform }}"
           $destination = "Easydict-legacy-hybrid-win-${{ matrix.platform }}-${{ needs.prepare.outputs.VERSION }}.zip"
 
-          cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- `
+          cargo run --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging -- `
             zip-directory `
             --source $source `
             --destination $destination `

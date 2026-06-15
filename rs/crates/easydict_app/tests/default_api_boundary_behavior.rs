@@ -62,6 +62,32 @@ fn crate_root_retained_worker_exports_are_feature_gated() {
 }
 
 #[test]
+fn default_cli_rejects_legacy_retained_worker_options_unless_feature_gated() {
+    let cli_translate = include_str!("../src/cli_translate.rs");
+
+    for option in ["--host", "--host-arg", "--app-dir"] {
+        for section in cli_legacy_option_sections(cli_translate, option) {
+            assert!(
+                section.contains("#[cfg(feature = \"retained-dotnet-workers\")]"),
+                "legacy CLI option {option} should keep any compatibility parsing behind retained-dotnet-workers cfg:\n{section}"
+            );
+            assert!(
+                section.contains("#[cfg(not(feature = \"retained-dotnet-workers\"))]"),
+                "legacy CLI option {option} should have a default-build rejection guard:\n{section}"
+            );
+            assert!(
+                section.contains("CliParseError::UnknownOption"),
+                "legacy CLI option {option} should be unknown in default builds:\n{section}"
+            );
+        }
+    }
+    assert!(
+        cli_translate.contains("default_build_rejects_legacy_host_and_app_dir_options"),
+        "parser unit tests should lock default rejection of legacy retained-worker CLI options"
+    );
+}
+
+#[test]
 fn default_runtime_policy_implementation_is_lib_owned() {
     let runtime_policy = include_str!("../src/runtime_policy.rs");
 
@@ -481,6 +507,38 @@ fn assert_crate_root_export_is_retained_worker_feature_gated(crate_root: &str, e
         before_pub_use_line.ends_with(RETAINED_WORKER_CFG),
         "crate-root retained export {export} must stay behind retained-dotnet-workers cfg"
     );
+}
+
+fn cli_legacy_option_sections(source: &str, option: &str) -> Vec<String> {
+    let needle = format!("\"{option}\" => {{");
+    let lines: Vec<_> = source.lines().collect();
+    let mut sections = Vec::new();
+
+    for start in lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| line.contains(&needle).then_some(index))
+    {
+        let mut depth = 0isize;
+        let mut section = String::new();
+        for line in &lines[start..] {
+            section.push_str(line);
+            section.push('\n');
+            depth += line.chars().filter(|character| *character == '{').count() as isize;
+            depth -= line.chars().filter(|character| *character == '}').count() as isize;
+            if depth == 0 {
+                break;
+            }
+        }
+        sections.push(section);
+    }
+
+    assert_eq!(
+        sections.len(),
+        2,
+        "cli_translate.rs should have exactly two parse arms for {option}: inline and split option forms"
+    );
+    sections
 }
 
 fn assert_no_retained_dotnet_runtime_entry_markers(path: &str, source: &str) {

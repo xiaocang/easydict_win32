@@ -1,5 +1,6 @@
 use crate::protocol::{GrammarCorrectParams, TranslateParams};
 use std::fmt;
+#[cfg(feature = "retained-dotnet-workers")]
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -125,8 +126,11 @@ where
     let mut services = Vec::new();
     let mut json = false;
     let mut verbose = false;
+    #[cfg(feature = "retained-dotnet-workers")]
     let mut host_program = None;
+    #[cfg(feature = "retained-dotnet-workers")]
     let mut host_args = Vec::new();
+    #[cfg(feature = "retained-dotnet-workers")]
     let mut app_dir = None;
     let mut positional = Vec::new();
     let mut rest = args.peekable();
@@ -139,9 +143,36 @@ where
                 "--to" => to = Some(value.to_string()),
                 "--language" => language = Some(value.to_string()),
                 "--service" | "--services" => push_services(&mut services, value),
-                "--host" => host_program = Some(PathBuf::from(value)),
-                "--host-arg" => host_args.push(value.to_string()),
-                "--app-dir" => app_dir = Some(PathBuf::from(value)),
+                "--host" => {
+                    #[cfg(feature = "retained-dotnet-workers")]
+                    {
+                        host_program = Some(PathBuf::from(value));
+                    }
+                    #[cfg(not(feature = "retained-dotnet-workers"))]
+                    {
+                        return Err(CliParseError::UnknownOption(name.to_string()));
+                    }
+                }
+                "--host-arg" => {
+                    #[cfg(feature = "retained-dotnet-workers")]
+                    {
+                        host_args.push(value.to_string());
+                    }
+                    #[cfg(not(feature = "retained-dotnet-workers"))]
+                    {
+                        return Err(CliParseError::UnknownOption(name.to_string()));
+                    }
+                }
+                "--app-dir" => {
+                    #[cfg(feature = "retained-dotnet-workers")]
+                    {
+                        app_dir = Some(PathBuf::from(value));
+                    }
+                    #[cfg(not(feature = "retained-dotnet-workers"))]
+                    {
+                        return Err(CliParseError::UnknownOption(name.to_string()));
+                    }
+                }
                 _ => return Err(CliParseError::UnknownOption(name.to_string())),
             }
             continue;
@@ -159,9 +190,36 @@ where
                 let value = next_value(&mut rest, arg.as_str())?;
                 push_services(&mut services, &value);
             }
-            "--host" => host_program = Some(PathBuf::from(next_value(&mut rest, "--host")?)),
-            "--host-arg" => host_args.push(next_value(&mut rest, "--host-arg")?),
-            "--app-dir" => app_dir = Some(PathBuf::from(next_value(&mut rest, "--app-dir")?)),
+            "--host" => {
+                #[cfg(feature = "retained-dotnet-workers")]
+                {
+                    host_program = Some(PathBuf::from(next_value(&mut rest, "--host")?));
+                }
+                #[cfg(not(feature = "retained-dotnet-workers"))]
+                {
+                    return Err(CliParseError::UnknownOption(arg));
+                }
+            }
+            "--host-arg" => {
+                #[cfg(feature = "retained-dotnet-workers")]
+                {
+                    host_args.push(next_value(&mut rest, "--host-arg")?);
+                }
+                #[cfg(not(feature = "retained-dotnet-workers"))]
+                {
+                    return Err(CliParseError::UnknownOption(arg));
+                }
+            }
+            "--app-dir" => {
+                #[cfg(feature = "retained-dotnet-workers")]
+                {
+                    app_dir = Some(PathBuf::from(next_value(&mut rest, "--app-dir")?));
+                }
+                #[cfg(not(feature = "retained-dotnet-workers"))]
+                {
+                    return Err(CliParseError::UnknownOption(arg));
+                }
+            }
             value if value.starts_with('-') => {
                 return Err(CliParseError::UnknownOption(value.to_string()));
             }
@@ -173,6 +231,7 @@ where
         .or_else(|| (!positional.is_empty()).then(|| positional.join(" ")))
         .ok_or(CliParseError::MissingText)?;
 
+    #[cfg(feature = "retained-dotnet-workers")]
     let _legacy_host_option = (host_program, host_args, app_dir);
 
     Ok(CliOptions {
@@ -265,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_grammar_language_and_ignores_legacy_host_and_app_dir_together() {
+    fn parses_grammar_language() {
         let options = parse_args([
             "grammar",
             "--language",
@@ -282,7 +341,11 @@ mod tests {
             Some("en")
         );
         assert_eq!(options.services, ["openai"]);
+    }
 
+    #[cfg(feature = "retained-dotnet-workers")]
+    #[test]
+    fn retained_feature_ignores_legacy_host_and_app_dir_together() {
         let options = parse_args([
             "translate",
             "--host",
@@ -295,6 +358,21 @@ mod tests {
         .expect("legacy host/app-dir hints should parse as no-op compatibility flags");
         assert_eq!(options.mode, CliMode::Translate);
         assert_eq!(options.text, "Hello");
+    }
+
+    #[cfg(not(feature = "retained-dotnet-workers"))]
+    #[test]
+    fn default_build_rejects_legacy_host_and_app_dir_options() {
+        for option in ["--host", "--host-arg", "--app-dir"] {
+            let error = parse_args(["translate", option, "legacy", "--text", "Hello"])
+                .expect_err("default CLI should reject retained-worker compatibility flags");
+            assert_eq!(error, CliParseError::UnknownOption(option.to_string()));
+
+            let inline = format!("{option}=legacy");
+            let error = parse_args(["translate", inline.as_str(), "--text", "Hello"])
+                .expect_err("default CLI should reject inline retained-worker compatibility flags");
+            assert_eq!(error, CliParseError::UnknownOption(option.to_string()));
+        }
     }
 
     #[test]

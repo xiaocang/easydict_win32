@@ -96,7 +96,6 @@ Standalone packaging helper diagnostics:
 ```powershell
 cargo run -p easydict_packager -- package-browser-extension --extension-dir ..\browser-extension --target All --output-dir $env:TEMP\easydict-browser-extension
 cargo run -p easydict_packager -- build-rust-helpers --workspace . --platform x64 --configuration Release --output-dir $env:TEMP\easydict-rust-helpers
-cargo run -p easydict_packager -- zip-directory --source path\to\already-staged-dir --destination $env:TEMP\easydict-diagnostic.zip --exclude-extension .pdb
 ```
 
 These helper commands are not the first rs portable assembly path. Use
@@ -112,7 +111,8 @@ store submission, and Chrome `.zip` / Firefox `.xpi` archive writing.
 Hybrid-only retained runtime checks:
 
 ```powershell
-cargo run -p easydict_packager -- extract-dotnet-runtime --rid win-x64 --output-dir path\to\publish-msix\dotnet --runtime-profile hybrid
+cargo run -p easydict_packager --features hybrid-dotnet-runtime-packaging -- zip-directory --source path\to\already-staged-hybrid-dir --destination $env:TEMP\easydict-legacy-hybrid.zip --exclude-extension .pdb
+cargo run -p easydict_packager --features hybrid-dotnet-runtime-packaging -- extract-dotnet-runtime --rid win-x64 --output-dir path\to\publish-msix\dotnet --runtime-profile hybrid
 ```
 
 `easydict_packager` also owns retained worker shared `.NET` runtime bundling for
@@ -125,6 +125,11 @@ accidentally gain a bundled `.NET` runtime. The public Rust library API requires
 the same explicit hybrid profile, so direct callers cannot bypass the CLI guard.
 The extractor then writes the standard `DOTNET_ROOT` layout, strips duplicate
 license/notice files, and verifies `host/fxr` plus `shared/Microsoft.NETCore.App`.
+The standalone `zip-directory` CLI helper is also compiled only with the
+`hybrid-dotnet-runtime-packaging` feature. It remains available for legacy/hybrid
+ZIP diagnostics and still rejects symlink or reparse-point entries, but the
+first rs portable package path must use `pack-rs-portable` so staging, ZIP
+creation, and validation stay coupled.
 
 `dotnet/scripts/Build-RustHelpers.ps1` is likewise only a shim to
 `build-rust-helpers`. The Rust packager owns target triple mapping, helper bin

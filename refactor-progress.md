@@ -21,6 +21,125 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-14: Tightened default CI runtime profiles and desktop registry command targets
+
+- Closed several default CI/diagnostic runtime-profile gaps found by parallel read-only audits. UI automation WinUI unit tests, the performance benchmark workflow, PR memory gate, and nightly memory profile now explicitly set `EASYDICT_RUNTIME_PROFILE=rust-only` / `RUNTIME_PROFILE=rust-only` and pass `-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}` plus `-p:EnableInProcLongDocFallback=false` on WinUI restore/build/publish paths.
+- Updated ARM64 MSIX smoke failure guidance so Rust-only/unknown profile users are pointed to the direct `easydict_packager pack-rs-portable` path, keeping `Package-Portable.ps1` as compatibility-only wording.
+- Added a desktop integration registry guard: shell verb, protocol, and startup registration helpers now reject retained runtime, worker, or script command targets before writing HKCU command values. This reuses the existing `lib/easydict-runtime-guards` command-target classifier; no new library was needed.
+- Added Rust contract coverage for benchmark and memory workflows, expanded the UI automation MSIX/profile contract to cover the parallel WinUI unit-test job, and added desktop integration unit coverage for rejected registry command targets.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior arm64_msix_smoke_requires_explicit_hybrid_runtime_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior benchmark_workflow_keeps_winui_benchmarks_on_rust_only_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior memory_workflows_publish_winui_under_rust_only_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test msix_runtime_profile_contract_behavior ui_automation_msix_path_forces_rust_only_and_validates_before_upload_and_install -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app desktop_integration --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --exact --nocapture`
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml command_target_classifier_rejects_retained_runtime_and_script_targets -- --nocapture`
+- `git diff --check -- .github/workflows/arm64-msix-smoke.yml .github/workflows/benchmark.yml .github/workflows/ui-automation.yml .github/workflows/memory-gate.yml .github/workflows/memory-nightly.yml rs/crates/easydict_packager/tests/release_contract_behavior.rs rs/crates/easydict_packager/tests/msix_runtime_profile_contract_behavior.rs rs/crates/easydict_app/src/desktop_integration.rs`
+
+## 2026-06-14: Rejected legacy CLI worker options by default and rechecked Collins MDD
+
+- Tightened the default `easydict_cli` parser so `--host`, `--host-arg`, and `--app-dir` now return `UnknownOption` in the default build instead of being accepted as retained-worker no-ops. Compatibility parsing remains available only under the explicit `retained-dotnet-workers` feature.
+- Added a default API boundary test that requires any legacy CLI option arms to be both feature-gated and paired with a default unknown-option guard.
+- Kept the browser extension packaging shim on the Rust packager path with a fake-cargo contract for `browser-extension/scripts/Package-Extension.ps1 -> easydict_packager package-browser-extension`.
+- Closed another MSIX validation gap through the parallel QDC/UI automation worker. QDC deploy/install now defaults `RuntimeProfile` to `rust-only`, copies or locates the Rust `easydict_msix_validate` binary, and validates the MSIX before cert import, uninstall, or `Add-AppxPackage`. The UI automation workflow now fixes both runtime profile env vars to `rust-only`, passes `-p:RuntimeProfile=${{ env.RUNTIME_PROFILE }}` to restore/publish, and validates the MSIX before upload and before install.
+- Re-ran the Collins COBUILD English Usage corpus specified by the user, including the companion `.mdd`. The real corpus still reports `Encrypted=2`, 1517 MDX keywords, and one MDD resource `\cceu.css` with 4579 raw CSS bytes. Settings discovery, native HTML inlining, and Quick Translate all passed against the same files.
+- No new parser dependency was needed. The in-tree `lib/rs-mdict` fork remains the right reuse point because it already owns the MDict encryption, key normalization, MDD resource lookup, and app-level data-URL inlining semantics.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app cli_translate::tests::default_build_rejects_legacy_host_and_app_dir_options --lib -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test cli_translate_behavior default_cli_rejects_legacy_retained_worker_options -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_cli_rejects_legacy_retained_worker_options_unless_feature_gated -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers cli_translate::tests::retained_feature_ignores_legacy_host_and_app_dir_together --lib -- --exact --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior browser_extension_powershell_shim_delegates_to_rust_packager -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test msix_runtime_profile_contract_behavior -- --nocapture`
+- PowerShell parser check for `dotnet/scripts/qdc/Deploy-ToQdc.ps1` and `dotnet/scripts/qdc/Install-OnQdc.ps1`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_real_corpus_mdd_from_env_for_legacy_mdx_entry -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+
+## 2026-06-14: Aligned stale .NET packaging tests with hybrid-only ZIP helper gating
+
+- Updated `dotnet/tests/Easydict.WinUI.Tests/Services/WorkerPackagingTests.cs` so the legacy .NET test oracle no longer treats `zip-directory` as evidence for the default rs portable release path. The test now scopes assertions to `publish-rs-portable` and `publish-msix`: rs portable must call direct `pack-rs-portable`, while the legacy/hybrid ZIP step must use `easydict_packager --features hybrid-dotnet-runtime-packaging -- zip-directory`.
+- Tightened the legacy `dotnet/scripts/publish.ps1 -CreateZip` assertion so it requires the same explicit hybrid packager feature before `zip-directory`. This keeps the stale .NET-side contract in sync with the Rust release-contract tests added earlier.
+- No new library was needed. This is test coverage alignment for the already-migrated Rust packager boundary.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contract -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_path_forces_rust_only_runtime_profile -- --exact --nocapture`
+- `dotnet test tests/Easydict.WinUI.Tests/Easydict.WinUI.Tests.csproj --filter "FullyQualifiedName~WorkerPackagingTests" --no-restore` was retried after a 30s wait but still failed before running the filtered tests because unrelated long-document/layout/table test sources currently do not compile (`DocLayoutYoloService`, `LayoutDetectionStrategy`, `TableStructureRecognitionService`, `DocumentOutputMode`, and related stale symbols).
+
+## 2026-06-14: Hid build-rust-helpers legacy alias knobs from the default API
+
+- Tightened the helper build API after gating the legacy registrar alias itself. Default `BuildRustHelpersOptions` now only contains the Rust helper build inputs, and default `copy_built_rust_helpers(...)` only copies the four Rust helper executables. The `include_legacy_registrar_alias` field, `runtime_profile` field, alias-specific error variants, and extended copy arguments compile only with `hybrid-dotnet-runtime-packaging`.
+- The default `build-rust-helpers` CLI no longer parses `--runtime-profile`; that knob is reserved for the explicit hybrid feature path where it must pair with `--include-legacy-registrar-alias`.
+- No new library was needed. This is another Rust packager API-surface cleanup around already migrated helper binaries.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager default_build_rejects_runtime_profile_flag_before_workspace -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging build_rust_helpers_rejects_legacy_registrar_alias_without_explicit_hybrid_before_workspace -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging -- --nocapture`
+
+## 2026-06-14: Moved standalone zip-directory behind the hybrid packager feature
+
+- Tightened the packager CLI boundary: default `easydict_packager` usage no longer advertises `zip-directory`, and invoking that standalone command in a default build now follows the unknown-command path. The internal private `zip_directory(...)` implementation remains available because `pack-rs-portable` uses it to create the first rs portable ZIP before `validate-rs-portable`; the public standalone ZIP API is feature-gated for hybrid packaging.
+- Updated the retained legacy/hybrid callers that still need the standalone ZIP helper. The release workflow's legacy ZIP step and `dotnet/scripts/publish.ps1 -CreateZip` now run `easydict_packager` with `--features hybrid-dotnet-runtime-packaging` before `zip-directory`.
+- No new library was needed. This is a packager CLI/feature-boundary cleanup around the existing Rust ZIP implementation, keeping rs portable callers on `pack-rs-portable`.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager default_build_rejects_legacy_zip_directory_command_before_args -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager default_usage_hides_dotnet_runtime_extraction_command -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging usage_marks_dotnet_runtime_extraction_as_hybrid_only_not_rs_portable -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contract -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging --lib -- --nocapture`
+
+## 2026-06-14: Gated the legacy registrar alias behind the hybrid packager feature
+
+- Tightened the helper packaging boundary again: default `easydict_packager` builds now reject `--include-legacy-registrar-alias` before workspace/output side effects and no longer advertise that flag in default usage. The legacy `BrowserHostRegistrar.exe` alias copy code only compiles under `hybrid-dotnet-runtime-packaging`.
+- Kept the explicit coexistence path working. `dotnet/scripts/Build-RustHelpers.ps1` now adds `--features hybrid-dotnet-runtime-packaging` only when `-IncludeLegacyRegistrarAlias` is requested, and it still forces child `cargo`/helper builds to `EASYDICT_RUNTIME_PROFILE=rust-only` and `RUNTIME_PROFILE=rust-only`.
+- No new library was needed. This is a Rust packager feature boundary cleanup around the already migrated helper build path.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager legacy_registrar_alias -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager default_usage_hides_dotnet_runtime_extraction_command -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager default_build_rejects_legacy_registrar_alias_flag_before_workspace -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging legacy_registrar_alias -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging usage_marks_dotnet_runtime_extraction_as_hybrid_only_not_rs_portable -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior build_rust_helpers_powershell_shim_enables_hybrid_packager_feature_only_for_legacy_alias -- --exact --nocapture`
+
+## 2026-06-14: Removed WinFluent Windows platform dev-dependency from the default app manifest
+
+- Tightened the default app dependency boundary so `rs/crates/easydict_app/Cargo.toml` no longer lists `win_fluent_platform_win` even as a dev-dependency. This keeps the default rs app manifest aligned with the first portable release rule: platform/hybrid implementation crates stay outside the app crate unless explicitly needed by another package's own tests.
+- Replaced the Quick Translate tray projection test that called `WindowsPlatformAdapter::plan_tray(...)` with an app-owned `TrayMenu` shape contract. The app test still verifies default item, submenu, separator, browser support, and command enablement structure, while native adapter projection remains the responsibility of the WinFluent platform crate.
+- No new library was needed. This was a manifest/test-surface cleanup after the tray, shell, registry, and native task paths had already moved to Rust-owned helpers.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_app_manifests_do_not_link_hybrid_packaging_or_dotnet_runtime_tools -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior default_tray_menu_keeps_native_tray_shape_without_platform_adapter -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_ -- --nocapture`
+
 ## 2026-06-13: Required Hybrid profile for the legacy browser registrar alias
 
 - Tightened `easydict_packager build-rust-helpers` so `BrowserHostRegistrar.exe` is no longer produced by the alias flag alone. Callers must pass `--runtime-profile hybrid --include-legacy-registrar-alias`; missing or explicit Rust-only profiles fail before workspace, output, or child cargo side effects.

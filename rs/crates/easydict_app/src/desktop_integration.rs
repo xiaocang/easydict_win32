@@ -1,3 +1,5 @@
+use easydict_runtime_guards::command_target_is_retained_runtime_or_script_marker;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopShellVerb {
     pub id: String,
@@ -177,6 +179,8 @@ pub fn register_shell_verb_with_executable_path(
     plan: &DesktopShellVerbPlan,
     executable_path: &str,
 ) -> Result<(), String> {
+    validate_desktop_command_executable_path(executable_path)?;
+
     for (registry_key_path, command_key_path) in plan
         .registry_key_paths
         .iter()
@@ -202,6 +206,8 @@ pub fn register_protocol_with_executable_path(
     plan: &DesktopProtocolRegistrationPlan,
     executable_path: &str,
 ) -> Result<(), String> {
+    validate_desktop_command_executable_path(executable_path)?;
+
     write_registry_string(&plan.registry_key_path, None, &plan.description)?;
     write_registry_string(&plan.registry_key_path, Some("URL Protocol"), "")?;
     write_registry_string(
@@ -221,6 +227,8 @@ pub fn register_startup_with_executable_path(
     plan: &DesktopStartupRegistrationPlan,
     executable_path: &str,
 ) -> Result<(), String> {
+    validate_desktop_command_executable_path(executable_path)?;
+
     write_registry_string(
         &plan.registry_key_path,
         Some(&plan.value_name),
@@ -253,6 +261,16 @@ fn current_executable_path_string() -> Result<String, String> {
     std::env::current_exe()
         .map_err(|error| format!("failed to resolve current executable path: {error}"))
         .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn validate_desktop_command_executable_path(executable_path: &str) -> Result<(), String> {
+    if command_target_is_retained_runtime_or_script_marker(executable_path) {
+        return Err(format!(
+            "desktop integration command target is a retained runtime, worker, or script entry: {executable_path}"
+        ));
+    }
+
+    Ok(())
 }
 
 fn write_registry_string(
@@ -378,5 +396,36 @@ mod tests {
         };
 
         assert_eq!(shell_verb_plan(&verb), None);
+    }
+
+    #[test]
+    fn desktop_registry_commands_reject_retained_runtime_or_script_targets() {
+        let shell_plan = shell_verb_plan(
+            &DesktopShellVerb::new("EasydictRsOCR", "OCR Translate").argument("--ocr-translate"),
+        )
+        .expect("shell verb should produce registry plan");
+        let shell_error =
+            register_shell_verb_with_executable_path(&shell_plan, r"C:\Payload\dotnet\dotnet.exe")
+                .expect_err("shell verb registration should reject retained runtime targets");
+        assert!(shell_error.contains("retained runtime"));
+
+        let protocol_plan = protocol_registration_plan(
+            &DesktopProtocolRegistration::new("easydict-rs", "URL:Easydict Rust Protocol")
+                .argument("%1"),
+        );
+        let protocol_error = register_protocol_with_executable_path(
+            &protocol_plan,
+            r"C:\Payload\tools\Register-Easydict.ps1",
+        )
+        .expect_err("protocol registration should reject script targets");
+        assert!(protocol_error.contains("script entry"));
+
+        let startup_plan = startup_registration_plan();
+        let startup_error = register_startup_with_executable_path(
+            &startup_plan,
+            r"C:\Payload\workers\localai\Easydict.Workers.LocalAi.exe",
+        )
+        .expect_err("startup registration should reject retained worker targets");
+        assert!(startup_error.contains("retained runtime"));
     }
 }

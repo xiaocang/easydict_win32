@@ -4,6 +4,10 @@ edition.workspace = true
 license.workspace = true
 version.workspace = true
 
+[features]
+default = []
+legacy-powershell-tts = []
+
 [dependencies]
 win_fluent = { path = "../win_fluent" }
 

@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const NATIVE_HOST_NAME: &str = "com.easydict.bridge";
+pub const LEGACY_NATIVE_HOST_NAME: &str = "com.easydict.bridge";
+pub const RUST_NATIVE_HOST_NAME: &str = "com.easydict.rs.bridge";
+pub const NATIVE_HOST_NAME: &str = RUST_NATIVE_HOST_NAME;
 pub const BRIDGE_EXE_NAME: &str = "easydict-native-bridge.exe";
 pub const CHROME_MANIFEST_FILE: &str = "chrome-manifest.json";
 pub const FIREFOX_MANIFEST_FILE: &str = "firefox-manifest.json";

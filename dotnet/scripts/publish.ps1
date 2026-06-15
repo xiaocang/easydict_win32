@@ -112,6 +112,7 @@ Write-Host "Publishing Rust helper executables..." -ForegroundColor Green
     -Platform $Platform `
     -Configuration $Configuration `
     -OutputDir $PublishDir `
+    -RuntimeProfile $RuntimeProfile `
     -IncludeLegacyRegistrarAlias
 
 # Calculate size

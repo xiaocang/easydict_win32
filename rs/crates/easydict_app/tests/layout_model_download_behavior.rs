@@ -417,7 +417,7 @@ fn layout_model_settings_entry_uses_configured_cache_dir() {
 fn layout_model_settings_entry_treats_blank_cache_dir_as_default() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let local_app_data = temp_dir("settings-blank-cache-dir");
-    let default_base = local_app_data.join("Easydict");
+    let default_base = local_app_data.join("EasydictRs");
     let paths = LayoutModelPaths::for_base(&default_base);
     create_valid_sized_file(&paths.native_lib_path, MIN_RUNTIME_FILE_SIZE);
     create_valid_sized_file(&paths.doc_layout_model_path, MIN_DOC_LAYOUT_MODEL_FILE_SIZE);

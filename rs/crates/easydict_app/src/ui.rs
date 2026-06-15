@@ -2199,16 +2199,16 @@ fn settings_services_content(state: &SettingsState, locale: &str) -> View<Messag
         deepl_service_expander(state),
         local_ai_service_expander(state),
         ollama_service_expander(state, locale),
-        open_ai_service_expander(state),
+        open_ai_service_expander(state, locale),
     ];
     service_configuration_children.extend(llm_provider_descriptors().iter().map(|descriptor| {
         if descriptor.service_id == "builtin" {
-            builtin_ai_service_expander(state, descriptor)
+            builtin_ai_service_expander(state, descriptor, locale)
         } else {
-            llm_provider_service_expander(state, descriptor)
+            llm_provider_service_expander(state, descriptor, locale)
         }
     }));
-    service_configuration_children.extend(traditional_http_service_expanders(state));
+    service_configuration_children.extend(traditional_http_service_expanders(state, locale));
     service_configuration_children.push(imported_mdx_config_panel(state));
     service_configuration_children.push(no_config_services_section());
 
@@ -2408,111 +2408,75 @@ fn service_configuration_icon(service_id: &str) -> win_fluent::IconToken {
     match service_id {
         "google" => win_fluent::IconToken::with_image(
             "service-google",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Google.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Google.scale-100.png"),
         ),
         "linguee" => win_fluent::IconToken::with_image(
             "service-linguee",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Linguee.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Linguee.scale-100.png"),
         ),
         "deepl" => win_fluent::IconToken::with_image(
             "service-deepl",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepL.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/DeepL.scale-100.png"),
         ),
         "windows-local-ai" => win_fluent::IconToken::with_image(
             "service-windows-local-ai",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/windows-local-ai.scale-100.png"),
         ),
         "ollama" => win_fluent::IconToken::with_image(
             "service-ollama",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Ollama.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Ollama.scale-100.png"),
         ),
         "openai" => win_fluent::IconToken::with_image(
             "service-openai",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenAI.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/OpenAI.scale-100.png"),
         ),
         "custom-openai" => win_fluent::IconToken::with_image(
             "service-custom-openai",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/CustomOpenAI.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/CustomOpenAI.scale-100.png"),
         ),
         "builtin" => win_fluent::IconToken::with_image(
             "service-builtin-ai",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/BuiltInAI.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/BuiltInAI.scale-100.png"),
         ),
         "deepseek" => win_fluent::IconToken::with_image(
             "service-deepseek",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepSeek.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/DeepSeek.scale-100.png"),
         ),
         "groq" => win_fluent::IconToken::with_image(
             "service-groq",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Groq.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Groq.scale-100.png"),
         ),
         "zhipu" => win_fluent::IconToken::with_image(
             "service-zhipu",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Zhipu.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Zhipu.scale-100.png"),
         ),
         "github" => win_fluent::IconToken::with_image(
             "service-github",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/GitHubOnLight.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/GitHubOnLight.scale-100.png"),
         ),
         "gemini" => win_fluent::IconToken::with_image(
             "service-gemini",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Gemini.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Gemini.scale-100.png"),
         ),
         "doubao" => win_fluent::IconToken::with_image(
             "service-doubao",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Doubao.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Doubao.scale-100.png"),
         ),
         "caiyun" => win_fluent::IconToken::with_image(
             "service-caiyun",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Caiyun.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Caiyun.scale-100.png"),
         ),
         "niutrans" => win_fluent::IconToken::with_image(
             "service-niutrans",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/NiuTrans.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/NiuTrans.scale-100.png"),
         ),
         "youdao" => win_fluent::IconToken::with_image(
             "service-youdao",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Youdao.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Youdao.scale-100.png"),
         ),
         "volcano" => win_fluent::IconToken::with_image(
             "service-volcano",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Volcano.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/Volcano.scale-100.png"),
         ),
         _ => icon::translate(),
     }
@@ -3172,7 +3136,7 @@ fn ollama_service_expander(state: &SettingsState, locale: &str) -> View<Message>
     )
 }
 
-fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
+fn open_ai_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
     service_expander(
         state,
         "openai",
@@ -3186,7 +3150,11 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
             secret_field_stack(
                 "OpenAIKeyField",
                 350,
-                styled_text_id("OpenAIKeyHeaderText", "API Key", TextStyle::Body),
+                styled_text_id(
+                    "OpenAIKeyHeaderText",
+                    service_api_key_label(locale),
+                    TextStyle::Body,
+                ),
                 text_editor(state.open_ai_api_key.clone())
                     .id("OpenAIKeyBox")
                     .placeholder("sk-...")
@@ -3196,14 +3164,22 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
                 "OpenAIKeyRevealButton",
                 "Reveal API key",
             ),
-            fixed_width_field(
+            settings_field_stack(
                 "OpenAIEndpointField",
                 450,
-                text_editor(state.open_ai_endpoint.clone())
-                    .id("OpenAIEndpointBox")
-                    .placeholder("https://api.openai.com/v1/responses")
-                    .max_height(36)
-                    .on_input(Message::OpenAIEndpointChanged),
+                vec![
+                    styled_text_id(
+                        "OpenAIEndpointHeaderText",
+                        service_endpoint_optional_label(locale),
+                        TextStyle::Body,
+                    ),
+                    text_editor(state.open_ai_endpoint.clone())
+                        .id("OpenAIEndpointBox")
+                        .placeholder("https://api.openai.com/v1/responses")
+                        .max_height(36)
+                        .on_input(Message::OpenAIEndpointChanged)
+                        .into_view(),
+                ],
             ),
                 combo_box(open_ai_api_format_items())
                     .id("OpenAIApiFormatCombo")
@@ -3214,12 +3190,12 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
                     .into_view(),
                 styled_text_id(
                     "OpenAIDetectedFormatText",
-                    open_ai_detected_format_text(state),
+                    open_ai_detected_format_text(state, locale),
                     TextStyle::Caption,
                 ),
                 combo_box(open_ai_model_items())
                     .id("OpenAIModelCombo")
-                    .label("Model")
+                    .label(service_model_label(locale))
                     .width(Length::Fixed(280))
                     .selected(state.open_ai_model.as_str())
                     .on_change(Message::OpenAIModelChanged)
@@ -3228,7 +3204,7 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
                     "Auto-detect picks /responses for Responses API endpoints; otherwise it uses Chat Completions.",
                     TextStyle::Caption,
                 ),
-                button("Test")
+                button(service_test_label(locale))
                     .id("TestOpenAIButton")
                     .height(Length::Fixed(29))
                     .on_press(Message::TestOpenAI)
@@ -3260,6 +3236,7 @@ struct LlmProviderDescriptor {
 fn llm_provider_service_expander(
     state: &SettingsState,
     descriptor: &LlmProviderDescriptor,
+    locale: &str,
 ) -> View<Message> {
     let setting = service_provider_setting(state, descriptor);
     let mut content = vec![secret_field_stack(
@@ -3267,7 +3244,7 @@ fn llm_provider_service_expander(
         350,
         styled_text_id(
             descriptor.key_header_id,
-            descriptor.key_label,
+            service_provider_key_label(locale, descriptor.key_label),
             TextStyle::Body,
         ),
         text_editor(setting.api_key.clone())
@@ -3313,7 +3290,7 @@ fn llm_provider_service_expander(
     content.extend([
         combo_box(provider_model_items(descriptor))
             .id(descriptor.model_box_id)
-            .label("Model")
+            .label(service_model_label(locale))
             .width(Length::Fixed(provider_model_width(descriptor)))
             .selected(setting.model.as_str())
             .on_change({
@@ -3328,7 +3305,7 @@ fn llm_provider_service_expander(
             })
             .into_view(),
         styled_text(descriptor.description, TextStyle::Caption),
-        button("Test")
+        button(service_test_label(locale))
             .id(descriptor.test_button_id)
             .height(Length::Fixed(29))
             .on_press(Message::TestServiceProvider(
@@ -3353,13 +3330,14 @@ fn llm_provider_service_expander(
 fn builtin_ai_service_expander(
     state: &SettingsState,
     descriptor: &LlmProviderDescriptor,
+    locale: &str,
 ) -> View<Message> {
     let setting = service_provider_setting(state, descriptor);
     let content = vec![
         builtin_ai_hint_bar(),
         combo_box(provider_model_items(descriptor))
             .id(descriptor.model_box_id)
-            .label("Model")
+            .label(service_model_label(locale))
             .width(Length::Fixed(provider_model_width(descriptor)))
             .selected(setting.model.as_str())
             .on_change({
@@ -3378,7 +3356,7 @@ fn builtin_ai_service_expander(
             350,
             styled_text_id(
                 descriptor.key_header_id,
-                descriptor.key_label,
+                service_provider_key_label(locale, descriptor.key_label),
                 TextStyle::Body,
             ),
             text_editor(setting.api_key.clone())
@@ -3404,7 +3382,7 @@ fn builtin_ai_service_expander(
             descriptor.description,
             TextStyle::Caption,
         ),
-        button("Test")
+        button(service_test_label(locale))
             .id(descriptor.test_button_id)
             .height(Length::Fixed(29))
             .on_press(Message::TestServiceProvider(
@@ -3483,6 +3461,43 @@ fn provider_model_width(descriptor: &LlmProviderDescriptor) -> u16 {
     }
 }
 
+fn service_api_key_label(locale: &str) -> String {
+    tr_locale(locale, "settings.services.api_key", "API Key")
+}
+
+fn service_api_key_optional_label(locale: &str) -> String {
+    tr_locale(
+        locale,
+        "settings.services.api_key_optional",
+        "API Key (Optional)",
+    )
+}
+
+fn service_endpoint_optional_label(locale: &str) -> String {
+    tr_locale(
+        locale,
+        "settings.services.endpoint_optional",
+        "Endpoint (Optional)",
+    )
+}
+
+fn service_model_label(locale: &str) -> String {
+    tr_locale(locale, "settings.services.model", "Model")
+}
+
+fn service_test_label(locale: &str) -> String {
+    tr_locale(locale, "settings.services.test", "Test")
+}
+
+fn service_provider_key_label(locale: &str, label: &str) -> String {
+    match label {
+        "API Key" => service_api_key_label(locale),
+        "API Key (Optional)" => service_api_key_optional_label(locale),
+        "GitHub Token" => tr_locale(locale, "settings.services.github_token", "GitHub Token"),
+        _ => label.to_string(),
+    }
+}
+
 fn no_config_services_section() -> View<Message> {
     let mut service_rows = vec![no_config_service_row(
         "FreeServiceGoogleTranslateRow",
@@ -3553,16 +3568,16 @@ fn no_config_service_row(
     .into_view()
 }
 
-fn traditional_http_service_expanders(state: &SettingsState) -> [View<Message>; 4] {
+fn traditional_http_service_expanders(state: &SettingsState, locale: &str) -> [View<Message>; 4] {
     [
-        caiyun_service_expander(state),
-        niu_trans_service_expander(state),
-        youdao_service_expander(state),
-        volcano_service_expander(state),
+        caiyun_service_expander(state, locale),
+        niu_trans_service_expander(state, locale),
+        youdao_service_expander(state, locale),
+        volcano_service_expander(state, locale),
     ]
 }
 
-fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
+fn caiyun_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
     service_expander(
         state,
         "caiyun",
@@ -3576,7 +3591,11 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
             secret_field_stack(
                 "CaiyunKeyField",
                 350,
-                styled_text_id("CaiyunKeyHeaderText", "API Key", TextStyle::Body),
+                styled_text_id(
+                    "CaiyunKeyHeaderText",
+                    service_api_key_label(locale),
+                    TextStyle::Body,
+                ),
                 text_editor(state.caiyun_api_key.clone())
                     .id("CaiyunKeyBox")
                     .placeholder("Enter your Caiyun API key")
@@ -3590,7 +3609,7 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
                 "Get your API key from fanyi.caiyunapp.com.",
                 TextStyle::Caption,
             ),
-            button("Test")
+            button(service_test_label(locale))
                 .id("TestCaiyunButton")
                 .height(Length::Fixed(29))
                 .on_press(Message::TestCaiyun)
@@ -3599,7 +3618,7 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
     )
 }
 
-fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
+fn niu_trans_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
     service_expander(
         state,
         "niutrans",
@@ -3613,7 +3632,11 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
             secret_field_stack(
                 "NiuTransKeyField",
                 350,
-                styled_text_id("NiuTransKeyHeaderText", "API Key", TextStyle::Body),
+                styled_text_id(
+                    "NiuTransKeyHeaderText",
+                    service_api_key_label(locale),
+                    TextStyle::Body,
+                ),
                 text_editor(state.niu_trans_api_key.clone())
                     .id("NiuTransKeyBox")
                     .placeholder("Enter your NiuTrans API key")
@@ -3627,7 +3650,7 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
                 "NiuTrans supports 450+ language pairs. Get your API key from niutrans.com.",
                 TextStyle::Caption,
             ),
-            button("Test")
+            button(service_test_label(locale))
                 .id("TestNiuTransButton")
                 .height(Length::Fixed(29))
                 .on_press(Message::TestNiuTrans)
@@ -3636,7 +3659,7 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
     )
 }
 
-fn youdao_service_expander(state: &SettingsState) -> View<Message> {
+fn youdao_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
     service_expander(
         state,
         "youdao",
@@ -3650,7 +3673,11 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
             secret_field_stack(
                 "YoudaoAppKeyField",
                 350,
-                styled_text_id("YoudaoAppKeyHeaderText", "App Key", TextStyle::Body),
+                styled_text_id(
+                    "YoudaoAppKeyHeaderText",
+                    tr_locale(locale, "settings.services.app_key", "App Key"),
+                    TextStyle::Body,
+                ),
                 text_editor(state.youdao_app_key.clone())
                     .id("YoudaoAppKeyBox")
                     .placeholder("Enter your Youdao App Key")
@@ -3663,7 +3690,11 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
             secret_field_stack(
                 "YoudaoAppSecretField",
                 350,
-                styled_text_id("YoudaoAppSecretHeaderText", "App Secret", TextStyle::Body),
+                styled_text_id(
+                    "YoudaoAppSecretHeaderText",
+                    tr_locale(locale, "settings.services.app_secret", "App Secret"),
+                    TextStyle::Body,
+                ),
                 text_editor(state.youdao_app_secret.clone())
                     .id("YoudaoAppSecretBox")
                     .placeholder("Enter your Youdao App Secret")
@@ -3673,7 +3704,14 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
                 "YoudaoAppSecretRevealButton",
                 "Reveal app secret",
             ),
-                toggle_switch("Use Official API", state.youdao_use_official_api)
+                toggle_switch(
+                    tr_locale(
+                        locale,
+                        "settings.services.youdao.use_official_api",
+                        "Use Official API",
+                    ),
+                    state.youdao_use_official_api,
+                )
                     .id("YoudaoUseOfficialApiToggle")
                     .on_toggle(Message::ToggleYoudaoUseOfficialApi)
                     .into_view(),
@@ -3681,7 +3719,7 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
                     "Without API keys, Youdao uses the free web dictionary. With keys, official API mode is available.",
                     TextStyle::Caption,
                 ),
-                button("Test")
+                button(service_test_label(locale))
                     .id("TestYoudaoButton")
                     .height(Length::Fixed(29))
                     .on_press(Message::TestYoudao)
@@ -3690,7 +3728,7 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
     )
 }
 
-fn volcano_service_expander(state: &SettingsState) -> View<Message> {
+fn volcano_service_expander(state: &SettingsState, locale: &str) -> View<Message> {
     service_expander(
         state,
         "volcano",
@@ -3706,7 +3744,11 @@ fn volcano_service_expander(state: &SettingsState) -> View<Message> {
                 350,
                 styled_text_id(
                     "VolcanoAccessKeyIdHeaderText",
-                    "Access Key ID",
+                    tr_locale(
+                        locale,
+                        "settings.services.access_key_id",
+                        "Access Key ID",
+                    ),
                     TextStyle::Body,
                 ),
                 text_editor(state.volcano_access_key_id.clone())
@@ -3723,7 +3765,11 @@ fn volcano_service_expander(state: &SettingsState) -> View<Message> {
                 350,
                 styled_text_id(
                     "VolcanoSecretAccessKeyHeaderText",
-                    "Secret Access Key",
+                    tr_locale(
+                        locale,
+                        "settings.services.secret_access_key",
+                        "Secret Access Key",
+                    ),
                     TextStyle::Body,
                 ),
                 text_editor(state.volcano_secret_access_key.clone())
@@ -3739,7 +3785,7 @@ fn volcano_service_expander(state: &SettingsState) -> View<Message> {
                     "Volcano translation uses signed OpenAPI requests from translate.volcengineapi.com.",
                     TextStyle::Caption,
                 ),
-                button("Test")
+                button(service_test_label(locale))
                     .id("TestVolcanoButton")
                     .height(Length::Fixed(29))
                     .on_press(Message::TestVolcano)
@@ -3820,19 +3866,35 @@ fn deepl_service_expander(state: &SettingsState) -> View<Message> {
     )
 }
 
-fn open_ai_detected_format_text(state: &SettingsState) -> &'static str {
+fn open_ai_detected_format_text(state: &SettingsState, locale: &str) -> String {
     match state.open_ai_api_format_override.as_str() {
-        "Responses" => "Pinned format: Responses API",
-        "ChatCompletions" => "Pinned format: Chat Completions API",
+        "Responses" => tr_locale(
+            locale,
+            "settings.services.openai.pinned_format.responses",
+            "Pinned format: Responses API",
+        ),
+        "ChatCompletions" => tr_locale(
+            locale,
+            "settings.services.openai.pinned_format.chat_completions",
+            "Pinned format: Chat Completions API",
+        ),
         _ if state
             .open_ai_endpoint
             .trim()
             .trim_end_matches('/')
             .ends_with("/responses") =>
         {
-            "Detected format: Responses API"
+            tr_locale(
+                locale,
+                "settings.services.openai.detected_format.responses",
+                "Detected format: Responses API",
+            )
         }
-        _ => "Detected format: Chat Completions API",
+        _ => tr_locale(
+            locale,
+            "settings.services.openai.detected_format.chat_completions",
+            "Detected format: Chat Completions API",
+        ),
     }
 }
 

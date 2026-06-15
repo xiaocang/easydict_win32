@@ -145,6 +145,7 @@ jobs:
             -Platform arm64 `
             -Configuration Release `
             -OutputDir ./publish-msix/arm64 `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}" `
             -IncludeLegacyRegistrarAlias
 
       - name: Publish LongDoc Worker (arm64)

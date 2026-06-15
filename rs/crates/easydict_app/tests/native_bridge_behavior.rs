@@ -45,7 +45,7 @@ fn native_bridge_binary_signals_rs_ocr_event_not_legacy_dotnet_event() {
 
 #[test]
 fn native_bridge_defaults_invalid_or_missing_action_to_ocr_translate() {
-    assert_eq!(NATIVE_HOST_NAME, "com.easydict.bridge");
+    assert_eq!(NATIVE_HOST_NAME, "com.easydict.rs.bridge");
     assert_eq!(
         parse_native_action(br#"{"action":"ocr-translate"}"#),
         OCR_TRANSLATE_ACTION

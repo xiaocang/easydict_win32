@@ -144,6 +144,48 @@ msgstr "为每个翻译服务配置 API 密钥、端点和模型。"
 msgid "settings.services.test"
 msgstr "测试"
 
+msgid "settings.services.api_key"
+msgstr "API 密钥"
+
+msgid "settings.services.api_key_optional"
+msgstr "API 密钥（可选）"
+
+msgid "settings.services.endpoint_optional"
+msgstr "端点（可选）"
+
+msgid "settings.services.model"
+msgstr "模型"
+
+msgid "settings.services.github_token"
+msgstr "GitHub 令牌"
+
+msgid "settings.services.app_key"
+msgstr "App Key"
+
+msgid "settings.services.app_secret"
+msgstr "App Secret"
+
+msgid "settings.services.access_key_id"
+msgstr "Access Key ID"
+
+msgid "settings.services.secret_access_key"
+msgstr "Secret Access Key"
+
+msgid "settings.services.youdao.use_official_api"
+msgstr "使用官方 API"
+
+msgid "settings.services.openai.detected_format.responses"
+msgstr "检测格式：Responses API"
+
+msgid "settings.services.openai.detected_format.chat_completions"
+msgstr "检测格式：Chat Completions API"
+
+msgid "settings.services.openai.pinned_format.responses"
+msgstr "固定格式：Responses API"
+
+msgid "settings.services.openai.pinned_format.chat_completions"
+msgstr "固定格式：Chat Completions API"
+
 msgid "settings.services.deepl.api_key_optional"
 msgstr "API 密钥（可选）"
 

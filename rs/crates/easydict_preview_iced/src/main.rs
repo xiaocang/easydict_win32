@@ -23,7 +23,30 @@ fn main() {
 }
 
 fn preview_mode_requested() -> bool {
-    preview_mode_requested_from_names(std::env::vars().map(|(name, _)| name))
+    let executable = std::env::current_exe().ok();
+    preview_mode_requested_for_executable(
+        executable.as_deref(),
+        std::env::vars().map(|(name, _)| name),
+    )
+}
+
+fn preview_mode_requested_for_executable<I, S>(executable: Option<&Path>, names: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    if is_packaged_production_alias(executable) {
+        return false;
+    }
+
+    preview_mode_requested_from_names(names)
+}
+
+fn is_packaged_production_alias(executable: Option<&Path>) -> bool {
+    executable
+        .and_then(Path::file_stem)
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("Easydict.Rust"))
 }
 
 fn preview_mode_requested_from_names<I, S>(names: I) -> bool
@@ -212,41 +235,46 @@ impl Application for PreviewApp {
     fn new(flags: Self::Flags) -> (Self, Task<Self::Message>) {
         let preview_mode = preview_mode_requested();
         let (inner, initial_task) = EasydictApp::new(flags);
-        dump_preview_schema_if_requested(&inner);
+        if preview_mode {
+            dump_preview_schema_if_requested(&inner);
+        }
 
-        let auto_toggle_task = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT")
-            .ok()
-            .map(|id| {
-                let delay_ms = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_DELAY_MS")
-                    .ok()
-                    .and_then(|value| value.parse::<u64>().ok())
-                    .unwrap_or(650);
-                Task::perform(
-                    async move {
-                        std::thread::sleep(Duration::from_millis(delay_ms));
-                        id
-                    },
-                    Message::ToggleResultExpanded,
-                )
-            })
-            .unwrap_or_else(Task::none);
+        let auto_toggle_task = if preview_mode {
+            std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT")
+                .ok()
+                .map(|id| {
+                    let delay_ms = std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_DELAY_MS")
+                        .ok()
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .unwrap_or(650);
+                    Task::perform(
+                        async move {
+                            std::thread::sleep(Duration::from_millis(delay_ms));
+                            id
+                        },
+                        Message::ToggleResultExpanded,
+                    )
+                })
+                .unwrap_or_else(Task::none)
+        } else {
+            Task::none()
+        };
 
-        let pending_scroll = preview_scroll_from_env();
-        let preview_scroll_task = pending_scroll
-            .as_ref()
-            .map(|_| {
-                let delay_ms = std::env::var("EASYDICT_PREVIEW_SCROLL_DELAY_MS")
-                    .ok()
-                    .and_then(|value| value.parse::<u64>().ok())
-                    .unwrap_or(900);
-                Task::perform(
-                    async move {
-                        std::thread::sleep(Duration::from_millis(delay_ms));
-                    },
-                    |_| Message::Noop,
-                )
-            })
-            .unwrap_or_else(Task::none);
+        let pending_scroll = preview_mode.then(preview_scroll_from_env).flatten();
+        let preview_scroll_task = if pending_scroll.is_some() {
+            let delay_ms = std::env::var("EASYDICT_PREVIEW_SCROLL_DELAY_MS")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(900);
+            Task::perform(
+                async move {
+                    std::thread::sleep(Duration::from_millis(delay_ms));
+                },
+                |_| Message::Noop,
+            )
+        } else {
+            Task::none()
+        };
 
         (
             Self {
@@ -391,6 +419,36 @@ mod tests {
             "EASYDICT_RUNTIME_PROFILE",
             "EASYDICT_APP_VERSION"
         ]));
+    }
+
+    #[test]
+    fn preview_mode_detector_allows_preview_binary_environment() {
+        assert!(preview_mode_requested_for_executable(
+            Some(std::path::Path::new(
+                r"C:\Easydict\tools\easydict_preview_iced.exe"
+            )),
+            ["PATH", "EASYDICT_PREVIEW_SCENARIO"]
+        ));
+    }
+
+    #[test]
+    fn preview_mode_detector_ignores_preview_environment_for_packaged_rust_alias() {
+        assert!(!preview_mode_requested_for_executable(
+            Some(std::path::Path::new(r"C:\Easydict\Easydict.Rust.exe")),
+            ["PATH", "EASYDICT_PREVIEW_SCENARIO"]
+        ));
+        assert!(!preview_mode_requested_for_executable(
+            Some(std::path::Path::new(r"C:\Easydict\easydict.rust.EXE")),
+            ["EASYDICT_PREVIEW_WINDOW"]
+        ));
+    }
+
+    #[test]
+    fn preview_mode_detector_keeps_preview_fallback_when_executable_is_unknown() {
+        assert!(preview_mode_requested_for_executable(
+            None::<&std::path::Path>,
+            ["EASYDICT_PREVIEW_SCENARIO"]
+        ));
     }
 
     #[test]

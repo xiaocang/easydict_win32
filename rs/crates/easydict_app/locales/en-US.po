@@ -144,6 +144,48 @@ msgstr "Configure API keys, endpoints, and models for each translation service."
 msgid "settings.services.test"
 msgstr "Test"
 
+msgid "settings.services.api_key"
+msgstr "API Key"
+
+msgid "settings.services.api_key_optional"
+msgstr "API Key (Optional)"
+
+msgid "settings.services.endpoint_optional"
+msgstr "Endpoint (Optional)"
+
+msgid "settings.services.model"
+msgstr "Model"
+
+msgid "settings.services.github_token"
+msgstr "GitHub Token"
+
+msgid "settings.services.app_key"
+msgstr "App Key"
+
+msgid "settings.services.app_secret"
+msgstr "App Secret"
+
+msgid "settings.services.access_key_id"
+msgstr "Access Key ID"
+
+msgid "settings.services.secret_access_key"
+msgstr "Secret Access Key"
+
+msgid "settings.services.youdao.use_official_api"
+msgstr "Use Official API"
+
+msgid "settings.services.openai.detected_format.responses"
+msgstr "Detected format: Responses API"
+
+msgid "settings.services.openai.detected_format.chat_completions"
+msgstr "Detected format: Chat Completions API"
+
+msgid "settings.services.openai.pinned_format.responses"
+msgstr "Pinned format: Responses API"
+
+msgid "settings.services.openai.pinned_format.chat_completions"
+msgstr "Pinned format: Chat Completions API"
+
 msgid "settings.services.deepl.api_key_optional"
 msgstr "API Key (Optional)"
 

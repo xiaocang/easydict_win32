@@ -3,7 +3,8 @@ use easydict_app::browser_registrar::{
     parse_browser_registrar_args, parse_chrome_ext_ids, rust_bridge_directory, serialize_cli_json,
     usage, BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError,
     BrowserRegistry, MemoryBrowserRegistry, DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS,
-    DEFAULT_FIREFOX_EXT_ID, LEGACY_BRIDGE_ROOT_NAME, RUST_BRIDGE_ROOT_NAME,
+    DEFAULT_FIREFOX_EXT_ID, LEGACY_BRIDGE_ROOT_NAME, LEGACY_NATIVE_HOST_NAME, NATIVE_HOST_NAME,
+    RUST_BRIDGE_ROOT_NAME, RUST_NATIVE_HOST_NAME,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -116,6 +117,50 @@ fn browser_registrar_usage_names_rust_binary_not_legacy_alias() {
 }
 
 #[test]
+fn browser_registrar_defaults_to_rs_native_host_without_overwriting_legacy_host() {
+    assert_eq!(NATIVE_HOST_NAME, RUST_NATIVE_HOST_NAME);
+    assert_ne!(NATIVE_HOST_NAME, LEGACY_NATIVE_HOST_NAME);
+    assert_eq!(
+        chrome_registry_path(),
+        format!(r"Software\Google\Chrome\NativeMessagingHosts\{RUST_NATIVE_HOST_NAME}")
+    );
+    assert_eq!(
+        firefox_registry_path(),
+        format!(r"Software\Mozilla\NativeMessagingHosts\{RUST_NATIVE_HOST_NAME}")
+    );
+}
+
+#[test]
+fn browser_extension_tries_rs_native_host_before_legacy_fallback() {
+    for (name, source) in [
+        (
+            "background.js",
+            include_str!("../../../../browser-extension/background.js"),
+        ),
+        (
+            "setup.js",
+            include_str!("../../../../browser-extension/setup.js"),
+        ),
+    ] {
+        let rs_index = source
+            .find(RUST_NATIVE_HOST_NAME)
+            .unwrap_or_else(|| panic!("{name} should contain the rs native host name"));
+        let legacy_index = source
+            .find(LEGACY_NATIVE_HOST_NAME)
+            .unwrap_or_else(|| panic!("{name} should keep the legacy native host fallback"));
+
+        assert!(
+            rs_index < legacy_index,
+            "{name} should try the rs native host before legacy fallback"
+        );
+        assert!(
+            source.contains("sendNativeMessageWithFallback"),
+            "{name} should route native messages through the fallback helper"
+        );
+    }
+}
+
+#[test]
 fn browser_registrar_binary_uses_rust_owned_registry_helper() {
     let registrar_bin = include_str!("../src/bin/easydict_browser_registrar.rs");
 
@@ -201,7 +246,7 @@ fn install_chrome_writes_manifest_registry_and_copies_bridge() {
     );
 
     let manifest = read_json(manifest_path);
-    assert_eq!(manifest["name"], "com.easydict.bridge");
+    assert_eq!(manifest["name"], RUST_NATIVE_HOST_NAME);
     assert_eq!(manifest["description"], "Easydict native messaging bridge");
     assert_eq!(
         manifest["path"],
@@ -243,7 +288,7 @@ fn install_firefox_writes_allowed_extensions_manifest() {
         .expect("firefox registry value");
     let manifest = read_json(manifest_path);
 
-    assert_eq!(manifest["name"], "com.easydict.bridge");
+    assert_eq!(manifest["name"], RUST_NATIVE_HOST_NAME);
     assert_eq!(manifest["type"], "stdio");
     assert_eq!(
         manifest["allowed_extensions"],
@@ -344,7 +389,7 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
     write_json(
         &manifest_path,
         json!({
-            "name": "com.easydict.bridge",
+            "name": NATIVE_HOST_NAME,
             "description": "Easydict native messaging bridge",
             "path": bridge_path.clone(),
             "type": "pipe",
@@ -358,7 +403,7 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
     write_json(
         &manifest_path,
         json!({
-            "name": "com.easydict.bridge",
+            "name": NATIVE_HOST_NAME,
             "description": "Easydict native messaging bridge",
             "path": other_bridge_path.display().to_string(),
             "type": "stdio",
@@ -370,7 +415,7 @@ fn status_validates_manifest_name_type_and_current_bridge_path() {
     write_json(
         &manifest_path,
         json!({
-            "name": "com.easydict.bridge",
+            "name": NATIVE_HOST_NAME,
             "description": "Easydict native messaging bridge",
             "path": bridge_path,
             "type": "stdio",
@@ -442,7 +487,7 @@ fn uninstall_preserves_foreign_native_messaging_registration() {
     write_json(
         &foreign_manifest_path,
         json!({
-            "name": "com.easydict.bridge",
+            "name": LEGACY_NATIVE_HOST_NAME,
             "description": "Easydict native messaging bridge",
             "path": foreign_bridge_path.display().to_string(),
             "type": "stdio",

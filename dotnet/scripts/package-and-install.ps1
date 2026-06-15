@@ -88,6 +88,7 @@ try {
         -Platform $Platform `
         -Configuration $Configuration `
         -OutputDir $publishDir `
+        -RuntimeProfile $RuntimeProfile `
         -IncludeLegacyRegistrarAlias
 
     if ($Platform -ne "x86") {

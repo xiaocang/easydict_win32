@@ -21,6 +21,189 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-13: Required Hybrid profile for the legacy browser registrar alias
+
+- Tightened `easydict_packager build-rust-helpers` so `BrowserHostRegistrar.exe` is no longer produced by the alias flag alone. Callers must pass `--runtime-profile hybrid --include-legacy-registrar-alias`; missing or explicit Rust-only profiles fail before workspace, output, or child cargo side effects.
+- Updated `dotnet/scripts/Build-RustHelpers.ps1` to require `-RuntimeProfile Hybrid` when `-IncludeLegacyRegistrarAlias` is used, while still forcing the actual helper cargo/rustup child environment to `rust-only`.
+- Updated legacy/hybrid release workflow, ARM64 smoke, Makefile, publish, and package-and-install callers to pass the explicit runtime profile when they request the alias. The first rs portable path remains alias-free.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_packager --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior runtime_profile -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects -- --exact --nocapture`
+
+## 2026-06-13: Namespaced rs DPAPI credential purpose
+
+- Closed a settings/coexistence naming gap in the default rs credential path. New `edcred1:` credentials now use the rs-specific DPAPI optional entropy purpose `Easydict.Rs.LocalSettingsCredential.v1` instead of continuing to write the legacy WinUI purpose.
+- Kept legacy settings import compatible: Rust still reads old WinUI `edcred1:` DPAPI payloads and marks them for normalization, so `load_settings_file(...)` rewrites them with the rs purpose alongside the existing plaintext/nested/`edloc1:` normalization path.
+- No new dependency was needed. The implementation continues to use `lib/easydict-windows-credentials`, which wraps Windows DPAPI through the Microsoft `windows` crate.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test credential_protection_behavior credential_protection_new_dpapi_values_use_rs_entropy_with_legacy_fallback -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior settings_storage_load_file_rewrites_legacy_winui_dpapi_credentials_to_rs_entropy -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test credential_protection_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior -- --nocapture`
+
+## 2026-06-13: Namespaced rs protocol activation scheme
+
+- Closed the remaining Windows global activation-name coexistence gap in the default rs app. The rs portable now registers `easydict-rs://` through the app-owned desktop integration path instead of overwriting the dotnet app's legacy `easydict://` protocol key.
+- Kept startup activation compatibility: if a legacy `easydict://ocr-translate` URI is passed directly to the rs executable, the Rust parser still maps it to the same OCR hotkey path. New/default rs registration and tests use `easydict-rs://ocr-translate`.
+- No new dependency was needed. The change reuses `easydict_app::desktop_integration` and `lib/easydict-windows-registry`.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior startup_activation_parses_shell_and_protocol_ocr_triggers -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior shell_and_protocol_entries_cover_ocr_activation_contract -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app desktop_integration::tests::protocol_registration_plan_quotes_uri_argument --lib -- --exact --nocapture`
+
+## 2026-06-13: Narrowed default app bundled helper launch to browser registrar
+
+- Tightened the default rs app shell boundary after the Native Messaging split. `easydict_app::desktop_shell` no longer exposes a generic "run bundled executable" task that accepts an arbitrary helper name; the app-level task is now browser-registrar-specific and always launches `easydict_browser_registrar.exe`.
+- Kept the actual process boundary inside `lib/easydict-windows-shell`, which already validates helper names, rejects retained `.NET` / script helper names, checks the target file type, and scans helper bytes for retained runtime markers before `Command::new(...)`.
+- No new dependency was needed. This is an app API surface narrowing over the existing Rust-owned shell wrapper.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior browser_support_and_external_links_use_rust_owned_desktop_shell_helper -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior browser_support_messages_run_bundled_registrar_commands -- --exact --nocapture`
+
+## 2026-06-13: Namespaced rs browser Native Messaging host
+
+- Closed another first-release portable coexistence gap. The rs browser registrar now defaults to the Native Messaging host name `com.easydict.rs.bridge` instead of legacy `com.easydict.bridge`, so installing browser support from the rs portable no longer overwrites the dotnet app's Chrome/Firefox Native Messaging registry key.
+- Kept the staged bridge directory under the existing rs-specific `%LOCALAPPDATA%\EasydictRs\browser-bridge` root and kept legacy bridge-root rejection unchanged.
+- Updated the browser extension scripts to try `com.easydict.rs.bridge` first and fall back to `com.easydict.bridge`, allowing updated extensions to work with the rs portable while still supporting an installed legacy/dotnet host.
+- Synchronized the native bridge module constant with the rs host name. No new dependency was added; this is a naming/registration ownership split.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `node --check browser-extension\background.js; node --check browser-extension\setup.js`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test native_bridge_behavior native_bridge_defaults_invalid_or_missing_action_to_ocr_translate -- --exact --nocapture`
+
+## 2026-06-13: Added real Collins MDD coverage through settings and Quick Translate
+
+- Rechecked reusable MDX/MDD parser options before editing. Current Rust crates still include `rs-mdict`, `mdict-rs`, and `readmdict`, but the in-tree MIT `lib/rs-mdict` fork already owns Easydict's MDX/MDD route, encryption boundaries, resource-key semantics, and app-level data-URL inlining. No parser dependency changed.
+- Added an opt-in settings-storage regression using `RS_MDICT_TEST_MDX` / `RS_MDICT_TEST_MDD`: a legacy imported MDX entry with no saved `MddFilePaths` now proves it discovers the real Collins companion `.mdd`.
+- Added an opt-in Quick Translate regression using the same real Collins files. The test imports the real MDX, confirms the companion MDD is discovered, runs the Rust-native `mdx::` request, verifies `\cceu.css` is inlined as `data:text/css;base64,...`, and confirms rich HTML is retained only through `rawHtml` while plain `translatedText` stays readable.
+- Re-ran the full `lib/rs-mdict` real-corpus integration suite against `C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx` plus the companion `.mdd`; all 24 tests passed. The corpus reports `Encrypted=2` key-info-only MDX/MDD, 1517 MDX keywords, one MDD resource `\cceu.css`, and 4579 raw CSS bytes.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml -p easydict_app --check`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/tests/quick_translate_behavior.rs rs/crates/easydict_app/tests/settings_storage_behavior.rs`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior settings_storage_load_discovers_real_corpus_mdd_from_env_for_legacy_mdx_entry -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; $env:RS_MDICT_TEST_QUERY='ability'; cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `git diff --check -- rs/crates/easydict_app/tests/quick_translate_behavior.rs rs/crates/easydict_app/tests/settings_storage_behavior.rs migration-list.md refactor-progress.md lib/rs-mdict/tests/integration_test.rs`
+
+## 2026-06-13: Split rs settings storage from legacy settings migration
+
+- Closed a first-release portable coexistence gap in the settings path. Runtime settings now default to `%LOCALAPPDATA%\EasydictRs\settings.json` through `default_settings_storage_path()`, while `EASYDICT_SETTINGS_DIR` still overrides the storage directory for UI automation, CLI tests, and isolated smoke runs.
+- Kept the legacy `.NET` settings directory as a migration source instead of a runtime storage target. `migrate_settings_file(Default::default())` now reads `%LOCALAPPDATA%\Easydict\settings.json` and writes the migrated copy to `%LOCALAPPDATA%\EasydictRs\settings.json`, so launching the rs portable can import old settings without rewriting the dotnet app's live settings file.
+- No new dependency was needed. The slice only separates path ownership and uses the existing Rust settings migrator/storage code.
+- Added path-contract coverage for the rs-specific default storage directory, the `EASYDICT_SETTINGS_DIR` override, and default legacy-to-rs migration copy behavior. The env-sensitive tests now serialize their process-environment overrides so full test-binary runs do not race on `LOCALAPPDATA` or `EASYDICT_SETTINGS_DIR`.
+
+## 2026-06-13: Moved default rs cache roots under EasydictRs
+
+- Followed the portable coexistence audit and split the remaining runtime cache/data fallback roots from the dotnet `%LOCALAPPDATA%\Easydict` directory. `app_data::default_user_data_directory()` now owns the rs default `%LOCALAPPDATA%\EasydictRs` root.
+- OpenVINO/NLLB assets, layout model assets, CJK font downloads, settings runtime-status probes, and LongDoc translation cache now use the rs root whenever `SettingsSnapshot.cache_dir` is blank or absent. Explicit `cache_dir` settings still win, so user-configured portable/test cache roots remain respected.
+- Local dictionary index is intentionally unchanged in this slice because it was already documented as a compatible shared cache with the dotnet app, not a runtime/process boundary.
+- No new dependency was needed; this is a small path ownership helper rather than a platform-directory abstraction.
+- Updated blank-cache/default-root coverage for layout models, fonts, OpenVINO status/download roots, and LongDoc translation cache.
+
+## 2026-06-13: Namespaced rs shell and startup registry entries
+
+- Split two Windows global registration names that would otherwise make first-release rs portable compete with an installed dotnet app.
+- The rs OCR shell verb id is now `EasydictRsOCR` instead of legacy `EasydictOCR`, while keeping the same user-visible "OCR Translate" label and `--ocr-translate` activation argument.
+- The rs startup Run value is now `EasydictRs` instead of legacy `Easydict`, so enabling launch-at-startup in the portable does not overwrite the dotnet startup command.
+- At this point the `easydict://` protocol scheme and Native Messaging host id were intentionally left for separate compatibility/channel decisions; later 2026-06-13 slices moved Native Messaging to `com.easydict.rs.bridge` and protocol registration to `easydict-rs://`.
+
+## 2026-06-13: Moved rs app icons out of the dotnet project tree
+
+- Trimmed another default rs dependency on the legacy project layout. The app previously embedded service icon PNGs from `dotnet/src/Easydict.WinUI/Assets/ServiceIcons` at compile time; those assets are now owned by `rs/crates/easydict_app/resources/service-icons`.
+- Moved `AppIcon.ico` into `rs/crates/easydict_app/resources` as well. Tray icon discovery now checks the portable/current directory and rs resources instead of walking up to `dotnet/src/Easydict.WinUI/AppIcon.ico`.
+- `pack-rs-portable` now stages `AppIcon.ico` beside `Easydict.Rust.exe`, the Rust helper executables, and `README-portable.txt`, so first-release portable builds have the tray icon file without depending on a sibling dotnet checkout.
+- Rechecked reusable resource-embedding crates first. `rust-embed` and `include_dir` are good fits for whole asset trees, but this path only needs a fixed set of image bytes plus one portable icon file, so the implementation stays on Rust's standard `include_bytes!` and explicit package staging without adding a proc-macro dependency.
+- Added a default boundary regression so production rs sources cannot load app assets from `dotnet/src/Easydict.WinUI` again, and verified the copied PNG/ICO hashes match the original assets.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_rs_app_embeds_service_icons_from_crate_owned_resources -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior default_tray_menu_covers_migration_contract -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager tests::stage_rust_portable_payload_copies_preview_helpers_and_readme -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager tests::validate_rs_portable_accepts_rust_only_directory_payload -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager tests::validate_rs_portable_rejects_missing_required_first_release_payload -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --lib`
+- SHA-256 comparison of all 19 copied service icon PNGs and `AppIcon.ico` against the existing dotnet assets.
+
+## 2026-06-13: Kept the packaged Rust GUI alias production-only
+
+- Closed a first-release portable entrypoint leak found during the parallel audit. `pack-rs-portable` currently copies `easydict_preview_iced.exe` to `Easydict.Rust.exe`; inherited `EASYDICT_PREVIEW_*` variables must not turn that public production entrypoint into the screenshot/preview harness.
+- `preview_mode_requested()` now checks the current executable name. `Easydict.Rust.exe` ignores preview environment variables and stays on the production initial state, while the real `easydict_preview_iced.exe` keeps the UI automation preview behavior.
+- Preview-only side effects in `PreviewApp::new()` are now guarded by the same mode decision, so schema dumps, auto-toggle, scroll injection, and pop-button preview state do not run through the packaged production alias.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced preview_mode -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced tests::production_initial_state_removes_preview_demo_content_and_loads_settings -- --exact --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_preview_iced --target x86_64-pc-windows-msvc`
+
+## 2026-06-13: Scanned bundled helpers before runtime launch
+
+- Closed the next runtime execution gap from the parallel audit: packaging and browser registrar already scan helper bytes, but `lib/easydict-windows-shell` only checked bundled helper names, regular-file status, symlinks, and reparse points before `Command::new(...)`.
+- `validate_bundled_executable_target(...)` now reads the target executable and reuses `easydict_runtime_guards::bytes_contain_retained_runtime_marker(...)`. A same-name helper polluted with retained `.NET`, PowerShell, TTS, or WinForms marker bytes now fails locally before spawn.
+- Added a shell-lib regression with a fake `easydict_browser_registrar.exe` containing both ASCII `hostfxr.dll` and UTF-16LE `System.Windows.Forms`; the regular fake helper still passes.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior browser_support_messages_run_bundled_registrar_commands -- --exact --nocapture`
+
+## 2026-06-13: Made standalone rs portable marker validation usable
+
+- Revisited the retained-runtime marker scanner after the real portable smoke. `pack-rs-portable` validated the staged payload, but invoking the debug `validate-rs-portable` CLI directly on the same 79 MB directory took minutes, which is too sluggish for a release gate.
+- Rechecked reuse options before editing. The Rust `aho-corasick` crate is already present elsewhere in the workspace lock and provides multi-pattern search with ASCII case-insensitive matching, which fits the retained marker scanner better than hand-rolling repeated `windows()` scans.
+- Added `aho-corasick` as a direct dependency of `lib/easydict-runtime-guards`. The public `bytes_contain_retained_runtime_marker(...)` API is unchanged, but it now builds one cached Aho-Corasick matcher containing both ASCII and UTF-16LE forms from the existing encoded marker table.
+- Verified the real staged portable directory again with the standalone debug packager: `validate-rs-portable --package rs/target/portable-smoke/easydict-rs-portable-win-x64` completed successfully in about 3.2 seconds and checked all 6 entries. The manual retained-marker scan over the five shipped executables still reports OK.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager validate_rs_portable -- --nocapture`
+- `C:\Users\johnn\Documents\work\easydict_win32.refactor\rs\target\debug\easydict_packager.exe validate-rs-portable --package C:\Users\johnn\Documents\work\easydict_win32.refactor\rs\target\portable-smoke\easydict-rs-portable-win-x64`
+- Manual marker scan of `Easydict.Rust.exe`, `easydict-native-bridge.exe`, `easydict_browser_registrar.exe`, `easydict_cli.exe`, and `easydict_long_doc.exe` for ASCII/UTF-16LE retained .NET, PowerShell, System.Speech, and System.Windows.Forms markers.
+
+## 2026-06-13: Gated WinFluent legacy backends and verified rs portable payload
+
+- Followed the parallel audits on packaging feature propagation and runtime marker coverage. No new dependency was added; the change reuses the existing app-owned Rust file-dialog/TTS helpers and the shared `lib/easydict-runtime-guards` validator.
+- Put WinFluent's old PowerShell file/folder dialogs behind `legacy-powershell-dialogs` and the old PowerShell/System.Speech TTS backend behind `legacy-powershell-tts`. Both features default off; `easydict_preview_iced` now depends on `win_fluent_backend_iced` with `default-features = false`.
+- Encoded retained runtime content/path/component marker tables inside `lib/easydict-runtime-guards`, including `System.Windows.Forms`, so apps linking the scanner no longer self-report `hostfxr.dll`, `.runtimeconfig.json`, or `Easydict.CompatHost*` strings from the scanner itself.
+- Confirmed the real first-release portable path builds and validates as Rust-only: `pack-rs-portable --configuration Release --no-zip` produced 6 entries under `rs/target/portable-smoke/easydict-rs-portable-win-x64`, 79.03 MB total, with no retained .NET/PowerShell/WinForms marker hits in the five shipped executables.
+- Re-ran the Collins COBUILD real MDX/MDD tests with the correct `RS_MDICT_TEST_MDX` / `RS_MDICT_TEST_MDD` variables. The parser saw the encrypted MDX/MDD pair and the app route inlined `\cceu.css` as a data URI.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains -- --nocapture`
+- `cargo check --manifest-path lib/winfluent-rs/Cargo.toml -p win_fluent_platform_win --no-default-features`
+- `cargo check --manifest-path lib/winfluent-rs/Cargo.toml -p win_fluent_backend_iced --no-default-features`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_preview_iced --target x86_64-pc-windows-msvc`
+- `cargo run --manifest-path rs/Cargo.toml -p easydict_packager -- pack-rs-portable --workspace C:\Users\johnn\Documents\work\easydict_win32.refactor\rs --platform x64 --configuration Release --output-root C:\Users\johnn\Documents\work\easydict_win32.refactor\rs\target\portable-smoke --no-zip`
+- Manual marker scan of `Easydict.Rust.exe`, `easydict-native-bridge.exe`, `easydict_browser_registrar.exe`, `easydict_cli.exe`, and `easydict_long_doc.exe` for ASCII/UTF-16LE retained .NET, PowerShell, System.Speech, and System.Windows.Forms markers.
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path lib/rs-mdict/Cargo.toml --features real-corpus-tests --test integration_test -- --nocapture`
+- `$env:RS_MDICT_TEST_MDX='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdx'; $env:RS_MDICT_TEST_MDD='C:\Users\johnn\Downloads\collins-cobuild-english-usage\Collins COBUILD English Usage.mdd'; cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --nocapture`
+
 ## 2026-06-13: Moved OCR named-event receiving to a Rust-owned stream
 
 - Followed the parallel desktop-boundary audit: the NativeBridge binary already signals `Local\EasydictRs-OcrTranslate` through `lib/easydict-windows-ipc`, but the app still received that event through WinFluent's named-event subscription/runtime adapter.

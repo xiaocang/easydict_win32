@@ -1,4 +1,4 @@
-use crate::{Message, HOTKEY_OCR_TRANSLATE, PROTOCOL_EASYDICT};
+use crate::{Message, HOTKEY_OCR_TRANSLATE, LEGACY_PROTOCOL_EASYDICT, PROTOCOL_EASYDICT};
 
 pub const OCR_TRANSLATE_ARGUMENT: &str = "--ocr-translate";
 pub const OCR_TRANSLATE_PROTOCOL_PAYLOAD: &str = "ocr-translate";
@@ -71,7 +71,7 @@ fn parse_startup_activation_arg(arg: &str) -> Option<StartupActivation> {
 
 fn parse_protocol_activation(arg: &str) -> Option<StartupActivation> {
     let (scheme, payload) = arg.split_once(':')?;
-    if !scheme.eq_ignore_ascii_case(PROTOCOL_EASYDICT) {
+    if !protocol_scheme_is_supported(scheme) {
         return None;
     }
 
@@ -87,4 +87,9 @@ fn parse_protocol_activation(arg: &str) -> Option<StartupActivation> {
     } else {
         None
     }
+}
+
+fn protocol_scheme_is_supported(scheme: &str) -> bool {
+    scheme.eq_ignore_ascii_case(PROTOCOL_EASYDICT)
+        || scheme.eq_ignore_ascii_case(LEGACY_PROTOCOL_EASYDICT)
 }

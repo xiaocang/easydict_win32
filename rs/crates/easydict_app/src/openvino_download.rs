@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
+use crate::app_data::default_user_data_directory;
 use crate::protocol::SettingsSnapshot;
 use crate::resource_download::{
     download_with_retry, try_delete_file, ReqwestResourceDownloadClient, ResourceDownloadClient,
@@ -154,10 +155,7 @@ impl From<zip::result::ZipError> for OpenVinoDownloadError {
 }
 
 pub fn default_openvino_data_directory() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
+    default_user_data_directory()
 }
 
 pub fn openvino_download_status_for_directory(

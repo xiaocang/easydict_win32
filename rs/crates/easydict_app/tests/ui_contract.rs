@@ -1261,6 +1261,7 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
         "OpenAIKeyHeaderText",
         "OpenAIKeyBox",
         "OpenAIKeyRevealButton",
+        "OpenAIEndpointHeaderText",
         "OpenAIEndpointBox",
         "OpenAIApiFormatCombo",
         "OpenAIDetectedFormatText",
@@ -1276,6 +1277,7 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
     assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "icon=reveal-secret");
     assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "width=Fixed(28)");
     assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "height=Fixed(28)");
+    assert_control_contains(&snapshot, "OpenAIEndpointHeaderText", "Endpoint");
     assert_control_contains(&snapshot, "OpenAIEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "OpenAIApiFormatCombo", "selected=\"Auto\"");
     assert_control_contains(&snapshot, "OpenAIDetectedFormatText", "Responses API");
@@ -1341,6 +1343,29 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
     );
     assert_control_contains(&snapshot, "OpenAIStatusText", "Test requested");
     assert_control_contains(&snapshot, "OllamaStatusText", "Test requested for qwen2.5");
+}
+
+#[test]
+fn zh_cn_services_openai_configuration_uses_winui_labels() {
+    let mut state = EasydictUiState::default();
+    state.settings.selected_section = easydict_app::SettingsSection::Services;
+    state.settings.ui_language = "zh-CN".to_string();
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        "openai".to_string(),
+        true,
+    ));
+
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+
+    assert_control_contains(&snapshot, "OpenAIKeyHeaderText", "API 密钥");
+    assert_control_contains(&snapshot, "OpenAIEndpointHeaderText", "端点（可选）");
+    assert_control_contains(&snapshot, "OpenAIModelCombo", "label=\"模型\"");
+    assert_control_contains(&snapshot, "TestOpenAIButton", "label=\"测试\"");
+    assert_control_contains(
+        &snapshot,
+        "OpenAIDetectedFormatText",
+        "检测格式：Responses API",
+    );
 }
 
 #[test]

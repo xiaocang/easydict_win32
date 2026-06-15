@@ -4,10 +4,14 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::app_data::default_user_data_directory;
+
 const LEGACY_OPENVINO_SERVICE_ID: &str = "openvino-local-ai";
 const LEGACY_FOUNDRY_LOCAL_SERVICE_ID: &str = "foundry-local";
 const WINDOWS_LOCAL_AI_SERVICE_ID: &str = "windows-local-ai";
 const SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE: &str = "EASYDICT_SETTINGS_DIR";
+const LEGACY_SETTINGS_ROOT_NAME: &str = "Easydict";
+const SETTINGS_FILE_NAME: &str = "settings.json";
 const RUNTIME_ONLY_WORKER_ISOLATION_SETTINGS: &[&str] =
     &["UseLongDocWorker", "UseLocalAiWorker", "UseOcrWorker"];
 
@@ -65,12 +69,7 @@ pub fn migrate_settings_file(
     params: &SettingsMigrateParams,
 ) -> Result<SettingsMigrateResult, SettingsMigrationError> {
     let source_path = resolve_source_path(params.legacy_settings_path.as_deref());
-    let target_path = params
-        .target_settings_path
-        .as_deref()
-        .filter(|path| !path.trim().is_empty())
-        .map(resolve_expanded_full_path)
-        .unwrap_or_else(|| source_path.clone());
+    let target_path = resolve_target_path(params.target_settings_path.as_deref());
     let mut warnings = Vec::new();
 
     if !source_path.exists() {
@@ -124,9 +123,29 @@ pub fn migrate_settings_object(root: &mut Map<String, Value>) -> bool {
 }
 
 pub fn resolve_source_path(path: Option<&str>) -> PathBuf {
+    resolve_settings_path(path, default_legacy_settings_path)
+}
+
+pub fn resolve_target_path(path: Option<&str>) -> PathBuf {
+    resolve_settings_path(path, default_rust_settings_path)
+}
+
+pub fn default_rust_settings_path() -> PathBuf {
+    if let Some(settings_directory) = std::env::var(SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return resolve_expanded_full_path(&settings_directory).join(SETTINGS_FILE_NAME);
+    }
+
+    default_user_data_directory().join(SETTINGS_FILE_NAME)
+}
+
+fn resolve_settings_path(path: Option<&str>, default_path: impl FnOnce() -> PathBuf) -> PathBuf {
     path.filter(|value| !value.trim().is_empty())
         .map(resolve_expanded_full_path)
-        .unwrap_or_else(default_settings_path)
+        .unwrap_or_else(default_path)
 }
 
 fn parse_settings_object(json: &str) -> Result<Map<String, Value>, SettingsMigrationError> {
@@ -326,20 +345,24 @@ fn value_eq_ignore_case(value: &Value, expected: &str) -> bool {
         .is_some_and(|value| value.eq_ignore_ascii_case(expected))
 }
 
-fn default_settings_path() -> PathBuf {
+fn default_legacy_settings_path() -> PathBuf {
+    default_settings_path(LEGACY_SETTINGS_ROOT_NAME)
+}
+
+fn default_settings_path(root_name: &str) -> PathBuf {
     if let Some(settings_directory) = std::env::var(SETTINGS_DIRECTORY_ENVIRONMENT_VARIABLE)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
     {
-        return resolve_expanded_full_path(&settings_directory).join("settings.json");
+        return resolve_expanded_full_path(&settings_directory).join(SETTINGS_FILE_NAME);
     }
 
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
-        .join("settings.json")
+        .join(root_name)
+        .join(SETTINGS_FILE_NAME)
 }
 
 fn resolve_expanded_full_path(path: &str) -> PathBuf {

@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::app_data::default_user_data_directory;
 use crate::protocol::SettingsSnapshot;
 use crate::resource_download::{
     download_with_retry, is_file_valid, ordered_urls_by_probe, try_delete_file,
@@ -454,8 +455,5 @@ fn extract_runtime_from_zip(
 }
 
 fn default_data_directory() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
+    default_user_data_directory()
 }

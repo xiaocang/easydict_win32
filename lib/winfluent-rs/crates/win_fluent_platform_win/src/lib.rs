@@ -1379,6 +1379,7 @@ fn squared_distance_to_rect(point: WindowsPoint, area: WindowsRect) -> i64 {
 #[cfg(windows)]
 mod native {
     use std::io::Write;
+    #[cfg(feature = "legacy-powershell-tts")]
     use std::process::Command;
     use std::ptr::{null, null_mut};
     use std::sync::Mutex;
@@ -1455,12 +1456,14 @@ mod native {
         IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
         MSG, PM_REMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
         SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-        SW_SHOWNORMAL, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_HOTKEY, WM_LBUTTONUP,
-        WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-        WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW, WS_POPUP, WS_THICKFRAME,
+        SW_SHOWNORMAL, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CONTEXTMENU, WM_HOTKEY,
+        WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW,
+        WS_POPUP, WS_THICKFRAME,
     };
 
     static TEXT_INSERTION_TARGET: Mutex<isize> = Mutex::new(0);
+    pub(super) const NIN_KEYSELECT: u32 = WM_USER + 1;
 
     #[derive(Debug)]
     pub struct NamedEventHandle {
@@ -1700,7 +1703,7 @@ mod native {
         }
 
         let tray_mouse_message = message.lParam as u32;
-        if tray_mouse_message == WM_LBUTTONUP || tray_mouse_message == NIN_SELECT {
+        if is_tray_default_activation_message(tray_mouse_message) {
             let item = handle
                 .native
                 .default_command_id
@@ -1714,11 +1717,22 @@ mod native {
             }));
         }
 
-        if tray_mouse_message == WM_RBUTTONUP {
+        if is_tray_context_menu_message(tray_mouse_message) {
             return show_tray_menu(&handle.native);
         }
 
         Ok(None)
+    }
+
+    pub(super) const fn is_tray_default_activation_message(message: u32) -> bool {
+        matches!(
+            message,
+            WM_LBUTTONUP | WM_LBUTTONDBLCLK | NIN_SELECT | NIN_KEYSELECT
+        )
+    }
+
+    pub(super) const fn is_tray_context_menu_message(message: u32) -> bool {
+        matches!(message, WM_RBUTTONUP | WM_CONTEXTMENU)
     }
 
     pub fn create_named_event(
@@ -2274,6 +2288,7 @@ mod native {
         Ok(())
     }
 
+    #[cfg(feature = "legacy-powershell-tts")]
     pub fn speak_text(text: &str, language: Option<&str>) -> Result<(), WindowsPlatformError> {
         if text.trim().is_empty() {
             return Ok(());
@@ -2325,6 +2340,11 @@ try {
                 operation: "powershell.exe",
                 code: 0,
             })
+    }
+
+    #[cfg(not(feature = "legacy-powershell-tts"))]
+    pub fn speak_text(_text: &str, _language: Option<&str>) -> Result<(), WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
     fn captured_text_insertion_target() -> Result<HWND, WindowsPlatformError> {
@@ -4289,6 +4309,36 @@ mod tests {
         let disabled_parent_plan =
             WindowsPlatformAdapter::plan_tray::<Msg>(&disabled_parent).expect("tray plan");
         assert_eq!(disabled_parent_plan.default_command_id, None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_default_activation_accepts_mouse_and_keyboard_invocation() {
+        use windows_sys::Win32::UI::Shell::NIN_SELECT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            WM_CONTEXTMENU, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP,
+        };
+
+        assert!(native::is_tray_default_activation_message(WM_LBUTTONUP));
+        assert!(native::is_tray_default_activation_message(WM_LBUTTONDBLCLK));
+        assert!(native::is_tray_default_activation_message(NIN_SELECT));
+        assert!(native::is_tray_default_activation_message(
+            native::NIN_KEYSELECT
+        ));
+        assert!(!native::is_tray_default_activation_message(WM_RBUTTONUP));
+        assert!(!native::is_tray_default_activation_message(WM_CONTEXTMENU));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_context_menu_accepts_legacy_and_v4_shell_messages() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            WM_CONTEXTMENU, WM_LBUTTONUP, WM_RBUTTONUP,
+        };
+
+        assert!(native::is_tray_context_menu_message(WM_RBUTTONUP));
+        assert!(native::is_tray_context_menu_message(WM_CONTEXTMENU));
+        assert!(!native::is_tray_context_menu_message(WM_LBUTTONUP));
     }
 
     #[cfg(windows)]

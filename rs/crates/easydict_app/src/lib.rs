@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod activation;
+pub mod app_data;
 pub mod browser_registrar;
 pub mod character_paragraph;
 pub mod cli_translate;
@@ -552,12 +553,12 @@ pub use activation::{
     startup_activation_message_for_args, StartupActivation, StartupActivationDisposition,
 };
 pub use credential_protection::{
-    get_or_create_persisted_machine_id, is_protected_credential, protect_credential,
-    protect_credential_legacy, protect_credential_with_scope, try_unprotect_credential,
-    try_unprotect_credential_legacy, try_unprotect_credential_with_machine_id,
-    unprotect_or_return_plaintext, unprotect_or_return_plaintext_with_machine_id,
-    CredentialPlaintext, CredentialProtectionError, CredentialProtectionScope,
-    MAX_NESTED_PROTECTED_VALUE_DEPTH,
+    get_or_create_persisted_machine_id, get_or_create_persisted_machine_id_with_legacy_fallback,
+    is_protected_credential, protect_credential, protect_credential_legacy,
+    protect_credential_with_scope, try_unprotect_credential, try_unprotect_credential_legacy,
+    try_unprotect_credential_with_machine_id, unprotect_or_return_plaintext,
+    unprotect_or_return_plaintext_with_machine_id, CredentialPlaintext, CredentialProtectionError,
+    CredentialProtectionScope, MAX_NESTED_PROTECTED_VALUE_DEPTH,
 };
 pub use grammar_correction::{
     build_grammar_correction_plain_text_prompt, build_grammar_correction_user_prompt,
@@ -1687,8 +1688,9 @@ pub const BROWSER_REGISTRAR_EXE: &str = "easydict_browser_registrar.exe";
 pub const CHROME_EXTENSION_URL: &str =
     "https://chromewebstore.google.com/detail/dmokdfinnomehfpmhoeekomncpobgagf";
 pub const OCR_TRANSLATE_EVENT_NAME: &str = r"Local\EasydictRs-OcrTranslate";
-pub const SHELL_OCR_TRANSLATE: &str = "EasydictOCR";
-pub const PROTOCOL_EASYDICT: &str = "easydict";
+pub const SHELL_OCR_TRANSLATE: &str = "EasydictRsOCR";
+pub const PROTOCOL_EASYDICT: &str = "easydict-rs";
+pub const LEGACY_PROTOCOL_EASYDICT: &str = "easydict";
 
 pub fn startup_activation_task_for_args<I, S>(args: I) -> Task<Message>
 where
@@ -2005,9 +2007,17 @@ fn push_tray_icon_candidates_from_directory(
     for ancestor in directory.ancestors() {
         candidates.push(
             ancestor
-                .join("dotnet")
-                .join("src")
-                .join("Easydict.WinUI")
+                .join("crates")
+                .join("easydict_app")
+                .join("resources")
+                .join("AppIcon.ico"),
+        );
+        candidates.push(
+            ancestor
+                .join("rs")
+                .join("crates")
+                .join("easydict_app")
+                .join("resources")
                 .join("AppIcon.ico"),
         );
     }
@@ -2032,7 +2042,7 @@ pub fn default_desktop_protocol_registrations(
 ) -> Vec<desktop_integration::DesktopProtocolRegistration> {
     vec![desktop_integration::DesktopProtocolRegistration::new(
         PROTOCOL_EASYDICT,
-        "URL:Easydict Protocol",
+        "URL:Easydict Rust Protocol",
     )
     .argument("%1")]
 }
@@ -2065,10 +2075,7 @@ pub fn browser_registrar_task_for(
     command: &'static str,
     browser: Option<&'static str>,
 ) -> Task<Message> {
-    desktop_shell::run_bundled_executable_task(
-        BROWSER_REGISTRAR_EXE,
-        browser_registrar_arguments(command, browser),
-    )
+    desktop_shell::run_browser_registrar_task(browser_registrar_arguments(command, browser))
 }
 
 pub fn browser_registrar_arguments(command: &str, browser: Option<&str>) -> Vec<String> {

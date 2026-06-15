@@ -2,7 +2,7 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-pub const NATIVE_HOST_NAME: &str = "com.easydict.bridge";
+pub const NATIVE_HOST_NAME: &str = "com.easydict.rs.bridge";
 pub const OCR_TRANSLATE_ACTION: &str = "ocr-translate";
 pub const MAX_NATIVE_MESSAGE_BYTES: u32 = 1024 * 1024;
 

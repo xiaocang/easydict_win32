@@ -1,11 +1,12 @@
+use crate::app_data::legacy_user_data_directory;
 use crate::credential_protection::{
-    get_or_create_persisted_machine_id, protect_credential,
+    get_or_create_persisted_machine_id_with_legacy_fallback, protect_credential,
     unprotect_or_return_plaintext_with_machine_id,
 };
 use crate::mdx_native::discover_mdd_file_paths;
 use crate::protocol::normalize_local_ai_provider_mode;
 use crate::settings_migration::{
-    migrate_settings_json, resolve_source_path, SettingsMigrationError,
+    default_rust_settings_path, migrate_settings_json, SettingsMigrationError,
 };
 use crate::state::{
     HotkeySetting, ImportedMdxDictionary, ServiceProviderSetting, SettingsState,
@@ -84,7 +85,7 @@ impl From<SettingsMigrationError> for SettingsStorageError {
 }
 
 pub fn default_settings_storage_path() -> PathBuf {
-    resolve_source_path(None)
+    default_rust_settings_path()
 }
 
 pub fn load_settings_file(
@@ -1154,5 +1155,5 @@ fn default_storage_machine_id() -> String {
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
-    get_or_create_persisted_machine_id(directory)
+    get_or_create_persisted_machine_id_with_legacy_fallback(directory, legacy_user_data_directory())
 }

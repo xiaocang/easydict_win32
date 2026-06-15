@@ -674,41 +674,39 @@ fn service_icon(service_id: &str) -> IconToken {
     match service_id {
         "google" | "google_web" => IconToken::with_image(
             "service-google",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Google.scale-100.png"),
+            include_bytes!("../resources/service-icons/Google.scale-100.png"),
         ),
         "bing" => IconToken::with_image(
             "service-bing",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Bing.scale-100.png"),
+            include_bytes!("../resources/service-icons/Bing.scale-100.png"),
         ),
         "windows-local-ai" => IconToken::with_image(
             "service-local-ai",
-            include_bytes!(
-                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/windows-local-ai.scale-100.png"
-            ),
+            include_bytes!("../resources/service-icons/windows-local-ai.scale-100.png"),
         ),
         "openai" => IconToken::with_image(
             "service-ai",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/OpenAI.scale-100.png"),
+            include_bytes!("../resources/service-icons/OpenAI.scale-100.png"),
         ),
         "deepseek" => IconToken::with_image(
             "service-deepseek",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepSeek.scale-100.png"),
+            include_bytes!("../resources/service-icons/DeepSeek.scale-100.png"),
         ),
         "deepl" => IconToken::with_image(
             "service-deepl",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/DeepL.scale-100.png"),
+            include_bytes!("../resources/service-icons/DeepL.scale-100.png"),
         ),
         "ollama" => IconToken::with_image(
             "service-ollama",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Ollama.scale-100.png"),
+            include_bytes!("../resources/service-icons/Ollama.scale-100.png"),
         ),
         "zhipu" => IconToken::with_image(
             "service-zhipu",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Zhipu.scale-100.png"),
+            include_bytes!("../resources/service-icons/Zhipu.scale-100.png"),
         ),
         "groq" => IconToken::with_image(
             "service-groq",
-            include_bytes!("../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Groq.scale-100.png"),
+            include_bytes!("../resources/service-icons/Groq.scale-100.png"),
         ),
         service_id if service_id.starts_with("mdx::") => {
             IconToken::with_glyph("service-mdx", '\u{E8D5}')

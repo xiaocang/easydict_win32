@@ -58,7 +58,6 @@ retained-dotnet-workers = ["easydict_runtime_guards/retained-dotnet-workers"]
 [dev-dependencies]
 easydict_windows_ipc = { path = "../../../lib/easydict-windows-ipc", features = ["test-support"] }
 flate2 = "1"
-win_fluent_platform_win = { path = "../../../lib/winfluent-rs/crates/win_fluent_platform_win" }
 win_fluent_testkit = { path = "../../../lib/winfluent-rs/crates/win_fluent_testkit" }
 
 [target.'cfg(windows)'.dev-dependencies]

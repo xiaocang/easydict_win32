@@ -8,6 +8,8 @@ param(
     [int]$SettlingMilliseconds = 900,
     [int]$ContentCheckRetries = 8,
     [int]$ContentCheckDelayMilliseconds = 350,
+    [double]$CursorDipX = -1,
+    [double]$CursorDipY = -1,
     [switch]$AllowLikelyBlankCapture
 )
 
@@ -73,7 +75,7 @@ trap {
     if ($null -ne $script:StartedPreviewProcess -and -not $script:StartedPreviewProcess.HasExited) {
         Stop-Process -Id $script:StartedPreviewProcess.Id -ErrorAction SilentlyContinue
     }
-    throw
+    throw $_
 }
 
 Add-Type -AssemblyName System.Drawing
@@ -106,6 +108,13 @@ public static class Win32DpiCapture
         public int dwFlags;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
     [DllImport("user32.dll")]
     public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 
@@ -119,6 +128,12 @@ public static class Win32DpiCapture
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
     public static extern bool SetWindowPos(
         IntPtr hWnd,
         IntPtr hWndInsertAfter,
@@ -130,6 +145,12 @@ public static class Win32DpiCapture
 
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(POINT point);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -294,6 +315,120 @@ function Get-WindowRectPhysical($hwnd) {
     return $getWindowRect
 }
 
+function Get-WindowDpiScale($hwnd) {
+    $monitor = [Win32DpiCapture]::MonitorFromWindow($hwnd, 2)
+    $dpiX = [uint32]96
+    $dpiY = [uint32]96
+    $dpiResult = [Win32DpiCapture]::GetDpiForMonitor($monitor, 0, [ref]$dpiX, [ref]$dpiY)
+    if ($dpiResult -lt 0 -or $dpiX -eq 0) {
+        $dpiX = [Win32DpiCapture]::GetDpiForWindow($hwnd)
+    }
+    if ($dpiX -eq 0) {
+        return 1.0
+    }
+
+    return [double]$dpiX / 96.0
+}
+
+function Format-HwndHex([IntPtr]$hwnd) {
+    if ($hwnd -eq [IntPtr]::Zero) {
+        return "0x0"
+    }
+
+    "0x{0:X}" -f $hwnd.ToInt64()
+}
+
+function Measure-WindowOcclusion($hwnd, $rect) {
+    $gaRoot = 2
+    $foreground = [Win32DpiCapture]::GetForegroundWindow()
+    [uint32]$targetProcessId = 0
+    $null = [Win32DpiCapture]::GetWindowThreadProcessId($hwnd, [ref]$targetProcessId)
+
+    $width = [Math]::Max(1, $rect.Right - $rect.Left)
+    $height = [Math]::Max(1, $rect.Bottom - $rect.Top)
+    $probePoints = @(
+        @{ Name = "title-left"; X = $rect.Left + [Math]::Min([Math]::Max(24, [int]($width * 0.08)), $width - 24); Y = $rect.Top + [Math]::Min(36, [Math]::Max(12, [int]($height * 0.08))) },
+        @{ Name = "title-right"; X = $rect.Right - [Math]::Min([Math]::Max(80, [int]($width * 0.08)), $width - 24); Y = $rect.Top + [Math]::Min(36, [Math]::Max(12, [int]($height * 0.08))) },
+        @{ Name = "center"; X = $rect.Left + [int]($width / 2); Y = $rect.Top + [int]($height / 2) },
+        @{ Name = "lower-center"; X = $rect.Left + [int]($width / 2); Y = $rect.Top + [int]($height * 0.82) }
+    )
+
+    $probes = New-Object System.Collections.Generic.List[object]
+    $matchingProbeCount = 0
+    foreach ($probe in $probePoints) {
+        $point = New-Object Win32DpiCapture+POINT
+        $point.X = [int]$probe["X"]
+        $point.Y = [int]$probe["Y"]
+        $topWindow = [Win32DpiCapture]::WindowFromPoint($point)
+        $rootWindow = if ($topWindow -ne [IntPtr]::Zero) {
+            [Win32DpiCapture]::GetAncestor($topWindow, $gaRoot)
+        } else {
+            [IntPtr]::Zero
+        }
+        [uint32]$rootProcessId = 0
+        if ($rootWindow -ne [IntPtr]::Zero) {
+            $null = [Win32DpiCapture]::GetWindowThreadProcessId($rootWindow, [ref]$rootProcessId)
+        }
+        $matchesTarget = $rootWindow -eq $hwnd -or ($rootProcessId -ne 0 -and $rootProcessId -eq $targetProcessId)
+        if ($matchesTarget) {
+            $matchingProbeCount++
+        }
+
+        $probes.Add([ordered]@{
+            name = [string]$probe["Name"]
+            x = [int]$probe["X"]
+            y = [int]$probe["Y"]
+            topWindow = Format-HwndHex $topWindow
+            rootWindow = Format-HwndHex $rootWindow
+            rootProcessId = if ($rootProcessId -ne 0) { [int]$rootProcessId } else { $null }
+            matchesTarget = [bool]$matchesTarget
+        }) | Out-Null
+    }
+
+    [ordered]@{
+        targetWindow = Format-HwndHex $hwnd
+        targetProcessId = if ($targetProcessId -ne 0) { [int]$targetProcessId } else { $null }
+        foregroundWindow = Format-HwndHex $foreground
+        isForeground = [bool]($foreground -eq $hwnd)
+        matchingProbeCount = [int]$matchingProbeCount
+        probeCount = [int]$probePoints.Count
+        isLikelyOccluded = [bool]($matchingProbeCount -lt $probePoints.Count)
+        probes = $probes.ToArray()
+    }
+}
+
+function Save-BitmapPngWithRetry($bitmap, [string]$path) {
+    $directory = Split-Path -Parent $path
+    if (-not [string]::IsNullOrWhiteSpace($directory)) {
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    }
+
+    $attempts = 4
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        $tempPath = if ([string]::IsNullOrWhiteSpace($directory)) {
+            "_c$PID$attempt.png"
+        } else {
+            Join-Path $directory "_c$PID$attempt.png"
+        }
+        try {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+            $bitmap.Save($tempPath, [System.Drawing.Imaging.ImageFormat]::Png)
+            Move-Item -LiteralPath $tempPath -Destination $path -Force
+            return
+        } catch {
+            $lastError = $_
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+            if ($attempt -lt $attempts) {
+                Start-Sleep -Milliseconds (120 * $attempt)
+            }
+        }
+    }
+
+    $message = if ($null -ne $lastError) { [string]$lastError.Exception.Message } else { "unknown error" }
+    throw "Failed to save PNG '$path' after $attempts attempt(s): $message"
+}
+
 function Save-ScreenRegionPng($path, [int]$x, [int]$y, [int]$width, [int]$height) {
     if ($width -le 0 -or $height -le 0) {
         throw "Invalid capture size ${width}x${height}."
@@ -303,7 +438,7 @@ function Save-ScreenRegionPng($path, [int]$x, [int]$y, [int]$width, [int]$height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
         $graphics.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size $width, $height), [System.Drawing.CopyPixelOperation]::SourceCopy)
-        $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+        Save-BitmapPngWithRetry -bitmap $bitmap -path $path
     } finally {
         $graphics.Dispose()
         $bitmap.Dispose()
@@ -417,10 +552,31 @@ $null = [Win32DpiCapture]::ShowWindow($hwnd, $swRestore)
 $null = [Win32DpiCapture]::SetWindowPos($hwnd, $hwndTopMost, 0, 0, 0, 0, $swpNoMove -bor $swpNoSize -bor $swpShowWindow)
 $restorePreviewZOrder = $true
 $null = [Win32DpiCapture]::SetForegroundWindow($hwnd)
+$cursorPhysical = $null
+if ($CursorDipX -ge 0 -and $CursorDipY -ge 0) {
+    $cursorRect = Get-WindowRectPhysical $hwnd
+    $cursorScale = Get-WindowDpiScale $hwnd
+    $cursorPhysical = [ordered]@{
+        x = [int][Math]::Round($cursorRect.Left + ($CursorDipX * $cursorScale))
+        y = [int][Math]::Round($cursorRect.Top + ($CursorDipY * $cursorScale))
+        source = "requested"
+    }
+    $null = [Win32DpiCapture]::SetCursorPos($cursorPhysical["x"], $cursorPhysical["y"])
+} else {
+    $cursorRect = Get-WindowRectPhysical $hwnd
+    $cursorScale = Get-WindowDpiScale $hwnd
+    $cursorPhysical = [ordered]@{
+        x = [int][Math]::Round($cursorRect.Left + (18.0 * $cursorScale))
+        y = [int][Math]::Round($cursorRect.Top + (18.0 * $cursorScale))
+        source = "default-titlebar-safe-point"
+    }
+    $null = [Win32DpiCapture]::SetCursorPos($cursorPhysical["x"], $cursorPhysical["y"])
+}
 Start-Sleep -Milliseconds ([Math]::Max(0, $SettlingMilliseconds))
 
 $captureAttempt = 0
 $contentCheck = $null
+$occlusionCheck = $null
 $windowPath = $null
 $desktopPath = $null
 $metadataPath = $null
@@ -454,14 +610,28 @@ try {
         $scale = [double]$dpiX / 96.0
         $virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
 
+        $null = [Win32DpiCapture]::ShowWindow($hwnd, $swRestore)
+        $null = [Win32DpiCapture]::SetWindowPos($hwnd, $hwndTopMost, 0, 0, 0, 0, $swpNoMove -bor $swpNoSize -bor $swpShowWindow)
+        $null = [Win32DpiCapture]::SetForegroundWindow($hwnd)
+        Start-Sleep -Milliseconds 120
+        $occlusionCheck = Measure-WindowOcclusion -hwnd $hwnd -rect $rect
+        if ([bool]$occlusionCheck.isLikelyOccluded -and $captureAttempt -lt $maxAttempts) {
+            Start-Sleep -Milliseconds ([Math]::Max(0, $ContentCheckDelayMilliseconds))
+            continue
+        }
+
         Save-ScreenRegionPng $windowPath $rect.Left $rect.Top $windowWidth $windowHeight
         $contentCheck = Measure-ImageContent $windowPath
-        if (-not $contentCheck.isLikelyBlank -or $AllowLikelyBlankCapture) {
+        if ((-not [bool]$occlusionCheck.isLikelyOccluded) -and (-not $contentCheck.isLikelyBlank -or $AllowLikelyBlankCapture)) {
             break
         }
         if ($captureAttempt -lt $maxAttempts) {
             Start-Sleep -Milliseconds ([Math]::Max(0, $ContentCheckDelayMilliseconds))
         }
+    }
+
+    if ($null -ne $occlusionCheck -and [bool]$occlusionCheck.isLikelyOccluded) {
+        throw "Captured preview window appears occluded after $captureAttempt attempt(s): $windowPath"
     }
 
     if ($null -ne $contentCheck -and $contentCheck.isLikelyBlank -and -not $AllowLikelyBlankCapture) {
@@ -525,6 +695,12 @@ $metadata = [ordered]@{
         retryLimit = [int]$ContentCheckRetries
         delayMilliseconds = [int]$ContentCheckDelayMilliseconds
         result = $contentCheck
+    }
+    occlusionCheck = $occlusionCheck
+    cursor = [ordered]@{
+        requestedDipX = if ($CursorDipX -ge 0) { [double]$CursorDipX } else { $null }
+        requestedDipY = if ($CursorDipY -ge 0) { [double]$CursorDipY } else { $null }
+        physical = $cursorPhysical
     }
     output = [ordered]@{
         window = $windowPath

@@ -11,13 +11,13 @@ pub fn open_url_task(url: &'static str) -> Task<Message> {
     )
 }
 
-pub fn run_bundled_executable_task(
-    executable_name: &'static str,
-    arguments: Vec<String>,
-) -> Task<Message> {
+pub fn run_browser_registrar_task(arguments: Vec<String>) -> Task<Message> {
     Task::perform(
         async move {
-            let _ = easydict_windows_shell::run_bundled_executable(executable_name, &arguments);
+            let _ = easydict_windows_shell::run_bundled_executable(
+                crate::BROWSER_REGISTRAR_EXE,
+                &arguments,
+            );
         },
         |_| Message::Noop,
     )

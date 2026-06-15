@@ -216,6 +216,7 @@ jobs:
             -Platform ${{ matrix.platform }} `
             -Configuration Release `
             -OutputDir ./publish/${{ matrix.platform }} `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}" `
             -IncludeLegacyRegistrarAlias
 
       # Publish LongDoc worker (out-of-process PDF + ONNX layout detection).
@@ -279,6 +280,7 @@ jobs:
             -Platform ${{ matrix.platform }} `
             -Configuration Release `
             -OutputDir ./publish-msix/${{ matrix.platform }} `
+            -RuntimeProfile "${{ env.RUNTIME_PROFILE }}" `
             -IncludeLegacyRegistrarAlias
 
       # Publish LongDoc worker into MSIX output. The publish dir becomes a subtree under

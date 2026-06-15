@@ -1,6 +1,6 @@
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use base64::{
@@ -16,10 +16,13 @@ use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::digest;
 use ring::rand::{SecureRandom, SystemRandom};
 
+use crate::app_data::{default_user_data_directory, legacy_user_data_directory};
+
 const PROTECTED_VALUE_PREFIX: &str = "edcred1:";
 const LEGACY_PROTECTED_VALUE_PREFIX: &str = "edloc1:";
 const LEGACY_KEY_PURPOSE: &str = "Easydict.WinUI.LocalSettingsCredentialKey.v1";
-const DPAPI_PURPOSE: &str = "Easydict.WinUI.LocalSettingsCredential.v2";
+const DPAPI_PURPOSE: &str = "Easydict.Rs.LocalSettingsCredential.v1";
+const LEGACY_DPAPI_PURPOSE: &str = "Easydict.WinUI.LocalSettingsCredential.v2";
 const USER_SCOPE_NAME: &str = "user";
 const MACHINE_SCOPE_NAME: &str = "machine";
 pub const MACHINE_ID_FILE_NAME: &str = "machine-id";
@@ -249,8 +252,8 @@ fn try_unprotect_nested_with_machine_id(
 }
 
 fn try_unprotect_single(protected_value: &str, machine_id: Option<&str>) -> Option<(String, bool)> {
-    if let Some(plaintext) = try_unprotect_dpapi(protected_value) {
-        return Some((plaintext, false));
+    if let Some((plaintext, used_legacy_purpose)) = try_unprotect_dpapi(protected_value) {
+        return Some((plaintext, used_legacy_purpose));
     }
 
     if let Some(machine_id) = machine_id {
@@ -262,12 +265,28 @@ fn try_unprotect_single(protected_value: &str, machine_id: Option<&str>) -> Opti
     None
 }
 
-fn try_unprotect_dpapi(protected_value: &str) -> Option<String> {
+fn try_unprotect_dpapi(protected_value: &str) -> Option<(String, bool)> {
     let (scope, payload) = parse_dpapi_protected_value(protected_value)?;
     let protected_bytes = base64_decode(payload).ok()?;
+
+    if let Some(plaintext) =
+        try_unprotect_dpapi_with_purpose(&protected_bytes, scope, DPAPI_PURPOSE)
+    {
+        return Some((plaintext, false));
+    }
+
+    try_unprotect_dpapi_with_purpose(&protected_bytes, scope, LEGACY_DPAPI_PURPOSE)
+        .map(|plaintext| (plaintext, true))
+}
+
+fn try_unprotect_dpapi_with_purpose(
+    protected_bytes: &[u8],
+    scope: CredentialProtectionScope,
+    purpose: &str,
+) -> Option<String> {
     let plaintext = unprotect_data(
         &protected_bytes,
-        &dpapi_optional_entropy(scope),
+        &dpapi_optional_entropy_for_purpose(purpose, scope),
         scope.platform_scope(),
     )
     .ok()?;
@@ -336,26 +355,50 @@ fn parse_dpapi_protected_value(value: &str) -> Option<(CredentialProtectionScope
 }
 
 fn dpapi_optional_entropy(scope: CredentialProtectionScope) -> Vec<u8> {
-    format!("{DPAPI_PURPOSE}:{}", scope.as_wire_name()).into_bytes()
+    dpapi_optional_entropy_for_purpose(DPAPI_PURPOSE, scope)
+}
+
+fn dpapi_optional_entropy_for_purpose(purpose: &str, scope: CredentialProtectionScope) -> Vec<u8> {
+    format!("{purpose}:{}", scope.as_wire_name()).into_bytes()
 }
 
 pub fn get_or_create_persisted_machine_id(directory: impl AsRef<Path>) -> String {
     let directory = directory.as_ref();
     fs::create_dir_all(directory).ok();
 
-    let path = directory.join(MACHINE_ID_FILE_NAME);
-    if let Some(existing) = read_non_empty_trimmed(&path) {
+    if let Some(existing) = read_machine_id_from_directory(directory) {
         return existing;
     }
 
-    let legacy_path = directory.join(LEGACY_MACHINE_ID_FILE_NAME);
-    if let Some(legacy) = read_non_empty_trimmed(&legacy_path) {
-        fs::write(&path, &legacy).ok();
+    let created = machine_guid_hash().unwrap_or_else(create_machine_id);
+    if fs::write(directory.join(MACHINE_ID_FILE_NAME), &created).is_ok() {
+        return created;
+    }
+
+    std::env::var("COMPUTERNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(created)
+}
+
+pub fn get_or_create_persisted_machine_id_with_legacy_fallback(
+    directory: impl AsRef<Path>,
+    legacy_directory: impl AsRef<Path>,
+) -> String {
+    let directory = directory.as_ref();
+    fs::create_dir_all(directory).ok();
+
+    if let Some(existing) = read_machine_id_from_directory(directory) {
+        return existing;
+    }
+
+    if let Some(legacy) = read_machine_id_from_directory(legacy_directory.as_ref()) {
+        fs::write(directory.join(MACHINE_ID_FILE_NAME), &legacy).ok();
         return legacy;
     }
 
     let created = machine_guid_hash().unwrap_or_else(create_machine_id);
-    if fs::write(&path, &created).is_ok() {
+    if fs::write(directory.join(MACHINE_ID_FILE_NAME), &created).is_ok() {
         return created;
     }
 
@@ -367,15 +410,28 @@ pub fn get_or_create_persisted_machine_id(directory: impl AsRef<Path>) -> String
 
 fn default_machine_id() -> &'static str {
     MACHINE_ID
-        .get_or_init(|| get_or_create_persisted_machine_id(default_data_directory()))
+        .get_or_init(|| {
+            get_or_create_persisted_machine_id_with_legacy_fallback(
+                default_user_data_directory(),
+                legacy_user_data_directory(),
+            )
+        })
         .as_str()
 }
 
-fn default_data_directory() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
+fn read_machine_id_from_directory(directory: &Path) -> Option<String> {
+    let path = directory.join(MACHINE_ID_FILE_NAME);
+    if let Some(existing) = read_non_empty_trimmed(&path) {
+        return Some(existing);
+    }
+
+    let legacy_path = directory.join(LEGACY_MACHINE_ID_FILE_NAME);
+    if let Some(legacy) = read_non_empty_trimmed(&legacy_path) {
+        fs::write(&path, &legacy).ok();
+        return Some(legacy);
+    }
+
+    None
 }
 
 fn read_non_empty_trimmed(path: &Path) -> Option<String> {

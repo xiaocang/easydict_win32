@@ -32,9 +32,11 @@ use iced::{
 use win_fluent::action::{Action, ActionKind};
 use win_fluent::command::CommandToken;
 use win_fluent::icon;
+#[cfg(all(windows, feature = "legacy-powershell-dialogs"))]
+use win_fluent::platform::FileDialogFilter;
 use win_fluent::platform::{
-    FileDialogFilter, FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey, HotkeyModifier,
-    PlatformCommand, ProtocolRegistration, ShellVerb,
+    FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand,
+    ProtocolRegistration, ShellVerb,
 };
 use win_fluent::runtime::{Application as FluentApplication, DesktopIntegrationPlan, RuntimePlan};
 use win_fluent::screenshot::WindowScreenshot;
@@ -936,7 +938,7 @@ where
 }
 
 fn run_platform_open_file_dialog(options: FileDialogOptions) -> Option<String> {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "legacy-powershell-dialogs"))]
     {
         let filter = file_dialog_filter_string(&options.filters);
         let mut script = String::new();
@@ -976,7 +978,7 @@ fn run_platform_open_file_dialog(options: FileDialogOptions) -> Option<String> {
         (!path.is_empty()).then_some(path)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "legacy-powershell-dialogs")))]
     {
         let _ = options;
         None
@@ -984,7 +986,7 @@ fn run_platform_open_file_dialog(options: FileDialogOptions) -> Option<String> {
 }
 
 fn run_platform_open_folder_dialog(options: FolderDialogOptions) -> Option<String> {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "legacy-powershell-dialogs"))]
     {
         let mut script = String::new();
         script.push_str("Add-Type -AssemblyName System.Windows.Forms\n");
@@ -1024,13 +1026,14 @@ fn run_platform_open_folder_dialog(options: FolderDialogOptions) -> Option<Strin
         (!path.is_empty()).then_some(path)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "legacy-powershell-dialogs")))]
     {
         let _ = options;
         None
     }
 }
 
+#[cfg(all(windows, feature = "legacy-powershell-dialogs"))]
 fn file_dialog_filter_string(filters: &[FileDialogFilter]) -> String {
     let mut parts = Vec::new();
 
@@ -1049,6 +1052,7 @@ fn file_dialog_filter_string(filters: &[FileDialogFilter]) -> String {
     parts.join("|")
 }
 
+#[cfg(all(windows, feature = "legacy-powershell-dialogs"))]
 fn ps_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -3808,8 +3812,8 @@ where
 
     let header_state = token.header_state.clone();
     let header: IcedElement<'a, Message> = if let Some(message) = toggle_message {
-        iced_button(header_content)
-            .padding([8, 16])
+        let header_button = iced_button(header_content)
+            .padding([7, 15])
             .width(IcedLength::Fill)
             .style(move |_, status| {
                 expander_header_button_style(
@@ -3817,7 +3821,10 @@ where
                     button_status_with_state(&header_state, status),
                 )
             })
-            .on_press(message)
+            .on_press(message);
+        iced_container(header_button)
+            .padding(1)
+            .width(IcedLength::Fill)
             .into()
     } else {
         iced_container(header_content)
@@ -3826,9 +3833,7 @@ where
             .into()
     };
 
-    let mut layout = iced_column(vec![header])
-        .spacing(0)
-        .width(IcedLength::Fill);
+    let mut layout = iced_column(vec![header]).spacing(0).width(IcedLength::Fill);
 
     if token.expanded {
         if let Some(content) = &token.content {
@@ -3881,13 +3886,8 @@ fn expander_header_button_style(
     visual: IcedVisualTheme,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
-    let background = match status {
-        iced::widget::button::Status::Hovered => visual.button_hover,
-        iced::widget::button::Status::Pressed => visual.button_pressed,
-        iced::widget::button::Status::Disabled | iced::widget::button::Status::Active => {
-            expander_background_color(visual)
-        }
-    };
+    let _ = status;
+    let background = expander_background_color(visual);
 
     iced::widget::button::Style {
         background: Some(Background::Color(background)),
@@ -6980,13 +6980,8 @@ fn expander_container_style_with_state(
 }
 
 fn expander_background_color_with_state(visual: IcedVisualTheme, state: &ControlState) -> Color {
-    if state.pressed {
-        visual.button_pressed
-    } else if state.hovered {
-        visual.button_hover
-    } else {
-        expander_background_color(visual)
-    }
+    let _ = state;
+    expander_background_color(visual)
 }
 
 fn expander_background_color(visual: IcedVisualTheme) -> Color {
@@ -8231,11 +8226,13 @@ mod tests {
         assert_eq!(expander_active.border.width, theme.stroke.control);
         assert_eq!(
             optional_background_color(expander_hover.background),
-            iced_color(theme.button_hover)
+            iced::Color::from_rgb8(253, 253, 254),
+            "WinUI Settings service expanders keep the header bar fill stable while hovered"
         );
         assert_eq!(
             optional_background_color(expander_pressed.background),
-            iced_color(theme.button_pressed)
+            iced::Color::from_rgb8(253, 253, 254),
+            "WinUI Settings service expanders keep the header bar fill stable while pressed"
         );
         let expander_header_hover =
             expander_header_button_style(visual, iced::widget::button::Status::Hovered);
@@ -8243,11 +8240,13 @@ mod tests {
             expander_header_button_style(visual, iced::widget::button::Status::Pressed);
         assert_eq!(
             optional_background_color(expander_header_hover.background),
-            iced_color(theme.button_hover)
+            iced::Color::from_rgb8(253, 253, 254),
+            "WinUI Expander header button does not tint the bar on hover"
         );
         assert_eq!(
             optional_background_color(expander_header_pressed.background),
-            iced_color(theme.button_pressed)
+            iced::Color::from_rgb8(253, 253, 254),
+            "WinUI Expander header button does not tint the bar on press"
         );
         assert_eq!(expander_header_hover.border.width, 0.0);
         let expander_content = expander_content_container_style(visual);

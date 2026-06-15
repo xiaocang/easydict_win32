@@ -1,3 +1,4 @@
+use crate::app_data::default_user_data_directory;
 use crate::translation_language::TranslationLanguage;
 use ring::digest::{digest, SHA256};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -427,10 +428,7 @@ pub fn long_document_source_hash(text: &str) -> String {
 }
 
 fn default_translation_cache_directory() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Easydict")
+    default_user_data_directory()
 }
 
 fn persistent_cache_now() -> String {

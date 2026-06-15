@@ -976,8 +976,23 @@ fn release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects() 
     );
     assert_contains(
         &build_helpers,
+        "[string]$RuntimeProfile = \"\"",
+        "Build-RustHelpers shim should not silently default to a hybrid runtime profile",
+    );
+    assert_contains(
+        &build_helpers,
+        "requires -RuntimeProfile Hybrid",
+        "Build-RustHelpers shim should require explicit Hybrid profile for the legacy alias",
+    );
+    assert_contains(
+        &build_helpers,
         "--include-legacy-registrar-alias",
         "Build-RustHelpers shim should forward the legacy registrar alias only when explicitly requested",
+    );
+    assert_contains(
+        &build_helpers,
+        "--runtime-profile",
+        "Build-RustHelpers shim should pass the explicit runtime profile to the Rust packager",
     );
 
     for relative_path in [
@@ -1022,6 +1037,13 @@ fn release_orchestration_uses_rust_helpers_not_retired_dotnet_helper_projects() 
             "IncludeLegacyRegistrarAlias",
             &format!(
                 "{relative_path} is a legacy/hybrid WinUI packaging path and must explicitly request the BrowserHostRegistrar.exe alias"
+            ),
+        );
+        assert_contains(
+            &text,
+            "RuntimeProfile",
+            &format!(
+                "{relative_path} must pair the BrowserHostRegistrar.exe alias with an explicit runtime profile"
             ),
         );
     }
@@ -1073,6 +1095,7 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
         configuration: "Release".to_string(),
         output_dir: output_dir.clone(),
         include_legacy_registrar_alias: false,
+        runtime_profile: None,
     })
     .expect("build helpers should run fake cargo and copy generated helpers");
 
@@ -1168,6 +1191,7 @@ fn rustup_target_add_is_forced_to_rust_only_runtime_profile() {
         configuration: "Release".to_string(),
         output_dir,
         include_legacy_registrar_alias: false,
+        runtime_profile: None,
     })
     .expect("build helpers should run fake rustup and cargo");
 
@@ -1249,8 +1273,8 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
         "easydict-rs-portable-v0.0.0-test-win-x64"
     );
     assert!(outcome.zip_path.is_none());
-    assert_eq!(outcome.file_count, 6);
-    assert_eq!(outcome.directory_validation_entries, 6);
+    assert_eq!(outcome.file_count, 7);
+    assert_eq!(outcome.directory_validation_entries, 7);
 
     let record = read_text(&record_path);
     assert_eq!(
@@ -1320,6 +1344,7 @@ fn pack_rs_portable_child_cargo_is_forced_to_rust_only_runtime_profile() {
         "easydict_browser_registrar.exe",
         "easydict_cli.exe",
         "easydict_long_doc.exe",
+        "AppIcon.ico",
         "README-portable.txt",
     ] {
         assert!(
@@ -1388,7 +1413,7 @@ fn pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload() 
     );
     assert_eq!(
         outcome.zip_validation_entries,
-        Some(6),
+        Some(7),
         "pack-rs-portable should validate the ZIP payload after creating it"
     );
 
@@ -1400,10 +1425,11 @@ fn pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload() 
         package_path: zip_path.clone(),
     })
     .expect("created rs portable ZIP should validate");
-    assert_eq!(directory_validation.checked_entries, 6);
-    assert_eq!(zip_validation.checked_entries, 6);
+    assert_eq!(directory_validation.checked_entries, 7);
+    assert_eq!(zip_validation.checked_entries, 7);
 
     let expected_entries = vec![
+        "AppIcon.ico".to_string(),
         "Easydict.Rust.exe".to_string(),
         "README-portable.txt".to_string(),
         "easydict-native-bridge.exe".to_string(),
@@ -2981,6 +3007,7 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
     for shim_name in [
         "Package-Msix.ps1",
         "Dedupe-WorkerSharedFiles.ps1",
+        "Build-RustHelpers.ps1",
         "Build-Installer.ps1",
         "Extract-DotnetRuntime.ps1",
     ] {
@@ -3221,7 +3248,6 @@ fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
     for needle in [
         "pub struct ExtractDotnetRuntimeOptions",
         "pub struct ExtractDotnetRuntimeOutcome",
-        "pub enum PackageRuntimeProfile",
         "pub enum ExtractDotnetRuntimeError",
         "pub fn extract_dotnet_runtime_archive",
         "pub fn dotnet_runtime_url",
@@ -4375,6 +4401,13 @@ fn write_fake_windows_ai_manifest_for_workspace(workspace: &Path) {
         "[package]\nname = \"easydict_windows_ai\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
     )
     .expect("write fake WindowsAI manifest");
+    let app_resource_dir = workspace
+        .join("crates")
+        .join("easydict_app")
+        .join("resources");
+    fs::create_dir_all(&app_resource_dir).expect("create fake app resources dir");
+    fs::write(app_resource_dir.join("AppIcon.ico"), b"fake app icon")
+        .expect("write fake rs app icon");
 }
 
 #[cfg(windows)]

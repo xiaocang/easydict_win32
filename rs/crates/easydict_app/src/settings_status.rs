@@ -1,11 +1,12 @@
 //! Real (filesystem-backed) runtime status for the settings page.
 //!
 //! Replaces the static placeholder status strings with genuine on-disk checks
-//! under the conventional Easydict data directory. This is the work the
+//! under the conventional rs data directory. This is the work the
 //! settings entry loading overlay waits on.
 
 use std::path::{Path, PathBuf};
 
+use crate::app_data::default_user_data_directory;
 use crate::font_download;
 use crate::layout_model_download::{self, LayoutModelDownloadConfig};
 #[cfg(test)]
@@ -38,12 +39,9 @@ pub enum OpenVinoCacheStatus {
     NotCompatible,
 }
 
-/// Conventional Easydict per-user data directory (`%LOCALAPPDATA%/Easydict`).
+/// Conventional rs per-user data directory (`%LOCALAPPDATA%/EasydictRs`).
 fn data_directory() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
+    default_user_data_directory()
 }
 
 fn is_open_vino_supported_current_architecture() -> bool {
@@ -636,7 +634,7 @@ mod tests {
     fn open_vino_cache_status_for_settings_treats_blank_cache_dir_as_default() {
         let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
         let local_app_data = temp_status_dir("openvino-settings-blank-cache-dir");
-        let default_base = local_app_data.join("Easydict");
+        let default_base = local_app_data.join("EasydictRs");
         install_open_vino_model(&default_base);
         install_open_vino_runtime(&default_base);
         let _local_app_data_guard =

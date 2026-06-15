@@ -2,21 +2,24 @@ use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use easydict_app::{
-    ensure_openvino_assets_available_for_directory, ensure_openvino_model_available_for_directory,
-    ensure_openvino_runtime_available_for_directory, openvino_download_status_for_directory,
-    openvino_ep_path_injection_enabled, openvino_runtime_path_with_directory, EasydictUiState,
-    Message, OpenVinoDownloadConfig, OpenVinoDownloadError, OpenVinoDownloadStatus,
-    OpenVinoModelDownloadFile, ResourceDownloadClient, ResourceDownloadError,
-    ResourceDownloadProgress, ResourceProbeResult,
+    default_openvino_data_directory, ensure_openvino_assets_available_for_directory,
+    ensure_openvino_model_available_for_directory, ensure_openvino_runtime_available_for_directory,
+    openvino_download_status_for_directory, openvino_ep_path_injection_enabled,
+    openvino_runtime_path_with_directory, EasydictUiState, Message, OpenVinoDownloadConfig,
+    OpenVinoDownloadError, OpenVinoDownloadStatus, OpenVinoModelDownloadFile,
+    ResourceDownloadClient, ResourceDownloadError, ResourceDownloadProgress, ResourceProbeResult,
 };
 use easydict_nllb::{
     NllbModelPaths, MODEL_COMPLETION_SENTINEL, OPENVINO_RUNTIME_PACKAGE_SHA256,
     OPENVINO_RUNTIME_PACKAGE_URL,
 };
 use ring::digest::{digest, SHA256};
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default)]
 struct FakeResourceDownloadClient {
@@ -85,6 +88,44 @@ fn temp_dir(name: &str) -> PathBuf {
         "easydict-openvino-download-{name}-{}-{nanos}",
         std::process::id()
     ))
+}
+
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let previous = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, previous }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.name, previous);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
+}
+
+#[test]
+fn default_openvino_data_directory_uses_rs_specific_root() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let local_app_data = temp_dir("openvino-default-root");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &local_app_data.to_string_lossy());
+
+    assert_eq!(
+        default_openvino_data_directory(),
+        local_app_data.join("EasydictRs")
+    );
+
+    let _ = fs::remove_dir_all(&local_app_data);
 }
 
 fn sha256_lower(bytes: &[u8]) -> String {

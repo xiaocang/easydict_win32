@@ -2,6 +2,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::app_data::default_user_data_directory;
 use crate::protocol::SettingsSnapshot;
 use crate::resource_download::{
     download_with_retry, ordered_urls_by_probe, try_delete_file, ReqwestResourceDownloadClient,
@@ -90,11 +91,7 @@ impl From<ResourceDownloadError> for FontDownloadError {
 }
 
 pub fn default_font_cache_dir() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
-        .join(FONTS_SUBDIR)
+    default_data_directory().join(FONTS_SUBDIR)
 }
 
 pub fn font_cache_dir(base: impl AsRef<Path>) -> PathBuf {
@@ -240,10 +237,7 @@ fn data_directory_for_settings(settings: &SettingsSnapshot) -> PathBuf {
 }
 
 fn default_data_directory() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Easydict")
+    default_user_data_directory()
 }
 
 pub(crate) fn is_managed_cjk_font_file(path: impl AsRef<Path>) -> bool {

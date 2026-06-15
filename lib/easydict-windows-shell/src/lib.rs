@@ -152,6 +152,19 @@ fn validate_bundled_executable_target(executable: &Path) -> Result<(), WindowsSh
         });
     }
 
+    let bytes = fs::read(executable).map_err(|error| {
+        WindowsShellError::InvalidBundledExecutableTarget {
+            executable: executable.to_path_buf(),
+            reason: error.to_string(),
+        }
+    })?;
+    if easydict_runtime_guards::bytes_contain_retained_runtime_marker(&bytes) {
+        return Err(WindowsShellError::InvalidBundledExecutableTarget {
+            executable: executable.to_path_buf(),
+            reason: "contains retained runtime marker".to_string(),
+        });
+    }
+
     Ok(())
 }
 
@@ -340,14 +353,7 @@ mod tests {
 
     #[test]
     fn bundled_executable_target_accepts_regular_file() {
-        let dir = std::env::temp_dir().join(format!(
-            "easydict-windows-shell-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system time")
-                .as_nanos()
-        ));
+        let dir = unique_temp_dir("regular-helper");
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let exe = dir.join("easydict_browser_registrar.exe");
         std::fs::write(&exe, b"fake rust helper").expect("write helper");
@@ -358,7 +364,45 @@ mod tests {
     }
 
     #[test]
+    fn bundled_executable_target_rejects_retained_runtime_content_markers() {
+        let dir = unique_temp_dir("retained-marker-helper");
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let exe = dir.join("easydict_browser_registrar.exe");
+        let mut bytes = b"fake helper with stale runtime marker hostfxr.dll\n".to_vec();
+        bytes.extend(
+            "System.Windows.Forms"
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes),
+        );
+        std::fs::write(&exe, bytes).expect("write helper");
+
+        let error = validate_bundled_executable_target(&exe)
+            .expect_err("retained runtime content must be rejected before spawn");
+
+        assert_eq!(
+            error,
+            WindowsShellError::InvalidBundledExecutableTarget {
+                executable: exe,
+                reason: "contains retained runtime marker".to_string(),
+            }
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn blank_url_is_noop() {
         open_url("   ").expect("blank URL should preserve old no-op behavior");
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "easydict-windows-shell-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ))
     }
 }

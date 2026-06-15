@@ -425,7 +425,7 @@ fn font_download_settings_entry_uses_configured_cache_dir() {
 fn font_download_settings_entry_treats_blank_cache_dir_as_default() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let local_app_data = temp_dir("font-settings-blank-cache-dir");
-    let default_base = local_app_data.join("Easydict");
+    let default_base = local_app_data.join("EasydictRs");
     let fonts_dir = font_cache_dir(&default_base);
     fs::create_dir_all(&fonts_dir).expect("create default fonts dir");
     let font_path = fonts_dir.join("NotoSansSC-Regular.ttf");

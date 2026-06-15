@@ -5,7 +5,10 @@ use easydict_app::{
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn settings_migration_normalizes_legacy_settings_shape() {
@@ -225,6 +228,7 @@ fn settings_migration_removes_duplicate_foundry_local_service_when_windows_local
 
 #[test]
 fn settings_migration_default_path_honors_settings_directory_env() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
     let temp = TempDir::new("settings-migrate-env");
     let settings_dir = temp.path().join("configured-settings");
     let _guard = EnvVarGuard::set(
@@ -235,6 +239,29 @@ fn settings_migration_default_path_honors_settings_directory_env() {
     assert_eq!(
         resolve_source_path(None),
         settings_dir.join("settings.json")
+    );
+}
+
+#[test]
+fn settings_migration_default_paths_copy_legacy_settings_to_rs_storage() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp = TempDir::new("settings-migrate-default-copy");
+    let _settings_guard = EnvVarGuard::set("EASYDICT_SETTINGS_DIR", String::new());
+    let _local_app_data_guard =
+        EnvVarGuard::set("LOCALAPPDATA", temp.path().to_string_lossy().to_string());
+    let source = temp.path().join("Easydict").join("settings.json");
+    let target = temp.path().join("EasydictRs").join("settings.json");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, r#"{"WindowWidth":640}"#).unwrap();
+
+    let result = migrate_settings_file(&SettingsMigrateParams::default()).unwrap();
+
+    assert!(result.migrated);
+    assert!(result.warnings.is_empty());
+    assert_eq!(read_json(&target)["WindowWidthDips"], 640.0);
+    assert!(
+        read_json(&source).get("WindowWidthDips").is_none(),
+        "default rs migration must copy into EasydictRs instead of rewriting legacy dotnet settings"
     );
 }
 

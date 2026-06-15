@@ -83,6 +83,53 @@ fn default_runtime_policy_implementation_is_lib_owned() {
 }
 
 #[test]
+fn default_rs_app_embeds_service_icons_from_crate_owned_resources() {
+    let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    for path in rust_source_files_under(&src_dir) {
+        let relative_path = relative_slash_path(&src_dir, &path);
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
+
+        assert!(
+            !production_source(&source).contains("dotnet/src/Easydict.WinUI"),
+            "{relative_path} should not load rs app assets from the dotnet project tree"
+        );
+    }
+
+    let icon_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join("service-icons");
+    for expected_icon in [
+        "Bing.scale-100.png",
+        "BuiltInAI.scale-100.png",
+        "Caiyun.scale-100.png",
+        "CustomOpenAI.scale-100.png",
+        "DeepL.scale-100.png",
+        "DeepSeek.scale-100.png",
+        "Doubao.scale-100.png",
+        "Gemini.scale-100.png",
+        "GitHubOnLight.scale-100.png",
+        "Google.scale-100.png",
+        "Groq.scale-100.png",
+        "Linguee.scale-100.png",
+        "NiuTrans.scale-100.png",
+        "Ollama.scale-100.png",
+        "OpenAI.scale-100.png",
+        "Volcano.scale-100.png",
+        "windows-local-ai.scale-100.png",
+        "Youdao.scale-100.png",
+        "Zhipu.scale-100.png",
+    ] {
+        let path = icon_dir.join(expected_icon);
+        assert!(
+            path.is_file(),
+            "rs app should own service icon resource {}",
+            path.display()
+        );
+    }
+}
+
+#[test]
 fn default_cargo_features_do_not_enable_retained_dotnet_workers() {
     let app_manifest = include_str!("../Cargo.toml");
     let preview_manifest = include_str!("../../easydict_preview_iced/Cargo.toml");

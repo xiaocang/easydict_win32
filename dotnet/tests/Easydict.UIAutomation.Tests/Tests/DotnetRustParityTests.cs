@@ -3088,12 +3088,12 @@ public sealed class DotnetRustParityTests : IDisposable
 
         if (step.HoveredElement is { } hoveredElement)
         {
-            AddRequiredControlStates(states, hoveredElement, "hovered");
+            AddRequiredControlStates(states, step.RequiredStateElement ?? hoveredElement, "hovered");
         }
 
         if (step.PressedElement is { } pressedElement)
         {
-            AddRequiredControlStates(states, pressedElement, "hovered", "pressed");
+            AddRequiredControlStates(states, step.RequiredStateElement ?? pressedElement, "hovered", "pressed");
         }
 
         if (step.FocusedElement is { } focusedElement)
@@ -4685,9 +4685,11 @@ public sealed class DotnetRustParityTests : IDisposable
         string? RustImportMdxState = null,
         string? RustInternationalToggleState = null,
         string? RustDeepLExpanderState = null,
+        string? RustServiceExpanderState = null,
         string? DotnetExpandElement = null,
         string? RustExpandedServiceConfigurations = null,
         string? RustLocalAiProvider = null,
+        string? RequiredStateElement = null,
         string? BaselineScenarioId = null,
         double InteractionFallbackX = 0.50,
         double InteractionFallbackY = 0.62)
@@ -4781,97 +4783,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 BaselineScenarioId: "parity-settings-services-translation-service-configuration-top",
                 InteractionFallbackX: 0.50,
                 InteractionFallbackY: 0.61),
-            new(
-                "parity-settings-services-deepl-expanded-top",
-                SettingsParitySection.Services,
-                0,
-                DotnetExpandElement: "DeepLServiceExpander",
-                RustExpandedServiceConfigurations: "deepl"),
-            new(
-                "parity-settings-services-local-ai-expanded-top",
-                SettingsParitySection.Services,
-                0,
-                DotnetExpandElement: "WindowsLocalAIExpander",
-                RustExpandedServiceConfigurations: "windows-local-ai",
-                RustLocalAiProvider: "FoundryLocal"),
-            new(
-                "parity-settings-services-ollama-expanded-top",
-                SettingsParitySection.Services,
-                0,
-                DotnetExpandElement: "Ollama (Local LLM)",
-                RustExpandedServiceConfigurations: "ollama"),
-            new(
-                "parity-settings-services-openai-expanded-scroll-15-percent",
-                SettingsParitySection.Services,
-                15,
-                DotnetExpandElement: "OpenAI",
-                RustExpandedServiceConfigurations: "openai"),
-            new(
-                "parity-settings-services-deepseek-expanded-scroll-25-percent",
-                SettingsParitySection.Services,
-                25,
-                DotnetExpandElement: "DeepSeek",
-                RustExpandedServiceConfigurations: "deepseek"),
-            new(
-                "parity-settings-services-groq-expanded-scroll-35-percent",
-                SettingsParitySection.Services,
-                35,
-                DotnetExpandElement: "Groq",
-                RustExpandedServiceConfigurations: "groq"),
-            new(
-                "parity-settings-services-zhipu-expanded-scroll-45-percent",
-                SettingsParitySection.Services,
-                45,
-                DotnetExpandElement: "Zhipu (智谱)",
-                RustExpandedServiceConfigurations: "zhipu"),
-            new(
-                "parity-settings-services-github-models-expanded-scroll-55-percent",
-                SettingsParitySection.Services,
-                55,
-                DotnetExpandElement: "GitHub Models",
-                RustExpandedServiceConfigurations: "github"),
-            new(
-                "parity-settings-services-gemini-expanded-scroll-60-percent",
-                SettingsParitySection.Services,
-                60,
-                DotnetExpandElement: "Gemini",
-                RustExpandedServiceConfigurations: "gemini"),
-            new(
-                "parity-settings-services-custom-openai-expanded-scroll-70-percent",
-                SettingsParitySection.Services,
-                70,
-                DotnetExpandElement: "Custom OpenAI Compatible",
-                RustExpandedServiceConfigurations: "custom-openai"),
-            new(
-                "parity-settings-services-builtin-ai-expanded-scroll-75-percent",
-                SettingsParitySection.Services,
-                75,
-                DotnetExpandElement: "Built-in AI",
-                RustExpandedServiceConfigurations: "builtin"),
-            new(
-                "parity-settings-services-doubao-expanded-scroll-80-percent",
-                SettingsParitySection.Services,
-                80,
-                DotnetExpandElement: "Doubao (豆包)",
-                RustExpandedServiceConfigurations: "doubao"),
-            new(
-                "parity-settings-services-caiyun-expanded-scroll-88-percent",
-                SettingsParitySection.Services,
-                88,
-                DotnetExpandElement: "Caiyun (彩云小译)",
-                RustExpandedServiceConfigurations: "caiyun"),
-            new(
-                "parity-settings-services-niutrans-expanded-scroll-94-percent",
-                SettingsParitySection.Services,
-                94,
-                DotnetExpandElement: "NiuTrans (小牛翻译)",
-                RustExpandedServiceConfigurations: "niutrans"),
-            new(
-                "parity-settings-services-youdao-expanded-scroll-100-percent",
-                SettingsParitySection.Services,
-                100,
-                DotnetExpandElement: "Youdao (有道翻译)",
-                RustExpandedServiceConfigurations: "youdao"),
+            .. ExpandedServiceConfigurationSteps(),
             new("parity-settings-views-window-results-top", SettingsParitySection.Views, 0),
             new("parity-settings-hotkeys-shortcut-inputs-top", SettingsParitySection.Hotkeys, 0),
             new("parity-settings-advanced-ocr-layout-top", SettingsParitySection.Advanced, 0),
@@ -4885,6 +4797,72 @@ public sealed class DotnetRustParityTests : IDisposable
                 RustTranslationLanguagesExpanded: true),
             new("parity-settings-about-links-top", SettingsParitySection.About, 0),
         ];
+
+        private static IReadOnlyList<SettingsParityCaptureStep> ExpandedServiceConfigurationSteps()
+        {
+            var steps = new List<SettingsParityCaptureStep>();
+            foreach (var service in ServiceConfigurationCaptures())
+            {
+                steps.Add(CreateExpandedServiceConfigurationStep(service, interactionState: null));
+                steps.Add(CreateExpandedServiceConfigurationStep(service, interactionState: "hovered"));
+                steps.Add(CreateExpandedServiceConfigurationStep(service, interactionState: "pressed"));
+            }
+
+            return steps;
+        }
+
+        private static SettingsParityCaptureStep CreateExpandedServiceConfigurationStep(
+            ServiceConfigurationCapture service,
+            string? interactionState)
+        {
+            var suffix = interactionState switch
+            {
+                "hovered" => "-bar-hover",
+                "pressed" => "-bar-pressed",
+                _ => string.Empty
+            };
+            var stateElement = interactionState is null ? null : service.RustExpanderId;
+
+            return new SettingsParityCaptureStep(
+                $"{service.ScenarioId}{suffix}",
+                SettingsParitySection.Services,
+                service.ScrollPercent,
+                HoveredElement: interactionState == "hovered" ? service.DotnetExpandElement : null,
+                PressedElement: interactionState == "pressed" ? service.DotnetExpandElement : null,
+                DotnetExpandElement: service.DotnetExpandElement,
+                RustExpandedServiceConfigurations: service.ServiceId,
+                RustLocalAiProvider: service.RustLocalAiProvider,
+                RustServiceExpanderState: interactionState,
+                RequiredStateElement: stateElement,
+                BaselineScenarioId: interactionState is null ? null : service.ScenarioId);
+        }
+
+        private static IReadOnlyList<ServiceConfigurationCapture> ServiceConfigurationCaptures() =>
+        [
+            new("parity-settings-services-deepl-expanded-top", "deepl", "DeepLServiceExpander", "DeepLServiceExpander", 0),
+            new("parity-settings-services-local-ai-expanded-top", "windows-local-ai", "WindowsLocalAIExpander", "WindowsLocalAIExpander", 0, "FoundryLocal"),
+            new("parity-settings-services-ollama-expanded-top", "ollama", "OllamaServiceExpander", "Ollama (Local LLM)", 0),
+            new("parity-settings-services-openai-expanded-scroll-15-percent", "openai", "OpenAIServiceExpander", "OpenAI", 15),
+            new("parity-settings-services-deepseek-expanded-scroll-25-percent", "deepseek", "DeepSeekServiceExpander", "DeepSeek", 25),
+            new("parity-settings-services-groq-expanded-scroll-35-percent", "groq", "GroqServiceExpander", "Groq", 35),
+            new("parity-settings-services-zhipu-expanded-scroll-45-percent", "zhipu", "ZhipuServiceExpander", "Zhipu (智谱)", 45),
+            new("parity-settings-services-github-models-expanded-scroll-55-percent", "github", "GitHubModelsServiceExpander", "GitHub Models", 55),
+            new("parity-settings-services-gemini-expanded-scroll-60-percent", "gemini", "GeminiServiceExpander", "Gemini", 60),
+            new("parity-settings-services-custom-openai-expanded-scroll-70-percent", "custom-openai", "CustomOpenAIServiceExpander", "Custom OpenAI Compatible", 70),
+            new("parity-settings-services-builtin-ai-expanded-scroll-75-percent", "builtin", "BuiltInAIServiceExpander", "Built-in AI", 75),
+            new("parity-settings-services-doubao-expanded-scroll-80-percent", "doubao", "DoubaoServiceExpander", "Doubao (豆包)", 80),
+            new("parity-settings-services-caiyun-expanded-scroll-88-percent", "caiyun", "CaiyunServiceExpander", "Caiyun (彩云小译)", 88),
+            new("parity-settings-services-niutrans-expanded-scroll-94-percent", "niutrans", "NiuTransServiceExpander", "NiuTrans (小牛翻译)", 94),
+            new("parity-settings-services-youdao-expanded-scroll-100-percent", "youdao", "YoudaoServiceExpander", "Youdao (有道翻译)", 100),
+        ];
+
+        private sealed record ServiceConfigurationCapture(
+            string ScenarioId,
+            string ServiceId,
+            string RustExpanderId,
+            string DotnetExpandElement,
+            double ScrollPercent,
+            string? RustLocalAiProvider = null);
     }
 
     private sealed record UiParityManifest(
@@ -5176,6 +5154,14 @@ public sealed class DotnetRustParityTests : IDisposable
                 startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE"] =
                     step.RustDeepLExpanderState;
             }
+            if (!string.IsNullOrWhiteSpace(step.RustServiceExpanderState) &&
+                !string.IsNullOrWhiteSpace(step.RustExpandedServiceConfigurations))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_ID"] =
+                    step.RustExpandedServiceConfigurations;
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATE"] =
+                    step.RustServiceExpanderState;
+            }
             if (!string.IsNullOrWhiteSpace(step.RustExpandedServiceConfigurations))
             {
                 startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS"] =
@@ -5224,6 +5210,9 @@ public sealed class DotnetRustParityTests : IDisposable
                 "EASYDICT_PREVIEW_SETTINGS_IMPORT_MDX_STATE",
                 "EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE",
                 "EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_ID",
+                "EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATES",
                 "EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS",
                 "EASYDICT_PREVIEW_SETTINGS_OLLAMA_MODEL_EMPTY",
                 "EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER",

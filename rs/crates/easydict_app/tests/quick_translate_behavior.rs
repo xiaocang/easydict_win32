@@ -68,12 +68,13 @@ use easydict_app::{
     TraditionalHttpServiceKind, TranslationCacheRequest, TranslationLanguage, TranslationResult,
     BROWSER_REGISTRAR_EXE, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, HOTKEY_OCR_TRANSLATE,
     HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR, HOTKEY_TOGGLE_FIXED,
-    HOTKEY_TOGGLE_MINI, HOTKEY_TRANSLATE_CLIPBOARD, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS,
-    OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT, SHELL_OCR_TRANSLATE,
-    TRAY_BROWSER_GET_CHROME_EXTENSION, TRAY_BROWSER_GET_FIREFOX_EXTENSION, TRAY_BROWSER_INSTALL,
-    TRAY_BROWSER_INSTALL_CHROME, TRAY_BROWSER_INSTALL_FIREFOX, TRAY_BROWSER_UNINSTALL,
-    TRAY_BROWSER_UNINSTALL_CHROME, TRAY_BROWSER_UNINSTALL_FIREFOX, TRAY_EXIT, TRAY_OCR_TRANSLATE,
-    TRAY_OPEN_SETTINGS, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
+    HOTKEY_TOGGLE_MINI, HOTKEY_TRANSLATE_CLIPBOARD, LEGACY_PROTOCOL_EASYDICT,
+    LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT,
+    SHELL_OCR_TRANSLATE, TRAY_BROWSER_GET_CHROME_EXTENSION, TRAY_BROWSER_GET_FIREFOX_EXTENSION,
+    TRAY_BROWSER_INSTALL, TRAY_BROWSER_INSTALL_CHROME, TRAY_BROWSER_INSTALL_FIREFOX,
+    TRAY_BROWSER_UNINSTALL, TRAY_BROWSER_UNINSTALL_CHROME, TRAY_BROWSER_UNINSTALL_FIREFOX,
+    TRAY_EXIT, TRAY_OCR_TRANSLATE, TRAY_OPEN_SETTINGS, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN,
+    TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
 };
 use easydict_app::{find_translation_service_descriptor, TranslationServiceKind};
 #[cfg(feature = "retained-dotnet-workers")]
@@ -103,9 +104,9 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake};
 use win_fluent::prelude::{
     Application, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand, PlatformEvent, ResultStatus,
-    RuntimePlan, Subscription, SubscriptionKind, Task, WindowCommand, WindowEvent, WindowId,
+    RuntimePlan, Subscription, SubscriptionKind, Task, TrayMenuItem, WindowCommand, WindowEvent,
+    WindowId,
 };
-use win_fluent_platform_win::{WindowsPlatformAdapter, WindowsTrayItemKind};
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -5972,9 +5973,20 @@ fn launch_at_startup_registration_uses_rust_owned_desktop_integration_helper() {
 #[test]
 fn browser_support_and_external_links_use_rust_owned_desktop_shell_helper() {
     let app_source = include_str!("../src/lib.rs");
+    let desktop_shell_source = include_str!("../src/desktop_shell.rs");
 
-    assert!(app_source.contains("desktop_shell::run_bundled_executable_task"));
+    assert!(app_source.contains("desktop_shell::run_browser_registrar_task"));
     assert!(app_source.contains("desktop_shell::open_url_task"));
+    assert!(desktop_shell_source.contains("pub fn run_browser_registrar_task("));
+    assert!(desktop_shell_source.contains("crate::BROWSER_REGISTRAR_EXE"));
+    assert!(
+        !desktop_shell_source.contains("pub fn run_bundled_executable_task("),
+        "default app should not expose a generic bundled executable task"
+    );
+    assert!(
+        !desktop_shell_source.contains("executable_name:"),
+        "default app shell task should not accept arbitrary bundled executable names"
+    );
     assert!(
         !app_source.contains("Task::run_bundled_executable"),
         "browser registrar launch should not route through WinFluent platform commands"
@@ -6396,6 +6408,71 @@ fn native_quick_translate_reads_real_mdx_and_inlines_real_mdd_resources() {
     );
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env() {
+    let Some(mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
+        return;
+    };
+    let Some(mdd_path) = real_corpus_path("RS_MDICT_TEST_MDD") else {
+        return;
+    };
+    let query = std::env::var("RS_MDICT_TEST_QUERY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "ability".to_string());
+    let app_dir = mdx_path
+        .parent()
+        .expect("real corpus MDX path should have a parent directory");
+
+    let mut state = EasydictUiState::default();
+    state.source_text = query.clone();
+    state.results = Vec::new();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
+
+    let dictionary = &state.settings.imported_mdx_dictionaries[0];
+    assert!(
+        dictionary
+            .mdd_file_paths
+            .iter()
+            .any(|path| Path::new(path) == mdd_path.as_path()),
+        "real corpus MDD should be discovered or preserved for the imported MDX"
+    );
+
+    let plan = begin_quick_translate(&mut state).expect("real corpus MDX query should begin");
+    let mut requests = plan.service_requests();
+    let request = requests.remove(0);
+    assert!(quick_translate_request_can_route_natively(&request));
+
+    let update = run_quick_translate_service_with_app_dir(request, app_dir);
+    let result = update
+        .outcome
+        .result
+        .as_ref()
+        .expect("real corpus MDX/MDD lookup should succeed");
+    let raw_html = result
+        .raw_html
+        .clone()
+        .expect("real corpus MDD inline should keep rich HTML");
+
+    assert!(!result.translated_text.trim().is_empty());
+    assert!(!result.translated_text.contains("<link"));
+    assert!(raw_html.contains("data:text/css;base64,"));
+    assert!(!raw_html.contains(r#"href="cceu.css""#));
+    assert!(!raw_html.contains(r#"href='cceu.css'"#));
+    for forbidden in ["CompatHost", ".NET", "Easydict.Workers"] {
+        assert!(
+            !result.translated_text.contains(forbidden) && !raw_html.contains(forbidden),
+            "real corpus MDX/MDD route should stay Rust-native and avoid {forbidden} wording"
+        );
+    }
+
+    apply_quick_translate_service_update(&mut state, update);
+    assert_eq!(
+        state.results[0].raw_html.as_deref(),
+        Some(raw_html.as_str())
+    );
 }
 
 #[test]
@@ -8829,45 +8906,40 @@ fn tray_browser_support_menu_reflects_installation_status() {
 }
 
 #[test]
-fn tray_menu_projects_to_windows_native_plan() {
+fn default_tray_menu_keeps_native_tray_shape_without_platform_adapter() {
     let menu = default_tray_menu();
-    let plan = WindowsPlatformAdapter::plan_tray(&menu).expect("native tray plan");
 
-    assert_eq!(plan.tooltip, menu.tooltip);
-    assert_eq!(plan.item_count, 15);
+    assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
+    assert_eq!(menu.default_item_id.as_deref(), Some(TRAY_SHOW_MAIN));
+    assert_eq!(count_tray_items(&menu.items), 21);
+    assert_eq!(count_tray_separators(&menu.items), 3);
 
-    let show_main = tray_plan_item(&plan.items, TRAY_SHOW_MAIN).expect("show main command");
-    assert_eq!(plan.default_command_id, Some(show_main.command_id));
-    assert_eq!(show_main.kind, WindowsTrayItemKind::Command);
+    let show_main = tray_menu_item(&menu.items, TRAY_SHOW_MAIN).expect("show main command");
+    assert!(!show_main.is_separator());
+    assert!(!show_main.is_submenu());
     assert_eq!(show_main.label, "Show Easydict");
     assert!(show_main.enabled);
 
-    let browser = tray_plan_item(&plan.items, "browser-support").expect("browser submenu");
-    assert_eq!(browser.kind, WindowsTrayItemKind::Submenu);
+    let browser = tray_menu_item(&menu.items, "browser-support").expect("browser submenu");
+    assert!(browser.is_submenu());
     assert_eq!(browser.children.len(), 5);
 
-    let chrome = tray_plan_item(&browser.children, "browser-chrome").expect("chrome submenu");
-    assert_eq!(chrome.kind, WindowsTrayItemKind::Submenu);
+    let chrome = tray_menu_item(&browser.children, "browser-chrome").expect("chrome submenu");
+    assert!(chrome.is_submenu());
     assert_eq!(chrome.children[0].id, TRAY_BROWSER_INSTALL_CHROME);
     assert!(chrome.children[0].enabled);
     assert_eq!(chrome.children[1].id, TRAY_BROWSER_UNINSTALL_CHROME);
     assert!(!chrome.children[1].enabled);
 
-    let firefox = tray_plan_item(&browser.children, "browser-firefox").expect("firefox submenu");
-    assert_eq!(firefox.kind, WindowsTrayItemKind::Submenu);
+    let firefox = tray_menu_item(&browser.children, "browser-firefox").expect("firefox submenu");
+    assert!(firefox.is_submenu());
     assert_eq!(firefox.children[0].id, TRAY_BROWSER_INSTALL_FIREFOX);
     assert!(firefox.children[0].enabled);
     assert_eq!(firefox.children[1].id, TRAY_BROWSER_UNINSTALL_FIREFOX);
     assert!(!firefox.children[1].enabled);
 
-    let separator_count = plan
-        .items
-        .iter()
-        .filter(|item| item.kind == WindowsTrayItemKind::Separator)
-        .count();
-    assert_eq!(separator_count, 2);
     assert!(
-        tray_plan_item(&plan.items, TRAY_EXIT)
+        tray_menu_item(&menu.items, TRAY_EXIT)
             .expect("exit command")
             .enabled
     );
@@ -9000,6 +9072,7 @@ fn shell_and_protocol_entries_cover_ocr_activation_contract() {
     let verbs = default_desktop_shell_verbs();
     assert_eq!(verbs.len(), 1);
     assert_eq!(verbs[0].id, SHELL_OCR_TRANSLATE);
+    assert_ne!(verbs[0].id, "EasydictOCR");
     assert_eq!(verbs[0].label, "OCR Translate");
     assert!(verbs[0].accepts_files);
     assert!(verbs[0].accepts_directory_background);
@@ -9008,7 +9081,8 @@ fn shell_and_protocol_entries_cover_ocr_activation_contract() {
     let protocols = default_desktop_protocol_registrations();
     assert_eq!(protocols.len(), 1);
     assert_eq!(protocols[0].scheme, PROTOCOL_EASYDICT);
-    assert_eq!(protocols[0].description, "URL:Easydict Protocol");
+    assert_ne!(protocols[0].scheme, LEGACY_PROTOCOL_EASYDICT);
+    assert_eq!(protocols[0].description, "URL:Easydict Rust Protocol");
     assert_eq!(protocols[0].arguments, vec!["%1"]);
 
     let named_events = default_named_events();
@@ -9064,13 +9138,22 @@ fn startup_activation_parses_shell_and_protocol_ocr_triggers() {
         Some(StartupActivation::OcrTranslate)
     );
     assert_eq!(
+        parse_startup_activation(["easydict-rs://ocr-translate"]),
+        Some(StartupActivation::OcrTranslate)
+    );
+    assert_eq!(
+        parse_startup_activation(["EASYDICT-RS://OCR-TRANSLATE?source=browser"]),
+        Some(StartupActivation::OcrTranslate)
+    );
+    assert_eq!(
         parse_startup_activation(["EASYDICT://OCR-TRANSLATE?source=browser"]),
         Some(StartupActivation::OcrTranslate)
     );
     assert_eq!(
-        parse_startup_activation(["easydict:ocr-translate#native-message"]),
+        parse_startup_activation(["easydict-rs:ocr-translate#native-message"]),
         Some(StartupActivation::OcrTranslate)
     );
+    assert_eq!(parse_startup_activation(["easydict-rs://settings"]), None);
     assert_eq!(parse_startup_activation(["easydict://settings"]), None);
     assert_eq!(parse_startup_activation(["--unknown"]), None);
 }
@@ -9091,7 +9174,7 @@ fn startup_activation_disposition_signals_existing_instance_or_cold_starts() {
     assert_eq!(signaled, [StartupActivation::OcrTranslate]);
 
     let disposition =
-        resolve_startup_activation_disposition(["easydict://ocr-translate"], |activation| {
+        resolve_startup_activation_disposition(["easydict-rs://ocr-translate"], |activation| {
             signaled.push(activation);
             Ok::<_, ()>(false)
         })
@@ -9116,14 +9199,14 @@ fn startup_activation_disposition_signals_existing_instance_or_cold_starts() {
 
 #[test]
 fn startup_activation_reuses_hotkey_ocr_overlay_path() {
-    let pure_message = startup_activation_message_for_args(["easydict://ocr-translate"])
+    let pure_message = startup_activation_message_for_args(["easydict-rs://ocr-translate"])
         .expect("startup activation should produce an app message");
     assert_eq!(
         pure_message,
         Message::HotkeyTriggered(HOTKEY_OCR_TRANSLATE.to_string())
     );
 
-    let task = startup_activation_task_for_args(["easydict://ocr-translate"]);
+    let task = startup_activation_task_for_args(["easydict-rs://ocr-translate"]);
     let message = match task {
         Task::Message(message) => message,
         other => panic!(
@@ -10003,6 +10086,16 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
             .as_nanos()
     ));
     path
+}
+
+fn real_corpus_path(env_name: &str) -> Option<PathBuf> {
+    match std::env::var(env_name) {
+        Ok(path) if !path.trim().is_empty() => Some(PathBuf::from(path)),
+        _ => {
+            eprintln!("Skipping real-corpus test; set {env_name} to a local MDX/MDD file path");
+            None
+        }
+    }
 }
 
 fn install_stale_retained_runtime_app_dir_markers(root: &Path) {
@@ -11108,17 +11201,31 @@ fn browser_registrar_arguments(command: &str, browser: Option<&str>) -> Vec<Stri
     arguments
 }
 
-fn tray_plan_item<'a>(
-    items: &'a [win_fluent_platform_win::WindowsTrayItemPlan],
+fn tray_menu_item<'a>(
+    items: &'a [TrayMenuItem<Message>],
     id: &str,
-) -> Option<&'a win_fluent_platform_win::WindowsTrayItemPlan> {
+) -> Option<&'a TrayMenuItem<Message>> {
     items.iter().find_map(|item| {
         if item.id == id {
             Some(item)
         } else {
-            tray_plan_item(&item.children, id)
+            tray_menu_item(&item.children, id)
         }
     })
+}
+
+fn count_tray_items(items: &[TrayMenuItem<Message>]) -> usize {
+    items
+        .iter()
+        .map(|item| 1 + count_tray_items(&item.children))
+        .sum()
+}
+
+fn count_tray_separators(items: &[TrayMenuItem<Message>]) -> usize {
+    items
+        .iter()
+        .map(|item| usize::from(item.is_separator()) + count_tray_separators(&item.children))
+        .sum()
 }
 
 fn contains_read_clipboard_task(task: &Task<Message>) -> bool {

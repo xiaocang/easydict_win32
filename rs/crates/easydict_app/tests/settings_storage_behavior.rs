@@ -1,15 +1,53 @@
 use easydict_app::{
-    load_settings_file, load_settings_json_with_machine_id, protect_credential_legacy,
-    save_settings_file, save_settings_json, ImportedMdxDictionary, SettingsState,
+    default_settings_storage_path, load_settings_file, load_settings_json_with_machine_id,
+    protect_credential_legacy, save_settings_file, save_settings_json, ImportedMdxDictionary,
+    SettingsState,
 };
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use win_fluent::prelude::ThemeMode;
 
 #[cfg(windows)]
+use base64::{engine::general_purpose, Engine as _};
+#[cfg(windows)]
 use easydict_app::{protect_credential, try_unprotect_credential};
+#[cfg(windows)]
+use easydict_windows_credentials::{protect_data, unprotect_data, DataProtectionScope};
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+#[test]
+fn settings_storage_default_path_uses_rs_specific_directory() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp = TempDir::new("settings-storage-default-path");
+    let _settings_guard = EnvVarGuard::set("EASYDICT_SETTINGS_DIR", String::new());
+    let _local_app_data_guard =
+        EnvVarGuard::set("LOCALAPPDATA", temp.path().to_string_lossy().to_string());
+
+    assert_eq!(
+        default_settings_storage_path(),
+        temp.path().join("EasydictRs").join("settings.json")
+    );
+}
+
+#[test]
+fn settings_storage_default_path_honors_settings_directory_env() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp = TempDir::new("settings-storage-env-path");
+    let settings_dir = temp.path().join("configured-settings");
+    let _guard = EnvVarGuard::set(
+        "EASYDICT_SETTINGS_DIR",
+        settings_dir.to_string_lossy().to_string(),
+    );
+
+    assert_eq!(
+        default_settings_storage_path(),
+        settings_dir.join("settings.json")
+    );
+}
 
 #[cfg(windows)]
 #[test]
@@ -281,6 +319,7 @@ fn settings_storage_load_file_persists_local_ai_provider_alias_cleanup() {
 #[cfg(windows)]
 #[test]
 fn settings_storage_load_file_normalizes_pending_sensitive_values_without_rewriting_stable_dpapi() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
     let temp = TempDir::new("settings-storage-sensitive-normalization");
     let _guard = EnvVarGuard::set(
         "EASYDICT_SETTINGS_DIR",
@@ -366,6 +405,78 @@ fn settings_storage_load_file_normalizes_pending_sensitive_values_without_rewrit
     }
 }
 
+#[cfg(windows)]
+#[test]
+fn settings_storage_load_file_rewrites_legacy_winui_dpapi_credentials_to_rs_entropy() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp = TempDir::new("settings-storage-legacy-winui-dpapi-normalization");
+    let _guard = EnvVarGuard::set(
+        "EASYDICT_SETTINGS_DIR",
+        temp.path().to_string_lossy().to_string(),
+    );
+    let legacy_dpapi = legacy_winui_dpapi_value("deepl-legacy");
+    let path = temp.path().join("settings.json");
+    fs::write(&path, format!(r#"{{ "DeepLApiKey": "{legacy_dpapi}" }}"#)).unwrap();
+
+    let result = load_settings_file(&path).expect("settings file should load");
+
+    assert_eq!(result.settings.deepl_api_key, "deepl-legacy");
+    let persisted = fs::read_to_string(&path).unwrap();
+    let root: Value = serde_json::from_str(&persisted).unwrap();
+    let rewritten = root["DeepLApiKey"].as_str().unwrap();
+    assert_ne!(rewritten, legacy_dpapi);
+    assert!(rewritten.starts_with("edcred1:user:"));
+    assert_eq!(
+        try_unprotect_credential(rewritten).as_deref(),
+        Some("deepl-legacy")
+    );
+
+    let payload = rewritten
+        .strip_prefix("edcred1:user:")
+        .expect("rewritten DPAPI payload should keep current-user prefix");
+    let protected_bytes = general_purpose::STANDARD.decode(payload).unwrap();
+    assert!(
+        unprotect_data(
+            &protected_bytes,
+            b"Easydict.WinUI.LocalSettingsCredential.v2:user",
+            DataProtectionScope::CurrentUser,
+        )
+        .is_err(),
+        "settings normalization should rewrite legacy WinUI DPAPI entropy to the rs purpose"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn settings_storage_load_file_uses_legacy_machine_id_fallback_for_migrated_rs_settings() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp = TempDir::new("settings-storage-legacy-machine-id-fallback");
+    let _settings_guard = EnvVarGuard::set("EASYDICT_SETTINGS_DIR", String::new());
+    let _local_app_data_guard =
+        EnvVarGuard::set("LOCALAPPDATA", temp.path().to_string_lossy().to_string());
+    let legacy_dir = temp.path().join("Easydict");
+    let rs_dir = temp.path().join("EasydictRs");
+    fs::create_dir_all(&legacy_dir).unwrap();
+    fs::create_dir_all(&rs_dir).unwrap();
+    fs::write(
+        legacy_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME),
+        "legacy-machine-id",
+    )
+    .unwrap();
+    let legacy_secret = protect_credential_legacy("deepl-legacy", "legacy-machine-id").unwrap();
+    let path = rs_dir.join("settings.json");
+    fs::write(&path, format!(r#"{{ "DeepLApiKey": "{legacy_secret}" }}"#)).unwrap();
+
+    let result = load_settings_file(&path).expect("settings file should load");
+
+    assert_eq!(result.settings.deepl_api_key, "deepl-legacy");
+    assert_eq!(
+        fs::read_to_string(rs_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME))
+            .unwrap(),
+        "legacy-machine-id"
+    );
+}
+
 #[test]
 fn settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_paths() {
     let temp = TempDir::new("settings-storage-mdd-discovery");
@@ -398,6 +509,35 @@ fn settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_path
             mdd_path.to_string_lossy().into_owned(),
             numbered_mdd_path.to_string_lossy().into_owned()
         ]
+    );
+}
+
+#[test]
+fn settings_storage_load_discovers_real_corpus_mdd_from_env_for_legacy_mdx_entry() {
+    let Some(mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
+        return;
+    };
+    let Some(mdd_path) = real_corpus_path("RS_MDICT_TEST_MDD") else {
+        return;
+    };
+    let json = json!({
+        "ImportedMdxDictionaries": [{
+            "ServiceId": "mdx::collins-cobuild-english-usage",
+            "DisplayName": "Collins COBUILD English Usage",
+            "FilePath": mdx_path.to_string_lossy(),
+            "IsEncrypted": true
+        }]
+    })
+    .to_string();
+
+    let settings = load_settings_json_with_machine_id(&json, "stable-machine-id")
+        .expect("settings load")
+        .settings;
+
+    assert_eq!(settings.imported_mdx_dictionaries.len(), 1);
+    assert_eq!(
+        settings.imported_mdx_dictionaries[0].mdd_file_paths,
+        vec![mdd_path.to_string_lossy().into_owned()]
     );
 }
 
@@ -642,6 +782,31 @@ fn assert_array_not_contains(value: &Value, expected: &str) {
     );
 }
 
+fn real_corpus_path(env_name: &str) -> Option<PathBuf> {
+    match std::env::var(env_name) {
+        Ok(path) if !path.trim().is_empty() => Some(PathBuf::from(path)),
+        _ => {
+            eprintln!("Skipping real-corpus test; set {env_name} to a local MDX/MDD file path");
+            None
+        }
+    }
+}
+
+#[cfg(windows)]
+fn legacy_winui_dpapi_value(plaintext: &str) -> String {
+    let protected_bytes = protect_data(
+        plaintext.as_bytes(),
+        b"Easydict.WinUI.LocalSettingsCredential.v2:user",
+        DataProtectionScope::CurrentUser,
+    )
+    .expect("legacy WinUI DPAPI test value should protect");
+
+    format!(
+        "edcred1:user:{}",
+        general_purpose::STANDARD.encode(protected_bytes)
+    )
+}
+
 struct TempDir {
     path: PathBuf,
 }
@@ -669,13 +834,11 @@ impl Drop for TempDir {
     }
 }
 
-#[cfg(windows)]
 struct EnvVarGuard {
     key: &'static str,
     previous: Option<String>,
 }
 
-#[cfg(windows)]
 impl EnvVarGuard {
     fn set(key: &'static str, value: String) -> Self {
         let previous = std::env::var(key).ok();
@@ -684,7 +847,6 @@ impl EnvVarGuard {
     }
 }
 
-#[cfg(windows)]
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         if let Some(previous) = &self.previous {

@@ -1,15 +1,19 @@
 use easydict_app::{
-    get_or_create_persisted_machine_id, is_protected_credential, protect_credential_legacy,
-    try_unprotect_credential_legacy, try_unprotect_credential_with_machine_id,
-    unprotect_or_return_plaintext_with_machine_id, CredentialProtectionScope,
-    MAX_NESTED_PROTECTED_VALUE_DEPTH,
+    get_or_create_persisted_machine_id, get_or_create_persisted_machine_id_with_legacy_fallback,
+    is_protected_credential, protect_credential_legacy, try_unprotect_credential_legacy,
+    try_unprotect_credential_with_machine_id, unprotect_or_return_plaintext_with_machine_id,
+    CredentialProtectionScope, MAX_NESTED_PROTECTED_VALUE_DEPTH,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(windows)]
+use base64::{engine::general_purpose, Engine as _};
+#[cfg(windows)]
 use easydict_app::{protect_credential, protect_credential_with_scope, try_unprotect_credential};
+#[cfg(windows)]
+use easydict_windows_credentials::{protect_data, unprotect_data, DataProtectionScope};
 
 #[cfg(windows)]
 #[test]
@@ -24,6 +28,51 @@ fn credential_protection_current_user_scope_roundtrips_without_plaintext_storage
         try_unprotect_credential(&protected_value).as_deref(),
         Some(PLAINTEXT)
     );
+}
+
+#[cfg(windows)]
+#[test]
+fn credential_protection_new_dpapi_values_use_rs_entropy_with_legacy_fallback() {
+    const PLAINTEXT: &str = "sk-test-local-api-key";
+    let protected_value = protect_credential(PLAINTEXT).unwrap();
+    let payload = protected_value
+        .strip_prefix("edcred1:user:")
+        .expect("current-user DPAPI payload should have expected prefix");
+    let protected_bytes = general_purpose::STANDARD.decode(payload).unwrap();
+
+    assert!(
+        unprotect_data(
+            &protected_bytes,
+            b"Easydict.WinUI.LocalSettingsCredential.v2:user",
+            DataProtectionScope::CurrentUser,
+        )
+        .is_err(),
+        "new rs credentials should not be decryptable with the legacy WinUI DPAPI purpose"
+    );
+
+    let legacy_bytes = protect_data(
+        PLAINTEXT.as_bytes(),
+        b"Easydict.WinUI.LocalSettingsCredential.v2:user",
+        DataProtectionScope::CurrentUser,
+    )
+    .unwrap();
+    let legacy_dpapi_value = format!(
+        "edcred1:user:{}",
+        general_purpose::STANDARD.encode(legacy_bytes)
+    );
+
+    assert_eq!(
+        try_unprotect_credential(&legacy_dpapi_value).as_deref(),
+        Some(PLAINTEXT)
+    );
+    let normalized =
+        unprotect_or_return_plaintext_with_machine_id(Some(&legacy_dpapi_value), "machine-id");
+    assert_eq!(normalized.value.as_deref(), Some(PLAINTEXT));
+    assert!(
+        normalized.needs_migration,
+        "legacy WinUI DPAPI values should be rewritten with the rs purpose on settings load"
+    );
+    assert!(!normalized.decrypt_failed);
 }
 
 #[cfg(windows)]
@@ -289,6 +338,51 @@ fn credential_protection_machine_id_creates_file() {
         )
         .unwrap(),
         machine_id
+    );
+}
+
+#[test]
+fn credential_protection_machine_id_uses_rs_directory_before_legacy_fallback() {
+    let temp = TempDir::new("credential-machine-id-rs-first");
+    let rs_dir = temp.path().join("EasydictRs");
+    let legacy_dir = temp.path().join("Easydict");
+    fs::create_dir_all(&rs_dir).unwrap();
+    fs::create_dir_all(&legacy_dir).unwrap();
+    fs::write(
+        rs_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME),
+        "rs-machine-id",
+    )
+    .unwrap();
+    fs::write(
+        legacy_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME),
+        "legacy-machine-id",
+    )
+    .unwrap();
+
+    let machine_id = get_or_create_persisted_machine_id_with_legacy_fallback(&rs_dir, &legacy_dir);
+
+    assert_eq!(machine_id, "rs-machine-id");
+}
+
+#[test]
+fn credential_protection_machine_id_copies_legacy_fallback_into_rs_directory() {
+    let temp = TempDir::new("credential-machine-id-legacy-fallback");
+    let rs_dir = temp.path().join("EasydictRs");
+    let legacy_dir = temp.path().join("Easydict");
+    fs::create_dir_all(&legacy_dir).unwrap();
+    fs::write(
+        legacy_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME),
+        "legacy-machine-id",
+    )
+    .unwrap();
+
+    let machine_id = get_or_create_persisted_machine_id_with_legacy_fallback(&rs_dir, &legacy_dir);
+
+    assert_eq!(machine_id, "legacy-machine-id");
+    assert_eq!(
+        fs::read_to_string(rs_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME))
+            .unwrap(),
+        "legacy-machine-id"
     );
 }
 

@@ -39,14 +39,12 @@ pub struct ExtractDotnetRuntimeOutcome {
     pub archive_bytes: u64,
 }
 
-#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageRuntimeProfile {
     Hybrid,
     RustOnly,
 }
 
-#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 impl PackageRuntimeProfile {
     pub fn parse_explicit(value: &str) -> Option<Self> {
         let normalized = normalize_runtime_profile(value);
@@ -56,6 +54,7 @@ impl PackageRuntimeProfile {
         runtime_profile_is_rust_only(&normalized).then_some(Self::RustOnly)
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn parse_environment(value: &str) -> Self {
         let normalized = normalize_runtime_profile(value);
         if normalized == "hybrid" {
@@ -73,6 +72,7 @@ pub struct BuildRustHelpersOptions {
     pub configuration: String,
     pub output_dir: PathBuf,
     pub include_legacy_registrar_alias: bool,
+    pub runtime_profile: Option<PackageRuntimeProfile>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -169,6 +169,7 @@ pub enum ExtractDotnetRuntimeError {
 pub enum BuildRustHelpersError {
     UnsupportedPlatform(String),
     UnsupportedConfiguration(String),
+    LegacyRegistrarAliasRequiresHybridProfile(Option<PackageRuntimeProfile>),
     WorkspaceMissing(PathBuf),
     WindowsAiManifestMissing(PathBuf),
     RustupFailed { exit_code: Option<i32> },
@@ -333,6 +334,10 @@ impl fmt::Display for BuildRustHelpersError {
                     "unsupported Rust helper configuration: {configuration}"
                 )
             }
+            Self::LegacyRegistrarAliasRequiresHybridProfile(_) => write!(
+                formatter,
+                "legacy BrowserHostRegistrar.exe alias requires explicit --runtime-profile hybrid"
+            ),
             Self::WorkspaceMissing(path) => {
                 write!(formatter, "Rust workspace not found at {}", path.display())
             }
@@ -664,6 +669,10 @@ pub fn build_rust_helpers(
 ) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
     let cargo_target = cargo_target_for_platform(&options.platform)?;
     let profile_dir = profile_dir_for_configuration(&options.configuration)?;
+    validate_legacy_registrar_alias_runtime_profile(
+        options.include_legacy_registrar_alias,
+        options.runtime_profile,
+    )?;
     if !options.rust_workspace.join("Cargo.toml").is_file() {
         return Err(BuildRustHelpersError::WorkspaceMissing(
             options.rust_workspace.clone(),
@@ -691,6 +700,7 @@ pub fn build_rust_helpers(
         profile_dir,
         &options.output_dir,
         options.include_legacy_registrar_alias,
+        options.runtime_profile,
     )
 }
 
@@ -916,7 +926,12 @@ pub fn copy_built_rust_helpers(
     profile_dir: &str,
     output_dir: &Path,
     include_legacy_registrar_alias: bool,
+    runtime_profile: Option<PackageRuntimeProfile>,
 ) -> Result<BuildRustHelpersOutcome, BuildRustHelpersError> {
+    validate_legacy_registrar_alias_runtime_profile(
+        include_legacy_registrar_alias,
+        runtime_profile,
+    )?;
     let mut copied_files =
         copy_built_rust_helper_executables(rust_workspace, cargo_target, profile_dir, output_dir)?;
     if include_legacy_registrar_alias {
@@ -1012,6 +1027,18 @@ where
     let canonical_built_dir =
         canonicalize(built_dir).map_err(|error| (built_dir.to_path_buf(), error))?;
     Ok(canonical_source.starts_with(canonical_built_dir))
+}
+
+fn validate_legacy_registrar_alias_runtime_profile(
+    include_legacy_registrar_alias: bool,
+    runtime_profile: Option<PackageRuntimeProfile>,
+) -> Result<(), BuildRustHelpersError> {
+    if include_legacy_registrar_alias && runtime_profile != Some(PackageRuntimeProfile::Hybrid) {
+        return Err(
+            BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridProfile(runtime_profile),
+        );
+    }
+    Ok(())
 }
 
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
@@ -1141,12 +1168,10 @@ fn validate_extract_dotnet_runtime_profile(
     Ok(())
 }
 
-#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn normalize_runtime_profile(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
-#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn runtime_profile_is_rust_only(normalized: &str) -> bool {
     matches!(normalized, "rust-only" | "rustonly" | "rust_only")
 }
@@ -1158,6 +1183,7 @@ pub const RUST_HELPER_EXECUTABLES: &[&str] = &[
     "easydict_long_doc.exe",
 ];
 
+const RUST_PORTABLE_APP_ICON_ENTRY: &str = "AppIcon.ico";
 const WINDOWS_AI_REQUIRE_WINRT_BINDINGS_ENV: &str = "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS";
 
 const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
@@ -1166,6 +1192,7 @@ const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
     "easydict_browser_registrar.exe",
     "easydict_cli.exe",
     "easydict_long_doc.exe",
+    RUST_PORTABLE_APP_ICON_ENTRY,
     "README-portable.txt",
 ];
 
@@ -1349,6 +1376,7 @@ fn stage_rust_portable_payload(
     })?;
 
     copy_built_rust_helpers_for_portable(rust_workspace, cargo_target, profile_dir, package_dir)?;
+    copy_rust_portable_app_icon(rust_workspace, package_dir)?;
     fs::write(
         package_dir.join("README-portable.txt"),
         rust_portable_readme(),
@@ -1370,6 +1398,25 @@ fn copy_built_rust_helpers_for_portable(
     copy_built_rust_helper_executables(rust_workspace, cargo_target, profile_dir, output_dir)
         .map(|_| ())
         .map_err(pack_error_from_build_error)
+}
+
+fn copy_rust_portable_app_icon(
+    rust_workspace: &Path,
+    package_dir: &Path,
+) -> Result<(), PackRustPortableError> {
+    let source = rust_workspace
+        .join("crates")
+        .join("easydict_app")
+        .join("resources")
+        .join(RUST_PORTABLE_APP_ICON_ENTRY);
+    fs::copy(&source, package_dir.join(RUST_PORTABLE_APP_ICON_ENTRY)).map_err(|error| {
+        PackRustPortableError::Io {
+            path: source,
+            message: error.to_string(),
+        }
+    })?;
+
+    Ok(())
 }
 
 fn rust_portable_readme() -> &'static str {
@@ -1395,6 +1442,12 @@ fn pack_error_from_build_error(error: BuildRustHelpersError) -> PackRustPortable
         }
         BuildRustHelpersError::WorkspaceMissing(path) => {
             PackRustPortableError::WorkspaceMissing(path)
+        }
+        BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridProfile(_) => {
+            PackRustPortableError::Validation(
+                "legacy BrowserHostRegistrar.exe alias requires explicit --runtime-profile hybrid"
+                    .to_string(),
+            )
         }
         BuildRustHelpersError::WindowsAiManifestMissing(path) => {
             PackRustPortableError::WindowsAiManifestMissing(path)
@@ -2454,6 +2507,7 @@ mod tests {
         assert!(entries
             .iter()
             .any(|entry| entry == "easydict_browser_registrar.exe"));
+        assert!(entries.iter().any(|entry| entry == "AppIcon.ico"));
         let _ = fs::remove_dir_all(package);
     }
 
@@ -2552,6 +2606,7 @@ Easydict.Workers.LocalAi\n\
 powershell.exe\n\
 PwSh.ExE\n\
 System.Speech.Synthesis\n\
+System.Windows.Forms\n\
 System.Management.Automation\n\
 WIN_FLUENT_TTS_TEXT\n";
         for entry in [
@@ -2621,6 +2676,11 @@ WIN_FLUENT_TTS_TEXT\n";
             "easydict_cli.exe",
             &utf16le_ascii_bytes("This application requires .NET"),
         );
+        write_file(
+            &package,
+            "easydict_browser_registrar.exe",
+            &utf16le_ascii_bytes("stale dialog marker: System.Windows.Forms"),
+        );
 
         let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
             package_path: package.clone(),
@@ -2630,7 +2690,10 @@ WIN_FLUENT_TTS_TEXT\n";
         let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
             panic!("expected forbidden entries");
         };
-        assert_eq!(entries, vec!["easydict_cli.exe"]);
+        assert_eq!(
+            entries,
+            vec!["easydict_browser_registrar.exe", "easydict_cli.exe"]
+        );
 
         let zip_path = package.with_extension("zip");
         zip_directory(&ZipDirectoryOptions {
@@ -2647,7 +2710,10 @@ WIN_FLUENT_TTS_TEXT\n";
         let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
             panic!("expected forbidden ZIP entries");
         };
-        assert_eq!(entries, vec!["easydict_cli.exe"]);
+        assert_eq!(
+            entries,
+            vec!["easydict_browser_registrar.exe", "easydict_cli.exe"]
+        );
         let _ = fs::remove_dir_all(package);
         let _ = fs::remove_file(zip_path);
     }
@@ -3087,6 +3153,7 @@ WIN_FLUENT_TTS_TEXT\n";
             configuration: "Release".to_string(),
             output_dir,
             include_legacy_registrar_alias: false,
+            runtime_profile: None,
         })
         .unwrap_err();
 
@@ -3095,6 +3162,37 @@ WIN_FLUENT_TTS_TEXT\n";
             BuildRustHelpersError::WindowsAiManifestMissing(expected_manifest)
         );
         let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn build_rust_helpers_rejects_legacy_registrar_alias_without_explicit_hybrid_before_workspace()
+    {
+        for runtime_profile in [None, Some(PackageRuntimeProfile::RustOnly)] {
+            let test_root = tempfile_dir("build-helpers-legacy-alias-profile");
+            let _ = fs::remove_dir_all(&test_root);
+            let workspace = test_root.join("missing-workspace");
+            let output_dir = test_root.join("out");
+
+            let error = build_rust_helpers(&BuildRustHelpersOptions {
+                rust_workspace: workspace.clone(),
+                platform: "x64".to_string(),
+                configuration: "Release".to_string(),
+                output_dir: output_dir.clone(),
+                include_legacy_registrar_alias: true,
+                runtime_profile,
+            })
+            .unwrap_err();
+
+            assert_eq!(
+                error,
+                BuildRustHelpersError::LegacyRegistrarAliasRequiresHybridProfile(runtime_profile)
+            );
+            assert!(
+                !output_dir.exists(),
+                "legacy alias profile guard should fail before output or cargo side effects"
+            );
+            let _ = fs::remove_dir_all(test_root);
+        }
     }
 
     #[test]
@@ -3144,6 +3242,11 @@ WIN_FLUENT_TTS_TEXT\n";
         for exe_name in RUST_HELPER_EXECUTABLES {
             write_file(&built_dir, exe_name, exe_name.as_bytes());
         }
+        write_file(
+            &workspace,
+            "crates/easydict_app/resources/AppIcon.ico",
+            b"icon",
+        );
         let package = tempfile_dir("rs-portable-stage-output");
 
         stage_rust_portable_payload(&workspace, "x86_64-pc-windows-msvc", "debug", &package)
@@ -3162,6 +3265,10 @@ WIN_FLUENT_TTS_TEXT\n";
         assert!(
             !package.join("BrowserHostRegistrar.exe").exists(),
             "first rs portable payload should not carry the legacy registrar alias"
+        );
+        assert_eq!(
+            fs::read(package.join("AppIcon.ico")).expect("read app icon"),
+            b"icon"
         );
         assert!(fs::read_to_string(package.join("README-portable.txt"))
             .expect("read readme")
@@ -3346,6 +3453,7 @@ WIN_FLUENT_TTS_TEXT\n";
             "debug",
             &output,
             false,
+            None,
         )
         .expect("copy helpers");
 
@@ -3376,9 +3484,15 @@ WIN_FLUENT_TTS_TEXT\n";
         }
         let output = tempfile_dir("rust-helper-output-legacy-alias");
 
-        let outcome =
-            copy_built_rust_helpers(&workspace, "x86_64-pc-windows-msvc", "debug", &output, true)
-                .expect("copy helpers with legacy alias");
+        let outcome = copy_built_rust_helpers(
+            &workspace,
+            "x86_64-pc-windows-msvc",
+            "debug",
+            &output,
+            true,
+            Some(PackageRuntimeProfile::Hybrid),
+        )
+        .expect("copy helpers with legacy alias");
 
         assert_eq!(
             outcome.copied_files.len(),
@@ -3426,6 +3540,7 @@ WIN_FLUENT_TTS_TEXT\n";
             "debug",
             &output,
             false,
+            None,
         )
         .unwrap_err();
 

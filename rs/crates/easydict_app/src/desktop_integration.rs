@@ -132,7 +132,7 @@ pub fn protocol_registration_plan(
 pub fn startup_registration_plan() -> DesktopStartupRegistrationPlan {
     DesktopStartupRegistrationPlan {
         registry_key_path: r"Software\Microsoft\Windows\CurrentVersion\Run".to_string(),
-        value_name: "Easydict".to_string(),
+        value_name: "EasydictRs".to_string(),
         command_arguments: Vec::new(),
     }
 }
@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn shell_verb_plan_matches_ocr_registry_contract() {
-        let verb = DesktopShellVerb::new("EasydictOCR", "OCR Translate")
+        let verb = DesktopShellVerb::new("EasydictRsOCR", "OCR Translate")
             .directory_background(true)
             .argument("--ocr-translate");
 
@@ -316,15 +316,15 @@ mod tests {
         assert_eq!(
             plan.registry_key_paths,
             [
-                r"Software\Classes\*\shell\EasydictOCR".to_string(),
-                r"Software\Classes\Directory\Background\shell\EasydictOCR".to_string(),
+                r"Software\Classes\*\shell\EasydictRsOCR".to_string(),
+                r"Software\Classes\Directory\Background\shell\EasydictRsOCR".to_string(),
             ]
         );
         assert_eq!(
             plan.command_key_paths,
             [
-                r"Software\Classes\*\shell\EasydictOCR\command".to_string(),
-                r"Software\Classes\Directory\Background\shell\EasydictOCR\command".to_string(),
+                r"Software\Classes\*\shell\EasydictRsOCR\command".to_string(),
+                r"Software\Classes\Directory\Background\shell\EasydictRsOCR\command".to_string(),
             ]
         );
         assert_eq!(
@@ -336,14 +336,15 @@ mod tests {
     #[test]
     fn protocol_registration_plan_quotes_uri_argument() {
         let protocol =
-            DesktopProtocolRegistration::new("easydict", "URL:Easydict Protocol").argument("%1");
+            DesktopProtocolRegistration::new("easydict-rs", "URL:Easydict Rust Protocol")
+                .argument("%1");
 
         let plan = protocol_registration_plan(&protocol);
 
-        assert_eq!(plan.registry_key_path, r"Software\Classes\easydict");
+        assert_eq!(plan.registry_key_path, r"Software\Classes\easydict-rs");
         assert_eq!(
             plan.command_key_path,
-            r"Software\Classes\easydict\shell\open\command"
+            r"Software\Classes\easydict-rs\shell\open\command"
         );
         assert_eq!(
             plan.command_line(r"C:\Program Files\Easydict\Easydict.Rust.exe"),
@@ -352,14 +353,14 @@ mod tests {
     }
 
     #[test]
-    fn startup_registration_plan_matches_winui_run_key_contract() {
+    fn startup_registration_plan_uses_rs_specific_run_value() {
         let plan = startup_registration_plan();
 
         assert_eq!(
             plan.registry_key_path,
             r"Software\Microsoft\Windows\CurrentVersion\Run"
         );
-        assert_eq!(plan.value_name, "Easydict");
+        assert_eq!(plan.value_name, "EasydictRs");
         assert_eq!(
             plan.command_line(r"C:\Program Files\Easydict\Easydict.exe"),
             r#""C:\Program Files\Easydict\Easydict.exe""#

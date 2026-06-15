@@ -8,7 +8,10 @@ use easydict_app::{
     TranslationMemoryCache, TranslationResult, WordResult,
 };
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn translation_cache_key_matches_dotnet_sha256_hex() {
@@ -78,6 +81,23 @@ fn long_document_persistent_cache_matches_dotnet_hash_and_sqlite_contract() {
     cache.clear().expect("clear should work");
     assert_eq!(cache.entry_count().expect("count should work"), 0);
     std::fs::remove_dir_all(temp_dir).ok();
+}
+
+#[test]
+fn long_document_translation_cache_default_path_uses_rs_specific_root() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let local_app_data = unique_temp_dir("translation-cache-default-root");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &local_app_data.to_string_lossy());
+
+    assert_eq!(
+        easydict_app::long_document_translation_cache_path(None),
+        local_app_data
+            .join("EasydictRs")
+            .join("translation_cache.db")
+    );
+
+    std::fs::remove_dir_all(local_app_data).ok();
 }
 
 #[test]
@@ -368,6 +388,29 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
     std::env::temp_dir().join(format!("{prefix}-{}-{stamp}", std::process::id()))
+}
+
+struct EnvironmentVariableGuard {
+    name: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvironmentVariableGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let previous = std::env::var(name).ok();
+        std::env::set_var(name, value);
+        Self { name, previous }
+    }
+}
+
+impl Drop for EnvironmentVariableGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.name, previous);
+        } else {
+            std::env::remove_var(self.name);
+        }
+    }
 }
 
 fn result_with_phonetics(phonetics: Vec<Phonetic>) -> TranslationResult {

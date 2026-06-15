@@ -1298,7 +1298,6 @@ dependencies = [
  "unicode-normalization",
  "unicode-segmentation",
  "win_fluent",
- "win_fluent_platform_win",
  "win_fluent_testkit",
  "windows 0.62.2",
  "zip 8.6.0",
@@ -1401,6 +1400,9 @@ dependencies = [
 [[package]]
 name = "easydict_runtime_guards"
 version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+]
 
 [[package]]
 name = "easydict_store_listings"

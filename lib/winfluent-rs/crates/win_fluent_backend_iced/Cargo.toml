@@ -4,6 +4,11 @@ edition.workspace = true
 license.workspace = true
 version.workspace = true
 
+[features]
+default = []
+legacy-powershell-dialogs = []
+legacy-powershell-tts = ["win_fluent_platform_win/legacy-powershell-tts"]
+
 [dependencies]
 iced = { version = "0.14.0", default-features = false, features = [
     "advanced",
@@ -17,7 +22,7 @@ iced = { version = "0.14.0", default-features = false, features = [
 win_fluent = { path = "../win_fluent" }
 
 [target.'cfg(windows)'.dependencies]
-win_fluent_platform_win = { path = "../win_fluent_platform_win" }
+win_fluent_platform_win = { path = "../win_fluent_platform_win", default-features = false }
 
 [dev-dependencies]
 win_fluent_testkit = { path = "../win_fluent_testkit" }

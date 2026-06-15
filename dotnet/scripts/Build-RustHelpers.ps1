@@ -10,6 +10,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputDir,
 
+    [string]$RuntimeProfile = "",
+
     [switch]$IncludeLegacyRegistrarAlias
 )
 
@@ -40,7 +42,20 @@ $arguments = @(
 )
 
 if ($IncludeLegacyRegistrarAlias) {
+    if ($RuntimeProfile -notin @("Hybrid", "hybrid")) {
+        throw "Build-RustHelpers.ps1 requires -RuntimeProfile Hybrid when -IncludeLegacyRegistrarAlias is used. The first rs release portable helper build must not generate BrowserHostRegistrar.exe."
+    }
+    $arguments += @(
+        "--runtime-profile",
+        $RuntimeProfile
+    )
     $arguments += "--include-legacy-registrar-alias"
+}
+elseif (-not [string]::IsNullOrWhiteSpace($RuntimeProfile)) {
+    $arguments += @(
+        "--runtime-profile",
+        $RuntimeProfile
+    )
 }
 
 $previousRuntimeProfile = $env:EASYDICT_RUNTIME_PROFILE

@@ -11,6 +11,10 @@ param(
     [string]$ReferenceRoot,
     [string]$CaptureScript,
     [string]$Executable,
+    [int]$SettlingMilliseconds = 1800,
+    [int]$ContentCheckRetries = 10,
+    [int]$ContentCheckDelayMilliseconds = 350,
+    [int]$InterScenarioDelayMilliseconds = 1000,
     [switch]$Build,
     [switch]$SkipBuild,
     [switch]$RunAnalyzer,
@@ -159,7 +163,7 @@ function Get-SettingsServiceConfigurationDescriptor {
     }
 
     $normalized = $ScenarioIdOrServiceId.Trim().ToLowerInvariant()
-    $normalized = $normalized -replace '-bar-(hover|pressed)$', ''
+    $normalized = $normalized -replace '-bar-(hover|pressed|mouse-hover)$', ''
     return Get-SettingsServiceConfigurationDescriptors |
         Where-Object {
             $_.ScenarioId.ToLowerInvariant() -eq $normalized -or
@@ -224,7 +228,7 @@ function Get-SettingsServiceExpandedAutomationIds {
             return @("OllamaEndpointBox", "OllamaModelCombo", "RefreshOllamaButton", "TestOllamaButton")
         }
         "openai" {
-            return @("OpenAIKeyHeaderText", "OpenAIKeyBox", "OpenAIKeyRevealButton", "OpenAIEndpointBox", "OpenAIApiFormatCombo", "OpenAIDetectedFormatText", "OpenAIModelCombo", "TestOpenAIButton")
+            return @("OpenAIKeyHeaderText", "OpenAIKeyBox", "OpenAIKeyRevealButton", "OpenAIEndpointHeaderText", "OpenAIEndpointBox", "OpenAIApiFormatCombo", "OpenAIDetectedFormatText", "OpenAIModelCombo", "TestOpenAIButton")
         }
         "deepseek" {
             return @("DeepSeekKeyHeaderText", "DeepSeekKeyBox", "DeepSeekKeyRevealButton", "DeepSeekModelCombo", "TestDeepSeekButton")
@@ -397,6 +401,24 @@ function Test-ReferenceManifestEntryMatchesScenarioState {
     }
 
     $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    $serviceDescriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $normalized
+    if ($null -ne $serviceDescriptor -and [bool]$serviceDescriptor.DotnetReferenceExpected) {
+        if ($null -eq $ReferenceEntry -or
+            $null -eq $ReferenceEntry.ReferenceUiSummary -or
+            $null -eq $ReferenceEntry.ReferenceUiSummary.PSObject.Properties["VisibleAutomationIds"]) {
+            return $false
+        }
+
+        $visibleIds = @($ReferenceEntry.ReferenceUiSummary.VisibleAutomationIds)
+        foreach ($id in @(Get-SettingsServiceExpandedAutomationIds -ServiceId $serviceDescriptor.ServiceId)) {
+            if ($visibleIds -contains $id) {
+                return $true
+            }
+        }
+
+        return $false
+    }
+
     if ($normalized -ne "effects.overlay-fade") {
         return $true
     }
@@ -426,7 +448,7 @@ function Find-ReferenceManifestEntry {
     }
 
     try {
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     } catch {
         Write-Warning "Ignoring unreadable reference manifest ${manifestPath}: $($_.Exception.Message)"
         return $null
@@ -448,6 +470,75 @@ function Require-Path {
     }
 }
 
+function ConvertTo-JsonSafeString {
+    param(
+        [string]$Text
+    )
+
+    if ($null -eq $Text) {
+        return $null
+    }
+
+    $builder = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $Text.Length; $i++) {
+        $ch = $Text[$i]
+        $code = [int][char]$ch
+        if ([char]::IsHighSurrogate($ch)) {
+            if ($i + 1 -lt $Text.Length -and [char]::IsLowSurrogate($Text[$i + 1])) {
+                [void]$builder.Append($ch)
+                [void]$builder.Append($Text[$i + 1])
+                $i++
+            } else {
+                [void]$builder.Append([char]0xFFFD)
+            }
+        } elseif ([char]::IsLowSurrogate($ch)) {
+            [void]$builder.Append([char]0xFFFD)
+        } elseif ($code -lt 32 -and $ch -notin @("`t", "`r", "`n")) {
+            [void]$builder.Append(" ")
+        } else {
+            [void]$builder.Append($ch)
+        }
+    }
+
+    $builder.ToString()
+}
+
+function ConvertTo-JsonSafeValue {
+    param(
+        $Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+    if ($Value -is [string]) {
+        return ConvertTo-JsonSafeString -Text $Value
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $result = [ordered]@{}
+        foreach ($key in $Value.Keys) {
+            $result[$key] = ConvertTo-JsonSafeValue -Value $Value[$key]
+        }
+        return [pscustomobject]$result
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        $items = New-Object System.Collections.Generic.List[object]
+        foreach ($item in $Value) {
+            $items.Add((ConvertTo-JsonSafeValue -Value $item)) | Out-Null
+        }
+        return ,$items.ToArray()
+    }
+    if ($Value -is [pscustomobject]) {
+        $result = [ordered]@{}
+        foreach ($property in $Value.PSObject.Properties) {
+            $result[$property.Name] = ConvertTo-JsonSafeValue -Value $property.Value
+        }
+        return [pscustomobject]$result
+    }
+
+    return $Value
+}
+
 function Write-JsonFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -459,7 +550,7 @@ function Write-JsonFile {
         [int]$Depth = 8
     )
 
-    $json = $Value | ConvertTo-Json -Depth $Depth
+    $json = (ConvertTo-JsonSafeValue -Value $Value) | ConvertTo-Json -Depth $Depth
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
 }
@@ -778,6 +869,16 @@ function Set-UiSummaryControlDimension {
 
     $dimensions = Get-UiSummaryControlDimensionsMap -UiSummary $UiSummary
     if ($dimensions.Contains($Id)) {
+        $existing = $dimensions[$Id]
+        if (-not $Dimension.Contains("State") -and $null -ne $existing) {
+            $stateProperty = $existing.PSObject.Properties["State"]
+            if ($null -eq $stateProperty) {
+                $stateProperty = $existing.PSObject.Properties["state"]
+            }
+            if ($null -ne $stateProperty -and -not [string]::IsNullOrWhiteSpace([string]$stateProperty.Value)) {
+                $Dimension["State"] = [string]$stateProperty.Value
+            }
+        }
         $dimensions.Remove($Id)
     }
     $dimensions[$Id] = [pscustomobject]$Dimension
@@ -853,7 +954,13 @@ function Add-SettingsServicesTopCandidateDimensions {
         @("ServiceConfigurationDescriptionText", "Text", 32, 469, 796, 16)
     ) | ForEach-Object { $topControls.Add($_) | Out-Null }
 
-    switch ($ScenarioId) {
+    $baseScenarioId = if ($null -ne $descriptor) {
+        [string]$descriptor.ScenarioId
+    } else {
+        $ScenarioId
+    }
+
+    switch ($baseScenarioId) {
         "parity-settings-services-deepl-expanded-top" {
             @(
                 @("DeepLServiceExpander", "Button", 32, 497, 796, 309),
@@ -1084,6 +1191,13 @@ function Add-RustSchemaControlDimensions {
         if ($null -ne $value) {
             $dimension[$name] = $value
         }
+    }
+    $state = Get-SchemaTokenValue -Line $Line -Name "state"
+    if ($null -eq $state -and $Kind -eq "ResultItem") {
+        $state = Get-SchemaTokenValue -Line $Line -Name "header_state"
+    }
+    if ($null -ne $state) {
+        $dimension["State"] = $state
     }
     $margin = Get-SchemaEdgesValue -Line $Line -Name "margin"
     if ($null -ne $margin) {
@@ -1348,6 +1462,8 @@ function Test-RustSchemaLineInUiSummaryScope {
                     "SettingsGeneralBehaviorHeader",
                     "AppThemeCombo",
                     "AppThemeDescriptionText",
+                    "TtsSpeedSlider",
+                    "AutoPlayTranslationToggle",
                     "MinimizeToTrayToggle",
                     "MinimizeToTrayOnStartupToggle",
                     "ClipboardMonitorToggle",
@@ -1421,6 +1537,8 @@ function Test-RustSchemaAutomationIdInUiSummaryScope {
                 "SettingsGeneralBehaviorHeader",
                 "AppThemeCombo",
                 "AppThemeDescriptionText",
+                "TtsSpeedSlider",
+                "AutoPlayTranslationToggle",
                 "MinimizeToTrayToggle",
                 "MinimizeToTrayOnStartupToggle",
                 "ClipboardMonitorToggle",
@@ -1516,6 +1634,8 @@ function Get-ScenarioRequiredSemanticTags {
                 "SettingsGeneralBehaviorHeader",
                 "AppThemeCombo",
                 "AppThemeDescriptionText",
+                "TtsSpeedSlider",
+                "AutoPlayTranslationToggle",
                 "MinimizeToTrayToggle",
                 "MinimizeToTrayOnStartupToggle",
                 "ClipboardMonitorToggle",
@@ -1550,6 +1670,287 @@ function Get-ScenarioRequiredSemanticTags {
             return @()
         }
     }
+}
+
+function New-RequiredControlStatesMap {
+    return ,([ordered]@{})
+}
+
+function Add-RequiredControlState {
+    param(
+        $States,
+        [string]$Id,
+        [string[]]$StateNames
+    )
+
+    if ($null -eq $States -or [string]::IsNullOrWhiteSpace($Id)) {
+        return
+    }
+
+    $normalizedId = $Id.Trim()
+    $existing = New-Object System.Collections.Generic.List[string]
+    if ($States.Contains($normalizedId)) {
+        foreach ($state in @($States[$normalizedId])) {
+            if ($null -ne $state -and -not [string]::IsNullOrWhiteSpace([string]$state)) {
+                $existing.Add(([string]$state).Trim()) | Out-Null
+            }
+        }
+    }
+
+    foreach ($state in @($StateNames)) {
+        if ($null -eq $state -or [string]::IsNullOrWhiteSpace([string]$state)) {
+            continue
+        }
+        $trimmed = ([string]$state).Trim()
+        if (-not ($existing | Where-Object { $_ -ieq $trimmed } | Select-Object -First 1)) {
+            $existing.Add($trimmed) | Out-Null
+        }
+    }
+
+    if ($existing.Count -gt 0) {
+        $jsonStates = New-Object System.Collections.ArrayList
+        foreach ($state in $existing) {
+            [void]$jsonStates.Add($state)
+        }
+        $States[$normalizedId] = $jsonStates
+    }
+}
+
+function Import-RequiredControlStates {
+    param(
+        $Value
+    )
+
+    $states = New-RequiredControlStatesMap
+    if ($null -eq $Value) {
+        return ,$states
+    }
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($key in $Value.Keys) {
+            Add-RequiredControlState -States $states -Id ([string]$key) -StateNames @($Value[$key])
+        }
+        return ,$states
+    }
+
+    foreach ($property in @($Value.PSObject.Properties)) {
+        Add-RequiredControlState -States $states -Id $property.Name -StateNames @($property.Value)
+    }
+    return ,$states
+}
+
+function Merge-RequiredControlStates {
+    param(
+        $First,
+        $Second
+    )
+
+    $states = New-RequiredControlStatesMap
+    foreach ($source in @($First, $Second)) {
+        if ($null -eq $source) {
+            continue
+        }
+        if ($source -is [System.Collections.IDictionary]) {
+            foreach ($key in $source.Keys) {
+                Add-RequiredControlState -States $states -Id ([string]$key) -StateNames @($source[$key])
+            }
+        } else {
+            foreach ($property in @($source.PSObject.Properties)) {
+                Add-RequiredControlState -States $states -Id $property.Name -StateNames @($property.Value)
+            }
+        }
+    }
+    return ,$states
+}
+
+function Get-RequiredControlStateCount {
+    param(
+        $States
+    )
+
+    if ($null -eq $States) {
+        return 0
+    }
+
+    $count = 0
+    if ($States -is [System.Collections.IDictionary]) {
+        foreach ($key in $States.Keys) {
+            $count += @($States[$key]).Count
+        }
+    } else {
+        foreach ($property in @($States.PSObject.Properties)) {
+            $count += @($property.Value).Count
+        }
+    }
+    return $count
+}
+
+function Get-ScenarioRequiredControlStates {
+    param(
+        [string]$ScenarioId
+    )
+
+    $states = New-RequiredControlStatesMap
+    if ([string]::IsNullOrWhiteSpace($ScenarioId)) {
+        return ,$states
+    }
+
+    $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    $serviceDescriptor = Get-SettingsServiceConfigurationDescriptor -ScenarioIdOrServiceId $normalized
+    if ($null -ne $serviceDescriptor -and
+        $normalized -match '-bar-(hover|pressed|mouse-hover)$' -and
+        -not [string]::IsNullOrWhiteSpace([string]$serviceDescriptor.RustExpanderId)) {
+        $required = if ($normalized.EndsWith("-bar-pressed", [System.StringComparison]::Ordinal)) {
+            @("hovered", "pressed")
+        } else {
+            @("hovered")
+        }
+        Add-RequiredControlState -States $states -Id ([string]$serviceDescriptor.RustExpanderId) -StateNames $required
+        return ,$states
+    }
+
+    switch -Regex ($normalized) {
+        '^effects\.primary-hover$' {
+            Add-RequiredControlState -States $states -Id "TranslateButton" -StateNames @("hovered")
+            Add-RequiredControlState -States $states -Id "TranslateButtonNarrow" -StateNames @("hovered")
+            break
+        }
+        '^effects\.primary-pressed$' {
+            Add-RequiredControlState -States $states -Id "TranslateButton" -StateNames @("hovered", "pressed")
+            Add-RequiredControlState -States $states -Id "TranslateButtonNarrow" -StateNames @("hovered", "pressed")
+            break
+        }
+        '^effects\.result-header-hover$' {
+            Add-RequiredControlState -States $states -Id "bing" -StateNames @("hovered")
+            break
+        }
+        '^effects\.source-input-hover$' {
+            Add-RequiredControlState -States $states -Id "InputTextBox" -StateNames @("hovered")
+            break
+        }
+        '^effects\.source-input-focus$' {
+            Add-RequiredControlState -States $states -Id "InputTextBox" -StateNames @("focused")
+            break
+        }
+        '^effects\.settings-slider-focus$' {
+            Add-RequiredControlState -States $states -Id "TtsSpeedSlider" -StateNames @("focused")
+            break
+        }
+        '^effects\.settings-toggle-focus$' {
+            Add-RequiredControlState -States $states -Id "AutoPlayTranslationToggle" -StateNames @("focused")
+            break
+        }
+        '^effects\.floating-action-pressed$' {
+            Add-RequiredControlState -States $states -Id "pop-button.translate" -StateNames @("hovered", "pressed")
+            break
+        }
+        '^mini\.translate-hover$' {
+            Add-RequiredControlState -States $states -Id "mini.translate" -StateNames @("hovered")
+            break
+        }
+        '^mini\.translate-pressed$' {
+            Add-RequiredControlState -States $states -Id "mini.translate" -StateNames @("hovered", "pressed")
+            break
+        }
+        '^fixed\.translate-hover$' {
+            Add-RequiredControlState -States $states -Id "fixed.translate" -StateNames @("hovered")
+            break
+        }
+        '^fixed\.translate-pressed$' {
+            Add-RequiredControlState -States $states -Id "fixed.translate" -StateNames @("hovered", "pressed")
+            break
+        }
+        '^popbutton\.hover$' {
+            Add-RequiredControlState -States $states -Id "pop-button.translate" -StateNames @("hovered")
+            break
+        }
+        '^popbutton\.pressed$' {
+            Add-RequiredControlState -States $states -Id "pop-button.translate" -StateNames @("hovered", "pressed")
+            break
+        }
+        '^long-doc\.service-hover$' {
+            Add-RequiredControlState -States $states -Id "main.long-doc.service" -StateNames @("hovered")
+            break
+        }
+        '^parity-settings-tabs-services-hover$' {
+            Add-RequiredControlState -States $states -Id "SettingsTab_Services" -StateNames @("hovered")
+            break
+        }
+        '^parity-settings-tabs-views-pressed$' {
+            Add-RequiredControlState -States $states -Id "SettingsTab_Views" -StateNames @("hovered", "pressed")
+            break
+        }
+    }
+
+    return ,$states
+}
+
+function Get-ScenarioBaselineId {
+    param(
+        [string]$ScenarioId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScenarioId)) {
+        return $null
+    }
+
+    $normalized = $ScenarioId.Trim().ToLowerInvariant()
+    if ($normalized -match '^(?<base>parity-settings-services-.+-expanded-.+)-bar-(hover|pressed|mouse-hover)$') {
+        return $Matches["base"]
+    }
+
+    switch -Regex ($normalized) {
+        '^effects\.primary-(hover|pressed)$' { return "main.initial" }
+        '^effects\.result-header-hover$' { return "main.initial" }
+        '^effects\.source-input-(hover|focus)$' { return "main.before-translate" }
+        '^effects\.overlay-fade$' { return "main.initial" }
+        '^effects\.result-collapse-toggle$' { return "main.initial" }
+        '^effects\.floating-action-pressed$' { return "popbutton.hover" }
+        '^mini\.translate-(hover|pressed)$' { return "mini.initial" }
+        '^fixed\.translate-(hover|pressed)$' { return "fixed.initial" }
+        '^popbutton\.pressed$' { return "popbutton.hover" }
+        '^long-doc\.service-hover$' { return "long-doc.tab" }
+        '^parity-settings-tabs-services-hover$' { return "parity-settings-general-behavior-top" }
+        '^parity-settings-tabs-views-pressed$' { return "parity-settings-general-behavior-top" }
+        default { return $null }
+    }
+}
+
+function Expand-SelectedScenariosWithBaselines {
+    param(
+        [object[]]$SelectedScenarios,
+        [object[]]$AllScenarios
+    )
+
+    $allById = @{}
+    foreach ($definition in @($AllScenarios)) {
+        $allById[$definition.Id.ToLowerInvariant()] = $definition
+    }
+
+    $ordered = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
+    function Add-ScenarioById {
+        param(
+            [string]$Id
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Id)) {
+            return
+        }
+        $key = $Id.Trim().ToLowerInvariant()
+        if ($seen.ContainsKey($key) -or -not $allById.ContainsKey($key)) {
+            return
+        }
+        $seen[$key] = $true
+        $ordered.Add($allById[$key]) | Out-Null
+    }
+
+    foreach ($definition in @($SelectedScenarios)) {
+        Add-ScenarioById -Id (Get-ScenarioBaselineId -ScenarioId $definition.Id)
+        Add-ScenarioById -Id $definition.Id
+    }
+
+    return @($ordered.ToArray())
 }
 
 function Test-ReferenceUiSummaryMatchesSection {
@@ -1904,6 +2305,14 @@ $scenarioDefinitions = @(
             }
             New-MatrixScenario -Id "$($serviceDescriptor.ScenarioId)-bar-$($interactionCase.Suffix)" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain $stateEnvironment)
         }
+
+        if ($serviceDescriptor.ServiceId -eq "ollama" -and [double]$serviceDescriptor.ScrollPercent -le 0) {
+            $mouseHoverEnvironment = Join-Environment $serviceEnvironment @{
+                EASYDICT_PREVIEW_CURSOR_DIP_X = "420"
+                EASYDICT_PREVIEW_CURSOR_DIP_Y = "638"
+            }
+            New-MatrixScenario -Id "$($serviceDescriptor.ScenarioId)-bar-mouse-hover" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain $mouseHoverEnvironment)
+        }
     }
     New-MatrixScenario -Id "parity-settings-views-window-results-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
@@ -2071,6 +2480,10 @@ if ($selectedScenarios.Count -eq 0) {
     throw "No parity preview scenarios selected."
 }
 
+$selectedScenarios = @(Expand-SelectedScenariosWithBaselines `
+        -SelectedScenarios $selectedScenarios `
+        -AllScenarios $scenarioDefinitions)
+
 Require-Path -Path $CaptureScript -Description "Capture script"
 
 if ($Build -or (-not $SkipBuild -and -not (Test-Path -LiteralPath $Executable))) {
@@ -2087,6 +2500,10 @@ $results = New-Object System.Collections.Generic.List[object]
 $manifestEntries = New-Object System.Collections.Generic.List[object]
 
 foreach ($definition in $selectedScenarios) {
+    if ($results.Count -gt 0 -and $InterScenarioDelayMilliseconds -gt 0) {
+        Start-Sleep -Milliseconds $InterScenarioDelayMilliseconds
+    }
+
     $safeId = $definition.Id -replace '[^a-zA-Z0-9._-]', '-'
     $scenarioDir = Join-Path $OutputRoot $safeId
     $rawDir = Join-Path $scenarioDir "raw"
@@ -2104,12 +2521,26 @@ foreach ($definition in $selectedScenarios) {
     $expectedWindowDips = New-ExpectedWindowDips -Environment $environment -WindowKind $windowKind
 
     Write-Host "Capturing $($definition.Id)."
+    $captureArguments = @{
+        OutputDir = $rawDir
+        StartNewInstance = $true
+        Executable = $Executable
+        WindowTitle = $definition.WindowTitle
+        SettlingMilliseconds = $SettlingMilliseconds
+        ContentCheckRetries = $ContentCheckRetries
+        ContentCheckDelayMilliseconds = $ContentCheckDelayMilliseconds
+    }
+    if ($environment.ContainsKey("EASYDICT_PREVIEW_CURSOR_DIP_X") -and
+        $environment.ContainsKey("EASYDICT_PREVIEW_CURSOR_DIP_Y")) {
+        $captureArguments["CursorDipX"] = [double]::Parse(
+            [string]$environment["EASYDICT_PREVIEW_CURSOR_DIP_X"],
+            [System.Globalization.CultureInfo]::InvariantCulture)
+        $captureArguments["CursorDipY"] = [double]::Parse(
+            [string]$environment["EASYDICT_PREVIEW_CURSOR_DIP_Y"],
+            [System.Globalization.CultureInfo]::InvariantCulture)
+    }
     Invoke-WithPreviewEnvironment -Environment $environment -Script {
-        & $CaptureScript `
-            -OutputDir $rawDir `
-            -StartNewInstance `
-            -Executable $Executable `
-            -WindowTitle $definition.WindowTitle
+        & $CaptureScript @captureArguments
     }
 
     $metadataFile = Get-ChildItem -LiteralPath $rawDir -Filter "*.metadata.json" -File |
@@ -2119,11 +2550,12 @@ foreach ($definition in $selectedScenarios) {
         throw "Capture did not produce metadata for $($definition.Id)."
     }
 
-    $metadata = Get-Content -LiteralPath $metadataFile.FullName -Raw | ConvertFrom-Json
+    $metadata = Get-Content -LiteralPath $metadataFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($null -eq $metadata.output -or [string]::IsNullOrWhiteSpace($metadata.output.window)) {
         throw "Capture metadata did not include output.window for $($definition.Id)."
     }
     $windowSizeAudit = New-WindowSizeAudit -Metadata $metadata -ExpectedWindowDips $expectedWindowDips
+    $candidateExpectedWindowDips = $expectedWindowDips
     if ($null -ne $expectedWindowDips) {
         $metadata | Add-Member -NotePropertyName expectedWindowDips -NotePropertyValue $expectedWindowDips -Force
     }
@@ -2152,7 +2584,7 @@ foreach ($definition in $selectedScenarios) {
         } else {
             $referenceEntry = Find-ReferenceManifestEntry -ReferenceFile $reference -ScenarioId $definition.Id
             if (-not (Test-ReferenceManifestEntryMatchesScenarioState -ScenarioId $definition.Id -ReferenceEntry $referenceEntry)) {
-                Write-Warning "Ignoring reference for $($definition.Id): manifest UI summary does not show the expected overlay/fade state."
+                Write-Warning "Ignoring reference for $($definition.Id): manifest UI summary does not show the expected scenario state."
                 $reference = $null
                 $referenceEntry = $null
             }
@@ -2166,6 +2598,39 @@ foreach ($definition in $selectedScenarios) {
         $referenceCopied = $true
 
         $referenceWindow = if ($null -ne $referenceEntry) { $referenceEntry.ReferenceWindow } else { $null }
+        $referenceExpectedWindowDips = if ($null -ne $referenceEntry -and
+            $null -ne $referenceEntry.PSObject.Properties["ReferenceExpectedWindowDips"]) {
+            $referenceEntry.ReferenceExpectedWindowDips
+        } else {
+            $null
+        }
+        $referenceWindowSizeAudit = if ($null -ne $referenceEntry -and
+            $null -ne $referenceEntry.PSObject.Properties["ReferenceWindowSizeAudit"]) {
+            $referenceEntry.ReferenceWindowSizeAudit
+        } else {
+            $null
+        }
+        $referenceCandidateExpectedWindowDips = if ($null -ne $referenceEntry -and
+            $null -ne $referenceEntry.PSObject.Properties["CandidateExpectedWindowDips"]) {
+            $referenceEntry.CandidateExpectedWindowDips
+        } else {
+            $null
+        }
+        if ($null -ne $referenceCandidateExpectedWindowDips) {
+            $candidateExpectedWindowDips = $referenceCandidateExpectedWindowDips
+            $expectedWindowDips = $candidateExpectedWindowDips
+            $windowSizeAudit = New-WindowSizeAudit -Metadata $metadata -ExpectedWindowDips $candidateExpectedWindowDips
+        } elseif ($null -ne $referenceExpectedWindowDips) {
+            $candidateExpectedWindowDips = $referenceExpectedWindowDips
+            $expectedWindowDips = $candidateExpectedWindowDips
+            $windowSizeAudit = New-WindowSizeAudit -Metadata $metadata -ExpectedWindowDips $candidateExpectedWindowDips
+        }
+        if ($null -ne $candidateExpectedWindowDips) {
+            $metadata | Add-Member -NotePropertyName expectedWindowDips -NotePropertyValue $candidateExpectedWindowDips -Force
+        }
+        if ($null -ne $windowSizeAudit) {
+            $metadata | Add-Member -NotePropertyName windowSizeAudit -NotePropertyValue $windowSizeAudit -Force
+        }
         $regions = @(if ($null -ne $referenceEntry -and $null -ne $referenceEntry.Regions) { $referenceEntry.Regions })
         $summarySectionId = if ($null -ne $referenceEntry -and -not [string]::IsNullOrWhiteSpace($referenceEntry.SectionId)) {
             [string]$referenceEntry.SectionId
@@ -2189,7 +2654,25 @@ foreach ($definition in $selectedScenarios) {
             @($definition.RequiredSemanticTags) +
             @(Get-ScenarioRequiredSemanticTags -ScenarioId $definition.Id -SectionId $summarySectionId)
         ))
-        $candidateUiSummary = if ($null -ne $referenceUiSummary -or $requiredSemanticTags.Count -gt 0) {
+        $referenceRequiredControlStates = if ($null -ne $referenceEntry -and
+            $null -ne $referenceEntry.PSObject.Properties["RequiredControlStates"]) {
+            Import-RequiredControlStates -Value $referenceEntry.RequiredControlStates
+        } else {
+            New-RequiredControlStatesMap
+        }
+        $requiredControlStates = Merge-RequiredControlStates `
+            -First $referenceRequiredControlStates `
+            -Second (Get-ScenarioRequiredControlStates -ScenarioId $definition.Id)
+        $baselineScenarioId = if ($null -ne $referenceEntry -and
+            $null -ne $referenceEntry.PSObject.Properties["BaselineScenarioId"] -and
+            -not [string]::IsNullOrWhiteSpace([string]$referenceEntry.BaselineScenarioId)) {
+            [string]$referenceEntry.BaselineScenarioId
+        } else {
+            Get-ScenarioBaselineId -ScenarioId $definition.Id
+        }
+        $candidateUiSummary = if ($null -ne $referenceUiSummary -or
+            $requiredSemanticTags.Count -gt 0 -or
+            (Get-RequiredControlStateCount -States $requiredControlStates) -gt 0) {
             New-RustSchemaUiSummary -SchemaPath $schemaPath -ScenarioId $definition.Id -SectionId $summarySectionId
         } else {
             $null
@@ -2211,15 +2694,21 @@ foreach ($definition in $selectedScenarios) {
             ReferenceSourceLastWriteTimeUtc = $reference.LastWriteTimeUtc.ToString("o")
             ReferenceSourceIsFallback = $referenceSourceIsFallback
             ReferenceWindow = $referenceWindow
+            ReferenceExpectedWindowDips = $referenceExpectedWindowDips
+            ReferenceWindowSizeAudit = $referenceWindowSizeAudit
             CandidateWindow = New-WindowManifestFromCaptureMetadata -Metadata $metadata
-            CandidateExpectedWindowDips = $expectedWindowDips
+            CandidateExpectedWindowDips = $candidateExpectedWindowDips
             CandidateWindowSizeAudit = $windowSizeAudit
             Regions = $regions
             RequiredSemanticTags = $requiredSemanticTags
+            RequiredControlStates = $requiredControlStates
+            BaselineScenarioId = $baselineScenarioId
             ReferenceUiSummary = $referenceUiSummary
             CandidateUiSummary = $candidateUiSummary
         }) | Out-Null
     }
+
+    Write-JsonFile -Path $metadataCopyPath -Value $metadata -Depth 10
 
     $results.Add([pscustomobject]@{
         scenarioId = $definition.Id
@@ -2267,7 +2756,7 @@ $candidateAuditEntries = @($results | ForEach-Object {
         MonitorWorkAreaDips = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.MonitorWorkAreaDips } else { $null }
         ExpectedLargerThanWorkArea = if ($null -ne $_.windowSizeAudit) { $_.windowSizeAudit.ExpectedLargerThanWorkArea } else { $null }
         ContentCheck = if ($null -ne $_.metadata -and (Test-Path -LiteralPath $_.metadata)) {
-            (Get-Content -LiteralPath $_.metadata -Raw | ConvertFrom-Json).contentCheck
+            (Get-Content -LiteralPath $_.metadata -Raw -Encoding UTF8 | ConvertFrom-Json).contentCheck
         } else {
             $null
         }

@@ -517,13 +517,14 @@ pub fn capture_native_selected_text_after_hotkey_delay_result(
 }
 
 pub fn capture_native_selected_text_result() -> Result<Option<String>, TextSelectionBackendError> {
-    let Some(foreground) = easydict_windows_text_selection::foreground_text_selection_target().ok()
-    else {
-        return Ok(None);
+    let foreground = match easydict_windows_text_selection::foreground_text_selection_target() {
+        Ok(target) => target,
+        Err(error) if foreground_target_error_is_empty_selection(&error) => return Ok(None),
+        Err(error) => return Err(TextSelectionBackendError::new(error.to_string())),
     };
-    let process_name = easydict_windows_text_selection::process_name_for_id(foreground.process_id)
-        .ok()
-        .flatten();
+    let process_name = selected_text_target_process_name_result(
+        easydict_windows_text_selection::process_name_for_id(foreground.process_id),
+    )?;
     let target = TextSelectionTarget::new(
         process_name.as_deref(),
         Some(foreground.process_id),
@@ -540,6 +541,21 @@ pub fn capture_native_selected_text_result() -> Result<Option<String>, TextSelec
     let result =
         capture_text_selection_with_backend(&target, &mut suppression, now_ticks, &mut backend);
     selected_text_from_capture_result(&result)
+}
+
+pub fn foreground_target_error_is_empty_selection(
+    error: &easydict_windows_text_selection::WindowsTextSelectionError,
+) -> bool {
+    matches!(
+        error,
+        easydict_windows_text_selection::WindowsTextSelectionError::InvalidWindow
+    )
+}
+
+pub fn selected_text_target_process_name_result(
+    result: Result<Option<String>, easydict_windows_text_selection::WindowsTextSelectionError>,
+) -> Result<Option<String>, TextSelectionBackendError> {
+    result.map_err(|error| TextSelectionBackendError::new(error.to_string()))
 }
 
 pub fn capture_native_selected_text_after_hotkey_delay() -> Option<String> {
@@ -593,11 +609,8 @@ fn native_selected_text_via_clipboard(
     timeout_ms: u64,
 ) -> Result<ClipboardSelectionResult, easydict_windows_text_selection::WindowsTextSelectionError> {
     let target = easydict_windows_text_selection::foreground_text_selection_target()?;
-    let original_clipboard = easydict_windows_text_selection::clipboard_text_snapshot().ok();
-    let baseline_sequence = original_clipboard
-        .as_ref()
-        .map(|snapshot| snapshot.sequence_number)
-        .unwrap_or_else(easydict_windows_text_selection::clipboard_sequence_number);
+    let original_clipboard = easydict_windows_text_selection::clipboard_text_snapshot()?;
+    let baseline_sequence = original_clipboard.sequence_number;
 
     easydict_windows_text_selection::focus_window_and_send_ctrl_c(
         target.hwnd,
@@ -608,10 +621,20 @@ fn native_selected_text_via_clipboard(
     let mut state = ClipWaitState::new();
     let mut selected_text = None;
     let mut outcome = ClipWaitResult::Timeout;
+    let mut last_snapshot_error = None;
 
     while Instant::now() < deadline {
         thread::sleep(Duration::from_millis(CLIPBOARD_POLL_INTERVAL_MS));
-        let snapshot = easydict_windows_text_selection::clipboard_text_snapshot().ok();
+        let snapshot = match easydict_windows_text_selection::clipboard_text_snapshot() {
+            Ok(snapshot) => {
+                last_snapshot_error = None;
+                Some(snapshot)
+            }
+            Err(error) => {
+                last_snapshot_error = Some(error);
+                None
+            }
+        };
         let probe = snapshot.as_ref().map(|snapshot| ClipboardProbe {
             sequence_changed: snapshot.sequence_number != baseline_sequence,
             has_text: snapshot.text.is_some(),
@@ -631,12 +654,26 @@ fn native_selected_text_via_clipboard(
         }
     }
 
-    restore_clipboard_after_selection(original_clipboard.as_ref(), selected_text.as_deref())?;
+    let should_surface_snapshot_error =
+        should_surface_clipboard_snapshot_error_after_wait(outcome, last_snapshot_error.is_some());
+    restore_clipboard_after_selection(Some(&original_clipboard), selected_text.as_deref())?;
+    if should_surface_snapshot_error {
+        if let Some(error) = last_snapshot_error {
+            return Err(error);
+        }
+    }
 
     Ok(ClipboardSelectionResult {
         text: selected_text,
         outcome,
     })
+}
+
+pub fn should_surface_clipboard_snapshot_error_after_wait(
+    outcome: ClipWaitResult,
+    has_last_snapshot_error: bool,
+) -> bool {
+    outcome == ClipWaitResult::Timeout && has_last_snapshot_error
 }
 
 fn restore_clipboard_after_selection(

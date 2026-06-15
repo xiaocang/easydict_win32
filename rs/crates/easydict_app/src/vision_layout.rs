@@ -201,12 +201,7 @@ pub fn execute_vision_layout_detection<C: VisionLayoutHttpClient>(
         ));
     }
 
-    Ok(parse_vision_layout_response(
-        plan.api_format,
-        &response.body,
-        width,
-        height,
-    ))
+    parse_vision_layout_response_result(plan.api_format, &response.body, width, height)
 }
 
 pub fn parse_vision_layout_response(
@@ -215,14 +210,30 @@ pub fn parse_vision_layout_response(
     image_width: u32,
     image_height: u32,
 ) -> Vec<VisionLayoutDetection> {
-    let Some(content) = extract_vision_layout_response_content(api_format, response_json) else {
-        return Vec::new();
+    parse_vision_layout_response_result(api_format, response_json, image_width, image_height)
+        .unwrap_or_default()
+}
+
+pub fn parse_vision_layout_response_result(
+    api_format: OpenAiApiFormat,
+    response_json: &str,
+    image_width: u32,
+    image_height: u32,
+) -> Result<Vec<VisionLayoutDetection>, OpenAiExecutionError> {
+    let value = parse_vision_layout_response_json(response_json)?;
+    let Some(content) = extract_vision_layout_response_content_from_value(api_format, &value)
+    else {
+        return Err(invalid_vision_layout_response(
+            "Vision layout response did not contain layout text.",
+        ));
     };
     let Some(json_array) = extract_json_array(&content) else {
-        return Vec::new();
+        return Err(invalid_vision_layout_response(
+            "Vision layout response text did not contain a JSON detection array.",
+        ));
     };
 
-    parse_vision_layout_detection_array(json_array, image_width, image_height)
+    parse_vision_layout_detection_array_result(json_array, image_width, image_height)
 }
 
 pub fn parse_vision_layout_detection_array(
@@ -230,11 +241,24 @@ pub fn parse_vision_layout_detection_array(
     image_width: u32,
     image_height: u32,
 ) -> Vec<VisionLayoutDetection> {
-    let Ok(value) = serde_json::from_str::<Value>(json_array) else {
-        return Vec::new();
-    };
+    parse_vision_layout_detection_array_result(json_array, image_width, image_height)
+        .unwrap_or_default()
+}
+
+pub fn parse_vision_layout_detection_array_result(
+    json_array: &str,
+    image_width: u32,
+    image_height: u32,
+) -> Result<Vec<VisionLayoutDetection>, OpenAiExecutionError> {
+    let value = serde_json::from_str::<Value>(json_array).map_err(|error| {
+        invalid_vision_layout_response(format!(
+            "Vision layout detection array JSON is invalid: {error}"
+        ))
+    })?;
     let Some(array) = value.as_array() else {
-        return Vec::new();
+        return Err(invalid_vision_layout_response(
+            "Vision layout detection payload is not a JSON array.",
+        ));
     };
 
     let mut detections = Vec::with_capacity(array.len());
@@ -244,7 +268,7 @@ pub fn parse_vision_layout_detection_array(
         }
     }
 
-    detections
+    Ok(detections)
 }
 
 pub fn vision_layout_region_type_from_str(value: &str) -> VisionLayoutRegionType {
@@ -360,20 +384,19 @@ fn vision_layout_error_from_status(
     )
 }
 
-fn extract_vision_layout_response_content(
+fn extract_vision_layout_response_content_from_value(
     api_format: OpenAiApiFormat,
-    response_json: &str,
+    value: &Value,
 ) -> Option<String> {
     match api_format {
-        OpenAiApiFormat::ChatCompletions => extract_chat_completions_content(response_json),
-        OpenAiApiFormat::Responses => extract_responses_content(response_json),
-        OpenAiApiFormat::Auto => extract_chat_completions_content(response_json)
-            .or_else(|| extract_responses_content(response_json)),
+        OpenAiApiFormat::ChatCompletions => extract_chat_completions_content_from_value(value),
+        OpenAiApiFormat::Responses => extract_responses_content_from_value(value),
+        OpenAiApiFormat::Auto => extract_chat_completions_content_from_value(value)
+            .or_else(|| extract_responses_content_from_value(value)),
     }
 }
 
-fn extract_chat_completions_content(response_json: &str) -> Option<String> {
-    let value = serde_json::from_str::<Value>(response_json).ok()?;
+fn extract_chat_completions_content_from_value(value: &Value) -> Option<String> {
     value
         .get("choices")
         .and_then(Value::as_array)
@@ -386,8 +409,7 @@ fn extract_chat_completions_content(response_json: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn extract_responses_content(response_json: &str) -> Option<String> {
-    let value = serde_json::from_str::<Value>(response_json).ok()?;
+fn extract_responses_content_from_value(value: &Value) -> Option<String> {
     if let Some(output_text) = value
         .get("output_text")
         .and_then(Value::as_str)
@@ -412,6 +434,16 @@ fn extract_responses_content(response_json: &str) -> Option<String> {
 
     let content = content.trim();
     (!content.is_empty()).then(|| content.to_string())
+}
+
+fn parse_vision_layout_response_json(response_json: &str) -> Result<Value, OpenAiExecutionError> {
+    serde_json::from_str::<Value>(response_json).map_err(|error| {
+        invalid_vision_layout_response(format!("Vision layout response JSON is invalid: {error}"))
+    })
+}
+
+fn invalid_vision_layout_response(message: impl Into<String>) -> OpenAiExecutionError {
+    OpenAiExecutionError::new(OpenAiExecutionErrorCode::InvalidResponse, message.into())
 }
 
 fn extract_json_array(content: &str) -> Option<&str> {

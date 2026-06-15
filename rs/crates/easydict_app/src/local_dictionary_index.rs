@@ -338,8 +338,23 @@ impl LocalDictionaryIndexService {
 
         if let Some(existing_manifest) = load_manifest(&manifest_path) {
             if index_path.exists() && existing_manifest.matches(&current_fingerprint) {
-                self.loaded_indexes.remove(&dictionary.service_id);
-                return Ok(());
+                match LexIndex::open(&index_path) {
+                    Ok(index) => {
+                        self.loaded_indexes.insert(
+                            dictionary.service_id.clone(),
+                            LoadedIndexEntry {
+                                index,
+                                manifest: existing_manifest,
+                                display_name: dictionary.display_name.clone(),
+                                is_queryable: true,
+                            },
+                        );
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        self.loaded_indexes.remove(&dictionary.service_id);
+                    }
+                }
             }
         }
 
@@ -515,8 +530,13 @@ impl LocalDictionaryIndexService {
             return false;
         }
 
-        let Some(index) = LexIndex::open(&index_path).ok() else {
-            return false;
+        let index = match LexIndex::open(&index_path) {
+            Ok(index) => index,
+            Err(_) => {
+                self.loaded_indexes.remove(service_id);
+                remove_unreadable_index_file(&index_path);
+                return false;
+            }
         };
         let entry = LoadedIndexEntry {
             index,
@@ -579,6 +599,12 @@ pub fn escape_data_string(value: &str) -> String {
 fn load_manifest(path: &Path) -> Option<LocalDictionaryIndexManifest> {
     let json = fs::read_to_string(path).ok()?;
     serde_json::from_str(&json).ok()
+}
+
+fn remove_unreadable_index_file(path: &Path) {
+    if let Err(_error) = fs::remove_file(path) {
+        // Autocomplete has no diagnostics surface; keep the next query best-effort if cleanup fails.
+    }
 }
 
 fn mdx_header_normalization(path: &str) -> Option<LocalDictionaryIndexNormalization> {

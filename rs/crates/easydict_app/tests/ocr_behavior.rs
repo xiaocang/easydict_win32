@@ -1,16 +1,17 @@
 use base64::{engine::general_purpose, Engine as _};
 use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
-    apply_ocr_outcome, begin_ocr_recognize, bgra_to_base64_bmp, bgra_to_base64_jpeg_data_url,
-    build_custom_api_ocr_request, build_ollama_ocr_request, group_and_sort_ocr_lines,
-    merge_ocr_lines, merge_ocr_words, merged_ocr_text, parse_ocr_http_response, run_ocr_recognize,
-    run_ocr_recognize_with_app_dir, run_ocr_recognize_with_current_app_dir,
-    screen_capture_request_from_selection, windows_native_ocr_availability_with_recognizer,
-    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message,
-    NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult,
-    OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
-    OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams,
-    OcrRectDto, OcrResultDto, ScreenWindowRect, ScreenWindowSnapshot, WindowsNativeOcrRecognizer,
+    apply_capture_background_result, apply_ocr_outcome, begin_ocr_recognize, bgra_to_base64_bmp,
+    bgra_to_base64_jpeg_data_url, build_custom_api_ocr_request, build_ollama_ocr_request,
+    group_and_sort_ocr_lines, merge_ocr_lines, merge_ocr_words, merged_ocr_text,
+    parse_ocr_http_response, run_ocr_recognize, run_ocr_recognize_with_app_dir,
+    run_ocr_recognize_with_current_app_dir, screen_capture_request_from_selection,
+    windows_native_ocr_availability_with_recognizer, CaptureBackground, CapturePhase, CapturePoint,
+    CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend,
+    OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig,
+    OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError,
+    OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto,
+    ScreenWindowRect, ScreenWindowSnapshot, WindowsNativeOcrRecognizer,
 };
 use easydict_windows_screen_capture::{ScreenCaptureRequest, ScreenRect};
 use serde_json::json;
@@ -1205,6 +1206,47 @@ fn capture_window_snapshot_failure_preserves_manual_region_capture() {
 }
 
 #[test]
+fn capture_background_failure_preserves_overlay_and_success_clears_only_background_error() {
+    let mut state = EasydictUiState::default();
+
+    apply_capture_background_result(
+        &mut state,
+        Err("BitBlt failed with native error 5".to_string()),
+    );
+
+    assert_eq!(state.capture_background, None);
+    assert_eq!(
+        state.last_ocr_error.as_deref(),
+        Some("Screen capture background failed: BitBlt failed with native error 5")
+    );
+
+    let background = CaptureBackground {
+        bgra_path: r"C:\Temp\easydict-capture.bgra".to_string(),
+        pixel_width: 1920,
+        pixel_height: 1080,
+    };
+    apply_capture_background_result(&mut state, Ok(background.clone()));
+
+    assert_eq!(state.capture_background, Some(background));
+    assert_eq!(state.last_ocr_error, None);
+
+    state.last_ocr_error = Some("Screen window snapshot failed: EnumWindows failed".to_string());
+    apply_capture_background_result(
+        &mut state,
+        Ok(CaptureBackground {
+            bgra_path: r"C:\Temp\easydict-capture-2.bgra".to_string(),
+            pixel_width: 100,
+            pixel_height: 80,
+        }),
+    );
+
+    assert_eq!(
+        state.last_ocr_error.as_deref(),
+        Some("Screen window snapshot failed: EnumWindows failed")
+    );
+}
+
+#[test]
 fn capture_window_snapshot_does_not_reset_active_drag_selection() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
@@ -1407,8 +1449,16 @@ fn app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface()
         "OCR capture result conversion should use the lib-owned screen capture result DTO"
     );
     assert!(
-        state_source.contains("screen_capture_native::capture_screen_region"),
+        state_source.contains("pub fn capture_screen_background_result()"),
+        "capture overlay background freeze should expose Result diagnostics"
+    );
+    assert!(
+        app_source.contains("state::capture_screen_background_result()"),
         "capture overlay background freeze should use the Rust-native screen capture helper"
+    );
+    assert!(
+        app_source.contains("state::apply_capture_background_result("),
+        "capture overlay background freeze should preserve native backend errors"
     );
     assert!(
         !app_source.contains("Task::capture_screen_region"),

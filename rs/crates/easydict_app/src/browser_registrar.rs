@@ -295,10 +295,9 @@ where
         match bridge_file_has_retained_runtime_marker(&bridge_path) {
             Ok(false) => {}
             Ok(true) => {
-                let _ = delete_file(&bridge_path);
-                return InstallOutput::error(format!(
-                    "Staged bridge contains retained payload or script markers: {}",
-                    bridge_path.display()
+                return InstallOutput::error(staged_bridge_retained_marker_error(
+                    &bridge_path,
+                    delete_file(&bridge_path),
                 ));
             }
             Err(error) => return InstallOutput::error(error.to_string()),
@@ -700,6 +699,17 @@ fn delete_file(path: impl AsRef<Path>) -> io::Result<()> {
     }
 }
 
+fn staged_bridge_retained_marker_error(path: &Path, cleanup_result: io::Result<()>) -> String {
+    let message = format!(
+        "Staged bridge contains retained payload or script markers: {}",
+        path.display()
+    );
+    match cleanup_result {
+        Ok(()) => message,
+        Err(error) => format!("{message}; failed to remove staged bridge: {error}"),
+    }
+}
+
 fn remove_directory(path: impl AsRef<Path>) -> io::Result<()> {
     match fs::remove_dir_all(path) {
         Ok(()) => Ok(()),
@@ -808,5 +818,17 @@ mod tests {
             requested,
             |_| Some(canonical.clone())
         ));
+    }
+
+    #[test]
+    fn staged_bridge_retained_marker_error_preserves_cleanup_failure() {
+        let path = Path::new(r"C:\Tools\EasydictRs\easydict-native-bridge.exe");
+        let cleanup_error = io::Error::new(io::ErrorKind::PermissionDenied, "bridge is locked");
+
+        let message = staged_bridge_retained_marker_error(path, Err(cleanup_error));
+
+        assert!(message.contains("Staged bridge contains retained payload or script markers"));
+        assert!(message.contains("failed to remove staged bridge"));
+        assert!(message.contains("bridge is locked"));
     }
 }

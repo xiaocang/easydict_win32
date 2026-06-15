@@ -1,8 +1,10 @@
 use easydict_app::mouse_selection::EASYDICT_SYNTHETIC_KEY;
 use easydict_app::text_selection::{
     build_text_selection_plan, capture_native_selected_text, clipboard_restore_required,
-    finalize_text_selection_attempts, is_electron_process_name, is_terminal_process_name,
-    normalize_process_name, selected_text_from_capture_result, synthetic_ctrl_c_input_plan,
+    finalize_text_selection_attempts, foreground_target_error_is_empty_selection,
+    is_electron_process_name, is_terminal_process_name, normalize_process_name,
+    selected_text_from_capture_result, selected_text_target_process_name_result,
+    should_surface_clipboard_snapshot_error_after_wait, synthetic_ctrl_c_input_plan,
     AttemptOutcome, ClipWaitResult, ClipWaitState, ClipboardProbe, ClipboardSelectionResult,
     TextSelectionAttempt, TextSelectionAttemptResult, TextSelectionBackend,
     TextSelectionBackendError, TextSelectionFinalOutcome, TextSelectionPlan,
@@ -10,6 +12,7 @@ use easydict_app::text_selection::{
     NON_TEXT_FAILURE_THRESHOLD, STANDARD_CLIPBOARD_TIMEOUT_MS, SUPPRESSION_WINDOW_MS, VK_C,
     VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
+use easydict_windows_text_selection::WindowsTextSelectionError;
 
 #[cfg(windows)]
 static TERMINAL_SMOKE_CTRL_EVENT_MARKER: std::sync::OnceLock<std::path::PathBuf> =
@@ -537,6 +540,82 @@ fn capture_backend_preserves_clipboard_error_without_suppression() {
         }
     );
     assert!(!suppression.is_suppressed("notepad", 1_001, false, false));
+}
+
+#[test]
+fn capture_backend_preserves_native_clipboard_snapshot_errors_after_timeout_rule() {
+    assert!(
+        should_surface_clipboard_snapshot_error_after_wait(ClipWaitResult::Timeout, true),
+        "persistent clipboard snapshot failures should surface as backend errors instead of plain timeout"
+    );
+    assert!(
+        !should_surface_clipboard_snapshot_error_after_wait(ClipWaitResult::Timeout, false),
+        "ordinary timeouts without backend failures stay no-selection outcomes"
+    );
+    assert!(
+        !should_surface_clipboard_snapshot_error_after_wait(ClipWaitResult::Success, true),
+        "a later successful snapshot should keep the selection success path"
+    );
+    assert!(
+        !should_surface_clipboard_snapshot_error_after_wait(ClipWaitResult::NonTextPayload, true),
+        "confirmed non-text payloads should continue to drive suppression, not backend errors"
+    );
+}
+
+#[test]
+fn capture_backend_preserves_foreground_target_errors_except_missing_window() {
+    assert!(
+        foreground_target_error_is_empty_selection(&WindowsTextSelectionError::InvalidWindow),
+        "missing foreground window is a no-selection outcome"
+    );
+    assert!(
+        !foreground_target_error_is_empty_selection(
+            &WindowsTextSelectionError::UnsupportedPlatform
+        ),
+        "unsupported platform should surface through the Result API"
+    );
+    assert!(
+        !foreground_target_error_is_empty_selection(&WindowsTextSelectionError::NativeCallFailed {
+            operation: "GetForegroundWindow",
+            code: 5,
+        }),
+        "native helper failures should not be collapsed into no-selection"
+    );
+}
+
+#[test]
+fn capture_backend_preserves_process_name_lookup_errors_before_fallback() {
+    assert_eq!(
+        selected_text_target_process_name_result(Ok(Some("WindowsTerminal".to_string())))
+            .expect("known process name should pass through"),
+        Some("WindowsTerminal".to_string())
+    );
+    assert_eq!(
+        selected_text_target_process_name_result(Ok(None))
+            .expect("missing process name should remain unknown process"),
+        None
+    );
+
+    let unsupported = selected_text_target_process_name_result(Err(
+        WindowsTextSelectionError::UnsupportedPlatform,
+    ))
+    .expect_err("unsupported platform should surface as backend error");
+    assert_eq!(
+        unsupported.message,
+        "Windows text selection is only available on Windows"
+    );
+
+    let native_failure = selected_text_target_process_name_result(Err(
+        WindowsTextSelectionError::NativeCallFailed {
+            operation: "QueryFullProcessImageNameW",
+            code: 5,
+        },
+    ))
+    .expect_err("native process-name lookup failures should surface as backend errors");
+    assert_eq!(
+        native_failure.message,
+        "QueryFullProcessImageNameW failed with Win32 error 5"
+    );
 }
 
 #[test]

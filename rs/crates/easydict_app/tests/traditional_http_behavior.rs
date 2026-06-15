@@ -943,6 +943,18 @@ fn caiyun_and_niutrans_response_parsers_match_legacy_fallbacks_and_errors() {
         OpenAiExecutionErrorCode::InvalidResponse
     );
 
+    let deepl_missing_text = parse_deepl_api_translation_response(
+        r#"{"translations":[{"detected_source_language":"EN","text":""}]}"#,
+        "deepl".to_string(),
+        "DeepL".to_string(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        deepl_missing_text.code,
+        OpenAiExecutionErrorCode::InvalidResponse
+    );
+    assert_eq!(deepl_missing_text.service_id.as_deref(), Some("deepl"));
+
     let deepl_web = parse_deepl_web_translation_response(
         r#"{"jsonrpc":"2.0","id":100000000,"result":{"texts":[{"text":"Bonjour"}],"lang":"EN"}}"#,
         "deepl".to_string(),
@@ -1608,6 +1620,18 @@ fn parser_status_and_provider_errors_are_classified() {
     .unwrap_err();
     assert_eq!(invalid.code, OpenAiExecutionErrorCode::InvalidResponse);
     assert_eq!(invalid.service_id.as_deref(), Some("google"));
+
+    let missing_translation = parse_google_translation_response(
+        r#"{"sentences":[{"orig":"Hello"}],"src":"en"}"#,
+        "google".to_string(),
+        "Google Translate".to_string(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        missing_translation.code,
+        OpenAiExecutionErrorCode::InvalidResponse
+    );
+    assert_eq!(missing_translation.service_id.as_deref(), Some("google"));
 
     let invalid_key = traditional_http_error_from_status(401, "Unauthorized");
     assert_eq!(invalid_key.code, OpenAiExecutionErrorCode::InvalidApiKey);

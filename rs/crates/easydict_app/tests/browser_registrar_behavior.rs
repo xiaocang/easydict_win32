@@ -249,6 +249,28 @@ fn browser_registrar_source_uses_lib_owned_retained_runtime_guard() {
 }
 
 #[test]
+fn install_retained_staged_bridge_cleanup_failure_stays_observable() {
+    let source = include_str!("../src/browser_registrar.rs");
+    let production = source
+        .split("#[cfg(test)]")
+        .next()
+        .expect("browser registrar source should have production section");
+
+    assert!(
+        !production.contains("let _ = delete_file(&bridge_path)"),
+        "staged retained bridge cleanup errors must not be discarded"
+    );
+    assert!(
+        production.contains("staged_bridge_retained_marker_error("),
+        "staged retained bridge cleanup should route through an observable error helper"
+    );
+    assert!(
+        production.contains("failed to remove staged bridge"),
+        "install error should include staged bridge cleanup failure details"
+    );
+}
+
+#[test]
 fn install_chrome_writes_manifest_registry_and_copies_bridge() {
     let sandbox = TestSandbox::new("install_chrome");
     let source_bridge = sandbox.write_source_bridge();

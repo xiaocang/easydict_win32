@@ -1147,7 +1147,9 @@ where
     translations.resize_with(chunks.len(), || None);
     let mut failed_chunk_indexes = Vec::new();
     let mut first_error = None;
-    let mut translation_cache = native_long_document_translation_cache(&request.settings);
+    let mut cache_warnings = Vec::new();
+    let mut translation_cache =
+        native_long_document_translation_cache(&request.settings, &mut cache_warnings);
     let max_concurrency = request
         .settings
         .long_doc_max_concurrency
@@ -1225,13 +1227,13 @@ where
             let chunk_hash =
                 (!chunk_text.trim().is_empty()).then(|| long_document_source_hash(chunk_text));
             if let (Some(cache), Some(hash)) = (translation_cache.as_mut(), chunk_hash.as_deref()) {
-                if let Ok(Some(cached)) = cache.try_get(
+                match cache.try_get(
                     &request.params.service_id,
                     &request.params.from,
                     &request.params.to,
                     hash,
                 ) {
-                    if !cached.trim().is_empty() {
+                    Ok(Some(cached)) if !cached.trim().is_empty() => {
                         events.push(LongDocumentEvent::BlockTranslated(
                             BlockTranslatedEventData {
                                 chunk_index: index as u32,
@@ -1244,6 +1246,15 @@ where
                         ));
                         translations[index] = Some(cached);
                         continue;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        push_native_long_document_cache_warning(
+                            &mut cache_warnings,
+                            format!(
+                                "Long document translation cache read failed for chunk {index}: {error}"
+                            ),
+                        );
                     }
                 }
             }
@@ -1272,6 +1283,7 @@ where
                 &mut failed_chunk_indexes,
                 &mut first_error,
                 &mut events,
+                &mut cache_warnings,
                 result,
             );
         }
@@ -1308,6 +1320,7 @@ where
             let quality_report = native_long_document_quality_report_json(
                 &export.checkpoint,
                 export.backfill_metrics.clone(),
+                &cache_warnings,
             )?;
             let result = TranslateDocumentResult {
                 state: if failed_chunk_indexes.is_empty() {
@@ -1441,7 +1454,9 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
     })];
     let mut failed_chunk_indexes = Vec::new();
     let mut first_error = None;
-    let mut translation_cache = native_long_document_translation_cache(&retry_request.settings);
+    let mut cache_warnings = Vec::new();
+    let mut translation_cache =
+        native_long_document_translation_cache(&retry_request.settings, &mut cache_warnings);
     let max_concurrency = retry_request
         .settings
         .long_doc_max_concurrency
@@ -1506,13 +1521,13 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
             let chunk_hash =
                 (!chunk_text.trim().is_empty()).then(|| long_document_source_hash(chunk_text));
             if let (Some(cache), Some(hash)) = (translation_cache.as_mut(), chunk_hash.as_deref()) {
-                if let Ok(Some(cached)) = cache.try_get(
+                match cache.try_get(
                     &retry_request.params.service_id,
                     &retry_request.params.from,
                     &retry_request.params.to,
                     hash,
                 ) {
-                    if !cached.trim().is_empty() {
+                    Ok(Some(cached)) if !cached.trim().is_empty() => {
                         events.push(LongDocumentEvent::BlockTranslated(
                             BlockTranslatedEventData {
                                 chunk_index: index as u32,
@@ -1525,6 +1540,15 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
                         ));
                         translations[index] = Some(cached);
                         continue;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        push_native_long_document_cache_warning(
+                            &mut cache_warnings,
+                            format!(
+                                "Long document translation cache read failed for retry chunk {index}: {error}"
+                            ),
+                        );
                     }
                 }
             }
@@ -1550,6 +1574,7 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
                 &mut failed_chunk_indexes,
                 &mut first_error,
                 &mut events,
+                &mut cache_warnings,
                 result,
             );
         }
@@ -1583,6 +1608,7 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
             let quality_report = native_long_document_quality_report_json(
                 &export.checkpoint,
                 export.backfill_metrics.clone(),
+                &cache_warnings,
             )?;
             let result = TranslateDocumentResult {
                 state: if failed_chunk_indexes.is_empty() {
@@ -2504,6 +2530,7 @@ fn apply_native_text_chunk_result(
     failed_chunk_indexes: &mut Vec<u32>,
     first_error: &mut Option<String>,
     events: &mut Vec<LongDocumentEvent>,
+    cache_warnings: &mut Vec<String>,
     result: NativeTextChunkResult,
 ) {
     if result.index >= translations.len() {
@@ -2516,14 +2543,22 @@ fn apply_native_text_chunk_result(
             if let (Some(cache), Some(hash)) =
                 (translation_cache.as_mut(), result.source_hash.as_deref())
             {
-                let _ = cache.set(
+                if let Err(error) = cache.set(
                     &request.params.service_id,
                     &request.params.from,
                     &request.params.to,
                     hash,
                     &result.chunk,
                     &translated,
-                );
+                ) {
+                    push_native_long_document_cache_warning(
+                        cache_warnings,
+                        format!(
+                            "Long document translation cache write failed for chunk {}: {error}",
+                            result.index
+                        ),
+                    );
+                }
             }
 
             events.push(LongDocumentEvent::BlockTranslated(
@@ -2571,15 +2606,30 @@ fn apply_native_text_chunk_result(
 
 fn native_long_document_translation_cache(
     settings: &SettingsSnapshot,
+    cache_warnings: &mut Vec<String>,
 ) -> Option<LongDocumentTranslationCache> {
     if !settings.enable_translation_cache.unwrap_or(false) {
         return None;
     }
 
-    LongDocumentTranslationCache::open(long_document_translation_cache_path(
+    match LongDocumentTranslationCache::open(long_document_translation_cache_path(
         settings.cache_dir_str(),
-    ))
-    .ok()
+    )) {
+        Ok(cache) => Some(cache),
+        Err(error) => {
+            push_native_long_document_cache_warning(
+                cache_warnings,
+                format!("Long document translation cache could not be opened: {error}"),
+            );
+            None
+        }
+    }
+}
+
+fn push_native_long_document_cache_warning(warnings: &mut Vec<String>, warning: String) {
+    if !warnings.iter().any(|existing| existing == &warning) {
+        warnings.push(warning);
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2606,6 +2656,8 @@ struct NativeLongDocumentQualityReport {
     translated_blocks: u32,
     skipped_blocks: u32,
     failed_blocks: Vec<NativeLongDocumentFailedBlockInfo>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    warnings: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -7104,8 +7156,9 @@ fn native_export_checkpoint(
 fn native_long_document_quality_report_json(
     checkpoint: &LongDocumentExportCheckpoint,
     backfill_metrics: Option<serde_json::Value>,
+    warnings: &[String],
 ) -> Result<String, LongDocumentBackendError> {
-    let report = native_long_document_quality_report(checkpoint, backfill_metrics);
+    let report = native_long_document_quality_report(checkpoint, backfill_metrics, warnings);
     serde_json::to_string(&report).map_err(|error| {
         LongDocumentBackendError::new(format!(
             "Could not serialize native long document quality report: {error}"
@@ -7116,6 +7169,7 @@ fn native_long_document_quality_report_json(
 fn native_long_document_quality_report(
     checkpoint: &LongDocumentExportCheckpoint,
     backfill_metrics: Option<serde_json::Value>,
+    warnings: &[String],
 ) -> NativeLongDocumentQualityReport {
     let metadata_by_index = checkpoint
         .chunk_metadata
@@ -7151,6 +7205,7 @@ fn native_long_document_quality_report(
             .filter(|metadata| metadata.source_block_type == LongDocumentExportBlockType::Formula)
             .count() as u32,
         failed_blocks,
+        warnings: warnings.to_vec(),
     }
 }
 

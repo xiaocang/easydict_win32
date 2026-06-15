@@ -1503,6 +1503,66 @@ fn native_text_long_document_cache_disabled_ignores_persistent_hit() {
 }
 
 #[test]
+fn native_text_long_document_cache_open_failure_surfaces_quality_warning_without_blocking_output() {
+    let temp_dir = unique_temp_dir("longdoc-native-text-cache-open-warning");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let invalid_cache_root = temp_dir.join("cache-root-is-file");
+    fs::write(&invalid_cache_root, b"not a directory").expect("invalid cache root marker");
+    let result_json_path = temp_dir.join("cache-warning-result.json");
+
+    let mut request = native_plaintext_cache_request(&temp_dir, true);
+    request.settings.cache_dir = Some(invalid_cache_root.to_string_lossy().to_string());
+    request.params.result_json_path = Some(result_json_path.to_string_lossy().to_string());
+    let mut translator = RecordingNativeLongDocTranslator::default();
+
+    let outcome = run_native_text_long_document_request_with_translator(&mut translator, request);
+    let result = outcome
+        .result
+        .expect("cache diagnostics should not block successful native output");
+
+    assert_eq!(translator.call_count(), 1);
+    let output = fs::read_to_string(result.output_path.expect("output path"))
+        .expect("output should still be written");
+    assert!(output.contains("[zh] First paragraph."));
+
+    let quality_report: serde_json::Value = serde_json::from_str(
+        result
+            .quality_report
+            .as_deref()
+            .expect("quality report should be present"),
+    )
+    .expect("quality report should parse");
+    let warning = quality_report["warnings"][0]
+        .as_str()
+        .expect("cache warning should be present");
+    assert!(
+        warning.contains("Long document translation cache could not be opened"),
+        "cache open warning should explain the side-effect failure: {warning}"
+    );
+    assert_eq!(quality_report["translatedBlocks"], 1);
+
+    let sidecar_json =
+        fs::read_to_string(&result_json_path).expect("result sidecar should still be written");
+    let sidecar: serde_json::Value =
+        serde_json::from_str(&sidecar_json).expect("sidecar should parse");
+    let sidecar_quality_report = sidecar["qualityReport"]
+        .as_str()
+        .expect("sidecar should store quality report JSON");
+    assert!(
+        sidecar_quality_report.contains("Long document translation cache could not be opened"),
+        "sidecar quality report should preserve cache diagnostics: {sidecar_quality_report}"
+    );
+
+    let long_document_source = include_str!("../src/long_document.rs");
+    assert!(
+        !long_document_source.contains("let _ = cache.set("),
+        "LongDoc cache write failures should remain observable in quality-report warnings"
+    );
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
 fn long_document_request_clamps_max_concurrency_setting() {
     fn parsed_concurrency(value: &str) -> Option<u32> {
         build_long_document_request(

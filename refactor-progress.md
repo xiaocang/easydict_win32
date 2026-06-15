@@ -21,6 +21,256 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-15: Surfaced OCR capture background diagnostics
+
+- No new dependency was needed. The overlay background freeze reuses the existing Rust-owned `lib/easydict-windows-screen-capture` helper through the app `screen_capture_native` Result API.
+- `capture_screen_background_result(...)` now preserves native BitBlt/virtual-desktop capture failures, and hotkey OCR paths feed those failures through `apply_capture_background_result(...)` instead of silently falling back to a blank overlay background.
+- The overlay remains usable after a background-freeze failure: `capture_background` is cleared, `last_ocr_error` records `Screen capture background failed: ...`, and a later successful freeze clears only that background prefix without erasing window-snapshot diagnostics.
+- The `ocr-diagnostics` validation profile now includes the focused capture-background test, and the tooling self-test locks the diff recommendation plus dry-run matrix so future OCR close-out can use `-RunRecommendedProfiles` instead of hand-picking OCR subtests.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior capture_background_failure_preserves_overlay_and_success_clears_only_background_error -- --exact --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test ocr_behavior app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface -- --exact --nocapture"`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile ocr-diagnostics,core-validation-tooling -ChangedPath rs\crates\easydict_app\src\state.rs,rs\crates\easydict_app\src\lib.rs,rs\crates\easydict_app\tests\ocr_behavior.rs,rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Surface OCR capture background diagnostics"`
+
+## 2026-06-15: Added focused translation-cache close-out profile
+
+- No runtime behavior or production dependency changed. This is a tooling-efficiency slice for repeated translation-cache work.
+- `Invoke-RsCoreSliceValidation.ps1` now has a `translation-cache` profile that groups formatting, `translation_cache_behavior`, Quick Translate `clear_` status/memory-cache tests, and focused LongDoc persistent/formula cache tests in one UI-isolated pass.
+- Recommendation rules now route `translation_cache.rs`, `translation_cache_behavior.rs`, and cache-specific diff text such as `ClearTranslationCache`, `LongDocumentTranslationCache`, `translation_cache_status`, `EnableTranslationCache`, and phonetic-cache symbols to that focused profile.
+- `Test-RsCoreSliceValidation.ps1` covers the new profile/recommendation alignment, including a simulated Clear Cache diff like the previous slice, so future close-out can use `-RunRecommendedProfiles` instead of hand-splicing a custom cargo command.
+
+Validation:
+
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Add translation cache validation profile"`
+
+## 2026-06-15: Surfaced persistent translation-cache clear failures
+
+- No new dependency was needed. The settings Clear Cache action reuses the existing Rust-owned `LongDocumentTranslationCache` / `rusqlite` persistent cache layer instead of adding a cache cleanup crate or falling back to retained workers.
+- `clear_persistent_translation_cache_for_settings(...)` now returns `Result<(), PersistentTranslationCacheError>` and resolves the same `SettingsSnapshot.cache_dir` path used by native LongDoc cache reads/writes.
+- `Message::ClearTranslationCache` still clears the Rust in-memory Quick Translate cache first. If the persistent SQLite cache cannot be opened or cleared, the settings status is overwritten with `Clear failed: ...` so the failure is visible without blocking memory-cache cleanup or crashing the settings page.
+- The focused `clear_` behavior tests now cover settings-root clearing, invalid cache-root diagnostics, app status reporting, and the neighboring in-memory clear case under the shared environment lock. This keeps the default close-out cheaper by avoiding flaky `LOCALAPPDATA` cross-test interference.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior clear_ -- --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- rustfmt --edition 2021 --check rs\crates\easydict_app\src\lib.rs rs\crates\easydict_app\tests\quick_translate_behavior.rs"`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -ChangedPath rs\crates\easydict_app\src\lib.rs,rs\crates\easydict_app\tests\quick_translate_behavior.rs,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage 'Surface translation cache clear diagnostics' -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior clear_ -- --nocapture"`
+
+## 2026-06-15: Aligned LongDoc cache close-out recommendations
+
+- No runtime behavior or production dependency changed. This slice improves close-out efficiency for LongDoc runner edits.
+- `Invoke-RsCoreSliceValidation.ps1` now treats LongDoc translation-cache, `qualityReport`, and result JSON sidecar diff text as `longdoc-export` signals. A cache/quality-report change in the shared `long_document.rs` runner now defaults to the export/sidecar lane instead of being pulled toward the broader layout matrix by path alone.
+- `Test-RsCoreSliceValidation.ps1` now accepts explicit diff text in recommendation tests and locks the cache-warning example that motivated this slice, keeping the recommender and the tool's own test cases aligned.
+
+Validation:
+
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Align LongDoc cache close-out recommendations"`
+
+## 2026-06-15: Surfaced native LongDoc translation-cache diagnostics
+
+- No new dependency was needed. The native LongDoc runner continues to use the existing Rust-owned `LongDocumentTranslationCache` backed by `rusqlite`; this slice tightens side-effect diagnostics rather than replacing the cache layer.
+- Native Text/Markdown/simple-PDF LongDoc cache open, read, and write failures are now preserved as quality-report `warnings` instead of being hidden behind `.ok()` or `let _ = cache.set(...)`. Cache failures remain non-fatal, so successful provider output and exports still complete.
+- Successful result JSON sidecars now preserve those cache diagnostics through the `qualityReport` string, which keeps Retry Failed/result-file workflows observable without reintroducing retained LongDoc worker fallback.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test long_document_behavior native_text_long_document_cache_open_failure_surfaces_quality_warning_without_blocking_output -- --exact --nocapture"`
+- Final close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-export,rust-only-boundary -ChangedPath rs\crates\easydict_app\src\long_document.rs,rs\crates\easydict_app\tests\long_document_behavior.rs,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Surface LongDoc translation cache diagnostics"`
+
+## 2026-06-15: Exposed machine-readable close-out recommendations
+
+- No runtime behavior or production dependency changed. This slice improves the local close-out loop used while finishing Rust-only migration slices.
+- `Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles -Json` now emits the same recommendation data as the human-readable report in a machine-readable shape: selector inputs, ignored/core paths, default selected profiles, matched profile diagnostics, each profile's aligned validation steps, and generated close-out commands.
+- The wrapper now owns `Get-SelectedRecommendationResults(...)` and the recommendation command/report builders, so `Test-RsCoreSliceValidation.ps1` no longer carries a duplicate profile-selection implementation. The self-test covers both in-process report alignment and black-box parseable JSON output.
+- No reusable external library was needed; PowerShell's built-in object pipeline and `ConvertTo-Json` are sufficient for the tooling contract.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Expose recommendation JSON close-out report"`
+
+## 2026-06-15: Combined validation and checkpoint close-out
+
+- No runtime behavior or production dependency changed. This slice improves the local close-out loop used while finishing Rust-only migration slices.
+- `Invoke-RsCoreSliceValidation.ps1` now accepts `-GstepCommitMessage "<message>"`. After the selected validation profile(s) and optional trailing-whitespace scan pass, the wrapper runs `gstep commit -m ...` before restoring isolated parallel UI/parity files, so a routine slice can validate and checkpoint in one isolation pass instead of two.
+- `-GstepCommitMessage` is blocked with `-NoParallelUiIsolation` and supports `-DryRun` preview output. The tooling self-test now covers checkpoint dry-run wiring, black-box CLI preview, and the safety guard that prevents accidental checkpoints while isolation is disabled.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace -GstepCommitMessage "Combine validation and checkpoint close-out"`
+
+## 2026-06-15: Printed default recommended close-out commands
+
+- No runtime behavior or production dependency changed. This slice only improves the local close-out tooling used while finishing Rust-only migration work.
+- `Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles` now prints default recommended close-out and dry-run commands that use `-RunRecommendedProfiles ... -CheckTrailingWhitespace`, preserving any `-ChangedPath` or non-default diff selector that shaped the recommendation.
+- The existing all-recommended commands remain available for deliberate broader validation, but routine slices can now follow the generated default command instead of hand-splicing `-CheckTrailingWhitespace` or accidentally running every matched lane.
+- `core-validation-tooling` self-tests now lock this output shape for shared helper paths, including selector preservation.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -CheckTrailingWhitespace`
+
+## 2026-06-15: Accelerated core validation tooling self-tests
+
+- No runtime behavior or production dependency changed. This slice only improves the local close-out tooling used while finishing Rust-only migration work.
+- `Test-RsCoreSliceValidation.ps1` now imports the definition section from `Invoke-RsCoreSliceValidation.ps1` and exercises the same profile, recommendation, dry-run, duplicate-step, selector, and trailing-whitespace functions in-process.
+- Kept black-box wrapper invocations for the parts that genuinely need CLI plumbing: dry-run should not take the isolation mutex, `-AllRecommendedProfiles` without `-RunRecommendedProfiles` should fail clearly, and no-match `-RunRecommendedProfiles` should still surface the expected error.
+- This keeps the tool test matrix aligned with the actual wrapper definitions while avoiding one PowerShell process startup per recommendation/profile case.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Tightened recommended close-out lane selection
+
+- No runtime implementation change or new production dependency was needed. This slice improves the local validation tooling used to finish Rust-only migration work while parallel UI/parity files are dirty.
+- `Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles` now selects every profile tied for the highest recommendation score by default, so shared route files such as `quick_translate.rs` and `long_document.rs` no longer silently validate only the first alphabetical lane when multiple adjacent lanes are equally likely.
+- Added low-weight fallback recommendation paths for broad app-surface files (`state.rs` and `lib.rs`) to the `rust-only-boundary` profile, plus a formatter step in that profile. Planned/dry-run closure for those shared files now has a default no-runtime matrix instead of failing with no profile.
+- Kept `windows-ai-prepare` available as an explicit/narrow profile, but stopped letting generic `lib/easydict-windows-ai/**` path-only recommendations tie the broader `windows-ai-native` lane. WindowsAI/Phi close-out still defaults to the broader native route matrix.
+- Expanded `core-validation-tooling` self-tests to cover tied top-lane expansion, shared app fallback, and the rust-only boundary formatter.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Preserved staged browser bridge cleanup diagnostics
+
+- Rechecked reusable native-messaging crates before changing code. The current `native_messaging` crate offers host/manifest installer helpers, but replacing the registrar would bypass Easydict's existing rs-specific host name, memory-testable registry adapter, source/canonical path checks, and retained runtime byte-marker scanning. This slice therefore stays on the Rust-owned registrar and shared runtime guards.
+- `BrowserRegistrarCore::install(...)` no longer discards cleanup failures when a copied/staged `easydict-native-bridge.exe` is detected as a retained `.NET`/script payload. The install result still fails on the retained marker, and now appends the failed staged-file removal error so a locked or undeletable polluted bridge does not look fully cleaned up.
+- Added browser-support behavior coverage so the aligned profile catches a regression back to `let _ = delete_file(&bridge_path)` for the staged retained bridge cleanup path.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --lib browser_registrar -- --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test browser_registrar_behavior install_retained_staged_bridge_cleanup_failure_stays_observable -- --exact --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\browser_registrar.rs,rs\crates\easydict_app\tests\browser_registrar_behavior.rs,migration-list.md,refactor-progress.md,experience.md -AllRecommendedProfiles -CheckTrailingWhitespace`
+
+## 2026-06-15: Surfaced malformed traditional HTTP translation payloads
+
+- Rechecked reusable crates before changing code: `google-cloud-translation-v3` is Google's authenticated Cloud Translation API client, not Easydict's free GTX/WebApp traditional HTTP path; `rtranslate` is a minimal Google web wrapper but does not cover Easydict's DTO/error/classification surface; `deepl` covers the broader DeepL API client stack, while this slice only tightens existing parser diagnostics.
+- No new dependency was added. The existing Rust-owned `traditional_http` request planners, blocking `reqwest` executor, and `serde_json` parsers remain the right boundary for this small diagnostic slice.
+- `parse_google_translation_response(...)` now returns `InvalidResponse` when a successful Google payload has no translated sentence text, and `parse_deepl_api_translation_response(...)` does the same when the first official DeepL translation lacks non-empty `text`. This keeps provider shape changes visible instead of producing a blank translation result.
+- The legacy no-result fallbacks for Caiyun, Volcano, Linguee, and Youdao web-dict remain unchanged because their existing tests explicitly document original-text fallback behavior.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test traditional_http_behavior -- --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\traditional_http.rs,rs\crates\easydict_app\tests\traditional_http_behavior.rs,migration-list.md,refactor-progress.md,experience.md -AllRecommendedProfiles -CheckTrailingWhitespace`
+
+## 2026-06-15: Aligned close-out tooling tests with efficient recommended runs
+
+- No production runtime behavior or dependency changed. This only tightens the local validation tooling contract used to finish Rust migration slices.
+- Added a `core-validation-tooling` self-test for the exact efficient close-out shape used by LongDoc layout/Vision slices: `-RunRecommendedProfiles -ChangedPath <code files plus docs> -AllRecommendedProfiles -DryRun -CheckTrailingWhitespace`.
+- The test locks in the intended split: profile-exempt docs do not change lane selection, while the trailing-whitespace check still scans `migration-list.md`, `refactor-progress.md`, and `experience.md` in the same wrapper pass.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -AllRecommendedProfiles -CheckTrailingWhitespace`
+
+## 2026-06-15: Surfaced malformed Vision layout provider responses
+
+- No new dependency was needed. The Vision layout route already uses the existing Rust-owned OpenAI-compatible request planner, blocking `reqwest` executor, and `serde_json` response parsing; the gap was using the forgiving parser in the provider execution path.
+- Added `parse_vision_layout_response_result(...)` and `parse_vision_layout_detection_array_result(...)`. The old `parse_*` wrappers still return an empty list for compatibility/parser tests, while `execute_vision_layout_detection(...)` now returns `InvalidResponse` for malformed HTTP 200 provider JSON, missing layout text, non-array detection payloads, or malformed detection arrays.
+- Because LongDoc maps Vision execution errors with `vision_layout_page_backend_error(...)`, malformed provider success responses now keep the PDF page number and provider parser message instead of looking like a normal empty layout result.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test vision_layout_behavior vision_layout_ -- --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\vision_layout.rs,rs\crates\easydict_app\tests\vision_layout_behavior.rs,rs\crates\easydict_app\src\lib.rs,migration-list.md,refactor-progress.md,experience.md -AllRecommendedProfiles -CheckTrailingWhitespace`
+
+## 2026-06-15: Pruned corrupt lazy local dictionary indexes before suggestion reuse
+
+- No new dependency was needed. This is a cache lifecycle fix around the existing Rust-owned `LexIndex`/LXDX route rather than a replacement of parsing or indexing logic.
+- `LocalDictionaryIndexService::ensure_queryable_index_loaded(...)` no longer collapses a lazy `LexIndex::open(index.bin)` failure into a permanent empty suggestion result. If autocomplete discovers an unreadable `index.bin`, it now removes that file and leaves the manifest in place so the next `ensure_index_with_key_loader(...)` can rebuild through the normal MDX key enumeration path.
+- Added `local_dictionary_index_behavior` coverage proving lazy autocomplete returns no suggestions for the corrupt cache, removes the bad `index.bin`, and then rebuilds to usable suggestions on the next ensure.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test local_dictionary_index_behavior native_local_dictionary_index_prunes_corrupt_lazy_index_before_rebuild -- --nocapture"`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\crates\easydict_app\src\local_dictionary_index.rs,rs\crates\easydict_app\tests\local_dictionary_index_behavior.rs,migration-list.md,refactor-progress.md,experience.md -AllRecommendedProfiles -CheckTrailingWhitespace`
+
+## 2026-06-15: Folded trailing-whitespace close-out into core validation tooling
+
+- No production runtime behavior or dependency changed. This only improves the local validation tooling used to finish Rust migration slices more efficiently.
+- `Invoke-RsCoreSliceValidation.ps1` now supports `-CheckTrailingWhitespace`, which can compose with `-Profile`, `-RunRecommendedProfiles`, or a custom validation command. The check reuses `-ChangedPath` when provided, otherwise scans the current gstep diff, skips known parallel UI/parity files and binary/model/dictionary assets, and treats `rg` exit code 1 as the expected "no matches" success case.
+- `-RecommendProfiles` now prints an all-recommended close-out command with `-CheckTrailingWhitespace`, so the common profile + trailing whitespace pass can be copied as one command.
+- Strengthened `core-validation-tooling` self-tests so recommended profile dry-runs and standalone whitespace dry-runs must keep the scanned file list visible and aligned with the wrapper's selector inputs.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -DryRun -CheckTrailingWhitespace`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1,migration-list.md,refactor-progress.md,experience.md -AllRecommendedProfiles -CheckTrailingWhitespace`
+
+## 2026-06-15: Preserved recommendation selectors in core close-out commands
+
+- No production runtime behavior or dependency changed. This only improves the local validation tooling used to finish Rust migration slices more efficiently.
+- `Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles` now carries `-ChangedPath` or non-default diff selectors into the printed `-RunRecommendedProfiles -AllRecommendedProfiles` run/dry-run commands. Copying the generated command therefore reuses the same recommendation input instead of falling back to whatever happens to be dirty in the worktree.
+- Strengthened `core-validation-tooling` self-tests so shared-helper recommendation output must include the normalized `-ChangedPath` selector in both all-recommended commands.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles -ChangedPath rs\scripts\Invoke-RsCoreSliceValidation.ps1,rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Rebuilt corrupt local dictionary indexes before suggestion reuse
+
+- No new dependency was needed. The local dictionary suggestion route intentionally keeps the in-repo `LexIndex`/LXDX format so existing .NET-compatible indexes and manifest semantics remain readable by Rust.
+- `LocalDictionaryIndexService::ensure_index_with_key_loader(...)` no longer trusts a matching manifest alone. When the source fingerprint matches, it now opens the matching `index.bin`; a valid index is cached immediately and skips MDX key enumeration, while a corrupt LXDX file falls through to the normal rebuild path instead of later becoming a silent empty suggestion list.
+- Added `local_dictionary_index_behavior` coverage for manifest-match/corrupt-index self-healing.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\rs\scripts\Invoke-RsCoreSliceValidation.ps1 -- cargo test --manifest-path rs\Cargo.toml -p easydict_app --test local_dictionary_index_behavior native_local_dictionary_index_rebuilds_corrupt_index_when_fingerprint_matches -- --nocapture"`
+
+## 2026-06-15: Preserved selected-text process-name lookup diagnostics
+
+- No new dependency was needed. This keeps selected-text capture on the existing Rust-owned `lib/easydict-windows-text-selection` Win32/UIA helper and app Result API.
+- `capture_native_selected_text_result()` no longer collapses `process_name_for_id(...)` failures into the unknown-process route. A successful `Ok(None)` still behaves like an unknown regular app for .NET parity, but an actual process-name lookup error now surfaces as `TextSelectionBackendError` before any clipboard fallback can send synthetic Ctrl+C with unreliable terminal/electron classification metadata.
+- Added `text_selection_behavior` coverage for successful process names, unknown-process `Ok(None)`, unsupported-platform errors, and native `QueryFullProcessImageNameW` failures.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile text-selection`
+
+## 2026-06-15: Added all-recommended core close-out tooling
+
+- No production runtime behavior or dependency changed. This only improves the local close-out tooling used while Rust migration slices are being finished.
+- `Invoke-RsCoreSliceValidation.ps1` now supports `-RunRecommendedProfiles -AllRecommendedProfiles`, so shared helper and cross-boundary changes can run every recommended validation lane in one UI/parity isolation pass without hand-counting `-MaxRecommendedProfiles`.
+- `-RecommendProfiles` now prints the all-recommended run and dry-run commands alongside the deterministic combined `-Profile a,b,c` commands.
+- Strengthened `core-validation-tooling` self-tests so validation profile definitions and recommendation rules must stay one-to-one, the full profile dry-run wiring must remain executable, and shared text-selection helper changes must align all dependent input lanes through `-AllRecommendedProfiles`.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Test-RsCoreSliceValidation.ps1`
+
+## 2026-06-15: Preserved foreground target diagnostics in selected-text capture
+
+- No new dependency was needed. This keeps the selected-text route on the existing Rust-owned `lib/easydict-windows-text-selection` helper and app Result API.
+- `capture_native_selected_text_result()` no longer collapses every foreground target acquisition error into `Ok(None)`. Missing/invalid foreground window remains the no-selection case, while unsupported platform or native helper failures now surface as `TextSelectionBackendError` so Quick Translate can report `Text selection failed: ...`.
+- Added `text_selection_behavior` coverage for this foreground-target error classification and recorded the `.ok()` pitfall in `experience.md`.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile text-selection`
+
+## 2026-06-15: Preserved native selected-text clipboard snapshot errors
+
+- No new dependency was needed. This slice keeps the existing Rust-owned `lib/easydict-windows-text-selection` Win32 clipboard/UIA helper and tightens app-level diagnostics.
+- `native_selected_text_via_clipboard(...)` no longer converts the initial clipboard snapshot failure into a missing baseline. It now returns the backend error before sending synthetic Ctrl+C, so the default rs selected-text path does not touch the user's clipboard when it cannot capture a restore baseline.
+- Poll-time clipboard snapshot failures remain tolerant of transient locks, but if the wait ends in timeout with the last snapshot still failing, the capture now surfaces that backend error instead of collapsing it into a plain no-selection timeout. Success and confirmed non-text payload outcomes keep their previous behavior.
+- Added `text_selection_behavior` coverage for the timeout/error decision rule and documented the `.ok()` pitfall in `experience.md`.
+
+Validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile text-selection`
+
 ## 2026-06-15: Printed combined recommended validation profile commands
 
 - No production runtime behavior or dependency changed. This slice only improves the local close-out workflow for Rust migration iterations.

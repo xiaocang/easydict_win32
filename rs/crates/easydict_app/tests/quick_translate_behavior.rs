@@ -402,6 +402,7 @@ fn quick_translate_cache_miss_stores_success_and_second_request_hits_cache() {
 
 #[test]
 fn translation_cache_disabled_and_clear_affect_quick_translate_cache() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let mut app = quick_translate_cache_app(["google"]);
     app.state.translation_cache.insert(
         &google_cache_request("Hello cache"),
@@ -449,12 +450,75 @@ fn clear_persistent_translation_cache_uses_settings_cache_dir() {
     assert_eq!(cache.entry_count().expect("count should work"), 1);
     drop(cache);
 
-    clear_persistent_translation_cache_for_settings(&settings);
+    clear_persistent_translation_cache_for_settings(&settings).expect("clear should succeed");
 
     let cache = LongDocumentTranslationCache::open(&db_path).expect("cache should reopen");
     assert_eq!(cache.entry_count().expect("count should work"), 0);
     drop(cache);
 
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn clear_persistent_translation_cache_surfaces_cache_root_errors() {
+    let temp_dir = unique_temp_dir("easydict-persistent-cache-clear-invalid-root");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let cache_root_file = temp_dir.join("cache-root-is-file");
+    fs::write(&cache_root_file, b"not a directory").expect("cache root file should be written");
+    let settings = SettingsSnapshot {
+        cache_dir: Some(path_string(&cache_root_file)),
+        ..SettingsSnapshot::default()
+    };
+
+    let error = clear_persistent_translation_cache_for_settings(&settings)
+        .expect_err("cache root file should make SQLite cache open fail");
+    let error_text = error.to_string();
+
+    assert!(
+        looks_like_cache_directory_failure(&error_text),
+        "{error_text}"
+    );
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn clear_translation_cache_status_reports_persistent_cache_failure_without_blocking_memory_clear() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().unwrap();
+    let temp_dir = unique_temp_dir("easydict-clear-cache-invalid-localappdata");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let local_app_data_file = temp_dir.join("LOCALAPPDATA-is-file");
+    fs::write(&local_app_data_file, b"not a directory")
+        .expect("local app data file should be written");
+    let _local_app_data_guard =
+        EnvironmentVariableGuard::set("LOCALAPPDATA", &path_string(&local_app_data_file));
+    let mut app = quick_translate_cache_app(["google"]);
+    app.state.translation_cache.insert(
+        &google_cache_request("Hello cache"),
+        TranslationResult::success(
+            "内存缓存",
+            "Hello cache",
+            TranslationLanguage::SimplifiedChinese,
+            "Google Translate",
+        ),
+    );
+
+    let task = app.update(Message::ClearTranslationCache);
+
+    assert_eq!(task_kind(&task), "none");
+    assert!(app.state.translation_cache.is_empty());
+    assert!(
+        app.state
+            .settings
+            .translation_cache_status
+            .starts_with("Clear failed:"),
+        "{}",
+        app.state.settings.translation_cache_status
+    );
+    assert!(
+        looks_like_cache_directory_failure(&app.state.settings.translation_cache_status),
+        "{}",
+        app.state.settings.translation_cache_status
+    );
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
@@ -11223,6 +11287,22 @@ impl Drop for EnvironmentVariableGuard {
 
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+fn looks_like_cache_directory_failure(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("not a directory")
+        || message.contains("directory")
+        || message.contains("file")
+        || message.contains("path")
+        || message.contains("system cannot find")
+        || message.contains("cannot find")
+        || message.contains("os error 183")
+        || message.contains("文件")
+        || message.contains("目录")
+        || message.contains("路径")
+        || message.contains("已存在")
+        || message.contains("无法创建")
 }
 
 fn install_open_vino_cache(base: &Path) {

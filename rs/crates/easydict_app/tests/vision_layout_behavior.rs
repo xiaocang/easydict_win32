@@ -2,10 +2,11 @@ use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
     execute_vision_layout_detection, parse_vision_layout_detection_array,
-    parse_vision_layout_response, OpenAiApiFormat, OpenAiCompatibleConfig, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, ReqwestVisionLayoutHttpClient, VisionLayoutDetection,
-    VisionLayoutHttpClient, VisionLayoutHttpRequestPlan, VisionLayoutHttpResponse,
-    VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
+    parse_vision_layout_response, parse_vision_layout_response_result, OpenAiApiFormat,
+    OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiExecutionErrorCode,
+    ReqwestVisionLayoutHttpClient, VisionLayoutDetection, VisionLayoutHttpClient,
+    VisionLayoutHttpRequestPlan, VisionLayoutHttpResponse, VisionLayoutRegionType,
+    VISION_LAYOUT_DETECTION_PROMPT,
 };
 
 const VISION_LAYOUT_SMOKE_ENDPOINT_ENV: &str = "EASYDICT_VISION_LAYOUT_SMOKE_ENDPOINT";
@@ -168,6 +169,48 @@ fn vision_layout_response_parser_returns_empty_for_malformed_json() {
 }
 
 #[test]
+fn vision_layout_response_result_surfaces_malformed_provider_payloads() {
+    let malformed_json =
+        parse_vision_layout_response_result(OpenAiApiFormat::ChatCompletions, "{nope", 100, 100)
+            .expect_err("malformed provider JSON should be a backend error");
+    assert_eq!(
+        malformed_json.code,
+        OpenAiExecutionErrorCode::InvalidResponse
+    );
+    assert!(malformed_json.message.contains("response JSON is invalid"));
+
+    let missing_content = parse_vision_layout_response_result(
+        OpenAiApiFormat::ChatCompletions,
+        r#"{ "choices": [{ "message": { "content": "" } }] }"#,
+        100,
+        100,
+    )
+    .expect_err("missing layout text should be a backend error");
+    assert_eq!(
+        missing_content.code,
+        OpenAiExecutionErrorCode::InvalidResponse
+    );
+    assert!(missing_content
+        .message
+        .contains("did not contain layout text"));
+
+    let malformed_detection_json = parse_vision_layout_response_result(
+        OpenAiApiFormat::Responses,
+        r#"{ "output_text": "[not valid json]" }"#,
+        100,
+        100,
+    )
+    .expect_err("malformed detection array should be a backend error");
+    assert_eq!(
+        malformed_detection_json.code,
+        OpenAiExecutionErrorCode::InvalidResponse
+    );
+    assert!(malformed_detection_json
+        .message
+        .contains("detection array JSON is invalid"));
+}
+
+#[test]
 fn vision_layout_request_plan_uses_chat_completions_image_url_payload() {
     let config =
         OpenAiCompatibleConfig::new("https://api.example.test/v1/chat/completions", "gpt-4o")
@@ -308,6 +351,24 @@ fn vision_layout_executor_maps_http_errors() {
 }
 
 #[test]
+fn vision_layout_executor_surfaces_malformed_success_response() {
+    let config =
+        OpenAiCompatibleConfig::new("https://api.example.test/v1/chat/completions", "gpt-4o")
+            .with_api_key("sk-vision");
+    let mut client = FakeVisionLayoutClient::new(Ok(VisionLayoutHttpResponse {
+        status_code: 200,
+        reason_phrase: "OK".to_string(),
+        body: r#"{ "choices": [{ "message": { "content": "[not valid json]" } }] }"#.to_string(),
+    }));
+
+    let error = execute_vision_layout_detection(&mut client, &config, &[0, 0, 255, 255], 1, 1)
+        .expect_err("malformed provider success response should surface");
+
+    assert_eq!(error.code, OpenAiExecutionErrorCode::InvalidResponse);
+    assert!(error.message.contains("detection array JSON is invalid"));
+}
+
+#[test]
 fn vision_layout_executor_requires_api_key_unless_config_allows_local_endpoint() {
     let config =
         OpenAiCompatibleConfig::new("https://api.example.test/v1/chat/completions", "gpt-4o");
@@ -326,6 +387,11 @@ fn vision_layout_executor_requires_api_key_unless_config_allows_local_endpoint()
     let local_config =
         OpenAiCompatibleConfig::new("http://localhost:11434/v1/chat/completions", "llava")
             .without_required_api_key();
+    client.response = Ok(VisionLayoutHttpResponse {
+        status_code: 200,
+        reason_phrase: "OK".to_string(),
+        body: r#"{ "choices": [{ "message": { "content": "[]" } }] }"#.to_string(),
+    });
     let result =
         execute_vision_layout_detection(&mut client, &local_config, &[0, 0, 255, 255], 1, 1)
             .expect("local endpoint can omit key");

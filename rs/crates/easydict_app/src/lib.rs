@@ -413,8 +413,9 @@ pub use settings_storage::{
     SettingsStorageError,
 };
 pub use state::{
+    apply_capture_background_result, capture_screen_background, capture_screen_background_result,
     preview_control_state_from_id, resolve_result_action_intent, settings_snapshot, AppMode,
-    BrowserSupportState, ConnectionStatus, EasydictUiState, FloatingWindowState,
+    BrowserSupportState, CaptureBackground, ConnectionStatus, EasydictUiState, FloatingWindowState,
     GrammarCorrectionPreview, HotkeySetting, ImportedMdxDictionary, LocalDictionarySuggestion,
     LongDocumentState, Message, PopButtonAnchor, PopButtonState, PreviewScenario,
     ResultActionIntent, ResultActionKind, ServiceProviderField, ServiceProviderSetting,
@@ -526,7 +527,8 @@ pub use ui::{
 pub use vision_layout::{
     build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
     execute_vision_layout_detection, parse_vision_layout_detection_array,
-    parse_vision_layout_response, vision_layout_region_type_from_str,
+    parse_vision_layout_detection_array_result, parse_vision_layout_response,
+    parse_vision_layout_response_result, vision_layout_region_type_from_str,
     ReqwestVisionLayoutHttpClient, VisionLayoutDetection, VisionLayoutHttpClient,
     VisionLayoutHttpRequestPlan, VisionLayoutHttpResponse, VisionLayoutRegionType,
     VISION_LAYOUT_DETECTION_PROMPT,
@@ -539,12 +541,13 @@ pub use window_options::{
     SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
 };
 
-pub fn clear_persistent_translation_cache_for_settings(settings: &protocol::SettingsSnapshot) {
-    if let Ok(mut cache) = LongDocumentTranslationCache::open(long_document_translation_cache_path(
+pub fn clear_persistent_translation_cache_for_settings(
+    settings: &protocol::SettingsSnapshot,
+) -> Result<(), PersistentTranslationCacheError> {
+    let mut cache = LongDocumentTranslationCache::open(long_document_translation_cache_path(
         settings.cache_dir_str(),
-    )) {
-        let _ = cache.clear();
-    }
+    ))?;
+    cache.clear()
 }
 
 use win_fluent::prelude::*;
@@ -1035,9 +1038,9 @@ impl Application for EasydictApp {
             return auto_play_task;
         }
 
-        if message == Message::ClearTranslationCache {
-            self.clear_persistent_translation_cache();
-        }
+        let persistent_translation_cache_clear_error = (message == Message::ClearTranslationCache)
+            .then(|| self.clear_persistent_translation_cache().err())
+            .flatten();
 
         let task = match &message {
             // Opening settings kicks off a real async check of the on-disk
@@ -1090,6 +1093,9 @@ impl Application for EasydictApp {
             Message::ConfirmCapture | Message::CopyResult | Message::CancelCapture
         ) {
             self.state.apply(message);
+        }
+        if let Some(error) = persistent_translation_cache_clear_error {
+            self.state.settings.translation_cache_status = format!("Clear failed: {error}");
         }
 
         if should_sync_background_hooks {
@@ -1310,7 +1316,10 @@ impl EasydictApp {
                 self.state.capture_selection = None;
                 // Freeze the desktop before the overlay opens, like the WinUI
                 // ScreenCaptureWindow's BitBlt-on-open.
-                self.state.capture_background = crate::state::capture_screen_background();
+                crate::state::apply_capture_background_result(
+                    &mut self.state,
+                    crate::state::capture_screen_background_result(),
+                );
                 self.state.ocr_status_text = "Select a region for OCR Translate".to_string();
                 Task::batch([
                     capture_screen_window_snapshot_task(),
@@ -1321,7 +1330,10 @@ impl EasydictApp {
                 self.state.pending_ocr_mode = Some(ocr::OcrMode::SilentClipboard);
                 self.state.capture_interaction = CaptureInteractionState::new();
                 self.state.capture_selection = None;
-                self.state.capture_background = crate::state::capture_screen_background();
+                crate::state::apply_capture_background_result(
+                    &mut self.state,
+                    crate::state::capture_screen_background_result(),
+                );
                 self.state.ocr_status_text = "Select a region for Silent OCR".to_string();
                 Task::batch([
                     capture_screen_window_snapshot_task(),
@@ -1568,10 +1580,10 @@ impl EasydictApp {
         }
     }
 
-    fn clear_persistent_translation_cache(&self) {
+    fn clear_persistent_translation_cache(&self) -> Result<(), PersistentTranslationCacheError> {
         clear_persistent_translation_cache_for_settings(&state::settings_snapshot(
             &self.state.settings,
-        ));
+        ))
     }
 
     fn main_window_close_task(&self) -> Task<Message> {

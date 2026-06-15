@@ -241,6 +241,87 @@ fn native_local_dictionary_index_registers_existing_index_without_reopening_dict
 }
 
 #[test]
+fn native_local_dictionary_index_rebuilds_corrupt_index_when_fingerprint_matches() {
+    let temp = TempDir::new("local-dictionary-index-rebuild-corrupt-index");
+    let source_path = temp.source_file("dict-corrupt-rebuild.mdx", "seed");
+    let dictionary = descriptor("mdx::corrupt-rebuild", "Corrupt Rebuild", &source_path);
+    let mut service = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    service
+        .ensure_index_from_keys(&dictionary, ["apple", "application"])
+        .unwrap();
+
+    let folder_path = temp.path.join("mdx%3A%3Acorrupt-rebuild");
+    fs::write(folder_path.join(INDEX_FILE_NAME), [1, 2, 3, 4]).unwrap();
+
+    let mut loader_called = false;
+    service
+        .ensure_index_with_key_loader(&dictionary, true, || {
+            loader_called = true;
+            Ok::<_, String>(vec!["apricot".to_string()])
+        })
+        .unwrap();
+
+    assert!(
+        loader_called,
+        "a matching manifest must not suppress rebuild when index.bin is corrupt"
+    );
+    let results = service.complete("ap", &[dictionary.service_id.as_str()], 10);
+    assert_eq!(
+        results
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>(),
+        ["apricot"]
+    );
+}
+
+#[test]
+fn native_local_dictionary_index_prunes_corrupt_lazy_index_before_rebuild() {
+    let temp = TempDir::new("local-dictionary-index-prune-corrupt-lazy");
+    let source_path = temp.source_file("dict-corrupt-lazy.mdx", "seed");
+    let dictionary = descriptor("mdx::corrupt-lazy", "Corrupt Lazy", &source_path);
+    let mut builder = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    builder
+        .ensure_index_from_keys(&dictionary, ["apple", "application"])
+        .unwrap();
+
+    let folder_path = temp.path.join("mdx%3A%3Acorrupt-lazy");
+    let index_path = folder_path.join(INDEX_FILE_NAME);
+    fs::write(&index_path, [1, 2, 3, 4]).unwrap();
+
+    let mut service = LocalDictionaryIndexService::with_index_root(temp.path.clone()).unwrap();
+    service.register_descriptor(&dictionary);
+    assert!(service
+        .complete("app", &[dictionary.service_id.as_str()], 10)
+        .is_empty());
+    assert!(
+        !index_path.exists(),
+        "lazy autocomplete should remove unreadable index.bin so ensure can rebuild"
+    );
+
+    let mut loader_called = false;
+    service
+        .ensure_index_with_key_loader(&dictionary, true, || {
+            loader_called = true;
+            Ok::<_, String>(vec!["apricot".to_string()])
+        })
+        .unwrap();
+
+    assert!(
+        loader_called,
+        "missing index.bin after lazy cleanup should force key enumeration"
+    );
+    let results = service.complete("ap", &[dictionary.service_id.as_str()], 10);
+    assert_eq!(
+        results
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>(),
+        ["apricot"]
+    );
+}
+
+#[test]
 fn native_local_dictionary_index_blocks_registered_encrypted_dictionary_without_credentials() {
     let temp = TempDir::new("local-dictionary-index-block-encrypted");
     let source_path = temp.source_file("dict-existing-encrypted.mdx", "seed");

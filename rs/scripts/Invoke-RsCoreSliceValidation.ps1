@@ -15,13 +15,19 @@
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RustTestNocapture @testArgs
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -ListProfiles
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RecommendProfiles -Json
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -AllRecommendedProfiles -DryRun
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -AllRecommendedProfiles -CheckTrailingWhitespace
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -CheckTrailingWhitespace -GstepCommitMessage "Preserve selected text diagnostics"
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection -DryRun
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection -CheckTrailingWhitespace
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile text-selection
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mouse-selection
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-export
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile longdoc-formula
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile mdx-native
+    rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile translation-cache
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile openai-compatible
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile foundry-local,rust-only-boundary
     rs/scripts/Invoke-RsCoreSliceValidation.ps1 -Profile windows-ai-native
@@ -37,9 +43,17 @@ param(
 
     [switch]$RecommendProfiles,
 
+    [switch]$Json,
+
     [switch]$RunRecommendedProfiles,
 
+    [switch]$AllRecommendedProfiles,
+
     [switch]$DryRun,
+
+    [switch]$CheckTrailingWhitespace,
+
+    [string]$GstepCommitMessage,
 
     [string[]]$Profile,
 
@@ -49,7 +63,7 @@ param(
 
     [string]$DiffTo = "worktree",
 
-    [int]$MaxRecommendedProfiles = 1,
+    [int]$MaxRecommendedProfiles = 0,
 
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Command
@@ -154,6 +168,16 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "Quick Translate traditional HTTP providers" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "native_traditional_http")),
             (New-ValidationStep "Quick Translate Bing two-phase provider" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "native_bing")),
             (New-ValidationStep "CLI traditional providers avoid worker/CompatHost wording" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "cli_translate_behavior", "without_worker_or_compat_host_wording"))
+        )
+    }
+    "translation-cache" = [pscustomobject]@{
+        Description = "Rust-owned memory/persistent translation cache, Quick Translate clear/status, LongDoc cache, and phonetic-cache contracts."
+        Steps = @(
+            (New-ValidationStep "format translation cache slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\translation_cache.rs", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\tests\translation_cache_behavior.rs", "rs\crates\easydict_app\tests\quick_translate_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs")),
+            (New-ValidationStep "translation cache core contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "translation_cache_behavior")),
+            (New-ValidationStep "Quick Translate cache clear/status contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "quick_translate_behavior", "clear_")),
+            (New-ValidationStep "LongDoc persistent cache contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "native_text_long_document_cache")),
+            (New-ValidationStep "LongDoc formula cache hash contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "long_document_behavior", "native_text_long_document_formula_cache"))
         )
     }
     "foundry-local" = [pscustomobject]@{
@@ -292,6 +316,7 @@ $validationProfiles = [ordered]@{
             (New-ValidationStep "HTTP backend parse diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "ocr_http_provider")),
             (New-ValidationStep "app screen capture facade contracts" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "screen_capture_native")),
             (New-ValidationStep "app OCR capture diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "app_ocr_capture_failure_surfaces_native_screen_capture_error")),
+            (New-ValidationStep "capture background diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "capture_background_failure_preserves_overlay_and_success_clears_only_background_error")),
             (New-ValidationStep "window snapshot diagnostics" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "capture_window_snapshot_failure_preserves_manual_region_capture")),
             (New-ValidationStep "snapshot startup contract" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "ocr_hotkey_captures_window_snapshot_for_double_click_detection")),
             (New-ValidationStep "native capture helper task surface" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "ocr_behavior", "app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface"))
@@ -374,6 +399,7 @@ $validationProfiles = [ordered]@{
     "rust-only-boundary" = [pscustomobject]@{
         Description = "Fast default-rs no-runtime boundary checks before closing core migration slices."
         Steps = @(
+            (New-ValidationStep "format default runtime boundary slice" @("rustfmt", "--edition", "2021", "--check", "rs\crates\easydict_app\src\runtime_policy.rs", "rs\crates\easydict_app\src\state.rs", "rs\crates\easydict_app\src\lib.rs", "rs\crates\easydict_app\src\quick_translate.rs", "rs\crates\easydict_app\src\long_document.rs", "rs\crates\easydict_app\src\long_document_cli.rs", "rs\crates\easydict_app\src\bin\easydict_cli.rs", "rs\crates\easydict_app\tests\default_api_boundary_behavior.rs", "rs\crates\easydict_app\tests\cli_translate_behavior.rs", "rs\crates\easydict_app\tests\long_document_behavior.rs", "rs\crates\easydict_app\tests\long_document_cli_behavior.rs")),
             (New-ValidationStep "runtime policy defaults stay rust-only" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--lib", "runtime_policy")),
             (New-ValidationStep "default app source has no retained runtime entries" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_has_no_retained_dotnet_runtime_entries")),
             (New-ValidationStep "default app process spawn allowlist stays narrow" @("cargo", "test", "--manifest-path", "rs\Cargo.toml", "-p", "easydict_app", "--test", "default_api_boundary_behavior", "default_process_spawn_surface_only_allows_foundry_local_cli_boundary")),
@@ -421,7 +447,7 @@ $profileRecommendations = [ordered]@{
             "rs/scripts/Invoke-RsCoreSliceValidation.ps1",
             "rs/scripts/Test-RsCoreSliceValidation.ps1"
         )
-        DiffPatterns = @("RunRecommendedProfiles", "DryRun", "validationProfiles", "profileRecommendations", "RecommendProfiles")
+        DiffPatterns = @("RunRecommendedProfiles", "AllRecommendedProfiles", "DryRun", "validationProfiles", "profileRecommendations", "RecommendProfiles")
     }
     "desktop-settings" = [pscustomobject]@{
         PathPatterns = @(
@@ -477,6 +503,13 @@ $profileRecommendations = [ordered]@{
         )
         DiffPatterns = @("TraditionalHttp", "traditional_http", "GoogleWeb", "google_web", "Bing", "bing", "DeepL", "deepl", "Youdao", "youdao", "Caiyun", "caiyun", "NiuTrans", "niutrans", "Volcano", "volcano", "Linguee", "linguee", "without_worker_or_compat_host_wording")
     }
+    "translation-cache" = [pscustomobject]@{
+        PathPatterns = @(
+            "rs/crates/easydict_app/src/translation_cache.rs",
+            "rs/crates/easydict_app/tests/translation_cache_behavior.rs"
+        )
+        DiffPatterns = @("TranslationCache", "translation_cache", "translation cache", "TranslationMemoryCache", "LongDocumentTranslationCache", "ClearTranslationCache", "clear_persistent_translation_cache", "translation_cache_status", "EnableTranslationCache", "enable_translation_cache", "cache_warnings", "from_cache", "PhoneticMemoryCache", "PhoneticFlightTracker")
+    }
     "foundry-local" = [pscustomobject]@{
         PathPatterns = @(
             "lib/easydict-foundry-local/**",
@@ -505,10 +538,8 @@ $profileRecommendations = [ordered]@{
         DiffPatterns = @("WindowsAi", "WindowsAI", "windows_ai", "windows-ai", "Phi Silica", "PhiSilica", "phi_silica", "windows-local-ai", "LanguageModel", "WindowsAiLanguageModelClient", "DefaultWindowsAiLanguageModelClient", "local_ai_route_decision", "explicit_windows_ai", "auto_windows_ai")
     }
     "windows-ai-prepare" = [pscustomobject]@{
-        PathPatterns = @(
-            "lib/easydict-windows-ai/**"
-        )
-        DiffPatterns = @("WindowsAi", "WindowsAI", "windows_ai", "windows-ai", "Phi Silica", "phi_silica")
+        PathPatterns = @()
+        DiffPatterns = @("app_windows_ai_prepare", "prepare_status", "prepare_", "PrepareWindowsAi", "WindowsAI prepare")
     }
     "browser-support" = [pscustomobject]@{
         PathPatterns = @(
@@ -588,7 +619,7 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/src/screen_capture_native.rs",
             "rs/crates/easydict_app/tests/ocr_behavior.rs"
         )
-        DiffPatterns = @("Ocr", "OCR", "screen_capture", "ScreenCapture", "CaptureWindowsSnapshot", "ocr_http_provider")
+        DiffPatterns = @("Ocr", "OCR", "screen_capture", "ScreenCapture", "capture_screen_background", "CAPTURE_BACKGROUND", "last_ocr_error", "CaptureWindowsSnapshot", "ocr_http_provider")
     }
     "longdoc-layout" = [pscustomobject]@{
         PathPatterns = @(
@@ -622,7 +653,7 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_app/tests/pdf_export_blocks_behavior.rs",
             "rs/crates/easydict_app/tests/pdf_source_extraction_behavior.rs"
         )
-        DiffPatterns = @("LongDocumentExport", "long_document_export", "PdfExport", "pdf_export", "PdfExportCheckpoint", "pdf_native_export", "pdf_content_stream", "ContentStreamReplacement", "NeedsFontEmbedding", "PdfOcr", "resultJsonPath", "result_json", "sidecar", "pdf_export_mode")
+        DiffPatterns = @("LongDocumentExport", "long_document_export", "PdfExport", "pdf_export", "PdfExportCheckpoint", "pdf_native_export", "pdf_content_stream", "ContentStreamReplacement", "NeedsFontEmbedding", "PdfOcr", "resultJsonPath", "result_json", "sidecar", "qualityReport", "quality_report", "NativeLongDocumentQualityReport", "LongDocumentTranslationCache", "translation cache", "cache_warnings", "read_native_result_json_sidecar", "write_native_result_json_sidecar", "pdf_export_mode")
     }
     "longdoc-formula" = [pscustomobject]@{
         PathPatterns = @(
@@ -691,6 +722,10 @@ $profileRecommendations = [ordered]@{
             "rs/crates/easydict_packager/**",
             "lib/easydict-runtime-guards/**",
             "lib/easydict-foundry-local/**"
+        )
+        FallbackPathPatterns = @(
+            "rs/crates/easydict_app/src/state.rs",
+            "rs/crates/easydict_app/src/lib.rs"
         )
         DiffPatterns = @("runtime_policy", "retained-dotnet", "retained worker", "CompatHost", "dotnet.exe", "DOTNET_ROOT", "hostfxr", "PowerShell", "pwsh", "process::Command", "WorkerCommand")
     }
@@ -769,9 +804,12 @@ function Test-PathMatchesAnyPattern {
         [Parameter(Mandatory = $true)]
         [string]$Path,
 
-        [Parameter(Mandatory = $true)]
         [string[]]$Patterns
     )
+
+    if ($null -eq $Patterns -or $Patterns.Count -eq 0) {
+        return $false
+    }
 
     foreach ($pattern in @($Patterns)) {
         if (Test-PathPattern -Path $Path -Pattern $pattern) {
@@ -798,6 +836,118 @@ function Get-GstepDirtyPaths {
 
     $diff = $diffText | ConvertFrom-Json
     @($diff.files | ForEach-Object { Normalize-RepoRelativePath $_.path })
+}
+
+function Test-TrailingWhitespaceCandidatePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $normalized = Normalize-RepoRelativePath $Path
+    if ($normalized -match '(^|/)(\.git|target|node_modules)(/|$)') {
+        return $false
+    }
+
+    $extension = [System.IO.Path]::GetExtension($normalized).ToLowerInvariant()
+    $binaryExtensions = @(
+        ".7z",
+        ".appx",
+        ".bin",
+        ".dll",
+        ".exe",
+        ".gif",
+        ".ico",
+        ".ilk",
+        ".jpg",
+        ".jpeg",
+        ".lib",
+        ".mdd",
+        ".mdx",
+        ".msix",
+        ".obj",
+        ".onnx",
+        ".ort",
+        ".pdb",
+        ".pdf",
+        ".png",
+        ".zip"
+    )
+
+    $binaryExtensions -notcontains $extension
+}
+
+function Get-TrailingWhitespaceCheckPaths {
+    param(
+        [string[]]$ChangedPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DiffFrom,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DiffTo
+    )
+
+    $rawPaths = if ($ChangedPath.Count -gt 0) {
+        @(Expand-PathList $ChangedPath)
+    }
+    else {
+        @(Get-GstepDirtyPaths -From $DiffFrom -To $DiffTo)
+    }
+
+    $ignoredPaths = @($parallelUiFiles) + @($parallelCargoLockFiles) + @($generatedCargoLockFiles)
+    $ignoredPaths = @($ignoredPaths | ForEach-Object { Normalize-RepoRelativePath $_ })
+    $selectedPaths = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($rawPath in @($rawPaths)) {
+        $normalizedPath = Normalize-RepoRelativePath $rawPath
+        if ($ignoredPaths -contains $normalizedPath) {
+            continue
+        }
+
+        $workspacePath = Join-Path $repoRoot $normalizedPath
+        if (Test-Path -LiteralPath $workspacePath -PathType Container) {
+            foreach ($file in @(Get-ChildItem -LiteralPath $workspacePath -Recurse -File)) {
+                $relativePath = Normalize-RepoRelativePath ([System.IO.Path]::GetRelativePath([string]$repoRoot, $file.FullName))
+                if (Test-TrailingWhitespaceCandidatePath -Path $relativePath) {
+                    $selectedPaths.Add($relativePath)
+                }
+            }
+        }
+        elseif ((Test-Path -LiteralPath $workspacePath -PathType Leaf) -and
+            (Test-TrailingWhitespaceCandidatePath -Path $normalizedPath)) {
+            $selectedPaths.Add($normalizedPath)
+        }
+    }
+
+    @($selectedPaths | Select-Object -Unique)
+}
+
+function Invoke-TrailingWhitespaceCheck {
+    param(
+        [string[]]$Paths
+    )
+
+    if ($Paths.Count -eq 0) {
+        Write-Host "No changed text file(s) need trailing whitespace validation."
+        return
+    }
+
+    if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
+        throw "rg was not found; install ripgrep or run trailing whitespace validation manually."
+    }
+
+    Write-Host "Running validation step [trailing whitespace check]: rg -n ""[ \t]+$"" -- $($Paths -join ' ')"
+    & rg "-n" '[ \t]+$' "--" @Paths
+    $rgExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+    if ($rgExitCode -eq 0) {
+        throw "Trailing whitespace found in changed text file(s)."
+    }
+    if ($rgExitCode -ne 1) {
+        throw "Trailing whitespace check failed with exit code $rgExitCode."
+    }
+
+    Write-Host "No trailing whitespace found in changed text file(s)."
 }
 
 function Get-GstepDiffText {
@@ -883,6 +1033,15 @@ function Get-ProfileRecommendations {
             }
         }
 
+        $fallbackPathMatches = @()
+        if ($pathMatches.Count -eq 0 -and $null -ne $rules.FallbackPathPatterns) {
+            foreach ($path in $corePaths) {
+                if (Test-PathMatchesAnyPattern -Path $path -Patterns $rules.FallbackPathPatterns) {
+                    $fallbackPathMatches += $path
+                }
+            }
+        }
+
         $textMatches = @()
         if ((-not $onlyValidationToolingPaths -or $profileName -eq "core-validation-tooling") -and -not [string]::IsNullOrWhiteSpace($DiffText)) {
             foreach ($pattern in @($rules.DiffPatterns)) {
@@ -893,13 +1052,15 @@ function Get-ProfileRecommendations {
         }
 
         $pathMatches = @($pathMatches | Select-Object -Unique)
+        $fallbackPathMatches = @($fallbackPathMatches | Select-Object -Unique)
         $textMatches = @($textMatches | Select-Object -Unique)
-        $score = ($pathMatches.Count * 3) + $textMatches.Count
+        $score = ($pathMatches.Count * 3) + $fallbackPathMatches.Count + $textMatches.Count
         if ($score -gt 0) {
             $results += [pscustomobject]@{
                 Profile = $profileName
                 Score = $score
                 PathMatches = $pathMatches
+                FallbackPathMatches = $fallbackPathMatches
                 TextMatches = $textMatches
             }
         }
@@ -912,10 +1073,165 @@ function Get-ProfileRecommendations {
     }
 }
 
+function Format-PowerShellCommandArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    if ($Value -match "[\s'`"]") {
+        return "'$($Value -replace "'", "''")'"
+    }
+
+    $Value
+}
+
+function Get-RecommendationSelectorArguments {
+    param(
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree"
+    )
+
+    $selectorArgs = @()
+    $expandedChangedPaths = @(Expand-PathList $ChangedPath |
+        ForEach-Object { Normalize-RepoRelativePath $_ } |
+        Select-Object -Unique)
+    if ($expandedChangedPaths.Count -gt 0) {
+        $selectorArgs += "-ChangedPath"
+        $selectorArgs += ($expandedChangedPaths -join ",")
+    }
+    else {
+        if ($DiffFrom -ne "gstep:@") {
+            $selectorArgs += "-DiffFrom"
+            $selectorArgs += $DiffFrom
+        }
+        if ($DiffTo -ne "worktree") {
+            $selectorArgs += "-DiffTo"
+            $selectorArgs += $DiffTo
+        }
+    }
+
+    if ($selectorArgs.Count -eq 0) {
+        return ""
+    }
+
+    " " + (@($selectorArgs | ForEach-Object { Format-PowerShellCommandArgument $_ }) -join " ")
+}
+
+function Get-SelectedRecommendationResults {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Recommendation,
+
+        [switch]$AllRecommendedProfiles,
+
+        [int]$MaxRecommendedProfiles = 0
+    )
+
+    if ($Recommendation.Results.Count -eq 0) {
+        throw "No validation profile matched."
+    }
+
+    if ($AllRecommendedProfiles) {
+        return @($Recommendation.Results)
+    }
+
+    if ($MaxRecommendedProfiles -eq 0) {
+        $topScore = $Recommendation.Results[0].Score
+        return @($Recommendation.Results | Where-Object { $_.Score -eq $topScore })
+    }
+
+    @($Recommendation.Results | Select-Object -First $MaxRecommendedProfiles)
+}
+
+function New-RecommendationCommandReport {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Recommendation,
+
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree"
+    )
+
+    $profileCsv = (@($Recommendation.Results | ForEach-Object { $_.Profile }) -join ",")
+    $recommendationSelectorArgs = Get-RecommendationSelectorArguments -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
+    $scriptCommandPrefix = "powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1"
+
+    [pscustomobject]@{
+        CombinedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -Profile $profileCsv" }
+        CombinedCloseOutDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -Profile $profileCsv -DryRun" }
+        DefaultRecommendedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -CheckTrailingWhitespace" }
+        DefaultRecommendedCloseOutDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -CheckTrailingWhitespace -DryRun" }
+        AllRecommended = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles" }
+        AllRecommendedDryRun = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles -DryRun" }
+        AllRecommendedCloseOut = if ([string]::IsNullOrWhiteSpace($profileCsv)) { $null } else { "$scriptCommandPrefix -RunRecommendedProfiles$recommendationSelectorArgs -AllRecommendedProfiles -CheckTrailingWhitespace" }
+    }
+}
+
+function New-RecommendationReport {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Recommendation,
+
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree"
+    )
+
+    $expandedChangedPaths = @(Expand-PathList $ChangedPath | ForEach-Object { Normalize-RepoRelativePath $_ } | Select-Object -Unique)
+    $defaultSelectedProfiles = @()
+    if ($Recommendation.Results.Count -gt 0) {
+        $defaultSelectedProfiles = @(Get-SelectedRecommendationResults -Recommendation $Recommendation | ForEach-Object { $_.Profile })
+    }
+
+    [pscustomobject]@{
+        Selector = [pscustomobject]@{
+            ChangedPath = $expandedChangedPaths
+            DiffFrom = $DiffFrom
+            DiffTo = $DiffTo
+        }
+        IgnoredPaths = @($Recommendation.IgnoredPaths)
+        CorePaths = @($Recommendation.CorePaths)
+        DefaultSelectedProfiles = $defaultSelectedProfiles
+        Results = @($Recommendation.Results | ForEach-Object {
+                $profileDefinition = $validationProfiles[$_.Profile]
+                [pscustomobject]@{
+                    Profile = $_.Profile
+                    Score = $_.Score
+                    Description = $profileDefinition.Description
+                    PathMatches = @($_.PathMatches)
+                    FallbackPathMatches = @($_.FallbackPathMatches)
+                    TextMatches = @($_.TextMatches)
+                    Steps = @($profileDefinition.Steps | ForEach-Object {
+                            [pscustomobject]@{
+                                Name = $_.Name
+                                Command = @($_.Command)
+                            }
+                        })
+                }
+            })
+        Commands = New-RecommendationCommandReport -Recommendation $Recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
+    }
+}
+
 function Show-ProfileRecommendations {
     param(
         [Parameter(Mandatory = $true)]
-        [pscustomobject]$Recommendation
+        [pscustomobject]$Recommendation,
+
+        [string[]]$ChangedPath,
+
+        [string]$DiffFrom = "gstep:@",
+
+        [string]$DiffTo = "worktree"
     )
 
     if ($Recommendation.IgnoredPaths.Count -gt 0) {
@@ -948,17 +1264,30 @@ function Show-ProfileRecommendations {
         if ($result.PathMatches.Count -gt 0) {
             Write-Host "    path: $($result.PathMatches -join ', ')"
         }
+        if ($result.FallbackPathMatches.Count -gt 0) {
+            Write-Host "    fallback path: $($result.FallbackPathMatches -join ', ')"
+        }
         if ($result.TextMatches.Count -gt 0) {
             Write-Host "    diff: $($result.TextMatches -join ', ')"
         }
         Write-Host "    run: powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $($result.Profile)"
     }
 
-    $profileCsv = (@($Recommendation.Results | ForEach-Object { $_.Profile }) -join ",")
+    $commandReport = New-RecommendationCommandReport -Recommendation $Recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
     Write-Host "Combined close-out command for listed profile(s):"
-    Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $profileCsv"
+    Write-Host "  $($commandReport.CombinedCloseOut)"
     Write-Host "Combined close-out dry-run:"
-    Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile $profileCsv -DryRun"
+    Write-Host "  $($commandReport.CombinedCloseOutDryRun)"
+    Write-Host "Default recommended close-out:"
+    Write-Host "  $($commandReport.DefaultRecommendedCloseOut)"
+    Write-Host "Default recommended close-out dry-run:"
+    Write-Host "  $($commandReport.DefaultRecommendedCloseOutDryRun)"
+    Write-Host "Run all recommendations through the recommender:"
+    Write-Host "  $($commandReport.AllRecommended)"
+    Write-Host "Run all recommendations dry-run:"
+    Write-Host "  $($commandReport.AllRecommendedDryRun)"
+    Write-Host "Run all recommendations with trailing whitespace close-out:"
+    Write-Host "  $($commandReport.AllRecommendedCloseOut)"
 }
 
 function Get-CurrentProfileRecommendation {
@@ -984,27 +1313,59 @@ function Get-CurrentProfileRecommendation {
     Get-ProfileRecommendations -Paths $recommendationPaths -DiffText $recommendationDiff
 }
 
+function Format-GstepCommitCommandForDisplay {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    $escapedMessage = $Message -replace '"', '\"'
+    "gstep commit -m ""$escapedMessage"""
+}
+
 $profileKeys = @(Expand-ProfileList $Profile)
+$hasGstepCommitMessage = $PSBoundParameters.ContainsKey("GstepCommitMessage")
+
+if ($hasGstepCommitMessage -and [string]::IsNullOrWhiteSpace($GstepCommitMessage)) {
+    throw "-GstepCommitMessage cannot be blank."
+}
+
+if ($Json -and -not $RecommendProfiles) {
+    throw "-Json is only valid with -RecommendProfiles."
+}
+
+if ($AllRecommendedProfiles -and -not $RunRecommendedProfiles) {
+    throw "-AllRecommendedProfiles is only valid with -RunRecommendedProfiles."
+}
+if ($AllRecommendedProfiles -and $MaxRecommendedProfiles -ne 0) {
+    throw "-AllRecommendedProfiles cannot be combined with -MaxRecommendedProfiles."
+}
 
 if ($RecommendProfiles) {
-    if ($ListProfiles -or $RunRecommendedProfiles -or $DryRun -or $Command.Count -ne 0 -or $profileKeys.Count -ne 0) {
-        throw "-RecommendProfiles cannot be combined with -ListProfiles, -RunRecommendedProfiles, -DryRun, -Profile, or a validation command."
+    if ($ListProfiles -or $RunRecommendedProfiles -or $DryRun -or $CheckTrailingWhitespace -or $hasGstepCommitMessage -or $Command.Count -ne 0 -or $profileKeys.Count -ne 0) {
+        throw "-RecommendProfiles cannot be combined with -ListProfiles, -RunRecommendedProfiles, -DryRun, -CheckTrailingWhitespace, -GstepCommitMessage, -Profile, or a validation command."
     }
-    if ($MaxRecommendedProfiles -ne 1) {
+    if ($MaxRecommendedProfiles -ne 0) {
         throw "-MaxRecommendedProfiles is only valid with -RunRecommendedProfiles."
     }
 
     Set-Location $repoRoot
     $recommendation = Get-CurrentProfileRecommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
-    Show-ProfileRecommendations -Recommendation $recommendation
+    if ($Json) {
+        New-RecommendationReport -Recommendation $recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo |
+            ConvertTo-Json -Depth 16
+    }
+    else {
+        Show-ProfileRecommendations -Recommendation $recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
+    }
     exit 0
 }
 
 if ($ListProfiles) {
-    if ($RunRecommendedProfiles -or $DryRun -or $Command.Count -ne 0 -or $profileKeys.Count -ne 0 -or $ChangedPath.Count -ne 0 -or $DiffFrom -ne "gstep:@" -or $DiffTo -ne "worktree") {
-        throw "-ListProfiles cannot be combined with -RunRecommendedProfiles, -DryRun, -Profile, -ChangedPath, diff selectors, or a validation command."
+    if ($RunRecommendedProfiles -or $DryRun -or $CheckTrailingWhitespace -or $hasGstepCommitMessage -or $Command.Count -ne 0 -or $profileKeys.Count -ne 0 -or $ChangedPath.Count -ne 0 -or $DiffFrom -ne "gstep:@" -or $DiffTo -ne "worktree") {
+        throw "-ListProfiles cannot be combined with -RunRecommendedProfiles, -DryRun, -CheckTrailingWhitespace, -GstepCommitMessage, -Profile, -ChangedPath, diff selectors, or a validation command."
     }
-    if ($MaxRecommendedProfiles -ne 1) {
+    if ($MaxRecommendedProfiles -ne 0) {
         throw "-MaxRecommendedProfiles is only valid with -RunRecommendedProfiles."
     }
 
@@ -1020,16 +1381,19 @@ if ($ListProfiles) {
 }
 
 if ($ChangedPath.Count -ne 0 -or $DiffFrom -ne "gstep:@" -or $DiffTo -ne "worktree") {
-    if (-not $RunRecommendedProfiles) {
-        throw "-ChangedPath, -DiffFrom, and -DiffTo are only valid with -RecommendProfiles or -RunRecommendedProfiles."
+    if (-not $RunRecommendedProfiles -and -not $CheckTrailingWhitespace) {
+        throw "-ChangedPath, -DiffFrom, and -DiffTo are only valid with -RecommendProfiles, -RunRecommendedProfiles, or -CheckTrailingWhitespace."
     }
 }
 
-if ($MaxRecommendedProfiles -ne 1 -and -not $RunRecommendedProfiles) {
+if ($MaxRecommendedProfiles -ne 0 -and -not $RunRecommendedProfiles) {
     throw "-MaxRecommendedProfiles is only valid with -RunRecommendedProfiles."
 }
-if ($MaxRecommendedProfiles -lt 1) {
-    throw "-MaxRecommendedProfiles must be greater than or equal to 1."
+if ($MaxRecommendedProfiles -lt 0) {
+    throw "-MaxRecommendedProfiles must be greater than or equal to 0."
+}
+if ($hasGstepCommitMessage -and $NoParallelUiIsolation) {
+    throw "-GstepCommitMessage cannot be combined with -NoParallelUiIsolation; keep UI/parity isolation enabled so checkpoints do not absorb parallel work."
 }
 
 $modeCount = 0
@@ -1044,12 +1408,15 @@ $validationSteps = @()
 if ($RunRecommendedProfiles) {
     Set-Location $repoRoot
     $recommendation = Get-CurrentProfileRecommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
-    Show-ProfileRecommendations -Recommendation $recommendation
+    Show-ProfileRecommendations -Recommendation $recommendation -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo
     if ($recommendation.Results.Count -eq 0) {
         throw "No validation profile matched; run a custom command or add a profile plus recommendation rules for this lane."
     }
 
-    $selectedProfiles = @($recommendation.Results | Select-Object -First $MaxRecommendedProfiles)
+    $selectedProfiles = @(Get-SelectedRecommendationResults `
+            -Recommendation $recommendation `
+            -AllRecommendedProfiles:$AllRecommendedProfiles `
+            -MaxRecommendedProfiles $MaxRecommendedProfiles)
     Write-Host "Selected recommended validation profile(s): $((@($selectedProfiles | ForEach-Object { $_.Profile })) -join ', ')"
     foreach ($selectedProfile in $selectedProfiles) {
         foreach ($step in @($validationProfiles[$selectedProfile.Profile].Steps)) {
@@ -1078,16 +1445,35 @@ elseif ($profileKeys.Count -ne 0) {
 elseif ($Command.Count -ne 0) {
     $validationSteps = @((New-ValidationStep "custom" $Command))
 }
+elseif ($CheckTrailingWhitespace) {
+    $validationSteps = @()
+}
 else {
-    throw "Provide one validation command, -Profile <name>, -RunRecommendedProfiles, -ListProfiles, or -RecommendProfiles."
+    throw "Provide one validation command, -Profile <name>, -RunRecommendedProfiles, -ListProfiles, -RecommendProfiles, or -CheckTrailingWhitespace."
 }
 
 $validationSteps = @(Select-UniqueValidationSteps -Steps $validationSteps)
+$trailingWhitespacePaths = @()
+if ($CheckTrailingWhitespace) {
+    Set-Location $repoRoot
+    $trailingWhitespacePaths = @(Get-TrailingWhitespaceCheckPaths -ChangedPath $ChangedPath -DiffFrom $DiffFrom -DiffTo $DiffTo)
+}
 
 if ($DryRun) {
     Write-Host "Dry run; validation step(s) that would run:"
     foreach ($step in $validationSteps) {
         Write-Host "  - $($step.Name): $($step.Command -join ' ')"
+    }
+    if ($CheckTrailingWhitespace) {
+        if ($trailingWhitespacePaths.Count -eq 0) {
+            Write-Host "  - trailing whitespace check: no changed text files would be scanned"
+        }
+        else {
+            Write-Host "  - trailing whitespace check: rg -n ""[ \t]+$"" -- $($trailingWhitespacePaths -join ' ')"
+        }
+    }
+    if ($hasGstepCommitMessage) {
+        Write-Host "  - gstep checkpoint after successful validation: $(Format-GstepCommitCommandForDisplay -Message $GstepCommitMessage)"
     }
     exit 0
 }
@@ -1273,6 +1659,21 @@ try {
             $commandExitCode = $stepExitCode
             break
         }
+    }
+
+    if ($commandExitCode -eq 0 -and $CheckTrailingWhitespace) {
+        try {
+            Invoke-TrailingWhitespaceCheck -Paths $trailingWhitespacePaths
+        }
+        catch {
+            Write-Host "Trailing whitespace check failed: $($_.Exception.Message)"
+            $commandExitCode = 1
+        }
+    }
+
+    if ($commandExitCode -eq 0 -and $hasGstepCommitMessage) {
+        Write-Host "Running post-validation checkpoint: $(Format-GstepCommitCommandForDisplay -Message $GstepCommitMessage)"
+        Invoke-GstepChecked @("commit", "-m", $GstepCommitMessage)
     }
 }
 finally {

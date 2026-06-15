@@ -93,6 +93,7 @@ const DEFAULT_OLLAMA_OCR_MODEL: &str = "glm-ocr";
 const DEFAULT_CUSTOM_OCR_ENDPOINT: &str = "https://api.openai.com/v1/responses";
 const DEFAULT_CUSTOM_OCR_MODEL: &str = "gpt-5.4-mini";
 const FILE_DIALOG_ERROR_PREFIX: &str = "File dialog failed: ";
+const CAPTURE_BACKGROUND_ERROR_PREFIX: &str = "Screen capture background failed: ";
 const CAPTURE_WINDOW_SNAPSHOT_ERROR_PREFIX: &str = "Screen window snapshot failed: ";
 const BROWSER_SUPPORT_ERROR_PREFIX: &str = "Browser support failed: ";
 const BUILT_IN_AI_DEVICE_REGISTRATION_ERROR_PREFIX: &str =
@@ -4610,10 +4611,10 @@ pub struct CaptureBackground {
 }
 
 /// Freezes the desktop for the capture overlay, mirroring the WinUI
-/// ScreenCaptureWindow's BitBlt-on-open. Returns `None` when the platform
-/// capture fails (the overlay then falls back to the plain dim mask).
-pub fn capture_screen_background() -> Option<CaptureBackground> {
-    crate::screen_capture_native::capture_screen_region(
+/// ScreenCaptureWindow's BitBlt-on-open. Returns the native backend error so
+/// callers can keep the overlay usable while preserving diagnostics.
+pub fn capture_screen_background_result() -> Result<CaptureBackground, String> {
+    crate::screen_capture_native::capture_screen_region_result(
         easydict_windows_screen_capture::ScreenCaptureRequest::virtual_desktop(),
     )
     .map(|capture| CaptureBackground {
@@ -4621,6 +4622,33 @@ pub fn capture_screen_background() -> Option<CaptureBackground> {
         pixel_width: capture.pixel_width,
         pixel_height: capture.pixel_height,
     })
+}
+
+/// Compatibility wrapper for preview/non-diagnostic paths.
+pub fn capture_screen_background() -> Option<CaptureBackground> {
+    capture_screen_background_result().ok()
+}
+
+pub fn apply_capture_background_result(
+    state: &mut EasydictUiState,
+    result: Result<CaptureBackground, String>,
+) {
+    match result {
+        Ok(background) => {
+            state.capture_background = Some(background);
+            if state
+                .last_ocr_error
+                .as_deref()
+                .is_some_and(|message| message.starts_with(CAPTURE_BACKGROUND_ERROR_PREFIX))
+            {
+                state.last_ocr_error = None;
+            }
+        }
+        Err(error) => {
+            state.capture_background = None;
+            state.last_ocr_error = Some(format!("{CAPTURE_BACKGROUND_ERROR_PREFIX}{error}"));
+        }
+    }
 }
 
 fn preview_waiting_results() -> Vec<TranslationResultPreview> {

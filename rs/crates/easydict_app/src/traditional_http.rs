@@ -2327,6 +2327,14 @@ pub fn parse_google_translation_response(
                 .collect::<String>()
         })
         .unwrap_or_default();
+    if translated_text.is_empty() {
+        return Err(invalid_traditional_http_response(
+            "Google Translate",
+            &service_id,
+            "missing translated text",
+        ));
+    }
+
     let detected_language = root
         .get("src")
         .and_then(Value::as_str)
@@ -2501,6 +2509,18 @@ fn google_web_examples(root: &Value) -> Option<Vec<String>> {
     (!values.is_empty()).then_some(values)
 }
 
+fn invalid_traditional_http_response(
+    service_name: &str,
+    service_id: &str,
+    detail: &str,
+) -> OpenAiExecutionError {
+    OpenAiExecutionError::new(
+        OpenAiExecutionErrorCode::InvalidResponse,
+        format!("Invalid response from {service_name}: {detail}"),
+    )
+    .with_service_id(service_id.to_string())
+}
+
 fn strip_html_tags(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
     let mut in_tag = false;
@@ -2577,7 +2597,10 @@ pub fn parse_deepl_api_translation_response(
     let translated_text = first_translation
         .get("text")
         .and_then(Value::as_str)
-        .unwrap_or_default()
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| {
+            invalid_traditional_http_response("DeepL API", &service_id, "missing translated text")
+        })?
         .to_string();
     let detected_language = first_translation
         .get("detected_source_language")

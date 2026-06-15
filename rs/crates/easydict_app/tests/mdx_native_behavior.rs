@@ -719,6 +719,52 @@ fn native_mdx_lookup_inlines_real_corpus_mdd_from_env() {
 }
 
 #[test]
+fn native_mdx_lookup_real_corpus_does_not_inline_css_without_mdd_from_env() {
+    let Some(mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
+        return;
+    };
+    let query = std::env::var("RS_MDICT_TEST_QUERY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "ability".to_string());
+    let encryption_mode =
+        detect_mdx_file_encryption_mode(&mdx_path).expect("real MDX header should be readable");
+
+    let mut dictionary = mdx_dictionary(encryption_mode != MdxEncryptionMode::None, []);
+    dictionary.service_id = "mdx::real-corpus-no-mdd".to_string();
+    dictionary.display_name = "Real Corpus Without MDD".to_string();
+    dictionary.file_path = mdx_path;
+    dictionary.mdd_file_paths.clear();
+    let settings = mdx_settings_with_dictionary(dictionary);
+
+    let result = run_native_mdx_lookup(
+        &MdxLookupParams {
+            dictionary_id: "mdx::real-corpus-no-mdd".to_string(),
+            query: query.clone(),
+            fuzzy: false,
+        },
+        &settings,
+    )
+    .expect("real corpus MDX lookup without MDD should still stay Rust-native");
+
+    assert_eq!(result.entries.len(), 1);
+    assert_eq!(
+        result.entries[0].key.to_ascii_lowercase(),
+        query.to_ascii_lowercase()
+    );
+    assert!(
+        !result.mdd_resources_inlined,
+        "MDD inline flag must prove a real companion resource was attached"
+    );
+    let html = &result.entries[0].html;
+    assert!(!html.contains("data:text/css;base64,"));
+    assert!(
+        html.contains(r#"href="cceu.css""#) || html.contains(r#"href='cceu.css'"#),
+        "without companion MDD, the original MDX stylesheet reference should remain"
+    );
+}
+
+#[test]
 fn native_mdx_lookup_inlines_first_hit_from_real_multi_mdd_fixtures() {
     let temp_dir = unique_temp_dir("easydict-native-mdd-real-first-hit-inline");
     fs::create_dir_all(&temp_dir).expect("temp dir should be created");

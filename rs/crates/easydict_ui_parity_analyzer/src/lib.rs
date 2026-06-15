@@ -2396,6 +2396,15 @@ fn compare_control_dimensions(
             else {
                 continue;
             };
+            if should_treat_control_dimension_delta_as_chrome_layer_diagnostic(
+                &id,
+                property,
+                reference,
+                candidate,
+                delta_abs,
+            ) {
+                continue;
+            }
             if delta_abs > 0.01 {
                 deltas.push(ControlDimensionDelta {
                     id: id.clone(),
@@ -2416,6 +2425,28 @@ fn compare_control_dimensions(
             .then_with(|| a.property.cmp(b.property))
     });
     deltas
+}
+
+fn should_treat_control_dimension_delta_as_chrome_layer_diagnostic(
+    id: &str,
+    property: &str,
+    reference: &ManifestControlDimension,
+    candidate: Option<&ManifestControlDimension>,
+    delta_abs: f64,
+) -> bool {
+    if !id.eq_ignore_ascii_case("InputTextBox") || property != "height" {
+        return false;
+    }
+    if delta_abs > 24.0 {
+        return false;
+    }
+
+    let Some(candidate) = candidate else {
+        return false;
+    };
+    let reference_kind = reference.kind.as_deref().unwrap_or_default();
+    let candidate_kind = candidate.kind.as_deref().unwrap_or_default();
+    reference_kind.eq_ignore_ascii_case("Edit") && candidate_kind.eq_ignore_ascii_case("TextEditor")
 }
 
 const MISSING_CONTROL_DIMENSION_EVIDENCE_DELTA_DIPS: f64 = 9.0;
@@ -8439,6 +8470,110 @@ mod tests {
         assert!(markdown.contains("LicenseText"));
         assert!(markdown.contains("controlDimensionDeltaDips"));
         assert!(markdown.contains("controlDimensionScoreCap"));
+    }
+
+    #[test]
+    fn main_input_textbox_inner_edit_height_does_not_cap_visual_chrome_height() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("main.before-translate{DOTNET_SUFFIX}"));
+        let candidate = dir
+            .path()
+            .join(format!("main.before-translate{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        create_synthetic_frame(false)
+            .save(&candidate)
+            .expect("save candidate");
+
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": [{
+                "ScenarioId": "main.before-translate",
+                "WindowKind": "main",
+                "Theme": "system",
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "Regions": [],
+                "RequiredSemanticTags": ["InputTextBox"],
+                "ReferenceUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["InputTextBox"],
+                    "VisibleControlDimensions": {
+                        "InputTextBox": {
+                            "Kind": "Edit",
+                            "Width": "333",
+                            "Height": "80"
+                        }
+                    }
+                },
+                "CandidateUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["InputTextBox"],
+                    "VisibleControlDimensions": {
+                        "InputTextBox": {
+                            "Kind": "TextEditor",
+                            "Width": "auto",
+                            "Height": "Fixed(96)",
+                            "LabeledHeight": "Fixed(119)",
+                            "MinHeight": "96",
+                            "MaxHeight": "112"
+                        }
+                    }
+                }
+            }]
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenario = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    item.get("ScenarioId").and_then(Value::as_str)
+                        == Some("main.before-translate")
+                })
+            })
+            .expect("main.before-translate scenario");
+
+        assert!(scenario
+            .get("Metrics")
+            .and_then(|metrics| metrics.get("ControlDimensionDeltaCount"))
+            .is_none_or(|value| value.is_null() || value.as_u64() == Some(0)));
+        assert!(scenario
+            .get("Metrics")
+            .and_then(|metrics| metrics.get("ControlDimensionScoreCap"))
+            .is_none_or(|value| value.is_null() || value.as_f64() == Some(100.0)));
+        assert!(!scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str)
+                    == Some("controlDimensionDeltaDips")
+            })));
+
+        let markdown =
+            fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
+        assert!(markdown.contains("InputTextBox"));
+        assert!(markdown.contains("reference Edit width=333 height=80"));
+        assert!(markdown.contains("candidate TextEditor"));
     }
 
     #[test]

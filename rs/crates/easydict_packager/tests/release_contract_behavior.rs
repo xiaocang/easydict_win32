@@ -1184,6 +1184,16 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
             "dotnet/",
             "dotnet\\",
             "dotnet ",
+            "workers/",
+            "workers\\",
+            "hostfxr",
+            "hostpolicy",
+            "coreclr",
+            "System.Private.CoreLib",
+            "Microsoft.NETCore.App",
+            ".runtimeconfig.json",
+            ".deps.json",
+            "--self-contained true",
             "publish-msix",
             "create-bundle",
             "easydict-msix",
@@ -1632,6 +1642,61 @@ fn rs_portable_release_packager_invocation_never_enables_hybrid_feature() {
             build_step,
             forbidden,
             &format!("rs portable release packager invocation must not contain {forbidden}"),
+        );
+    }
+}
+
+#[test]
+#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
+fn rs_portable_release_default_packager_help_exposes_only_rs_portable_no_runtime_paths() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_easydict_packager"))
+        .arg("--help")
+        .output()
+        .expect("run default easydict_packager --help");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let help = format!("{stdout}\n{stderr}");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "packager help currently exits with usage code 2; stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    for required in [
+        "pack-rs-portable --workspace",
+        "validate-rs-portable --package",
+        "write-sha256-checksum --package",
+        "verify-sha256-checksum --package",
+        "package-browser-extension --extension-dir",
+        "build-rust-helpers --workspace",
+    ] {
+        assert_contains(
+            &help,
+            required,
+            &format!("default packager help should expose Rust-owned command {required}"),
+        );
+    }
+    for forbidden in [
+        "extract-dotnet-runtime",
+        "zip-directory",
+        "--runtime-profile",
+        "--include-legacy-registrar-alias",
+        "hybrid-dotnet-runtime-packaging",
+        "retained-dotnet-workers",
+        "CompatHost",
+        "Easydict.Workers",
+        "workers/",
+        "workers\\",
+        "dotnet/",
+        "dotnet\\",
+        "hostfxr",
+        "runtimeconfig.json",
+        "deps.json",
+    ] {
+        assert_not_contains(
+            &help,
+            forbidden,
+            &format!("default packager help must not expose retained runtime path {forbidden}"),
         );
     }
 }

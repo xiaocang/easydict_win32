@@ -1657,6 +1657,7 @@ foreach ($record in $recordsByScenario.Values) {
         $candidateBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.BoundsDips } else { $null }
         $candidateFullBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.FullBoundsDips } else { $null }
         $candidateBodyBoundsDips = if ($null -ne $candidateProbe) { $candidateProbe.ExpandedBodyBoundsDips } else { $null }
+        $candidateBodyBoundsInferred = $false
         $candidateBounds = Convert-BoundsToPixels -BoundsDips $candidateBoundsDips -Scale $candidateScale
         $candidateSource = if ($null -ne $candidateProbe) {
             [string]$candidateProbe.Source
@@ -1683,6 +1684,7 @@ foreach ($record in $recordsByScenario.Values) {
             if ($null -ne $imageFullBoundsDips) {
                 $candidateFullBoundsDips = $imageFullBoundsDips
                 $candidateBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $candidateFullBoundsDips
+                $candidateBodyBoundsInferred = $true
             }
         }
 
@@ -1690,6 +1692,7 @@ foreach ($record in $recordsByScenario.Values) {
         $referenceBoundsDips = $null
         $referenceFullBoundsDips = $null
         $referenceBodyBoundsDips = $null
+        $referenceBodyBoundsInferred = $false
         $referenceSource = "missing"
         $referenceDerivedFrom = $null
         if ($null -ne $referenceBitmap) {
@@ -1731,6 +1734,7 @@ foreach ($record in $recordsByScenario.Values) {
                     if ($null -ne $imageFullBoundsDips) {
                         $referenceFullBoundsDips = $imageFullBoundsDips
                         $referenceBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $referenceFullBoundsDips
+                        $referenceBodyBoundsInferred = $true
                     }
                 }
             } elseif ($UseSummaryBounds -and $null -ne $record.ReferenceUiSummary) {
@@ -1750,6 +1754,7 @@ foreach ($record in $recordsByScenario.Values) {
                     if ($InferImageExpandedBodyBounds) {
                         $referenceFullBoundsDips = Convert-FullExpanderPixelsToDips -PixelBounds $referenceRegions.expanderBounds -Scale $referenceScale
                         $referenceBodyBoundsDips = New-ExpandedBodyBoundsDips -FullExpanderBoundsDips $referenceFullBoundsDips
+                        $referenceBodyBoundsInferred = $true
                     }
                 }
             }
@@ -1775,6 +1780,8 @@ foreach ($record in $recordsByScenario.Values) {
             referenceFullExpanderBoundsDips = $referenceFullBoundsDips
             candidateExpandedBodyBoundsDips = $candidateBodyBoundsDips
             referenceExpandedBodyBoundsDips = $referenceBodyBoundsDips
+            candidateExpandedBodyBoundsInferred = $candidateBodyBoundsInferred
+            referenceExpandedBodyBoundsInferred = $referenceBodyBoundsInferred
             candidateWindowDips = Get-WindowSizeDips -Window $record.CandidateWindow
             referenceWindowDips = Get-WindowSizeDips -Window $record.ReferenceWindow
             headerBar = [pscustomobject]@{
@@ -1931,7 +1938,11 @@ $surfaceSchemeRows = @(
             if ($null -ne $boundsSizeDrift -and [double]$boundsSizeDrift -gt [double]$MaxBoundsDriftDips) {
                 $issues.Add("header size drift > $MaxBoundsDriftDips DIP") | Out-Null
             }
-            if ($null -ne $bodySizeDrift -and [double]$bodySizeDrift -gt [double]$MaxBoundsDriftDips) {
+            $bodySizeDriftIsDiagnostic = [bool]$_.referenceExpandedBodyBoundsInferred -or
+                [bool]$_.candidateExpandedBodyBoundsInferred
+            if (-not $bodySizeDriftIsDiagnostic -and
+                $null -ne $bodySizeDrift -and
+                [double]$bodySizeDrift -gt [double]$MaxBoundsDriftDips) {
                 $issues.Add("expanded body size drift > $MaxBoundsDriftDips DIP") | Out-Null
             }
             if ($null -ne $windowDrift -and [double]$windowDrift -gt [double]$MaxBoundsDriftDips) {
@@ -1980,6 +1991,8 @@ $surfaceSchemeRows = @(
                 candidateFullExpanderBoundsDips = $_.candidateFullExpanderBoundsDips
                 referenceExpandedBodyBoundsDips = $_.referenceExpandedBodyBoundsDips
                 candidateExpandedBodyBoundsDips = $_.candidateExpandedBodyBoundsDips
+                referenceExpandedBodyBoundsInferred = $_.referenceExpandedBodyBoundsInferred
+                candidateExpandedBodyBoundsInferred = $_.candidateExpandedBodyBoundsInferred
                 verdict = $verdict
                 issues = @($issues.ToArray())
             }
@@ -2038,12 +2051,12 @@ if ($ValidateVisibleExpanderBounds) {
     $optionalBoundsText += "summary bounds require a matching visible expander chevron"
 }
 if ($InferImageExpandedBodyBounds) {
-    $optionalBoundsText += "missing expanded body bounds may be inferred from image surfaces"
+    $optionalBoundsText += "missing expanded body bounds may be inferred from image surfaces and shown as diagnostics"
 }
 $optionalBoundsSuffix = if ($optionalBoundsText.Count -gt 0) { " Optional diagnostics: $($optionalBoundsText -join '; ')." } else { "" }
 $markdown.Add("Sampling: bounds use $boundsModeText; color deltas use each sampled region's dominant surface color, while JSON also preserves average RGB/luma for diagnostics.$optionalBoundsSuffix") | Out-Null
 $markdown.Add("") | Out-Null
-$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header/expanded-body size drift <= $MaxBoundsDriftDips DIP; viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
+$markdown.Add("Summary: $($summary.scenarioCount) measured scenarios, $($summary.baseExpandedScenarioCount) base expanded service items, $($summary.referenceExpandedCount) expanded references, $($summary.referenceGapCount) reference gaps, $($summary.strongSampleCount) strong summary samples, $($summary.chevronSampleCount) chevron-probe samples, $($summary.imageSampleCount) image-detected samples, $($summary.weakSampleCount) weak/missing samples, $($summary.surfaceSchemeComparedCount) base service surface schemes ok, $($summary.surfaceSchemeRustOnlyCount) rust-only service surface schemes, $($summary.surfaceSchemeIssueCount) base service surface scheme issues. Color verdict thresholds: ok <= 3 RGB, watch <= 8 RGB, drift > 8 RGB. Optional gate: max surface delta <= $MaxSurfaceDeltaRgb RGB and absolute window/header size drift <= $MaxBoundsDriftDips DIP; exact expanded-body size drift is gated when both sides come from non-inferred bounds, while image-inferred body bounds remain visible as diagnostics. Viewport x/y drift remains visible in the bounds columns but is not treated as size drift.") | Out-Null
 $markdown.Add("") | Out-Null
 
 $markdown.Add("## Service State Coverage") | Out-Null

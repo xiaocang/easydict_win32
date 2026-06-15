@@ -21,6 +21,65 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-14: Added a default packager help no-runtime release contract
+
+- Added a release-contract test under the `rs_portable_release` filter that executes the default `easydict_packager --help` binary and verifies the visible CLI surface only exposes Rust-owned commands for rs portable packaging, validation, checksums, browser extension packaging, and Rust helper builds.
+- The default help contract now rejects retained/hybrid command and payload markers including `extract-dotnet-runtime`, `zip-directory`, `--runtime-profile`, legacy registrar alias flags, retained-worker features, CompatHost/Workers wording, `workers/`, `dotnet/`, `hostfxr`, and `.runtimeconfig.json` / `.deps.json`.
+- No new third-party library was needed. This moves the existing unit-level usage guarantee into the release-contract integration gate.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_default_packager_help_exposes_only_rs_portable_no_runtime_paths -- --exact --nocapture`
+
+## 2026-06-14: Tightened rs portable release job retained-payload scanning
+
+- Extended the rs portable release-contract job isolation test so the default `publish-rs-portable` and `create-rs-portable-release` workflow sections reject retained payload markers beyond the old dotnet/CompatHost checks.
+- The default rs release jobs now have contract coverage against `workers/`, `hostfxr`, `hostpolicy`, `coreclr`, CoreLib/.NETCore runtime roots, `.runtimeconfig.json`, `.deps.json`, and `--self-contained true`.
+- No new third-party library was needed. This is a release-contract scan over the existing workflow text and packager test harness.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_packager\tests\release_contract_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_packager --test release_contract_behavior rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts -- --exact --nocapture`
+
+## 2026-06-14: Added a Quick Translate negative Collins MDD guard
+
+- Added the Quick Translate counterpart to the MDX-native negative real-corpus guard: the same Collins COBUILD English Usage MDX/MDD is imported, the discovered companion MDD paths are deliberately cleared, and the query still routes through Rust-native MDX lookup.
+- The test asserts the user-visible result remains readable plain text and `raw_html` stays absent when no MDD resource was actually attached, while also keeping the route free of CompatHost, `.NET`, and worker wording.
+- No new third-party library was needed. This tightens the contract over the existing Rust-native Quick Translate MDX backend.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\quick_translate_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_without_mdd_as_plain_result_from_env -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+
+## 2026-06-14: Added a negative Collins MDD inline guard
+
+- Added an env-gated real-corpus MDX lookup test for the Collins COBUILD English Usage corpus with the same MDX/query but no companion MDD paths.
+- The guard proves `mdd_resources_inlined` only becomes true when a real MDD resource is attached: without the MDD, the HTML keeps the external `cceu.css` reference and does not synthesize a `data:text/css;base64,...` URL.
+- No new third-party library was needed. This is a contract test over the existing `lib/rs-mdict` reader and Rust-native `mdx_native` app route.
+
+Validation:
+
+- `rustfmt --edition 2021 --check rs\crates\easydict_app\tests\mdx_native_behavior.rs`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_real_corpus_does_not_inline_css_without_mdd_from_env -- --exact --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test mdx_native_behavior native_mdx_lookup_inlines_real_corpus_mdd_from_env -- --exact --nocapture`
+
+## 2026-06-14: Surfaced Rust-native TTS startup errors back to UI state
+
+- Closed the remaining TTS UI recovery note. Result Speak actions and AutoPlayTranslation still run through the Rust-owned `Task::perform(...)` path, but startup failures from the native SAPI helper now return `SpeakResultFinished(Err(...))` instead of disappearing as `Noop`.
+- TTS failures are shown through the existing settings error channel as `Text to speech failed: ...`; a later successful TTS completion clears only that previous TTS error and leaves unrelated settings errors intact.
+- No new third-party library was needed. The backend remains the in-tree `lib/easydict-windows-tts` wrapper over Microsoft's official `windows` crate and SAPI.
+
+Validation:
+
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app tts --lib -- --nocapture`
+- `cargo test --manifest-path lib\easydict-windows-tts\Cargo.toml -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior speak -- --nocapture`
+- `cargo test --manifest-path rs\Cargo.toml -p easydict_app --test quick_translate_behavior app_update_result_actions_emit_rust_owned_side_effect_tasks -- --exact --nocapture`
+
 ## 2026-06-14: Replaced retained-worker PowerShell IPC mocks with a Rust helper
 
 - Removed the `compat_client` retained-feature tests' inline PowerShell JSONL mock host/worker scripts. The tests now spawn the Rust `easydict-ipc-mock` helper, which reuses the existing retained IPC DTOs and `serde_json`.

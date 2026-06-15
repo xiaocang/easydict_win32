@@ -2315,9 +2315,11 @@ fn speak_text_task(text: String, language: Option<String>, tts_speed: String) ->
     Task::perform(
         async move {
             let speaking_rate = tts::parse_speaking_rate(&tts_speed);
-            let _ = tts::speak_text(text, language, speaking_rate);
+            tts::speak_text(text, language, speaking_rate)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
         },
-        |_| Message::Noop,
+        Message::SpeakResultFinished,
     )
 }
 

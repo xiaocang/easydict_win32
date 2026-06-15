@@ -2029,6 +2029,22 @@ impl EasydictUiState {
                     self.settings.save_error_message = Some(error.clone());
                 }
             }
+            Message::SpeakResultFinished(result) => match result {
+                Ok(()) => {
+                    if self
+                        .settings
+                        .save_error_message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with("Text to speech failed: "))
+                    {
+                        self.settings.save_error_message = None;
+                    }
+                }
+                Err(error) => {
+                    self.settings.save_error_message =
+                        Some(format!("Text to speech failed: {error}"));
+                }
+            },
             Message::BuiltInAiDeviceRegistrationFinished(result) => {
                 if let Ok(Some(token)) = result {
                     if !token.trim().is_empty() {
@@ -4561,6 +4577,7 @@ pub enum Message {
     RetryResultIn(QuickTranslateSurface, String),
     SpeakResult,
     SpeakResultIn(QuickTranslateSurface, String),
+    SpeakResultFinished(Result<(), String>),
     OpenSettings,
     /// Result of the async settings runtime-status check (model/font on-disk
     /// availability), used to settle the `settings_runtime` [`Loadable`] and

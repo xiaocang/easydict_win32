@@ -5332,6 +5332,30 @@ fn app_update_result_actions_emit_rust_owned_side_effect_tasks() {
 }
 
 #[test]
+fn speak_result_error_surfaces_settings_error_and_success_clears_tts_error() {
+    let mut state = EasydictUiState::default();
+
+    state.apply(Message::SpeakResultFinished(Err(
+        "voice unavailable".to_string()
+    )));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("Text to speech failed: voice unavailable")
+    );
+
+    state.apply(Message::SpeakResultFinished(Ok(())));
+    assert_eq!(state.settings.save_error_message, None);
+
+    state.settings.save_error_message = Some("desktop shell failed".to_string());
+    state.apply(Message::SpeakResultFinished(Ok(())));
+    assert_eq!(
+        state.settings.save_error_message.as_deref(),
+        Some("desktop shell failed"),
+        "successful TTS completion should only clear a previous TTS error"
+    );
+}
+
+#[test]
 fn explicit_clipboard_actions_use_rust_owned_helper_tasks() {
     let app_source = include_str!("../src/lib.rs");
 
@@ -6582,6 +6606,64 @@ fn native_quick_translate_reads_real_corpus_mdx_and_inlines_real_corpus_mdd_from
         state.results[0].raw_html.as_deref(),
         Some(raw_html.as_str())
     );
+}
+
+#[test]
+fn native_quick_translate_reads_real_corpus_mdx_without_mdd_as_plain_result_from_env() {
+    let Some(mdx_path) = real_corpus_path("RS_MDICT_TEST_MDX") else {
+        return;
+    };
+    let Some(mdd_path) = real_corpus_path("RS_MDICT_TEST_MDD") else {
+        return;
+    };
+    let query = std::env::var("RS_MDICT_TEST_QUERY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "ability".to_string());
+    let app_dir = mdx_path
+        .parent()
+        .expect("real corpus MDX path should have a parent directory");
+
+    let mut state = EasydictUiState::default();
+    state.source_text = query;
+    state.results = Vec::new();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
+    assert!(
+        state.settings.imported_mdx_dictionaries[0]
+            .mdd_file_paths
+            .iter()
+            .any(|path| Path::new(path) == mdd_path.as_path()),
+        "the Collins MDD should normally be auto-discovered before this test clears it"
+    );
+    state.settings.imported_mdx_dictionaries[0]
+        .mdd_file_paths
+        .clear();
+
+    let plan = begin_quick_translate(&mut state).expect("real corpus MDX-only query should begin");
+    let mut requests = plan.service_requests();
+    let request = requests.remove(0);
+    assert!(quick_translate_request_can_route_natively(&request));
+
+    let update = run_quick_translate_service_with_app_dir(request, app_dir);
+    let result = update
+        .outcome
+        .result
+        .as_ref()
+        .expect("real corpus MDX-only lookup should succeed");
+
+    assert!(!result.translated_text.trim().is_empty());
+    assert!(!result.translated_text.contains("<link"));
+    assert_eq!(result.raw_html, None);
+    for forbidden in ["CompatHost", ".NET", "Easydict.Workers"] {
+        assert!(
+            !result.translated_text.contains(forbidden),
+            "real corpus MDX-only route should stay Rust-native and avoid {forbidden} wording"
+        );
+    }
+
+    apply_quick_translate_service_update(&mut state, update);
+    assert!(!state.results[0].body.trim().is_empty());
+    assert_eq!(state.results[0].raw_html, None);
 }
 
 #[test]

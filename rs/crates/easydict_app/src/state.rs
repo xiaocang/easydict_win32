@@ -993,6 +993,9 @@ pub struct SettingsState {
     pub translation_languages_expanded: bool,
     pub tts_speed_slider_state: ControlState,
     pub auto_play_translation_toggle_state: ControlState,
+    pub import_mdx_button_state: ControlState,
+    pub international_services_toggle_state: ControlState,
+    pub deepl_service_expander_state: ControlState,
     pub auto_select_target_language: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
@@ -1116,6 +1119,9 @@ impl Default for SettingsState {
             translation_languages_expanded: false,
             tts_speed_slider_state: ControlState::default(),
             auto_play_translation_toggle_state: ControlState::default(),
+            import_mdx_button_state: ControlState::default(),
+            international_services_toggle_state: ControlState::default(),
+            deepl_service_expander_state: ControlState::default(),
             auto_select_target_language: true,
             minimize_to_tray: true,
             start_minimized: false,
@@ -1204,6 +1210,33 @@ impl Default for SettingsState {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct BrowserSupportState {
+    pub chrome_installed: bool,
+    pub firefox_installed: bool,
+    pub loaded: bool,
+    pub last_error: Option<String>,
+}
+
+impl BrowserSupportState {
+    pub fn from_status(status: &crate::browser_registrar::StatusOutput) -> Self {
+        Self {
+            chrome_installed: status.chrome.installed,
+            firefox_installed: status.firefox.installed,
+            loaded: true,
+            last_error: None,
+        }
+    }
+
+    pub fn failed(error: impl Into<String>) -> Self {
+        Self {
+            loaded: true,
+            last_error: Some(error.into()),
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct EasydictUiState {
     pub mode: AppMode,
@@ -1253,6 +1286,7 @@ pub struct EasydictUiState {
     pub local_dictionary_suggestion_error: Option<String>,
     pub results: Vec<TranslationResultPreview>,
     pub long_document: LongDocumentState,
+    pub browser_support: BrowserSupportState,
     pub settings: SettingsState,
     pub saved_settings: SettingsState,
     pub pop_button: PopButtonState,
@@ -1328,6 +1362,7 @@ impl Default for EasydictUiState {
                 .latency_ms(1032),
             ],
             long_document: LongDocumentState::default(),
+            browser_support: BrowserSupportState::default(),
             settings: SettingsState::default(),
             saved_settings: SettingsState::default(),
             pop_button: PopButtonState::default(),
@@ -1608,6 +1643,43 @@ impl EasydictUiState {
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE") {
             state.settings.auto_play_translation_toggle_state =
                 preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_IMPORT_MDX_STATE") {
+            state.settings.import_mdx_button_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE") {
+            state.settings.international_services_toggle_state =
+                preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE") {
+            state.settings.deepl_service_expander_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) =
+            std::env::var("EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS")
+        {
+            for service_id in value
+                .split(',')
+                .map(str::trim)
+                .filter(|service_id| !service_id.is_empty())
+            {
+                if !state
+                    .settings
+                    .expanded_service_configurations
+                    .iter()
+                    .any(|existing| existing == service_id)
+                {
+                    state
+                        .settings
+                        .expanded_service_configurations
+                        .push(service_id.to_string());
+                }
+            }
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER") {
+            let provider = normalize_local_ai_provider(&value);
+            state.settings.local_ai_provider = provider;
+            state.settings.local_ai_status =
+                local_ai_provider_status(&state.settings.local_ai_provider).to_string();
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_CAPTURE_OVERLAY_STATE") {
             apply_capture_overlay_preview(&mut state, &value);
@@ -2558,6 +2630,12 @@ impl EasydictUiState {
             Message::ReplaceResultIn(surface, id) => {
                 capture_result_action(self, ResultActionKind::Replace, surface, &id);
             }
+            Message::BrowserSupportStatusLoaded(result) => {
+                self.browser_support = match result {
+                    Ok(status) => BrowserSupportState::from_status(&status),
+                    Err(error) => BrowserSupportState::failed(error.clone()),
+                };
+            }
             Message::Noop
             | Message::QuickTranslate
             | Message::QuickTranslateIn(_)
@@ -2565,7 +2643,9 @@ impl EasydictUiState {
             | Message::UninstallBrowserSupport
             | Message::HotkeyTriggered(_)
             | Message::TrayCommand(_)
+            | Message::WindowEvent(_)
             | Message::ClipboardTextReceived(_)
+            | Message::TrayClipboardTextReceived(_)
             | Message::OcrCaptureFinished(_)
             | Message::SilentOcrCaptureFinished(_)
             | Message::OcrCaptureCancelled(_)
@@ -2585,6 +2665,7 @@ impl EasydictUiState {
             | Message::SpeakResult
             | Message::MinimizeWindow
             | Message::ToggleMaximizeWindow
+            | Message::CloseMainWindow
             | Message::CloseWindow
             | Message::BrowseFile
             | Message::BrowseOutputFolder
@@ -4038,7 +4119,7 @@ fn result_action_language(state: &EasydictUiState, surface: QuickTranslateSurfac
 }
 
 /// Frozen desktop screenshot backing the capture overlay (raw BGRA pixel file
-/// written by the platform screen-capture API).
+/// written by the native screen-capture helper).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CaptureBackground {
     pub bgra_path: String,
@@ -4050,8 +4131,7 @@ pub struct CaptureBackground {
 /// ScreenCaptureWindow's BitBlt-on-open. Returns `None` when the platform
 /// capture fails (the overlay then falls back to the plain dim mask).
 pub fn capture_screen_background() -> Option<CaptureBackground> {
-    win_fluent_platform_win::WindowsPlatformAdapter::capture_screen_region()
-        .ok()
+    crate::screen_capture_native::capture_screen_region(ScreenCaptureRequest::virtual_desktop())
         .map(|capture| CaptureBackground {
             bgra_path: capture.pixel_data_path,
             pixel_width: capture.pixel_width,
@@ -4241,6 +4321,7 @@ pub enum Message {
     ToggleResultExpandedIn(QuickTranslateSurface, String),
     InstallBrowserSupport,
     UninstallBrowserSupport,
+    BrowserSupportStatusLoaded(Result<crate::browser_registrar::StatusOutput, String>),
     SwapLanguages,
     SwapFloatingLanguages(QuickTranslateSurface),
     QuickTranslate,
@@ -4277,7 +4358,9 @@ pub enum Message {
     CaptureEscape,
     HotkeyTriggered(String),
     TrayCommand(String),
+    WindowEvent(WindowEvent),
     ClipboardTextReceived(Option<String>),
+    TrayClipboardTextReceived(Option<String>),
     Translate,
     CopyResult,
     CopyResultIn(QuickTranslateSurface, String),
@@ -4301,6 +4384,7 @@ pub enum Message {
     OpenSettingsLink(SettingsLink),
     MinimizeWindow,
     ToggleMaximizeWindow,
+    CloseMainWindow,
     CloseWindow,
     BrowseFile,
     BrowseOutputFolder,

@@ -62,6 +62,27 @@ fn crate_root_retained_worker_exports_are_feature_gated() {
 }
 
 #[test]
+fn default_runtime_policy_implementation_is_lib_owned() {
+    let runtime_policy = include_str!("../src/runtime_policy.rs");
+
+    assert!(
+        runtime_policy.contains("pub use easydict_runtime_guards::"),
+        "app runtime_policy module should be a thin re-export over lib/easydict-runtime-guards"
+    );
+    for forbidden_inline_implementation in [
+        "std::env::var",
+        "fn runtime_profile_from_environment",
+        "fn runtime_profile_from_value",
+        "fn environment_flag_is_enabled",
+    ] {
+        assert!(
+            !runtime_policy.contains(forbidden_inline_implementation),
+            "app runtime_policy module must not re-inline retained worker policy implementation marker {forbidden_inline_implementation}"
+        );
+    }
+}
+
+#[test]
 fn default_cargo_features_do_not_enable_retained_dotnet_workers() {
     let app_manifest = include_str!("../Cargo.toml");
     let preview_manifest = include_str!("../../easydict_preview_iced/Cargo.toml");
@@ -279,6 +300,7 @@ fn default_app_manifests_do_not_link_hybrid_packaging_or_dotnet_runtime_tools() 
             "easydict_icon_generator",
             "easydict_store_listings",
             "easydict_ui_parity_analyzer",
+            "win_fluent_platform_win",
         ] {
             assert!(
                 !manifest.contains(forbidden_dependency),
@@ -374,6 +396,18 @@ fn production_source_scan_continues_past_early_cfg_test_items() {
     );
 }
 
+#[test]
+fn startup_activation_core_stays_decoupled_from_winfluent_task() {
+    let activation = include_str!("../src/activation.rs");
+
+    for forbidden in ["win_fluent", "Task<", "Task::"] {
+        assert!(
+            !activation.contains(forbidden),
+            "startup activation parsing should stay pure Rust app core and let lib.rs wrap messages into WinFluent tasks; found {forbidden}"
+        );
+    }
+}
+
 fn assert_crate_root_export_is_retained_worker_feature_gated(crate_root: &str, export: &str) {
     const RETAINED_WORKER_CFG: &str = "#[cfg(feature = \"retained-dotnet-workers\")]";
 
@@ -417,6 +451,8 @@ fn assert_no_retained_dotnet_runtime_entry_markers(path: &str, source: &str) {
         "pwsh",
         ".ps1",
         "Compress-Archive",
+        "BrowserHostRegistrar",
+        "Easydict NativeBridge",
         "Easydict.NativeBridge",
         "Easydict.BrowserRegistrar",
         "NativeBridge.csproj",
@@ -425,9 +461,9 @@ fn assert_no_retained_dotnet_runtime_entry_markers(path: &str, source: &str) {
         "host/fxr",
         "hostfxr",
     ] {
-        if let Some((line_number, _)) =
-            non_comment_lines(source).find(|(_, line)| line.contains(marker))
-        {
+        if let Some((line_number, _)) = non_comment_lines(source).find(|(_, line)| {
+            line.contains(marker) && !is_text_selection_terminal_classifier_line(path, line, marker)
+        }) {
             panic!(
                 "{path}:{line_number} must not expose retained .NET runtime/worker or legacy script/helper marker {marker:?} on the default rs surface"
             );
@@ -450,6 +486,12 @@ fn assert_no_process_spawn_entry_points(path: &str, source: &str) {
             );
         }
     }
+}
+
+fn is_text_selection_terminal_classifier_line(path: &str, line: &str, marker: &str) -> bool {
+    path == "text_selection.rs"
+        && matches!(marker, "powershell" | "pwsh")
+        && matches!(line.trim(), "\"powershell\"," | "\"pwsh\",")
 }
 
 fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
@@ -483,13 +525,23 @@ fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
     );
     for denied_override in [
         "\"dotnet.exe\"",
+        "\"dotnet.cmd\"",
+        "\"dotnet.bat\"",
+        "\"dotnet.com\"",
         "\"powershell.exe\"",
+        "\"powershell.cmd\"",
+        "\"powershell.bat\"",
+        "\"powershell.com\"",
         "\"pwsh.exe\"",
+        "\"pwsh.cmd\"",
+        "\"pwsh.bat\"",
+        "\"pwsh.com\"",
         "\"hostfxr.dll\"",
         "\"hostpolicy.dll\"",
         "\"coreclr.dll\"",
         "\"clrjit.dll\"",
         "\"singlefilehost.exe\"",
+        "\"system.private.corelib.dll\"",
         "easydict.compathost",
         "easydict.workers.",
         ".runtimeconfig.json",
@@ -520,6 +572,8 @@ fn assert_no_foundry_local_runtime_markers_outside_cli_denylist(path: &str, sour
         "pwsh",
         ".ps1",
         "Compress-Archive",
+        "BrowserHostRegistrar",
+        "Easydict NativeBridge",
         "Easydict.NativeBridge",
         "Easydict.BrowserRegistrar",
         "NativeBridge.csproj",
@@ -547,15 +601,25 @@ fn is_foundry_local_cli_denylist_line(line: &str) -> bool {
     [
         "\"dotnet\"",
         "\"dotnet.exe\"",
+        "\"dotnet.cmd\"",
+        "\"dotnet.bat\"",
+        "\"dotnet.com\"",
         "\"powershell\"",
         "\"powershell.exe\"",
+        "\"powershell.cmd\"",
+        "\"powershell.bat\"",
+        "\"powershell.com\"",
         "\"pwsh\"",
         "\"pwsh.exe\"",
+        "\"pwsh.cmd\"",
+        "\"pwsh.bat\"",
+        "\"pwsh.com\"",
         "\"hostfxr.dll\"",
         "\"hostpolicy.dll\"",
         "\"coreclr.dll\"",
         "\"clrjit.dll\"",
         "\"singlefilehost.exe\"",
+        "\"system.private.corelib.dll\"",
         "easydict.compathost",
         "easydict.workers.",
         ".runtimeconfig.json",

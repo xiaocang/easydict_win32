@@ -121,7 +121,11 @@ pub trait NativeMddResourceReader {
 pub trait NativeMddResourceReaderFactory {
     type Reader: NativeMddResourceReader;
 
-    fn open_mdd(&mut self, path: &str) -> Result<Self::Reader, NativeMddResourceError>;
+    fn open_mdd(
+        &mut self,
+        dictionary: &ImportedMdxDictionarySnapshot,
+        path: &str,
+    ) -> Result<Self::Reader, NativeMddResourceError>;
 }
 
 #[derive(Default)]
@@ -208,7 +212,11 @@ impl NativeMdxDictionaryReader for RsMdictReader {
 impl NativeMddResourceReaderFactory for RsMdictMddReaderFactory {
     type Reader = RsMdictMddReader;
 
-    fn open_mdd(&mut self, path: &str) -> Result<Self::Reader, NativeMddResourceError> {
+    fn open_mdd(
+        &mut self,
+        dictionary: &ImportedMdxDictionarySnapshot,
+        path: &str,
+    ) -> Result<Self::Reader, NativeMddResourceError> {
         let path = path.trim();
         if path.is_empty() {
             return Err(NativeMddResourceError::new(
@@ -220,8 +228,20 @@ impl NativeMddResourceReaderFactory for RsMdictMddReaderFactory {
             return Err(NativeMddResourceError::new("MDD resource file not found."));
         }
 
-        let mdd = rust_mdict::Mdd::new(path)
-            .map_err(|error| NativeMddResourceError::new(error.to_string()))?;
+        let mdd = if native_mdx_dictionary_uses_passcode_native_route(dictionary) {
+            let key = mdx_key_header_decryption_key(dictionary)
+                .map_err(|error| NativeMddResourceError::new(error.to_string()))?;
+            rust_mdict::Mdd::new_with_key_header_transform(
+                path.to_string(),
+                move |key_header, _| {
+                    mdx_salsa20_8(key_header, &key)
+                        .map_err(|error| rust_mdict::MdictError::DecryptionError(error.to_string()))
+                },
+            )
+        } else {
+            rust_mdict::Mdd::new(path)
+        }
+        .map_err(|error| NativeMddResourceError::new(error.to_string()))?;
         Ok(RsMdictMddReader { mdd })
     }
 }
@@ -283,8 +303,8 @@ pub fn native_mdx_dictionary_can_route_natively(
         .map(|mode| match mode {
             MdxEncryptionMode::None | MdxEncryptionMode::KeyInfoBlock => true,
             MdxEncryptionMode::RecordBlock => {
-                native_mdx_dictionary_has_credentials(dictionary)
-                    && native_mdx_dictionary_credential_error(dictionary).is_none()
+                !native_mdx_dictionary_has_credentials(dictionary)
+                    || native_mdx_dictionary_credential_error(dictionary).is_none()
             }
             MdxEncryptionMode::RecordAndKeyInfoBlock | MdxEncryptionMode::Unknown => false,
         })
@@ -349,6 +369,14 @@ fn native_mdx_dictionary_local_input_error(
         return Some(NativeMdxLookupError::new("MDX dictionary file not found."));
     }
 
+    if native_mdx_dictionary_requires_credentials(dictionary)
+        && native_mdx_dictionary_has_credentials(dictionary)
+    {
+        if let Some(error) = native_mdx_dictionary_credential_error(dictionary) {
+            return Some(error);
+        }
+    }
+
     if dictionary.is_encrypted {
         match mdx_dictionary_encryption_mode(dictionary) {
             Ok(mode) => {
@@ -362,14 +390,6 @@ fn native_mdx_dictionary_local_input_error(
                 }
             }
             Err(error) => return Some(error),
-        }
-    }
-
-    if native_mdx_dictionary_requires_credentials(dictionary)
-        && native_mdx_dictionary_has_credentials(dictionary)
-    {
-        if let Some(error) = native_mdx_dictionary_credential_error(dictionary) {
-            return Some(error);
         }
     }
 
@@ -604,7 +624,7 @@ pub fn run_native_mdd_resource_lookup_with_factory<F: NativeMddResourceReaderFac
 
     let resource_key = normalize_mdd_resource_key(resource_key)?;
     for path in &dictionary.mdd_file_paths {
-        let Ok(mut reader) = factory.open_mdd(path) else {
+        let Ok(mut reader) = factory.open_mdd(dictionary, path) else {
             continue;
         };
 
@@ -866,7 +886,7 @@ fn open_mdd_readers<F: NativeMddResourceReaderFactory>(
     dictionary
         .mdd_file_paths
         .iter()
-        .filter_map(|path| factory.open_mdd(path).ok())
+        .filter_map(|path| factory.open_mdd(dictionary, path).ok())
         .collect()
 }
 

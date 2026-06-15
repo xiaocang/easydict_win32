@@ -61,12 +61,12 @@ impl fmt::Display for BrowserRegistrarParseError {
 impl std::error::Error for BrowserRegistrarParseError {}
 
 pub fn usage() -> &'static str {
-    "BrowserHostRegistrar - Easydict browser Native Messaging host registrar
+    "easydict_browser_registrar - Easydict browser Native Messaging host registrar
 
 Usage:
-  BrowserHostRegistrar install [options]    Register native messaging host
-  BrowserHostRegistrar uninstall [options]  Remove native messaging host
-  BrowserHostRegistrar status               Show installation status
+  easydict_browser_registrar install [options]    Register native messaging host
+  easydict_browser_registrar uninstall [options]  Remove native messaging host
+  easydict_browser_registrar status               Show installation status
 
 Options:
   --chrome              Target Chrome/Edge (default: both)
@@ -616,23 +616,7 @@ fn bridge_source_path_shape_is_allowed(path: &Path) -> bool {
         .map(|name| name.eq_ignore_ascii_case(BRIDGE_EXE_NAME))
         .unwrap_or(false);
 
-    has_expected_name && !path_has_forbidden_bridge_source_component(path)
-}
-
-fn path_has_forbidden_bridge_source_component(path: &Path) -> bool {
-    path.components().any(|component| {
-        let Some(value) = component.as_os_str().to_str() else {
-            return false;
-        };
-        let value = value.to_ascii_lowercase();
-        value == "workers"
-            || value == "dotnet"
-            || value == "easydict.compathost"
-            || value.starts_with("easydict.compathost.")
-            || value == "easydict.nativebridge"
-            || value.starts_with("easydict.nativebridge.")
-            || value.starts_with("easydict.workers.")
-    })
+    has_expected_name && !easydict_runtime_guards::path_has_retained_runtime_component(path)
 }
 
 fn path_points_to_bridge(path: &Path, bridge_path: &Path) -> bool {

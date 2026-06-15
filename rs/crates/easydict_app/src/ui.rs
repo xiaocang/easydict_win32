@@ -37,7 +37,7 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
                     .caption_controls(true)
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
-                    .on_close(Message::CloseWindow),
+                    .on_close(Message::CloseMainWindow),
                 busy_overlay(surface)
                     .id("ModeSwitchOverlay")
                     .active(state.mode_overlay_active)
@@ -53,6 +53,17 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
 }
 
 pub fn settings_view(state: &SettingsState) -> View<Message> {
+    settings_view_with_close_message(state, Message::CloseWindow)
+}
+
+pub fn settings_view_for_main_window(state: &SettingsState) -> View<Message> {
+    settings_view_with_close_message(state, Message::CloseMainWindow)
+}
+
+fn settings_view_with_close_message(
+    state: &SettingsState,
+    close_message: Message,
+) -> View<Message> {
     let mut tabs_row_children = vec![settings_category_bar(state)];
     if state.tab_switching {
         tabs_row_children.push(
@@ -149,7 +160,7 @@ pub fn settings_view(state: &SettingsState) -> View<Message> {
                     .caption_controls(true)
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
-                    .on_close(Message::CloseWindow),
+                    .on_close(close_message),
                 content,
             ))
             .id("settings.root_with_title")
@@ -1661,16 +1672,6 @@ fn floating_translate_button(
     }
 }
 
-fn reveal_secret_button(id: impl Into<String>, label: &str) -> View<Message> {
-    button("")
-        .id(id)
-        .icon(icon::search())
-        .tooltip(label)
-        .a11y(A11yHint::named(label))
-        .on_press(Message::Noop)
-        .into_view()
-}
-
 fn styled_text(value: impl Into<String>, style: TextStyle) -> View<Message> {
     View::new(ViewToken::Text(TextToken {
         id: None,
@@ -2238,6 +2239,7 @@ fn settings_services_content(state: &SettingsState, locale: &str) -> View<Messag
                     "Import MDX Dictionary",
                 ))
                 .id("ImportMdxDictionaryButton")
+                .state(state.import_mdx_button_state.clone())
                 .height(Length::Fixed(29))
                 .on_press(Message::ImportMdxDictionary),
                 styled_text_id(
@@ -2309,6 +2311,7 @@ fn services_international_panel(state: &SettingsState, locale: &str) -> View<Mes
                 state.enable_international_services,
             )
             .id("EnableInternationalServicesToggle")
+            .state(state.international_services_toggle_state.clone())
             .width(Length::Fixed(66))
             .height(Length::Fixed(40))
             .on_toggle(Message::ToggleInternationalServices),
@@ -2338,6 +2341,7 @@ fn services_international_panel(state: &SettingsState, locale: &str) -> View<Mes
 }
 
 fn service_expander(
+    state: &SettingsState,
     service_id: &'static str,
     expanded: bool,
     id: impl Into<String>,
@@ -2353,6 +2357,7 @@ fn service_expander(
         .id(id)
         .icon(service_configuration_icon(&service_id))
         .expanded(expanded)
+        .header_state(settings_service_expander_header_state(state, &service_id))
         .on_toggle(move |expanded| {
             Message::ToggleServiceConfigurationExpanded(toggle_service_id.clone(), expanded)
         })
@@ -2375,8 +2380,27 @@ fn service_expander(
     builder.into_view()
 }
 
+fn settings_service_expander_header_state(state: &SettingsState, service_id: &str) -> ControlState {
+    match service_id {
+        "deepl" => state.deepl_service_expander_state.clone(),
+        _ => ControlState::default(),
+    }
+}
+
 fn service_configuration_icon(service_id: &str) -> win_fluent::IconToken {
     match service_id {
+        "google" => win_fluent::IconToken::with_image(
+            "service-google",
+            include_bytes!(
+                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Google.scale-100.png"
+            ),
+        ),
+        "linguee" => win_fluent::IconToken::with_image(
+            "service-linguee",
+            include_bytes!(
+                "../../../../dotnet/src/Easydict.WinUI/Assets/ServiceIcons/Linguee.scale-100.png"
+            ),
+        ),
         "deepl" => win_fluent::IconToken::with_image(
             "service-deepl",
             include_bytes!(
@@ -2511,6 +2535,56 @@ fn settings_field_stack(
         .into_view()
 }
 
+fn secret_field_stack(
+    id: impl Into<String>,
+    width: u16,
+    header: View<Message>,
+    editor: View<Message>,
+    reveal_id: impl Into<String>,
+    reveal_label: &'static str,
+) -> View<Message> {
+    let id = id.into();
+    let row_id = format!("{id}.editor");
+    let editor = text_editor_view_width_with_trailing_icon(editor, width, reveal_id, reveal_label);
+    settings_field_stack(
+        id,
+        width,
+        vec![
+            header,
+            row((editor,))
+                .id(row_id)
+                .spacing(0)
+                .align(Alignment::Center)
+                .width(Length::Fill)
+                .height(Length::Fixed(36))
+                .into_view(),
+        ],
+    )
+}
+
+fn text_editor_view_width_with_trailing_icon(
+    view: View<Message>,
+    width: u16,
+    reveal_id: impl Into<String>,
+    reveal_label: &'static str,
+) -> View<Message> {
+    match view.into_token() {
+        ViewToken::TextEditor(mut token) => {
+            token.width = Some(Length::Fixed(width));
+            token.trailing_icon = Some(win_fluent::view::TextEditorTrailingIcon {
+                id: reveal_id.into(),
+                icon: win_fluent::IconToken::with_glyph("reveal-secret", '\u{E890}'),
+                label: reveal_label.to_string(),
+                width: 28,
+                height: 28,
+                spacing: 6,
+            });
+            View::new(ViewToken::TextEditor(token))
+        }
+        token => View::new(token),
+    }
+}
+
 fn fixed_width_field(
     id: impl Into<String>,
     width: u16,
@@ -2520,6 +2594,46 @@ fn fixed_width_field(
         .id(id)
         .width(Length::Fixed(width))
         .into_view()
+}
+
+fn settings_checkbox_row(id: impl Into<String>, checkbox: View<Message>) -> View<Message> {
+    row((checkbox,))
+        .id(id)
+        .align(Alignment::Center)
+        .height(Length::Fixed(32))
+        .width(Length::Fill)
+        .into_view()
+}
+
+fn settings_text_box_field(
+    id: impl Into<String>,
+    label_id: impl Into<String>,
+    label: impl Into<String>,
+    value: impl Into<String>,
+    placeholder: impl Into<String>,
+    width: u16,
+    height: u16,
+    on_input: impl Fn(String) -> Message + Send + Sync + 'static,
+) -> View<Message> {
+    let id = id.into();
+    let value = value.into();
+    let placeholder = placeholder.into();
+    let field_id = format!("{id}Field");
+
+    column((
+        styled_text_id(label_id, label, TextStyle::Caption),
+        text_editor(value)
+            .id(id)
+            .placeholder(placeholder)
+            .width(Length::Fixed(width))
+            .max_height(32)
+            .on_input(on_input),
+    ))
+    .id(field_id)
+    .spacing(6)
+    .width(Length::Fixed(width))
+    .height(Length::Fixed(height))
+    .into_view()
 }
 
 fn service_configuration_expanded(state: &SettingsState, service_id: &str) -> bool {
@@ -2643,7 +2757,48 @@ fn mdx_mdd_summary(dictionary: &ImportedMdxDictionary) -> String {
 }
 
 fn local_ai_service_expander(state: &SettingsState) -> View<Message> {
+    let mut content = vec![
+        column(vec![
+            styled_text_id(
+                "LocalAIProviderLabelText",
+                tr("settings.services.local_ai.provider", "Provider"),
+                TextStyle::Caption,
+            ),
+            combo_box(local_ai_provider_items())
+                .id("LocalAIProviderCombo")
+                .label(format!(
+                    "Windows Local AI {}",
+                    tr("settings.services.local_ai.provider", "Provider")
+                ))
+                .width(Length::Fixed(520))
+                .height(Length::Fixed(48))
+                .selected(state.local_ai_provider.as_str())
+                .on_change(Message::LocalAiProviderChanged)
+                .into_view(),
+        ])
+        .id("LocalAIProviderPanel")
+        .spacing(6)
+        .into_view(),
+        styled_text_id(
+            "WindowsLocalAIDescriptionText",
+            local_ai_provider_description(&state.local_ai_provider),
+            TextStyle::Caption,
+        ),
+    ];
+
+    match state.local_ai_provider.as_str() {
+        local_ai_provider_modes::WINDOWS_AI => content.push(windows_ai_config_panel(state)),
+        local_ai_provider_modes::FOUNDRY_LOCAL => content.push(foundry_local_config_panel(state)),
+        local_ai_provider_modes::OPENVINO => content.push(open_vino_config_panel(state)),
+        _ => {
+            content.push(windows_ai_config_panel(state));
+            content.push(foundry_local_config_panel(state));
+            content.push(open_vino_config_panel(state));
+        }
+    }
+
     service_expander(
+        state,
         "windows-local-ai",
         service_configuration_expanded(state, "windows-local-ai"),
         "WindowsLocalAIExpander",
@@ -2651,73 +2806,12 @@ fn local_ai_service_expander(state: &SettingsState) -> View<Message> {
         "WindowsLocalAIStatusBadge",
         state.local_ai_status.clone(),
         "settings.services.local_ai.content",
-        vec![
-            column(vec![
-                styled_text_id("LocalAIProviderLabelText", "Provider", TextStyle::Caption),
-                combo_box(local_ai_provider_items())
-                    .id("LocalAIProviderCombo")
-                    .label("Windows Local AI provider")
-                    .width(Length::Fixed(520))
-                    .selected(state.local_ai_provider.as_str())
-                    .on_change(Message::LocalAiProviderChanged)
-                    .into_view(),
-                local_ai_provider_rating_row(
-                    "LocalAIProviderWindowsAIItem",
-                    "LocalAIProviderWindowsAIRatingText",
-                    "Phi Silica (Copilot+ PC)",
-                    "5 stars",
-                    "Best quality when available. Uses Phi Silica on supported Copilot+ PCs.",
-                ),
-                local_ai_provider_rating_row(
-                    "LocalAIProviderFoundryLocalItem",
-                    "LocalAIProviderFoundryLocalRatingText",
-                    "Foundry Local",
-                    "4 stars",
-                    "Good local LLM fallback. Requires Foundry Local and a loaded model.",
-                ),
-                local_ai_provider_rating_row(
-                    "LocalAIProviderOpenVINOItem",
-                    "LocalAIProviderOpenVINORatingText",
-                    "OpenVINO (NLLB-200)",
-                    "2 stars",
-                    "Basic offline translation fallback. Hardware acceleration is best effort.",
-                ),
-            ])
-            .id("LocalAIProviderPanel")
-            .spacing(6)
-            .into_view(),
-            styled_text_id(
-                "WindowsLocalAIDescriptionText",
-                local_ai_provider_description(&state.local_ai_provider),
-                TextStyle::Caption,
-            ),
-            windows_ai_config_panel(state),
-            foundry_local_config_panel(state),
-            open_vino_config_panel(state),
-        ],
+        content,
     )
 }
 
-fn local_ai_provider_rating_row(
-    row_id: &'static str,
-    rating_id: &'static str,
-    label: &'static str,
-    rating: &'static str,
-    tooltip: &'static str,
-) -> View<Message> {
-    row((
-        text(label).into_view(),
-        styled_text_id(rating_id, rating, TextStyle::Caption),
-        styled_text(tooltip, TextStyle::Caption).into_view(),
-    ))
-    .id(row_id)
-    .spacing(8)
-    .align(Alignment::Center)
-    .into_view()
-}
-
 fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
-    column(vec![
+    let mut content = vec![
         row((
             styled_text_id(
                 "WindowsLocalAISectionTitleText",
@@ -2726,7 +2820,7 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
             ),
             styled_text_id(
                 "WindowsLocalAISectionRatingText",
-                "5 stars",
+                "★★★★★",
                 TextStyle::Caption,
             ),
         ))
@@ -2742,98 +2836,141 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
         button("Prepare model")
             .id("WindowsLocalAIPrepareButton")
             .icon(icon::refresh())
+            .height(Length::Fixed(40))
             .on_press(Message::PrepareLocalAiModel)
             .into_view(),
-        column(vec![
-            styled_text_id(
-                "WindowsLocalAIPrepareProgressText",
-                state.local_ai_prepare_progress.clone(),
-                TextStyle::Caption,
-            ),
-            progress_ring()
-                .id("WindowsLocalAIPrepareProgressBar")
-                .active(state.local_ai_prepare_progress != "Idle")
-                .size(16)
-                .label(state.local_ai_prepare_progress.clone())
-                .into_view(),
-            button("Track download progress in Windows Update")
-                .id("WindowsLocalAIWindowsUpdateLink")
-                .icon(icon::settings())
-                .on_press(Message::OpenWindowsAiUpdate)
-                .into_view(),
-        ])
-        .id("WindowsLocalAIPrepareProgressPanel")
-        .spacing(4)
-        .into_view(),
-    ])
-    .id("WindowsLocalAIConfigPanel")
-    .spacing(10)
-    .into_view()
+    ];
+
+    if state.local_ai_prepare_progress != "Idle" {
+        content.push(
+            column(vec![
+                styled_text_id(
+                    "WindowsLocalAIPrepareProgressText",
+                    state.local_ai_prepare_progress.clone(),
+                    TextStyle::Caption,
+                ),
+                progress_bar()
+                    .id("WindowsLocalAIPrepareProgressBar")
+                    .active(state.local_ai_prepare_progress != "Idle")
+                    .height(4)
+                    .label(state.local_ai_prepare_progress.clone())
+                    .into_view(),
+                button("Track download progress in Windows Update")
+                    .id("WindowsLocalAIWindowsUpdateLink")
+                    .icon(icon::settings())
+                    .on_press(Message::OpenWindowsAiUpdate)
+                    .into_view(),
+            ])
+            .id("WindowsLocalAIPrepareProgressPanel")
+            .spacing(4)
+            .into_view(),
+        );
+    }
+
+    column(content)
+        .id("WindowsLocalAIConfigPanel")
+        .spacing(10)
+        .into_view()
 }
 
 fn foundry_local_config_panel(state: &SettingsState) -> View<Message> {
-    column(vec![
+    let mut content = vec![
         row((
-            styled_text_id("FoundryLocalTitleText", "Foundry Local", TextStyle::BodyStrong),
-            styled_text_id("FoundryLocalRatingText", "4 stars", TextStyle::Caption),
+            styled_text_id(
+                "FoundryLocalTitleText",
+                "Foundry Local",
+                TextStyle::BodyStrong,
+            ),
+            styled_text_id("FoundryLocalRatingText", "★★★★", TextStyle::Caption),
         ))
         .spacing(8)
         .align(Alignment::Center)
         .into_view(),
-        text_editor(state.foundry_local_endpoint.clone())
-            .id("FoundryLocalEndpointBox")
-            .placeholder("Auto-detect from foundry service status")
-            .max_height(36)
-            .on_input(Message::FoundryLocalEndpointChanged)
-            .into_view(),
-        text_editor(state.foundry_local_model.clone())
-            .id("FoundryLocalModelBox")
-            .placeholder("qwen2.5-0.5b")
-            .max_height(36)
-            .on_input(Message::FoundryLocalModelChanged)
-            .into_view(),
-        status_badge(
-            state.foundry_local_status.clone(),
-            ValidationSeverity::Info,
-        )
-        .id("FoundryLocalStatusBar")
-        .into_view(),
-        row((
-            button("Start Foundry Local")
-                .id("FoundryLocalStartButton")
-                .icon(icon::play())
-                .on_press(Message::StartFoundryLocal),
-            button("Install Foundry Local")
-                .id("FoundryLocalInstallLink")
-                .icon(icon::add())
-                .on_press(Message::InstallFoundryLocal),
-            button("Install/use docs")
-                .id("FoundryLocalDocsLink")
-                .icon(icon::help())
-                .on_press(Message::OpenFoundryLocalDocs),
-        ))
-        .spacing(8)
-        .into_view(),
-        styled_text_id(
-            "FoundryLocalDescriptionText",
-            "Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint.",
-            TextStyle::Caption,
+        settings_text_box_field(
+            "FoundryLocalEndpointBox",
+            "FoundryLocalEndpointLabelText",
+            tr(
+                "settings.services.local_ai.foundry.endpoint",
+                "Endpoint (optional)",
+            ),
+            state.foundry_local_endpoint.clone(),
+            tr(
+                "settings.services.local_ai.foundry.endpoint_placeholder",
+                "Auto-detect from foundry service status",
+            ),
+            762,
+            59,
+            Message::FoundryLocalEndpointChanged,
         ),
-    ])
-    .id("FoundryLocalConfigPanel")
-    .spacing(10)
-    .into_view()
+        settings_text_box_field(
+            "FoundryLocalModelBox",
+            "FoundryLocalModelLabelText",
+            tr("settings.services.local_ai.foundry.model", "Model"),
+            state.foundry_local_model.clone(),
+            "qwen2.5-0.5b",
+            762,
+            56,
+            Message::FoundryLocalModelChanged,
+        ),
+    ];
+
+    if should_show_foundry_local_recovery(&state.foundry_local_status) {
+        content.extend([
+            status_badge(
+                state.foundry_local_status.clone(),
+                ValidationSeverity::Info,
+            )
+            .id("FoundryLocalStatusBar")
+            .into_view(),
+            row((
+                button("Start Foundry Local")
+                    .id("FoundryLocalStartButton")
+                    .icon(icon::play())
+                    .height(Length::Fixed(40))
+                    .on_press(Message::StartFoundryLocal),
+                button("Install Foundry Local")
+                    .id("FoundryLocalInstallLink")
+                    .icon(icon::add())
+                    .height(Length::Fixed(40))
+                    .on_press(Message::InstallFoundryLocal),
+                button("Install/use docs")
+                    .id("FoundryLocalDocsLink")
+                    .icon(icon::help())
+                    .on_press(Message::OpenFoundryLocalDocs),
+            ))
+            .spacing(8)
+            .into_view(),
+            styled_text_id(
+                "FoundryLocalDescriptionText",
+                tr(
+                    "settings.services.local_ai.foundry.config_description",
+                    "Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint.",
+                ),
+                TextStyle::Caption,
+            ),
+        ]);
+    }
+
+    column(content)
+        .id("FoundryLocalConfigPanel")
+        .spacing(10)
+        .into_view()
+}
+
+fn should_show_foundry_local_recovery(status: &str) -> bool {
+    let normalized = status.trim();
+    !normalized.is_empty() && normalized != "Endpoint auto-detected at runtime"
 }
 
 fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
-    column(vec![
+    let mut content = vec![
         row((
             styled_text_id(
                 "OpenVinoTitleText",
                 "OpenVINO (local NLLB)",
                 TextStyle::BodyStrong,
             ),
-            styled_text_id("OpenVinoRatingText", "2 stars", TextStyle::Caption),
+            styled_text_id("OpenVinoRatingText", "★★", TextStyle::Caption),
             styled_text_id(
                 "OpenVinoStatusBadge",
                 state.open_vino_status.clone(),
@@ -2843,33 +2980,27 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
         .spacing(8)
         .align(Alignment::Center)
         .into_view(),
-        combo_box(open_vino_device_items())
-            .id("OpenVinoDeviceCombo")
-            .label("Device")
-            .selected(state.open_vino_device.as_str())
-            .on_change(Message::OpenVinoDeviceChanged)
-            .into_view(),
         status_badge(state.open_vino_status.clone(), ValidationSeverity::Info)
             .id("OpenVinoStatusBar")
             .into_view(),
-        row((
-            progress_ring()
+    ];
+
+    if state.open_vino_download_progress != "Idle" {
+        content.push(
+            progress_bar()
                 .id("OpenVinoDownloadProgress")
                 .active(state.open_vino_download_progress != "Idle")
-                .size(16)
-                .label(state.open_vino_download_progress.clone()),
-            styled_text_id(
-                "OpenVinoDownloadProgressText",
-                state.open_vino_download_progress.clone(),
-                TextStyle::Caption,
-            ),
-        ))
-        .spacing(8)
-        .align(Alignment::Center)
-        .into_view(),
+                .height(4)
+                .label(state.open_vino_download_progress.clone())
+                .into_view(),
+        );
+    }
+
+    content.extend([
         button("Download model")
             .id("OpenVinoDownloadButton")
             .icon(icon::refresh())
+            .height(Length::Fixed(40))
             .on_press(Message::DownloadOpenVinoModel)
             .into_view(),
         styled_text_id(
@@ -2877,10 +3008,12 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
             "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort and falls back to CPU when needed.",
             TextStyle::Caption,
         ),
-    ])
-    .id("OpenVinoConfigPanel")
-    .spacing(10)
-    .into_view()
+    ]);
+
+    column(content)
+        .id("OpenVinoConfigPanel")
+        .spacing(10)
+        .into_view()
 }
 
 fn local_ai_status_severity(status: &str) -> ValidationSeverity {
@@ -2891,20 +3024,24 @@ fn local_ai_status_severity(status: &str) -> ValidationSeverity {
     }
 }
 
-fn local_ai_provider_description(provider: &str) -> &'static str {
+fn local_ai_provider_description(provider: &str) -> String {
     match provider {
-        local_ai_provider_modes::WINDOWS_AI => {
-            "Uses Phi Silica on Copilot+ PCs through Windows AI APIs. No API key, no network."
-        }
-        local_ai_provider_modes::FOUNDRY_LOCAL => {
-            "Runs local models through the Microsoft Foundry Local OpenAI-compatible endpoint. Requires Foundry Local installed and a local model available."
-        }
-        local_ai_provider_modes::OPENVINO => {
-            "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort; unsupported graph parts fall back to CPU. No API key, no network."
-        }
-        _ => {
-            "Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key."
-        }
+        local_ai_provider_modes::WINDOWS_AI => tr(
+            "settings.services.local_ai.description.windows_ai",
+            "Uses Phi Silica on Copilot+ PCs through Windows AI APIs. No API key, no network.",
+        ),
+        local_ai_provider_modes::FOUNDRY_LOCAL => tr(
+            "settings.services.local_ai.description.foundry",
+            "Runs local models through the Microsoft Foundry Local OpenAI-compatible endpoint. Requires Foundry Local installed and a local model available.",
+        ),
+        local_ai_provider_modes::OPENVINO => tr(
+            "settings.services.local_ai.description.openvino",
+            "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort; unsupported graph parts fall back to CPU. No API key, no network.",
+        ),
+        _ => tr(
+            "settings.services.local_ai.description.auto",
+            "Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key.",
+        ),
     }
 }
 
@@ -2912,34 +3049,26 @@ fn local_ai_provider_items() -> [ComboBoxItem; 4] {
     [
         ComboBoxItem::new(
             local_ai_provider_modes::AUTO,
-            "Auto (Phi Silica -> Foundry Local -> OpenVINO)",
+            "Auto (Phi Silica → Foundry Local → OpenVINO)",
         ),
         ComboBoxItem::new(
             local_ai_provider_modes::WINDOWS_AI,
-            "Phi Silica (Copilot+ PC) - 5 stars",
+            "Phi Silica (Copilot+ PC)  ★★★★★",
         ),
         ComboBoxItem::new(
             local_ai_provider_modes::FOUNDRY_LOCAL,
-            "Foundry Local - 4 stars",
+            "Foundry Local  ★★★★",
         ),
         ComboBoxItem::new(
             local_ai_provider_modes::OPENVINO,
-            "OpenVINO (NLLB-200, local) - 2 stars",
+            "OpenVINO (NLLB-200, local)  ★★",
         ),
-    ]
-}
-
-fn open_vino_device_items() -> [ComboBoxItem; 4] {
-    [
-        ComboBoxItem::new("Auto", "Auto"),
-        ComboBoxItem::new("NPU", "NPU"),
-        ComboBoxItem::new("GPU", "GPU"),
-        ComboBoxItem::new("CPU", "CPU"),
     ]
 }
 
 fn ollama_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "ollama",
         service_configuration_expanded(state, "ollama"),
         "OllamaServiceExpander",
@@ -2970,7 +3099,7 @@ fn ollama_service_expander(state: &SettingsState) -> View<Message> {
                     .on_press(Message::RefreshOllamaModels),
                 button("Test")
                     .id("TestOllamaButton")
-                    .height(Length::Fixed(32))
+                    .height(Length::Fixed(29))
                     .on_press(Message::TestOllama),
             ))
             .spacing(8)
@@ -2986,6 +3115,7 @@ fn ollama_service_expander(state: &SettingsState) -> View<Message> {
 
 fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "openai",
         service_configuration_expanded(state, "openai"),
         "OpenAIServiceExpander",
@@ -2994,19 +3124,18 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
         state.open_ai_test_status.clone(),
         "settings.services.openai.content",
         vec![
-            settings_field_stack(
+            secret_field_stack(
                 "OpenAIKeyField",
                 350,
-                vec![
-                styled_text_id("OpenAIKeyHeaderText", "API Key", TextStyle::Caption),
+                styled_text_id("OpenAIKeyHeaderText", "API Key", TextStyle::Body),
                 text_editor(state.open_ai_api_key.clone())
                     .id("OpenAIKeyBox")
                     .placeholder("sk-...")
                     .max_height(36)
                     .on_input(Message::OpenAIApiKeyChanged)
                     .into_view(),
-                reveal_secret_button("OpenAIKeyRevealButton", "Reveal API key"),
-                ],
+                "OpenAIKeyRevealButton",
+                "Reveal API key",
             ),
             fixed_width_field(
                 "OpenAIEndpointField",
@@ -3042,7 +3171,7 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
                 ),
                 button("Test")
                     .id("TestOpenAIButton")
-                    .height(Length::Fixed(32))
+                    .height(Length::Fixed(29))
                     .on_press(Message::TestOpenAI)
                     .into_view(),
         ],
@@ -3074,32 +3203,31 @@ fn llm_provider_service_expander(
     descriptor: &LlmProviderDescriptor,
 ) -> View<Message> {
     let setting = service_provider_setting(state, descriptor);
-    let mut content = vec![settings_field_stack(
+    let mut content = vec![secret_field_stack(
         format!("{}Field", descriptor.key_box_id),
         350,
-        vec![
-            styled_text_id(
-                descriptor.key_header_id,
-                descriptor.key_label,
-                TextStyle::Caption,
-            ),
-            text_editor(setting.api_key.clone())
-                .id(descriptor.key_box_id)
-                .placeholder(descriptor.key_placeholder)
-                .max_height(36)
-                .on_input({
-                    let service_id = descriptor.service_id.to_string();
-                    move |value| {
-                        Message::ServiceProviderSettingChanged(
-                            service_id.clone(),
-                            ServiceProviderField::ApiKey,
-                            value,
-                        )
-                    }
-                })
-                .into_view(),
-            reveal_secret_button(descriptor.key_reveal_id, "Reveal secret"),
-        ],
+        styled_text_id(
+            descriptor.key_header_id,
+            descriptor.key_label,
+            TextStyle::Body,
+        ),
+        text_editor(setting.api_key.clone())
+            .id(descriptor.key_box_id)
+            .placeholder(descriptor.key_placeholder)
+            .max_height(36)
+            .on_input({
+                let service_id = descriptor.service_id.to_string();
+                move |value| {
+                    Message::ServiceProviderSettingChanged(
+                        service_id.clone(),
+                        ServiceProviderField::ApiKey,
+                        value,
+                    )
+                }
+            })
+            .into_view(),
+        descriptor.key_reveal_id,
+        "Reveal secret",
     )];
 
     if let Some(endpoint_box_id) = descriptor.endpoint_box_id {
@@ -3143,7 +3271,7 @@ fn llm_provider_service_expander(
         styled_text(descriptor.description, TextStyle::Caption),
         button("Test")
             .id(descriptor.test_button_id)
-            .height(Length::Fixed(32))
+            .height(Length::Fixed(29))
             .on_press(Message::TestServiceProvider(
                 descriptor.service_id.to_string(),
             ))
@@ -3151,6 +3279,7 @@ fn llm_provider_service_expander(
     ]);
 
     service_expander(
+        state,
         descriptor.service_id,
         service_configuration_expanded(state, descriptor.service_id),
         descriptor.expander_id,
@@ -3199,6 +3328,7 @@ fn provider_model_width(descriptor: &LlmProviderDescriptor) -> u16 {
 fn no_config_services_section() -> View<Message> {
     let mut service_rows = vec![no_config_service_row(
         "FreeServiceGoogleTranslateRow",
+        "google",
         "Google Translate",
     )];
 
@@ -3233,6 +3363,7 @@ fn no_config_services_section() -> View<Message> {
 fn linguee_no_config_service_rows() -> Vec<View<Message>> {
     vec![no_config_service_row(
         "LingueeFreeServicePanel",
+        "linguee",
         "Linguee Dictionary",
     )]
 }
@@ -3242,12 +3373,26 @@ fn linguee_no_config_service_rows() -> Vec<View<Message>> {
     Vec::new()
 }
 
-fn no_config_service_row(id: &'static str, label: &'static str) -> View<Message> {
-    row((text(label).into_view(),))
-        .id(id)
-        .spacing(6)
-        .align(Alignment::Center)
-        .into_view()
+fn no_config_service_row(
+    id: &'static str,
+    service_id: &'static str,
+    label: &'static str,
+) -> View<Message> {
+    row((
+        button("")
+            .id(format!("{id}.icon"))
+            .icon(service_configuration_icon(service_id))
+            .icon_only()
+            .enabled(false)
+            .width(Length::Fixed(18))
+            .height(Length::Fixed(18))
+            .into_view(),
+        text(label).into_view(),
+    ))
+    .id(id)
+    .spacing(6)
+    .align(Alignment::Center)
+    .into_view()
 }
 
 fn traditional_http_service_expanders(state: &SettingsState) -> [View<Message>; 4] {
@@ -3261,6 +3406,7 @@ fn traditional_http_service_expanders(state: &SettingsState) -> [View<Message>; 
 
 fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "caiyun",
         service_configuration_expanded(state, "caiyun"),
         "CaiyunServiceExpander",
@@ -3269,19 +3415,18 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
         state.caiyun_status.clone(),
         "settings.services.caiyun.content",
         vec![
-            settings_field_stack(
+            secret_field_stack(
                 "CaiyunKeyField",
                 350,
-                vec![
-                    styled_text_id("CaiyunKeyHeaderText", "API Key", TextStyle::Caption),
-                    text_editor(state.caiyun_api_key.clone())
-                        .id("CaiyunKeyBox")
-                        .placeholder("Enter your Caiyun API key")
-                        .max_height(36)
-                        .on_input(Message::CaiyunApiKeyChanged)
-                        .into_view(),
-                    reveal_secret_button("CaiyunKeyRevealButton", "Reveal API key"),
-                ],
+                styled_text_id("CaiyunKeyHeaderText", "API Key", TextStyle::Body),
+                text_editor(state.caiyun_api_key.clone())
+                    .id("CaiyunKeyBox")
+                    .placeholder("Enter your Caiyun API key")
+                    .max_height(36)
+                    .on_input(Message::CaiyunApiKeyChanged)
+                    .into_view(),
+                "CaiyunKeyRevealButton",
+                "Reveal API key",
             ),
             styled_text(
                 "Get your API key from fanyi.caiyunapp.com.",
@@ -3289,7 +3434,7 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
             ),
             button("Test")
                 .id("TestCaiyunButton")
-                .height(Length::Fixed(32))
+                .height(Length::Fixed(29))
                 .on_press(Message::TestCaiyun)
                 .into_view(),
         ],
@@ -3298,6 +3443,7 @@ fn caiyun_service_expander(state: &SettingsState) -> View<Message> {
 
 fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "niutrans",
         service_configuration_expanded(state, "niutrans"),
         "NiuTransServiceExpander",
@@ -3306,19 +3452,18 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
         state.niu_trans_status.clone(),
         "settings.services.niutrans.content",
         vec![
-            settings_field_stack(
+            secret_field_stack(
                 "NiuTransKeyField",
                 350,
-                vec![
-                    styled_text_id("NiuTransKeyHeaderText", "API Key", TextStyle::Caption),
-                    text_editor(state.niu_trans_api_key.clone())
-                        .id("NiuTransKeyBox")
-                        .placeholder("Enter your NiuTrans API key")
-                        .max_height(36)
-                        .on_input(Message::NiuTransApiKeyChanged)
-                        .into_view(),
-                    reveal_secret_button("NiuTransKeyRevealButton", "Reveal API key"),
-                ],
+                styled_text_id("NiuTransKeyHeaderText", "API Key", TextStyle::Body),
+                text_editor(state.niu_trans_api_key.clone())
+                    .id("NiuTransKeyBox")
+                    .placeholder("Enter your NiuTrans API key")
+                    .max_height(36)
+                    .on_input(Message::NiuTransApiKeyChanged)
+                    .into_view(),
+                "NiuTransKeyRevealButton",
+                "Reveal API key",
             ),
             styled_text(
                 "NiuTrans supports 450+ language pairs. Get your API key from niutrans.com.",
@@ -3326,7 +3471,7 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
             ),
             button("Test")
                 .id("TestNiuTransButton")
-                .height(Length::Fixed(32))
+                .height(Length::Fixed(29))
                 .on_press(Message::TestNiuTrans)
                 .into_view(),
         ],
@@ -3335,6 +3480,7 @@ fn niu_trans_service_expander(state: &SettingsState) -> View<Message> {
 
 fn youdao_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "youdao",
         service_configuration_expanded(state, "youdao"),
         "YoudaoServiceExpander",
@@ -3343,33 +3489,31 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
         state.youdao_status.clone(),
         "settings.services.youdao.content",
         vec![
-            settings_field_stack(
+            secret_field_stack(
                 "YoudaoAppKeyField",
                 350,
-                vec![
-                    styled_text_id("YoudaoAppKeyHeaderText", "App Key", TextStyle::Caption),
-                    text_editor(state.youdao_app_key.clone())
-                        .id("YoudaoAppKeyBox")
-                        .placeholder("Enter your Youdao App Key")
-                        .max_height(36)
-                        .on_input(Message::YoudaoAppKeyChanged)
-                        .into_view(),
-                    reveal_secret_button("YoudaoAppKeyRevealButton", "Reveal app key"),
-                ],
+                styled_text_id("YoudaoAppKeyHeaderText", "App Key", TextStyle::Body),
+                text_editor(state.youdao_app_key.clone())
+                    .id("YoudaoAppKeyBox")
+                    .placeholder("Enter your Youdao App Key")
+                    .max_height(36)
+                    .on_input(Message::YoudaoAppKeyChanged)
+                    .into_view(),
+                "YoudaoAppKeyRevealButton",
+                "Reveal app key",
             ),
-            settings_field_stack(
+            secret_field_stack(
                 "YoudaoAppSecretField",
                 350,
-                vec![
-                    styled_text_id("YoudaoAppSecretHeaderText", "App Secret", TextStyle::Caption),
-                    text_editor(state.youdao_app_secret.clone())
-                        .id("YoudaoAppSecretBox")
-                        .placeholder("Enter your Youdao App Secret")
-                        .max_height(36)
-                        .on_input(Message::YoudaoAppSecretChanged)
-                        .into_view(),
-                    reveal_secret_button("YoudaoAppSecretRevealButton", "Reveal app secret"),
-                ],
+                styled_text_id("YoudaoAppSecretHeaderText", "App Secret", TextStyle::Body),
+                text_editor(state.youdao_app_secret.clone())
+                    .id("YoudaoAppSecretBox")
+                    .placeholder("Enter your Youdao App Secret")
+                    .max_height(36)
+                    .on_input(Message::YoudaoAppSecretChanged)
+                    .into_view(),
+                "YoudaoAppSecretRevealButton",
+                "Reveal app secret",
             ),
                 toggle_switch("Use Official API", state.youdao_use_official_api)
                     .id("YoudaoUseOfficialApiToggle")
@@ -3381,7 +3525,7 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
                 ),
                 button("Test")
                     .id("TestYoudaoButton")
-                    .height(Length::Fixed(32))
+                    .height(Length::Fixed(29))
                     .on_press(Message::TestYoudao)
                     .into_view(),
         ],
@@ -3390,6 +3534,7 @@ fn youdao_service_expander(state: &SettingsState) -> View<Message> {
 
 fn volcano_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "volcano",
         service_configuration_expanded(state, "volcano"),
         "VolcanoServiceExpander",
@@ -3398,41 +3543,39 @@ fn volcano_service_expander(state: &SettingsState) -> View<Message> {
         state.volcano_status.clone(),
         "settings.services.volcano.content",
         vec![
-            settings_field_stack(
+            secret_field_stack(
                 "VolcanoAccessKeyIdField",
                 350,
-                vec![
-                    styled_text_id(
-                        "VolcanoAccessKeyIdHeaderText",
-                        "Access Key ID",
-                        TextStyle::Caption,
-                    ),
-                    text_editor(state.volcano_access_key_id.clone())
-                        .id("VolcanoAccessKeyIdBox")
-                        .placeholder("Enter your Volcano Access Key ID")
-                        .max_height(36)
-                        .on_input(Message::VolcanoAccessKeyIdChanged)
-                        .into_view(),
-                    reveal_secret_button("VolcanoAccessKeyIdRevealButton", "Reveal access key"),
-                ],
+                styled_text_id(
+                    "VolcanoAccessKeyIdHeaderText",
+                    "Access Key ID",
+                    TextStyle::Body,
+                ),
+                text_editor(state.volcano_access_key_id.clone())
+                    .id("VolcanoAccessKeyIdBox")
+                    .placeholder("Enter your Volcano Access Key ID")
+                    .max_height(36)
+                    .on_input(Message::VolcanoAccessKeyIdChanged)
+                    .into_view(),
+                "VolcanoAccessKeyIdRevealButton",
+                "Reveal access key",
             ),
-            settings_field_stack(
+            secret_field_stack(
                 "VolcanoSecretAccessKeyField",
                 350,
-                vec![
-                    styled_text_id(
-                        "VolcanoSecretAccessKeyHeaderText",
-                        "Secret Access Key",
-                        TextStyle::Caption,
-                    ),
-                    text_editor(state.volcano_secret_access_key.clone())
-                        .id("VolcanoSecretAccessKeyBox")
-                        .placeholder("Enter your Volcano Secret Access Key")
-                        .max_height(36)
-                        .on_input(Message::VolcanoSecretAccessKeyChanged)
-                        .into_view(),
-                    reveal_secret_button("VolcanoSecretAccessKeyRevealButton", "Reveal secret key"),
-                ],
+                styled_text_id(
+                    "VolcanoSecretAccessKeyHeaderText",
+                    "Secret Access Key",
+                    TextStyle::Body,
+                ),
+                text_editor(state.volcano_secret_access_key.clone())
+                    .id("VolcanoSecretAccessKeyBox")
+                    .placeholder("Enter your Volcano Secret Access Key")
+                    .max_height(36)
+                    .on_input(Message::VolcanoSecretAccessKeyChanged)
+                    .into_view(),
+                "VolcanoSecretAccessKeyRevealButton",
+                "Reveal secret key",
             ),
                 styled_text(
                     "Volcano translation uses signed OpenAPI requests from translate.volcengineapi.com.",
@@ -3440,7 +3583,7 @@ fn volcano_service_expander(state: &SettingsState) -> View<Message> {
                 ),
                 button("Test")
                     .id("TestVolcanoButton")
-                    .height(Length::Fixed(32))
+                    .height(Length::Fixed(29))
                     .on_press(Message::TestVolcano)
                     .into_view(),
         ],
@@ -3449,6 +3592,7 @@ fn volcano_service_expander(state: &SettingsState) -> View<Message> {
 
 fn deepl_service_expander(state: &SettingsState) -> View<Message> {
     service_expander(
+        state,
         "deepl",
         service_configuration_expanded(state, "deepl"),
         "DeepLServiceExpander",
@@ -3457,42 +3601,63 @@ fn deepl_service_expander(state: &SettingsState) -> View<Message> {
         "",
         "settings.services.deepl.content",
         vec![
-            settings_field_stack(
+            secret_field_stack(
                 "DeepLKeyField",
                 350,
-                vec![
-                    styled_text_id("DeepLKeyHeaderText", "API Key (Optional)", TextStyle::Body),
+                styled_text_id(
+                    "DeepLKeyHeaderText",
+                    tr("settings.services.deepl.api_key_optional", "API Key (Optional)"),
+                    TextStyle::Body,
+                ),
                 text_editor(state.deepl_api_key.clone())
                     .id("DeepLKeyBox")
                     .placeholder("Enter your DeepL API key")
                     .max_height(36)
                     .on_input(Message::DeepLApiKeyChanged)
                     .into_view(),
-                    reveal_secret_button("DeepLKeyRevealButton", "Reveal API key"),
-                ],
+                "DeepLKeyRevealButton",
+                "Reveal API key",
             ),
-                checkbox("Use Free API", state.deepl_use_free_api)
-                    .id("DeepLFreeCheck")
-                    .enabled(!state.deepl_use_quality_optimized)
-                    .on_toggle(Message::ToggleDeepLUseFreeApi)
-                    .into_view(),
+            settings_checkbox_row(
+                "DeepLFreeCheckRow",
                 checkbox(
-                    "Use quality-optimized model",
+                    tr(
+                        "settings.services.deepl.free_api",
+                        "Use Free API (no API key required for web translation)",
+                    ),
+                    state.deepl_use_free_api,
+                )
+                .id("DeepLFreeCheck")
+                .enabled(!state.deepl_use_quality_optimized)
+                .on_toggle(Message::ToggleDeepLUseFreeApi),
+            )
+            .into_view(),
+            settings_checkbox_row(
+                "DeepLQualityCheckRow",
+                checkbox(
+                    tr(
+                        "settings.services.deepl.quality_model",
+                        "Use quality-optimized model (API only; slower, higher quality)",
+                    ),
                     state.deepl_use_quality_optimized,
                 )
                 .id("DeepLQualityCheck")
-                .on_toggle(Message::ToggleDeepLUseQualityOptimized)
-                .into_view(),
-                styled_text_id(
-                    "DeepLDescriptionText",
-                    "Configure optional API key and quality options. Quality-optimized mode requires an API key.",
-                    TextStyle::Caption,
+                .on_toggle(Message::ToggleDeepLUseQualityOptimized),
+            )
+            .into_view(),
+            styled_text_id(
+                "DeepLDescriptionText",
+                tr(
+                    "settings.services.deepl.description",
+                    "Leave the API key empty to use free web translation. Pro API keys have higher limits.",
                 ),
-                button("Test")
-                    .id("TestDeepLButton")
-                    .height(Length::Fixed(32))
-                    .on_press(Message::Translate)
-                    .into_view(),
+                TextStyle::Caption,
+            ),
+            button(tr("settings.services.test", "Test"))
+                .id("TestDeepLButton")
+                .height(Length::Fixed(29))
+                .on_press(Message::Translate)
+                .into_view(),
         ],
     )
 }

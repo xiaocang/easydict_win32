@@ -107,6 +107,7 @@ pub enum ViewToken<Message> {
     FlyoutButton(FlyoutButtonToken<Message>),
     StatusBadge(StatusBadgeToken),
     ProgressRing(ProgressRingToken),
+    ProgressBar(ProgressBarToken),
     BusyOverlay(BusyOverlayToken<Message>),
     Card(CardToken<Message>),
     Spacer(SpacerToken),
@@ -445,6 +446,17 @@ pub struct ProgressRingToken {
     pub a11y: A11yHint,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProgressBarToken {
+    pub id: Option<String>,
+    pub active: bool,
+    pub value: Option<f32>,
+    pub width: Length,
+    pub height: u16,
+    pub label: Option<String>,
+    pub a11y: A11yHint,
+}
+
 #[derive(Clone, Debug)]
 pub struct BusyOverlayToken<Message> {
     pub id: Option<String>,
@@ -481,6 +493,7 @@ pub struct TextEditorToken<Message> {
     pub id: Option<String>,
     pub text: String,
     pub placeholder: Option<String>,
+    pub width: Option<Length>,
     pub min_height: Option<u16>,
     pub max_height: Option<u16>,
     pub text_style: TextStyle,
@@ -489,7 +502,18 @@ pub struct TextEditorToken<Message> {
     pub state: ControlState,
     pub action: Action<Message>,
     pub key_bindings: Vec<TextEditorKeyBinding<Message>>,
+    pub trailing_icon: Option<TextEditorTrailingIcon>,
     pub a11y: A11yHint,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TextEditorTrailingIcon {
+    pub id: String,
+    pub icon: IconToken,
+    pub label: String,
+    pub width: u16,
+    pub height: u16,
+    pub spacing: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -551,6 +575,7 @@ pub struct ComboBoxToken<Message> {
     pub items: Vec<ComboBoxItem>,
     pub selected: Option<String>,
     pub width: Length,
+    pub height: Length,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -746,6 +771,7 @@ pub struct ExpanderToken<Message> {
     pub description: Option<String>,
     pub icon: Option<IconToken>,
     pub expanded: bool,
+    pub header_state: ControlState,
     pub content: Option<Box<View<Message>>>,
     pub trailing: Vec<View<Message>>,
     pub action: Action<Message>,
@@ -1292,6 +1318,19 @@ pub fn progress_ring<Message>() -> ProgressRingBuilder<Message> {
     }
 }
 
+pub fn progress_bar<Message>() -> ProgressBarBuilder<Message> {
+    ProgressBarBuilder {
+        id: None,
+        active: true,
+        value: None,
+        width: Length::Fill,
+        height: 4,
+        label: None,
+        a11y: A11yHint::default(),
+        _message: std::marker::PhantomData,
+    }
+}
+
 pub fn busy_overlay<Message, Child>(content: Child) -> BusyOverlayBuilder<Message>
 where
     Child: IntoView<Message>,
@@ -1335,6 +1374,7 @@ pub fn text_editor<Message>(text: impl Into<String>) -> TextEditorBuilder<Messag
         id: None,
         text: text.into(),
         placeholder: None,
+        width: None,
         min_height: None,
         max_height: None,
         text_style: TextStyle::Body,
@@ -1343,6 +1383,7 @@ pub fn text_editor<Message>(text: impl Into<String>) -> TextEditorBuilder<Messag
         state: ControlState::default(),
         action: Action::None,
         key_bindings: Vec::new(),
+        trailing_icon: None,
         a11y: A11yHint::default(),
     }
 }
@@ -1399,6 +1440,7 @@ pub fn combo_box<Message>(
         items: items.into_iter().collect(),
         selected: None,
         width: Length::Shrink,
+        height: Length::Fixed(32),
         state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
@@ -1578,6 +1620,7 @@ pub fn expander<Message>(title: impl Into<String>) -> ExpanderBuilder<Message> {
         description: None,
         icon: None,
         expanded: false,
+        header_state: ControlState::default(),
         content: None,
         trailing: Vec::new(),
         action: Action::None,
@@ -2123,6 +2166,74 @@ impl<Message> IntoView<Message> for ProgressRingBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct ProgressBarBuilder<Message> {
+    id: Option<String>,
+    active: bool,
+    value: Option<f32>,
+    width: Length,
+    height: u16,
+    label: Option<String>,
+    a11y: A11yHint,
+    _message: std::marker::PhantomData<Message>,
+}
+
+impl<Message> ProgressBarBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
+    pub fn value(mut self, value: f32) -> Self {
+        self.value = Some(value);
+        self
+    }
+
+    pub fn indeterminate(mut self) -> Self {
+        self.value = None;
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: u16) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for ProgressBarBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::ProgressBar(ProgressBarToken {
+            id: self.id,
+            active: self.active,
+            value: self.value,
+            width: self.width,
+            height: self.height,
+            label: self.label,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct BusyOverlayBuilder<Message> {
     id: Option<String>,
     active: bool,
@@ -2297,6 +2408,7 @@ pub struct TextEditorBuilder<Message> {
     id: Option<String>,
     text: String,
     placeholder: Option<String>,
+    width: Option<Length>,
     min_height: Option<u16>,
     max_height: Option<u16>,
     text_style: TextStyle,
@@ -2305,6 +2417,7 @@ pub struct TextEditorBuilder<Message> {
     state: ControlState,
     action: Action<Message>,
     key_bindings: Vec<TextEditorKeyBinding<Message>>,
+    trailing_icon: Option<TextEditorTrailingIcon>,
     a11y: A11yHint,
 }
 
@@ -2316,6 +2429,11 @@ impl<Message> TextEditorBuilder<Message> {
 
     pub fn placeholder(mut self, value: impl Into<String>) -> Self {
         self.placeholder = Some(value.into());
+        self
+    }
+
+    pub fn width(mut self, value: Length) -> Self {
+        self.width = Some(value);
         self
     }
 
@@ -2398,6 +2516,23 @@ impl<Message> TextEditorBuilder<Message> {
         self
     }
 
+    pub fn trailing_icon(
+        mut self,
+        id: impl Into<String>,
+        icon: IconToken,
+        label: impl Into<String>,
+    ) -> Self {
+        self.trailing_icon = Some(TextEditorTrailingIcon {
+            id: id.into(),
+            icon,
+            label: label.into(),
+            width: 28,
+            height: 28,
+            spacing: 6,
+        });
+        self
+    }
+
     pub fn on_input(
         mut self,
         map: impl Fn(String) -> Message + Send + Sync + 'static,
@@ -2413,6 +2548,7 @@ impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
             id: self.id,
             text: self.text,
             placeholder: self.placeholder,
+            width: self.width,
             min_height: self.min_height,
             max_height: self.max_height,
             text_style: self.text_style,
@@ -2421,6 +2557,7 @@ impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
             state: self.state,
             action: self.action,
             key_bindings: self.key_bindings,
+            trailing_icon: self.trailing_icon,
             a11y: self.a11y,
         }))
     }
@@ -2709,6 +2846,7 @@ pub struct ComboBoxBuilder<Message> {
     items: Vec<ComboBoxItem>,
     selected: Option<String>,
     width: Length,
+    height: Length,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -2732,6 +2870,11 @@ impl<Message> ComboBoxBuilder<Message> {
 
     pub fn width(mut self, width: Length) -> Self {
         self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
         self
     }
 
@@ -2787,6 +2930,7 @@ impl<Message> IntoView<Message> for ComboBoxBuilder<Message> {
             items: self.items,
             selected: self.selected,
             width: self.width,
+            height: self.height,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -3638,6 +3782,7 @@ pub struct ExpanderBuilder<Message> {
     description: Option<String>,
     icon: Option<IconToken>,
     expanded: bool,
+    header_state: ControlState,
     content: Option<Box<View<Message>>>,
     trailing: Vec<View<Message>>,
     action: Action<Message>,
@@ -3662,6 +3807,21 @@ impl<Message> ExpanderBuilder<Message> {
 
     pub fn expanded(mut self, expanded: bool) -> Self {
         self.expanded = expanded;
+        self
+    }
+
+    pub fn header_state(mut self, state: ControlState) -> Self {
+        self.header_state = state;
+        self
+    }
+
+    pub fn header_hovered(mut self, hovered: bool) -> Self {
+        self.header_state.hovered = hovered;
+        self
+    }
+
+    pub fn header_pressed(mut self, pressed: bool) -> Self {
+        self.header_state.pressed = pressed;
         self
     }
 
@@ -3694,6 +3854,7 @@ impl<Message> IntoView<Message> for ExpanderBuilder<Message> {
             description: self.description,
             icon: self.icon,
             expanded: self.expanded,
+            header_state: self.header_state,
             content: self.content,
             trailing: self.trailing,
             action: self.action,

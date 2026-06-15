@@ -11,6 +11,7 @@ base64 = "0.22"
 cbc = { version = "0.1", features = ["alloc", "block-padding"] }
 clap = { version = "4.5", features = ["derive"] }
 futures-channel = "0.3"
+futures-core = "0.3"
 html2text = "0.17"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 md5 = { package = "md-5", version = "0.10" }
@@ -33,10 +34,18 @@ easydict_pdf_render = { path = "../../../lib/easydict-pdf-render" }
 easydict_pdf_overlay = { path = "../../../lib/easydict-pdf-overlay" }
 easydict_nllb = { path = "../../../lib/easydict-nllb", features = ["ort-openvino"] }
 easydict_foundry_local = { path = "../../../lib/easydict-foundry-local" }
+easydict_runtime_guards = { path = "../../../lib/easydict-runtime-guards" }
+easydict_windows_credentials = { path = "../../../lib/easydict-windows-credentials" }
+easydict_windows_dialogs = { path = "../../../lib/easydict-windows-dialogs" }
+easydict_windows_ipc = { path = "../../../lib/easydict-windows-ipc" }
+easydict_windows_registry = { path = "../../../lib/easydict-windows-registry" }
+easydict_windows_screen_capture = { path = "../../../lib/easydict-windows-screen-capture" }
+easydict_windows_shell = { path = "../../../lib/easydict-windows-shell" }
+easydict_windows_text_selection = { path = "../../../lib/easydict-windows-text-selection" }
+easydict_windows_tts = { path = "../../../lib/easydict-windows-tts" }
 easydict_windows_ai = { path = "../../../lib/easydict-windows-ai" }
 easydict_windows_ocr = { path = "../easydict_windows_ocr" }
 win_fluent = { path = "../../../lib/winfluent-rs/crates/win_fluent" }
-win_fluent_platform_win = { path = "../../../lib/winfluent-rs/crates/win_fluent_platform_win" }
 zip = "8.6"
 
 [features]
@@ -44,7 +53,7 @@ default = []
 enable-linguee-service = []
 foundry-sdk = ["easydict_foundry_local/sdk"]
 foundry-sdk-winml = ["easydict_foundry_local/sdk-winml"]
-retained-dotnet-workers = []
+retained-dotnet-workers = ["easydict_runtime_guards/retained-dotnet-workers"]
 
 [dev-dependencies]
 flate2 = "1"

@@ -23,6 +23,22 @@ impl Mdd {
         Ok(Mdd { base })
     }
 
+    /// Create a new MDD parser with a caller-provided key header transform.
+    ///
+    /// Credential-encrypted MDD files use the same encrypted key-header shape
+    /// as MDX files. Callers that already own the credential algorithm can
+    /// supply the decrypting transform here while reusing the MDD parser and
+    /// raw resource lookup path unchanged.
+    pub fn new_with_key_header_transform<P, F>(filepath: P, key_header_transform: F) -> Result<Self>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(&[u8], &DictHeader) -> Result<Vec<u8>> + 'static,
+    {
+        let base =
+            MdictBase::new_with_key_header_transform(filepath, FileExt::Mdd, key_header_transform)?;
+        Ok(Mdd { base })
+    }
+
     /// Get dictionary header
     pub fn header(&self) -> &DictHeader {
         &self.base.header
@@ -258,7 +274,9 @@ mod tests {
     use flate2::{write::ZlibEncoder, Compression};
     use std::io::{Seek, SeekFrom, Write};
 
+    use crate::error::MdictError;
     use crate::mdict_base::MdictBase;
+    use crate::ripemd128::ripemd128;
     use crate::types::{FileExt, KeyWordItem, RecordInfo};
 
     use super::{mime_type_for_mdd_resource_key, normalize_mdd_resource_key, Mdd};
@@ -433,6 +451,42 @@ mod tests {
     }
 
     #[test]
+    fn new_with_key_header_transform_reads_record_encrypted_mdd_resource() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp encrypted MDD file");
+        write_record_encrypted_mdd_with_xor_key_header(
+            file.as_file_mut(),
+            &[(r"\images\secret.png", b"\x89PNG".as_slice())],
+        );
+        file.as_file_mut()
+            .flush()
+            .expect("flush encrypted MDD file");
+
+        let without_transform = match Mdd::new(file.path()) {
+            Ok(_) => panic!("encrypted MDD should need key"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            without_transform,
+            MdictError::EncryptedFileRequiresPasscode
+        ));
+
+        let mut mdd = Mdd::new_with_key_header_transform(file.path(), |encrypted, header| {
+            assert_eq!(header.get("Encrypted").map(String::as_str), Some("1"));
+            Ok(xor_key_header(encrypted))
+        })
+        .expect("encrypted MDD should open with caller transform");
+
+        let resource = mdd
+            .locate_resource_result("images/secret.png")
+            .expect("encrypted MDD lookup should not fail")
+            .expect("encrypted MDD resource should exist");
+
+        assert_eq!(resource.key, r"\images\secret.png");
+        assert_eq!(resource.data, b"\x89PNG");
+        assert_eq!(resource.mime_type, "image/png");
+    }
+
+    #[test]
     fn mdd_lookup_respects_case_sensitive_and_strip_key_headers() {
         let mut case_sensitive = MdictBase::from_test_file(
             tempfile::tempfile().expect("case-sensitive MDD file"),
@@ -484,6 +538,64 @@ mod tests {
 
     fn write_minimal_mdd(file: &mut std::fs::File, resources: &[(&str, &[u8])]) {
         write_minimal_mdd_with_record_block(file, resources, uncompressed_record_block);
+    }
+
+    fn write_record_encrypted_mdd_with_xor_key_header(
+        file: &mut std::fs::File,
+        resources: &[(&str, &[u8])],
+    ) {
+        assert!(!resources.is_empty());
+
+        let header_text = r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" Encrypted="1" />"#;
+        let header_bytes = utf16le(header_text);
+        write_u32_be(file, header_bytes.len() as u32);
+        file.write_all(&header_bytes)
+            .expect("encrypted MDD header bytes");
+        file.write_all(&[0, 0, 0, 0])
+            .expect("encrypted MDD header checksum");
+
+        let mut key_block_payload = Vec::new();
+        let mut record_payload = Vec::new();
+        for (key, data) in resources {
+            write_u64_be_vec(&mut key_block_payload, record_payload.len() as u64);
+            key_block_payload.extend_from_slice(&utf16le(key));
+            key_block_payload.extend_from_slice(&[0, 0]);
+            record_payload.extend_from_slice(data);
+        }
+
+        let key_block = uncompressed_record_block(&key_block_payload);
+        let key_info_payload = key_info_payload(
+            resources.first().expect("first resource").0,
+            resources.last().expect("last resource").0,
+            resources.len() as u64,
+            key_block.len() as u64,
+            key_block_payload.len() as u64,
+        );
+        let key_info = zlib_block(&key_info_payload);
+
+        let mut key_header = Vec::new();
+        write_u64_be_vec(&mut key_header, 1);
+        write_u64_be_vec(&mut key_header, resources.len() as u64);
+        write_u64_be_vec(&mut key_header, key_info_payload.len() as u64);
+        write_u64_be_vec(&mut key_header, key_info.len() as u64);
+        write_u64_be_vec(&mut key_header, key_block.len() as u64);
+        file.write_all(&xor_key_header(&key_header))
+            .expect("encrypted MDD key header");
+        file.write_all(&[0, 0, 0, 0])
+            .expect("encrypted MDD key header checksum");
+
+        file.write_all(&key_info).expect("encrypted MDD key info");
+        file.write_all(&key_block).expect("encrypted MDD key block");
+
+        let record_block = mdx_encrypt_block(&uncompressed_record_block(&record_payload));
+        write_u64_be(file, 1);
+        write_u64_be(file, resources.len() as u64);
+        write_u64_be(file, 16);
+        write_u64_be(file, record_block.len() as u64);
+        write_u64_be(file, record_block.len() as u64);
+        write_u64_be(file, record_payload.len() as u64);
+        file.write_all(&record_block)
+            .expect("encrypted MDD record block");
     }
 
     fn write_minimal_mdd_with_record_block(
@@ -574,6 +686,35 @@ mod tests {
         let mut block = vec![2, 0, 0, 0, 0, 0, 0, 0];
         block.extend_from_slice(&compressed);
         block
+    }
+
+    fn mdx_encrypt_block(plain_block: &[u8]) -> Vec<u8> {
+        let mut key_input = [0u8; 8];
+        key_input[..4].copy_from_slice(&plain_block[4..8]);
+        key_input[4] ^= 0x95;
+        key_input[5] ^= 0x36;
+        let key = ripemd128(&key_input);
+
+        let mut encrypted = Vec::with_capacity(plain_block.len());
+        encrypted.extend_from_slice(&plain_block[..8]);
+        encrypted.extend_from_slice(&mdx_fast_encrypt(&plain_block[8..], &key));
+        encrypted
+    }
+
+    fn mdx_fast_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
+        let mut output = Vec::with_capacity(data.len());
+        let mut previous = 0x36u8;
+        for (index, byte) in data.iter().enumerate() {
+            let encrypted =
+                (byte ^ previous ^ ((index & 0xff) as u8) ^ key[index % key.len()]).rotate_right(4);
+            previous = encrypted;
+            output.push(encrypted);
+        }
+        output
+    }
+
+    fn xor_key_header(bytes: &[u8]) -> Vec<u8> {
+        bytes.iter().map(|byte| byte ^ 0xa5).collect()
     }
 
     fn utf16le(value: &str) -> Vec<u8> {

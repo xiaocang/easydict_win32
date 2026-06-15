@@ -163,6 +163,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
         | ViewToken::ProgressRing(_)
+        | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
         | ViewToken::TextEditor(_)
         | ViewToken::CheckBox(_)
@@ -183,6 +184,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::FlyoutButton(_) => "FlyoutButton",
         ViewToken::StatusBadge(_) => "StatusBadge",
         ViewToken::ProgressRing(_) => "ProgressRing",
+        ViewToken::ProgressBar(_) => "ProgressBar",
         ViewToken::BusyOverlay(_) => "BusyOverlay",
         ViewToken::Card(_) => "Card",
         ViewToken::Spacer(_) => "Spacer",
@@ -223,6 +225,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::FlyoutButton(token) => token.id.as_deref(),
         ViewToken::StatusBadge(token) => token.id.as_deref(),
         ViewToken::ProgressRing(token) => token.id.as_deref(),
+        ViewToken::ProgressBar(token) => token.id.as_deref(),
         ViewToken::BusyOverlay(token) => token.id.as_deref(),
         ViewToken::Card(token) => token.id.as_deref(),
         ViewToken::Spacer(token) => token.id.as_deref(),
@@ -298,6 +301,10 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
                 token.active, token.size, token.label
             )
         }
+        ViewToken::ProgressBar(token) => format!(
+            "active={}|value={:?}|{:?}|height={}|{:?}",
+            token.active, token.value, token.width, token.height, token.label
+        ),
         ViewToken::BusyOverlay(token) => format!(
             "active={}|opacity={:.2}|fade_transition_ms={}|blocks_input={}|{:?}",
             token.active,
@@ -316,8 +323,9 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
         ),
         ViewToken::Spacer(token) => format!("{:?}|{:?}", token.width, token.height),
         ViewToken::TextEditor(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|keys={}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|keys={}",
             token.placeholder,
+            token.width,
             token.min_height,
             token.max_height,
             token.text_style,
@@ -353,11 +361,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.action.kind()
         ),
         ViewToken::ComboBox(token) => format!(
-            "{:?}|{:?}|items={}|{:?}|{}|{:?}",
+            "{:?}|{:?}|items={}|{:?}|{:?}|{}|{:?}",
             token.label,
             token.selected,
             token.items.len(),
             token.width,
+            token.height,
             token.state,
             token.action.kind()
         ),

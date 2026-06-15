@@ -27,45 +27,53 @@ use easydict_app::{
     begin_manual_quick_translate_service, begin_quick_translate, begin_quick_translate_for_surface,
     begin_retry_quick_translate_service_for_surface, build_quick_translate_plan,
     build_quick_translate_plan_for_surface, clear_persistent_translation_cache_for_settings,
-    default_hotkeys, default_named_events, default_protocol_registrations, default_shell_verbs,
-    default_tray_menu, enrich_quick_translate_update_with_youdao_phonetics,
+    default_desktop_protocol_registrations, default_desktop_shell_verbs, default_hotkeys,
+    default_named_events, default_tray_menu, enrich_quick_translate_update_with_youdao_phonetics,
     local_ai_route_decision, local_dictionary_query_token,
     local_dictionary_suggestion_request_can_route_natively, long_document_translation_cache_path,
-    parse_startup_activation, quick_translate_request_can_route_natively,
-    resolve_quick_query_language, resolve_startup_activation_disposition,
-    run_local_dictionary_suggestion_request, run_local_dictionary_suggestion_request_with_app_dir,
+    mouse_selection_capture_result_message, mouse_selection_capture_task,
+    mouse_selection_pending_timer, mouse_selection_producer_action_task,
+    mouse_selection_producer_actions_task, parse_startup_activation,
+    quick_translate_request_can_route_natively, resolve_quick_query_language,
+    resolve_startup_activation_disposition, run_local_dictionary_suggestion_request,
+    run_local_dictionary_suggestion_request_with_app_dir,
     run_local_dictionary_suggestion_request_with_native_index_root, run_quick_translate,
     run_quick_translate_service, run_quick_translate_service_with_app_dir,
     run_quick_translate_service_with_app_dir_and_native_local_ai_client,
     run_quick_translate_service_with_app_dir_and_native_local_ai_probes,
     run_quick_translate_streaming_service_with_app_dir_and_foundry_resolver,
     run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client,
-    startup_activation_task_for_args, translation_cache_request_for_quick_translate,
-    BingHttpClient, BingHttpResponse, BingTranslatorPage, CustomStreamingHttpClient,
-    CustomStreamingHttpRequestPlan, EasydictApp, EasydictUiState, FoundryLocalEndpointResolver,
-    FoundryLocalError, FoundryLocalErrorCode, FoundryLocalRuntimeController,
-    FoundryLocalRuntimeState, FoundryLocalRuntimeStatus, LocalAiRouteDecision,
-    LocalDictionarySuggestion, LocalDictionarySuggestionBackend, LocalDictionarySuggestionError,
-    LocalDictionarySuggestionUpdate, LongDocumentTranslationCache, Message,
-    NativeBingQuickTranslateBackend, NativeCustomStreamingQuickTranslateBackend,
-    NativeMdxDictionaryReader, NativeMdxDictionaryReaderFactory, NativeMdxLookupError,
-    NativeOpenAiQuickTranslateBackend, NativeOpenVinoQuickTranslateBackend,
-    NativeTraditionalHttpQuickTranslateBackend, OpenAiApiFormat, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan,
-    OpenAiHttpTextResponse, Phonetic, PhoneticFlightTracker, PhoneticMemoryCache, PopButtonAnchor,
-    QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError, QuickTranslateExecutionKind,
-    QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService, QuickTranslateServiceOutcome,
-    QuickTranslateServiceRequest, QuickTranslateServiceUpdate, QuickTranslateStartError,
-    QuickTranslateStreamChunk, QuickTranslateStreamResult, QuickTranslateSurface, ResultActionKind,
-    SettingsLink, StartupActivation, StartupActivationDisposition, TraditionalHttpClient,
-    TraditionalHttpRequestPlan, TraditionalHttpServiceKind, TranslationCacheRequest,
-    TranslationLanguage, TranslationResult, BROWSER_REGISTRAR_EXE,
-    FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, HOTKEY_OCR_TRANSLATE, HOTKEY_SHOW_FIXED,
-    HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR, HOTKEY_TOGGLE_FIXED, HOTKEY_TOGGLE_MINI,
-    HOTKEY_TRANSLATE_CLIPBOARD, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS, OCR_TRANSLATE_EVENT_NAME,
-    PROTOCOL_EASYDICT, SHELL_OCR_TRANSLATE, TRAY_BROWSER_INSTALL, TRAY_BROWSER_UNINSTALL,
-    TRAY_EXIT, TRAY_OCR_TRANSLATE, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI,
-    TRAY_TRANSLATE_CLIPBOARD,
+    startup_activation_message_for_args, startup_activation_task_for_args,
+    translation_cache_request_for_quick_translate, tray_menu_for_browser_support,
+    tray_menu_for_browser_support_locale, BingHttpClient, BingHttpResponse, BingTranslatorPage,
+    BrowserSupportState, CustomStreamingHttpClient, CustomStreamingHttpRequestPlan, EasydictApp,
+    EasydictUiState, FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalErrorCode,
+    FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
+    LocalAiRouteDecision, LocalDictionarySuggestion, LocalDictionarySuggestionBackend,
+    LocalDictionarySuggestionError, LocalDictionarySuggestionUpdate, LongDocumentTranslationCache,
+    Message, MouseSelectionCaptureRequest, MouseSelectionPoint, MouseSelectionProducerAction,
+    MouseSelectionTrigger, MouseSelectionTriggerKind, NativeBingQuickTranslateBackend,
+    NativeCustomStreamingQuickTranslateBackend, NativeMdxDictionaryReader,
+    NativeMdxDictionaryReaderFactory, NativeMdxLookupError, NativeOpenAiQuickTranslateBackend,
+    NativeOpenVinoQuickTranslateBackend, NativeTraditionalHttpQuickTranslateBackend,
+    OpenAiApiFormat, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
+    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse,
+    PendingMultiClickSelection, Phonetic, PhoneticFlightTracker, PhoneticMemoryCache,
+    PopButtonAnchor, QuickQueryMode, QuickTranslateBackend, QuickTranslateBackendError,
+    QuickTranslateExecutionKind, QuickTranslateOutcome, QuickTranslatePlan, QuickTranslateService,
+    QuickTranslateServiceOutcome, QuickTranslateServiceRequest, QuickTranslateServiceUpdate,
+    QuickTranslateStartError, QuickTranslateStreamChunk, QuickTranslateStreamResult,
+    QuickTranslateSurface, ResultActionKind, SettingsLink, StartupActivation,
+    StartupActivationDisposition, TraditionalHttpClient, TraditionalHttpRequestPlan,
+    TraditionalHttpServiceKind, TranslationCacheRequest, TranslationLanguage, TranslationResult,
+    BROWSER_REGISTRAR_EXE, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, HOTKEY_OCR_TRANSLATE,
+    HOTKEY_SHOW_FIXED, HOTKEY_SHOW_MAIN, HOTKEY_SHOW_MINI, HOTKEY_SILENT_OCR, HOTKEY_TOGGLE_FIXED,
+    HOTKEY_TOGGLE_MINI, HOTKEY_TRANSLATE_CLIPBOARD, LOCAL_DICTIONARY_SUGGESTION_DELAY_MS,
+    OCR_TRANSLATE_EVENT_NAME, PROTOCOL_EASYDICT, SHELL_OCR_TRANSLATE,
+    TRAY_BROWSER_GET_CHROME_EXTENSION, TRAY_BROWSER_GET_FIREFOX_EXTENSION, TRAY_BROWSER_INSTALL,
+    TRAY_BROWSER_INSTALL_CHROME, TRAY_BROWSER_INSTALL_FIREFOX, TRAY_BROWSER_UNINSTALL,
+    TRAY_BROWSER_UNINSTALL_CHROME, TRAY_BROWSER_UNINSTALL_FIREFOX, TRAY_EXIT, TRAY_OCR_TRANSLATE,
+    TRAY_OPEN_SETTINGS, TRAY_SHOW_FIXED, TRAY_SHOW_MAIN, TRAY_SHOW_MINI, TRAY_TRANSLATE_CLIPBOARD,
 };
 use easydict_app::{find_translation_service_descriptor, TranslationServiceKind};
 #[cfg(feature = "retained-dotnet-workers")]
@@ -95,7 +103,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake};
 use win_fluent::prelude::{
     Application, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand, PlatformEvent, ResultStatus,
-    RuntimePlan, Subscription, SubscriptionKind, Task, WindowCommand, WindowId,
+    RuntimePlan, Subscription, SubscriptionKind, Task, WindowCommand, WindowEvent, WindowId,
 };
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
@@ -1345,7 +1353,10 @@ fn app_startup_registers_builtin_device_when_token_is_missing() {
     direct_or_registered.settings.device_id = "device-id".to_string();
     direct_or_registered.settings.device_token = "already-registered".to_string();
     let (_app, task) = <EasydictApp as Application>::new(direct_or_registered);
-    assert!(!contains_future_task(&task));
+    assert!(
+        contains_future_task(&task),
+        "startup still emits the Rust-owned protocol registration future"
+    );
 
     let mut direct_user_key = EasydictUiState::default();
     if let Some(builtin) = direct_user_key
@@ -1358,7 +1369,10 @@ fn app_startup_registers_builtin_device_when_token_is_missing() {
     }
     direct_user_key.settings.device_id = "device-id".to_string();
     let (_app, task) = <EasydictApp as Application>::new(direct_user_key);
-    assert!(!contains_future_task(&task));
+    assert!(
+        contains_future_task(&task),
+        "startup still emits the Rust-owned protocol registration future"
+    );
 }
 
 #[test]
@@ -5285,7 +5299,7 @@ fn result_action_messages_use_rendered_grammar_body_and_ignore_empty_results() {
 }
 
 #[test]
-fn app_update_result_actions_emit_platform_side_effect_tasks() {
+fn app_update_result_actions_emit_rust_owned_side_effect_tasks() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -5297,31 +5311,186 @@ fn app_update_result_actions_emit_platform_side_effect_tasks() {
         QuickTranslateSurface::Main,
         "google".to_string(),
     ));
-    assert_eq!(
-        platform_command(&copy),
-        Some(PlatformCommand::WriteClipboardText("bonjour".to_string()))
-    );
+    assert_eq!(task_kind(&copy), "future");
+    assert_eq!(platform_command(&copy), None);
 
     let speak = app.update(Message::SpeakResultIn(
         QuickTranslateSurface::Main,
         "google".to_string(),
     ));
-    assert_eq!(
-        platform_command(&speak),
-        Some(PlatformCommand::SpeakText {
-            text: "bonjour".to_string(),
-            language: Some("fr".to_string()),
-        })
-    );
+    assert_eq!(task_kind(&speak), "future");
+    assert_eq!(platform_command(&speak), None);
 
     let replace = app.update(Message::ReplaceResultIn(
         QuickTranslateSurface::Main,
         "google".to_string(),
     ));
-    assert_eq!(
-        platform_command(&replace),
-        Some(PlatformCommand::InsertText("bonjour".to_string()))
+    assert_eq!(task_kind(&replace), "future");
+    assert_eq!(ready_future_message(replace), Message::Noop);
+}
+
+#[test]
+fn explicit_clipboard_actions_use_rust_owned_helper_tasks() {
+    let app_source = include_str!("../src/lib.rs");
+
+    assert!(app_source.contains("clipboard::read_clipboard_text"));
+    assert!(app_source.contains("clipboard::write_clipboard_text"));
+    assert!(
+        !app_source.contains("Task::read_clipboard_text"),
+        "explicit clipboard reads should not route through WinFluent runtime clipboard tasks"
     );
+    assert!(
+        !app_source.contains("Task::clipboard_text"),
+        "explicit clipboard writes should not route through WinFluent platform clipboard commands"
+    );
+}
+
+#[test]
+fn monitor_clipboard_uses_app_owned_stream_not_winfluent_clipboard_subscription() {
+    let app_source = include_str!("../src/lib.rs");
+
+    assert!(app_source.contains("clipboard::clipboard_monitor_stream"));
+    assert!(
+        !app_source.contains("Subscription::clipboard"),
+        "clipboard monitoring should not route through WinFluent Clipboard subscription while that backend is a no-op"
+    );
+}
+
+#[test]
+fn app_startup_starts_clipboard_monitor_stream_when_saved_setting_is_enabled() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    easydict_app::clipboard::stop_clipboard_monitor();
+    let mut state = EasydictUiState::default();
+    state.settings.monitor_clipboard = true;
+    state.saved_settings.monitor_clipboard = true;
+
+    let (_app, task) = EasydictApp::new(state);
+
+    assert!(contains_stream_task(&task));
+    assert!(easydict_app::clipboard::clipboard_monitor_is_running());
+    drop(task);
+    easydict_app::clipboard::stop_clipboard_monitor();
+}
+
+#[test]
+fn saving_monitor_clipboard_setting_starts_and_stops_rust_owned_monitor() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    easydict_app::clipboard::stop_clipboard_monitor();
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    app.update(Message::OpenSettings);
+    let toggle_task = app.update(Message::ToggleMonitorClipboard(true));
+    assert_eq!(task_kind(&toggle_task), "none");
+    assert!(!easydict_app::clipboard::clipboard_monitor_is_running());
+
+    let save_task = app.update(Message::SaveSettingsChanges);
+    assert!(contains_stream_task(&save_task));
+    assert!(easydict_app::clipboard::clipboard_monitor_is_running());
+    drop(save_task);
+
+    app.update(Message::OpenSettings);
+    app.update(Message::ToggleMonitorClipboard(false));
+    let stop_task = app.update(Message::SaveSettingsChanges);
+
+    assert_eq!(task_kind(&stop_task), "none");
+    assert!(!easydict_app::clipboard::clipboard_monitor_is_running());
+}
+
+#[test]
+fn auto_play_translation_speaks_first_successful_result_only() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.auto_play_translation = true;
+    app.state.target_language = "fr".to_string();
+    let query_id = start_quick_translate_query(
+        &mut app,
+        vec![
+            QuickTranslateResult::new("google", "Google", false),
+            QuickTranslateResult::new("bing", "Bing", false),
+        ],
+    );
+
+    let first = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_update(query_id, "google", "Google", "bonjour"),
+    ));
+    assert_eq!(task_kind(&first), "future");
+    assert_eq!(platform_command(&first), None);
+    assert_eq!(app.state.active_query_success_count, 1);
+
+    let second = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_update(query_id, "bing", "Bing", "salut"),
+    ));
+    assert_eq!(platform_command(&second), None);
+    assert_eq!(app.state.active_query_id, None);
+    assert!(!app.state.is_translating);
+}
+
+#[test]
+fn auto_play_translation_ignores_disabled_empty_error_and_stale_updates() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.target_language = "fr".to_string();
+    let disabled_query = start_quick_translate_query(
+        &mut app,
+        vec![QuickTranslateResult::new("google", "Google", false)],
+    );
+
+    let disabled = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_update(disabled_query, "google", "Google", "bonjour"),
+    ));
+    assert_eq!(platform_command(&disabled), None);
+
+    app.state.settings.auto_play_translation = true;
+    let empty_query = start_quick_translate_query(
+        &mut app,
+        vec![QuickTranslateResult::new("google", "Google", false)],
+    );
+    let empty = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_update(empty_query, "google", "Google", "   "),
+    ));
+    assert_eq!(platform_command(&empty), None);
+
+    let stale_query = start_quick_translate_query(
+        &mut app,
+        vec![QuickTranslateResult::new("google", "Google", false)],
+    );
+    let stale = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_update(stale_query + 100, "google", "Google", "stale"),
+    ));
+    assert_eq!(platform_command(&stale), None);
+
+    let error_query = start_quick_translate_query(
+        &mut app,
+        vec![QuickTranslateResult::new("google", "Google", false)],
+    );
+    let error = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_error_update(error_query, "google", "Google", "network error"),
+    ));
+    assert_eq!(platform_command(&error), None);
+}
+
+#[test]
+fn auto_play_translation_uses_floating_surface_target_language() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+    app.state.settings.auto_play_translation = true;
+    app.state.mini.target_language = "ja".to_string();
+    app.state.mini.text = "Hello mini".to_string();
+    app.state.mini.results = vec![QuickTranslateResult::new("google", "Google", false).into()];
+
+    app.update(Message::QuickTranslateIn(QuickTranslateSurface::Mini));
+    let query_id = app.state.mini.active_query_id.expect("mini query id");
+    let task = app.update(Message::QuickTranslateServiceFinished(
+        quick_translate_update(query_id, "google", "Google", "こんにちは"),
+    ));
+
+    assert_eq!(task_kind(&task), "future");
+    assert_eq!(platform_command(&task), None);
 }
 
 #[test]
@@ -5332,10 +5501,8 @@ fn app_update_translate_selection_captures_text_insertion_target() {
 
     let task = app.update(Message::TranslateSelection);
 
-    assert_eq!(
-        platform_command(&task),
-        Some(PlatformCommand::CaptureTextInsertionTarget)
-    );
+    assert!(contains_future_task(&task));
+    assert!(!contains_read_clipboard_task(&task));
 }
 
 #[test]
@@ -5344,6 +5511,90 @@ fn pop_button_anchor_uses_dotnet_show_at_offset() {
         PopButtonAnchor::new(400, 240).window_position_dips(),
         (408.0, 208.0)
     );
+}
+
+#[test]
+fn mouse_selection_capture_result_maps_to_existing_pop_button_message() {
+    let request = mouse_selection_capture_request(400, 240, 7);
+
+    let message =
+        mouse_selection_capture_result_message(request, Some("  selected text  ".to_string()));
+    match message {
+        Message::SelectionTextReady {
+            text,
+            anchor_x,
+            anchor_y,
+            generation,
+        } => {
+            assert_eq!(text, "  selected text  ");
+            assert_eq!(anchor_x, 400);
+            assert_eq!(anchor_y, 240);
+            assert_eq!(generation, 7);
+        }
+        other => panic!("expected SelectionTextReady, got {other:?}"),
+    }
+
+    assert_eq!(
+        mouse_selection_capture_result_message(request, Some("   ".to_string())),
+        Message::Noop
+    );
+    assert_eq!(
+        mouse_selection_capture_result_message(request, None),
+        Message::Noop
+    );
+}
+
+#[test]
+fn mouse_selection_capture_task_runs_native_selection_future_for_pop_button() {
+    let task = mouse_selection_capture_task(mouse_selection_capture_request(400, 240, 7));
+    assert_eq!(task_kind(&task), "future");
+}
+
+#[test]
+fn mouse_selection_producer_actions_map_immediate_tasks_and_expose_pending_timer() {
+    let capture = mouse_selection_capture_request(400, 240, 7);
+    let dismiss =
+        mouse_selection_producer_action_task(MouseSelectionProducerAction::DismissPopButton {
+            reason: easydict_app::MouseSelectionDismissReason::LeftMouseDown,
+        });
+    assert!(matches!(dismiss, Task::Message(Message::DismissPopButton)));
+
+    let capture_task = mouse_selection_producer_action_task(
+        MouseSelectionProducerAction::CaptureSelectionText(capture),
+    );
+    assert_eq!(task_kind(&capture_task), "future");
+
+    let pending_action = MouseSelectionProducerAction::SchedulePendingMultiClick {
+        pending: PendingMultiClickSelection {
+            point: MouseSelectionPoint::new(410, 250),
+            click_count: 2,
+            delay_ms: 550,
+        },
+        generation: 9,
+    };
+    assert_eq!(
+        mouse_selection_pending_timer(&pending_action),
+        Some((9, 550))
+    );
+    assert!(matches!(
+        mouse_selection_producer_action_task(pending_action),
+        Task::None
+    ));
+}
+
+#[test]
+fn mouse_selection_producer_actions_batch_immediate_tasks() {
+    let task = mouse_selection_producer_actions_task(vec![
+        MouseSelectionProducerAction::DismissPopButton {
+            reason: easydict_app::MouseSelectionDismissReason::KeyDown,
+        },
+        MouseSelectionProducerAction::CaptureSelectionText(mouse_selection_capture_request(
+            400, 240, 8,
+        )),
+    ]);
+
+    assert!(contains_message_task(&task, &Message::DismissPopButton));
+    assert!(contains_future_task(&task));
 }
 
 #[test]
@@ -5438,10 +5689,6 @@ fn pop_button_click_translates_pending_text_in_mini_window() {
         command,
         WindowCommand::Show(id) if id.as_str() == "mini"
     )));
-    assert!(contains_platform_command(
-        &task,
-        &PlatformCommand::CaptureTextInsertionTarget
-    ));
     assert!(contains_future_task(&task) || contains_stream_task(&task));
 }
 
@@ -5484,25 +5731,89 @@ fn pop_button_dismiss_and_auto_dismiss_clear_matching_generation() {
     )));
 }
 
+fn mouse_selection_capture_request(
+    x: i32,
+    y: i32,
+    generation: u64,
+) -> MouseSelectionCaptureRequest {
+    MouseSelectionCaptureRequest {
+        trigger: MouseSelectionTrigger {
+            kind: MouseSelectionTriggerKind::Drag,
+            point: MouseSelectionPoint::new(x, y),
+            click_count: 1,
+        },
+        generation,
+    }
+}
+
 #[test]
 fn shell_context_menu_toggle_emits_registration_commands_and_updates_setting() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
-    let expected = default_shell_verbs().remove(0);
 
     let register = app.update(Message::ToggleShellContextMenu(true));
     assert_eq!(app.state.settings.shell_context_menu, true);
-    assert_eq!(
-        platform_command(&register),
-        Some(PlatformCommand::RegisterShellVerb(expected.clone()))
-    );
+    assert_eq!(task_kind(&register), "future");
+    assert_eq!(platform_command(&register), None);
 
     let unregister = app.update(Message::ToggleShellContextMenu(false));
     assert_eq!(app.state.settings.shell_context_menu, false);
-    assert_eq!(
-        platform_command(&unregister),
-        Some(PlatformCommand::UnregisterShellVerb(expected))
+    assert_eq!(task_kind(&unregister), "future");
+    assert_eq!(platform_command(&unregister), None);
+}
+
+#[test]
+fn shell_context_menu_registration_uses_rust_owned_desktop_integration_helper() {
+    let app_source = include_str!("../src/lib.rs");
+    let desktop_source = include_str!("../src/desktop_integration.rs");
+
+    assert!(app_source.contains("desktop_integration::register_shell_verb"));
+    assert!(app_source.contains("desktop_integration::unregister_shell_verb"));
+    assert!(
+        !desktop_source.contains("win_fluent::"),
+        "desktop integration registry writer should use app-owned DTOs, not WinFluent platform types"
+    );
+    assert!(
+        !app_source.contains("Task::register_shell_verb"),
+        "shell context menu registration should not route through WinFluent platform commands"
+    );
+    assert!(
+        !app_source.contains("Task::unregister_shell_verb"),
+        "shell context menu unregistration should not route through WinFluent platform commands"
+    );
+}
+
+#[test]
+fn startup_protocol_registration_uses_rust_owned_desktop_integration_helper() {
+    let app_source = include_str!("../src/lib.rs");
+    let desktop_source = include_str!("../src/desktop_integration.rs");
+
+    assert!(app_source.contains("fn protocol_registration_task()"));
+    assert!(app_source.contains("desktop_integration::register_protocol"));
+    assert!(
+        !desktop_source.contains("win_fluent::"),
+        "desktop integration protocol writer should use app-owned DTOs, not WinFluent platform types"
+    );
+    assert!(
+        !app_source.contains("Task::register_protocol"),
+        "startup protocol registration should not route through WinFluent platform commands"
+    );
+}
+
+#[test]
+fn browser_support_and_external_links_use_rust_owned_desktop_shell_helper() {
+    let app_source = include_str!("../src/lib.rs");
+
+    assert!(app_source.contains("desktop_shell::run_bundled_executable_task"));
+    assert!(app_source.contains("desktop_shell::open_url_task"));
+    assert!(
+        !app_source.contains("Task::run_bundled_executable"),
+        "browser registrar launch should not route through WinFluent platform commands"
+    );
+    assert!(
+        !app_source.contains("Task::open_url"),
+        "external URL launch should not route through WinFluent platform commands"
     );
 }
 
@@ -5513,40 +5824,62 @@ fn browser_support_messages_run_bundled_registrar_commands() {
     };
 
     let install = app.update(Message::InstallBrowserSupport);
+    assert!(contains_future_task(&install));
+    assert_eq!(platform_command(&install), None);
+    assert_eq!(BROWSER_REGISTRAR_EXE, "easydict_browser_registrar.exe");
     assert_eq!(
-        platform_command(&install),
-        Some(PlatformCommand::RunBundledExecutable {
-            executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: browser_registrar_arguments("install"),
-        })
+        browser_registrar_arguments("install", None),
+        [
+            "install".to_string(),
+            "--bridge-root-name".to_string(),
+            RUST_BRIDGE_ROOT_NAME.to_string(),
+        ]
     );
 
     let uninstall = app.update(Message::UninstallBrowserSupport);
+    assert!(contains_future_task(&uninstall));
+    assert_eq!(platform_command(&uninstall), None);
     assert_eq!(
-        platform_command(&uninstall),
-        Some(PlatformCommand::RunBundledExecutable {
-            executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: browser_registrar_arguments("uninstall"),
-        })
+        browser_registrar_arguments("uninstall", None),
+        [
+            "uninstall".to_string(),
+            "--bridge-root-name".to_string(),
+            RUST_BRIDGE_ROOT_NAME.to_string(),
+        ]
     );
 }
 
 #[test]
-fn import_mdx_dictionary_opens_dedicated_mdx_file_dialog() {
+fn import_mdx_dictionary_uses_rust_owned_mdx_file_dialog_task() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
 
     let task = app.update(Message::ImportMdxDictionary);
 
-    match task {
-        Task::OpenFileDialog { options, .. } => {
-            assert_eq!(options.title, "Import MDX dictionary");
-            assert_eq!(options.filters[0].name, "MDX dictionaries");
-            assert_eq!(options.filters[0].patterns, ["*.mdx"]);
-        }
-        _ => panic!("expected MDX file dialog task"),
-    }
+    assert_eq!(task_kind(&task), "future");
+}
+
+#[test]
+fn app_update_routes_file_dialogs_to_rust_owned_helpers() {
+    let app_root = include_str!("../src/lib.rs");
+
+    assert!(
+        app_root.contains("open_file_dialog_task("),
+        "app update should route file selection through the app-owned dialog helper"
+    );
+    assert!(
+        app_root.contains("open_folder_dialog_task("),
+        "app update should route folder selection through the app-owned dialog helper"
+    );
+    assert!(
+        !app_root.contains("Task::open_file_dialog("),
+        "default app update must not emit WinFluent open-file dialog tasks backed by PowerShell/System.Windows.Forms"
+    );
+    assert!(
+        !app_root.contains("Task::open_folder_dialog("),
+        "default app update must not emit WinFluent open-folder dialog tasks backed by PowerShell/System.Windows.Forms"
+    );
 }
 
 #[test]
@@ -8016,6 +8349,7 @@ fn default_hotkey_subscriptions_cover_migration_contract() {
     assert!(silent.modifiers.contains(&HotkeyModifier::Shift));
     assert!(contains_tray_subscription(&app.subscription()));
     assert!(contains_named_event_subscription(&app.subscription()));
+    assert!(contains_main_window_subscription(&app.subscription()));
 }
 
 #[test]
@@ -8089,25 +8423,88 @@ fn default_tray_menu_covers_migration_contract() {
             TRAY_OCR_TRANSLATE,
             TRAY_SHOW_MINI,
             TRAY_SHOW_FIXED,
-            TRAY_BROWSER_INSTALL,
-            TRAY_BROWSER_UNINSTALL,
+            "",
+            "browser-support",
+            TRAY_OPEN_SETTINGS,
+            "",
             TRAY_EXIT,
         ]
     );
     assert!(labels.contains(&"OCR Translate (Ctrl+Alt+S)"));
-    assert!(menu.items[5].enabled);
-    assert!(menu.items[6].enabled);
+    assert!(labels.contains(&"Browser Support"));
+    assert!(labels.contains(&"Settings"));
+    assert!(menu.items[5].is_separator());
+    assert!(menu.items[6].is_submenu());
+    assert!(menu.items[8].is_separator());
+    let browser_menu = &menu.items[6];
+    assert_eq!(
+        browser_menu
+            .children
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "browser-chrome",
+            "browser-firefox",
+            "",
+            TRAY_BROWSER_INSTALL,
+            TRAY_BROWSER_UNINSTALL,
+        ]
+    );
+    assert!(browser_menu.children[0].is_submenu());
+    assert!(browser_menu.children[1].is_submenu());
+    assert!(browser_menu.children[2].is_separator());
+    let chrome_menu = &browser_menu.children[0];
+    let firefox_menu = &browser_menu.children[1];
+    assert_eq!(
+        chrome_menu
+            .children
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            TRAY_BROWSER_INSTALL_CHROME,
+            TRAY_BROWSER_UNINSTALL_CHROME,
+            TRAY_BROWSER_GET_CHROME_EXTENSION,
+        ]
+    );
+    assert_eq!(
+        firefox_menu
+            .children
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            TRAY_BROWSER_INSTALL_FIREFOX,
+            TRAY_BROWSER_UNINSTALL_FIREFOX,
+            TRAY_BROWSER_GET_FIREFOX_EXTENSION,
+        ]
+    );
+    assert!(chrome_menu.children[0].enabled);
+    assert!(!chrome_menu.children[1].enabled);
+    assert!(firefox_menu.children[0].enabled);
+    assert!(!firefox_menu.children[1].enabled);
+    assert!(browser_menu.children[3].enabled);
+    assert!(!browser_menu.children[4].enabled);
     assert_eq!(
         menu.items[1].action.press(),
         Some(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string()))
     );
     assert_eq!(
-        menu.items[5].action.press(),
-        Some(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string()))
+        chrome_menu.children[0].action.press(),
+        Some(Message::TrayCommand(
+            TRAY_BROWSER_INSTALL_CHROME.to_string()
+        ))
     );
     assert_eq!(
-        menu.items[6].action.press(),
-        Some(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string()))
+        chrome_menu.children[1].action.press(),
+        Some(Message::TrayCommand(
+            TRAY_BROWSER_UNINSTALL_CHROME.to_string()
+        ))
+    );
+    assert_eq!(
+        menu.items[7].action.press(),
+        Some(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string()))
     );
 
     let app = EasydictApp {
@@ -8117,6 +8514,65 @@ fn default_tray_menu_covers_migration_contract() {
         app.tray_menu().expect("tray menu").items.len(),
         menu.items.len()
     );
+}
+
+#[test]
+fn tray_menu_labels_follow_ui_language_like_winui_tray() {
+    let menu = tray_menu_for_browser_support_locale(&BrowserSupportState::default(), "zh-CN");
+    let labels = menu
+        .items
+        .iter()
+        .map(|item| item.label.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(labels.contains(&"显示 Easydict"));
+    assert!(labels.contains(&"翻译剪贴板"));
+    assert!(labels.contains(&"OCR 截图翻译 (Ctrl+Alt+S)"));
+    assert!(labels.contains(&"浏览器支持"));
+    assert!(labels.contains(&"设置"));
+    assert!(labels.contains(&"退出"));
+
+    let browser_menu = &menu.items[6];
+    assert_eq!(browser_menu.label, "浏览器支持");
+    assert_eq!(browser_menu.children[0].label, "Chrome 系");
+    assert_eq!(browser_menu.children[1].label, "Firefox 系");
+    assert_eq!(
+        browser_menu.children[0].children[0].label,
+        "① 安装 Chrome 支持"
+    );
+    assert_eq!(browser_menu.children[0].children[2].label, "② 获取扩展");
+    assert_eq!(browser_menu.children[3].label, "安装全部");
+
+    let mut state = EasydictUiState::default();
+    state.settings.ui_language = "zh-CN".to_string();
+    let app = EasydictApp { state };
+    let runtime_menu = app.tray_menu().expect("tray menu");
+    assert_eq!(runtime_menu.items[0].label, "显示 Easydict");
+    assert_eq!(runtime_menu.items[1].label, "翻译剪贴板");
+}
+
+#[test]
+fn tray_browser_support_menu_reflects_installation_status() {
+    let menu = tray_menu_for_browser_support(&BrowserSupportState {
+        chrome_installed: true,
+        firefox_installed: false,
+        loaded: true,
+        last_error: None,
+    });
+    let browser_menu = menu
+        .items
+        .iter()
+        .find(|item| item.id == "browser-support")
+        .expect("browser support submenu");
+    let chrome_menu = &browser_menu.children[0];
+    let firefox_menu = &browser_menu.children[1];
+
+    assert!(!chrome_menu.children[0].enabled);
+    assert!(chrome_menu.children[1].enabled);
+    assert!(firefox_menu.children[0].enabled);
+    assert!(!firefox_menu.children[1].enabled);
+    assert!(browser_menu.children[3].enabled);
+    assert!(browser_menu.children[4].enabled);
 }
 
 #[test]
@@ -8132,11 +8588,12 @@ fn tray_commands_route_to_existing_desktop_actions() {
     )));
 
     let clipboard = app.update(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string()));
-    assert!(contains_platform_command(
-        &clipboard,
-        &PlatformCommand::CaptureTextInsertionTarget
-    ));
-    assert!(contains_read_clipboard_task(&clipboard));
+    assert!(contains_future_task(&clipboard));
+    assert!(!contains_read_clipboard_task(&clipboard));
+    assert!(!contains_window_command(&clipboard, |command| matches!(
+        command,
+        WindowCommand::Show(id) if id.as_str() == "main"
+    )));
 
     let ocr = app.update(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string()));
     assert!(contains_window_command(&ocr, |command| matches!(
@@ -8157,28 +8614,63 @@ fn tray_commands_route_to_existing_desktop_actions() {
     )));
 
     let browser_install = app.update(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string()));
-    assert_eq!(
-        platform_command(&browser_install),
-        Some(PlatformCommand::RunBundledExecutable {
-            executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: browser_registrar_arguments("install"),
-        })
-    );
+    assert!(contains_future_task(&browser_install));
+    assert_eq!(platform_command(&browser_install), None);
 
     let browser_uninstall = app.update(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string()));
+    assert!(contains_future_task(&browser_uninstall));
+    assert_eq!(platform_command(&browser_uninstall), None);
+
+    let chrome_install = app.update(Message::TrayCommand(
+        TRAY_BROWSER_INSTALL_CHROME.to_string(),
+    ));
+    assert!(contains_future_task(&chrome_install));
+    assert_eq!(platform_command(&chrome_install), None);
     assert_eq!(
-        platform_command(&browser_uninstall),
-        Some(PlatformCommand::RunBundledExecutable {
-            executable_name: BROWSER_REGISTRAR_EXE.to_string(),
-            arguments: browser_registrar_arguments("uninstall"),
-        })
+        browser_registrar_arguments("install", Some("chrome")),
+        [
+            "install".to_string(),
+            "--bridge-root-name".to_string(),
+            RUST_BRIDGE_ROOT_NAME.to_string(),
+            "--chrome".to_string(),
+        ]
     );
+
+    let firefox_uninstall = app.update(Message::TrayCommand(
+        TRAY_BROWSER_UNINSTALL_FIREFOX.to_string(),
+    ));
+    assert!(contains_future_task(&firefox_uninstall));
+    assert_eq!(platform_command(&firefox_uninstall), None);
+    assert_eq!(
+        browser_registrar_arguments("uninstall", Some("firefox")),
+        [
+            "uninstall".to_string(),
+            "--bridge-root-name".to_string(),
+            RUST_BRIDGE_ROOT_NAME.to_string(),
+            "--firefox".to_string(),
+        ]
+    );
+
+    let chrome_extension = app.update(Message::TrayCommand(
+        TRAY_BROWSER_GET_CHROME_EXTENSION.to_string(),
+    ));
+    assert_eq!(task_kind(&chrome_extension), "future");
+    assert_eq!(platform_command(&chrome_extension), None);
+
+    let settings = app.update(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string()));
+    assert!(app.state.settings_open);
+    assert!(contains_window_command(&settings, |command| matches!(
+        command,
+        WindowCommand::Show(id) if id.as_str() == "main"
+    )));
+    assert!(contains_future_task(&settings));
 
     let exit = app.update(Message::TrayCommand(TRAY_EXIT.to_string()));
     assert!(contains_window_command(&exit, |command| matches!(
         command,
         WindowCommand::Close(id) if id.as_str() == "main"
     )));
+    assert!(contains_exit_task(&exit));
 }
 
 #[test]
@@ -8193,17 +8685,13 @@ fn settings_about_links_open_external_urls() {
         app.state.last_opened_settings_link,
         Some(SettingsLink::IssueFeedback)
     );
-    assert_eq!(
-        platform_command(&task),
-        Some(PlatformCommand::OpenUrl(
-            "https://github.com/xiaocang/easydict_win32/issues".to_string(),
-        ))
-    );
+    assert_eq!(task_kind(&task), "future");
+    assert_eq!(platform_command(&task), None);
 }
 
 #[test]
 fn shell_and_protocol_entries_cover_ocr_activation_contract() {
-    let verbs = default_shell_verbs();
+    let verbs = default_desktop_shell_verbs();
     assert_eq!(verbs.len(), 1);
     assert_eq!(verbs[0].id, SHELL_OCR_TRANSLATE);
     assert_eq!(verbs[0].label, "OCR Translate");
@@ -8211,7 +8699,7 @@ fn shell_and_protocol_entries_cover_ocr_activation_contract() {
     assert!(verbs[0].accepts_directory_background);
     assert_eq!(verbs[0].arguments, vec!["--ocr-translate"]);
 
-    let protocols = default_protocol_registrations();
+    let protocols = default_desktop_protocol_registrations();
     assert_eq!(protocols.len(), 1);
     assert_eq!(protocols[0].scheme, PROTOCOL_EASYDICT);
     assert_eq!(protocols[0].description, "URL:Easydict Protocol");
@@ -8232,12 +8720,25 @@ fn shell_and_protocol_entries_cover_ocr_activation_contract() {
     };
     assert_eq!(app.named_events()[0].name, named_events[0].name);
     assert!(app.shell_verbs().is_empty());
-    assert_eq!(app.protocol_registrations(), protocols);
+    let app_protocols = app.protocol_registrations();
+    assert_eq!(app_protocols.len(), protocols.len());
+    assert_eq!(app_protocols[0].scheme, protocols[0].scheme);
+    assert_eq!(app_protocols[0].description, protocols[0].description);
+    assert_eq!(app_protocols[0].arguments, protocols[0].arguments);
 
     let mut state = EasydictUiState::default();
     state.settings.shell_context_menu = true;
     let app = EasydictApp { state };
-    assert_eq!(app.shell_verbs(), verbs);
+    let app_verbs = app.shell_verbs();
+    assert_eq!(app_verbs.len(), verbs.len());
+    assert_eq!(app_verbs[0].id, verbs[0].id);
+    assert_eq!(app_verbs[0].label, verbs[0].label);
+    assert_eq!(app_verbs[0].accepts_files, verbs[0].accepts_files);
+    assert_eq!(
+        app_verbs[0].accepts_directory_background,
+        verbs[0].accepts_directory_background
+    );
+    assert_eq!(app_verbs[0].arguments, verbs[0].arguments);
 }
 
 #[test]
@@ -8303,6 +8804,13 @@ fn startup_activation_disposition_signals_existing_instance_or_cold_starts() {
 
 #[test]
 fn startup_activation_reuses_hotkey_ocr_overlay_path() {
+    let pure_message = startup_activation_message_for_args(["easydict://ocr-translate"])
+        .expect("startup activation should produce an app message");
+    assert_eq!(
+        pure_message,
+        Message::HotkeyTriggered(HOTKEY_OCR_TRANSLATE.to_string())
+    );
+
     let task = startup_activation_task_for_args(["easydict://ocr-translate"]);
     let message = match task {
         Task::Message(message) => message,
@@ -8362,7 +8870,7 @@ fn runtime_plan_captures_desktop_integration_entries() {
 }
 
 #[test]
-fn translate_clipboard_hotkey_captures_text_insertion_target() {
+fn translate_selection_hotkey_captures_source_and_starts_native_selection_task() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -8371,11 +8879,8 @@ fn translate_clipboard_hotkey_captures_text_insertion_target() {
         HOTKEY_TRANSLATE_CLIPBOARD.to_string(),
     ));
 
-    assert!(contains_platform_command(
-        &task,
-        &PlatformCommand::CaptureTextInsertionTarget
-    ));
-    assert!(contains_read_clipboard_task(&task));
+    assert!(contains_future_task(&task));
+    assert!(!contains_read_clipboard_task(&task));
 }
 
 #[test]
@@ -8406,10 +8911,7 @@ fn floating_window_show_hotkeys_keep_explicit_show_semantics() {
     let mini_task = app.update(Message::HotkeyTriggered(HOTKEY_SHOW_MINI.to_string()));
     let fixed_task = app.update(Message::HotkeyTriggered(HOTKEY_SHOW_FIXED.to_string()));
 
-    assert!(contains_platform_command(
-        &mini_task,
-        &PlatformCommand::CaptureTextInsertionTarget
-    ));
+    assert!(contains_future_task(&mini_task));
     assert!(contains_window_command(&mini_task, |command| matches!(
         command,
         WindowCommand::Show(id) if id.as_str() == "mini"
@@ -8418,6 +8920,48 @@ fn floating_window_show_hotkeys_keep_explicit_show_semantics() {
         command,
         WindowCommand::Show(id) if id.as_str() == "fixed"
     )));
+}
+
+#[test]
+fn main_window_close_respects_minimize_to_tray_setting() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let close_to_tray = app.update(Message::CloseMainWindow);
+    assert!(contains_window_command(&close_to_tray, |command| matches!(
+        command,
+        WindowCommand::Hide(id) if id.as_str() == "main"
+    )));
+    let system_close_to_tray = app.update(Message::WindowEvent(WindowEvent::CloseRequested(
+        WindowId::new("main"),
+    )));
+    assert!(contains_window_command(
+        &system_close_to_tray,
+        |command| matches!(
+            command,
+            WindowCommand::Hide(id) if id.as_str() == "main"
+        )
+    ));
+
+    app.state.settings.minimize_to_tray = false;
+    let close_window = app.update(Message::CloseMainWindow);
+    assert!(contains_window_command(&close_window, |command| matches!(
+        command,
+        WindowCommand::Close(id) if id.as_str() == "main"
+    )));
+    assert!(contains_exit_task(&close_window));
+    let system_close_window = app.update(Message::WindowEvent(WindowEvent::CloseRequested(
+        WindowId::new("main"),
+    )));
+    assert!(contains_window_command(
+        &system_close_window,
+        |command| matches!(
+            command,
+            WindowCommand::Close(id) if id.as_str() == "main"
+        )
+    ));
+    assert!(contains_exit_task(&system_close_window));
 }
 
 #[test]
@@ -8526,6 +9070,8 @@ fn settings_runtime_status_loaded_preserves_starting_foundry_local_status() {
 
 #[test]
 fn settings_changes_prompt_on_back_and_save_discard_cancel_are_stateful() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    easydict_app::clipboard::stop_clipboard_monitor();
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
@@ -8572,6 +9118,8 @@ fn settings_changes_prompt_on_back_and_save_discard_cancel_are_stateful() {
     assert!(!app.state.settings.unsaved_changes);
     assert!(app.state.settings.monitor_clipboard);
     assert!(app.state.saved_settings.monitor_clipboard);
+
+    easydict_app::clipboard::stop_clipboard_monitor();
 }
 
 #[test]
@@ -8651,6 +9199,30 @@ fn clipboard_text_received_starts_quick_translate_from_clipboard_text() {
     assert_eq!(app.state.active_query_id, Some(1));
     assert_eq!(app.state.active_query_service_count, 3);
     assert_eq!(task_kind(&task), "batch");
+}
+
+#[test]
+fn tray_clipboard_text_received_restores_main_window_before_translating() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let empty = app.update(Message::TrayClipboardTextReceived(Some("  ".to_string())));
+    assert_eq!(task_kind(&empty), "none");
+    assert!(!app.state.is_translating);
+
+    let task = app.update(Message::TrayClipboardTextReceived(Some(
+        "Hello from tray clipboard".to_string(),
+    )));
+
+    assert_eq!(app.state.source_text, "Hello from tray clipboard");
+    assert!(app.state.is_translating);
+    assert_eq!(app.state.active_query_id, Some(1));
+    assert!(contains_window_command(&task, |command| matches!(
+        command,
+        WindowCommand::Show(id) if id.as_str() == "main"
+    )));
+    assert!(contains_future_task(&task));
 }
 
 #[test]
@@ -9831,6 +10403,38 @@ fn quick_translate_update(
     }
 }
 
+fn quick_translate_error_update(
+    query_id: u64,
+    service_id: &str,
+    service_name: &str,
+    message: &str,
+) -> QuickTranslateServiceUpdate {
+    QuickTranslateServiceUpdate {
+        query_id,
+        outcome: QuickTranslateServiceOutcome {
+            service: QuickTranslateService {
+                id: service_id.to_string(),
+                name: service_name.to_string(),
+                enabled_query: true,
+                grammar_capable: false,
+                streaming_capable: false,
+            },
+            grammar_result: None,
+            streamed_chunks: Vec::new(),
+            result: Err(QuickTranslateBackendError::new(message)),
+        },
+    }
+}
+
+fn start_quick_translate_query(app: &mut EasydictApp, services: Vec<QuickTranslateResult>) -> u64 {
+    app.state.source_text = "Hello".to_string();
+    app.state.results = services.into_iter().map(Into::into).collect();
+    let _ = app.update(Message::QuickTranslate);
+    app.state
+        .active_query_id
+        .expect("quick translate should start an active query")
+}
+
 fn translation_resolution(from: &str, to: &str) -> easydict_app::QuickQueryLanguageResolution {
     easydict_app::QuickQueryLanguageResolution {
         selected_source_language: from.to_string(),
@@ -10075,6 +10679,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::Stream(_) => "stream",
         Task::Window(_) => "window",
         Task::Platform(_) => "platform",
+        Task::Exit => "exit",
         Task::ScrollToTop(_) => "scroll_to_top",
         Task::ScrollTo { .. } => "scroll_to",
         Task::ReadClipboardText(_) => "read_clipboard",
@@ -10124,22 +10729,18 @@ fn platform_command(task: &Task<Message>) -> Option<PlatformCommand> {
     }
 }
 
-fn browser_registrar_arguments(command: &str) -> Vec<String> {
-    vec![
+fn browser_registrar_arguments(command: &str, browser: Option<&str>) -> Vec<String> {
+    let mut arguments = vec![
         command.to_string(),
         "--bridge-root-name".to_string(),
         RUST_BRIDGE_ROOT_NAME.to_string(),
-    ]
-}
-
-fn contains_platform_command(task: &Task<Message>, expected: &PlatformCommand) -> bool {
-    match task {
-        Task::Platform(command) => command == expected,
-        Task::Batch(tasks) => tasks
-            .iter()
-            .any(|task| contains_platform_command(task, expected)),
-        _ => false,
+    ];
+    match browser {
+        Some("chrome") => arguments.push("--chrome".to_string()),
+        Some("firefox") => arguments.push("--firefox".to_string()),
+        _ => {}
     }
+    arguments
 }
 
 fn contains_read_clipboard_task(task: &Task<Message>) -> bool {
@@ -10158,10 +10759,28 @@ fn contains_future_task(task: &Task<Message>) -> bool {
     }
 }
 
+fn contains_message_task(task: &Task<Message>, expected: &Message) -> bool {
+    match task {
+        Task::Message(message) => message == expected,
+        Task::Batch(tasks) => tasks
+            .iter()
+            .any(|task| contains_message_task(task, expected)),
+        _ => false,
+    }
+}
+
 fn contains_stream_task(task: &Task<Message>) -> bool {
     match task {
         Task::Stream(_) => true,
         Task::Batch(tasks) => tasks.iter().any(contains_stream_task),
+        _ => false,
+    }
+}
+
+fn contains_exit_task(task: &Task<Message>) -> bool {
+    match task {
+        Task::Exit => true,
+        Task::Batch(tasks) => tasks.iter().any(contains_exit_task),
         _ => false,
     }
 }
@@ -10235,6 +10854,25 @@ fn contains_tray_subscription(subscription: &Subscription<Message>) -> bool {
         Subscription::None => false,
         Subscription::Batch(values) => values.iter().any(contains_tray_subscription),
         Subscription::Event { kind, .. } => matches!(kind, SubscriptionKind::Tray),
+    }
+}
+
+fn contains_main_window_subscription(subscription: &Subscription<Message>) -> bool {
+    match subscription {
+        Subscription::None => false,
+        Subscription::Batch(values) => values.iter().any(contains_main_window_subscription),
+        Subscription::Event { kind, map } => {
+            let SubscriptionKind::Window(id) = kind else {
+                return false;
+            };
+
+            id.as_str() == "main"
+                && map(PlatformEvent::Window(WindowEvent::CloseRequested(
+                    WindowId::new("main"),
+                ))) == Some(Message::WindowEvent(WindowEvent::CloseRequested(
+                    WindowId::new("main"),
+                )))
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 use base64::Engine;
 use easydict_app::protocol::{ImportedMdxDictionarySnapshot, MdxLookupParams, SettingsSnapshot};
 use easydict_app::{
-    detect_mdx_file_encryption_mode, discover_mdd_file_paths,
+    detect_mdx_file_encryption_mode, discover_mdd_file_paths, inline_mdd_resources_in_html,
     inline_mdd_resources_in_html_with_factory, mdx_decode_base64_regcode, mdx_decrypt_block,
     mdx_decrypt_regcode_by_device_id, mdx_decrypt_regcode_by_email, mdx_fast_decrypt,
     mdx_ripemd128, mdx_salsa20_8, mime_type_for_mdd_resource_key, native_mdx_lookup_can_route,
@@ -634,6 +634,42 @@ fn native_mdd_resource_lookup_reads_real_rs_mdict_mdd_fixture() {
     assert_eq!(logo.key, r"\images\logo.png");
     assert_eq!(logo.mime_type, "image/png");
     assert_eq!(logo.data, b"\x89PNG");
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
+}
+
+#[test]
+fn native_mdd_resource_lookup_reads_record_encrypted_mdd_with_dictionary_credentials() {
+    let temp_dir = unique_temp_dir("easydict-native-mdd-encrypted-real-fixture");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mdx_path = temp_dir.join("Secure Demo.mdx");
+    let mdd_path = temp_dir.join("Secure Demo.mdd");
+    let regcode = "MDEyMzQ1Njc4OTo7PD0+Pw==";
+    let email = "email@example.com";
+    write_record_encrypted_mdx_fixture(&mdx_path, regcode, email);
+    write_record_encrypted_mdd_fixture(
+        &mdd_path,
+        regcode,
+        email,
+        &[(r"\images\secret.png", b"\x89PNG".as_slice())],
+    );
+
+    let mut dictionary = mdx_dictionary(true, []);
+    dictionary.file_path = path_string(&mdx_path);
+    dictionary.regcode = Some(regcode.to_string());
+    dictionary.email = Some(email.to_string());
+    dictionary.mdd_file_paths = vec![path_string(&mdd_path)];
+
+    let image = run_native_mdd_resource_lookup(&dictionary, "images/secret.png")
+        .expect("encrypted MDD lookup should not fail")
+        .expect("encrypted MDD resource should exist");
+    assert_eq!(image.key, r"\images\secret.png");
+    assert_eq!(image.mime_type, "image/png");
+    assert_eq!(image.data, b"\x89PNG");
+
+    let html = inline_mdd_resources_in_html(&dictionary, r#"<img src="images/secret.png">"#)
+        .expect("encrypted MDD HTML inline should not fail");
+    assert!(html.contains(r#"src="data:image/png;base64,iVBORw==""#));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
@@ -1287,6 +1323,75 @@ fn write_minimal_mdd_fixture(path: &Path, resources: &[(&str, &[u8])]) {
         .expect("MDD record block should be written");
 }
 
+fn write_record_encrypted_mdd_fixture(
+    path: &Path,
+    regcode: &str,
+    email: &str,
+    resources: &[(&str, &[u8])],
+) {
+    assert!(!resources.is_empty());
+
+    let mut file = fs::File::create(path).expect("encrypted MDD fixture should be created");
+    let header_text = r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" Encrypted="1" />"#;
+    let header_bytes = utf16_le(header_text);
+    write_u32_be_file(&mut file, header_bytes.len() as u32);
+    file.write_all(&header_bytes)
+        .expect("encrypted MDD header should be written");
+    file.write_all(&0u32.to_be_bytes())
+        .expect("encrypted MDD header checksum should be written");
+
+    let mut key_block_payload = Vec::new();
+    let mut record_payload = Vec::new();
+    for (key, data) in resources {
+        push_u64_be_vec(&mut key_block_payload, record_payload.len() as u64);
+        key_block_payload.extend_from_slice(&utf16_le(key));
+        key_block_payload.extend_from_slice(&[0, 0]);
+        record_payload.extend_from_slice(data);
+    }
+
+    let key_block = mdd_none_block(&key_block_payload);
+    let key_info_payload = mdd_key_info_payload(
+        resources.first().expect("first resource").0,
+        resources.last().expect("last resource").0,
+        resources.len() as u64,
+        key_block.len() as u64,
+        key_block_payload.len() as u64,
+    );
+    let key_info = mdd_zlib_block(&key_info_payload);
+
+    let mut key_header = Vec::new();
+    push_u64_be_vec(&mut key_header, 1);
+    push_u64_be_vec(&mut key_header, resources.len() as u64);
+    push_u64_be_vec(&mut key_header, key_info_payload.len() as u64);
+    push_u64_be_vec(&mut key_header, key_info.len() as u64);
+    push_u64_be_vec(&mut key_header, key_block.len() as u64);
+
+    let regcode = mdx_decode_base64_regcode(regcode).expect("test regcode should be valid");
+    let key = mdx_decrypt_regcode_by_email(&regcode, email)
+        .expect("test email regcode should derive key header key");
+    let encrypted_key_header =
+        mdx_salsa20_8(&key_header, &key).expect("MDD key header should encrypt");
+    file.write_all(&encrypted_key_header)
+        .expect("encrypted MDD key header should be written");
+    file.write_all(&0u32.to_be_bytes())
+        .expect("encrypted MDD key header checksum should be written");
+
+    file.write_all(&key_info)
+        .expect("encrypted MDD key info should be written");
+    file.write_all(&key_block)
+        .expect("encrypted MDD key block should be written");
+
+    let record_block = mdx_encrypt_block(&mdd_none_block(&record_payload));
+    write_u64_be_file(&mut file, 1);
+    write_u64_be_file(&mut file, resources.len() as u64);
+    write_u64_be_file(&mut file, 16);
+    write_u64_be_file(&mut file, record_block.len() as u64);
+    write_u64_be_file(&mut file, record_block.len() as u64);
+    write_u64_be_file(&mut file, record_payload.len() as u64);
+    file.write_all(&record_block)
+        .expect("encrypted MDD record block should be written");
+}
+
 fn mdd_key_info_payload(
     first_key: &str,
     last_key: &str,
@@ -1607,7 +1712,11 @@ impl RecordingMddReaderFactory {
 impl NativeMddResourceReaderFactory for RecordingMddReaderFactory {
     type Reader = RecordingMddReader;
 
-    fn open_mdd(&mut self, path: &str) -> Result<Self::Reader, NativeMddResourceError> {
+    fn open_mdd(
+        &mut self,
+        _dictionary: &ImportedMdxDictionarySnapshot,
+        path: &str,
+    ) -> Result<Self::Reader, NativeMddResourceError> {
         self.opened.push(path.to_string());
         self.readers
             .pop_front()

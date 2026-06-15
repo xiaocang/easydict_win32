@@ -91,7 +91,7 @@ const RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY_FILE_NAMES: &[&str] = &[
 const RUST_ONLY_FORBIDDEN_REASON: &str =
     "Rust-only packages must not ship retained .NET workers or bundled .NET runtime";
 const RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON: &str =
-    "Rust-only packages must not ship payload files that contain .NET host/runtime markers";
+    "Rust-only packages must not ship payload files that contain .NET host/runtime or script runtime markers";
 const RUST_ONLY_FORBIDDEN_LINKED_PAYLOAD_REASON: &str =
     "Rust-only package inputs must not use symlink or reparse-point payload entries";
 const RUST_ONLY_DOTNET_CONTENT_MARKERS: &[&[u8]] = &[
@@ -107,6 +107,11 @@ const RUST_ONLY_DOTNET_CONTENT_MARKERS: &[&[u8]] = &[
     b"This application requires .NET",
     b"Easydict.CompatHost",
     b"Easydict.Workers.",
+    b"powershell.exe",
+    b"pwsh.exe",
+    b"System.Speech",
+    b"System.Management.Automation",
+    b"WIN_FLUENT_TTS_TEXT",
 ];
 const NO_RETAINED_WORKERS_FORBIDDEN_REASON: &str =
     "Packages without retained .NET workers must not ship retained workers or bundled .NET runtime";
@@ -2091,10 +2096,28 @@ fn is_forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
 
 fn bytes_contain_dotnet_content_marker(bytes: &[u8]) -> bool {
     RUST_ONLY_DOTNET_CONTENT_MARKERS.iter().any(|marker| {
-        bytes
+        bytes_contain_ascii_case_insensitive(bytes, marker)
+            || bytes_contain_utf16le_ascii_case_insensitive(bytes, marker)
+    })
+}
+
+fn bytes_contain_ascii_case_insensitive(bytes: &[u8], marker: &[u8]) -> bool {
+    !marker.is_empty()
+        && bytes
             .windows(marker.len())
             .any(|window| window.eq_ignore_ascii_case(marker))
-    })
+}
+
+fn bytes_contain_utf16le_ascii_case_insensitive(bytes: &[u8], marker: &[u8]) -> bool {
+    let marker_len = marker.len().saturating_mul(2);
+    !marker.is_empty()
+        && bytes.len() >= marker_len
+        && bytes.windows(marker_len).any(|window| {
+            window
+                .chunks_exact(2)
+                .zip(marker)
+                .all(|(left, right)| left[1] == 0 && left[0].eq_ignore_ascii_case(right))
+        })
 }
 
 fn retained_workers_required(manifest: &ManifestInfo) -> bool {
@@ -2626,6 +2649,90 @@ mod tests {
                 }
             )],
             "Rust-only MSIX validation should reject allowlisted helper names when their contents look like a retained .NET apphost"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_utf16le_dotnet_host_markers() {
+        let path = temp_msix_path("rust-only-helper-dotnet-marker-utf16");
+        let mut entries: Vec<(&str, &[u8])> = rust_helper_entries().into_iter().collect();
+        let utf16_marker =
+            utf16le_bytes("renamed apphost marker: HostFxR.DLL System.Private.CoreLib");
+        for entry in &mut entries {
+            if entry.0 == "easydict_cli.exe" {
+                entry.1 = &utf16_marker;
+            }
+        }
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "easydict_cli.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON,
+                }
+            )],
+            "Rust-only MSIX validation should reject UTF-16LE retained .NET host markers in renamed helpers"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_script_tts_markers() {
+        let path = temp_msix_path("rust-only-helper-script-tts-marker");
+        let mut entries: Vec<(&str, &[u8])> = rust_helper_entries().into_iter().collect();
+        for entry in &mut entries {
+            if entry.0 == "easydict_cli.exe" {
+                entry.1 = b"stale script backend marker: powershell.exe System.Speech.Synthesis";
+            }
+        }
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "easydict_cli.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON,
+                }
+            )],
+            "Rust-only MSIX validation should reject PowerShell/System.Speech script backend markers in renamed helpers"
         );
         let _ = fs::remove_file(path);
     }
@@ -3628,6 +3735,88 @@ mod tests {
     }
 
     #[test]
+    fn prepare_package_inputs_rejects_utf16le_dotnet_apphost_marker_before_manifest_write() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-content-marker-utf16-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(
+            temp.path(),
+            "native-support/easydict_support.exe",
+            &utf16le_bytes("renamed apphost marker: HOSTFXR.DLL System.Private.CoreLib"),
+        );
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "native-support/easydict_support.exe".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON
+            }
+        );
+        assert!(
+            !output_manifest.exists(),
+            "rust-only prepare-package-inputs must reject UTF-16LE .NET apphost bytes before writing a prepared manifest"
+        );
+    }
+
+    #[test]
+    fn prepare_package_inputs_rejects_script_tts_marker_before_manifest_write() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-script-tts-marker-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        write_test_file(
+            temp.path(),
+            "native-support/easydict_support.exe",
+            b"stale script backend marker: powershell.exe Add-Type -AssemblyName System.Speech",
+        );
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "native-support/easydict_support.exe".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON
+            }
+        );
+        assert!(
+            !output_manifest.exists(),
+            "rust-only prepare-package-inputs must reject script/TTS backend bytes before writing a prepared manifest"
+        );
+    }
+
+    #[test]
     fn prepare_package_inputs_rejects_linked_retained_runtime_root_before_manifest_write() {
         let temp = tempfile::Builder::new()
             .prefix("easydict-msix-prepare-rust-only-runtime-link-")
@@ -3958,6 +4147,48 @@ mod tests {
                 package: "Easydict-x64.appx".to_string(),
                 error: ValidationError::ForbiddenPayload {
                     path: "easydict_long_doc.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON,
+                },
+            }
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_rust_only_rejects_nested_helper_script_tts_markers() {
+        let path = temp_msix_path("bundle-rust-only-helper-script-tts-marker")
+            .with_extension("msixbundle");
+        let mut package_entries = rust_helper_entries();
+        for entry in &mut package_entries {
+            if entry.0 == "easydict_browser_registrar.exe" {
+                entry.1 =
+                    b"stale script backend marker: powershell.exe System.Management.Automation";
+            }
+        }
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "x64",
+            ),
+            &package_entries,
+        );
+        write_bundle(&path, &[("Easydict-x64.appx", &package)]);
+
+        let options = BundleMinVersionOptions {
+            runtime_profile: Some(PackageRuntimeProfile::RustOnly),
+            ..BundleMinVersionOptions::default()
+        };
+        let error = verify_bundle_min_version(&path, &options)
+            .expect_err("rust-only bundle should reject helper script/TTS markers");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::PackageManifest {
+                package: "Easydict-x64.appx".to_string(),
+                error: ValidationError::ForbiddenPayload {
+                    path: "easydict_browser_registrar.exe".to_string(),
                     reason: RUST_ONLY_FORBIDDEN_PAYLOAD_CONTENT_REASON,
                 },
             }
@@ -4420,6 +4651,12 @@ mod tests {
             fs::create_dir_all(parent).expect("create test parent");
         }
         fs::write(path, contents).expect("write test file");
+    }
+
+    fn utf16le_bytes(text: &str) -> Vec<u8> {
+        text.encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>()
     }
 
     fn create_required_msix_assets(root: &Path) {

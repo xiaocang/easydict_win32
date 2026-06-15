@@ -20,8 +20,24 @@ fn native_bridge_binary_signals_rs_ocr_event_not_legacy_dotnet_event() {
         "NativeBridge binary should signal the rs-specific OCR named event constant"
     );
     assert!(
+        bridge_bin.contains("[easydict-native-bridge]"),
+        "native bridge binary error prefix should use the Rust helper name"
+    );
+    assert!(
         !bridge_bin.contains(r"Local\Easydict-OcrTranslate"),
         "NativeBridge binary must not hard-code the legacy dotnet OCR event"
+    );
+    assert!(
+        !bridge_bin.contains("Easydict NativeBridge"),
+        "native bridge binary should not expose the legacy .NET helper name in errors"
+    );
+    assert!(
+        !bridge_bin.contains("win_fluent_platform_win"),
+        "native bridge binary should signal named events through the Rust-owned IPC helper"
+    );
+    assert!(
+        bridge_bin.contains("easydict_windows_ipc::signal_named_event"),
+        "native bridge binary should keep the signal boundary in lib/easydict-windows-ipc"
     );
 }
 
@@ -57,6 +73,27 @@ fn native_bridge_signals_ocr_and_writes_success_response() {
     assert_eq!(
         decode_single_response(&output),
         BridgeResponse::new(true, OCR_TRANSLATE_ACTION)
+    );
+}
+
+#[test]
+fn native_bridge_reports_false_when_ocr_event_is_not_available() {
+    let input = encode_native_message(&serde_json::json!({ "action": OCR_TRANSLATE_ACTION }))
+        .expect("input frame");
+    let mut output = Vec::new();
+    let mut signal_count = 0usize;
+
+    let responses = run_native_bridge(Cursor::new(input), &mut output, || {
+        signal_count += 1;
+        Ok(false)
+    })
+    .expect("bridge loop");
+
+    assert_eq!(responses, 1);
+    assert_eq!(signal_count, 1);
+    assert_eq!(
+        decode_single_response(&output),
+        BridgeResponse::new(false, OCR_TRANSLATE_ACTION)
     );
 }
 
@@ -121,6 +158,7 @@ fn native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_sign
     );
     for forbidden in [
         "Easydict.NativeBridge",
+        "Easydict NativeBridge",
         "CompatHost",
         ".NET",
         "dotnet",

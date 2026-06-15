@@ -270,6 +270,11 @@ impl<Message> TrayMenu<Message> {
         self.items.push(item);
         self
     }
+
+    pub fn separator(mut self) -> Self {
+        self.items.push(TrayMenuItem::separator());
+        self
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -278,6 +283,8 @@ pub struct TrayMenuItem<Message> {
     pub label: String,
     pub action: Action<Message>,
     pub enabled: bool,
+    pub children: Vec<TrayMenuItem<Message>>,
+    pub separator: bool,
 }
 
 impl<Message> TrayMenuItem<Message> {
@@ -287,7 +294,24 @@ impl<Message> TrayMenuItem<Message> {
             label: label.into(),
             action: Action::None,
             enabled: true,
+            children: Vec::new(),
+            separator: false,
         }
+    }
+
+    pub fn separator() -> Self {
+        Self {
+            id: String::new(),
+            label: String::new(),
+            action: Action::None,
+            enabled: false,
+            children: Vec::new(),
+            separator: true,
+        }
+    }
+
+    pub fn submenu(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self::new(id, label)
     }
 
     pub fn on_invoke(mut self, message: Message) -> Self {
@@ -298,6 +322,19 @@ impl<Message> TrayMenuItem<Message> {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
+    }
+
+    pub fn item(mut self, item: TrayMenuItem<Message>) -> Self {
+        self.children.push(item);
+        self
+    }
+
+    pub fn is_separator(&self) -> bool {
+        self.separator
+    }
+
+    pub fn is_submenu(&self) -> bool {
+        !self.children.is_empty()
     }
 }
 

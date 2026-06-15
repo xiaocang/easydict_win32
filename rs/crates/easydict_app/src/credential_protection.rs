@@ -8,12 +8,13 @@ use base64::{
     engine::general_purpose::{self, GeneralPurpose, GeneralPurposeConfig},
     Engine as _,
 };
+use easydict_windows_credentials::{
+    protect_data, read_local_machine_registry_value_string, unprotect_data, DataProtectionScope,
+    WindowsCredentialsError,
+};
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::digest;
 use ring::rand::{SecureRandom, SystemRandom};
-use win_fluent_platform_win::{
-    WindowsDataProtectionScope, WindowsPlatformAdapter, WindowsPlatformError,
-};
 
 const PROTECTED_VALUE_PREFIX: &str = "edcred1:";
 const LEGACY_PROTECTED_VALUE_PREFIX: &str = "edloc1:";
@@ -47,10 +48,10 @@ impl CredentialProtectionScope {
         }
     }
 
-    fn platform_scope(self) -> WindowsDataProtectionScope {
+    fn platform_scope(self) -> DataProtectionScope {
         match self {
-            Self::CurrentUser => WindowsDataProtectionScope::CurrentUser,
-            Self::LocalMachine => WindowsDataProtectionScope::LocalMachine,
+            Self::CurrentUser => DataProtectionScope::CurrentUser,
+            Self::LocalMachine => DataProtectionScope::LocalMachine,
         }
     }
 }
@@ -64,7 +65,7 @@ pub struct CredentialPlaintext {
 
 #[derive(Debug)]
 pub enum CredentialProtectionError {
-    Platform(WindowsPlatformError),
+    Platform(WindowsCredentialsError),
     InvalidProtectedValue,
     InvalidUtf8,
     LegacyCrypto,
@@ -83,8 +84,8 @@ impl fmt::Display for CredentialProtectionError {
     }
 }
 
-impl From<WindowsPlatformError> for CredentialProtectionError {
-    fn from(error: WindowsPlatformError) -> Self {
+impl From<WindowsCredentialsError> for CredentialProtectionError {
+    fn from(error: WindowsCredentialsError) -> Self {
         Self::Platform(error)
     }
 }
@@ -108,7 +109,7 @@ pub fn protect_credential_with_scope(
         return Ok(String::new());
     }
 
-    let protected_bytes = WindowsPlatformAdapter::protect_data(
+    let protected_bytes = protect_data(
         plaintext.as_bytes(),
         &dpapi_optional_entropy(scope),
         scope.platform_scope(),
@@ -264,7 +265,7 @@ fn try_unprotect_single(protected_value: &str, machine_id: Option<&str>) -> Opti
 fn try_unprotect_dpapi(protected_value: &str) -> Option<String> {
     let (scope, payload) = parse_dpapi_protected_value(protected_value)?;
     let protected_bytes = base64_decode(payload).ok()?;
-    let plaintext = WindowsPlatformAdapter::unprotect_data(
+    let plaintext = unprotect_data(
         &protected_bytes,
         &dpapi_optional_entropy(scope),
         scope.platform_scope(),
@@ -402,7 +403,7 @@ fn create_machine_id() -> String {
 }
 
 fn machine_guid_hash() -> Option<String> {
-    let machine_guid = WindowsPlatformAdapter::read_local_machine_registry_value_string(
+    let machine_guid = read_local_machine_registry_value_string(
         r"SOFTWARE\Microsoft\Cryptography",
         Some("MachineGuid"),
     )

@@ -22,6 +22,7 @@ pub struct ZipDirectoryOutcome {
     pub bytes_written: u64,
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtractDotnetRuntimeOptions {
     pub rid: String,
@@ -30,6 +31,7 @@ pub struct ExtractDotnetRuntimeOptions {
     pub runtime_profile: PackageRuntimeProfile,
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtractDotnetRuntimeOutcome {
     pub bundled_version: String,
@@ -37,12 +39,14 @@ pub struct ExtractDotnetRuntimeOutcome {
     pub archive_bytes: u64,
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageRuntimeProfile {
     Hybrid,
     RustOnly,
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 impl PackageRuntimeProfile {
     pub fn parse_explicit(value: &str) -> Option<Self> {
         let normalized = normalize_runtime_profile(value);
@@ -52,7 +56,6 @@ impl PackageRuntimeProfile {
         runtime_profile_is_rust_only(&normalized).then_some(Self::RustOnly)
     }
 
-    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn parse_environment(value: &str) -> Self {
         let normalized = normalize_runtime_profile(value);
         if normalized == "hybrid" {
@@ -146,6 +149,7 @@ pub enum ZipDirectoryError {
     Zip(String),
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 #[derive(Debug, Eq, PartialEq)]
 pub enum ExtractDotnetRuntimeError {
     RuntimeProfileMustBeHybrid(PackageRuntimeProfile),
@@ -268,6 +272,7 @@ impl fmt::Display for ZipDirectoryError {
 
 impl std::error::Error for ZipDirectoryError {}
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 impl fmt::Display for ExtractDotnetRuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -312,6 +317,7 @@ impl fmt::Display for ExtractDotnetRuntimeError {
     }
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 impl std::error::Error for ExtractDotnetRuntimeError {}
 
 impl fmt::Display for BuildRustHelpersError {
@@ -865,11 +871,14 @@ pub fn validate_rs_portable_payload(
         ));
     }
 
-    let missing_entries = RUST_PORTABLE_REQUIRED_ENTRIES
+    let mut missing_entries = RUST_PORTABLE_REQUIRED_ENTRIES
         .iter()
         .filter(|entry| !entries.iter().any(|actual| actual == **entry))
         .map(|entry| (*entry).to_string())
         .collect::<Vec<_>>();
+    missing_entries.extend(rust_portable_invalid_required_entries(path)?);
+    missing_entries.sort();
+    missing_entries.dedup();
     if !missing_entries.is_empty() {
         return Err(ValidateRustPortableError::MissingRequiredEntries(
             missing_entries,
@@ -1000,6 +1009,7 @@ where
     Ok(canonical_source.starts_with(canonical_built_dir))
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 pub fn extract_dotnet_runtime_archive(
     archive_path: &Path,
     output_dir: &Path,
@@ -1095,6 +1105,7 @@ pub fn extract_dotnet_runtime_archive(
     })
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 pub fn dotnet_runtime_url(version: &str, rid: &str) -> String {
     format!(
         "https://builds.dotnet.microsoft.com/dotnet/Runtime/{version}/dotnet-runtime-{version}-{rid}.zip"
@@ -1125,10 +1136,12 @@ fn validate_extract_dotnet_runtime_profile(
     Ok(())
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn normalize_runtime_profile(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn runtime_profile_is_rust_only(normalized: &str) -> bool {
     matches!(normalized, "rust-only" | "rustonly" | "rust_only")
 }
@@ -1149,21 +1162,6 @@ const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
     "easydict_cli.exe",
     "easydict_long_doc.exe",
     "README-portable.txt",
-];
-
-const RUST_PORTABLE_DOTNET_CONTENT_MARKERS: &[&[u8]] = &[
-    b"hostfxr.dll",
-    b"hostpolicy.dll",
-    b"coreclr.dll",
-    b"clrjit.dll",
-    b"singlefilehost.exe",
-    b"System.Private.CoreLib",
-    b"Microsoft.NETCore.App",
-    b".runtimeconfig.json",
-    b".deps.json",
-    b"This application requires .NET",
-    b"Easydict.CompatHost",
-    b"Easydict.Workers.",
 ];
 
 pub const BROWSER_EXTENSION_COMMON_FILES: &[&str] = &[
@@ -1906,6 +1904,93 @@ fn rust_portable_zip_entries(
     Ok(entries)
 }
 
+fn rust_portable_invalid_required_entries(
+    package_path: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    if package_path.is_dir() {
+        rust_portable_directory_invalid_required_entries(package_path)
+    } else {
+        rust_portable_zip_invalid_required_entries(package_path)
+    }
+}
+
+fn rust_portable_directory_invalid_required_entries(
+    package_dir: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    let mut invalid_entries = Vec::new();
+    for entry_name in RUST_PORTABLE_REQUIRED_ENTRIES {
+        let path = rust_portable_entry_path(package_dir, entry_name);
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                invalid_entries.push((*entry_name).to_string());
+                continue;
+            }
+            Err(error) => {
+                return Err(ValidateRustPortableError::Io {
+                    path,
+                    message: error.to_string(),
+                });
+            }
+        };
+
+        if !metadata.is_file() || metadata.len() == 0 {
+            invalid_entries.push((*entry_name).to_string());
+        }
+    }
+
+    Ok(invalid_entries)
+}
+
+fn rust_portable_zip_invalid_required_entries(
+    archive_path: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    let file = File::open(archive_path).map_err(|error| ValidateRustPortableError::Io {
+        path: archive_path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+    let mut required_entries = RUST_PORTABLE_REQUIRED_ENTRIES
+        .iter()
+        .map(|entry_name| (*entry_name, false))
+        .collect::<Vec<_>>();
+
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+        let original_name = entry.name().to_string();
+        if archive_entry_path_is_unsafe(&original_name) || entry.is_symlink() {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                original_name,
+            ));
+        }
+        let Some(enclosed_name) = entry.enclosed_name() else {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                original_name,
+            ));
+        };
+        let name = rust_portable_path_entry_name(&enclosed_name)
+            .ok_or_else(|| ValidateRustPortableError::InvalidArchiveEntry(original_name.clone()))?;
+        let Some((_, is_valid)) = required_entries
+            .iter_mut()
+            .find(|(entry_name, _)| *entry_name == name)
+        else {
+            continue;
+        };
+
+        if !entry.is_dir() && entry.size() > 0 {
+            *is_valid = true;
+        }
+    }
+
+    Ok(required_entries
+        .into_iter()
+        .filter_map(|(entry_name, is_valid)| (!is_valid).then_some(entry_name.to_string()))
+        .collect())
+}
+
 fn rust_portable_allowlisted_executable_dotnet_marker_entries(
     package_path: &Path,
 ) -> Result<Vec<String>, ValidateRustPortableError> {
@@ -2087,24 +2172,7 @@ fn rust_portable_entry_is_allowlisted_executable(entry_name: &str) -> bool {
 }
 
 fn rust_portable_bytes_contain_dotnet_marker(bytes: &[u8]) -> bool {
-    RUST_PORTABLE_DOTNET_CONTENT_MARKERS
-        .iter()
-        .any(|marker| rust_portable_bytes_contain_ascii_case_insensitive(bytes, marker))
-}
-
-fn rust_portable_bytes_contain_ascii_case_insensitive(bytes: &[u8], marker: &[u8]) -> bool {
-    !marker.is_empty()
-        && bytes
-            .windows(marker.len())
-            .any(|window| rust_portable_ascii_bytes_eq_ignore_case(window, marker))
-}
-
-fn rust_portable_ascii_bytes_eq_ignore_case(left: &[u8], right: &[u8]) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .zip(right)
-            .all(|(left, right)| left.to_ascii_lowercase() == right.to_ascii_lowercase())
+    easydict_runtime_guards::bytes_contain_retained_runtime_marker(bytes)
 }
 
 fn rust_portable_entry_contains_dotnet_runtime_layout(components: &[&str]) -> bool {
@@ -2251,6 +2319,7 @@ fn validate_runtime_rid(rid: &str) -> Result<(), ExtractDotnetRuntimeError> {
     }
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn first_directory_name(path: &Path) -> Result<String, ExtractDotnetRuntimeError> {
     let mut directories = fs::read_dir(path)
         .map_err(|error| ExtractDotnetRuntimeError::Io {
@@ -2270,6 +2339,7 @@ fn first_directory_name(path: &Path) -> Result<String, ExtractDotnetRuntimeError
         .ok_or_else(|| ExtractDotnetRuntimeError::MissingBundledVersion(path.to_path_buf()))
 }
 
+#[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn directory_size(path: &Path) -> Result<u64, ExtractDotnetRuntimeError> {
     let mut total = 0;
     for entry in fs::read_dir(path).map_err(|error| ExtractDotnetRuntimeError::Io {
@@ -2467,6 +2537,62 @@ mod tests {
     }
 
     #[test]
+    fn validate_rs_portable_rejects_required_exe_directory_or_empty_entries() {
+        let package = tempfile_dir("rs-portable-invalid-required-entry-shape");
+        write_rust_portable_allowed_payload(&package);
+        fs::remove_file(rust_portable_entry_path(&package, "easydict_cli.exe"))
+            .expect("remove helper exe fixture");
+        fs::create_dir(rust_portable_entry_path(&package, "easydict_cli.exe"))
+            .expect("create directory with helper exe name");
+        fs::write(
+            rust_portable_entry_path(&package, "easydict_long_doc.exe"),
+            b"",
+        )
+        .expect("write empty helper exe fixture");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::MissingRequiredEntries(entries) = error else {
+            panic!("expected missing/invalid required entries");
+        };
+        assert_eq!(
+            entries,
+            vec![
+                "easydict_cli.exe".to_string(),
+                "easydict_long_doc.exe".to_string()
+            ]
+        );
+
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create invalid required entry shape zip");
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::MissingRequiredEntries(entries) = error else {
+            panic!("expected missing/invalid ZIP required entries");
+        };
+        assert_eq!(
+            entries,
+            vec![
+                "easydict_cli.exe".to_string(),
+                "easydict_long_doc.exe".to_string()
+            ]
+        );
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
     fn validate_rs_portable_rejects_unknown_payload_outside_first_release_allowlist() {
         let package = tempfile_dir("rs-portable-unknown-payload");
         write_rust_portable_allowed_payload(&package);
@@ -2501,7 +2627,12 @@ Microsoft.NETCore.App\n\
 .deps.json\n\
 This application requires .NET\n\
 Easydict.CompatHost\n\
-Easydict.Workers.LocalAi\n";
+Easydict.Workers.LocalAi\n\
+powershell.exe\n\
+PwSh.ExE\n\
+System.Speech.Synthesis\n\
+System.Management.Automation\n\
+WIN_FLUENT_TTS_TEXT\n";
         for entry in [
             "Easydict.Rust.exe",
             "easydict-native-bridge.exe",
@@ -2558,6 +2689,115 @@ Easydict.Workers.LocalAi\n";
         );
         let _ = fs::remove_dir_all(package);
         let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_allowlisted_exe_that_contains_utf16le_dotnet_markers() {
+        let package = tempfile_dir("rs-portable-allowlisted-exe-utf16-dotnet-marker");
+        write_rust_portable_allowed_payload(&package);
+        write_file(
+            &package,
+            "easydict_cli.exe",
+            &utf16le_ascii_bytes("This application requires .NET"),
+        );
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert_eq!(entries, vec!["easydict_cli.exe"]);
+
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create UTF-16 marker test zip");
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden ZIP entries");
+        };
+        assert_eq!(entries, vec!["easydict_cli.exe"]);
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_allowlisted_exe_that_contains_script_tts_markers() {
+        let package = tempfile_dir("rs-portable-allowlisted-exe-script-tts-marker");
+        write_rust_portable_allowed_payload(&package);
+        write_file(
+            &package,
+            "Easydict.Rust.exe",
+            b"stale script backend marker: powershell.exe Add-Type -AssemblyName System.Speech",
+        );
+        write_file(
+            &package,
+            "easydict_cli.exe",
+            &utf16le_ascii_bytes("stale TTS marker: WIN_FLUENT_TTS_TEXT pwsh.exe"),
+        );
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert_eq!(entries, vec!["Easydict.Rust.exe", "easydict_cli.exe"]);
+
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create script marker test zip");
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden ZIP entries");
+        };
+        assert_eq!(entries, vec!["Easydict.Rust.exe", "easydict_cli.exe"]);
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn rs_portable_content_marker_scanner_is_lib_owned() {
+        let source = include_str!("lib.rs");
+
+        assert!(
+            source
+                .contains("easydict_runtime_guards::bytes_contain_retained_runtime_marker(bytes)"),
+            "rs portable executable content scan should delegate to lib/easydict-runtime-guards"
+        );
+        for forbidden in [
+            concat!("RUST_PORTABLE_DOTNET", "_CONTENT_MARKERS"),
+            concat!("rust_portable_bytes_contain_ascii", "_case_insensitive"),
+            concat!(
+                "rust_portable_bytes_contain_utf16le",
+                "_ascii_case_insensitive"
+            ),
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "packager should not re-inline retained runtime byte scanner marker {forbidden}"
+            );
+        }
     }
 
     #[test]
@@ -3045,6 +3285,7 @@ Easydict.Workers.LocalAi\n";
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn extract_dotnet_runtime_archive_writes_standard_layout_and_strips_notices() {
         let source = tempfile_dir("dotnet-source");
         let hostfxr_bytes = deterministic_bytes(2 * 1024 * 1024, 0x1234_5678);
@@ -3083,6 +3324,7 @@ Easydict.Workers.LocalAi\n";
     }
 
     #[test]
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn extract_dotnet_runtime_archive_rejects_missing_layout() {
         let source = tempfile_dir("dotnet-bad-source");
         let bytes = deterministic_bytes(2 * 1024 * 1024, 0xfeed_beef);
@@ -3393,6 +3635,10 @@ Easydict.Workers.LocalAi\n";
         fs::write(path, bytes).expect("write file");
     }
 
+    fn utf16le_ascii_bytes(value: &str) -> Vec<u8> {
+        value.encode_utf16().flat_map(u16::to_le_bytes).collect()
+    }
+
     #[cfg(windows)]
     fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
         std::os::windows::fs::symlink_dir(target, link)
@@ -3505,6 +3751,7 @@ Easydict.Workers.LocalAi\n";
         entries
     }
 
+    #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
     fn deterministic_bytes(length: usize, seed: u32) -> Vec<u8> {
         let mut value = seed;
         let mut bytes = Vec::with_capacity(length);

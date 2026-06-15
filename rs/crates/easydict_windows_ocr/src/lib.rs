@@ -1,5 +1,7 @@
 use std::fmt;
 
+pub const DEFAULT_WINDOWS_OCR_RECOGNIZE_TIMEOUT_MS: u64 = 30_000;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowsOcrResult {
     pub lines: Vec<WindowsOcrLine>,
@@ -42,6 +44,26 @@ impl fmt::Display for WindowsOcrError {
 }
 
 impl std::error::Error for WindowsOcrError {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum EngineCreationAttempt {
+    PreferredLanguage(String),
+    UserProfileLanguages,
+}
+
+fn engine_creation_attempts(preferred_language_tag: Option<&str>) -> Vec<EngineCreationAttempt> {
+    let mut attempts = Vec::with_capacity(2);
+    if let Some(tag) = preferred_language_tag.and_then(normalized_preferred_language_tag) {
+        attempts.push(EngineCreationAttempt::PreferredLanguage(tag.to_string()));
+    }
+    attempts.push(EngineCreationAttempt::UserProfileLanguages);
+    attempts
+}
+
+fn normalized_preferred_language_tag(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("auto")).then_some(trimmed)
+}
 
 #[cfg(windows)]
 pub fn is_available() -> bool {
@@ -91,31 +113,37 @@ pub fn recognize_bgra_file(
     preferred_language_tag: Option<&str>,
 ) -> Result<WindowsOcrResult, WindowsOcrError> {
     use std::fs;
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::Duration;
     use windows::Globalization::Language;
     use windows::Graphics::Imaging::{BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap};
-    use windows::Media::Ocr::{OcrEngine, OcrLine};
+    use windows::Media::Ocr::{OcrEngine, OcrLine, OcrResult as WinOcrResult};
     use windows::Storage::Streams::DataWriter;
 
     fn map_winrt_error(error: windows::core::Error) -> WindowsOcrError {
         WindowsOcrError::new(format!("Windows Native OCR failed: {error}"))
     }
 
-    fn non_auto_language(value: &str) -> Option<&str> {
-        let trimmed = value.trim();
-        (!trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("auto")).then_some(trimmed)
-    }
-
     fn create_engine(preferred_language_tag: Option<&str>) -> Option<OcrEngine> {
-        if let Some(tag) = preferred_language_tag.and_then(non_auto_language) {
-            let tag = windows::core::HSTRING::from(tag);
-            if let Ok(language) = Language::CreateLanguage(&tag) {
-                if let Ok(engine) = OcrEngine::TryCreateFromLanguage(&language) {
-                    return Some(engine);
+        for attempt in engine_creation_attempts(preferred_language_tag) {
+            match attempt {
+                EngineCreationAttempt::PreferredLanguage(tag) => {
+                    let tag = windows::core::HSTRING::from(tag);
+                    if let Ok(language) = Language::CreateLanguage(&tag) {
+                        if let Ok(engine) = OcrEngine::TryCreateFromLanguage(&language) {
+                            return Some(engine);
+                        }
+                    }
+                }
+                EngineCreationAttempt::UserProfileLanguages => {
+                    if let Ok(engine) = OcrEngine::TryCreateFromUserProfileLanguages() {
+                        return Some(engine);
+                    }
                 }
             }
         }
 
-        OcrEngine::TryCreateFromUserProfileLanguages().ok()
+        None
     }
 
     fn hstring_to_string(value: windows::core::HSTRING) -> String {
@@ -174,14 +202,26 @@ pub fn recognize_bgra_file(
     })?;
     validate_bgra_buffer(&pixel_data, pixel_width, pixel_height)?;
 
-    let writer = DataWriter::new().map_err(map_winrt_error)?;
-    writer.WriteBytes(&pixel_data).map_err(map_winrt_error)?;
-    let buffer = writer.DetachBuffer().map_err(map_winrt_error)?;
+    let Some(engine) = create_engine(preferred_language_tag) else {
+        return Ok(WindowsOcrResult {
+            lines: Vec::new(),
+            text_angle: None,
+            detected_language: None,
+        });
+    };
+
+    let max_dimension = OcrEngine::MaxImageDimension().map_err(map_winrt_error)?;
+    validate_ocr_engine_image_dimensions(pixel_width, pixel_height, max_dimension)?;
 
     let width = i32::try_from(pixel_width)
         .map_err(|_| WindowsOcrError::new("OCR image dimensions are too large"))?;
     let height = i32::try_from(pixel_height)
         .map_err(|_| WindowsOcrError::new("OCR image dimensions are too large"))?;
+
+    let writer = DataWriter::new().map_err(map_winrt_error)?;
+    writer.WriteBytes(&pixel_data).map_err(map_winrt_error)?;
+    let buffer = writer.DetachBuffer().map_err(map_winrt_error)?;
+
     let bitmap = SoftwareBitmap::CreateWithAlpha(
         BitmapPixelFormat::Bgra8,
         width,
@@ -192,19 +232,29 @@ pub fn recognize_bgra_file(
     bitmap.CopyFromBuffer(&buffer).map_err(map_winrt_error)?;
     drop(pixel_data);
 
-    let Some(engine) = create_engine(preferred_language_tag) else {
-        return Ok(WindowsOcrResult {
-            lines: Vec::new(),
-            text_angle: None,
-            detected_language: None,
-        });
-    };
-
-    let win_result = engine
-        .RecognizeAsync(&bitmap)
-        .map_err(map_winrt_error)?
-        .join()
+    let operation = engine.RecognizeAsync(&bitmap).map_err(map_winrt_error)?;
+    let (sender, receiver) = mpsc::channel();
+    operation
+        .when(move |result: Result<WinOcrResult, windows::core::Error>| {
+            let _ = sender.send(result);
+        })
         .map_err(map_winrt_error)?;
+    let win_result = match receiver.recv_timeout(Duration::from_millis(
+        DEFAULT_WINDOWS_OCR_RECOGNIZE_TIMEOUT_MS,
+    )) {
+        Ok(result) => result.map_err(map_winrt_error)?,
+        Err(RecvTimeoutError::Timeout) => {
+            let _ = operation.Cancel();
+            return Err(windows_ocr_timeout_error(
+                DEFAULT_WINDOWS_OCR_RECOGNIZE_TIMEOUT_MS,
+            ));
+        }
+        Err(RecvTimeoutError::Disconnected) => {
+            return Err(WindowsOcrError::new(
+                "Windows Native OCR completion channel closed",
+            ));
+        }
+    };
     let win_lines = win_result.Lines().map_err(map_winrt_error)?;
     let mut lines = Vec::with_capacity(win_lines.Size().map_err(map_winrt_error)? as usize);
     for index in 0..win_lines.Size().map_err(map_winrt_error)? {
@@ -270,9 +320,56 @@ fn validate_bgra_buffer(bgra: &[u8], width: u32, height: u32) -> Result<(), Wind
     Ok(())
 }
 
+fn validate_ocr_engine_image_dimensions(
+    width: u32,
+    height: u32,
+    max_dimension: u32,
+) -> Result<(), WindowsOcrError> {
+    if max_dimension == 0 {
+        return Err(WindowsOcrError::new(
+            "Windows Native OCR reported an invalid maximum image dimension",
+        ));
+    }
+
+    if width > max_dimension || height > max_dimension {
+        return Err(WindowsOcrError::new(format!(
+            "OCR image dimensions exceed Windows Native OCR maximum {max_dimension}: {width}x{height}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn windows_ocr_timeout_error(timeout_ms: u64) -> WindowsOcrError {
+    WindowsOcrError::new(format!("Windows Native OCR timed out after {timeout_ms}ms"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn engine_creation_attempts_always_fall_back_to_user_profile_languages() {
+        assert_eq!(
+            engine_creation_attempts(Some(" zh-CN ")),
+            vec![
+                EngineCreationAttempt::PreferredLanguage("zh-CN".to_string()),
+                EngineCreationAttempt::UserProfileLanguages
+            ]
+        );
+        assert_eq!(
+            engine_creation_attempts(Some("auto")),
+            vec![EngineCreationAttempt::UserProfileLanguages]
+        );
+        assert_eq!(
+            engine_creation_attempts(Some("  ")),
+            vec![EngineCreationAttempt::UserProfileLanguages]
+        );
+        assert_eq!(
+            engine_creation_attempts(None),
+            vec![EngineCreationAttempt::UserProfileLanguages]
+        );
+    }
 
     #[cfg(not(windows))]
     #[test]
@@ -281,6 +378,56 @@ mod tests {
         assert_eq!(
             available_languages().expect("language status should be queryable"),
             Vec::new()
+        );
+    }
+
+    #[test]
+    fn ocr_engine_image_dimensions_accept_engine_limit() {
+        validate_ocr_engine_image_dimensions(1024, 768, 1024)
+            .expect("edge dimensions should be accepted");
+        validate_ocr_engine_image_dimensions(1, 1, 1)
+            .expect("minimum positive edge dimensions should be accepted");
+    }
+
+    #[test]
+    fn ocr_engine_image_dimensions_reject_width_above_engine_limit() {
+        let error = validate_ocr_engine_image_dimensions(1025, 768, 1024)
+            .expect_err("width above the engine limit should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "OCR image dimensions exceed Windows Native OCR maximum 1024: 1025x768"
+        );
+    }
+
+    #[test]
+    fn ocr_engine_image_dimensions_reject_height_above_engine_limit() {
+        let error = validate_ocr_engine_image_dimensions(640, 1025, 1024)
+            .expect_err("height above the engine limit should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "OCR image dimensions exceed Windows Native OCR maximum 1024: 640x1025"
+        );
+    }
+
+    #[test]
+    fn ocr_engine_image_dimensions_reject_invalid_zero_engine_limit() {
+        let error = validate_ocr_engine_image_dimensions(1, 1, 0)
+            .expect_err("invalid engine limit should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "Windows Native OCR reported an invalid maximum image dimension"
+        );
+    }
+
+    #[test]
+    fn windows_ocr_timeout_error_is_descriptive() {
+        assert_eq!(
+            DEFAULT_WINDOWS_OCR_RECOGNIZE_TIMEOUT_MS, 30_000,
+            "default timeout should stay intentionally generous for screenshot OCR"
+        );
+        assert_eq!(
+            windows_ocr_timeout_error(DEFAULT_WINDOWS_OCR_RECOGNIZE_TIMEOUT_MS).to_string(),
+            "Windows Native OCR timed out after 30000ms"
         );
     }
 

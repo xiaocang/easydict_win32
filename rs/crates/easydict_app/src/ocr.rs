@@ -335,8 +335,16 @@ pub fn windows_native_ocr_availability() -> Result<OcrAvailabilityDto, OcrBacken
 pub fn windows_native_ocr_availability_with_recognizer<W: WindowsNativeOcrRecognizer>(
     recognizer: &mut W,
 ) -> Result<OcrAvailabilityDto, OcrBackendError> {
+    let is_available = recognizer.is_available()?;
+    if !is_available {
+        return Ok(OcrAvailabilityDto {
+            is_available,
+            available_languages: Vec::new(),
+        });
+    }
+
     Ok(OcrAvailabilityDto {
-        is_available: recognizer.is_available()?,
+        is_available,
         available_languages: recognizer.available_languages()?,
     })
 }

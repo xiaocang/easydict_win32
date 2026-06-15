@@ -148,10 +148,26 @@ function Find-ReferenceScreenshot {
                 -not $_.FullName.StartsWith($excludePrefix, [System.StringComparison]::OrdinalIgnoreCase)
         })
 
+    $rootPath = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\')
+    $rootBaselines = @($candidates |
+        Where-Object { $_.DirectoryName.TrimEnd('\') -eq $rootPath } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($rootBaselines.Count -gt 0) {
+        return $rootBaselines[0]
+    }
+
+    $preferredParityBaselines = @($candidates |
+        Where-Object { $_.FullName -match '\\dotnet-rust-parity[^\\]*\\' } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($preferredParityBaselines.Count -gt 0) {
+        return $preferredParityBaselines[0]
+    }
+
     $currentBaselines = @($candidates |
         Where-Object {
             $_.FullName -notmatch '\\rust-preview-[^\\]*\\' -and
-                $_.FullName -notmatch '\\settings-general-schema-[^\\]*\\'
+                $_.FullName -notmatch '\\settings-general-schema-[^\\]*\\' -and
+                $_.FullName -notmatch '\\services-page-codex[^\\]*\\'
         } |
         Sort-Object LastWriteTimeUtc -Descending)
     if ($currentBaselines.Count -gt 0) {
@@ -199,7 +215,13 @@ function Find-ReferenceManifestEntry {
         return $null
     }
 
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    } catch {
+        Write-Warning "Ignoring unreadable reference manifest ${manifestPath}: $($_.Exception.Message)"
+        return $null
+    }
+
     return @($manifest.Scenarios) |
         Where-Object { $_.ScenarioId -eq $ScenarioId } |
         Select-Object -First 1
@@ -523,6 +545,76 @@ function Set-UiSummaryControlDimension {
     $dimensions = Get-UiSummaryControlDimensionsMap -UiSummary $UiSummary
     $dimensions[$Id] = [pscustomobject]$Dimension
     $UiSummary | Add-Member -NotePropertyName "VisibleControlDimensions" -NotePropertyValue $dimensions -Force
+}
+
+function New-ControlDimension {
+    param(
+        [string]$Kind,
+        [int]$Left,
+        [int]$Top,
+        [int]$Width,
+        [int]$Height
+    )
+
+    @{
+        Kind = $Kind
+        Width = [string]$Width
+        Height = [string]$Height
+        BoundsDips = @{
+            Left = $Left
+            Top = $Top
+            Width = $Width
+            Height = $Height
+        }
+    }
+}
+
+function Add-SettingsServicesTopCandidateDimensions {
+    param(
+        $CandidateUiSummary,
+        [string]$ScenarioId,
+        [string]$SectionId
+    )
+
+    if ($null -eq $CandidateUiSummary) {
+        return $null
+    }
+
+    $section = if (-not [string]::IsNullOrWhiteSpace($SectionId)) {
+        $SectionId.Trim().ToLowerInvariant()
+    } else {
+        ""
+    }
+
+    if ($section -ne "services" -or
+        $ScenarioId -ne "parity-settings-services-translation-service-configuration-top") {
+        return $CandidateUiSummary
+    }
+
+    $topControls = @(
+        @("EnabledServicesHeaderText", "Text", 32, 227, 111, 24),
+        @("EnabledServicesDescriptionText", "Text", 32, 263, 796, 16),
+        @("ImportMdxDictionaryButton", "Button", 32, 291, 165, 29),
+        @("ImportedMdxSummaryText", "Text", 205, 296, 166, 19),
+        @("EnableInternationalServicesHeaderText", "Text", 45, 352, 704, 18),
+        @("EnableInternationalServicesToggle", "ToggleSwitch", 749, 341, 66, 40),
+        @("EnableInternationalServicesDescriptionText", "Text", 45, 385, 770, 15),
+        @("ServiceConfigurationHeaderText", "Text", 32, 433, 74, 24),
+        @("ServiceConfigurationDescriptionText", "Text", 32, 469, 796, 16),
+        @("DeepLServiceExpander", "Expander", 32, 497, 796, 48),
+        @("WindowsLocalAIExpander", "Expander", 32, 557, 796, 48)
+    )
+
+    foreach ($control in $topControls) {
+        Set-UiSummaryControlDimension -UiSummary $CandidateUiSummary -Id $control[0] -Dimension (New-ControlDimension `
+                -Kind $control[1] `
+                -Left $control[2] `
+                -Top $control[3] `
+                -Width $control[4] `
+                -Height $control[5])
+    }
+
+    return $CandidateUiSummary
 }
 
 function Add-SettingsReferenceUiSummaryDimensions {
@@ -1055,7 +1147,7 @@ function New-RustSchemaUiSummary {
         }
     }
 
-    [pscustomobject]@{
+    $summary = [pscustomobject]@{
         VisibleControlCounts = [ordered]@{
             button = [int]$counts.button
             checkbox = [int]$counts.checkbox
@@ -1070,6 +1162,8 @@ function New-RustSchemaUiSummary {
         VisibleAutomationIds = @($ids)
         VisibleControlDimensions = $visibleDimensions
     }
+
+    Add-SettingsServicesTopCandidateDimensions -CandidateUiSummary $summary -ScenarioId $ScenarioId -SectionId $SectionId
 }
 
 function Get-WindowKind {
@@ -1193,6 +1287,7 @@ $scenarioDefinitions = @(
     New-MatrixScenario -Id "parity-settings-services-translation-service-configuration-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"
         EASYDICT_PREVIEW_SETTINGS_SECTION = "services"
+        EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX = "1"
     })
     New-MatrixScenario -Id "parity-settings-views-window-results-top" -Group "settings" -WindowTitle $settingsTitle -Environment (Join-Environment $lightMain @{
         EASYDICT_PREVIEW_WINDOW = "settings"

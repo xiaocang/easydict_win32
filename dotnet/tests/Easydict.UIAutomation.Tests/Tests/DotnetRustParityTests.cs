@@ -74,6 +74,10 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 ExpandDotnetAvailableLanguages(dotnetWindow, dotnetScrollViewer, step);
             }
+            if (!string.IsNullOrWhiteSpace(step.DotnetExpandElement))
+            {
+                ExpandDotnetSettingsExpander(dotnetWindow, dotnetScrollViewer, step);
+            }
 
             ScrollBothWindowsToPercent(dotnetScrollViewer, rustWindow, step);
             AssertCaptureStepReady(dotnetWindow, dotnetScrollViewer, rustWindow, step);
@@ -1562,6 +1566,75 @@ public sealed class DotnetRustParityTests : IDisposable
             .BeGreaterThanOrEqualTo(4, "expanded dotnet Available Languages should expose language choices before screenshot capture");
     }
 
+    private void ExpandDotnetSettingsExpander(
+        Window window,
+        AutomationElement scrollViewer,
+        SettingsParityCaptureStep step)
+    {
+        var automationId = step.DotnetExpandElement!;
+        CollapseVisibleDotnetServiceExpanders(window, scrollViewer, step);
+        var expander = ScrollHelper.ScrollToFind(
+                scrollViewer,
+                80,
+                () => FindVisibleByAutomationIdOrName(window, automationId),
+                message => _output.WriteLine($"[{step.Key}][dotnet] {message}"))
+            ?? Retry.WhileNull(
+                    () => FindVisibleByAutomationIdOrName(window, automationId),
+                    TimeSpan.FromSeconds(5))
+                .Result;
+        expander.Should().NotBeNull($"{automationId} should be visible before expanding");
+
+        var expandPattern = expander!.Patterns.ExpandCollapse.PatternOrDefault;
+        if (expandPattern != null)
+        {
+            if (expandPattern.ExpandCollapseState.Value != ExpandCollapseState.Expanded)
+            {
+                expandPattern.Expand();
+            }
+        }
+        else
+        {
+            UITestHelper.ClickElement(expander);
+        }
+
+        Thread.Sleep(700);
+    }
+
+    private void CollapseVisibleDotnetServiceExpanders(
+        Window window,
+        AutomationElement scrollViewer,
+        SettingsParityCaptureStep step)
+    {
+        if (step.Section != SettingsParitySection.Services)
+        {
+            return;
+        }
+
+        ScrollHelper.ScrollToPercent(
+            scrollViewer,
+            0,
+            message => _output.WriteLine($"[{step.Key}][dotnet] {message}"));
+
+        foreach (var automationId in new[]
+                 {
+                     "DeepLServiceExpander",
+                     "WindowsLocalAIExpander",
+                     "OllamaServiceExpander",
+                     "OpenAIServiceExpander",
+                     "DeepSeekServiceExpander",
+                     "GroqServiceExpander"
+                 })
+        {
+            var expander = FindVisibleByAutomationIdOrName(window, automationId);
+            var expandPattern = expander?.Patterns.ExpandCollapse.PatternOrDefault;
+            if (expandPattern?.ExpandCollapseState.Value == ExpandCollapseState.Expanded)
+            {
+                expandPattern.Collapse();
+                Thread.Sleep(120);
+            }
+        }
+    }
+
     private void AssertCaptureStepReady(
         Window dotnetWindow,
         AutomationElement dotnetScrollViewer,
@@ -2079,6 +2152,8 @@ public sealed class DotnetRustParityTests : IDisposable
         }
         finally
         {
+            Mouse.MoveTo(GetWindowRelativePoint(window, 0.03, 0.03));
+            Thread.Sleep(80);
             Mouse.Up(MouseButton.Left);
             Thread.Sleep(180);
         }
@@ -2632,7 +2707,73 @@ public sealed class DotnetRustParityTests : IDisposable
 
     private static IReadOnlyList<string> AdditionalRequiredSettingsSemanticTags(
         SettingsParityCaptureStep step)
-        => AdditionalRequiredSettingsSemanticTags(step.Section);
+    {
+        var tags = AdditionalRequiredSettingsSemanticTags(step.Section).ToList();
+        if (!string.IsNullOrWhiteSpace(step.DotnetExpandElement))
+        {
+            tags.Add(step.DotnetExpandElement);
+        }
+
+        if (string.Equals(step.RustExpandedServiceConfigurations, "deepl", StringComparison.OrdinalIgnoreCase))
+        {
+            tags.AddRange(
+            [
+                "DeepLKeyBox",
+                "DeepLKeyRevealButton",
+                "DeepLFreeCheck",
+                "DeepLQualityCheck",
+                "TestDeepLButton"
+            ]);
+        }
+        else if (string.Equals(
+            step.RustExpandedServiceConfigurations,
+            "windows-local-ai",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            tags.Add("LocalAIProviderCombo");
+            if (string.Equals(step.RustLocalAiProvider, "FoundryLocal", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.AddRange(
+                [
+                    "FoundryLocalEndpointBox",
+                    "FoundryLocalModelBox"
+                ]);
+            }
+            else if (string.Equals(step.RustLocalAiProvider, "WindowsAI", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.AddRange(
+                [
+                    "WindowsLocalAIStatusBar",
+                    "WindowsLocalAIPrepareButton"
+                ]);
+            }
+            else if (string.Equals(step.RustLocalAiProvider, "OpenVINO", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.AddRange(
+                [
+                    "OpenVinoStatusBar",
+                    "OpenVinoDownloadButton"
+                ]);
+            }
+            else
+            {
+                tags.AddRange(
+                [
+                    "WindowsLocalAIStatusBar",
+                    "WindowsLocalAIPrepareButton",
+                    "FoundryLocalEndpointBox",
+                    "FoundryLocalModelBox",
+                    "OpenVinoStatusBar",
+                    "OpenVinoDownloadButton"
+                ]);
+            }
+        }
+
+        return tags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
     private static IReadOnlyList<string> AdditionalRequiredSettingsSemanticTags(
         SettingsParitySection section)
@@ -3033,6 +3174,25 @@ public sealed class DotnetRustParityTests : IDisposable
                 visibleTexts.Add(toggleLabel);
             }
 
+            if (summaryKind == "CheckBox" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } checkBoxLabel)
+            {
+                visibleTexts.Add(checkBoxLabel);
+            }
+
+            if (summaryKind == "ComboBox" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } comboLabel)
+            {
+                visibleTexts.Add(comboLabel);
+            }
+
+            if (summaryKind == "TextEditor" &&
+                scope.ShouldIncludeTextEditorTextAsVisibleText(automationId) &&
+                TryExtractRustSchemaQuotedValue(trimmed, "placeholder") is { Length: > 0 } placeholder)
+            {
+                visibleTexts.Add(placeholder);
+            }
+
             if (summaryKind == "Expander" &&
                 TryExtractRustSchemaQuotedValue(trimmed, "title") is { Length: > 0 } expanderTitle)
             {
@@ -3042,7 +3202,8 @@ public sealed class DotnetRustParityTests : IDisposable
             }
 
             if (kind == "Text" &&
-                TryExtractRustSchemaQuotedValue(trimmed, "value") is { Length: > 0 } textValue)
+                TryExtractRustSchemaQuotedValue(trimmed, "value") is { Length: > 0 } textValue &&
+                !IsIconGlyphText(textValue))
             {
                 visibleTexts.Add(textValue);
             }
@@ -3295,16 +3456,29 @@ public sealed class DotnetRustParityTests : IDisposable
         return endQuote <= 1 ? null : value[1..endQuote];
     }
 
+    private static bool IsIconGlyphText(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("\\u{", StringComparison.OrdinalIgnoreCase) &&
+            trimmed.EndsWith("}", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return trimmed.Length == 1 && trimmed[0] is >= '\uE000' and <= '\uF8FF';
+    }
+
     private sealed class RustSchemaSummaryScope
     {
         private string _currentViewsWindow = string.Empty;
         private int _mainServiceCheckboxCount;
         private bool _lastMainServiceVisible;
-        private int _servicesExpanderCount;
+        private readonly string _servicesExpandedServiceConfigurations;
 
-        private RustSchemaSummaryScope(string sectionId)
+        private RustSchemaSummaryScope(string sectionId, string? servicesExpandedServiceConfigurations)
         {
             SectionId = sectionId;
+            _servicesExpandedServiceConfigurations = servicesExpandedServiceConfigurations ?? string.Empty;
         }
 
         public string SectionId { get; }
@@ -3312,7 +3486,7 @@ public sealed class DotnetRustParityTests : IDisposable
         public bool IsSettings => !string.IsNullOrWhiteSpace(SectionId);
 
         public static RustSchemaSummaryScope FromStep(SettingsParityCaptureStep? step) =>
-            new(step?.Section.Id ?? string.Empty);
+            new(step?.Section.Id ?? string.Empty, step?.RustExpandedServiceConfigurations);
 
         public void Update(string? automationId)
         {
@@ -3339,8 +3513,13 @@ public sealed class DotnetRustParityTests : IDisposable
         public bool ShouldIncludeTitleBarChrome() =>
             !IsSettings ||
             SectionId.Equals("general", StringComparison.OrdinalIgnoreCase) ||
+            SectionId.Equals("services", StringComparison.OrdinalIgnoreCase) ||
             SectionId.Equals("views", StringComparison.OrdinalIgnoreCase) ||
             SectionId.Equals("about", StringComparison.OrdinalIgnoreCase);
+
+        public bool ShouldIncludeTextEditorTextAsVisibleText(string? automationId) =>
+            !SectionId.Equals("services", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(automationId, "DeepLKeyBox", StringComparison.OrdinalIgnoreCase);
 
         public bool ShouldIncludeLine(string kind, string? automationId, string line)
         {
@@ -3453,7 +3632,8 @@ public sealed class DotnetRustParityTests : IDisposable
             }
             if (SectionId.Equals("services", StringComparison.OrdinalIgnoreCase))
             {
-                return IsServicesReferenceAutomationId(automationId);
+                return IsServicesReferenceAutomationId(automationId) ||
+                    IsExpandedServicesAutomationId(automationId);
             }
             if (SectionId.Equals("views", StringComparison.OrdinalIgnoreCase))
             {
@@ -3568,33 +3748,112 @@ public sealed class DotnetRustParityTests : IDisposable
                 return servicesTopBounds;
             }
 
-            var expanderIndex = ServicesExpanderViewportIndex(automationId);
-            if (expanderIndex >= 0)
+            var expanderBounds = EstimateServiceExpanderBounds(automationId);
+            if (expanderBounds is not null)
             {
-                return new UiParityControlBoundsDips(32, 497 + (expanderIndex * 60), 796, 48);
+                return expanderBounds;
+            }
+
+            if (HasExpandedService("deepl"))
+            {
+                var deepLBounds = automationId switch
+                {
+                    "DeepLKeyBox" => new UiParityControlBoundsDips(49, 592, 350, 32),
+                    "DeepLKeyRevealButton" => new UiParityControlBoundsDips(365, 594, 28, 28),
+                    "DeepLFreeCheck" => new UiParityControlBoundsDips(49, 636, 277, 32),
+                    "DeepLQualityCheck" => new UiParityControlBoundsDips(49, 680, 347, 32),
+                    "TestDeepLButton" => new UiParityControlBoundsDips(49, 752, 46, 29),
+                    _ => null
+                };
+                if (deepLBounds is not null)
+                {
+                    return deepLBounds;
+                }
+            }
+
+            if (HasExpandedService("windows-local-ai"))
+            {
+                var localAiBounds = automationId switch
+                {
+                    "LocalAIProviderCombo" => new UiParityControlBoundsDips(45, 650, 528, 48),
+                    "FoundryLocalEndpointBox" => new UiParityControlBoundsDips(49, 763, 762, 59),
+                    "FoundryLocalModelBox" => new UiParityControlBoundsDips(49, 832, 762, 56),
+                    _ => null
+                };
+                if (localAiBounds is not null)
+                {
+                    return localAiBounds;
+                }
             }
 
             return null;
+        }
+
+        private UiParityControlBoundsDips? EstimateServiceExpanderBounds(string automationId)
+        {
+            var ordered = new[]
+            {
+                "DeepLServiceExpander",
+                "WindowsLocalAIExpander",
+                "OllamaServiceExpander",
+                "OpenAIServiceExpander",
+                "DeepSeekServiceExpander",
+                "GroqServiceExpander",
+                "ZhipuServiceExpander"
+            };
+            var top = 497;
+            foreach (var id in ordered)
+            {
+                var height = EstimatedServiceExpanderHeight(id);
+                if (id.Equals(automationId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new UiParityControlBoundsDips(32, top, 796, height);
+                }
+
+                top += height + 12;
+            }
+
+            return null;
+        }
+
+        private int EstimatedServiceExpanderHeight(string automationId) =>
+            automationId switch
+            {
+                "DeepLServiceExpander" when HasExpandedService("deepl") => 309,
+                "WindowsLocalAIExpander" when HasExpandedService("windows-local-ai") => 331,
+                _ => 48
+            };
+
+        private bool IsServiceExpanderInTopViewport(string automationId)
+        {
+            var bounds = EstimateServiceExpanderBounds(automationId);
+            return bounds is not null && bounds.Top < 870;
         }
 
         private bool ShouldIncludeServicesLine(string kind, string? automationId)
         {
             if (kind == "Expander")
             {
-                _servicesExpanderCount++;
-                return _servicesExpanderCount <= 7;
+                return !string.IsNullOrWhiteSpace(automationId) &&
+                    IsServiceExpanderInTopViewport(automationId);
+            }
+
+            if (string.IsNullOrWhiteSpace(automationId))
+            {
+                return false;
             }
 
             return automationId is "EnabledServicesHeaderText" or
-                "EnabledServicesDescriptionText" or
-                "ImportMdxDictionaryButton" or
-                "ImportedMdxSummaryText" or
-                "EnableInternationalServicesHeaderText" or
-                "EnableInternationalServicesToggle" or
-                "EnableInternationalServicesDescriptionText" or
-                "ServiceConfigurationHeaderText" or
-                "ServiceConfigurationDescriptionText" or
-                "WindowsLocalAIStatusBadge";
+                    "EnabledServicesDescriptionText" or
+                    "ImportMdxDictionaryButton" or
+                    "ImportedMdxSummaryText" or
+                    "EnableInternationalServicesHeaderText" or
+                    "EnableInternationalServicesToggle" or
+                    "EnableInternationalServicesDescriptionText" or
+                    "ServiceConfigurationHeaderText" or
+                    "ServiceConfigurationDescriptionText" or
+                    "WindowsLocalAIStatusBadge" ||
+                IsExpandedServicesAutomationId(automationId);
         }
 
         private static bool IsServicesReferenceAutomationId(string automationId) =>
@@ -3616,6 +3875,60 @@ public sealed class DotnetRustParityTests : IDisposable
                 "WindowsLocalAIExpander" or
                 "WindowsLocalAIStatusBadge" or
                 "WindowsLocalAITitleText";
+
+        private bool IsExpandedServicesAutomationId(string automationId)
+        {
+            if (HasExpandedService("deepl") &&
+                automationId is "DeepLKeyHeaderText" or
+                    "DeepLKeyBox" or
+                    "DeepLKeyRevealButton" or
+                    "DeepLFreeCheck" or
+                    "DeepLQualityCheck" or
+                    "DeepLDescriptionText" or
+                    "TestDeepLButton")
+            {
+                return true;
+            }
+
+            if (HasExpandedService("windows-local-ai") &&
+                automationId is "LocalAIProviderLabelText" or
+                    "LocalAIProviderCombo" or
+                    "WindowsLocalAIDescriptionText" or
+                    "WindowsLocalAIConfigPanel" or
+                    "WindowsLocalAISectionTitleText" or
+                    "WindowsLocalAISectionRatingText" or
+                    "WindowsLocalAIStatusBar" or
+                    "WindowsLocalAIPrepareButton" or
+                    "FoundryLocalConfigPanel" or
+                    "FoundryLocalTitleText" or
+                    "FoundryLocalRatingText" or
+                    "FoundryLocalEndpointLabelText" or
+                    "FoundryLocalEndpointBox" or
+                    "FoundryLocalModelLabelText" or
+                    "FoundryLocalModelBox" or
+                    "FoundryLocalStatusBar" or
+                    "FoundryLocalStartButton" or
+                    "FoundryLocalInstallLink" or
+                    "FoundryLocalDocsLink" or
+                    "FoundryLocalDescriptionText" or
+                    "OpenVinoConfigPanel" or
+                    "OpenVinoTitleText" or
+                    "OpenVinoRatingText" or
+                    "OpenVinoStatusBadge" or
+                    "OpenVinoStatusBar" or
+                    "OpenVinoDownloadButton" or
+                    "OpenVinoDescriptionText")
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool HasExpandedService(string serviceId) =>
+            _servicesExpandedServiceConfigurations
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Any(value => value.Equals(serviceId, StringComparison.OrdinalIgnoreCase));
 
         private static int ServicesExpanderViewportIndex(string automationId) =>
             automationId switch
@@ -3815,6 +4128,7 @@ public sealed class DotnetRustParityTests : IDisposable
         settings["SourceLanguage"] = "auto";
         settings["MouseSelectionTranslate"] = true;
         settings["MouseSelectionExcludedApps"] = new[] { "code" };
+        settings["EnableInternationalServices"] = true;
         settings["WindowWidthDips"] = 846.0;
         settings["WindowHeightDips"] = 913.0;
 
@@ -3945,6 +4259,12 @@ public sealed class DotnetRustParityTests : IDisposable
         string? PressedElement = null,
         string? RustTtsSpeedState = null,
         string? RustAutoPlayState = null,
+        string? RustImportMdxState = null,
+        string? RustInternationalToggleState = null,
+        string? RustDeepLExpanderState = null,
+        string? DotnetExpandElement = null,
+        string? RustExpandedServiceConfigurations = null,
+        string? RustLocalAiProvider = null,
         string? BaselineScenarioId = null,
         double InteractionFallbackX = 0.50,
         double InteractionFallbackY = 0.62)
@@ -4002,6 +4322,55 @@ public sealed class DotnetRustParityTests : IDisposable
                 InteractionFallbackX: 0.28,
                 InteractionFallbackY: 0.74),
             new("parity-settings-services-translation-service-configuration-top", SettingsParitySection.Services, 0),
+            new(
+                "parity-settings-services-import-mdx-hover",
+                SettingsParitySection.Services,
+                0,
+                HoveredElement: "ImportMdxDictionaryButton",
+                RustImportMdxState: "hovered",
+                BaselineScenarioId: "parity-settings-services-translation-service-configuration-top",
+                InteractionFallbackX: 0.13,
+                InteractionFallbackY: 0.38),
+            new(
+                "parity-settings-services-international-toggle-hover",
+                SettingsParitySection.Services,
+                0,
+                HoveredElement: "EnableInternationalServicesToggle",
+                RustInternationalToggleState: "hovered",
+                BaselineScenarioId: "parity-settings-services-translation-service-configuration-top",
+                InteractionFallbackX: 0.91,
+                InteractionFallbackY: 0.43),
+            new(
+                "parity-settings-services-international-toggle-pressed",
+                SettingsParitySection.Services,
+                0,
+                PressedElement: "EnableInternationalServicesToggle",
+                RustInternationalToggleState: "pressed",
+                BaselineScenarioId: "parity-settings-services-translation-service-configuration-top",
+                InteractionFallbackX: 0.91,
+                InteractionFallbackY: 0.43),
+            new(
+                "parity-settings-services-deepl-expander-hover",
+                SettingsParitySection.Services,
+                0,
+                HoveredElement: "DeepLServiceExpander",
+                RustDeepLExpanderState: "hovered",
+                BaselineScenarioId: "parity-settings-services-translation-service-configuration-top",
+                InteractionFallbackX: 0.50,
+                InteractionFallbackY: 0.61),
+            new(
+                "parity-settings-services-deepl-expanded-top",
+                SettingsParitySection.Services,
+                0,
+                DotnetExpandElement: "DeepLServiceExpander",
+                RustExpandedServiceConfigurations: "deepl"),
+            new(
+                "parity-settings-services-local-ai-expanded-top",
+                SettingsParitySection.Services,
+                0,
+                DotnetExpandElement: "WindowsLocalAIExpander",
+                RustExpandedServiceConfigurations: "windows-local-ai",
+                RustLocalAiProvider: "FoundryLocal"),
             new("parity-settings-views-window-results-top", SettingsParitySection.Views, 0),
             new("parity-settings-hotkeys-shortcut-inputs-top", SettingsParitySection.Hotkeys, 0),
             new("parity-settings-advanced-ocr-layout-top", SettingsParitySection.Advanced, 0),
@@ -4292,6 +4661,30 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE"] = step.RustAutoPlayState;
             }
+            if (!string.IsNullOrWhiteSpace(step.RustImportMdxState))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_IMPORT_MDX_STATE"] = step.RustImportMdxState;
+            }
+            if (!string.IsNullOrWhiteSpace(step.RustInternationalToggleState))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE"] =
+                    step.RustInternationalToggleState;
+            }
+            if (!string.IsNullOrWhiteSpace(step.RustDeepLExpanderState))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE"] =
+                    step.RustDeepLExpanderState;
+            }
+            if (!string.IsNullOrWhiteSpace(step.RustExpandedServiceConfigurations))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS"] =
+                    step.RustExpandedServiceConfigurations;
+            }
+            if (!string.IsNullOrWhiteSpace(step.RustLocalAiProvider))
+            {
+                startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER"] =
+                    step.RustLocalAiProvider;
+            }
             if (step.ScrollPercent > 0)
             {
                 startInfo.Environment["EASYDICT_PREVIEW_SCROLL_PERCENT"] =
@@ -4323,6 +4716,11 @@ public sealed class DotnetRustParityTests : IDisposable
                 "EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE",
                 "EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE",
                 "EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_IMPORT_MDX_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE",
+                "EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS",
+                "EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER",
                 "EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED",
                 "EASYDICT_PREVIEW_SCROLL_PERCENT",
                 "EASYDICT_PREVIEW_SCROLL_TARGET",

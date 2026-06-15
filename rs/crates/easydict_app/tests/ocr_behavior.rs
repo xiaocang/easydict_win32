@@ -5,11 +5,12 @@ use easydict_app::{
     build_custom_api_ocr_request, build_ollama_ocr_request, group_and_sort_ocr_lines,
     merge_ocr_lines, merge_ocr_words, merged_ocr_text, parse_ocr_http_response, run_ocr_recognize,
     run_ocr_recognize_with_app_dir, run_ocr_recognize_with_current_app_dir,
-    windows_native_ocr_availability_with_recognizer, CapturePhase, CapturePoint, CaptureRect,
-    DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend, OcrAvailabilityDto,
-    OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig, OcrEngineKind, OcrHttpClient,
-    OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError, OcrLanguageDto, OcrLineDto,
-    OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
+    screen_capture_request_from_selection, windows_native_ocr_availability_with_recognizer,
+    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message,
+    NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult,
+    OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser,
+    OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams,
+    OcrRectDto, OcrResultDto, WindowsNativeOcrRecognizer,
 };
 use serde_json::json;
 use std::{
@@ -23,8 +24,8 @@ use std::{
     time::Duration,
 };
 use win_fluent::prelude::{
-    Application, PlatformCommand, ScreenCaptureRequest, ScreenCaptureResult, ScreenRect,
-    ScreenWindow, Task, WindowCommand,
+    Application, PlatformCommand, ScreenCaptureRequest, ScreenRect, ScreenWindow, Task,
+    WindowCommand,
 };
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
@@ -484,6 +485,25 @@ fn windows_native_ocr_availability_maps_languages_without_recognition() {
 }
 
 #[test]
+fn windows_native_ocr_availability_skips_language_query_when_unavailable() {
+    let mut recognizer = RecordingWindowsNativeOcrRecognizer::unavailable();
+
+    let availability = windows_native_ocr_availability_with_recognizer(&mut recognizer)
+        .expect("unavailable Windows OCR should still report status");
+
+    assert_eq!(
+        availability,
+        OcrAvailabilityDto {
+            is_available: false,
+            available_languages: Vec::new(),
+        }
+    );
+    assert_eq!(recognizer.is_available_calls, 1);
+    assert_eq!(recognizer.available_languages_calls, 0);
+    assert!(recognizer.calls.is_empty());
+}
+
+#[test]
 fn app_dir_runner_uses_native_provider_for_advanced_ocr_engine() {
     let (endpoint, server) =
         serve_one_http_response(r#"{ "response": " routed native provider " }"#);
@@ -595,7 +615,11 @@ fn app_dir_runner_uses_custom_api_provider_without_legacy_ocr_worker_probe() {
         "custom api native text"
     );
     assert!(http_request.starts_with("POST /v1/chat/completions "));
-    assert!(http_request.contains("Authorization: Bearer sk-ocr"));
+    assert!(contains_http_header(
+        &http_request,
+        "authorization",
+        "bearer sk-ocr"
+    ));
     assert!(http_request.contains(r#""model":"gpt-vision""#));
     assert!(http_request.contains(r#""content":"Read via custom API.""#));
     assert!(!http_request.contains("Easydict.Workers.Ocr"));
@@ -640,7 +664,11 @@ fn current_app_dir_runner_uses_custom_api_provider_despite_hybrid_runtime_profil
         "current app dir native text"
     );
     assert!(http_request.starts_with("POST /v1/chat/completions "));
-    assert!(http_request.contains("Authorization: Bearer sk-current-ocr"));
+    assert!(contains_http_header(
+        &http_request,
+        "authorization",
+        "bearer sk-current-ocr"
+    ));
     assert!(http_request.contains(r#""model":"gpt-vision-current""#));
     assert!(http_request.contains(r#""content":"Read via current app dir.""#));
     assert!(!http_request.contains("Easydict.Workers.Ocr"));
@@ -955,15 +983,13 @@ fn ocr_hotkey_captures_window_snapshot_for_double_click_detection() {
         WindowCommand::Show(id) if id.as_str() == "capture-overlay"
     )));
 
-    let message = map_capture_screen_windows_task(
-        &task,
-        vec![
+    assert!(contains_future_task(&task));
+    app.update(Message::CaptureWindowsChanged(
+        easydict_app::detected_windows_from_screen_windows(vec![
             ScreenWindow::new(1, None, ScreenRect::new(0, 0, 500, 400)).class_name("Top"),
             ScreenWindow::new(2, Some(1), ScreenRect::new(40, 30, 160, 120)).class_name("Child"),
-        ],
-    )
-    .expect("hotkey should request a window snapshot");
-    app.update(message);
+        ]),
+    ));
 
     assert_eq!(
         app.state
@@ -996,12 +1022,14 @@ fn capture_window_snapshot_does_not_reset_active_drag_selection() {
         Some(CaptureRect::new(10, 10, 40, 40))
     );
 
-    let message = map_capture_screen_windows_task(
-        &task,
-        vec![ScreenWindow::new(1, None, ScreenRect::new(0, 0, 500, 400))],
-    )
-    .expect("hotkey should request a window snapshot");
-    app.update(message);
+    assert!(contains_future_task(&task));
+    app.update(Message::CaptureWindowsChanged(
+        easydict_app::detected_windows_from_screen_windows(vec![ScreenWindow::new(
+            1,
+            None,
+            ScreenRect::new(0, 0, 500, 400),
+        )]),
+    ));
 
     assert_eq!(app.state.capture_interaction.phase, CapturePhase::Selecting);
     assert_eq!(
@@ -1022,14 +1050,16 @@ fn capture_overlay_confirm_uses_selected_screen_region() {
         310, 220, -10, 20,
     ))));
 
-    let task = app.update(Message::ConfirmCapture);
-
     assert_eq!(
-        capture_screen_region_request(&task),
+        screen_capture_request_from_selection(Some(CaptureRect::new(310, 220, -10, 20))),
         Some(ScreenCaptureRequest::region(ScreenRect::new(
             -10, 20, 320, 200
         )))
     );
+    let task = app.update(Message::ConfirmCapture);
+
+    assert!(contains_future_task(&task));
+    assert!(!contains_capture_screen_region_task(&task));
     assert_eq!(app.state.capture_selection, None);
 }
 
@@ -1060,14 +1090,16 @@ fn capture_overlay_drag_interaction_enters_adjusting_then_confirms_selected_scre
         Some(CaptureRect::new(120, 90, 200, 160))
     );
 
-    let task = app.update(Message::ConfirmCapture);
-
     assert_eq!(
-        capture_screen_region_request(&task),
+        screen_capture_request_from_selection(app.state.capture_selection),
         Some(ScreenCaptureRequest::region(ScreenRect::new(
             120, 90, 80, 70
         )))
     );
+    let task = app.update(Message::ConfirmCapture);
+
+    assert!(contains_future_task(&task));
+    assert!(!contains_capture_screen_region_task(&task));
     assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::Translate));
     assert_eq!(app.state.capture_selection, None);
 }
@@ -1090,14 +1122,16 @@ fn capture_overlay_double_click_detected_window_confirms_window_region() {
     )])]));
     app.update(Message::CaptureMouseMoved(CapturePoint::new(80, 70)));
 
-    let task = app.update(Message::CaptureDoubleClick(CapturePoint::new(80, 70)));
-
     assert_eq!(
-        capture_screen_region_request(&task),
+        screen_capture_request_from_selection(Some(CaptureRect::new(50, 40, 220, 180))),
         Some(ScreenCaptureRequest::region(ScreenRect::new(
             50, 40, 170, 140
         )))
     );
+    let task = app.update(Message::CaptureDoubleClick(CapturePoint::new(80, 70)));
+
+    assert!(contains_future_task(&task));
+    assert!(!contains_capture_screen_region_task(&task));
     assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::SilentClipboard));
     assert_eq!(app.state.ocr_status_text, "Silent OCR capture requested");
 }
@@ -1114,30 +1148,16 @@ fn capture_overlay_copy_requests_silent_platform_screen_capture() {
         -10, 20, -7, 23,
     ))));
 
+    assert_eq!(
+        screen_capture_request_from_selection(app.state.capture_selection),
+        Some(ScreenCaptureRequest::region(ScreenRect::new(-10, 20, 3, 3)))
+    );
     let task = app.update(Message::CopyResult);
 
     assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::SilentClipboard));
     assert_eq!(app.state.ocr_status_text, "Silent OCR capture requested");
-
-    let message = map_capture_screen_region_task(
-        &task,
-        Some(ScreenCaptureResult {
-            pixel_data_path: r"C:\Temp\screen.bgra".to_string(),
-            pixel_width: 3,
-            pixel_height: 2,
-            screen_rect: ScreenRect {
-                x: -10,
-                y: 20,
-                width: 3,
-                height: 2,
-            },
-        }),
-    )
-    .expect("capture task should map screen result");
-    assert_eq!(
-        message,
-        Message::SilentOcrCaptureFinished(OcrCaptureResult::new(r"C:\Temp\screen.bgra", 3, 2))
-    );
+    assert!(contains_future_task(&task));
+    assert!(!contains_capture_screen_region_task(&task));
 }
 
 #[test]
@@ -1154,6 +1174,44 @@ fn capture_overlay_copy_without_selection_waits_for_region() {
     assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::Translate));
     assert_eq!(app.state.ocr_status_text, "Select a region before OCR");
     assert!(!contains_capture_screen_region_task(&task));
+}
+
+#[test]
+fn app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface() {
+    let app_source = include_str!("../src/lib.rs");
+    let state_source = include_str!("../src/state.rs");
+    let app_manifest = include_str!("../Cargo.toml");
+
+    assert!(app_source.contains("screen_capture_native::capture_screen_region_task"));
+    assert!(app_source.contains("screen_capture_native::capture_screen_windows_task"));
+    assert!(
+        app_manifest.contains("easydict_windows_screen_capture"),
+        "default app should depend on the lib-owned Rust-native screen capture helper"
+    );
+    assert!(
+        state_source.contains("screen_capture_native::capture_screen_region"),
+        "capture overlay background freeze should use the Rust-native screen capture helper"
+    );
+    assert!(
+        !app_source.contains("Task::capture_screen_region"),
+        "OCR capture should not route through WinFluent screen-region task helpers"
+    );
+    assert!(
+        !app_source.contains("Task::capture_screen_windows"),
+        "OCR window snapshots should not route through WinFluent screen-window task helpers"
+    );
+    assert!(
+        !state_source.contains("WindowsPlatformAdapter::capture_screen_region"),
+        "capture overlay background freeze should not call WinFluent platform capture directly"
+    );
+    assert!(
+        !app_source.contains("win_fluent_platform_win"),
+        "default app source should not directly import the WinFluent Windows platform adapter"
+    );
+    assert!(
+        !app_manifest.contains("win_fluent_platform_win"),
+        "default app should not directly depend on the WinFluent Windows platform adapter"
+    );
 }
 
 #[test]
@@ -1275,7 +1333,8 @@ fn silent_ocr_outcome_writes_text_to_clipboard() {
 
     assert_eq!(app.state.active_ocr_query_id, None);
     assert_eq!(app.state.last_ocr_text.as_deref(), Some("Copied OCR text"));
-    assert!(contains_platform_command(
+    assert!(contains_future_task(&task));
+    assert!(!contains_platform_command(
         &task,
         &PlatformCommand::WriteClipboardText("Copied OCR text".to_string())
     ));
@@ -1392,6 +1451,13 @@ impl RecordingWindowsNativeOcrRecognizer {
                     display_name: display_name.to_string(),
                 })
                 .collect(),
+            ..Self::with_responses([])
+        }
+    }
+
+    fn unavailable() -> Self {
+        Self {
+            is_available: false,
             ..Self::with_responses([])
         }
     }
@@ -1599,6 +1665,17 @@ fn http_request_is_complete(request: &[u8]) -> bool {
     request.len() >= header_end + 4 + content_length
 }
 
+fn contains_http_header(request: &str, expected_name: &str, expected_value: &str) -> bool {
+    request.lines().any(|line| {
+        let Some((name, value)) = line.split_once(':') else {
+            return false;
+        };
+
+        name.eq_ignore_ascii_case(expected_name)
+            && value.trim().eq_ignore_ascii_case(expected_value)
+    })
+}
+
 trait OcrCaptureResultTestExt {
     fn into_params_for_test(self) -> OcrRecognizeParams;
 }
@@ -1664,40 +1741,6 @@ fn contains_capture_screen_region_task(task: &Task<Message>) -> bool {
         Task::CaptureScreenRegion { .. } => true,
         Task::Batch(tasks) => tasks.iter().any(contains_capture_screen_region_task),
         _ => false,
-    }
-}
-
-fn capture_screen_region_request(task: &Task<Message>) -> Option<ScreenCaptureRequest> {
-    match task {
-        Task::CaptureScreenRegion { request, .. } => Some(*request),
-        Task::Batch(tasks) => tasks.iter().find_map(capture_screen_region_request),
-        _ => None,
-    }
-}
-
-fn map_capture_screen_region_task(
-    task: &Task<Message>,
-    capture: Option<ScreenCaptureResult>,
-) -> Option<Message> {
-    match task {
-        Task::CaptureScreenRegion { map, .. } => Some(map(capture)),
-        Task::Batch(tasks) => tasks
-            .iter()
-            .find_map(|task| map_capture_screen_region_task(task, capture.clone())),
-        _ => None,
-    }
-}
-
-fn map_capture_screen_windows_task(
-    task: &Task<Message>,
-    windows: Vec<ScreenWindow>,
-) -> Option<Message> {
-    match task {
-        Task::CaptureScreenWindows { map, .. } => Some(map(windows)),
-        Task::Batch(tasks) => tasks
-            .iter()
-            .find_map(|task| map_capture_screen_windows_task(task, windows.clone())),
-        _ => None,
     }
 }
 

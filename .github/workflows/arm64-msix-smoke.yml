@@ -4,12 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       runtime_profile:
-        description: 'Runtime payload profile to build and validate'
+        description: 'Hybrid-only runtime payload profile. Enter hybrid explicitly for retained-worker coexistence.'
         required: false
-        default: 'hybrid'
-        type: choice
-        options:
-          - hybrid
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +16,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
-  RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}
+  RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}
 
 jobs:
   arm64-msix-smoke:

@@ -17,6 +17,7 @@ pub enum Task<Message> {
     Stream(Pin<Box<dyn Stream<Item = Message> + Send + 'static>>),
     Window(WindowCommand<Message>),
     Platform(PlatformCommand),
+    Exit,
     /// Snap the scroll view with the given id back to the top (offset 0).
     ScrollToTop(String),
     /// Snap the scroll view with the given id to a relative offset.
@@ -88,6 +89,10 @@ impl<Message> Task<Message> {
 
     pub fn window(command: WindowCommand<Message>) -> Self {
         Self::Window(command)
+    }
+
+    pub const fn exit() -> Self {
+        Self::Exit
     }
 
     /// Snaps the scroll view with the given id back to the top.

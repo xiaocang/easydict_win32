@@ -511,6 +511,13 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.id, token.active, token.size
             );
         }
+        ViewToken::ProgressBar(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}ProgressBar id={:?} active={} value={:?} width={:?} height=Fixed({})",
+                token.id, token.active, token.value, token.width, token.height
+            );
+        }
         ViewToken::BusyOverlay(token) => {
             let _ = writeln!(
                 output,

@@ -1,5 +1,3 @@
-use win_fluent::prelude::Task;
-
 use crate::{Message, HOTKEY_OCR_TRANSLATE, PROTOCOL_EASYDICT};
 
 pub const OCR_TRANSLATE_ARGUMENT: &str = "--ocr-translate";
@@ -26,16 +24,16 @@ where
         .find_map(|arg| parse_startup_activation_arg(arg.as_ref()))
 }
 
-pub fn startup_activation_task_for_args<I, S>(args: I) -> Task<Message>
+pub fn startup_activation_message_for_args<I, S>(args: I) -> Option<Message>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
     match parse_startup_activation(args) {
         Some(StartupActivation::OcrTranslate) => {
-            Task::message(Message::HotkeyTriggered(HOTKEY_OCR_TRANSLATE.to_string()))
+            Some(Message::HotkeyTriggered(HOTKEY_OCR_TRANSLATE.to_string()))
         }
-        None => Task::none(),
+        None => None,
     }
 }
 

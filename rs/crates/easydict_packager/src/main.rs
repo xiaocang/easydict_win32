@@ -24,8 +24,6 @@ fn run(args: Vec<String>) -> i32 {
         "zip-directory" => run_zip_directory(&args[1..]),
         #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
         "extract-dotnet-runtime" => run_extract_dotnet_runtime(&args[1..]),
-        #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
-        "extract-dotnet-runtime" => run_extract_dotnet_runtime_feature_disabled(),
         "build-rust-helpers" => run_build_rust_helpers(&args[1..]),
         "package-browser-extension" => run_package_browser_extension(&args[1..]),
         "validate-rs-portable" => run_validate_rs_portable(&args[1..]),
@@ -343,14 +341,6 @@ fn run_build_rust_helpers(args: &[String]) -> i32 {
     }
 }
 
-#[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
-fn run_extract_dotnet_runtime_feature_disabled() -> i32 {
-    eprintln!(
-        "error: extract-dotnet-runtime is only available when easydict_packager is built with --features hybrid-dotnet-runtime-packaging"
-    );
-    2
-}
-
 #[cfg(feature = "hybrid-dotnet-runtime-packaging")]
 fn run_extract_dotnet_runtime(args: &[String]) -> i32 {
     let mut rid = None;
@@ -589,10 +579,16 @@ mod tests {
 
     #[test]
     #[cfg(not(feature = "hybrid-dotnet-runtime-packaging"))]
-    fn extract_dotnet_runtime_command_requires_hybrid_packaging_feature() {
+    fn default_build_does_not_offer_dotnet_runtime_extraction_command() {
         let code = run(vec!["extract-dotnet-runtime".to_string()]);
 
         assert_eq!(code, 2);
+        assert!(
+            !packager_usage_lines()
+                .join("\n")
+                .contains("extract-dotnet-runtime"),
+            "default packager usage should not expose the hybrid runtime extraction command"
+        );
     }
 
     #[test]

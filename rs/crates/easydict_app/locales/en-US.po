@@ -141,6 +141,48 @@ msgstr "Configure API keys, endpoints, and models for each translation service."
 msgid "settings.services.configuration.description"
 msgstr "Configure API keys, endpoints, and models for each translation service."
 
+msgid "settings.services.test"
+msgstr "Test"
+
+msgid "settings.services.deepl.api_key_optional"
+msgstr "API Key (Optional)"
+
+msgid "settings.services.deepl.free_api"
+msgstr "Use Free API (no API key required for web translation)"
+
+msgid "settings.services.deepl.quality_model"
+msgstr "Use quality-optimized model (API only; slower, higher quality)"
+
+msgid "settings.services.deepl.description"
+msgstr "Leave the API key empty to use free web translation. Pro API keys have higher limits."
+
+msgid "settings.services.local_ai.provider"
+msgstr "Provider"
+
+msgid "settings.services.local_ai.description.auto"
+msgstr "Auto tries Phi Silica first, then Foundry Local, then OpenVINO/NLLB as the local translation fallback. No cloud API key."
+
+msgid "settings.services.local_ai.description.windows_ai"
+msgstr "Uses Phi Silica on Copilot+ PCs through Windows AI APIs. No API key, no network."
+
+msgid "settings.services.local_ai.description.foundry"
+msgstr "Runs local models through the Microsoft Foundry Local OpenAI-compatible endpoint. Requires Foundry Local installed and a local model available."
+
+msgid "settings.services.local_ai.description.openvino"
+msgstr "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort; unsupported graph parts fall back to CPU. No API key, no network."
+
+msgid "settings.services.local_ai.foundry.endpoint"
+msgstr "Endpoint (optional)"
+
+msgid "settings.services.local_ai.foundry.endpoint_placeholder"
+msgstr "Auto-detect from foundry service status"
+
+msgid "settings.services.local_ai.foundry.model"
+msgstr "Model"
+
+msgid "settings.services.local_ai.foundry.config_description"
+msgstr "Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint."
+
 msgid "settings.hotkeys.title"
 msgstr "Hotkeys"
 
@@ -362,3 +404,57 @@ msgstr "On"
 
 msgid "settings.toggle.off"
 msgstr "Off"
+
+msgid "tray.show"
+msgstr "Show Easydict"
+
+msgid "tray.translate_clipboard"
+msgstr "Translate Clipboard"
+
+msgid "tray.ocr_translate"
+msgstr "OCR Translate"
+
+msgid "tray.show_mini"
+msgstr "Mini Window"
+
+msgid "tray.show_fixed"
+msgstr "Fixed Window"
+
+msgid "tray.browser_support"
+msgstr "Browser Support"
+
+msgid "tray.browser.chrome"
+msgstr "Chrome"
+
+msgid "tray.browser.firefox"
+msgstr "Firefox"
+
+msgid "tray.browser.install_chrome"
+msgstr "① Install Chrome Support"
+
+msgid "tray.browser.uninstall_chrome"
+msgstr "Uninstall Chrome Support"
+
+msgid "tray.browser.get_chrome_extension"
+msgstr "② Get Extension"
+
+msgid "tray.browser.install_firefox"
+msgstr "① Install Firefox Support"
+
+msgid "tray.browser.uninstall_firefox"
+msgstr "Uninstall Firefox Support"
+
+msgid "tray.browser.get_firefox_extension"
+msgstr "② Get Extension"
+
+msgid "tray.browser.install_all"
+msgstr "Install All"
+
+msgid "tray.browser.uninstall_all"
+msgstr "Uninstall All"
+
+msgid "tray.settings"
+msgstr "Settings"
+
+msgid "tray.exit"
+msgstr "Exit"

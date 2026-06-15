@@ -1204,6 +1204,12 @@ fn annotate_interaction_effect_metrics(
         scenario.metrics.effect_delta_magnitude_delta_percent =
             Some(round4(effect.magnitude_delta_percent));
         scenario.metrics.interaction_effect_delta_score = Some(round2(effect.score));
+        apply_interaction_effect_score_cap(
+            scenario,
+            effect.score,
+            "interactionEffectScoreCap",
+            "full-window interaction effect",
+        );
 
         if effect.score < 70.0 {
             scenario.findings.push(Finding {
@@ -1229,6 +1235,12 @@ fn annotate_interaction_effect_metrics(
             scenario.metrics.effect_roi_delta_magnitude_delta_percent =
                 Some(round4(roi.magnitude_delta_percent));
             scenario.metrics.interaction_effect_roi_delta_score = Some(round2(roi.score));
+            apply_interaction_effect_score_cap(
+                scenario,
+                roi.score,
+                "interactionEffectRoiScoreCap",
+                "interaction effect ROI",
+            );
 
             if roi.score < 70.0 {
                 scenario.findings.push(Finding {
@@ -1249,6 +1261,44 @@ fn annotate_interaction_effect_metrics(
     }
 
     Ok(())
+}
+
+fn apply_interaction_effect_score_cap(
+    scenario: &mut ScenarioResult,
+    cap_score: f64,
+    metric: &str,
+    source: &str,
+) {
+    let cap_score = round2(cap_score);
+    if cap_score >= scenario.score {
+        return;
+    }
+
+    let previous_score = scenario.score;
+    let previous_status = scenario.status;
+    scenario.score = cap_score;
+    scenario.status = ScoreStatus::from_score(
+        scenario.score,
+        scenario.gate.pass_score,
+        scenario.gate.warn_score,
+    );
+    scenario.findings.push(Finding {
+        severity: if scenario.status == ScoreStatus::Fail {
+            "error".to_string()
+        } else {
+            "warning".to_string()
+        },
+        layer_hint: "final_visual_effect".to_string(),
+        message: format!(
+            "{source} capped scenario score from {:.2} ({:?}) to {:.2} ({:?}); hover, pressed, and focus parity must match the WinUI reference before this scenario can pass.",
+            previous_score,
+            previous_status,
+            scenario.score,
+            scenario.status
+        ),
+        metric: metric.to_string(),
+        value: scenario.score,
+    });
 }
 
 fn compare_interaction_effect_delta(
@@ -2838,8 +2888,10 @@ fn calculate_semantic_contract_score_floor(
     control_dimension_score_cap: f64,
     absolute_size_score_cap: f64,
 ) -> Option<f64> {
-    if scoring_profile.id != "default-semantic"
-        || runtime_score_cap < 99.0
+    if !matches!(
+        scoring_profile.id.as_str(),
+        "default-semantic" | "interaction-animation"
+    ) || runtime_score_cap < 99.0
         || control_dimension_score_cap < 99.0
         || absolute_size_score_cap < 99.0
     {
@@ -8716,13 +8768,8 @@ mod tests {
         );
         let summary = fully_aligned_ui_summary();
 
-        let floor = calculate_semantic_contract_score_floor(
-            &profile,
-            Some(&summary),
-            100.0,
-            100.0,
-            100.0,
-        );
+        let floor =
+            calculate_semantic_contract_score_floor(&profile, Some(&summary), 100.0, 100.0, 100.0);
 
         assert_eq!(floor, Some(SEMANTIC_CONTRACT_SCORE_FLOOR));
 
@@ -8734,6 +8781,27 @@ mod tests {
             calculate_semantic_contract_score_floor(
                 &profile,
                 Some(&dpi_rounding),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            Some(SEMANTIC_CONTRACT_SCORE_FLOOR)
+        );
+
+        let animation_profile = ScenarioScoringProfile::new(
+            "interaction-animation",
+            0.26,
+            0.08,
+            0.40,
+            0.14,
+            0.04,
+            0.08,
+            62.0,
+        );
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &animation_profile,
+                Some(&fully_aligned_ui_summary()),
                 100.0,
                 100.0,
                 100.0,
@@ -8756,19 +8824,32 @@ mod tests {
         );
 
         // Visual-only profile never qualifies for the semantic floor.
-        let visual_profile = ScenarioScoringProfile::new(
-            "default-visual",
-            0.42,
-            0.18,
-            0.24,
-            0.0,
-            0.08,
-            0.08,
-            70.0,
-        );
+        let visual_profile =
+            ScenarioScoringProfile::new("default-visual", 0.42, 0.18, 0.24, 0.0, 0.08, 0.08, 70.0);
         assert_eq!(
             calculate_semantic_contract_score_floor(
                 &visual_profile,
+                Some(&fully_aligned_ui_summary()),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            None
+        );
+
+        let interaction_effects_profile = ScenarioScoringProfile::new(
+            "interaction-effects",
+            0.28,
+            0.10,
+            0.36,
+            0.14,
+            0.04,
+            0.08,
+            66.0,
+        );
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &interaction_effects_profile,
                 Some(&fully_aligned_ui_summary()),
                 100.0,
                 100.0,
@@ -9389,6 +9470,14 @@ mod tests {
                 .unwrap_or(100.0)
                 < 70.0
         );
+        assert_eq!(scenario.get("Status").and_then(Value::as_str), Some("fail"));
+        assert!(
+            scenario
+                .get("Score")
+                .and_then(Value::as_f64)
+                .unwrap_or(100.0)
+                < 70.0
+        );
         assert!(scenario
             .get("Findings")
             .and_then(Value::as_array)
@@ -9517,6 +9606,14 @@ mod tests {
                 .unwrap_or(100.0)
                 < 70.0
         );
+        assert_eq!(scenario.get("Status").and_then(Value::as_str), Some("fail"));
+        assert!(scenario
+            .get("Findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding.get("Metric").and_then(Value::as_str)
+                    == Some("interactionEffectRoiScoreCap")
+            })));
         assert_eq!(
             metrics
                 .get("InteractionEffectRoiTargetIds")

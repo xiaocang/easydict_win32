@@ -21,12 +21,574 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-13: Moved OCR overlay background freeze off WinFluent platform adapter
+
+- Completed the remaining OCR screen-capture backend cleanup in the default app path. The capture overlay's background freeze now calls `screen_capture_native::capture_screen_region(ScreenCaptureRequest::virtual_desktop())`, so selected-region capture, window snapshots, and overlay background screenshots all route through `lib/easydict-windows-screen-capture`.
+- No new third-party crate was added in this slice. The earlier screen-capture migration already chose the narrow Microsoft `windows` crate based helper; this pass reuses that helper instead of keeping the duplicate WinFluent platform adapter call.
+- Removed the direct `win_fluent_platform_win` dependency from `easydict_app/Cargo.toml`. The app still depends on neutral `win_fluent` runtime types, while the Windows backend crate remains reachable through the preview/iced runtime stack rather than the app crate.
+- Added source-boundary coverage proving OCR capture tasks, overlay background freeze, and the app manifest all stay on the Rust-native helper path and do not reintroduce direct `win_fluent_platform_win` / `WindowsPlatformAdapter::capture_screen_region` usage.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app screen_capture_native --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test screen_capture_behavior -- --nocapture`
+- `cargo test --manifest-path lib/easydict-windows-screen-capture/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_app_manifests_do_not_link_hybrid_packaging_or_dotnet_runtime_tools -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --exact --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Narrowed desktop integration declarations to app-owned DTOs
+
+- Continued the desktop-integration cleanup without touching UI-owned files or `lib/winfluent-rs`. The shell/protocol registry writer now consumes app-owned `DesktopShellVerb` and `DesktopProtocolRegistration` DTOs instead of WinFluent platform DTOs.
+- No third-party crate is involved; this is an internal boundary reduction. WinFluent `ShellVerb` / `ProtocolRegistration` remain only at the `Application` trait declaration boundary, where private conversion helpers project the app-owned DTOs for runtime-plan parity.
+- The Settings shell context-menu toggle and startup `easydict://` protocol ensure keep using Rust-owned futures through `easydict_app::desktop_integration` and `lib/easydict-windows-registry`; tests now guard that the registry facade does not import `win_fluent::`.
+- Read-only OCR audit confirmed the remaining overlay background-freeze capture cannot be migrated without touching UI-owned `state.rs`, so it stays as a coordinated follow-up rather than being changed in this slice.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app desktop_integration --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior shell_context_menu -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior startup_protocol_registration -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior shell_and_protocol_entries_cover_ocr_activation_contract -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior runtime_plan_captures_desktop_integration_entries -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced desktop_runtime -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced preview_runtime -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --exact --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_preview_iced --all-targets`
+
+## 2026-06-13: Forwarded desktop runtime surfaces through the packaged GUI wrapper
+
+- Continued hardening the first rs portable GUI entrypoint. `easydict_preview_iced.exe` is currently the binary copied to `Easydict.Rust.exe`, so its `PreviewApp` wrapper must expose the same runtime surfaces as the wrapped `EasydictApp`.
+- No third-party crate is involved; this is an app/runtime wiring fix. `PreviewApp` now forwards `window_options`, `subscription`, `tray_menu`, `named_events`, `shell_verbs`, and `protocol_registrations` to the inner `EasydictApp`.
+- This makes the packaged GUI runtime see the app-owned hotkeys, tray menu, named OCR event, mini/fixed/settings/capture/pop-button window options, shell context menu declarations, and `easydict://` protocol declaration instead of acting as a view/update-only preview wrapper.
+- Added `easydict_preview_iced` tests proving the wrapper forwards desktop runtime surfaces and that `RuntimePlan::<PreviewApp>` captures the inner desktop integration entries.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_preview_iced --all-targets`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell -- --exact --nocapture`
+
+## 2026-06-13: Ensured protocol registration through the Rust registry facade at app startup
+
+- Continued the desktop-integration migration by making `Application::new(...)` enqueue a Rust-owned best-effort protocol registration task for the default `easydict://` activation scheme.
+- No new third-party crate was needed for this slice. Protocol registration uses the existing `easydict_app::desktop_integration` facade and `lib/easydict-windows-registry`, preserving the same HKCU `Software\Classes\easydict` layout, `URL Protocol` marker, and `"exe" "%1"` command-line contract that the WinFluent platform adapter previously modeled.
+- The startup path now calls `desktop_integration::register_protocol(...)` from a `Task::perform(...)` future and no longer needs WinFluent `Task::RegisterProtocol` for the app-owned protocol ensure. The `RuntimePlan` protocol declaration is still retained as declarative metadata for parity tests and future runtime integration.
+- Kept the operation best-effort and `Message::Noop`-returning, matching the existing shell context-menu registration style and avoiding user-facing startup failures if HKCU protocol writes fail.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior startup_protocol_registration -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_startup_registers_builtin_device_when_token_is_missing -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior runtime_plan_captures_desktop_integration_entries -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior shell_and_protocol_entries_cover_ocr_activation_contract -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior startup_activation_parses_shell_and_protocol_ocr_triggers -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app desktop_integration::tests::protocol_registration_plan_quotes_uri_argument --lib -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Moved URL opening and bundled helper launch off WinFluent platform commands
+
+- Continued the default rs desktop-integration cleanup by moving Settings/About external links, the tray Chrome extension link, and browser registrar install/uninstall launches away from WinFluent `PlatformCommand::OpenUrl` / `RunBundledExecutable`.
+- Rechecked reusable crates before changing code. `open`, `webbrowser`, and `win-open` are viable general-purpose URL/default-app launch crates, but this slice only needs a narrow Windows shell boundary and should avoid cmd/script-style launch helpers. Added `lib/easydict-windows-shell` around Microsoft's official `windows` crate and native `ShellExecuteW`, plus a guarded bundled-executable launcher.
+- Added `easydict_app::desktop_shell` as the app-owned facade. Browser support install/uninstall still launches `easydict_browser_registrar.exe` next to the current executable with the existing `install|uninstall --bridge-root-name EasydictRs` and optional `--chrome` / `--firefox` arguments, then keeps the 600ms browser-support status refresh. External links still resolve through the OS default handler and return `Message::Noop`.
+- Hardened the bundled helper boundary so callers can only request a plain file name; absolute paths, subdirectories, `.` and `..` are rejected before process launch.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-shell/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior browser_support -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior tray_commands_route_to_existing_desktop_actions -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior settings_about_links_open_external_urls -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Moved shell context-menu registration to the Rust registry helper
+
+- Continued the desktop-integration migration by moving the Settings shell context-menu toggle away from WinFluent platform commands. The app now emits Rust-owned futures that call `easydict_app::desktop_integration` instead of `Task::RegisterShellVerb` / `Task::UnregisterShellVerb`.
+- Rechecked reusable registry crates before changing code. `winreg` and Microsoft's `windows-registry` are both viable, but this slice extends the existing narrow `lib/easydict-windows-registry` helper so Browser registrar and shell/protocol registration share one HKCU registry boundary and keep exact unnamed/named `REG_SZ`, missing-key, and tree-delete semantics.
+- Added `easydict_app::desktop_integration` as an app-owned facade for shell verb and protocol registration plans. The shell toggle writes the same `Software\Classes\*\shell\EasydictOCR` and `Software\Classes\Directory\Background\shell\EasydictOCR` command entries through the Rust helper, including the `Icon` named value, and unregister now deletes the verb tree.
+- Kept protocol registration helpers in the same facade for the next coordinated desktop-integration slice, but did not change startup auto-registration behavior in this pass.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-registry/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app desktop_integration --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior shell_context_menu -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Moved OCR capture task surface to a lib-owned Windows helper
+
+- Continued the core OCR migration by moving the selected-region capture and window-snapshot task surface out of WinFluent platform tasks.
+- Rechecked reusable Rust screen-capture crates before changing code. `windows-capture` is active and Windows Graphics Capture/DXGI oriented, while `xcap` and `screenshots` are cross-platform screenshot abstractions. Easydict's current OCR overlay needs a narrow synchronous BGRA BitBlt capture plus Win32 window hierarchy enumeration, so this slice uses Microsoft's official `windows` crate directly in `lib/easydict-windows-screen-capture` instead of adding a broader recording/cross-platform dependency.
+- Added `easydict_app::screen_capture_native` as an unsafe-free app facade that converts between the helper DTOs and the existing app/WinFluent DTOs. OCR confirm/copy capture and capture-overlay window snapshots now emit Rust-owned `Task::perform(...)` futures rather than WinFluent `Task::CaptureScreenRegion` / `Task::CaptureScreenWindows`.
+- Left UI-owned files alone. The overlay background-freeze helper in `state.rs` still calls the existing WinFluent platform capture path and remains a coordinated follow-up with the UI workstream.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-screen-capture/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app screen_capture_native --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior capture -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Wired clipboard monitoring through an app-owned stream
+
+- Continued the core clipboard migration by making saved `ClipboardMonitoring` settings start a Rust-owned monitor stream instead of relying on WinFluent `SubscriptionKind::Clipboard`, whose iced backend is still a no-op.
+- No new clipboard crate was added. `clipboard-win` remains a viable crate for a future event-listener backend, but this slice can reuse the existing `lib/easydict-windows-text-selection` Win32 clipboard sequence/snapshot helper and stay aligned with TextSelection/TextInsertion semantics.
+- `easydict_app::clipboard` now owns a small polling monitor state machine: it seeds from the current clipboard, watches sequence changes, trims/ignores empty text, suppresses duplicate text, and ignores the app's own just-written clipboard text once.
+- App startup starts a lazy `Task::stream(...)` only when the saved setting is enabled. Settings edits continue to respect the existing unsaved-changes model: toggling alone does not start/stop monitoring, while saving or discarding settings resynchronizes the monitor with the persisted settings state.
+- Added source and behavior coverage proving the app uses `clipboard::clipboard_monitor_stream(...)` rather than WinFluent `Subscription::clipboard(...)`.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app clipboard --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior monitor_clipboard -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior clipboard_monitor -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior settings_changes_prompt_on_back_and_save_discard_cancel_are_stateful -- --exact --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Centralized rs portable retained byte marker scanning
+
+- Continued the first rs portable no-runtime hardening by moving the allowlisted-executable byte marker scanner out of `easydict_packager` and into `lib/easydict-runtime-guards`.
+- No third-party crate is appropriate for this slice: the scanner is an Easydict-specific denylist for stale `.NET` host/runtime, retained worker, PowerShell, and old TTS script markers. Keeping it in `lib/` lets browser/runtime/package boundaries reuse one policy instead of re-copying byte tables.
+- `validate-rs-portable` still rejects first-release allowlisted executables such as `Easydict.Rust.exe` and Rust helper `.exe` files if their bytes contain ASCII or UTF-16LE retained runtime markers, but the actual marker matching now calls `easydict_runtime_guards::bytes_contain_retained_runtime_marker(...)`.
+- Added a packager source-boundary regression so the byte marker table and ASCII/UTF-16LE scanner are not re-inlined into `easydict_packager`.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml --all-targets --features retained-dotnet-workers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager marker -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_packager --all-targets`
+
+## 2026-06-13: Moved runtime route policy into lib-owned guards
+
+- Continued the default rs runtime cleanup by moving retained-worker runtime-profile parsing and disable-message policy out of `easydict_app::runtime_policy` and into `lib/easydict-runtime-guards`.
+- No third-party crate is appropriate for this slice: the behavior is Easydict-specific runtime-profile policy, not a reusable parser concern. The existing lib boundary now owns both stale retained payload path classification and the runtime route policy gate.
+- `easydict_app::runtime_policy` is now a thin re-export shim, preserving current Quick Translate, LongDoc, and retained-feature compatibility call sites while moving the implementation and feature-on policy matrix into `lib/`.
+- Propagated the app `retained-dotnet-workers` feature to `easydict_runtime_guards/retained-dotnet-workers`, so compiling the retained bridge still requires the same explicit `EASYDICT_RUNTIME_PROFILE=hybrid` opt-in before workers can be enabled.
+- Added a default API boundary regression proving the app shim does not re-inline environment parsing or runtime policy implementation.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml --all-targets --features retained-dotnet-workers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app runtime_policy --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers runtime_policy --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_runtime_policy_implementation_is_lib_owned -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Centralized retained payload path guards outside app code
+
+- Continued shrinking default app production-source exposure to retained runtime markers without changing browser registration behavior.
+- No third-party crate is appropriate for this slice: the logic is Easydict-specific policy over stale retained payload roots rather than generic path normalization. Added `lib/easydict-runtime-guards` as a small safe Rust library that classifies retained runtime/path components such as worker roots, legacy bridge names, and `.NET` payload roots.
+- Updated browser native-messaging registrar source validation to call `easydict_runtime_guards::path_has_retained_runtime_component(...)` instead of inlining the marker list in `easydict_app::browser_registrar`. Existing protections still reject renamed `easydict-native-bridge.exe` files under stale retained payload directories.
+- Added a browser registrar source-boundary guard so retained payload marker policy stays lib-owned.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-runtime-guards/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior browser_registrar_source_uses_lib_owned_retained_runtime_guard -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Moved app file/folder dialogs off PowerShell System.Windows.Forms
+
+- Continued the default rs no-runtime cleanup on a core UI workflow boundary: LongDoc input selection, LongDoc output-folder selection, and MDX dictionary import no longer emit WinFluent `OpenFileDialog` / `OpenFolderDialog` tasks, whose iced backend still uses PowerShell plus `System.Windows.Forms`.
+- Rechecked reusable dialog crates before changing code. `rfd` and `native-dialog` are mature cross-platform file-dialog crates, but this app only needs a narrow Windows portable boundary and must avoid script/runtime helpers. Added `lib/easydict-windows-dialogs` around Microsoft's official `windows` crate and the native COM `IFileOpenDialog` API instead.
+- Added `easydict_app::file_dialog` as the app-owned facade. Dialog work runs on a dedicated STA thread, maps user cancel to `None`, supports file filters and initial folders, and keeps app crate unsafe-free.
+- Added source/behavior coverage proving app update routes these user-driven file selections through Rust-owned futures instead of WinFluent dialog tasks.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-dialogs/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app file_dialog --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior import_mdx_dictionary_uses_rust_owned_mdx_file_dialog_task -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_update_routes_file_dialogs_to_rust_owned_helpers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test long_document_behavior app_update_long_document_browse_starts_file_dialog_only_in_long_document_mode -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface_has_no_retained_dotnet_runtime_entries -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Moved explicit clipboard read/write off WinFluent tasks
+
+- Continued the core input/clipboard migration without touching `state.rs`, `ui.rs`, or `lib/winfluent-rs`.
+- Rechecked reusable clipboard crates before changing code. `clipboard-win` is the closest Windows-specific crate and includes optional monitoring support, while `arboard` is a mature cross-platform text/image clipboard abstraction. This slice needs exact reuse of the existing Windows clipboard semantics already implemented for TextSelection/TextInsertion, so it reuses `lib/easydict-windows-text-selection` instead of adding a second clipboard dependency.
+- Added `easydict_app::clipboard`, a small app-owned facade over the Rust Windows helper. Explicit tray `Translate Clipboard` reads now use a `Task::perform(...)` future that maps clipboard errors to `None` like the previous non-fatal UI behavior; result Copy and Silent OCR copy now write through the same Rust-owned helper and resolve to `Message::Noop` on completion.
+- Added a source-boundary regression so the app core no longer emits WinFluent `Task::read_clipboard_text` or `Task::clipboard_text` for explicit clipboard actions. The later clipboard-monitoring slice wires the sustained monitor through an app-owned stream instead of WinFluent's no-op clipboard subscription.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app clipboard --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior clipboard -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_update_result_actions_emit_rust_owned_side_effect_tasks -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior tray_commands_route_to_existing_desktop_actions -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior silent_ocr_outcome_writes_text_to_clipboard -- --nocapture`
+
+## 2026-06-13: Reconfirmed Rust MDD support for the core MDX route
+
+- Rechecked the user-requested MDD follow-up on the current dirty tree. The core Rust path is already implemented through the existing in-tree `lib/rs-mdict` fork and app-side `mdx_native` glue; no new parser dependency is needed.
+- Confirmed support for MDD raw/base64 resource lookup, compressed and non-ASCII resources, cross-record-block reads, credential-encrypted companion MDD via the MDX key-header transform, same-stem `.mdd` / numbered `.N.mdd` discovery, multi-MDD first-hit lookup, failed-MDD skipping, WebView-ready `data:<mime>;base64,...` HTML inlining, and Quick Translate `rawHtml` retention only when MDD resources were actually inlined.
+- The remaining MDD-related work is evidence/UX polish rather than core runtime migration: real large-dictionary/manual WebView screenshot review is still useful, but the Rust parser and Quick Translate behavior are covered by focused automated tests.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml --lib mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mdx_native_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test settings_storage_behavior mdd -- --nocapture`
+
+## 2026-06-13: Moved browser registrar registry access off WinFluent
+
+- Continued shrinking default app dependencies on WinFluent platform internals by moving the Browser Native Messaging registrar registry adapter into `lib/easydict-windows-registry`.
+- Rechecked the reusable option first. Microsoft `windows-registry` is a high-quality safe crate, but direct use would broaden deletion semantics to recursive tree removal and does not map as directly onto unnamed/default value handling. This helper therefore uses Microsoft's official `windows` crate directly to preserve the previous exact Win32 behavior: HKCU default `REG_SZ` read/write, non-recursive `RegDeleteKeyW`, missing key/value as a neutral success/miss.
+- Updated `easydict_browser_registrar` so `SystemBrowserRegistry` calls the Rust-owned helper rather than `win_fluent_platform_win::WindowsPlatformAdapter`. Added a browser registrar source-boundary test to prevent the binary from reintroducing WinFluent registry access.
+- Left UI, state, and WinFluent files untouched. The remaining non-UI direct WinFluent platform dependency in default app code is the screen-capture bridge in `state.rs`, which is owned by the parallel UI work and was not changed in this slice.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-registry/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test browser_registrar_behavior -- --nocapture`
+
+## 2026-06-13: Moved native bridge named-event signaling off WinFluent
+
+- Continued shrinking default app dependencies on WinFluent platform internals by moving the browser native-messaging OCR signal path into `lib/easydict-windows-ipc`.
+- Rechecked reusable options first. Named events are a very narrow Win32 synchronization-object boundary, and the available higher-level Rust crates do not add value over the official `windows` crate for Easydict's exact `OpenEventW` / `SetEvent` semantics. The helper therefore exposes a small safe `signal_named_event(...) -> Result<bool, WindowsIpcError>` API, with a missing event preserving the existing `Ok(false)` behavior.
+- Updated `easydict-native-bridge` to signal `Local\EasydictRs-OcrTranslate` through the Rust-owned helper instead of `win_fluent_platform_win::WindowsPlatformAdapter`. The browser stdio protocol, unknown-action no-signal behavior, and Rust helper naming remain unchanged.
+- Left UI, state, and WinFluent files untouched. The remaining non-UI direct WinFluent platform dependency in default app code is the browser registrar registry adapter.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-ipc/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test native_bridge_behavior -- --nocapture`
+
+## 2026-06-13: Moved credential DPAPI boundary off WinFluent
+
+- Continued removing default app dependencies on WinFluent platform internals by moving credential DPAPI and HKLM `MachineGuid` registry access into `lib/easydict-windows-credentials`.
+- Rechecked reusable DPAPI crates first. `windows-dpapi` now exists as a small safe wrapper, but this path needs exact compatibility with Easydict's existing `edcred1` optional entropy, current-user/local-machine scope wire format, and machine-id fallback behavior, so the implementation uses Microsoft's official `windows` crate directly in a narrow in-tree helper.
+- Updated `easydict_app::credential_protection` to call the new helper instead of `win_fluent_platform_win::WindowsPlatformAdapter`. The public credential format remains `edcred1:user|machine:<base64>`, legacy `edloc1:` AES-GCM migration remains unchanged, and app-side unsafe code stays out of `easydict_app`.
+- Left UI, state, and WinFluent files untouched; remaining direct WinFluent platform uses outside UI/state are browser registrar registry helpers and native-bridge named-event signaling, which are good follow-up slices.
+
+Validation:
+
+- `cargo check --manifest-path lib/easydict-windows-credentials/Cargo.toml --all-targets`
+- `cargo test --manifest-path lib/easydict-windows-credentials/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test credential_protection_behavior -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Hardened Rust-only package scans for script/TTS runtime markers
+
+- Followed up the Rust-owned TTS backend by hardening the release gates that prove rs portable/MSIX payloads do not carry the old script-based speech route. Rechecked PE parser options first: `goblin`, `object`, and `pelite` all support PE/COFF inspection, but this slice only needs fixed ASCII/UTF-16LE marker detection in package payload bytes, so the existing byte scanner was extended instead of adding a parser dependency.
+- Extended `easydict_packager` rs portable validation markers beyond retained .NET host/runtime strings to include explicit script/TTS backend markers: `powershell.exe`, `pwsh.exe`, `System.Speech`, `System.Management.Automation`, and the old `WIN_FLUENT_TTS_TEXT` environment marker. Directory and ZIP portable validation both reject allowlisted helper executables containing those markers.
+- Extended `easydict_msix_validate` rust-only payload scanning with the same markers. This covers direct MSIX validation, `prepare-package-inputs` preflight before manifest writing, and rust-only nested appx/msix validation inside MSIX bundles.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains_script_tts_markers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains_utf16le_dotnet_markers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate rust_only_package_rejects_script_tts_markers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate prepare_package_inputs_rejects_script_tts_marker_before_manifest_write -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate verify_bundle_minversion_rust_only_rejects_nested_helper_script_tts_markers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate rust_only_package_rejects_utf16le_dotnet_host_markers -- --nocapture`
+
+## 2026-06-13: Moved Quick Translate TTS off PowerShell/System.Speech
+
+- Continued the core `.NET runtime` removal work on the TTS path. Rechecked reusable Rust TTS options first: `tts` provides a broad cross-platform abstraction but brings extra backend/event surface that Easydict does not need for first rs portable; `sapi-lite` is a small SAPI wrapper but has limited maintenance/coverage. The chosen route is a small in-tree wrapper under `lib/` using Microsoft's official `windows` crate and SAPI directly.
+- Added `lib/easydict-windows-tts`, which initializes COM inside the helper, creates `ISpVoice`, optionally chooses an installed SAPI voice by BCP-47/LCID language match, and speaks plain text through the system default audio output without launching PowerShell or loading `System.Speech`.
+- Added `easydict_app::tts`, a fakeable app-owned TTS boundary. Result Speak actions and `AutoPlayTranslation` now emit Rust `Task::perform(...)` futures instead of WinFluent `PlatformCommand::SpeakText`, so the app-side Quick Translate route no longer depends on the WinFluent PowerShell backend.
+- Kept error handling fire-and-forget for parity with the previous platform side effect: empty text is skipped before backend calls, and native TTS errors resolve to `Message::Noop` so translation state is not disrupted. Real Notepad/app audio smoke remains pending for a later Windows ignored/manual pass.
+
+Validation:
+
+- `cargo check --manifest-path lib/easydict-windows-tts/Cargo.toml --all-targets`
+- `cargo test --manifest-path lib/easydict-windows-tts/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app tts --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_update_result_actions_emit_platform_side_effect_tasks -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior auto_play_translation_speaks_first_successful_result_only -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior auto_play_translation_uses_floating_surface_target_language -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior auto_play_translation_ignores_disabled_empty_error_and_stale_updates -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Moved TextInsertion replace backend into Rust-owned helper boundary
+
+- Continued the core interaction migration without touching `ui.rs`, `state.rs`, `ui_contract.rs`, or WinFluent. Rechecked reuse options first: `clipboard-win` only covers clipboard operations, while `enigo`/`rdev` abstract keyboard simulation but do not preserve Easydict's HWND capture, foreground-window validation, thread-input attach, clipboard write, and `dwExtraInfo` requirements. The implementation therefore stays on the existing Microsoft `windows` crate helper in `lib/easydict-windows-text-selection`.
+- Added Rust-native text insertion primitives next to TextSelection: foreground insertion-target capture, target validation, `Ctrl+V` SendInput, and `insert_text_into_target(...)` built from clipboard write + foreground restoration. Non-Windows remains an explicit unsupported boundary.
+- Added `easydict_app::text_insertion`, a fakeable app-owned backend/cache for the last captured source window. `TranslateSelection`, PopButton click, Mini show hotkey, tray Translate Clipboard, and result Replace now use Rust `Task::perform(...)` helpers instead of WinFluent `PlatformCommand::CaptureTextInsertionTarget` / `InsertText`.
+- Kept user-visible error handling conservative for this slice: insertion failures complete as `Message::Noop`, matching the previous fire-and-forget platform side effect shape. A later UI slice can surface failures without changing the helper boundary.
+
+Validation:
+
+- `cargo check --manifest-path lib/easydict-windows-text-selection/Cargo.toml --all-targets`
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app text_insertion --lib -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_update_result_actions_emit_platform_side_effect_tasks -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior app_update_translate_selection_captures_text_insertion_target -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior pop_button_click_translates_pending_text_in_mini_window -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior translate_selection_hotkey_captures_source_and_starts_native_selection_task -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior tray_commands_route_to_existing_desktop_actions -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior floating_window_show_hotkeys_keep_explicit_show_semantics -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Hardened Rust-only MSIX UTF-16LE .NET marker scan
+
+- Reviewed PE inspection crate options before changing the release gate. `object`, `goblin`, and `pelite` all expose PE/COFF parsing, but this slice only needs known retained-runtime string detection across MSIX and prepared publish inputs, so the existing byte scanner was extended without adding a new dependency.
+- `easydict_msix_validate` now scans Rust-only payload content markers in both ASCII and UTF-16LE encodings. This aligns MSIX/prepare-package-inputs with the existing `validate-rs-portable` protection and closes the renamed .NET apphost/resource-string variant before manifest writing or package validation succeeds.
+- Added regressions for a helper executable and a `prepare-package-inputs` publish-dir file containing UTF-16LE `hostfxr.dll` / CoreLib markers.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate rust_only_package_rejects_utf16le_dotnet_host_markers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate prepare_package_inputs_rejects_utf16le_dotnet_apphost_marker_before_manifest_write -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_msix_validate -- --nocapture`
+
+## 2026-06-13: Wired Rust Quick Translate auto-play TTS
+
+- Continued with a small core UX closure that avoids the UI/state files currently being edited in parallel. The reusable-library check does not call for a new dependency here: Rust already has the platform-neutral `Task::speak_text` side-effect contract, and the backend maps it to the current Windows speech path.
+- `EasydictApp::update(...)` now turns a successful `QuickTranslateServiceFinished` into a TTS platform task when `AutoPlayTranslation` is enabled. It matches the .NET behavior of playing only the first successful result for an active query, skips disabled/empty/error/stale updates, and uses the active surface target language for Main/Mini/Fixed windows.
+- Streaming remains safe because only the final service-finished update can trigger auto-play; intermediate `QuickTranslateStreamChunk` messages do not speak.
+- While running the full quick-translate suite, restored the encrypted MDX route predicate: `Encrypted=1` dictionaries with no credentials are still Rust-native candidates, so lookup fails locally with credentials-required instead of falling out of the native route. Invalid supplied credentials remain a local input error.
+- Added the next MouseSelection app-boundary adapter without touching UI/state/WinFluent: producer `DismissPopButton` actions now map to an app message task, `CaptureSelectionText` actions reuse the native selected-text capture task, and pending multi-click timer metadata is exposed for the later real subscription bridge instead of being hidden in UI code.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior auto_play_translation -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior encrypted_mdx -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior mouse_selection_producer -- --nocapture`
+
+## 2026-06-13: Aligned unknown-process TextSelection fallback with .NET
+
+- Closed a small but user-visible TextSelection parity gap found while reviewing the .NET strategy. When the foreground process name cannot be resolved, `.NET TextSelectionService` still classifies it as neither Electron nor terminal and therefore tries UIA first, then clipboard fallback with the standard timeout.
+- Removed the Rust-only conservative UIA-only branch for unknown process names. Rust now treats that case like a regular desktop app: UIA first, then clipboard fallback; empty normalized process names still do not enter adaptive non-text suppression.
+- Kept the change inside the existing Rust TextSelection strategy layer. No new dependency was needed; the native primitives remain in `lib/easydict-windows-text-selection`.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+
+## 2026-06-13: Added Rust TextSelection UIA timeout guard
+
+- Continued the core selected-text migration without touching UI/WinFluent. The reusable-library decision remains the same as the TextSelection backend foundation: `get-selected-text` is too narrow/clipboard-oriented for Easydict's terminal-safe flow, and `uiautomation` only covers UIA while the app also needs Win32 foreground, clipboard sequence, SendInput, and low-level hook primitives. The safe wrapper stays in `lib/easydict-windows-text-selection` on Microsoft's `windows` crate.
+- Added a Rust UIA execution timeout matching the .NET guard shape: one UIA capture at a time, a 200ms "busy" wait before skipping, and an 800ms execution timeout before returning a local `WindowsTextSelectionError` instead of blocking the hotkey/PopButton capture path indefinitely.
+- Aligned the UIA pattern fallback with the .NET path: try `TextPattern` before `TextPattern2`, and treat an individual pattern failure as a miss so the next pattern or clipboard fallback can still run.
+- Switched `NativeTextSelectionBackend` to the timeout-aware helper. Existing app strategy stays unchanged: regular desktop apps fall back to clipboard after UIA timeout/failure, Electron still tries clipboard first and avoids double Ctrl+C, and terminal apps remain UIA-only so a timeout never sends SIGINT.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+
+## 2026-06-13: Added WindowsNative OCR RecognizeAsync timeout/cancel guard
+
+- Continued the Rust-native OCR hardening after the image-dimension guard. The reusable-library check remains unchanged: Windows Native OCR is already best served by Microsoft `windows` / `windows-future`; third-party OCR engines such as Tesseract/leptess would replace the engine and add native packaging, while generic wrappers would not improve Easydict's DTO/language/fallback contract.
+- `recognize_bgra_file(...)` no longer blocks indefinitely on `RecognizeAsync(...).join()`. It registers a `windows-future` completion callback with `when(...)`, waits on a standard channel with a 30s default timeout, and calls `Cancel()` on timeout before returning a local Rust `WindowsOcrError`.
+- Kept the public API stable and did not introduce an async runtime or new dependency. The timeout is intentionally generous for screenshot OCR and leaves normal completion behavior unchanged.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_windows_ocr -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_windows_ocr --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Added Rust low-level mouse selection hook foundation
+
+- Continued the PopButton/mouse-selection migration after TextSelection capture was wired. Two read-only subagents confirmed the remaining gap is the real `WH_MOUSE_LL` / `WH_KEYBOARD_LL` producer and its app message adapter; the PopButton consumer path (`SelectionTextReady`, auto-dismiss, click-to-Mini translation) already exists.
+- Rechecked reusable hook crates before changing code. `willhook` wraps Windows low-level hooks and `rdev` exposes cross-platform global input events, but both abstract away details Easydict needs to preserve for parity: raw Win32 mouse/keyboard message ids, `dwExtraInfo` for `EASYDICT_SYNTHETIC_KEY`, exact event timestamps, and point-to-PopButton-root hit-testing. The implementation therefore stays in `lib/easydict-windows-text-selection` on the official Microsoft `windows` crate instead of adding a third-party hook dependency.
+- Added `LowLevelInputHookEvent` plus a Windows `start_low_level_input_hook()` helper that installs `WH_MOUSE_LL` and `WH_KEYBOARD_LL` on a background message-loop thread, forwards raw hook events through a channel, and unhooks/joins on drop. Non-Windows remains an explicit unsupported boundary.
+- Added small platform helpers for `GetDoubleClickTime`, `GetTickCount64`, and `WindowFromPoint`/`GetAncestor(GA_ROOT)` root hit-testing so the later PopButton producer can keep the same double-click timing and "clicking the PopButton itself does not dismiss" behavior as the .NET service.
+- Added an app-side raw-event reducer in `mouse_selection.rs` that feeds the new helper events into the existing pure `MouseSelectionHookState` without touching UI/state files. Mouse events now reuse drag/multi-click planning, while keyboard events reuse the synthetic Ctrl+C dismiss guard.
+- Added a pure `MouseSelectionProducer` action layer on top of the reducer. It owns monotonic PopButton generations, converts drag selections into `CaptureSelectionText` requests, converts double/triple-click detections into cancellable pending timer actions, ignores stale pending generations, and exposes a `MouseSelectionTextReady` shape matching the existing `SelectionTextReady` app message fields. This lets the later runtime subscription map actions to `DismissPopButton`, timer tasks, selection capture, and `SelectionTextReady` without adding unsafe code or UI dependencies to `easydict_app`.
+- Added `mouse_selection_capture_result_message(...)` and `mouse_selection_capture_task(...)` at the app boundary. A producer `CaptureSelectionText` request can now reuse the existing native selected-text capture future and maps nonblank output directly into the existing `SelectionTextReady` PopButton consumer; blank/failed capture maps to `Noop`.
+- Remaining work: wire this helper into an actual app subscription/background producer, schedule pending multi-click timers in the runtime task layer, and dispatch producer actions to `DismissPopButton`, `mouse_selection_capture_task(...)`, and timer completion. Real Notepad/VS Code/Windows Terminal smoke coverage is still pending.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml --all-targets -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test mouse_selection_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior mouse_selection_capture -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Added WindowsNative OCR MaxImageDimension guard
+
+- Continued the Rust-native OCR hardening slice after the availability/status boundary. A read-only subagent checked the `windows 0.62.2` bindings and the .NET reference path; Microsoft exposes `OcrEngine::MaxImageDimension()` as the documented per-side image limit for `Windows.Media.Ocr`, while `RecognizeAsync` cancellation/timeout parity should be a later API-shape decision rather than part of this small guard.
+- Kept the implementation inside the existing `easydict_windows_ocr` helper crate. No new OCR dependency was added: Tesseract/leptess remain heavier engine replacements, while the current Rust wrapper already targets Easydict's Windows Native OCR contract through Microsoft's `windows` WinRT bindings.
+- `recognize_bgra_file(...)` now creates the OCR engine first, preserving the existing "no engine available -> empty result" behavior, then checks `OcrEngine::MaxImageDimension()` before allocating `SoftwareBitmap` or calling `RecognizeAsync`. Images whose width or height exceeds the engine limit now fail locally with a clear Rust-native OCR error instead of depending on WinRT allocation/recognition failure.
+- Added pure crate tests for `width == max` / `height == max` acceptance, width/height over-limit rejection, and invalid zero engine-limit handling. The broader app OCR behavior tests still prove WindowsNative/Ollama/Custom API routes do not probe legacy OCR workers or CompatHost.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_windows_ocr -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior -- --nocapture`
+
+## 2026-06-13: Hardened WindowsNative OCR availability for portable rs
+
+- Rechecked OCR replacement options before changing code. `leptess`/Tesseract are mature general OCR bindings but bring Tesseract/Leptonica/native language-data packaging; `oneocr-rs` targets the Windows 11 Snipping Tool engine rather than the documented Easydict behavior; thin Windows OCR wrappers such as `win_ocr` do not cover Easydict's DTO/language/fallback contracts better than the current in-tree wrapper. The existing Rust-owned `easydict_windows_ocr` crate on Microsoft `windows` WinRT bindings remains the best fit for Windows Native OCR parity.
+- Microsoft documents `Windows.Media.Ocr` as a package-identity API for desktop apps, which matters for the first rs portable build. The Rust app already runs WindowsNative OCR locally and does not probe legacy `workers/ocr`/CompatHost; this slice tightens the availability/status path so portable/unavailable environments report `isAvailable=false` with an empty language list instead of attempting `AvailableRecognizerLanguages()` after the engine is unavailable.
+- Added `windows_native_ocr_availability_skips_language_query_when_unavailable` to lock that behavior through the fake recognizer. This keeps settings/diagnostics callers on a clear Rust-native unavailable boundary and avoids resurrecting any `.NET` OCR worker fallback.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_windows_ocr -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior windows_native_ocr_availability -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior app_dir_runner_uses_native_windows_ocr_without_legacy_runtime -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior current_app_dir_runner_uses_default_windows_native_despite_hybrid_profile_and_stale_worker_markers -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test ocr_behavior -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_windows_ocr --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-13: Wired Rust TextSelection native backend into Translate Selection
+
+- Continued the core input/selection migration after the MDD route was verified. A read-only subagent audit confirmed the critical gap was not the planner but the missing app event wiring and foreground process-name context needed to avoid sending Ctrl+C to terminals.
+- Kept the backend on the official Microsoft `windows` crate inside the new `lib/easydict-windows-text-selection` helper crate. `uiautomation` remains useful for UIA-only experiments, but this slice also needs foreground HWND/PID, process-image lookup, clipboard sequence polling, clipboard restore, thread-input focus, and `SendInput`; generic `get-selected-text` crates do not cover Easydict's Electron/terminal/suppression contract.
+- Added `process_name_for_id(...)` to the helper crate so Rust can classify the foreground target using `.NET Process.ProcessName`-style stems. If process-name resolution fails, the Rust planner now takes a conservative UIA-only route rather than risking a clipboard fallback into a terminal.
+- Added a native capture wrapper with a shared suppression tracker in `text_selection.rs`: foreground target discovery, process classification, UIA attempt, clipboard fallback with ClipWait/restore, and success/non-text suppression recording now run behind the same fakeable planner tested earlier.
+- Wired `Message::TranslateSelection` and the settings "Translate Selection" hotkey to capture the insertion target and then run the Rust-native selected-text future. Non-empty captured text reuses the existing quick-translate entry point; the tray's explicit "Translate Clipboard" command remains on the old read-clipboard task.
+- Remaining TextSelection work: real mouse-hook producer to feed `SelectionTextReady` for PopButton, Windows ignored/E2E coverage against Notepad/terminal apps, and a timeout guard around synchronous UIA calls to match the .NET 200ms/800ms safeguards.
+
+Validation:
+
+- `cargo test --manifest-path lib/easydict-windows-text-selection/Cargo.toml --all-targets`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test text_selection_behavior -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior translate_selection -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior tray_commands_route_to_existing_desktop_actions -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_app --all-targets`
+
+## 2026-06-13: Hardened raw retained WorkerCommand startup guard
+
+- Continued the first rs portable/runtime boundary hardening. No new library was needed; this is an internal retained-worker feature guard rather than a replacement of parser/OCR/Win32 functionality.
+- `compat_client::WorkerCommand::spawn(...)` now classifies retained worker/runtime marker paths even when callers construct the command directly with `WorkerCommand::new(...)` instead of the packaged helper. Paths under `workers/<kind>`, `Easydict.Workers.*` executables, `dotnet.exe`, hostfxr/hostpolicy/CoreCLR DLLs, and `dotnet` path components all require the same explicit `EASYDICT_RUNTIME_PROFILE=hybrid` opt-in before any executable probing or deferred `.NET` runtime env injection.
+- Added feature-gated `compat_client` regressions proving raw LongDoc, LocalAI, unknown worker, and dotnet runtime commands fail locally with Rust-native-route-required when the profile is unset, while explicit `hybrid` still reaches the normal missing-executable I/O boundary for coexistence tests.
+
+Validation:
+
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --features retained-dotnet-workers --test compat_client raw_worker_command -- --nocapture`
+
+## 2026-06-13: Added Rust TextSelection pure strategy core
+
+- Rechecked reusable Windows selection/clipboard crates before changing code. `uiautomation` is a useful Windows UI Automation wrapper, but this slice only migrates Easydict's app-specific strategy planner; `get-selected-text` style crates are too generic for the terminal/Electron/suppression/clipboard-restore contract. No new dependency was added; the later Win32/UIA backend can stay on the official `windows` crate boundary already used elsewhere.
+- Added Rust `text_selection` pure logic for process-name normalization, Electron and terminal classification, target selection planning, ClipWait payload classification, per-process non-text suppression, clipboard restore decisions, synthetic Ctrl+C key input planning, and a small attempt-result reducer.
+- Added `text_selection_behavior`, mirroring the .NET `TextSelectionServiceTests` strategy boundaries: Electron clipboard-first route, terminal UIA-only route, ordinary UIA-then-clipboard route, own-process skip, two-tick non-text ClipWait, suppression expiry/recovery/exemptions, unknown-process non-suppression, modifier flushing before Ctrl+C, `EASYDICT_SYNTHETIC_KEY` marker propagation, and final outcome recording for success/failed clipboard attempts.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test text_selection_behavior -- --nocapture`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/text_selection.rs rs/crates/easydict_app/tests/text_selection_behavior.rs`
+
+## 2026-06-12: Added Rust encrypted-MDD key-header transform support
+
+- Split the user-requested MDD follow-up with read-only subagents: app-side companion discovery/resource inlining is already wired, while the library audit found one real core gap in `lib/rs-mdict`: MDD did not expose the same key-header transform entry point that MDX already had.
+- Rechecked reusable parser options before changing code. `mdict-rs` advertises defensive MDX/MDD parsing but is AGPL-3.0-only; `readmdict` is MIT but direct-port style; `libmdx` advertises broader features but is AGPL-3.0. The existing MIT in-tree `lib/rs-mdict` remains the lowest-risk route.
+- Added `Mdd::new_with_key_header_transform(...)`, reusing `MdictBase::new_with_key_header_transform(...)`, so encrypted companion MDD files can be opened by callers that already own the credential-derived decryptor. Without the transform, encrypted MDD still fails locally with `EncryptedFileRequiresPasscode` instead of being treated as a silent miss.
+- Updated the app-side `RsMdictMddReaderFactory` to receive the MDX dictionary snapshot and reuse the existing MDX credential-derived key-header decryptor for companion MDD files. Plain MDDs still open through the unchanged `Mdd::new(...)` route.
+- Added generated encrypted-MDD fixtures covering the public constructor, caller transform, encrypted record-block decrypt path, resolved resource key, raw bytes, MIME inference, and HTML data-URL inlining through the production app MDD factory.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml new_with_key_header_transform_reads_record_encrypted_mdd_resource -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior native_mdd_resource_lookup_reads_record_encrypted_mdd_with_dictionary_credentials -- --exact --nocapture`
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior mdd -- --nocapture`
+- `cargo fmt --manifest-path lib/rs-mdict/Cargo.toml --check`
+- `rustfmt --edition 2021 --check rs/crates/easydict_app/src/mdx_native.rs rs/crates/easydict_app/tests/mdx_native_behavior.rs`
+
+## 2026-06-12: Required real files for first rs portable payload entries
+
+- Continued the rs portable validator hardening from the packaging audit. No new dependency was needed; the existing ZIP and filesystem metadata checks are enough for this payload-shape guard.
+- `validate-rs-portable` now treats required entries as missing unless they are ordinary non-empty files. A ZIP directory named like `easydict_cli.exe` or an empty helper exe no longer satisfies the first-release allowlist.
+- Added directory and ZIP regression coverage for required helper exe entries that are directories or zero-byte files.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager validate_rs_portable_rejects_required_exe_directory_or_empty_entries -- --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable -- --nocapture`
+
+## 2026-06-12: Required explicit hybrid opt-in for ARM64 MSIX smoke
+
+- A parallel packaging audit found that the ARM64 MSIX smoke workflow still defaulted its manual `runtime_profile` input to `hybrid`, which could build the retained .NET/MSIX path without an explicit opt-in.
+- Changed the workflow input to a blank string default and removed the `|| 'hybrid'` environment fallback. The existing validation step now fails omitted/blank values and only continues after the caller enters `hybrid`.
+- Added `arm64_msix_smoke_requires_explicit_hybrid_runtime_profile` to keep the smoke workflow aligned with the first rs portable-only default.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior arm64_msix_smoke_requires_explicit_hybrid_runtime_profile -- --exact --nocapture`
+
+## 2026-06-12: Hardened rs portable validation for UTF-16 .NET host markers
+
+- Rechecked reusable PE inspection crates before changing the validator. `goblin`, `object`, and `pelite` all provide PE/COFF parsing surfaces, but this slice only needs to catch known retained-runtime marker strings in allowlisted portable executables, so the existing byte scanner was extended instead of adding a parser dependency.
+- `validate-rs-portable` now scans allowlisted executable bytes for both ASCII and UTF-16LE encodings of the retained .NET host/runtime markers, closing the rename-and-wide-string variant for apphost-style payloads inside `Easydict.Rust.exe` or Rust helper names.
+- Added directory and ZIP regression coverage for an allowlisted `easydict_cli.exe` that contains a UTF-16LE `.NET` host marker.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains_utf16le_dotnet_markers -- --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable -- --nocapture`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+
+## 2026-06-12: Locked Windows Native OCR language fallback order
+
+- Rechecked OCR replacement options before changing code. No new dependency was added: Windows Native OCR stays on the official `windows` crate / WinRT `Windows.Media.Ocr` path, while Tesseract/leptess would add native engine, language-data, and packaging surface that does not fit the first rs portable target.
+- `easydict_windows_ocr` now has a pure engine-attempt planner that trims a preferred language tag, ignores empty/`auto`, tries the preferred recognizer first, and always falls back to `TryCreateFromUserProfileLanguages()` afterward.
+- Added crate-level coverage for the fallback order so preferred-language PDF/OCR hints cannot regress into a hard unsupported-language failure before user-profile fallback.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_windows_ocr -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_windows_ocr --check`
+- `cd rs; cargo check -p easydict_windows_ocr --all-targets`
+
+## 2026-06-12: Revalidated Rust MDD support and restored MDX credential preflight parity
+
+- Rechecked available MDict/MDD libraries before changing code. `mdict-rs` is the only newer Rust library-first candidate that advertises MDX/MDD support, but switching parser crates would add license/API and behavior risk for no immediate core gap; `readmdict` is MIT but is a Python-origin route, and `mdict-parser` still does not implement MDD. The existing MIT `lib/rs-mdict` fork remains the selected reusable library.
+- Confirmed the current Rust route already covers the core MDD path: `Mdd` raw/base64 resource lookup, MIME inference, zlib/non-ASCII generated fixtures, cross-record-block reads, same-stem companion `.mdd` discovery, first-hit multi-MDD lookup, failed-MDD skipping, HTML data-URL inlining, and Quick Translate rich HTML separation.
+- Fixed one adjacent MDX preflight regression found while validating the MDD suite: record-block encrypted dictionaries with present but invalid regcode/email now report the local Base64/key-length credential error before opening the native reader, while unsupported `Encrypted=3` / unknown modes still fail locally as unsupported before any CompatHost path.
+
+Validation:
+
+- `cargo test --manifest-path lib/rs-mdict/Cargo.toml -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test mdx_native_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test quick_translate_behavior mdd -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior mdd -- --nocapture`
+
+## 2026-06-12: Added Rust-native mouse selection gesture core and tightened LongDoc helper resolution
+
+- Rechecked reusable hook libraries before changing code. `willhook` and `rdev` can wrap global input hooks, but this slice only migrates the pure MouseHook state machine, so no new dependency was added; later Win32 hook integration can stay on the existing `windows` crate boundary.
+- Added `mouse_selection` with Rust-owned drag detection, multi-click detection, hook-message outcome planning, PopButton self-click dismissal guard, excluded-app suppression, and the `EASYDICT_SYNTHETIC_KEY` keyboard marker used to ignore synthetic Ctrl+C.
+- Added `mouse_selection_behavior`, mirroring the .NET `MouseHookServiceTests` thresholds: 10px drag distance, 4px multi-click distance, double/triple-click timing, drag cancellation of pending multi-click, scroll/right/key dismiss semantics, and synthetic-key suppression.
+- Hardened `scripts/translate-long-doc.ps1` helper resolution so every resolved helper path, including explicit `-RustHelperPath`, `-AppDir\easydict_long_doc.exe`, source target candidates, and PATH discovery, is rejected if it lives under retained `dotnet/`, `workers/`, `host/fxr/`, shared runtime, `Easydict.CompatHost*`, `Easydict.NativeBridge*`, or `Easydict.Workers.*` payload roots. A file renamed to `easydict_long_doc.exe` can no longer bypass the leaf-name guard.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test mouse_selection_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_rejects_renamed_helper_under_retained_payload_root_before_spawn -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_rejects_retained_runtime_rust_helper_paths_before_spawn -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_resolves_app_dir_helper_without_cargo_or_dotnet_tools -- --exact --nocapture`
+- `rustfmt --edition 2021 rs/crates/easydict_app/src/mouse_selection.rs rs/crates/easydict_app/tests/mouse_selection_behavior.rs rs/crates/easydict_app/src/lib.rs`
+
 ## 2026-06-12: Reconfirmed MDD rs support and tightened LongDoc/browser no-runtime boundaries
 
 - No new dependency was needed. MDD remains on the existing MIT `lib/rs-mdict` fork, which is already the best-fit in-tree route for the required MDX/MDD semantics.
 - Re-ran the focused MDD suites after the user-requested check. The current Rust path covers MDD parsing, raw/base64 resource lookup, cross-record-block reads, companion `.mdd` discovery, MIME inference, WebView-ready data-URL inlining, first-hit ordering across multiple MDD files, failed-MDD skipping, and Quick Translate rich HTML separation.
 - Moved native LongDoc output/result JSON preflight ahead of PDF source reader/OCR fallback. If a PDF sidecar/output target is a directory, the run now fails locally before PDFium/source extraction, content-stream fallback, OCR, provider translation, or partial output writes.
 - Hardened the browser registrar source guard so renamed `easydict-native-bridge.exe` candidates are rejected not only from `workers/` and `dotnet/`, but also from legacy `Easydict.CompatHost`, `Easydict.NativeBridge`, and `Easydict.Workers.*` payload directories, including canonical target checks.
+- Tightened the browser bridge default wording: registrar usage/help now names `easydict_browser_registrar`, native bridge fatal stderr uses the `easydict-native-bridge` prefix, and the default boundary scan rejects legacy `BrowserHostRegistrar` / `Easydict NativeBridge` markers.
+- Added LongDoc PowerShell shim evidence for the remaining native options: `-EnvFile`, `-Layout`, `-MaxConcurrency`, and `-Vision*` settings are forwarded to the Rust helper under a forced rust-only child environment without invoking cargo/dotnet tools.
 
 Validation:
 
@@ -36,6 +598,11 @@ Validation:
 - `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_result_json_path_prechecked_before_provider_translation -- --exact --nocapture`
 - `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_both_output_prechecks_bilingual_text_path_before_writing_pdf_file -- --exact --nocapture`
 - `cd rs; cargo test -p easydict_app --test browser_registrar_behavior install_rejects_renamed_bridge_sources_from_legacy_payload_roots -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test browser_registrar_behavior browser_registrar_usage_names_rust_binary_not_legacy_alias -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test native_bridge_behavior native_bridge_binary_signals_rs_ocr_event_not_legacy_dotnet_event -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test native_bridge_behavior native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_signal -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script_forwards_layout_vision_env_file_and_max_concurrency -- --exact --nocapture`
 - `cd rs; cargo test -p easydict_app source_bridge_path_rejects_canonical_legacy_worker_or_dotnet_bridge_source --lib -- --nocapture`
 
 ## 2026-06-12: Tightened MDX/MDD credentials, discovery, and CLI no-runtime contracts
@@ -3815,9 +4382,34 @@ Worker fallback must be tested in both available and missing/failed host modes, 
   - No new dependency was needed. The route reuses the already migrated Youdao web dictionary executor plus the existing `PhoneticMemoryCache`, flight tracker, enrichment planner, and merge helpers from `translation_cache`.
   - Non-streaming Quick Translate backend tasks now attempt phonetic enrichment before emitting `QuickTranslateServiceFinished`, so successful provider results can be cached and rendered with merged US/UK phonetics. Streaming, grammar, MDX, Youdao itself, non-English targets, sentence-like outputs, existing target phonetics, and `NoResult` stay untouched.
   - Added focused Quick Translate coverage for Youdao phonetic fetch/merge/cache insert, skip conditions, and phonetic-cache hits that avoid a Youdao HTTP request. Youdao fetch failures remain non-fatal by returning the original translation update.
+- 2026-06-13: Decoupled startup activation parsing from WinFluent task types.
+  - No new dependency was needed. Startup activation is only CLI/protocol parsing plus internal message selection, so the route now stays in `activation.rs` as pure app-core logic and `lib.rs` wraps the optional message into a WinFluent `Task` at the application boundary.
+  - `startup_activation_message_for_args(...)` now covers the OCR activation message mapping without importing `win_fluent`; the existing `startup_activation_task_for_args(...)` API remains available from the crate root for app startup and tests.
+  - Added a default boundary guard so `activation.rs` cannot reintroduce `win_fluent`, `Task<`, or `Task::` while the Quick Translate behavior test continues proving startup OCR activation reuses the hotkey capture-overlay path.
+- 2026-06-13: Made the packaged Rust GUI entrypoint default to production state instead of preview demo state.
+  - No new dependency was needed. `easydict_preview_iced.exe` is still the first-release binary copied to `Easydict.Rust.exe`, but the wrapper now only enters preview harness behavior when an `EASYDICT_PREVIEW_*` environment variable is present.
+  - Without preview env, the packaged GUI loads real settings from `default_settings_storage_path()`, uses `main_window_options_for_settings(...)`, clears demo source text/results/LongDoc history/floating-window sample content, and snapshots loaded settings as saved settings.
+  - Preview-only affordances remain available for UI automation and screenshots: preview title/placement/sizing, schema dump, auto-toggle/scroll, and pop-button preview state still run when the preview env prefix is present.
+- 2026-06-13: Hid `.NET` runtime extraction from the default packager CLI/API surface.
+  - No replacement library was needed because this slice only narrows exposure. The existing hybrid-only extraction path still uses the already selected `reqwest` + `zip` implementation behind `hybrid-dotnet-runtime-packaging`.
+  - Default `easydict_packager` builds no longer recognize `extract-dotnet-runtime` as a named command or keep a feature-disabled fallback. The command is now only compiled in explicit hybrid builds.
+  - `ExtractDotnetRuntime*`, `PackageRuntimeProfile`, `extract_dotnet_runtime_archive(...)`, `dotnet_runtime_url(...)`, and extraction-only helpers/tests are now gated behind `hybrid-dotnet-runtime-packaging`, while release-contract coverage ensures they do not leak back into the default rs portable API surface.
 
 ## Current Verification
 
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_preview_iced -- --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_preview_iced --all-targets`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell -- --exact --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager rust_portable -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager dotnet_runtime -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --features hybrid-dotnet-runtime-packaging dotnet_runtime -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_packager --test release_contract_behavior dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile -- --exact --nocapture`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_packager --all-targets`
+- `cargo check --manifest-path rs/Cargo.toml -p easydict_packager --all-targets --features hybrid-dotnet-runtime-packaging`
+- `git diff --check -- rs/crates/easydict_preview_iced/src/main.rs rs/crates/easydict_packager/src/main.rs rs/crates/easydict_packager/src/lib.rs rs/crates/easydict_packager/tests/release_contract_behavior.rs migration-list.md refactor-progress.md`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test quick_translate_behavior startup_activation -- --nocapture`
+- `cargo test --manifest-path rs/Cargo.toml -p easydict_app --test default_api_boundary_behavior startup_activation_core_stays_decoupled_from_winfluent_task -- --exact --nocapture`
+- `rustfmt --edition 2021 rs/crates/easydict_app/src/activation.rs rs/crates/easydict_app/src/lib.rs rs/crates/easydict_app/tests/quick_translate_behavior.rs rs/crates/easydict_app/tests/default_api_boundary_behavior.rs`
 - `cd rs; cargo test -p easydict_app --test quick_translate_behavior phonetic_enrichment -- --nocapture`
 - `cd rs; cargo test -p easydict_app --test translation_cache_behavior phonetic -- --nocapture`
 - `cd rs; rustfmt --edition 2021 --check crates/easydict_app/src/quick_translate.rs crates/easydict_app/src/lib.rs crates/easydict_app/tests/quick_translate_behavior.rs`

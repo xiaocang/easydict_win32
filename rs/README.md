@@ -139,6 +139,7 @@ cargo test -p easydict_ui_parity_analyzer -- --nocapture
 cargo run -p easydict_ui_parity_analyzer -- --self-test
 cargo run -p easydict_ui_parity_analyzer -- screenshot-summary --screenshot-root path\to\ui-screenshots --artifact-name ui-screenshots-local --summary-path $env:TEMP\easydict-ui-screenshot-summary.md
 ..\dotnet\scripts\ci\Invoke-UiParityAnalysis.ps1 -ScreenshotRoot path\to\ui-screenshots -OutputDir path\to\ui-screenshots\ui-parity
+..\dotnet\scripts\ci\Invoke-UiParityAnalysis.ps1 -ScreenshotRoot path\to\single-page-shard -OutputDir path\to\single-page-shard\ui-parity -ManifestOnly
 ```
 
 `easydict_ui_parity_analyzer` is the Rust replacement for the old
@@ -146,7 +147,9 @@ cargo run -p easydict_ui_parity_analyzer -- screenshot-summary --screenshot-root
 contract, writes the parity report, coverage report, threshold policy, and LLM
 review prompt artifacts, preserves the wrapper's score/coverage gate flags, and
 also backs `dotnet/scripts/ci/Publish-UiScreenshotSummary.ps1` through the
-`screenshot-summary` subcommand.
+`screenshot-summary` subcommand. Use `-ManifestOnly` for focused shards such as
+Settings > Services so stale screenshot pairs elsewhere under the artifact root
+do not contaminate the page-specific score.
 
 Build-time icon generator smoke checks:
 

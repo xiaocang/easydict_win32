@@ -522,10 +522,10 @@ fn app_update_long_document_browse_starts_file_dialog_only_in_long_document_mode
 
     let browse_task = app.update(Message::BrowseFile);
 
-    assert_eq!(task_kind(&browse_task), "file_dialog");
+    assert_eq!(task_kind(&browse_task), "future");
 
     let output_browse_task = app.update(Message::BrowseOutputFolder);
-    assert_eq!(task_kind(&output_browse_task), "folder_dialog");
+    assert_eq!(task_kind(&output_browse_task), "future");
 
     app.state.long_document.is_translating = true;
     let locked_task = app.update(Message::BrowseFile);
@@ -5208,6 +5208,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::Stream(_) => "stream",
         Task::Window(_) => "window",
         Task::Platform(_) => "platform",
+        Task::Exit => "exit",
         Task::ScrollToTop(_) => "scroll_to_top",
         Task::ScrollTo { .. } => "scroll_to",
         Task::ReadClipboardText(_) => "read_clipboard",

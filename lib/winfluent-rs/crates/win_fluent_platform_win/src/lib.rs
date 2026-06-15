@@ -7,7 +7,7 @@ use win_fluent::action::ActionKind;
 use win_fluent::platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, NamedEventRegistration,
     ProtocolRegistration, ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow,
-    ScreenWindowSnapshotRequest, ShellVerb, TrayMenu,
+    ScreenWindowSnapshotRequest, ShellVerb, TrayMenu, TrayMenuItem,
 };
 use win_fluent::runtime::DesktopIntegrationPlan;
 use win_fluent::subscription::{Subscription, SubscriptionKind};
@@ -170,6 +170,31 @@ pub struct WindowsTrayPlan {
     pub tooltip: String,
     pub callback_message: u32,
     pub item_count: usize,
+    pub items: Vec<WindowsTrayItemPlan>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsTrayItemPlan {
+    pub id: String,
+    pub label: String,
+    pub enabled: bool,
+    pub command_id: u32,
+    pub action_kind: ActionKind,
+    pub kind: WindowsTrayItemKind,
+    pub children: Vec<WindowsTrayItemPlan>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum WindowsTrayItemKind {
+    Command,
+    Separator,
+    Submenu,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsTrayEvent {
+    pub id: String,
+    pub command_id: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -364,10 +389,17 @@ impl WindowsPlatformAdapter {
         if tray.items.is_empty() {
             None
         } else {
+            let mut next_command_id = 1000;
+            let items = tray
+                .items
+                .iter()
+                .map(|item| plan_tray_item(item, &mut next_command_id))
+                .collect::<Vec<_>>();
             Some(WindowsTrayPlan {
                 tooltip: tray.tooltip.clone(),
                 callback_message: native::wm_user() + 1,
-                item_count: tray.items.len(),
+                item_count: (next_command_id - 1000) as usize,
+                items,
             })
         }
     }
@@ -570,6 +602,38 @@ impl WindowsPlatformAdapter {
         native::signal_named_event(name)
     }
 
+    pub fn create_tray_icon(
+        plan: &WindowsTrayPlan,
+    ) -> Result<WindowsTrayHandle, WindowsPlatformError> {
+        native::create_tray_icon(plan)
+    }
+
+    pub fn wait_for_tray_event(
+        handle: &WindowsTrayHandle,
+        timeout: Duration,
+    ) -> Result<Option<WindowsTrayEvent>, WindowsPlatformError> {
+        let start = Instant::now();
+
+        loop {
+            if let Some(message) = native::poll_tray_message(handle)? {
+                if let Some(item) =
+                    find_tray_item_by_command(&handle.plan.items, message.command_id)
+                {
+                    return Ok(Some(WindowsTrayEvent {
+                        id: item.id.clone(),
+                        command_id: item.command_id,
+                    }));
+                }
+            }
+
+            if start.elapsed() >= timeout {
+                return Ok(None);
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     pub fn wait_for_named_event(
         handle: &WindowsNamedEventHandle,
         timeout: Duration,
@@ -744,11 +808,28 @@ impl WindowsNamedEventHandle {
     }
 }
 
+#[derive(Debug)]
+pub struct WindowsTrayHandle {
+    plan: WindowsTrayPlan,
+    native: native::TrayHandle,
+}
+
+impl WindowsTrayHandle {
+    pub fn plan(&self) -> &WindowsTrayPlan {
+        &self.plan
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct NativeHotkeyMessage {
     native_id: i32,
     modifiers: u32,
     virtual_key: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NativeTrayMessage {
+    command_id: u32,
 }
 
 fn map_hotkey_message(
@@ -789,6 +870,7 @@ fn collect_subscription<Message>(
                     tooltip: String::new(),
                     callback_message: native::wm_user() + 1,
                     item_count: 0,
+                    items: Vec::new(),
                 }))
             }
             SubscriptionKind::Window(id) => {
@@ -806,6 +888,64 @@ fn collect_subscription<Message>(
     }
 
     Ok(())
+}
+
+fn find_tray_item_by_command(
+    items: &[WindowsTrayItemPlan],
+    command_id: u32,
+) -> Option<&WindowsTrayItemPlan> {
+    items.iter().find_map(|item| {
+        if item.kind == WindowsTrayItemKind::Command && item.command_id == command_id {
+            Some(item)
+        } else {
+            find_tray_item_by_command(&item.children, command_id)
+        }
+    })
+}
+
+fn plan_tray_item<Message>(
+    item: &TrayMenuItem<Message>,
+    next_command_id: &mut u32,
+) -> WindowsTrayItemPlan {
+    if item.is_separator() {
+        return WindowsTrayItemPlan {
+            id: item.id.clone(),
+            label: item.label.clone(),
+            enabled: false,
+            command_id: 0,
+            action_kind: ActionKind::None,
+            kind: WindowsTrayItemKind::Separator,
+            children: Vec::new(),
+        };
+    }
+
+    if item.is_submenu() {
+        return WindowsTrayItemPlan {
+            id: item.id.clone(),
+            label: item.label.clone(),
+            enabled: item.enabled,
+            command_id: 0,
+            action_kind: ActionKind::None,
+            kind: WindowsTrayItemKind::Submenu,
+            children: item
+                .children
+                .iter()
+                .map(|child| plan_tray_item(child, next_command_id))
+                .collect(),
+        };
+    }
+
+    let command_id = *next_command_id;
+    *next_command_id += 1;
+    WindowsTrayItemPlan {
+        id: item.id.clone(),
+        label: item.label.clone(),
+        enabled: item.enabled,
+        command_id,
+        action_kind: item.action.kind(),
+        kind: WindowsTrayItemKind::Command,
+        children: Vec::new(),
+    }
 }
 
 fn plan_shell_verb(verb: &ShellVerb) -> WindowsShellVerbPlan {
@@ -1222,10 +1362,11 @@ mod native {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use super::{
-        ClipboardFormat, NativeHotkeyMessage, WindowsClipboardFormatSnapshot,
+        ClipboardFormat, NativeHotkeyMessage, NativeTrayMessage, WindowsClipboardFormatSnapshot,
         WindowsClipboardTextSnapshot, WindowsDataProtectionScope, WindowsHotkey,
         WindowsHotkeyHandle, WindowsMonitorMetrics, WindowsNamedEvent, WindowsNamedEventHandle,
-        WindowsPlatformError, WindowsPoint, WindowsProcessMemory, WindowsRect,
+        WindowsPlatformError, WindowsPoint, WindowsProcessMemory, WindowsRect, WindowsTrayHandle,
+        WindowsTrayPlan,
     };
     use win_fluent::platform::{
         ScreenCaptureRequest, ScreenCaptureResult, ScreenRect, ScreenWindow,
@@ -1233,7 +1374,7 @@ mod native {
     };
     use windows_sys::Win32::Foundation::{
         CloseHandle, GetLastError, GlobalFree, SetLastError, ERROR_FILE_NOT_FOUND, ERROR_SUCCESS,
-        HANDLE, HWND, LPARAM, POINT, RECT, WAIT_OBJECT_0, WAIT_TIMEOUT,
+        HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WAIT_OBJECT_0, WAIT_TIMEOUT, WPARAM,
     };
     use windows_sys::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
@@ -1249,6 +1390,7 @@ mod native {
         CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
         IsClipboardFormatAvailable, OpenClipboard, SetClipboardData,
     };
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::System::Memory::{
         GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
     };
@@ -1273,18 +1415,25 @@ mod native {
         VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_F1, VK_HOME, VK_LEFT, VK_LWIN,
         VK_MENU, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
     };
-    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
+        NIM_SETVERSION, NIN_SELECT, NOTIFYICONDATAW, NOTIFYICON_VERSION_4,
+    };
     #[cfg(test)]
     use windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
+        AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
         EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetParent,
         GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-        GetWindowThreadProcessId, IsWindow, IsWindowVisible, PeekMessageW, SetForegroundWindow,
-        SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, MSG, PM_REMOVE,
-        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        GetWindowThreadProcessId, IsWindow, IsWindowVisible, LoadIconW, PeekMessageW, PostMessageW,
+        RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, TrackPopupMenu,
+        CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE, HWND_MESSAGE, HWND_NOTOPMOST,
+        HWND_TOPMOST, IDI_APPLICATION, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG,
+        PM_REMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
         SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNORMAL,
-        WM_HOTKEY, WM_USER, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX,
-        WS_OVERLAPPEDWINDOW, WS_POPUP, WS_THICKFRAME,
+        TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_HOTKEY, WM_LBUTTONUP, WM_NULL,
+        WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+        WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW, WS_POPUP, WS_THICKFRAME,
     };
 
     static TEXT_INSERTION_TARGET: Mutex<isize> = Mutex::new(0);
@@ -1298,6 +1447,26 @@ mod native {
         fn drop(&mut self) {
             // Safety: handle is owned by this wrapper and was returned by CreateEventW/OpenEventW.
             let _ = unsafe { CloseHandle(self.handle) };
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct TrayHandle {
+        hwnd: HWND,
+        icon_id: u32,
+        callback_message: u32,
+        menu_items: Vec<super::WindowsTrayItemPlan>,
+    }
+
+    impl Drop for TrayHandle {
+        fn drop(&mut self) {
+            let mut data = tray_icon_data(self.hwnd, self.icon_id, self.callback_message);
+            // Safety: data identifies the icon added by create_tray_icon for this hidden HWND.
+            let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &mut data as _) };
+            if !self.hwnd.is_null() {
+                // Safety: hwnd was created by CreateWindowExW and is owned by this handle.
+                let _ = unsafe { DestroyWindow(self.hwnd) };
+            }
         }
     }
 
@@ -1395,6 +1564,87 @@ mod native {
             modifiers: lparam & 0xffff,
             virtual_key: (lparam >> 16) & 0xffff,
         }))
+    }
+
+    pub fn create_tray_icon(
+        plan: &WindowsTrayPlan,
+    ) -> Result<WindowsTrayHandle, WindowsPlatformError> {
+        if plan.items.is_empty() {
+            return Err(WindowsPlatformError::NativeCallFailed {
+                operation: "CreateTrayIcon",
+                code: 0,
+            });
+        }
+
+        let hwnd = create_tray_window()?;
+        let icon_id = 1;
+        let mut data = tray_icon_data(hwnd, icon_id, plan.callback_message);
+        data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+        // Safety: Loading the predefined application icon returns a shared icon handle.
+        data.hIcon = unsafe { LoadIconW(null_mut(), IDI_APPLICATION) };
+        copy_wide_truncated(&mut data.szTip, &plan.tooltip);
+
+        // Safety: data contains a valid hidden HWND owned by this thread.
+        if unsafe { Shell_NotifyIconW(NIM_ADD, &mut data as _) } == 0 {
+            // Safety: hwnd was created above and has not escaped on this error path.
+            let _ = unsafe { DestroyWindow(hwnd) };
+            return Err(last_error("Shell_NotifyIconW(NIM_ADD)"));
+        }
+
+        data.Anonymous.uVersion = NOTIFYICON_VERSION_4;
+        // Safety: data identifies the newly-added icon and sets its shell notification version.
+        if unsafe { Shell_NotifyIconW(NIM_SETVERSION, &mut data as _) } == 0 {
+            let mut delete_data = tray_icon_data(hwnd, icon_id, plan.callback_message);
+            // Safety: best-effort cleanup for the icon added above.
+            let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &mut delete_data as _) };
+            // Safety: hwnd was created above and has not escaped on this error path.
+            let _ = unsafe { DestroyWindow(hwnd) };
+            return Err(last_error("Shell_NotifyIconW(NIM_SETVERSION)"));
+        }
+
+        Ok(WindowsTrayHandle {
+            plan: plan.clone(),
+            native: TrayHandle {
+                hwnd,
+                icon_id,
+                callback_message: plan.callback_message,
+                menu_items: plan.items.clone(),
+            },
+        })
+    }
+
+    pub fn poll_tray_message(
+        handle: &WindowsTrayHandle,
+    ) -> Result<Option<NativeTrayMessage>, WindowsPlatformError> {
+        let mut message = MSG::default();
+        // Safety: PeekMessageW writes to a valid MSG pointer and is scoped to the hidden tray HWND.
+        let has_message =
+            unsafe { PeekMessageW(&mut message, handle.native.hwnd, 0, 0, PM_REMOVE) };
+
+        if has_message == 0 {
+            return Ok(None);
+        }
+
+        if message.message != handle.native.callback_message {
+            return Ok(None);
+        }
+
+        let tray_mouse_message = message.lParam as u32;
+        if tray_mouse_message == WM_LBUTTONUP || tray_mouse_message == NIN_SELECT {
+            return Ok(
+                first_enabled_tray_command(&handle.native.menu_items).map(|item| {
+                    NativeTrayMessage {
+                        command_id: item.command_id,
+                    }
+                }),
+            );
+        }
+
+        if tray_mouse_message == WM_RBUTTONUP {
+            return show_tray_menu(&handle.native);
+        }
+
+        Ok(None)
     }
 
     pub fn create_named_event(
@@ -2671,6 +2921,214 @@ try {
         }
     }
 
+    unsafe extern "system" fn tray_window_proc(
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        // Safety: This hidden window exists only to receive shell callback messages. All
+        // unhandled messages use the default Win32 procedure.
+        unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+    }
+
+    fn create_tray_window() -> Result<HWND, WindowsPlatformError> {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let class_name = wide_null(&format!(
+            "WinFluentTrayHost-{}-{:?}-{nonce}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        // Safety: null module name asks for the current module handle.
+        let hinstance = unsafe { GetModuleHandleW(null()) };
+        if hinstance.is_null() {
+            return Err(last_error("GetModuleHandleW"));
+        }
+
+        let window_class = WNDCLASSW {
+            style: CS_HREDRAW | CS_VREDRAW,
+            lpfnWndProc: Some(tray_window_proc),
+            hInstance: hinstance,
+            lpszClassName: class_name.as_ptr(),
+            ..Default::default()
+        };
+
+        // Safety: WNDCLASSW points to a valid, null-terminated class name.
+        if unsafe { RegisterClassW(&window_class) } == 0 {
+            return Err(last_error("RegisterClassW"));
+        }
+
+        // Safety: class_name is registered above; HWND_MESSAGE creates a message-only hidden window.
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                class_name.as_ptr(),
+                class_name.as_ptr(),
+                WS_POPUP,
+                CW_USEDEFAULT,
+                0,
+                CW_USEDEFAULT,
+                0,
+                HWND_MESSAGE,
+                null_mut(),
+                hinstance,
+                null_mut(),
+            )
+        };
+
+        if hwnd.is_null() {
+            return Err(last_error("CreateWindowExW"));
+        }
+
+        Ok(hwnd)
+    }
+
+    fn tray_icon_data(hwnd: HWND, icon_id: u32, callback_message: u32) -> NOTIFYICONDATAW {
+        NOTIFYICONDATAW {
+            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            hWnd: hwnd,
+            uID: icon_id,
+            uCallbackMessage: callback_message,
+            ..Default::default()
+        }
+    }
+
+    fn copy_wide_truncated(destination: &mut [u16], value: &str) {
+        if destination.is_empty() {
+            return;
+        }
+
+        for (index, unit) in value.encode_utf16().take(destination.len() - 1).enumerate() {
+            destination[index] = unit;
+        }
+    }
+
+    fn show_tray_menu(
+        handle: &TrayHandle,
+    ) -> Result<Option<NativeTrayMessage>, WindowsPlatformError> {
+        // Safety: CreatePopupMenu has no preconditions and returns an owned HMENU on success.
+        let menu = unsafe { CreatePopupMenu() };
+        if menu.is_null() {
+            return Err(last_error("CreatePopupMenu"));
+        }
+
+        if let Err(error) = append_tray_menu_items(menu, &handle.menu_items) {
+            // Safety: menu is owned by this function.
+            let _ = unsafe { DestroyMenu(menu) };
+            return Err(error);
+        }
+
+        let mut cursor = POINT { x: 0, y: 0 };
+        // Safety: cursor is a valid out pointer.
+        if unsafe { GetCursorPos(&mut cursor) } == 0 {
+            // Safety: menu is owned by this function.
+            let _ = unsafe { DestroyMenu(menu) };
+            return Err(last_error("GetCursorPos"));
+        }
+
+        // Safety: hidden HWND is valid while handle is alive. Foregrounding ensures the menu
+        // dismisses when the user clicks elsewhere, per notification area menu guidance.
+        let _ = unsafe { SetForegroundWindow(handle.hwnd) };
+        // Safety: menu and HWND are valid; TPM_RETURNCMD returns the chosen command id.
+        let command = unsafe {
+            TrackPopupMenu(
+                menu,
+                TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD,
+                cursor.x,
+                cursor.y,
+                0,
+                handle.hwnd,
+                null(),
+            )
+        };
+        // Safety: benign message recommended by Shell docs after notification-area popup menus.
+        let _ = unsafe { PostMessageW(handle.hwnd, WM_NULL, 0, 0) };
+        // Safety: menu is owned by this function.
+        let _ = unsafe { DestroyMenu(menu) };
+
+        if command == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(NativeTrayMessage {
+                command_id: command as u32,
+            }))
+        }
+    }
+
+    fn append_tray_menu_items(
+        menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
+        items: &[super::WindowsTrayItemPlan],
+    ) -> Result<(), WindowsPlatformError> {
+        for item in items {
+            match item.kind {
+                super::WindowsTrayItemKind::Separator => {
+                    // Safety: menu is owned by caller; separator ignores id and label.
+                    if unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, null()) } == 0 {
+                        return Err(last_error("AppendMenuW"));
+                    }
+                }
+                super::WindowsTrayItemKind::Submenu => {
+                    // Safety: CreatePopupMenu has no preconditions and returns an owned HMENU.
+                    let submenu = unsafe { CreatePopupMenu() };
+                    if submenu.is_null() {
+                        return Err(last_error("CreatePopupMenu"));
+                    }
+                    if let Err(error) = append_tray_menu_items(submenu, &item.children) {
+                        // Safety: submenu is owned by this branch until AppendMenuW succeeds.
+                        let _ = unsafe { DestroyMenu(submenu) };
+                        return Err(error);
+                    }
+
+                    let label = wide_null(&item.label);
+                    let flags = if item.enabled {
+                        MF_POPUP
+                    } else {
+                        MF_POPUP | MF_GRAYED
+                    };
+                    // Safety: menu and submenu are valid. On success, submenu ownership is
+                    // transferred to parent menu and will be destroyed with it.
+                    if unsafe { AppendMenuW(menu, flags, submenu as usize, label.as_ptr()) } == 0 {
+                        // Safety: submenu has not been transferred on failure.
+                        let _ = unsafe { DestroyMenu(submenu) };
+                        return Err(last_error("AppendMenuW"));
+                    }
+                }
+                super::WindowsTrayItemKind::Command => {
+                    let label = wide_null(&item.label);
+                    let flags = if item.enabled {
+                        MF_STRING
+                    } else {
+                        MF_STRING | MF_GRAYED
+                    };
+                    // Safety: menu is owned by caller, label is null-terminated for the duration
+                    // of the call, and command ids are stable in WindowsTrayPlan.
+                    if unsafe { AppendMenuW(menu, flags, item.command_id as usize, label.as_ptr()) }
+                        == 0
+                    {
+                        return Err(last_error("AppendMenuW"));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn first_enabled_tray_command(
+        items: &[super::WindowsTrayItemPlan],
+    ) -> Option<&super::WindowsTrayItemPlan> {
+        items.iter().find_map(|item| match item.kind {
+            super::WindowsTrayItemKind::Command if item.enabled => Some(item),
+            super::WindowsTrayItemKind::Submenu if item.enabled => {
+                first_enabled_tray_command(&item.children)
+            }
+            _ => None,
+        })
+    }
+
     fn last_error(operation: &'static str) -> WindowsPlatformError {
         // Safety: GetLastError has no preconditions and reads thread-local Win32 error state.
         WindowsPlatformError::NativeCallFailed {
@@ -2861,10 +3319,10 @@ try {
 #[cfg(not(windows))]
 mod native {
     use super::{
-        ClipboardFormat, NativeHotkeyMessage, WindowsClipboardTextSnapshot,
+        ClipboardFormat, NativeHotkeyMessage, NativeTrayMessage, WindowsClipboardTextSnapshot,
         WindowsDataProtectionScope, WindowsHotkey, WindowsHotkeyHandle, WindowsMonitorMetrics,
         WindowsNamedEvent, WindowsNamedEventHandle, WindowsPlatformError, WindowsPoint,
-        WindowsProcessMemory, WindowsRect,
+        WindowsProcessMemory, WindowsRect, WindowsTrayHandle, WindowsTrayPlan,
     };
     use win_fluent::platform::{
         ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow, ScreenWindowSnapshotRequest,
@@ -2872,6 +3330,9 @@ mod native {
 
     #[derive(Debug)]
     pub struct NamedEventHandle;
+
+    #[derive(Debug)]
+    pub struct TrayHandle;
 
     pub fn register_global_hotkey(
         native_hotkey: WindowsHotkey,
@@ -2883,6 +3344,18 @@ mod native {
     pub fn unregister_global_hotkey(_handle: &WindowsHotkeyHandle) {}
 
     pub fn poll_hotkey_message() -> Result<Option<NativeHotkeyMessage>, WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn create_tray_icon(
+        _plan: &WindowsTrayPlan,
+    ) -> Result<WindowsTrayHandle, WindowsPlatformError> {
+        Err(WindowsPlatformError::UnsupportedPlatform)
+    }
+
+    pub fn poll_tray_message(
+        _handle: &WindowsTrayHandle,
+    ) -> Result<Option<NativeTrayMessage>, WindowsPlatformError> {
         Err(WindowsPlatformError::UnsupportedPlatform)
     }
 
@@ -3664,10 +4137,71 @@ mod tests {
 
         assert_eq!(tray_plan.callback_message, native::wm_user() + 1);
         assert_eq!(tray_plan.item_count, 1);
+        assert_eq!(tray_plan.items.len(), 1);
+        assert_eq!(tray_plan.items[0].id, "open");
+        assert_eq!(tray_plan.items[0].label, "Open");
+        assert!(tray_plan.items[0].enabled);
+        assert_eq!(tray_plan.items[0].command_id, 1000);
+        assert_eq!(tray_plan.items[0].action_kind, ActionKind::None);
+        assert_eq!(tray_plan.items[0].kind, WindowsTrayItemKind::Command);
+        assert!(tray_plan.items[0].children.is_empty());
         assert_eq!(
             WindowsPlatformAdapter::native_clipboard_format(ClipboardFormat::Text),
             Some(13)
         );
+    }
+
+    #[test]
+    fn maps_structured_tray_menu_to_native_plan() {
+        let tray = TrayMenu::new("win fluent")
+            .item(TrayMenuItem::new("open", "Open").on_invoke(Msg::Changed))
+            .separator()
+            .item(
+                TrayMenuItem::submenu("browser", "Browser Support")
+                    .item(TrayMenuItem::new("install", "Install").on_invoke(Msg::Changed))
+                    .item(TrayMenuItem::new("uninstall", "Uninstall").enabled(false)),
+            )
+            .item(TrayMenuItem::new("exit", "Exit").on_invoke(Msg::Changed));
+        let tray_plan = WindowsPlatformAdapter::plan_tray(&tray).expect("tray plan");
+
+        assert_eq!(tray_plan.item_count, 4);
+        assert_eq!(tray_plan.items[0].kind, WindowsTrayItemKind::Command);
+        assert_eq!(tray_plan.items[0].command_id, 1000);
+        assert_eq!(tray_plan.items[1].kind, WindowsTrayItemKind::Separator);
+        assert_eq!(tray_plan.items[1].command_id, 0);
+        assert_eq!(tray_plan.items[2].kind, WindowsTrayItemKind::Submenu);
+        assert_eq!(tray_plan.items[2].label, "Browser Support");
+        assert_eq!(tray_plan.items[2].children[0].id, "install");
+        assert_eq!(tray_plan.items[2].children[0].command_id, 1001);
+        assert!(tray_plan.items[2].children[0].enabled);
+        assert_eq!(tray_plan.items[2].children[1].id, "uninstall");
+        assert_eq!(tray_plan.items[2].children[1].command_id, 1002);
+        assert!(!tray_plan.items[2].children[1].enabled);
+        assert_eq!(tray_plan.items[3].id, "exit");
+        assert_eq!(tray_plan.items[3].command_id, 1003);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn creates_and_drops_tray_icon_when_notification_area_is_available() {
+        let tray = TrayMenu::new("win fluent").item(TrayMenuItem::new("open", "Open"));
+        let plan = WindowsPlatformAdapter::plan_tray::<Msg>(&tray).expect("tray plan");
+
+        match WindowsPlatformAdapter::create_tray_icon(&plan) {
+            Ok(handle) => {
+                assert_eq!(handle.plan().tooltip, "win fluent");
+                assert_eq!(handle.plan().items[0].id, "open");
+                drop(handle);
+            }
+            Err(WindowsPlatformError::NativeCallFailed { operation, .. })
+                if operation.starts_with("Shell_NotifyIconW") =>
+            {
+                // Headless CI and service sessions may not expose Explorer's notification area.
+            }
+            Err(error) => {
+                panic!("tray icon should create or gracefully skip shell absence: {error:?}")
+            }
+        }
     }
 
     #[test]

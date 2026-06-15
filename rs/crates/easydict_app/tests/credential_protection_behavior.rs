@@ -61,6 +61,59 @@ fn credential_protection_only_matches_versioned_values() {
 }
 
 #[test]
+fn credential_protection_empty_values_are_neutral() {
+    assert_eq!(
+        protect_credential_legacy("", "stable-machine-id").unwrap(),
+        ""
+    );
+
+    for stored_value in [None, Some("")] {
+        let value =
+            unprotect_or_return_plaintext_with_machine_id(stored_value, "stable-machine-id");
+
+        assert_eq!(value.value, None);
+        assert!(!value.needs_migration);
+        assert!(!value.decrypt_failed);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn credential_protection_dpapi_empty_value_is_neutral() {
+    assert_eq!(protect_credential("").unwrap(), "");
+}
+
+#[test]
+fn credential_protection_invalid_dpapi_headers_fail_locally() {
+    for protected_value in [
+        "edcred1:bad:payload",
+        "edcred1:user:",
+        "edcred1::payload",
+        "edcred1:machine:",
+    ] {
+        assert_eq!(
+            try_unprotect_credential_with_machine_id(protected_value, "stable-machine-id"),
+            None
+        );
+        let value = unprotect_or_return_plaintext_with_machine_id(
+            Some(protected_value),
+            "stable-machine-id",
+        );
+        assert_eq!(value.value, None);
+        assert!(!value.needs_migration);
+        assert!(value.decrypt_failed);
+    }
+}
+
+#[test]
+fn credential_protection_source_no_longer_imports_winfluent_platform() {
+    let source = include_str!("../src/credential_protection.rs");
+
+    assert!(!source.contains("win_fluent_platform_win"));
+    assert!(!source.contains("WindowsPlatformAdapter"));
+}
+
+#[test]
 fn credential_protection_legacy_plaintext_requests_migration() {
     let value = unprotect_or_return_plaintext_with_machine_id(
         Some("plain-old-api-key"),

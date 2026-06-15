@@ -196,6 +196,16 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .or_else(|| Some("Loading".to_string()));
             node
         }
+        ViewToken::ProgressBar(token) => {
+            let mut node = A11yNode::new(A11yRole::StaticText).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| token.label.clone())
+                .or_else(|| Some("Progress".to_string()));
+            node
+        }
         ViewToken::BusyOverlay(token) => {
             let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
             node.name = token.a11y.name.clone().or_else(|| token.label.clone());

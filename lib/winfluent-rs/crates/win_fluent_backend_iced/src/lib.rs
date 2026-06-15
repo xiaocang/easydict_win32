@@ -19,10 +19,10 @@ use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
     button as iced_button, checkbox as iced_checkbox, column as iced_column,
     container as iced_container, image as iced_image, opaque as iced_opaque,
-    pick_list as iced_pick_list, responsive as iced_responsive, row as iced_row,
-    scrollable as iced_scrollable, slider as iced_slider, space as iced_space, stack as iced_stack,
-    text as iced_text, text_editor as iced_text_editor, text_input as iced_text_input,
-    toggler as iced_toggler,
+    pick_list as iced_pick_list, progress_bar as iced_progress_bar, responsive as iced_responsive,
+    row as iced_row, scrollable as iced_scrollable, slider as iced_slider, space as iced_space,
+    stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
+    text_input as iced_text_input, toggler as iced_toggler,
 };
 use iced::{
     alignment, font, keyboard, window, Background, Border, Color, Element, Event, Font,
@@ -42,6 +42,7 @@ use win_fluent::state::{ControlState, ValidationSeverity};
 use win_fluent::style::FluentStyle;
 use win_fluent::subscription::{
     PlatformEvent, Subscription as FluentSubscription, SubscriptionKind as FluentSubscriptionKind,
+    WindowEvent,
 };
 use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
@@ -49,9 +50,9 @@ use win_fluent::view::{
     AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind, CardToken,
     CheckBoxToken, CollapseTransition, ComboBoxItem, ExpanderToken, FlyoutButtonToken,
     LayoutDistribution, LayoutKind, LayoutToken, Length, OverlayToken, PointerPosition,
-    PointerRegionAction, PointerRegionToken, PointerWheel, ProgressRingToken, ResultCardToken,
-    ResultItem, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowToken, SliderToken,
-    StatusBadgeToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding,
+    PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken, ProgressRingToken,
+    ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowToken,
+    SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding,
     TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken, TitleBarToken, View, ViewToken,
     WrapToken,
 };
@@ -73,6 +74,12 @@ pub enum IcedHotkeyEvent {
 pub enum IcedNamedEvent {
     Signaled { name: String },
     Error { name: String, message: String },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum IcedTrayEvent {
+    Command { id: String },
+    Error { message: String },
 }
 
 pub struct IcedAdapter;
@@ -148,6 +155,12 @@ impl IcedAdapter {
         iced_named_event_subscription(name, auto_reset)
     }
 
+    pub fn tray_subscription(
+        plan: win_fluent_platform_win::WindowsTrayPlan,
+    ) -> Subscription<IcedTrayEvent> {
+        iced_tray_subscription(plan)
+    }
+
     pub fn window_screenshot(id: iced::window::Id) -> iced::Task<WindowScreenshot> {
         iced::window::screenshot(id).map(|screenshot| {
             Self::screenshot_frame(screenshot)
@@ -176,16 +189,14 @@ where
     App::Flags: Clone + Send + 'static,
     App::Message: fmt::Debug,
 {
-    let window_settings = window_settings(&options);
     let boot_options = options.clone();
 
-    iced::application(
+    iced::daemon(
         move || IcedSingleWindowRuntime::<App>::boot(flags.clone(), boot_options.clone()),
         IcedSingleWindowRuntime::<App>::update,
         IcedSingleWindowRuntime::<App>::view,
     )
-    .title(|state: &IcedSingleWindowRuntime<App>| state.title(&state.logical_window_id))
-    .window(window_settings)
+    .title(|state: &IcedSingleWindowRuntime<App>, window| state.title_for_native_window(window))
     .subscription(IcedSingleWindowRuntime::<App>::subscription)
     .run()
     .map_err(|error| error.to_string())
@@ -197,16 +208,26 @@ enum IcedRuntimeMessage<Message> {
     PlatformEvent(PlatformEvent),
     FocusWidget(String),
     WindowOpened(window::Id),
+    WindowClosed(window::Id),
+    WindowCloseRequested(window::Id),
+}
+
+#[derive(Clone)]
+struct RuntimeWindow {
+    logical_id: WindowId,
+    options: WindowOptions,
 }
 
 struct IcedSingleWindowRuntime<App: FluentApplication> {
     app: App,
-    logical_window_id: WindowId,
-    window_options: WindowOptions,
+    boot_window_id: WindowId,
+    boot_window_options: WindowOptions,
     window_title_overrides: HashMap<WindowId, String>,
-    native_window_id: Option<window::Id>,
-    view: View<App::Message>,
-    text_editors: TextEditorCache,
+    pending_windows: HashMap<window::Id, RuntimeWindow>,
+    native_windows: HashMap<window::Id, RuntimeWindow>,
+    logical_windows: HashMap<WindowId, window::Id>,
+    views: HashMap<WindowId, View<App::Message>>,
+    text_editors: HashMap<WindowId, TextEditorCache>,
     desktop_integration: DesktopIntegrationPlan<App::Message>,
 }
 
@@ -222,9 +243,17 @@ where
         let plan = RuntimePlan::<App>::new(flags);
         let mut runtime = Self::new(plan.app, options, plan.desktop_integration);
         let initial_task = runtime.fluent_task(plan.initial_task);
+        let open_task = if runtime.boot_window_options.visible_on_start {
+            runtime.open_window_task(runtime.boot_window_options.clone(), None)
+        } else {
+            iced::Task::none()
+        };
         let focus_task = runtime.delayed_focused_text_editor_task();
 
-        (runtime, iced::Task::batch([initial_task, focus_task]))
+        (
+            runtime,
+            iced::Task::batch([open_task, initial_task, focus_task]),
+        )
     }
 
     fn new(
@@ -232,33 +261,60 @@ where
         window_options: WindowOptions,
         desktop_integration: DesktopIntegrationPlan<App::Message>,
     ) -> Self {
-        let logical_window_id = window_options.id.clone();
-        let view = app.view(&logical_window_id);
-        let mut text_editors = TextEditorCache::default();
-        text_editors.sync(&view);
+        let boot_window_id = window_options.id.clone();
 
-        Self {
+        let mut runtime = Self {
             app,
-            logical_window_id,
-            window_options,
+            boot_window_id,
+            boot_window_options: window_options,
             window_title_overrides: HashMap::new(),
-            native_window_id: None,
-            view,
-            text_editors,
+            pending_windows: HashMap::new(),
+            native_windows: HashMap::new(),
+            logical_windows: HashMap::new(),
+            views: HashMap::new(),
+            text_editors: HashMap::new(),
             desktop_integration,
+        };
+        let boot_window_id = runtime.boot_window_id.clone();
+        runtime.sync_window_view(&boot_window_id, None);
+        runtime
+    }
+
+    fn rebuild_views(&mut self) {
+        let mut windows = vec![self.boot_window_id.clone()];
+        windows.extend(self.logical_windows.keys().cloned());
+        windows.extend(
+            self.pending_windows
+                .values()
+                .map(|window| window.logical_id.clone()),
+        );
+        windows.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        windows.dedup();
+
+        for window in windows {
+            self.sync_window_view(&window, None);
         }
     }
 
-    fn rebuild_view(&mut self) {
-        self.view = self.app.view(&self.logical_window_id);
-        self.text_editors.sync(&self.view);
+    fn sync_window_view(&mut self, window: &WindowId, view: Option<View<App::Message>>) {
+        let view = view.unwrap_or_else(|| self.app.view(window));
+        self.text_editors
+            .entry(window.clone())
+            .or_default()
+            .sync(&view);
+        self.views.insert(window.clone(), view);
     }
 
-    fn title(&self, window: &WindowId) -> String {
+    fn title_for_logical_window(&self, window: &WindowId) -> String {
         self.window_title_overrides
             .get(window)
             .cloned()
             .unwrap_or_else(|| self.app.title(window))
+    }
+
+    fn title_for_native_window(&self, window: window::Id) -> String {
+        let logical = self.logical_window_for_native(window);
+        self.title_for_logical_window(&logical)
     }
 
     fn update(
@@ -268,34 +324,74 @@ where
         match message {
             IcedRuntimeMessage::App(message) => {
                 let task = state.app.update(message);
-                state.rebuild_view();
+                state.rebuild_views();
                 iced::Task::batch([state.fluent_task(task), state.focused_text_editor_task()])
             }
-            IcedRuntimeMessage::PlatformEvent(event) => {
-                let Some(message) = map_platform_event(&state.app.subscription(), event) else {
-                    return iced::Task::none();
-                };
-
-                let task = state.app.update(message);
-                state.rebuild_view();
-                iced::Task::batch([state.fluent_task(task), state.focused_text_editor_task()])
-            }
+            IcedRuntimeMessage::PlatformEvent(event) => state
+                .platform_event_task(event)
+                .unwrap_or_else(iced::Task::none),
             IcedRuntimeMessage::FocusWidget(id) => iced::widget::operation::focus(id),
             IcedRuntimeMessage::WindowOpened(window_id) => {
-                state.native_window_id = Some(window_id);
+                let runtime_window =
+                    state
+                        .pending_windows
+                        .remove(&window_id)
+                        .unwrap_or_else(|| RuntimeWindow {
+                            logical_id: state.boot_window_id.clone(),
+                            options: state.boot_window_options.clone(),
+                        });
+                let logical_id = runtime_window.logical_id.clone();
+                state.logical_windows.insert(logical_id.clone(), window_id);
+                state
+                    .native_windows
+                    .insert(window_id, runtime_window.clone());
+                state.sync_window_view(&logical_id, None);
                 iced::Task::batch([
-                    apply_native_window_options_task(window_id, state.window_options.clone(), true),
+                    apply_native_window_options_task(window_id, runtime_window.options, true),
                     state.delayed_focused_text_editor_task(),
                 ])
+            }
+            IcedRuntimeMessage::WindowClosed(window_id) => {
+                if let Some(runtime_window) = state.native_windows.remove(&window_id) {
+                    state.logical_windows.remove(&runtime_window.logical_id);
+                }
+                iced::Task::none()
+            }
+            IcedRuntimeMessage::WindowCloseRequested(window_id) => {
+                let logical_id = state.logical_window_for_native(window_id);
+                let event = close_requested_platform_event(&logical_id);
+                state
+                    .platform_event_task(event)
+                    .unwrap_or_else(|| state.close_request_fallback_task(window_id, &logical_id))
             }
         }
     }
 
-    fn view(state: &Self) -> IcedElement<'_, IcedRuntimeMessage<App::Message>> {
+    fn platform_event_task(
+        &mut self,
+        event: PlatformEvent,
+    ) -> Option<iced::Task<IcedRuntimeMessage<App::Message>>> {
+        let message = map_platform_event(&self.app.subscription(), event)?;
+        let task = self.app.update(message);
+        self.rebuild_views();
+        Some(iced::Task::batch([
+            self.fluent_task(task),
+            self.focused_text_editor_task(),
+        ]))
+    }
+
+    fn view(state: &Self, window: window::Id) -> IcedElement<'_, IcedRuntimeMessage<App::Message>> {
         let theme = state.app.theme_tokens();
+        let logical = state.logical_window_for_native(window);
+        let view = state
+            .views
+            .get(&logical)
+            .or_else(|| state.views.get(&state.boot_window_id))
+            .expect("runtime must keep a view for the boot window");
+        let text_editors = state.text_editors.get(&logical);
         IcedAdapter::compile_view_with_text_editors_and_theme(
-            &state.view,
-            |id| state.text_editors.get(id),
+            view,
+            move |id| text_editors.and_then(|cache| cache.get(id)),
             &theme,
         )
         .map(IcedRuntimeMessage::App)
@@ -303,9 +399,17 @@ where
 
     fn subscription(state: &Self) -> Subscription<IcedRuntimeMessage<App::Message>> {
         let _desktop_entry_count = state.desktop_integration.entry_count();
+        let tray_menu = state
+            .app
+            .tray_menu()
+            .or_else(|| state.desktop_integration.tray_menu.clone());
+        let tray_plan = tray_menu
+            .as_ref()
+            .and_then(win_fluent_platform_win::WindowsPlatformAdapter::plan_tray);
         Subscription::batch([
-            window::open_events().map(IcedRuntimeMessage::WindowOpened),
-            fluent_subscription(state.app.subscription()),
+            window::close_requests().map(IcedRuntimeMessage::WindowCloseRequested),
+            window::close_events().map(IcedRuntimeMessage::WindowClosed),
+            fluent_subscription(state.app.subscription(), tray_plan.as_ref()),
         ])
     }
 
@@ -323,6 +427,7 @@ where
             FluentTask::Stream(stream) => iced::Task::stream(stream).map(IcedRuntimeMessage::App),
             FluentTask::Window(command) => self.window_command(command),
             FluentTask::Platform(command) => self.platform_command(command),
+            FluentTask::Exit => iced::exit(),
             FluentTask::ScrollToTop(id) => iced::widget::operation::snap_to(
                 iced::advanced::widget::Id::from(id),
                 iced::widget::scrollable::RelativeOffset::START,
@@ -354,14 +459,14 @@ where
     }
 
     fn focused_text_editor_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
-        focused_text_editor_id(&self.view)
+        self.focused_text_editor_id()
             .map(IcedRuntimeMessage::FocusWidget)
             .map(iced::Task::done)
             .unwrap_or_else(iced::Task::none)
     }
 
     fn delayed_focused_text_editor_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
-        focused_text_editor_id(&self.view)
+        self.focused_text_editor_id()
             .map(|id| {
                 iced::Task::perform(
                     async move {
@@ -372,6 +477,23 @@ where
                 )
             })
             .unwrap_or_else(iced::Task::none)
+    }
+
+    fn focused_text_editor_id(&self) -> Option<String> {
+        self.views.values().find_map(focused_text_editor_id)
+    }
+
+    fn close_request_fallback_task(
+        &self,
+        native_id: window::Id,
+        logical_id: &WindowId,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        let close = window::close(native_id);
+        if logical_id == &self.boot_window_id && !self.desktop_integration.has_entries() {
+            iced::Task::batch([close, iced::exit()])
+        } else {
+            close
+        }
     }
 
     fn platform_command(
@@ -435,18 +557,8 @@ where
             WindowCommand::Close(id) => self
                 .with_logical_window(&id, window::close)
                 .unwrap_or_else(iced::Task::none),
-            WindowCommand::Show(id) => self
-                .with_logical_window(&id, {
-                    let options = self.window_options.clone();
-                    move |window_id| show_window_task::<App::Message>(window_id, options.clone())
-                })
-                .unwrap_or_else(iced::Task::none),
-            WindowCommand::ShowAt { id, x, y } => self
-                .with_logical_window(&id, {
-                    let options = show_at_window_options(&self.window_options, x, y);
-                    move |window_id| show_window_task::<App::Message>(window_id, options.clone())
-                })
-                .unwrap_or_else(iced::Task::none),
+            WindowCommand::Show(id) => self.show_logical_window(id, None),
+            WindowCommand::ShowAt { id, x, y } => self.show_logical_window(id, Some((x, y))),
             WindowCommand::Hide(id) => self
                 .with_logical_window(&id, |window_id| {
                     window::set_mode::<IcedRuntimeMessage<App::Message>>(
@@ -457,7 +569,7 @@ where
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::ToggleVisibility(id) => self
                 .with_logical_window(&id, {
-                    let options = self.window_options.clone();
+                    let options = self.visible_options_for_logical_window(&id);
                     move |window_id| {
                         let show_options = options.clone();
                         window::mode(window_id).then(move |mode| {
@@ -472,7 +584,7 @@ where
                         })
                     }
                 })
-                .unwrap_or_else(iced::Task::none),
+                .unwrap_or_else(|| self.show_logical_window(id, None)),
             WindowCommand::Focus(id) => self
                 .with_logical_window(&id, window::gain_focus)
                 .unwrap_or_else(iced::Task::none),
@@ -500,20 +612,61 @@ where
                 })
                 .unwrap_or_else(iced::Task::none),
             WindowCommand::SetTitle { id, title } => {
-                if self.matches_logical_window(&id) {
-                    self.window_title_overrides.insert(id, title);
-                }
+                self.window_title_overrides.insert(id, title);
                 iced::Task::none()
             }
-            WindowCommand::Open { .. } | WindowCommand::ReplaceView { .. } => iced::Task::none(),
+            WindowCommand::Open { options, view } => self.open_window_task(options, Some(view)),
+            WindowCommand::ReplaceView { id, view } => {
+                self.sync_window_view(&id, Some(view));
+                iced::Task::none()
+            }
         }
+    }
+
+    fn show_logical_window(
+        &mut self,
+        id: WindowId,
+        position: Option<(f32, f32)>,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        let mut options = self.visible_options_for_logical_window(&id);
+        if let Some((x, y)) = position {
+            options = show_at_window_options(&options, x, y);
+        }
+
+        if let Some(task) = self.with_logical_window(&id, {
+            let options = options.clone();
+            move |window_id| show_window_task::<App::Message>(window_id, options.clone())
+        }) {
+            return task;
+        }
+
+        self.open_window_task(options, None)
+    }
+
+    fn open_window_task(
+        &mut self,
+        options: WindowOptions,
+        view: Option<View<App::Message>>,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        let logical_id = options.id.clone();
+        self.sync_window_view(&logical_id, view);
+        let settings = window_settings(&options);
+        let (native_id, task) = window::open(settings);
+        self.pending_windows.insert(
+            native_id,
+            RuntimeWindow {
+                logical_id,
+                options,
+            },
+        );
+        task.map(move |_| IcedRuntimeMessage::WindowOpened(native_id))
     }
 
     fn with_current_window(
         &self,
         command: impl Fn(window::Id) -> iced::Task<IcedRuntimeMessage<App::Message>> + Send + 'static,
     ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
-        if let Some(window_id) = self.native_window_id {
+        if let Some(window_id) = self.logical_windows.get(&self.boot_window_id).copied() {
             return command(window_id);
         }
 
@@ -528,12 +681,33 @@ where
         id: &WindowId,
         command: impl Fn(window::Id) -> iced::Task<IcedRuntimeMessage<App::Message>> + Send + 'static,
     ) -> Option<iced::Task<IcedRuntimeMessage<App::Message>>> {
-        self.matches_logical_window(id)
-            .then(|| self.with_current_window(command))
+        self.logical_windows.get(id).copied().map(command)
     }
 
-    fn matches_logical_window(&self, id: &WindowId) -> bool {
-        id == &self.logical_window_id
+    fn logical_window_for_native(&self, id: window::Id) -> WindowId {
+        self.native_windows
+            .get(&id)
+            .or_else(|| self.pending_windows.get(&id))
+            .map(|window| window.logical_id.clone())
+            .unwrap_or_else(|| self.boot_window_id.clone())
+    }
+
+    fn options_for_logical_window(&self, id: &WindowId) -> WindowOptions {
+        if id == &self.boot_window_id {
+            self.app
+                .window_options(id)
+                .unwrap_or_else(|| self.boot_window_options.clone())
+        } else {
+            self.app
+                .window_options(id)
+                .unwrap_or_else(|| WindowOptions::new(id.clone(), self.app.title(id)))
+        }
+    }
+
+    fn visible_options_for_logical_window(&self, id: &WindowId) -> WindowOptions {
+        let mut options = self.options_for_logical_window(id);
+        options.visible_on_start = true;
+        options
     }
 }
 
@@ -677,8 +851,13 @@ fn apply_native_window_options(handle: &dyn window::Window, options: &WindowOpti
     );
 }
 
+fn close_requested_platform_event(window_id: &WindowId) -> PlatformEvent {
+    PlatformEvent::Window(WindowEvent::CloseRequested(window_id.clone()))
+}
+
 fn fluent_subscription<Message>(
     subscription: FluentSubscription<Message>,
+    tray_plan: Option<&win_fluent_platform_win::WindowsTrayPlan>,
 ) -> Subscription<IcedRuntimeMessage<Message>>
 where
     Message: Clone + Send + 'static,
@@ -688,7 +867,7 @@ where
         FluentSubscription::Batch(subscriptions) => Subscription::batch(
             subscriptions
                 .into_iter()
-                .map(fluent_subscription::<Message>),
+                .map(|subscription| fluent_subscription::<Message>(subscription, tray_plan)),
         ),
         FluentSubscription::Event { kind, .. } => match kind {
             FluentSubscriptionKind::Hotkey(hotkey) => {
@@ -717,9 +896,23 @@ where
                     }
                 })
             }
+            FluentSubscriptionKind::Tray => tray_plan
+                .cloned()
+                .map(IcedAdapter::tray_subscription)
+                .unwrap_or_else(Subscription::none)
+                .map(|event| match event {
+                    IcedTrayEvent::Command { id } => {
+                        IcedRuntimeMessage::PlatformEvent(PlatformEvent::TrayCommand(id))
+                    }
+                    IcedTrayEvent::Error { message } => {
+                        IcedRuntimeMessage::PlatformEvent(PlatformEvent::Custom {
+                            kind: "tray_error".to_string(),
+                            value: message,
+                        })
+                    }
+                }),
             FluentSubscriptionKind::Clipboard
             | FluentSubscriptionKind::Theme
-            | FluentSubscriptionKind::Tray
             | FluentSubscriptionKind::Window(_)
             | FluentSubscriptionKind::Custom(_) => Subscription::none(),
         },
@@ -1212,6 +1405,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
         | ViewToken::ProgressRing(_)
+        | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
         | ViewToken::CheckBox(_)
         | ViewToken::ToggleSwitch(_)
@@ -1336,6 +1530,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         ViewToken::Button(_)
         | ViewToken::StatusBadge(_)
         | ViewToken::ProgressRing(_)
+        | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
         | ViewToken::Text(_)
         | ViewToken::CheckBox(_)
@@ -1443,6 +1638,7 @@ where
         ViewToken::FlyoutButton(token) => compile_flyout_button(token, visual),
         ViewToken::StatusBadge(token) => compile_status_badge(token, visual),
         ViewToken::ProgressRing(token) => compile_progress_ring(token, visual),
+        ViewToken::ProgressBar(token) => compile_progress_bar(token, visual),
         ViewToken::BusyOverlay(token) => compile_busy_overlay(token, provider, visual),
         ViewToken::Card(token) => compile_card(token, provider, visual),
         ViewToken::Spacer(token) => iced_space()
@@ -1507,6 +1703,7 @@ where
             token.selected.as_deref(),
             token.label.as_deref(),
             token.width,
+            token.height,
             &token.action,
             &token.state,
             visual,
@@ -1857,6 +2054,11 @@ where
     }
     if let Some(height) = token.height {
         container = container.height(iced_length(height));
+    }
+    if is_private_use_icon_text(&token.value) {
+        container = container
+            .align_x(alignment::Horizontal::Center)
+            .align_y(alignment::Vertical::Center);
     }
     container.into()
 }
@@ -2447,6 +2649,27 @@ where
         .font(text_font(TextStyle::Caption))
         .size(token.size as f32)
         .color(visual.text_secondary)
+        .into()
+}
+
+fn compile_progress_bar<'a, Message>(
+    token: &ProgressBarToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let value = if token.active {
+        token.value.unwrap_or(35.0)
+    } else {
+        0.0
+    };
+    let active = token.active;
+
+    iced_progress_bar(0.0..=100.0, value)
+        .length(iced_length(token.width))
+        .girth(IcedLength::Fixed(f32::from(token.height)))
+        .style(move |_| progress_bar_style(visual, active))
         .into()
 }
 
@@ -3277,62 +3500,71 @@ where
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     let placeholder = token.placeholder.as_deref().unwrap_or_default();
+    let use_single_line_input = token.min_height.is_none()
+        && token.max_height.is_some_and(|height| height <= 40)
+        && token.key_bindings.is_empty();
 
-    if let Some(content) = token.id.as_deref().and_then(provider) {
-        let mut control = iced_text_editor(content)
-            .placeholder(placeholder.to_string())
-            .font(text_font(token.text_style))
-            .size(text_size(token.text_style, visual))
-            .style({
-                let chrome = token.chrome;
-                let state = token.state.clone();
-                move |_, status| {
-                    text_editor_style(
-                        visual,
-                        text_editor_status_with_state(&state, status),
-                        chrome,
-                    )
-                }
-            });
+    if !use_single_line_input {
+        if let Some(content) = token.id.as_deref().and_then(provider) {
+            let mut control = iced_text_editor(content)
+                .placeholder(placeholder.to_string())
+                .font(text_font(token.text_style))
+                .size(text_size(token.text_style, visual))
+                .style({
+                    let chrome = token.chrome;
+                    let state = token.state.clone();
+                    move |_, status| {
+                        text_editor_style(
+                            visual,
+                            text_editor_status_with_state(&state, status),
+                            chrome,
+                        )
+                    }
+                });
 
-        if let Some(id) = &token.id {
-            control = control.id(id.clone());
-        }
+            if let Some(id) = &token.id {
+                control = control.id(id.clone());
+            }
 
-        if !token.key_bindings.is_empty() {
-            let key_bindings = token.key_bindings.clone();
-            control = control.key_binding(move |key_press| {
-                text_editor_key_binding(&key_bindings, &key_press)
-                    .or_else(|| iced_text_editor_state::Binding::from_key_press(key_press))
-            });
-        }
+            if let Some(Length::Fixed(width)) = token.width {
+                control = control.width(f32::from(width));
+            }
 
-        if let Some(height) = token.min_height {
-            control = control.min_height(u32::from(height));
-        }
-
-        if let Some(height) = token.max_height {
-            control = control.max_height(u32::from(height));
-        }
-
-        if token.state.enabled && !token.read_only {
-            if matches!(
-                token.action.kind(),
-                ActionKind::TextInput | ActionKind::SelectionInput
-            ) {
-                let action = token.action.clone();
-                let current = content.clone();
-                control = control.on_action(move |edit| {
-                    let mut next = current.clone();
-                    next.perform(edit);
-                    action
-                        .input_text(next.text())
-                        .expect("text editor action must produce a message")
+            if !token.key_bindings.is_empty() {
+                let key_bindings = token.key_bindings.clone();
+                control = control.key_binding(move |key_press| {
+                    text_editor_key_binding(&key_bindings, &key_press)
+                        .or_else(|| iced_text_editor_state::Binding::from_key_press(key_press))
                 });
             }
-        }
 
-        return control.into();
+            if let Some(height) = token.min_height {
+                control = control.min_height(u32::from(height));
+            }
+
+            if let Some(height) = token.max_height {
+                control = control.max_height(u32::from(height));
+            }
+
+            if token.state.enabled && !token.read_only {
+                if matches!(
+                    token.action.kind(),
+                    ActionKind::TextInput | ActionKind::SelectionInput
+                ) {
+                    let action = token.action.clone();
+                    let current = content.clone();
+                    control = control.on_action(move |edit| {
+                        let mut next = current.clone();
+                        next.perform(edit);
+                        action
+                            .input_text(next.text())
+                            .expect("text editor action must produce a message")
+                    });
+                }
+            }
+
+            return control.into();
+        }
     }
 
     let mut control = iced_text_input(placeholder, &token.text)
@@ -3346,8 +3578,23 @@ where
             }
         });
 
+    if let Some(icon) = &token.trailing_icon {
+        let symbol = icon_symbol(&icon.icon);
+        control = control.icon(iced::widget::text_input::Icon {
+            font: icon_symbol_font(symbol),
+            code_point: symbol,
+            size: Some(Pixels(14.0)),
+            spacing: f32::from(icon.spacing),
+            side: iced::widget::text_input::Side::Right,
+        });
+    }
+
     if let Some(id) = &token.id {
         control = control.id(id.clone());
+    }
+
+    if let Some(width) = token.width {
+        control = control.width(iced_length(width));
     }
 
     if token.state.enabled && !token.read_only {
@@ -3372,6 +3619,7 @@ fn compile_combo_box<'a, Message>(
     selected: Option<&str>,
     label: Option<&str>,
     width: Length,
+    height: Length,
     action: &Action<Message>,
     state: &'a ControlState,
     visual: IcedVisualTheme,
@@ -3397,12 +3645,14 @@ where
                 .unwrap_or_default(),
             label.unwrap_or("Select"),
             width,
+            height,
             state,
             visual,
         );
     }
 
     let action = action.clone();
+    let padding = combo_box_padding_for_height(height);
 
     iced_pick_list(choices, selected, move |choice| {
         action
@@ -3411,7 +3661,7 @@ where
     })
     .placeholder(label.unwrap_or("Select"))
     .width(iced_length(width))
-    .padding([8, 12])
+    .padding(padding)
     .text_size(text_size(TextStyle::Body, visual))
     .handle(iced::widget::pick_list::Handle::Static(
         iced::widget::pick_list::Icon {
@@ -3434,6 +3684,7 @@ fn compile_read_only_combo_box<'a, Message>(
     value: &str,
     placeholder: &str,
     width: Length,
+    height: Length,
     state: &'a ControlState,
     visual: IcedVisualTheme,
 ) -> IcedElement<'a, Message>
@@ -3470,9 +3721,20 @@ where
 
     iced_container(content)
         .width(iced_length(width))
+        .height(iced_length(height))
         .padding([8, 12])
+        .align_y(alignment::Vertical::Center)
         .style(move |_| read_only_combo_box_style(visual, state))
         .into()
+}
+
+fn combo_box_padding_for_height(height: Length) -> IcedPadding {
+    let vertical = match height {
+        Length::Fixed(value) if value >= 40 => 12.0,
+        Length::Fixed(value) if value <= 28 => 6.0,
+        _ => 8.0,
+    };
+    IcedPadding::from([vertical, 12.0])
 }
 
 fn compile_expander<'a, Message, Provider>(
@@ -3550,22 +3812,34 @@ where
             .align_y(alignment::Vertical::Center)
     };
 
+    let header = iced_container(header)
+        .padding([8, 16])
+        .width(IcedLength::Fill);
+
     let mut layout = iced_column(vec![header.into()])
-        .padding([7, 16])
-        .spacing(8)
+        .spacing(0)
         .width(IcedLength::Fill);
 
     if token.expanded {
         if let Some(content) = &token.content {
-            layout = layout.push(compile_view_with_text_editors_and_visual(
-                content, provider, visual,
-            ));
+            let content = compile_view_with_text_editors_and_visual(content, provider, visual);
+            layout = layout.push(
+                iced_container(content)
+                    .width(IcedLength::Fill)
+                    .padding(IcedPadding {
+                        top: 24.0,
+                        right: 16.0,
+                        bottom: 18.0,
+                        left: 16.0,
+                    })
+                    .style(move |_| expander_content_container_style(visual)),
+            );
         }
     }
 
     iced_container(layout)
         .width(IcedLength::Fill)
-        .style(move |_| settings_row_container_style(visual))
+        .style(move |_| expander_container_style_with_state(visual, &token.header_state))
         .into()
 }
 
@@ -5268,6 +5542,10 @@ fn text_font(style: TextStyle) -> Font {
 
 fn text_font_for_value(style: TextStyle, value: &str) -> Font {
     let mut font = text_font(style);
+    if is_private_use_icon_text(value) {
+        font.family = icon_font().family;
+        return font;
+    }
     if contains_cjk(value) {
         font.family = font::Family::Name("Microsoft YaHei UI");
         if matches!(
@@ -5283,6 +5561,14 @@ fn text_font_for_value(style: TextStyle, value: &str) -> Font {
         }
     }
     font
+}
+
+fn is_private_use_icon_text(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed
+            .chars()
+            .all(|ch| ('\u{E000}'..='\u{F8FF}').contains(&ch))
 }
 
 fn icon_font() -> Font {
@@ -5950,11 +6236,9 @@ fn button_style_with_state(
                 visual.tile_foreground,
                 visual.tile_border,
             ),
-            iced::widget::button::Status::Hovered => (
-                Some(visual.button_hover),
-                visual.text_primary,
-                visual.border,
-            ),
+            iced::widget::button::Status::Hovered => {
+                (Some(visual.surface), visual.text_primary, visual.border)
+            }
             iced::widget::button::Status::Pressed => (
                 Some(visual.button_pressed),
                 visual.text_primary,
@@ -6418,19 +6702,19 @@ fn toggle_switch_style_for_state(
         (
             if is_pressed {
                 visual.accent_pressed
-            } else if is_hovered {
-                visual.accent_hover
             } else {
                 visual.accent
             },
             if is_pressed {
                 visual.accent_pressed
-            } else if is_hovered {
-                visual.accent_hover
             } else {
                 visual.accent
             },
-            visual.text_on_accent,
+            if is_pressed {
+                visual.text_on_accent.scale_alpha(0.72)
+            } else {
+                visual.text_on_accent
+            },
         )
     } else {
         let resting_light = matches!(visual.mode, ThemeMode::Light | ThemeMode::Minimal)
@@ -6446,8 +6730,6 @@ fn toggle_switch_style_for_state(
             (
                 if is_pressed {
                     visual.button_pressed
-                } else if is_hovered {
-                    visual.button_hover
                 } else {
                     visual.surface
                 },
@@ -6540,6 +6822,14 @@ fn read_only_combo_box_style(
         .border(pick_list_style.border)
 }
 
+fn progress_bar_style(visual: IcedVisualTheme, active: bool) -> iced::widget::progress_bar::Style {
+    iced::widget::progress_bar::Style {
+        background: Background::Color(visual.surface_alt),
+        bar: Background::Color(if active { visual.accent } else { visual.border }),
+        border: control_border_with_radius(Color::TRANSPARENT, 0.0, 2.0),
+    }
+}
+
 fn flyout_pick_list_style(
     visual: IcedVisualTheme,
     status: iced::widget::pick_list::Status,
@@ -6571,10 +6861,66 @@ fn menu_style(visual: IcedVisualTheme) -> iced::overlay::menu::Style {
 }
 
 fn settings_row_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    settings_row_container_style_with_state(visual, &ControlState::default())
+}
+
+fn settings_row_container_style_with_state(
+    visual: IcedVisualTheme,
+    state: &ControlState,
+) -> iced::widget::container::Style {
+    let background = if !state.enabled {
+        visual.surface
+    } else if state.pressed {
+        visual.button_pressed
+    } else if state.hovered {
+        visual.button_hover
+    } else {
+        visual.surface
+    };
+    let border_color = if state.focused {
+        visual.accent
+    } else {
+        visual.border
+    };
+
+    iced::widget::container::Style::default()
+        .background(background)
+        .color(visual.text_primary)
+        .border(control_border(visual, border_color, visual.stroke_control))
+}
+
+fn expander_container_style_with_state(
+    visual: IcedVisualTheme,
+    state: &ControlState,
+) -> iced::widget::container::Style {
+    let border_color = if state.focused {
+        visual.accent
+    } else {
+        expander_border_color(visual)
+    };
+
     iced::widget::container::Style::default()
         .background(visual.surface)
         .color(visual.text_primary)
-        .border(control_border(visual, visual.border, visual.stroke_control))
+        .border(control_border(visual, border_color, visual.stroke_control))
+}
+
+fn expander_border_color(visual: IcedVisualTheme) -> Color {
+    if matches!(visual.mode, ThemeMode::HighContrast) || !is_light_surface(visual.surface) {
+        visual.border
+    } else {
+        Color::from_rgb8(232, 234, 237)
+    }
+}
+
+fn is_light_surface(color: Color) -> bool {
+    ((color.r * 0.299) + (color.g * 0.587) + (color.b * 0.114)) >= 0.72
+}
+
+fn expander_content_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(visual.background)
+        .color(visual.text_primary)
 }
 
 fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget::container::Style {
@@ -6674,6 +7020,12 @@ fn iced_named_event_subscription(name: String, auto_reset: bool) -> Subscription
     platform_named_event_subscription(name, auto_reset)
 }
 
+fn iced_tray_subscription(
+    plan: win_fluent_platform_win::WindowsTrayPlan,
+) -> Subscription<IcedTrayEvent> {
+    platform_tray_subscription(plan)
+}
+
 #[cfg(windows)]
 fn platform_hotkey_subscription(hotkey: Hotkey) -> Subscription<IcedHotkeyEvent> {
     Subscription::run_with(HotkeySubscriptionData::from(hotkey), hotkey_stream)
@@ -6700,6 +7052,20 @@ fn platform_named_event_subscription(
     _name: String,
     _auto_reset: bool,
 ) -> Subscription<IcedNamedEvent> {
+    Subscription::none()
+}
+
+#[cfg(windows)]
+fn platform_tray_subscription(
+    plan: win_fluent_platform_win::WindowsTrayPlan,
+) -> Subscription<IcedTrayEvent> {
+    Subscription::run_with(TraySubscriptionData::from(plan), tray_stream)
+}
+
+#[cfg(not(windows))]
+fn platform_tray_subscription(
+    _plan: win_fluent_platform_win::WindowsTrayPlan,
+) -> Subscription<IcedTrayEvent> {
     Subscription::none()
 }
 
@@ -6823,6 +7189,61 @@ fn named_event_stream(
 }
 
 #[cfg(windows)]
+fn tray_stream(data: &TraySubscriptionData) -> impl iced::futures::Stream<Item = IcedTrayEvent> {
+    let plan = data.to_plan();
+
+    iced::stream::channel(
+        16,
+        move |mut output: iced::futures::channel::mpsc::Sender<IcedTrayEvent>| async move {
+            use std::sync::{
+                atomic::{AtomicBool, Ordering},
+                Arc,
+            };
+
+            let running = Arc::new(AtomicBool::new(true));
+            let thread_running = Arc::clone(&running);
+            let _guard = TrayBridgeGuard {
+                running: Arc::clone(&running),
+            };
+
+            std::thread::spawn(move || {
+                let handle = match win_fluent_platform_win::WindowsPlatformAdapter::create_tray_icon(
+                    &plan,
+                ) {
+                    Ok(handle) => handle,
+                    Err(error) => {
+                        let _ = output.try_send(IcedTrayEvent::Error {
+                            message: format!("{error:?}"),
+                        });
+                        return;
+                    }
+                };
+
+                while thread_running.load(Ordering::Relaxed) {
+                    match win_fluent_platform_win::WindowsPlatformAdapter::wait_for_tray_event(
+                        &handle,
+                        std::time::Duration::from_millis(100),
+                    ) {
+                        Ok(Some(event)) => {
+                            let _ = output.try_send(IcedTrayEvent::Command { id: event.id });
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            let _ = output.try_send(IcedTrayEvent::Error {
+                                message: format!("{error:?}"),
+                            });
+                            return;
+                        }
+                    }
+                }
+            });
+
+            std::future::pending::<()>().await;
+        },
+    )
+}
+
+#[cfg(windows)]
 struct HotkeyBridgeGuard {
     running: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -6848,6 +7269,19 @@ impl Drop for NamedEventBridgeGuard {
     }
 }
 
+#[cfg(windows)]
+struct TrayBridgeGuard {
+    running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(windows)]
+impl Drop for TrayBridgeGuard {
+    fn drop(&mut self) {
+        self.running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct HotkeySubscriptionData {
     id: String,
@@ -6861,6 +7295,25 @@ struct NamedEventSubscriptionData {
     auto_reset: bool,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct TraySubscriptionData {
+    tooltip: String,
+    callback_message: u32,
+    item_count: usize,
+    items: Vec<TrayItemSubscriptionData>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct TrayItemSubscriptionData {
+    id: String,
+    label: String,
+    enabled: bool,
+    command_id: u32,
+    action_kind: ActionKind,
+    kind: win_fluent_platform_win::WindowsTrayItemKind,
+    children: Vec<TrayItemSubscriptionData>,
+}
+
 impl HotkeySubscriptionData {
     fn to_hotkey(&self) -> Hotkey {
         let mut hotkey = Hotkey::new(self.id.clone(), self.key.to_hotkey_key());
@@ -6869,6 +7322,41 @@ impl HotkeySubscriptionData {
         }
 
         hotkey
+    }
+}
+
+impl TraySubscriptionData {
+    fn to_plan(&self) -> win_fluent_platform_win::WindowsTrayPlan {
+        let items = self
+            .items
+            .iter()
+            .map(TrayItemSubscriptionData::to_plan_item)
+            .collect::<Vec<_>>();
+
+        win_fluent_platform_win::WindowsTrayPlan {
+            tooltip: self.tooltip.clone(),
+            callback_message: self.callback_message,
+            item_count: self.item_count,
+            items,
+        }
+    }
+}
+
+impl TrayItemSubscriptionData {
+    fn to_plan_item(&self) -> win_fluent_platform_win::WindowsTrayItemPlan {
+        win_fluent_platform_win::WindowsTrayItemPlan {
+            id: self.id.clone(),
+            label: self.label.clone(),
+            enabled: self.enabled,
+            command_id: self.command_id,
+            action_kind: self.action_kind,
+            kind: self.kind,
+            children: self
+                .children
+                .iter()
+                .map(TrayItemSubscriptionData::to_plan_item)
+                .collect(),
+        }
     }
 }
 
@@ -6881,6 +7369,51 @@ impl From<Hotkey> for HotkeySubscriptionData {
                 .modifiers
                 .into_iter()
                 .map(HotkeyModifierData::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<win_fluent_platform_win::WindowsTrayPlan> for TraySubscriptionData {
+    fn from(plan: win_fluent_platform_win::WindowsTrayPlan) -> Self {
+        Self {
+            tooltip: plan.tooltip,
+            callback_message: plan.callback_message,
+            item_count: plan.item_count,
+            items: plan
+                .items
+                .into_iter()
+                .map(|item| TrayItemSubscriptionData {
+                    id: item.id,
+                    label: item.label,
+                    enabled: item.enabled,
+                    command_id: item.command_id,
+                    action_kind: item.action_kind,
+                    kind: item.kind,
+                    children: item
+                        .children
+                        .into_iter()
+                        .map(TrayItemSubscriptionData::from)
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<win_fluent_platform_win::WindowsTrayItemPlan> for TrayItemSubscriptionData {
+    fn from(item: win_fluent_platform_win::WindowsTrayItemPlan) -> Self {
+        Self {
+            id: item.id,
+            label: item.label,
+            enabled: item.enabled,
+            command_id: item.command_id,
+            action_kind: item.action_kind,
+            kind: item.kind,
+            children: item
+                .children
+                .into_iter()
+                .map(TrayItemSubscriptionData::from)
                 .collect(),
         }
     }
@@ -6992,6 +7525,21 @@ mod tests {
         fn update(&mut self, _message: Self::Message) -> FluentTask<Self::Message> {
             FluentTask::none()
         }
+
+        fn subscription(&self) -> FluentSubscription<Self::Message> {
+            FluentSubscription::window("main", |_| Msg::Run)
+        }
+
+        fn window_options(&self, window: &WindowId) -> Option<WindowOptions> {
+            match window.as_str() {
+                "mini" => Some(
+                    WindowOptions::new("mini", "Mini")
+                        .size(320.0, 200.0)
+                        .skip_taskbar(true),
+                ),
+                _ => None,
+            }
+        }
     }
 
     fn empty_desktop_integration_plan<Message>() -> DesktopIntegrationPlan<Message> {
@@ -7001,6 +7549,16 @@ mod tests {
             shell_verbs: Vec::new(),
             protocol_registrations: Vec::new(),
         }
+    }
+
+    #[test]
+    fn maps_close_request_to_logical_window_event() {
+        let id = WindowId::new("main");
+
+        assert_eq!(
+            close_requested_platform_event(&id),
+            PlatformEvent::Window(WindowEvent::CloseRequested(WindowId::new("main")))
+        );
     }
 
     #[test]
@@ -7026,7 +7584,7 @@ mod tests {
     }
 
     #[test]
-    fn set_title_window_command_overrides_single_logical_window_title() {
+    fn set_title_window_command_overrides_logical_window_titles() {
         let options = WindowOptions::new("main", "Boot title");
         let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
             TestApp,
@@ -7035,7 +7593,7 @@ mod tests {
         );
 
         assert_eq!(
-            runtime.title(&WindowId::new("main")),
+            runtime.title_for_logical_window(&WindowId::new("main")),
             "Original title".to_string()
         );
 
@@ -7045,19 +7603,93 @@ mod tests {
         });
 
         assert_eq!(
-            runtime.title(&WindowId::new("main")),
+            runtime.title_for_logical_window(&WindowId::new("main")),
             "Updated title".to_string()
         );
 
         let _ = runtime.window_command(WindowCommand::SetTitle {
             id: WindowId::new("settings"),
-            title: "Ignored title".to_string(),
+            title: "Settings title".to_string(),
         });
 
         assert_eq!(
-            runtime.title(&WindowId::new("main")),
+            runtime.title_for_logical_window(&WindowId::new("main")),
             "Updated title".to_string()
         );
+        assert_eq!(
+            runtime.title_for_logical_window(&WindowId::new("settings")),
+            "Settings title".to_string()
+        );
+    }
+
+    #[test]
+    fn show_logical_window_opens_pending_window_with_app_options() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+
+        let _ = runtime.window_command(WindowCommand::Show(WindowId::new("mini")));
+
+        let pending = runtime
+            .pending_windows
+            .values()
+            .find(|window| window.logical_id.as_str() == "mini")
+            .expect("mini window should be pending");
+        assert_eq!(pending.options.width, 320.0);
+        assert_eq!(pending.options.height, 200.0);
+        assert!(pending.options.skip_taskbar);
+        assert!(runtime.views.contains_key(&WindowId::new("mini")));
+    }
+
+    #[test]
+    fn closed_native_window_removes_logical_mapping() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let native_id = window::Id::unique();
+        let runtime_window = RuntimeWindow {
+            logical_id: WindowId::new("mini"),
+            options: WindowOptions::new("mini", "Mini"),
+        };
+        runtime
+            .logical_windows
+            .insert(WindowId::new("mini"), native_id);
+        runtime.native_windows.insert(native_id, runtime_window);
+
+        let _ = IcedSingleWindowRuntime::<TestApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowClosed(native_id),
+        );
+
+        assert!(!runtime.logical_windows.contains_key(&WindowId::new("mini")));
+        assert!(!runtime.native_windows.contains_key(&native_id));
+    }
+
+    #[test]
+    fn platform_window_events_are_filtered_by_logical_subscription_id() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+
+        assert!(runtime
+            .platform_event_task(PlatformEvent::Window(WindowEvent::CloseRequested(
+                WindowId::new("mini"),
+            )))
+            .is_none());
+        assert!(runtime
+            .platform_event_task(PlatformEvent::Window(WindowEvent::CloseRequested(
+                WindowId::new("main"),
+            )))
+            .is_some());
     }
 
     #[test]
@@ -7452,6 +8084,34 @@ mod tests {
         );
         assert_eq!(settings_row.border.width, theme.stroke.control);
 
+        let expander_active = expander_container_style_with_state(visual, &ControlState::default());
+        let expander_hover =
+            expander_container_style_with_state(visual, &ControlState::default().hovered(true));
+        let expander_pressed =
+            expander_container_style_with_state(visual, &ControlState::default().pressed(true));
+        assert_eq!(
+            optional_background_color(expander_active.background),
+            iced_color(theme.surface)
+        );
+        assert_eq!(
+            expander_active.border.color,
+            iced::Color::from_rgb8(232, 234, 237)
+        );
+        assert_eq!(expander_active.border.width, theme.stroke.control);
+        assert_eq!(
+            optional_background_color(expander_hover.background),
+            optional_background_color(expander_active.background)
+        );
+        assert_eq!(
+            optional_background_color(expander_pressed.background),
+            optional_background_color(expander_active.background)
+        );
+        let expander_content = expander_content_container_style(visual);
+        assert_eq!(
+            optional_background_color(expander_content.background),
+            iced_color(theme.background)
+        );
+
         let divider = utility_container_style(&FluentStyle::from_classes("bg-border"), visual);
         assert_eq!(
             optional_background_color(divider.background),
@@ -7492,7 +8152,8 @@ mod tests {
         );
         assert_eq!(
             optional_background_color(standard_hover.background),
-            iced_color(theme.button_hover)
+            iced_color(theme.surface),
+            "WinUI Services command buttons keep the active surface on hover"
         );
         assert_eq!(standard_hover.border.color, iced_color(theme.border));
 
@@ -7645,7 +8306,8 @@ mod tests {
         );
         assert_eq!(
             background_color(toggle_on_hover.background),
-            iced_color(theme.accent_hover)
+            iced_color(theme.accent.base),
+            "WinUI Services toggles keep the checked track fill on hover"
         );
 
         let toggle_off_hover = toggle_switch_style(
@@ -7654,7 +8316,8 @@ mod tests {
         );
         assert_eq!(
             background_color(toggle_off_hover.background),
-            iced_color(theme.button_hover)
+            iced_color(theme.surface),
+            "WinUI Services toggles keep the unchecked track fill subtle on hover"
         );
 
         let slider_hover = slider_style(visual, iced::widget::slider::Status::Hovered);
@@ -7851,6 +8514,10 @@ mod tests {
         assert_eq!(
             background_color(toggle.background),
             iced_color(theme.accent_pressed)
+        );
+        assert_eq!(
+            background_color(toggle.foreground),
+            visual.text_on_accent.scale_alpha(0.72)
         );
 
         let toggle_focused = ControlState::default().focused(true);
@@ -8178,6 +8845,113 @@ mod tests {
         let data = HotkeySubscriptionData::from(hotkey.clone());
 
         assert_eq!(data.to_hotkey(), hotkey);
+    }
+
+    #[test]
+    fn tray_subscription_data_round_trips_native_plan() {
+        let plan = win_fluent_platform_win::WindowsTrayPlan {
+            tooltip: "Easydict".to_string(),
+            callback_message: 1025,
+            item_count: 2,
+            items: vec![
+                win_fluent_platform_win::WindowsTrayItemPlan {
+                    id: "show-main".to_string(),
+                    label: "Show Easydict".to_string(),
+                    enabled: true,
+                    command_id: 1000,
+                    action_kind: ActionKind::Message,
+                    kind: win_fluent_platform_win::WindowsTrayItemKind::Command,
+                    children: Vec::new(),
+                },
+                win_fluent_platform_win::WindowsTrayItemPlan {
+                    id: "settings".to_string(),
+                    label: "Settings".to_string(),
+                    enabled: false,
+                    command_id: 1001,
+                    action_kind: ActionKind::Message,
+                    kind: win_fluent_platform_win::WindowsTrayItemKind::Command,
+                    children: Vec::new(),
+                },
+            ],
+        };
+
+        let data = TraySubscriptionData::from(plan.clone());
+        let round_trip = data.to_plan();
+
+        assert_eq!(round_trip.tooltip, plan.tooltip);
+        assert_eq!(round_trip.callback_message, plan.callback_message);
+        assert_eq!(round_trip.item_count, plan.item_count);
+        assert_eq!(round_trip.items[0].id, "show-main");
+        assert_eq!(round_trip.items[0].command_id, 1000);
+        assert!(round_trip.items[0].enabled);
+        assert_eq!(round_trip.items[1].id, "settings");
+        assert_eq!(round_trip.items[1].command_id, 1001);
+        assert!(!round_trip.items[1].enabled);
+    }
+
+    #[test]
+    fn tray_subscription_data_preserves_structured_menu_items() {
+        let plan = win_fluent_platform_win::WindowsTrayPlan {
+            tooltip: "Easydict".to_string(),
+            callback_message: 1025,
+            item_count: 2,
+            items: vec![
+                win_fluent_platform_win::WindowsTrayItemPlan {
+                    id: String::new(),
+                    label: String::new(),
+                    enabled: false,
+                    command_id: 0,
+                    action_kind: ActionKind::None,
+                    kind: win_fluent_platform_win::WindowsTrayItemKind::Separator,
+                    children: Vec::new(),
+                },
+                win_fluent_platform_win::WindowsTrayItemPlan {
+                    id: "browser-support".to_string(),
+                    label: "Browser Support".to_string(),
+                    enabled: true,
+                    command_id: 0,
+                    action_kind: ActionKind::None,
+                    kind: win_fluent_platform_win::WindowsTrayItemKind::Submenu,
+                    children: vec![
+                        win_fluent_platform_win::WindowsTrayItemPlan {
+                            id: "browser-install".to_string(),
+                            label: "Install Browser Support".to_string(),
+                            enabled: true,
+                            command_id: 1000,
+                            action_kind: ActionKind::Message,
+                            kind: win_fluent_platform_win::WindowsTrayItemKind::Command,
+                            children: Vec::new(),
+                        },
+                        win_fluent_platform_win::WindowsTrayItemPlan {
+                            id: "browser-uninstall".to_string(),
+                            label: "Uninstall Browser Support".to_string(),
+                            enabled: false,
+                            command_id: 1001,
+                            action_kind: ActionKind::Message,
+                            kind: win_fluent_platform_win::WindowsTrayItemKind::Command,
+                            children: Vec::new(),
+                        },
+                    ],
+                },
+            ],
+        };
+
+        let round_trip = TraySubscriptionData::from(plan).to_plan();
+
+        assert_eq!(round_trip.item_count, 2);
+        assert_eq!(
+            round_trip.items[0].kind,
+            win_fluent_platform_win::WindowsTrayItemKind::Separator
+        );
+        assert_eq!(
+            round_trip.items[1].kind,
+            win_fluent_platform_win::WindowsTrayItemKind::Submenu
+        );
+        assert_eq!(round_trip.items[1].children[0].id, "browser-install");
+        assert_eq!(round_trip.items[1].children[0].command_id, 1000);
+        assert!(round_trip.items[1].children[0].enabled);
+        assert_eq!(round_trip.items[1].children[1].id, "browser-uninstall");
+        assert!(!round_trip.items[1].children[1].enabled);
     }
 
     // Render-level proof that `apply_layout_box` produces centered + capped

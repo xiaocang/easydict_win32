@@ -80,7 +80,7 @@ impl<Message> Action<Message> {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum ActionKind {
     None,
     Message,

@@ -1,18 +1,85 @@
 use std::{fs, path::Path, time::Duration};
 
 use easydict_app::{
-    capture_overlay_window_options, fixed_window_options, mini_window_options,
+    capture_overlay_window_options, default_settings_storage_path, fixed_window_options,
+    load_settings_file, main_window_options_for_settings, mini_window_options,
     pop_button_view_with_state, pop_button_window_options, preview_control_state_from_id,
-    settings_window_options, EasydictApp, EasydictUiState, Message,
+    settings_window_options, EasydictApp, EasydictUiState, Message, SettingsState,
 };
 use win_fluent::prelude::*;
 
 fn main() {
+    let preview_mode = preview_mode_requested();
+    let initial_state = initial_state_for_mode(preview_mode);
+    let window_options = initial_window_options(preview_mode, &initial_state);
+
     win_fluent_backend_iced::run_single_window_application::<PreviewApp>(
-        EasydictUiState::preview_from_env(),
-        preview_window_options(),
+        initial_state,
+        window_options,
     )
-    .expect("Easydict preview runtime failed");
+    .expect("Easydict Rust runtime failed");
+}
+
+fn preview_mode_requested() -> bool {
+    preview_mode_requested_from_names(std::env::vars().map(|(name, _)| name))
+}
+
+fn preview_mode_requested_from_names<I, S>(names: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    names
+        .into_iter()
+        .any(|name| name.as_ref().starts_with("EASYDICT_PREVIEW_"))
+}
+
+fn initial_state_for_mode(preview_mode: bool) -> EasydictUiState {
+    if preview_mode {
+        EasydictUiState::preview_from_env()
+    } else {
+        production_initial_state()
+    }
+}
+
+fn production_initial_state() -> EasydictUiState {
+    let settings = load_settings_file(default_settings_storage_path())
+        .ok()
+        .map(|loaded| loaded.settings);
+    production_initial_state_with_settings(settings)
+}
+
+fn production_initial_state_with_settings(settings: Option<SettingsState>) -> EasydictUiState {
+    let mut state = EasydictUiState::default();
+    if let Some(settings) = settings {
+        state.settings = settings;
+    }
+
+    state.source_text.clear();
+    state.detected_language = None;
+    state.services_completed = 0;
+    state.results.clear();
+    state.long_document.history.clear();
+    state.mini.text.clear();
+    state.mini.services_completed = 0;
+    state.mini.results.clear();
+    state.fixed.text.clear();
+    state.fixed.services_completed = 0;
+    state.fixed.results.clear();
+    state.settings.unsaved_changes = false;
+    state.settings.show_unsaved_changes_dialog = false;
+    state.saved_settings = state.settings.clone();
+    state.saved_settings.unsaved_changes = false;
+    state.saved_settings.show_unsaved_changes_dialog = false;
+    state
+}
+
+fn initial_window_options(preview_mode: bool, state: &EasydictUiState) -> WindowOptions {
+    if preview_mode {
+        preview_window_options()
+    } else {
+        main_window_options_for_settings(&state.settings)
+    }
 }
 
 fn preview_window_options() -> WindowOptions {
@@ -122,6 +189,7 @@ fn preview_scroll_from_env() -> Option<PreviewScroll> {
 struct PreviewApp {
     inner: EasydictApp,
     pending_scroll: Option<PreviewScroll>,
+    preview_mode: bool,
 }
 
 impl Application for PreviewApp {
@@ -129,6 +197,7 @@ impl Application for PreviewApp {
     type Flags = EasydictUiState;
 
     fn new(flags: Self::Flags) -> (Self, Task<Self::Message>) {
+        let preview_mode = preview_mode_requested();
         let (inner, initial_task) = EasydictApp::new(flags);
         dump_preview_schema_if_requested(&inner);
 
@@ -170,6 +239,7 @@ impl Application for PreviewApp {
             Self {
                 inner,
                 pending_scroll,
+                preview_mode,
             },
             Task::batch([initial_task, auto_toggle_task, preview_scroll_task]),
         )
@@ -180,7 +250,7 @@ impl Application for PreviewApp {
     }
 
     fn view(&self, window: &WindowId) -> View<Self::Message> {
-        if window.as_str() == "pop-button" {
+        if self.preview_mode && window.as_str() == "pop-button" {
             return pop_button_view_with_state(pop_button_preview_state());
         }
 
@@ -197,6 +267,30 @@ impl Application for PreviewApp {
         }
 
         task
+    }
+
+    fn window_options(&self, window: &WindowId) -> Option<WindowOptions> {
+        self.inner.window_options(window)
+    }
+
+    fn subscription(&self) -> Subscription<Self::Message> {
+        self.inner.subscription()
+    }
+
+    fn tray_menu(&self) -> Option<TrayMenu<Self::Message>> {
+        self.inner.tray_menu()
+    }
+
+    fn named_events(&self) -> Vec<NamedEventRegistration<Self::Message>> {
+        self.inner.named_events()
+    }
+
+    fn shell_verbs(&self) -> Vec<ShellVerb> {
+        self.inner.shell_verbs()
+    }
+
+    fn protocol_registrations(&self) -> Vec<ProtocolRegistration> {
+        self.inner.protocol_registrations()
     }
 
     fn theme(&self) -> ThemeMode {
@@ -271,6 +365,101 @@ mod tests {
         assert_eq!(options.height, 913.0);
         assert_eq!(options.min_width, Some(760.0));
         assert_eq!(options.min_height, Some(620.0));
+    }
+
+    #[test]
+    fn preview_mode_detector_only_uses_preview_environment_prefix() {
+        assert!(preview_mode_requested_from_names([
+            "PATH",
+            "EASYDICT_PREVIEW_SCENARIO"
+        ]));
+        assert!(!preview_mode_requested_from_names([
+            "PATH",
+            "EASYDICT_RUNTIME_PROFILE",
+            "EASYDICT_APP_VERSION"
+        ]));
+    }
+
+    #[test]
+    fn production_initial_state_removes_preview_demo_content_and_loads_settings() {
+        let mut settings = SettingsState::default();
+        settings.ui_language = "zh-CN".to_string();
+        settings.monitor_clipboard = true;
+        settings.unsaved_changes = true;
+        settings.show_unsaved_changes_dialog = true;
+
+        let state = production_initial_state_with_settings(Some(settings));
+
+        assert_eq!(state.settings.ui_language, "zh-CN");
+        assert!(state.settings.monitor_clipboard);
+        assert!(!state.settings.unsaved_changes);
+        assert!(!state.settings.show_unsaved_changes_dialog);
+        assert_eq!(state.saved_settings, state.settings);
+        assert!(state.source_text.is_empty());
+        assert!(state.results.is_empty());
+        assert!(state.long_document.history.is_empty());
+        assert!(state.mini.text.is_empty());
+        assert!(state.mini.results.is_empty());
+        assert!(state.fixed.text.is_empty());
+        assert!(state.fixed.results.is_empty());
+    }
+
+    #[test]
+    fn production_window_options_use_real_main_window_contract() {
+        let mut settings = SettingsState::default();
+        settings.minimize_to_tray = true;
+        settings.start_minimized = true;
+        let state = production_initial_state_with_settings(Some(settings));
+
+        let options = initial_window_options(false, &state);
+
+        assert_eq!(options.id.as_str(), "main");
+        assert_eq!(options.title, "Easydict");
+        assert_eq!(options.placement, WindowPlacement::Center);
+        assert!(!options.visible_on_start);
+    }
+
+    #[test]
+    fn preview_window_options_still_use_preview_contract_when_requested() {
+        let state = production_initial_state_with_settings(None);
+        let options = initial_window_options(true, &state);
+
+        assert_eq!(options.id.as_str(), "main");
+        assert_eq!(options.title, "Easydict Rust Main Window Preview");
+        assert!(matches!(
+            options.placement,
+            WindowPlacement::Explicit { x: 40.0, y: 20.0 }
+        ));
+    }
+
+    #[test]
+    fn preview_app_forwards_desktop_runtime_surfaces_from_easydict_app() {
+        let mut state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        state.settings.shell_context_menu = true;
+
+        let (app, _) = PreviewApp::new(state);
+
+        assert!(app.tray_menu().is_some());
+        assert_eq!(app.named_events().len(), 1);
+        assert_eq!(app.shell_verbs().len(), 1);
+        assert_eq!(app.protocol_registrations().len(), 1);
+        assert!(matches!(app.subscription(), Subscription::Batch(_)));
+        assert!(app.window_options(&WindowId::new("mini")).is_some());
+    }
+
+    #[test]
+    fn preview_runtime_plan_captures_inner_desktop_integration_entries() {
+        let mut state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        state.settings.shell_context_menu = true;
+
+        let plan = RuntimePlan::<PreviewApp>::new(state);
+
+        assert!(plan.desktop_integration.has_entries());
+        assert_eq!(plan.desktop_integration.named_events.len(), 1);
+        assert_eq!(plan.desktop_integration.shell_verbs.len(), 1);
+        assert_eq!(plan.desktop_integration.protocol_registrations.len(), 1);
     }
 
     fn restore_env(name: &str, value: Option<String>) {

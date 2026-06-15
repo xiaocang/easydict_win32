@@ -1,8 +1,8 @@
 use easydict_app::browser_registrar::{
     chrome_registry_path, default_bridge_directory, firefox_registry_path, legacy_bridge_directory,
     parse_browser_registrar_args, parse_chrome_ext_ids, rust_bridge_directory, serialize_cli_json,
-    BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError, BrowserRegistry,
-    MemoryBrowserRegistry, DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS,
+    usage, BrowserRegistrarCommand, BrowserRegistrarCore, BrowserRegistrarParseError,
+    BrowserRegistry, MemoryBrowserRegistry, DEFAULT_BRIDGE_ROOT_NAME, DEFAULT_CHROME_EXT_IDS,
     DEFAULT_FIREFOX_EXT_ID, LEGACY_BRIDGE_ROOT_NAME, RUST_BRIDGE_ROOT_NAME,
 };
 use serde_json::{json, Value};
@@ -102,6 +102,58 @@ fn parser_reports_missing_and_unknown_commands_like_the_registrar_cli() {
         parse_browser_registrar_args(["bogus"]).expect_err("unknown command"),
         BrowserRegistrarParseError::UnknownCommand("bogus".to_string())
     );
+}
+
+#[test]
+fn browser_registrar_usage_names_rust_binary_not_legacy_alias() {
+    let usage = usage();
+
+    assert!(usage.contains("easydict_browser_registrar"));
+    assert!(
+        !usage.contains("BrowserHostRegistrar"),
+        "default registrar help should not present the legacy .NET alias as the primary entrypoint"
+    );
+}
+
+#[test]
+fn browser_registrar_binary_uses_rust_owned_registry_helper() {
+    let registrar_bin = include_str!("../src/bin/easydict_browser_registrar.rs");
+
+    assert!(registrar_bin.contains("easydict_windows_registry::write_current_user_default_string"));
+    assert!(
+        !registrar_bin.contains("win_fluent_platform_win"),
+        "browser registrar binary should not reach into WinFluent platform registry helpers"
+    );
+    assert!(
+        !registrar_bin.contains("WindowsPlatformAdapter"),
+        "browser registrar binary should keep registry IO behind lib/easydict-windows-registry"
+    );
+}
+
+#[test]
+fn browser_registrar_source_uses_lib_owned_retained_runtime_guard() {
+    let source = include_str!("../src/browser_registrar.rs");
+    let production = source
+        .split("#[cfg(test)]")
+        .next()
+        .expect("browser registrar source should have production section");
+
+    assert!(
+        production.contains("easydict_runtime_guards::path_has_retained_runtime_component"),
+        "browser registrar should keep retained payload component policy in a lib-owned guard"
+    );
+    for forbidden_inline_marker in [
+        "value == \"dotnet\"",
+        "value == \"workers\"",
+        "easydict.compathost",
+        "easydict.nativebridge",
+        "easydict.workers.",
+    ] {
+        assert!(
+            !production.contains(forbidden_inline_marker),
+            "browser registrar production source should not inline retained runtime marker {forbidden_inline_marker}"
+        );
+    }
 }
 
 #[test]

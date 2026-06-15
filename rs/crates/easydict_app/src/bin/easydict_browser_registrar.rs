@@ -77,19 +77,16 @@ struct SystemBrowserRegistry;
 
 impl BrowserRegistry for SystemBrowserRegistry {
     fn write_default_value(&mut self, key_path: &str, value: &str) -> io::Result<()> {
-        win_fluent_platform_win::WindowsPlatformAdapter::write_current_user_registry_string(
-            key_path, value,
-        )
-        .map_err(platform_error)
-    }
-
-    fn delete_key(&mut self, key_path: &str) -> io::Result<()> {
-        win_fluent_platform_win::WindowsPlatformAdapter::delete_current_user_registry_key(key_path)
+        easydict_windows_registry::write_current_user_default_string(key_path, value)
             .map_err(platform_error)
     }
 
+    fn delete_key(&mut self, key_path: &str) -> io::Result<()> {
+        easydict_windows_registry::delete_current_user_key(key_path).map_err(platform_error)
+    }
+
     fn read_default_value(&self, key_path: &str) -> io::Result<Option<String>> {
-        win_fluent_platform_win::WindowsPlatformAdapter::read_current_user_registry_string(key_path)
+        easydict_windows_registry::read_current_user_default_string(key_path)
             .map_err(platform_error)
     }
 }
@@ -137,6 +134,6 @@ fn default_source_bridge_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(BRIDGE_EXE_NAME))
 }
 
-fn platform_error(error: win_fluent_platform_win::WindowsPlatformError) -> io::Error {
-    io::Error::other(format!("{error:?}"))
+fn platform_error(error: easydict_windows_registry::WindowsRegistryError) -> io::Error {
+    io::Error::other(error.to_string())
 }

@@ -24,6 +24,18 @@ pub enum WindowEvent {
     DpiChanged(WindowId),
 }
 
+impl WindowEvent {
+    pub fn window_id(&self) -> &WindowId {
+        match self {
+            Self::Opened(id)
+            | Self::CloseRequested(id)
+            | Self::Closed(id)
+            | Self::Focused(id)
+            | Self::DpiChanged(id) => id,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlatformEvent {
     HotkeyPressed(String),
@@ -105,6 +117,22 @@ impl<Message> Subscription<Message> {
         })
     }
 
+    pub fn window(
+        id: impl Into<WindowId>,
+        map: impl Fn(WindowEvent) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        let id = id.into();
+        Self::event(
+            SubscriptionKind::Window(id.clone()),
+            move |event| match event {
+                PlatformEvent::Window(window_event) if window_event.window_id() == &id => {
+                    Some(map(window_event))
+                }
+                _ => None,
+            },
+        )
+    }
+
     pub fn batch(values: impl IntoIterator<Item = Subscription<Message>>) -> Self {
         let mut subscriptions = Vec::new();
         for value in values {
@@ -130,5 +158,41 @@ impl<Message> Subscription<Message> {
 impl<Message> Default for Subscription<Message> {
     fn default() -> Self {
         Self::None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum Msg {
+        Window(WindowEvent),
+    }
+
+    #[test]
+    fn window_subscription_maps_window_events() {
+        let subscription = Subscription::window("main", Msg::Window);
+
+        let Subscription::Event { kind, map } = subscription else {
+            panic!("expected window event subscription");
+        };
+
+        assert_eq!(kind, SubscriptionKind::Window(WindowId::new("main")));
+        assert_eq!(
+            map(PlatformEvent::Window(WindowEvent::CloseRequested(
+                WindowId::new("main"),
+            ))),
+            Some(Msg::Window(WindowEvent::CloseRequested(WindowId::new(
+                "main"
+            ))))
+        );
+        assert_eq!(
+            map(PlatformEvent::Window(WindowEvent::CloseRequested(
+                WindowId::new("mini"),
+            ))),
+            None
+        );
+        assert_eq!(map(PlatformEvent::ClipboardChanged), None);
     }
 }

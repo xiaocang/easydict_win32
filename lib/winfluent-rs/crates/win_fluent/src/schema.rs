@@ -139,6 +139,18 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("active", token.active.to_string())
             .property("size", token.size.to_string())
             .property("label", optional_string(token.label.as_deref())),
+        ViewToken::ProgressBar(token) => SchemaNode::new("ProgressBar", token.id.clone())
+            .property("active", token.active.to_string())
+            .property(
+                "value",
+                token
+                    .value
+                    .map(|value| format!("{value:.2}"))
+                    .unwrap_or_else(|| "indeterminate".to_string()),
+            )
+            .property("width", format!("{:?}", token.width))
+            .property("height", format!("Fixed({})", token.height))
+            .property("label", optional_string(token.label.as_deref())),
         ViewToken::BusyOverlay(token) => SchemaNode::new("BusyOverlay", token.id.clone())
             .property("active", token.active.to_string())
             .property("opacity", format!("{:.2}", token.opacity))
@@ -162,20 +174,44 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::Spacer(token) => SchemaNode::new("Spacer", token.id.clone())
             .property("width", format!("{:?}", token.width))
             .property("height", format!("{:?}", token.height)),
-        ViewToken::TextEditor(token) => SchemaNode::new("TextEditor", token.id.clone())
-            .property("text_len", token.text.chars().count().to_string())
-            .property("placeholder", optional_string(token.placeholder.as_deref()))
-            .property("min_height", optional_u16(token.min_height))
-            .property("max_height", optional_u16(token.max_height))
-            .property("text_style", format!("{:?}", token.text_style))
-            .property("chrome", format!("{:?}", token.chrome))
-            .property("read_only", token.read_only.to_string())
-            .property("state", token.state.to_string())
-            .property("action", format!("{:?}", token.action.kind()))
-            .property(
-                "key_bindings",
-                text_editor_key_bindings(&token.key_bindings),
-            ),
+        ViewToken::TextEditor(token) => {
+            let mut node = SchemaNode::new("TextEditor", token.id.clone())
+                .property("text_len", token.text.chars().count().to_string())
+                .property("placeholder", optional_string(token.placeholder.as_deref()))
+                .property(
+                    "width",
+                    token
+                        .width
+                        .map(|width| format!("{width:?}"))
+                        .unwrap_or_else(|| "auto".to_string()),
+                )
+                .property("min_height", optional_u16(token.min_height))
+                .property("max_height", optional_u16(token.max_height))
+                .property("text_style", format!("{:?}", token.text_style))
+                .property("chrome", format!("{:?}", token.chrome))
+                .property("read_only", token.read_only.to_string())
+                .property("state", token.state.to_string())
+                .property("action", format!("{:?}", token.action.kind()))
+                .property(
+                    "key_bindings",
+                    text_editor_key_bindings(&token.key_bindings),
+                );
+            if let Some(icon) = &token.trailing_icon {
+                node = node.child(
+                    SchemaNode::new("Button", Some(icon.id.clone()))
+                        .property("label", quoted(""))
+                        .property("kind", "Icon")
+                        .property("icon", optional_icon(Some(&icon.icon)))
+                        .property("tooltip", optional_string(Some(&icon.label)))
+                        .property("width", format!("Fixed({})", icon.width))
+                        .property("height", format!("Fixed({})", icon.height))
+                        .property("text_style", "none")
+                        .property("state", "enabled=true,hovered=false,pressed=false,focused=false,selected=false,validation=none")
+                        .property("action", "none"),
+                );
+            }
+            node
+        }
         ViewToken::ToggleSwitch(token) => SchemaNode::new("ToggleSwitch", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
@@ -226,10 +262,10 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 "labeled_width",
                 combo_box_labeled_evidence_width(token.label.as_deref(), token.width),
             )
-            .property("height", "Fixed(32)")
+            .property("height", format!("{:?}", token.height))
             .property(
                 "labeled_height",
-                combo_box_labeled_evidence_height(token.label.as_deref()),
+                combo_box_labeled_evidence_height(token.label.as_deref(), token.height),
             )
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
@@ -312,6 +348,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("description", optional_string(token.description.as_deref()))
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("expanded", token.expanded.to_string())
+                .property("state", format!("{}", token.header_state))
                 .property("action", format!("{:?}", token.action.kind()))
                 .property("trailing", token.trailing.len().to_string());
             if token.expanded {
@@ -591,11 +628,14 @@ fn optional_text_style(value: Option<crate::view::TextStyle>) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
-fn combo_box_labeled_evidence_height(label: Option<&str>) -> &'static str {
-    if label.is_some_and(|value| !value.trim().is_empty()) {
-        "Fixed(64)"
-    } else {
-        "none"
+fn combo_box_labeled_evidence_height(label: Option<&str>, height: crate::view::Length) -> String {
+    if !label.is_some_and(|value| !value.trim().is_empty()) {
+        return "none".to_string();
+    }
+
+    match height {
+        crate::view::Length::Fixed(value) => format!("Fixed({})", value.saturating_add(32)),
+        _ => "none".to_string(),
     }
 }
 

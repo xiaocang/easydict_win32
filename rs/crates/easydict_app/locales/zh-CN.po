@@ -141,6 +141,48 @@ msgstr "配置每个翻译服务的 API 密钥、端点和模型。"
 msgid "settings.services.configuration.description"
 msgstr "为每个翻译服务配置 API 密钥、端点和模型。"
 
+msgid "settings.services.test"
+msgstr "测试"
+
+msgid "settings.services.deepl.api_key_optional"
+msgstr "API 密钥（可选）"
+
+msgid "settings.services.deepl.free_api"
+msgstr "使用免费 API（网页翻译无需 API 密钥）"
+
+msgid "settings.services.deepl.quality_model"
+msgstr "使用质量优化模型（仅 API；速度较慢，质量更高）"
+
+msgid "settings.services.deepl.description"
+msgstr "留空 API 密钥可使用免费网页翻译。Pro API 密钥有更高的限额。"
+
+msgid "settings.services.local_ai.provider"
+msgstr "提供方"
+
+msgid "settings.services.local_ai.description.auto"
+msgstr "自动依次尝试 Phi Silica、Foundry Local 和 OpenVINO/NLLB 作为本地翻译回退。无需云端 API 密钥。"
+
+msgid "settings.services.local_ai.description.windows_ai"
+msgstr "通过 Windows AI API 在 Copilot+ PC 上使用 Phi Silica。无需 API 密钥，无需网络。"
+
+msgid "settings.services.local_ai.description.foundry"
+msgstr "通过 Microsoft Foundry Local 的 OpenAI 兼容本地端点运行本地模型。需要安装 Foundry Local 并准备好本地模型。"
+
+msgid "settings.services.local_ai.description.openvino"
+msgstr "使用 ONNX Runtime + OpenVINO 在本地运行 NLLB-200。硬件加速尽力而为，不支持的图部分会回退到 CPU。无需 API 密钥，无需网络。"
+
+msgid "settings.services.local_ai.foundry.endpoint"
+msgstr "端点（可选）"
+
+msgid "settings.services.local_ai.foundry.endpoint_placeholder"
+msgstr "通过 foundry service status 自动发现"
+
+msgid "settings.services.local_ai.foundry.model"
+msgstr "模型"
+
+msgid "settings.services.local_ai.foundry.config_description"
+msgstr "留空端点可通过 foundry service status 自动发现；如果本地服务使用固定的 OpenAI 兼容端点，也可以手动设置。"
+
 msgid "settings.hotkeys.title"
 msgstr "快捷键"
 
@@ -362,3 +404,57 @@ msgstr "开"
 
 msgid "settings.toggle.off"
 msgstr "关"
+
+msgid "tray.show"
+msgstr "显示 Easydict"
+
+msgid "tray.translate_clipboard"
+msgstr "翻译剪贴板"
+
+msgid "tray.ocr_translate"
+msgstr "OCR 截图翻译"
+
+msgid "tray.show_mini"
+msgstr "迷你窗口"
+
+msgid "tray.show_fixed"
+msgstr "固定窗口"
+
+msgid "tray.browser_support"
+msgstr "浏览器支持"
+
+msgid "tray.browser.chrome"
+msgstr "Chrome 系"
+
+msgid "tray.browser.firefox"
+msgstr "Firefox 系"
+
+msgid "tray.browser.install_chrome"
+msgstr "① 安装 Chrome 支持"
+
+msgid "tray.browser.uninstall_chrome"
+msgstr "卸载 Chrome 支持"
+
+msgid "tray.browser.get_chrome_extension"
+msgstr "② 获取扩展"
+
+msgid "tray.browser.install_firefox"
+msgstr "① 安装 Firefox 支持"
+
+msgid "tray.browser.uninstall_firefox"
+msgstr "卸载 Firefox 支持"
+
+msgid "tray.browser.get_firefox_extension"
+msgstr "② 获取扩展"
+
+msgid "tray.browser.install_all"
+msgstr "安装全部"
+
+msgid "tray.browser.uninstall_all"
+msgstr "卸载全部"
+
+msgid "tray.settings"
+msgstr "设置"
+
+msgid "tray.exit"
+msgstr "退出"

@@ -5,6 +5,7 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+easydict_runtime_guards = { path = "../../../lib/easydict-runtime-guards" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
 serde_json = "1"
 tempfile = "3.14"

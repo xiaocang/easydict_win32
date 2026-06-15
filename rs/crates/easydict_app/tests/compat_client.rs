@@ -563,6 +563,62 @@ fn packaged_worker_command_spawn_respects_rust_only_runtime_profile_before_io_pr
 }
 
 #[test]
+fn raw_worker_command_to_retained_worker_requires_hybrid_runtime_profile_before_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+
+    for (program, expected_prefix) in [
+        (
+            r"C:\EasydictMissingPortable\workers\longdoc\Easydict.Workers.LongDoc.exe",
+            "Long Document translation",
+        ),
+        (
+            r"C:\EasydictMissingPortable\workers\localai\Easydict.Workers.LocalAi.exe",
+            "Windows Local AI",
+        ),
+        (
+            r"C:\EasydictMissingPortable\workers\legacy\Easydict.Workers.Legacy.exe",
+            "Retained .NET worker",
+        ),
+        (
+            r"C:\EasydictMissingPortable\dotnet\dotnet.exe",
+            "Retained .NET worker",
+        ),
+    ] {
+        let error = match WorkerCommand::new(program).spawn() {
+            Ok(_) => panic!("raw retained worker/runtime command must require hybrid runtime"),
+            Err(error) => error,
+        };
+
+        retained_worker_disabled_error(error, expected_prefix);
+    }
+}
+
+#[test]
+fn raw_worker_command_to_retained_worker_allows_hybrid_runtime_profile_to_reach_io_probe() {
+    let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _runtime_profile = EnvVarGuard::set(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "hybrid");
+    let _generic_runtime_profile =
+        EnvVarGuard::remove(GENERIC_RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);
+
+    let error = match WorkerCommand::new(
+        r"C:\EasydictMissingPortable\workers\longdoc\Easydict.Workers.LongDoc.exe",
+    )
+    .spawn()
+    {
+        Ok(_) => panic!("missing raw retained worker executable should fail at I/O boundary"),
+        Err(error) => error,
+    };
+
+    assert!(
+        error.is_not_found(),
+        "hybrid raw retained worker path should proceed to executable probing, got {error:?}"
+    );
+}
+
+#[test]
 fn direct_packaged_worker_facade_requires_hybrid_runtime_profile_before_io_probe() {
     let _environment_guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let _runtime_profile = EnvVarGuard::remove(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE);

@@ -14,6 +14,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_Security",
     "Win32_Security_Cryptography",
     "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",
     "Win32_System_ProcessStatus",

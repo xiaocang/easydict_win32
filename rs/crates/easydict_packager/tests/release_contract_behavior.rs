@@ -85,6 +85,44 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
 }
 
 #[test]
+fn arm64_msix_smoke_requires_explicit_hybrid_runtime_profile() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/arm64-msix-smoke.yml"));
+    let workflow_dispatch = text_between(&workflow, "  workflow_dispatch:", "\npermissions:");
+
+    assert_contains(
+        workflow_dispatch,
+        "runtime_profile:",
+        "ARM64 MSIX smoke should keep a runtime profile input for explicit hybrid runs",
+    );
+    assert_contains(
+        workflow_dispatch,
+        "default: ''",
+        "ARM64 MSIX smoke should require the caller to enter hybrid explicitly",
+    );
+    assert_contains(
+        workflow_dispatch,
+        "type: string",
+        "ARM64 MSIX smoke runtime_profile should allow a blank default",
+    );
+    assert_not_contains(
+        workflow_dispatch,
+        "default: 'hybrid'",
+        "ARM64 MSIX smoke must not silently default retained runtime packaging to hybrid",
+    );
+    assert_contains(
+        &workflow,
+        "RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}",
+        "ARM64 MSIX smoke should not turn an omitted runtime_profile into hybrid before validation",
+    );
+    assert_not_contains(
+        &workflow,
+        "github.event.inputs.runtime_profile || 'hybrid'",
+        "ARM64 MSIX smoke must not use a fallback hybrid runtime profile",
+    );
+}
+
+#[test]
 fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid_assets() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
@@ -1857,6 +1895,110 @@ fn translate_long_doc_script_rejects_retained_runtime_rust_helper_paths_before_s
 
 #[cfg(windows)]
 #[test]
+fn translate_long_doc_script_rejects_renamed_helper_under_retained_payload_root_before_spawn() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-renamed-retained-helper-path");
+    let forbidden_tool_record = test_root.join("forbidden-renamed-helper.txt");
+    let explicit_helper_paths = vec![
+        test_root
+            .join("dotnet")
+            .join("host")
+            .join("fxr")
+            .join("8.0.0")
+            .join("easydict_long_doc.exe"),
+        test_root
+            .join("workers")
+            .join("longdoc")
+            .join("easydict_long_doc.exe"),
+        test_root
+            .join("Easydict.Workers.LongDoc")
+            .join("easydict_long_doc.exe"),
+    ];
+    let app_dirs = vec![
+        test_root.join("app-from-dotnet").join("dotnet"),
+        test_root.join("app-from-workers").join("workers"),
+    ];
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    for helper_path in &explicit_helper_paths {
+        write_fake_retained_long_doc_entrypoint(helper_path);
+    }
+    for app_dir in &app_dirs {
+        write_fake_retained_long_doc_entrypoint(&app_dir.join("easydict_long_doc.exe"));
+    }
+    std::env::set_var(
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        &forbidden_tool_record,
+    );
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+
+    for helper_path in explicit_helper_paths {
+        let _ = fs::remove_file(&forbidden_tool_record);
+        let output = translate_long_doc_script_command(&root)
+            .arg("-ListServices")
+            .arg("-RustHelperPath")
+            .arg(&helper_path)
+            .output()
+            .expect("run translate-long-doc shim");
+        let output_text = powershell_output_text(&output);
+
+        assert!(
+            !output.status.success(),
+            "renamed retained RustHelperPath should fail before spawning {}\n{output_text}",
+            helper_path.display()
+        );
+        assert_contains(
+            &output_text,
+            "retained .NET runtime or worker entry",
+            "renamed retained RustHelperPath rejection should explain the no-runtime boundary",
+        );
+        assert!(
+            !forbidden_tool_record.exists(),
+            "renamed retained RustHelperPath must be rejected before invoking {}",
+            helper_path.display()
+        );
+    }
+
+    for app_dir in app_dirs {
+        let _ = fs::remove_file(&forbidden_tool_record);
+        let output = translate_long_doc_script_command(&root)
+            .arg("-ListServices")
+            .arg("-AppDir")
+            .arg(&app_dir)
+            .output()
+            .expect("run translate-long-doc shim");
+        let output_text = powershell_output_text(&output);
+
+        assert!(
+            !output.status.success(),
+            "AppDir helper under retained payload root should fail before spawning {}\n{output_text}",
+            app_dir.display()
+        );
+        assert_contains(
+            &output_text,
+            "retained .NET runtime or worker entry",
+            "AppDir retained helper rejection should explain the no-runtime boundary",
+        );
+        assert!(
+            !forbidden_tool_record.exists(),
+            "AppDir retained helper must be rejected before invoking {}",
+            app_dir.display()
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+    drop(environment);
+}
+
+#[cfg(windows)]
+#[test]
 fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() {
     let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
     let environment = EnvironmentSnapshot::capture([
@@ -1960,6 +2102,127 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
         &record,
         "RUNTIME_PROFILE=rust-only",
         "translate-long-doc Rust helper path should force the generic runtime profile",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_forwards_layout_vision_env_file_and_max_concurrency() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_LONG_DOC_HELPER_RECORD",
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-full-args");
+    let fake_bin = test_root.join("bin");
+    let helper_path = test_root.join("fake-easydict-long-doc.cmd");
+    let record_path = test_root.join("helper-args.txt");
+    let forbidden_tool_record = test_root.join("forbidden-tools.txt");
+    let input_path = test_root.join("input.pdf");
+    let output_path = test_root.join("translated.pdf");
+    let env_file_path = test_root.join("longdoc.env");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_long_doc_helper(&helper_path);
+    write_fake_forbidden_tool_scripts(&fake_bin);
+    fs::write(&input_path, b"%PDF-1.7\n").expect("write input");
+    fs::write(&env_file_path, "EASYDICT_TEST=1\n").expect("write env file");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &record_path);
+    std::env::set_var(
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        &forbidden_tool_record,
+    );
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-InputFile")
+        .arg(&input_path)
+        .args(["-TargetLanguage", "zh-Hans", "-SourceLanguage", "en"])
+        .arg("-EnvFile")
+        .arg(&env_file_path)
+        .arg("-OutputFile")
+        .arg(&output_path)
+        .args(["-ServiceId", "google", "-OutputMode", "monolingual"])
+        .args(["-Layout", "VisionLLM", "-PdfExportMode", "Overlay"])
+        .args(["-Page", "2", "-MaxConcurrency", "4"])
+        .args([
+            "-VisionEndpoint",
+            "http://localhost:11434/v1/chat/completions",
+            "-VisionApiKey",
+            "vision-test-key",
+            "-VisionModel",
+            "layout-model",
+        ])
+        .arg("-RustHelperPath")
+        .arg(&helper_path)
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        output.status.success(),
+        "translate-long-doc shim should invoke fake Rust helper successfully\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !forbidden_tool_record.exists(),
+        "full-argument LongDoc shim path must not launch cargo/dotnet tools from PATH"
+    );
+    let record = read_text(&record_path);
+    for expected in [
+        "--input".to_string(),
+        input_path.display().to_string(),
+        "--target-language".to_string(),
+        "zh-Hans".to_string(),
+        "--from".to_string(),
+        "en".to_string(),
+        "--env-file".to_string(),
+        env_file_path.display().to_string(),
+        "--output".to_string(),
+        output_path.display().to_string(),
+        "--service".to_string(),
+        "google".to_string(),
+        "--output-mode".to_string(),
+        "monolingual".to_string(),
+        "--layout".to_string(),
+        "VisionLLM".to_string(),
+        "--pdf-export-mode".to_string(),
+        "Overlay".to_string(),
+        "--page".to_string(),
+        "2".to_string(),
+        "--max-concurrency".to_string(),
+        "4".to_string(),
+        "--vision-endpoint".to_string(),
+        "http://localhost:11434/v1/chat/completions".to_string(),
+        "--vision-api-key".to_string(),
+        "vision-test-key".to_string(),
+        "--vision-model".to_string(),
+        "layout-model".to_string(),
+    ] {
+        assert_contains(
+            &record,
+            &expected,
+            "translate-long-doc shim should pass the full Rust LongDoc argument surface",
+        );
+    }
+    assert_contains(
+        &record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "full-argument shim should force the Easydict runtime profile",
+    );
+    assert_contains(
+        &record,
+        "RUNTIME_PROFILE=rust-only",
+        "full-argument shim should force the generic runtime profile",
     );
 
     let _ = fs::remove_dir_all(test_root);
@@ -2623,6 +2886,8 @@ fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
     let root = repo_root();
     let script = read_text(&root.join("dotnet/scripts/Extract-DotnetRuntime.ps1"));
     let manifest = read_text(&root.join("rs/crates/easydict_packager/Cargo.toml"));
+    let packager_main = read_text(&root.join("rs/crates/easydict_packager/src/main.rs"));
+    let packager_lib = read_text(&root.join("rs/crates/easydict_packager/src/lib.rs"));
 
     assert_contains(
         &script,
@@ -2674,6 +2939,30 @@ fn dotnet_runtime_extraction_shim_requires_explicit_hybrid_profile() {
         "hybrid-dotnet-runtime-packaging = [\"dep:reqwest\"]",
         ".NET runtime downloading should live behind an explicit hybrid packaging feature",
     );
+    assert_not_contains(
+        &packager_main,
+        "run_extract_dotnet_runtime_feature_disabled",
+        "default packager CLI should not keep a named .NET runtime extraction fallback",
+    );
+    assert_source_line_is_feature_gated(
+        &packager_main,
+        "\"extract-dotnet-runtime\" => run_extract_dotnet_runtime",
+        "runtime extraction CLI command should exist only in explicit hybrid builds",
+    );
+    for needle in [
+        "pub struct ExtractDotnetRuntimeOptions",
+        "pub struct ExtractDotnetRuntimeOutcome",
+        "pub enum PackageRuntimeProfile",
+        "pub enum ExtractDotnetRuntimeError",
+        "pub fn extract_dotnet_runtime_archive",
+        "pub fn dotnet_runtime_url",
+    ] {
+        assert_source_line_is_feature_gated(
+            &packager_lib,
+            needle,
+            "default packager library API must not expose .NET runtime extraction symbols",
+        );
+    }
 }
 
 #[cfg(windows)]
@@ -3194,6 +3483,27 @@ fn assert_contains(haystack: &str, needle: &str, message: &str) {
 
 fn assert_not_contains(haystack: &str, needle: &str, message: &str) {
     assert!(!haystack.contains(needle), "{message}\nforbidden: {needle}");
+}
+
+fn assert_source_line_is_feature_gated(source: &str, needle: &str, message: &str) {
+    const FEATURE_CFG: &str = "#[cfg(feature = \"hybrid-dotnet-runtime-packaging\")]";
+
+    let lines = source.lines().collect::<Vec<_>>();
+    let line_index = lines
+        .iter()
+        .position(|line| line.contains(needle))
+        .unwrap_or_else(|| panic!("{message}\nmissing: {needle}"));
+    let preceding_attributes = lines[..line_index]
+        .iter()
+        .rev()
+        .map(|line| line.trim())
+        .take_while(|line| line.starts_with("#[") || line.is_empty())
+        .collect::<Vec<_>>();
+
+    assert!(
+        preceding_attributes.contains(&FEATURE_CFG),
+        "{message}\n{needle} must be immediately preceded by {FEATURE_CFG}"
+    );
 }
 
 fn directory_entry_names(root: &Path) -> Vec<String> {

@@ -1265,10 +1265,20 @@ dependencies = [
  "easydict_nllb",
  "easydict_pdf_overlay",
  "easydict_pdf_render",
+ "easydict_runtime_guards",
  "easydict_windows_ai",
+ "easydict_windows_credentials",
+ "easydict_windows_dialogs",
+ "easydict_windows_ipc",
  "easydict_windows_ocr",
+ "easydict_windows_registry",
+ "easydict_windows_screen_capture",
+ "easydict_windows_shell",
+ "easydict_windows_text_selection",
+ "easydict_windows_tts",
  "flate2",
  "futures-channel",
+ "futures-core",
  "html2text",
  "image",
  "lopdf 0.38.0",
@@ -1288,7 +1298,6 @@ dependencies = [
  "unicode-normalization",
  "unicode-segmentation",
  "win_fluent",
- "win_fluent_platform_win",
  "win_fluent_testkit",
  "zip 8.6.0",
 ]
@@ -1348,6 +1357,7 @@ dependencies = [
 name = "easydict_packager"
 version = "0.1.0"
 dependencies = [
+ "easydict_runtime_guards",
  "reqwest",
  "serde_json",
  "tempfile",
@@ -1385,6 +1395,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "easydict_runtime_guards"
+version = "0.1.0"
+
+[[package]]
 name = "easydict_store_listings"
 version = "0.1.0"
 dependencies = [
@@ -1418,7 +1432,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "easydict_windows_credentials"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_dialogs"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_ipc"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "easydict_windows_ocr"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_registry"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_screen_capture"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_shell"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_text_selection"
+version = "0.1.0"
+dependencies = [
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "easydict_windows_tts"
 version = "0.1.0"
 dependencies = [
  "windows 0.62.2",

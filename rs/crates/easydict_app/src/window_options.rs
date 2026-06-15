@@ -1,3 +1,4 @@
+use crate::state::SettingsState;
 use win_fluent::prelude::*;
 
 pub fn main_window_options() -> WindowOptions {
@@ -7,6 +8,15 @@ pub fn main_window_options() -> WindowOptions {
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Center)
+}
+
+pub fn main_window_options_for_settings(settings: &SettingsState) -> WindowOptions {
+    let options = main_window_options();
+    if settings.minimize_to_tray && settings.start_minimized {
+        options.hidden()
+    } else {
+        options
+    }
 }
 
 pub fn settings_window_options() -> WindowOptions {

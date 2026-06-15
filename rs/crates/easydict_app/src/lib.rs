@@ -4,6 +4,7 @@ pub mod activation;
 pub mod browser_registrar;
 pub mod character_paragraph;
 pub mod cli_translate;
+pub mod clipboard;
 #[cfg(feature = "retained-dotnet-workers")]
 pub mod compat_client;
 #[cfg(feature = "retained-dotnet-workers")]
@@ -11,9 +12,12 @@ pub mod compat_protocol;
 pub mod content_preservation;
 pub mod credential_protection;
 pub mod custom_streaming;
+pub mod desktop_integration;
+pub mod desktop_shell;
 pub mod doc_layout_yolo;
 pub mod doc_layout_yolo_onnx;
 pub mod document_layout;
+pub mod file_dialog;
 pub mod font_download;
 pub mod font_metrics;
 pub mod formula_protection;
@@ -31,6 +35,7 @@ pub mod long_document_cli;
 pub mod long_document_context;
 pub mod long_document_export;
 pub mod mdx_native;
+pub mod mouse_selection;
 pub mod native_bridge;
 pub mod ocr;
 pub mod openai_compatible;
@@ -46,18 +51,22 @@ pub mod quick_translate;
 pub mod resource_download;
 mod runtime_policy;
 pub mod screen_capture;
+pub mod screen_capture_native;
 pub mod settings_migration;
 pub mod settings_status;
 pub mod settings_storage;
 pub mod state;
 pub mod table_structure;
 pub mod table_structure_onnx;
+pub mod text_insertion;
 pub mod text_layout;
+pub mod text_selection;
 pub mod theme;
 pub mod traditional_http;
 pub mod translation_cache;
 pub mod translation_language;
 pub mod translation_services;
+pub mod tts;
 pub mod ui;
 pub mod vision_layout;
 pub mod window_options;
@@ -238,6 +247,16 @@ pub use mdx_native::{
     NativeMdxLookupError, RsMdictMddReader, RsMdictMddReaderFactory, RsMdictReader,
     RsMdictReaderFactory,
 };
+pub use mouse_selection::{
+    keyboard_message_dismiss_reason, DragDetector, DragSelectionResult,
+    MouseSelectionCaptureRequest, MouseSelectionDismissReason, MouseSelectionHookOutcome,
+    MouseSelectionHookState, MouseSelectionPoint, MouseSelectionProducer,
+    MouseSelectionProducerAction, MouseSelectionProducerContext, MouseSelectionTextReady,
+    MouseSelectionTrigger, MouseSelectionTriggerKind, MultiClickDetector, MultiClickResult,
+    PendingMultiClickSelection, EASYDICT_SYNTHETIC_KEY, MAX_CLICK_DISTANCE, MIN_DRAG_DISTANCE,
+    MULTI_CLICK_DELAY_GRACE_MS, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_SYSKEYDOWN,
+};
 pub use ocr::{
     apply_ocr_outcome, apply_ocr_start_error, begin_ocr_recognize, bgra_to_base64_bmp,
     bgra_to_base64_jpeg_data_url, build_custom_api_ocr_request, build_ollama_ocr_request,
@@ -392,11 +411,12 @@ pub use settings_storage::{
 };
 pub use state::{
     preview_control_state_from_id, resolve_result_action_intent, settings_snapshot, AppMode,
-    ConnectionStatus, EasydictUiState, FloatingWindowState, GrammarCorrectionPreview,
-    HotkeySetting, ImportedMdxDictionary, LocalDictionarySuggestion, LongDocumentState, Message,
-    PopButtonAnchor, PopButtonState, PreviewScenario, ResultActionIntent, ResultActionKind,
-    ServiceProviderField, ServiceProviderSetting, SettingsLink, SettingsSection, SettingsState,
-    TranslationResultPreview, TRANSLATION_LANGUAGE_IDS,
+    BrowserSupportState, ConnectionStatus, EasydictUiState, FloatingWindowState,
+    GrammarCorrectionPreview, HotkeySetting, ImportedMdxDictionary, LocalDictionarySuggestion,
+    LongDocumentState, Message, PopButtonAnchor, PopButtonState, PreviewScenario,
+    ResultActionIntent, ResultActionKind, ServiceProviderField, ServiceProviderSetting,
+    SettingsLink, SettingsSection, SettingsState, TranslationResultPreview,
+    TRANSLATION_LANGUAGE_IDS,
 };
 pub use table_structure::{
     build_table_cell_grid, build_table_structure_from_detections, calculate_tatr_crop_resize,
@@ -412,6 +432,13 @@ pub use table_structure_onnx::{
     clamp_tatr_table_crop, normalize_tatr_logits_shape, normalize_tatr_pred_boxes_shape,
     parse_tatr_onnx_outputs, resolve_tatr_input_name, resolve_tatr_output_names, TatrOnnxError,
     TatrOnnxSession, TatrOutputNames, TatrTableCrop,
+};
+pub use text_insertion::{
+    capture_text_insertion_target, capture_text_insertion_target_with_backend,
+    captured_text_insertion_target, insert_text_into_captured_target,
+    insert_text_into_captured_target_with_backend, store_captured_text_insertion_target,
+    NativeTextInsertionBackend, TextInsertionBackend, TextInsertionError, TextInsertionOutcome,
+    TextInsertionTarget,
 };
 pub use text_layout::{
     classify_char, enumerate_graphemes, is_cjk, is_close_punctuation, is_left_sticky,
@@ -491,6 +518,7 @@ pub use ui::{
     capture_overlay_view, capture_overlay_view_with_state, fixed_window_view,
     fixed_window_view_with_settings, main_window_view, mini_window_view,
     mini_window_view_with_settings, pop_button_view, pop_button_view_with_state, settings_view,
+    settings_view_for_main_window,
 };
 pub use vision_layout::{
     build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
@@ -501,8 +529,9 @@ pub use vision_layout::{
     VISION_LAYOUT_DETECTION_PROMPT,
 };
 pub use window_options::{
-    capture_overlay_window_options, fixed_window_options, main_window_options, mini_window_options,
-    pop_button_window_options, settings_window_options,
+    capture_overlay_window_options, fixed_window_options, main_window_options,
+    main_window_options_for_settings, mini_window_options, pop_button_window_options,
+    settings_window_options,
 };
 
 pub fn clear_persistent_translation_cache_for_settings(settings: &protocol::SettingsSnapshot) {
@@ -517,7 +546,7 @@ use win_fluent::prelude::*;
 
 pub use activation::{
     parse_startup_activation, resolve_startup_activation_disposition,
-    startup_activation_task_for_args, StartupActivation, StartupActivationDisposition,
+    startup_activation_message_for_args, StartupActivation, StartupActivationDisposition,
 };
 pub use credential_protection::{
     get_or_create_persisted_machine_id, is_protected_credential, protect_credential,
@@ -541,13 +570,21 @@ impl Application for EasydictApp {
     type Message = Message;
     type Flags = EasydictUiState;
 
-    fn new(flags: Self::Flags) -> (Self, Task<Self::Message>) {
+    fn new(mut flags: Self::Flags) -> (Self, Task<Self::Message>) {
+        flags.browser_support = match load_browser_support_status() {
+            Ok(status) => BrowserSupportState::from_status(&status),
+            Err(error) => BrowserSupportState::failed(error),
+        };
         let built_in_ai_registration_task = built_in_ai_device_registration_task(&flags.settings);
+        let clipboard_monitor_task = clipboard_monitor_task_for_settings(&flags.settings);
+        let protocol_registration_task = protocol_registration_task();
         (
             Self { state: flags },
             Task::batch([
                 startup_activation_task_for_args(std::env::args().skip(1)),
                 built_in_ai_registration_task,
+                clipboard_monitor_task,
+                protocol_registration_task,
             ]),
         )
     }
@@ -567,7 +604,9 @@ impl Application for EasydictApp {
 
     fn view(&self, window: &WindowId) -> View<Self::Message> {
         match window.as_str() {
-            "main" if self.state.settings_open => settings_view(&self.state.settings),
+            "main" if self.state.settings_open => {
+                settings_view_for_main_window(&self.state.settings)
+            }
             "settings" => settings_view(&self.state.settings),
             "mini" => mini_window_view_with_settings(&self.state.mini, &self.state.settings),
             "fixed" => fixed_window_view_with_settings(&self.state.fixed, &self.state.settings),
@@ -581,6 +620,18 @@ impl Application for EasydictApp {
         }
     }
 
+    fn window_options(&self, window: &WindowId) -> Option<WindowOptions> {
+        match window.as_str() {
+            "main" => Some(main_window_options_for_settings(&self.state.settings)),
+            "settings" => Some(settings_window_options()),
+            "mini" => Some(mini_window_options()),
+            "fixed" => Some(fixed_window_options()),
+            "capture-overlay" => Some(capture_overlay_window_options()),
+            "pop-button" => Some(pop_button_window_options()),
+            _ => None,
+        }
+    }
+
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         if let Message::HotkeyTriggered(id) = &message {
             return self.hotkey_task(id);
@@ -588,6 +639,10 @@ impl Application for EasydictApp {
 
         if let Message::TrayCommand(id) = &message {
             return self.tray_task(id);
+        }
+
+        if let Message::TrayClipboardTextReceived(text) = message {
+            return self.translate_tray_clipboard_text(text);
         }
 
         if let Message::ClipboardTextReceived(text) = message {
@@ -766,7 +821,7 @@ impl Application for EasydictApp {
             && !self.state.settings_open
             && !self.state.long_document.is_translating
         {
-            return Task::open_file_dialog(
+            return open_file_dialog_task(
                 long_document_file_dialog_options(&self.state),
                 Message::LongDocumentFileSelected,
             );
@@ -777,14 +832,14 @@ impl Application for EasydictApp {
             && !self.state.settings_open
             && !self.state.long_document.is_translating
         {
-            return Task::open_folder_dialog(
+            return open_folder_dialog_task(
                 long_document_output_folder_dialog_options(&self.state),
                 Message::LongDocumentOutputFolderSelected,
             );
         }
 
         if message == Message::ImportMdxDictionary {
-            return Task::open_file_dialog(
+            return open_file_dialog_task(
                 mdx_dictionary_file_dialog_options(),
                 Message::MdxDictionarySelected,
             );
@@ -889,7 +944,10 @@ impl Application for EasydictApp {
 
         if message == Message::TranslateSelection {
             self.state.apply(message);
-            return Task::capture_text_insertion_target();
+            return Task::batch([
+                capture_text_insertion_target_task(),
+                selected_text_capture_task(),
+            ]);
         }
 
         if let Message::ToggleResultExpanded(service_id) = &message {
@@ -906,6 +964,9 @@ impl Application for EasydictApp {
 
         if let Message::QuickTranslateServiceFinished(update) = &message {
             self.store_quick_translate_cache_result(update);
+            let auto_play_task = auto_play_translation_task(&self.state, update);
+            self.state.apply(message);
+            return auto_play_task;
         }
 
         if message == Message::ClearTranslationCache {
@@ -922,18 +983,22 @@ impl Application for EasydictApp {
             // Switching settings tabs resets the shared scroll view to the top,
             // matching WinUI `MainScrollViewer.ChangeView(null, 0, null)`.
             Message::SettingsSectionChanged(_) => Task::scroll_to_top("MainScrollViewer"),
+            Message::WindowEvent(WindowEvent::CloseRequested(id)) if id.as_str() == "main" => {
+                self.main_window_close_task()
+            }
             Message::MinimizeWindow => Task::window(WindowCommand::MinimizeCurrent(true)),
             Message::ToggleMaximizeWindow => Task::window(WindowCommand::ToggleMaximizeCurrent),
+            Message::CloseMainWindow => self.main_window_close_task(),
             Message::CloseWindow => Task::window(WindowCommand::CloseCurrent),
             Message::ToggleShellContextMenu(true) => {
-                Task::register_shell_verb(default_shell_verb())
+                register_shell_verb_task(default_desktop_shell_verb())
             }
             Message::ToggleShellContextMenu(false) => {
-                Task::unregister_shell_verb(default_shell_verb())
+                unregister_shell_verb_task(default_desktop_shell_verb())
             }
-            Message::InstallBrowserSupport => browser_registrar_task("install"),
-            Message::UninstallBrowserSupport => browser_registrar_task("uninstall"),
-            Message::OpenSettingsLink(link) => Task::open_url(link.url()),
+            Message::InstallBrowserSupport => browser_registrar_action_task("install", None),
+            Message::UninstallBrowserSupport => browser_registrar_action_task("uninstall", None),
+            Message::OpenSettingsLink(link) => desktop_shell::open_url_task(link.url()),
             Message::DownloadOpenVinoModel => {
                 openvino_download_task(crate::state::settings_snapshot(&self.state.settings))
             }
@@ -948,13 +1013,26 @@ impl Application for EasydictApp {
             _ => Task::none(),
         };
 
+        let should_sync_clipboard_monitor = matches!(
+            message,
+            Message::SaveSettingsChanges | Message::DiscardSettingsChanges
+        );
+
         if !matches!(
             message,
             Message::ConfirmCapture | Message::CopyResult | Message::CancelCapture
         ) {
             self.state.apply(message);
         }
-        task
+
+        if should_sync_clipboard_monitor {
+            Task::batch([
+                task,
+                clipboard_monitor_task_for_settings(&self.state.settings),
+            ])
+        } else {
+            task
+        }
     }
 
     fn theme(&self) -> ThemeMode {
@@ -978,12 +1056,18 @@ impl Application for EasydictApp {
                         move |_| message.clone(),
                     ))
                 }))
-                .chain([Subscription::tray(Message::TrayCommand)]),
+                .chain([
+                    Subscription::tray(Message::TrayCommand),
+                    Subscription::window(WindowId::new("main"), Message::WindowEvent),
+                ]),
         )
     }
 
     fn tray_menu(&self) -> Option<TrayMenu<Self::Message>> {
-        Some(default_tray_menu())
+        Some(tray_menu_for_browser_support_locale(
+            &self.state.browser_support,
+            &self.state.settings.ui_language,
+        ))
     }
 
     fn named_events(&self) -> Vec<NamedEventRegistration<Self::Message>> {
@@ -992,14 +1076,20 @@ impl Application for EasydictApp {
 
     fn shell_verbs(&self) -> Vec<ShellVerb> {
         if self.state.settings.shell_context_menu {
-            default_shell_verbs()
+            default_desktop_shell_verbs()
+                .iter()
+                .map(platform_shell_verb_from_desktop)
+                .collect()
         } else {
             Vec::new()
         }
     }
 
     fn protocol_registrations(&self) -> Vec<ProtocolRegistration> {
-        default_protocol_registrations()
+        default_desktop_protocol_registrations()
+            .iter()
+            .map(platform_protocol_registration_from_desktop)
+            .collect()
     }
 }
 
@@ -1077,7 +1167,7 @@ impl EasydictApp {
 
         Task::batch([
             Task::window(WindowCommand::Hide(WindowId::new("pop-button"))),
-            Task::capture_text_insertion_target(),
+            capture_text_insertion_target_task(),
             Task::window(WindowCommand::Show(WindowId::new("mini"))),
             translate_task,
         ])
@@ -1087,8 +1177,8 @@ impl EasydictApp {
         match id {
             HOTKEY_SHOW_MAIN => Task::window(WindowCommand::Show(WindowId::new("main"))),
             HOTKEY_TRANSLATE_CLIPBOARD => Task::batch([
-                Task::capture_text_insertion_target(),
-                Task::read_clipboard_text(Message::ClipboardTextReceived),
+                capture_text_insertion_target_task(),
+                selected_text_capture_task(),
             ]),
             HOTKEY_OCR_TRANSLATE => {
                 self.state.pending_ocr_mode = Some(ocr::OcrMode::Translate);
@@ -1115,7 +1205,7 @@ impl EasydictApp {
                 ])
             }
             HOTKEY_SHOW_MINI => Task::batch([
-                Task::capture_text_insertion_target(),
+                capture_text_insertion_target_task(),
                 Task::window(WindowCommand::Show(WindowId::new("mini"))),
             ]),
             HOTKEY_TOGGLE_MINI => {
@@ -1176,7 +1266,7 @@ impl EasydictApp {
             }
             ocr::OcrResultAction::CopyText(text) => Task::batch([
                 Task::window(WindowCommand::Hide(WindowId::new("capture-overlay"))),
-                Task::clipboard_text(text),
+                clipboard_write_task(text),
             ]),
         }
     }
@@ -1198,7 +1288,7 @@ impl EasydictApp {
         self.state.pending_ocr_mode = Some(mode);
         self.state.ocr_status_text = format!("{} capture requested", mode.label());
         self.state.capture_selection = None;
-        Task::capture_screen_region_with_request(request, move |capture| match capture {
+        screen_capture_native::capture_screen_region_task(request, move |capture| match capture {
             Some(capture) => {
                 let capture = ocr::OcrCaptureResult::from(capture);
                 match mode {
@@ -1358,15 +1448,47 @@ impl EasydictApp {
         ));
     }
 
+    fn main_window_close_task(&self) -> Task<Message> {
+        if self.state.settings.minimize_to_tray {
+            Task::window(WindowCommand::Hide(WindowId::new("main")))
+        } else {
+            Task::batch([
+                Task::window(WindowCommand::Close(WindowId::new("main"))),
+                Task::exit(),
+            ])
+        }
+    }
+
     fn tray_task(&mut self, id: &str) -> Task<Message> {
         match id {
             TRAY_SHOW_MAIN => self.hotkey_task(HOTKEY_SHOW_MAIN),
-            TRAY_TRANSLATE_CLIPBOARD => self.hotkey_task(HOTKEY_TRANSLATE_CLIPBOARD),
+            TRAY_TRANSLATE_CLIPBOARD => tray_clipboard_read_task(),
             TRAY_OCR_TRANSLATE => self.hotkey_task(HOTKEY_OCR_TRANSLATE),
             TRAY_SHOW_MINI => self.hotkey_task(HOTKEY_SHOW_MINI),
             TRAY_SHOW_FIXED => self.hotkey_task(HOTKEY_SHOW_FIXED),
-            TRAY_BROWSER_INSTALL => browser_registrar_task("install"),
-            TRAY_BROWSER_UNINSTALL => browser_registrar_task("uninstall"),
+            TRAY_BROWSER_INSTALL => browser_registrar_action_task("install", None),
+            TRAY_BROWSER_UNINSTALL => browser_registrar_action_task("uninstall", None),
+            TRAY_BROWSER_INSTALL_CHROME => browser_registrar_action_task("install", Some("chrome")),
+            TRAY_BROWSER_UNINSTALL_CHROME => {
+                browser_registrar_action_task("uninstall", Some("chrome"))
+            }
+            TRAY_BROWSER_INSTALL_FIREFOX => {
+                browser_registrar_action_task("install", Some("firefox"))
+            }
+            TRAY_BROWSER_UNINSTALL_FIREFOX => {
+                browser_registrar_action_task("uninstall", Some("firefox"))
+            }
+            TRAY_BROWSER_GET_CHROME_EXTENSION => desktop_shell::open_url_task(CHROME_EXTENSION_URL),
+            TRAY_BROWSER_GET_FIREFOX_EXTENSION => Task::none(),
+            TRAY_OPEN_SETTINGS => {
+                self.state.apply(Message::OpenSettings);
+                Task::batch([
+                    Task::window(WindowCommand::Show(WindowId::new("main"))),
+                    settings_runtime_status_task(crate::state::settings_snapshot(
+                        &self.state.settings,
+                    )),
+                ])
+            }
             TRAY_EXIT => Task::batch(
                 [
                     "pop-button",
@@ -1377,7 +1499,8 @@ impl EasydictApp {
                     "main",
                 ]
                 .into_iter()
-                .map(|id| Task::window(WindowCommand::Close(WindowId::new(id)))),
+                .map(|id| Task::window(WindowCommand::Close(WindowId::new(id))))
+                .chain([Task::exit()]),
             ),
             _ => Task::none(),
         }
@@ -1395,9 +1518,28 @@ impl EasydictApp {
             }
         }
     }
+
+    fn translate_tray_clipboard_text(&mut self, text: Option<String>) -> Task<Message> {
+        let Some(text) = text.filter(|value| !value.trim().is_empty()) else {
+            return Task::none();
+        };
+        self.state.source_text = text;
+
+        let show_main = Task::window(WindowCommand::Show(WindowId::new("main")));
+        match quick_translate::begin_quick_translate(&mut self.state) {
+            Ok(plan) => Task::batch([
+                show_main,
+                self.quick_translate_service_batch_task(plan.service_requests()),
+            ]),
+            Err(error) => {
+                quick_translate::apply_quick_translate_start_error(&mut self.state, error);
+                show_main
+            }
+        }
+    }
 }
 
-fn screen_capture_request_from_selection(
+pub fn screen_capture_request_from_selection(
     selection: Option<CaptureRect>,
 ) -> Option<ScreenCaptureRequest> {
     let selection = selection?;
@@ -1430,7 +1572,7 @@ fn screen_capture_request_from_selection(
 }
 
 fn capture_screen_window_snapshot_task() -> Task<Message> {
-    Task::capture_screen_windows_with_request(
+    screen_capture_native::capture_screen_windows_task(
         ScreenWindowSnapshotRequest::new().exclude_title("Easydict Capture"),
         |windows| Message::CaptureWindowsChanged(detected_windows_from_screen_windows(windows)),
     )
@@ -1452,11 +1594,30 @@ pub const TRAY_SHOW_MINI: &str = "show-mini";
 pub const TRAY_SHOW_FIXED: &str = "show-fixed";
 pub const TRAY_BROWSER_INSTALL: &str = "browser-install";
 pub const TRAY_BROWSER_UNINSTALL: &str = "browser-uninstall";
+pub const TRAY_BROWSER_INSTALL_CHROME: &str = "browser-install-chrome";
+pub const TRAY_BROWSER_UNINSTALL_CHROME: &str = "browser-uninstall-chrome";
+pub const TRAY_BROWSER_GET_CHROME_EXTENSION: &str = "browser-get-chrome-extension";
+pub const TRAY_BROWSER_INSTALL_FIREFOX: &str = "browser-install-firefox";
+pub const TRAY_BROWSER_UNINSTALL_FIREFOX: &str = "browser-uninstall-firefox";
+pub const TRAY_BROWSER_GET_FIREFOX_EXTENSION: &str = "browser-get-firefox-extension";
+pub const TRAY_OPEN_SETTINGS: &str = "open-settings";
 pub const TRAY_EXIT: &str = "exit";
 pub const BROWSER_REGISTRAR_EXE: &str = "easydict_browser_registrar.exe";
+pub const CHROME_EXTENSION_URL: &str =
+    "https://chromewebstore.google.com/detail/dmokdfinnomehfpmhoeekomncpobgagf";
 pub const OCR_TRANSLATE_EVENT_NAME: &str = r"Local\EasydictRs-OcrTranslate";
 pub const SHELL_OCR_TRANSLATE: &str = "EasydictOCR";
 pub const PROTOCOL_EASYDICT: &str = "easydict";
+
+pub fn startup_activation_task_for_args<I, S>(args: I) -> Task<Message>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    startup_activation_message_for_args(args)
+        .map(Task::message)
+        .unwrap_or_else(Task::none)
+}
 
 pub fn default_hotkeys() -> Vec<Hotkey> {
     hotkeys_for_settings(&SettingsState::default())
@@ -1530,38 +1691,197 @@ pub fn parse_hotkey(id: &str, shortcut: &str) -> Option<Hotkey> {
 }
 
 pub fn default_tray_menu() -> TrayMenu<Message> {
+    tray_menu_for_browser_support(&BrowserSupportState::default())
+}
+
+pub fn tray_menu_for_browser_support(browser: &BrowserSupportState) -> TrayMenu<Message> {
+    tray_menu_for_browser_support_locale(browser, "en-US")
+}
+
+pub fn tray_menu_for_browser_support_locale(
+    browser: &BrowserSupportState,
+    locale: &str,
+) -> TrayMenu<Message> {
+    let any_not_installed = !browser.chrome_installed || !browser.firefox_installed;
+    let any_installed = browser.chrome_installed || browser.firefox_installed;
+
     TrayMenu::new("Easydict")
         .item(
-            TrayMenuItem::new(TRAY_SHOW_MAIN, "Show Easydict")
-                .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
+            TrayMenuItem::new(
+                TRAY_SHOW_MAIN,
+                crate::i18n::tr_locale(locale, "tray.show", "Show Easydict"),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
         )
         .item(
-            TrayMenuItem::new(TRAY_TRANSLATE_CLIPBOARD, "Translate Clipboard")
-                .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
+            TrayMenuItem::new(
+                TRAY_TRANSLATE_CLIPBOARD,
+                crate::i18n::tr_locale(locale, "tray.translate_clipboard", "Translate Clipboard"),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
         )
         .item(
-            TrayMenuItem::new(TRAY_OCR_TRANSLATE, "OCR Translate (Ctrl+Alt+S)")
-                .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
+            TrayMenuItem::new(
+                TRAY_OCR_TRANSLATE,
+                format!(
+                    "{} (Ctrl+Alt+S)",
+                    crate::i18n::tr_locale(locale, "tray.ocr_translate", "OCR Translate")
+                ),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
         )
         .item(
-            TrayMenuItem::new(TRAY_SHOW_MINI, "Show Mini Window")
-                .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
+            TrayMenuItem::new(
+                TRAY_SHOW_MINI,
+                format!(
+                    "{} (Ctrl+Alt+M)",
+                    crate::i18n::tr_locale(locale, "tray.show_mini", "Mini Window")
+                ),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
         )
         .item(
-            TrayMenuItem::new(TRAY_SHOW_FIXED, "Show Fixed Window")
-                .on_invoke(Message::TrayCommand(TRAY_SHOW_FIXED.to_string())),
+            TrayMenuItem::new(
+                TRAY_SHOW_FIXED,
+                format!(
+                    "{} (Ctrl+Alt+F)",
+                    crate::i18n::tr_locale(locale, "tray.show_fixed", "Fixed Window")
+                ),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_SHOW_FIXED.to_string())),
         )
+        .separator()
         .item(
-            TrayMenuItem::new(TRAY_BROWSER_INSTALL, "Install Browser Support")
+            TrayMenuItem::submenu(
+                "browser-support",
+                crate::i18n::tr_locale(locale, "tray.browser_support", "Browser Support"),
+            )
+            .item(
+                TrayMenuItem::submenu(
+                    "browser-chrome",
+                    crate::i18n::tr_locale(locale, "tray.browser.chrome", "Chrome"),
+                )
+                .item(
+                    TrayMenuItem::new(
+                        TRAY_BROWSER_INSTALL_CHROME,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.install_chrome",
+                            "① Install Chrome Support",
+                        ),
+                    )
+                    .enabled(!browser.chrome_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_INSTALL_CHROME.to_string(),
+                    )),
+                )
+                .item(
+                    TrayMenuItem::new(
+                        TRAY_BROWSER_UNINSTALL_CHROME,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.uninstall_chrome",
+                            "Uninstall Chrome Support",
+                        ),
+                    )
+                    .enabled(browser.chrome_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_UNINSTALL_CHROME.to_string(),
+                    )),
+                )
+                .item(
+                    TrayMenuItem::new(
+                        TRAY_BROWSER_GET_CHROME_EXTENSION,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.get_chrome_extension",
+                            "② Get Extension",
+                        ),
+                    )
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_GET_CHROME_EXTENSION.to_string(),
+                    )),
+                ),
+            )
+            .item(
+                TrayMenuItem::submenu(
+                    "browser-firefox",
+                    crate::i18n::tr_locale(locale, "tray.browser.firefox", "Firefox"),
+                )
+                .item(
+                    TrayMenuItem::new(
+                        TRAY_BROWSER_INSTALL_FIREFOX,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.install_firefox",
+                            "① Install Firefox Support",
+                        ),
+                    )
+                    .enabled(!browser.firefox_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_INSTALL_FIREFOX.to_string(),
+                    )),
+                )
+                .item(
+                    TrayMenuItem::new(
+                        TRAY_BROWSER_UNINSTALL_FIREFOX,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.uninstall_firefox",
+                            "Uninstall Firefox Support",
+                        ),
+                    )
+                    .enabled(browser.firefox_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_UNINSTALL_FIREFOX.to_string(),
+                    )),
+                )
+                .item(
+                    TrayMenuItem::new(
+                        TRAY_BROWSER_GET_FIREFOX_EXTENSION,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.get_firefox_extension",
+                            "② Get Extension",
+                        ),
+                    )
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_GET_FIREFOX_EXTENSION.to_string(),
+                    )),
+                ),
+            )
+            .item(TrayMenuItem::separator())
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_INSTALL,
+                    crate::i18n::tr_locale(locale, "tray.browser.install_all", "Install All"),
+                )
+                .enabled(any_not_installed)
                 .on_invoke(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string())),
-        )
-        .item(
-            TrayMenuItem::new(TRAY_BROWSER_UNINSTALL, "Uninstall Browser Support")
+            )
+            .item(
+                TrayMenuItem::new(
+                    TRAY_BROWSER_UNINSTALL,
+                    crate::i18n::tr_locale(locale, "tray.browser.uninstall_all", "Uninstall All"),
+                )
+                .enabled(any_installed)
                 .on_invoke(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string())),
+            ),
         )
         .item(
-            TrayMenuItem::new(TRAY_EXIT, "Exit")
-                .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
+            TrayMenuItem::new(
+                TRAY_OPEN_SETTINGS,
+                crate::i18n::tr_locale(locale, "tray.settings", "Settings"),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string())),
+        )
+        .separator()
+        .item(
+            TrayMenuItem::new(
+                TRAY_EXIT,
+                crate::i18n::tr_locale(locale, "tray.exit", "Exit"),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
         )
 }
 
@@ -1570,29 +1890,162 @@ pub fn default_named_events() -> Vec<NamedEventRegistration<Message>> {
         .on_signal(Message::HotkeyTriggered(HOTKEY_OCR_TRANSLATE.to_string()))]
 }
 
-pub fn default_shell_verbs() -> Vec<ShellVerb> {
-    vec![default_shell_verb()]
+pub fn default_desktop_shell_verbs() -> Vec<desktop_integration::DesktopShellVerb> {
+    vec![default_desktop_shell_verb()]
 }
 
-pub fn default_shell_verb() -> ShellVerb {
-    ShellVerb::new(SHELL_OCR_TRANSLATE, "OCR Translate")
+pub fn default_desktop_shell_verb() -> desktop_integration::DesktopShellVerb {
+    desktop_integration::DesktopShellVerb::new(SHELL_OCR_TRANSLATE, "OCR Translate")
         .directory_background(true)
         .argument("--ocr-translate")
 }
 
-pub fn default_protocol_registrations() -> Vec<ProtocolRegistration> {
-    vec![ProtocolRegistration::new(PROTOCOL_EASYDICT, "URL:Easydict Protocol").argument("%1")]
+pub fn default_desktop_protocol_registrations(
+) -> Vec<desktop_integration::DesktopProtocolRegistration> {
+    vec![desktop_integration::DesktopProtocolRegistration::new(
+        PROTOCOL_EASYDICT,
+        "URL:Easydict Protocol",
+    )
+    .argument("%1")]
+}
+
+fn platform_shell_verb_from_desktop(verb: &desktop_integration::DesktopShellVerb) -> ShellVerb {
+    ShellVerb {
+        id: verb.id.clone(),
+        label: verb.label.clone(),
+        accepts_files: verb.accepts_files,
+        accepts_directory_background: verb.accepts_directory_background,
+        arguments: verb.arguments.clone(),
+    }
+}
+
+fn platform_protocol_registration_from_desktop(
+    protocol: &desktop_integration::DesktopProtocolRegistration,
+) -> ProtocolRegistration {
+    ProtocolRegistration {
+        scheme: protocol.scheme.clone(),
+        description: protocol.description.clone(),
+        arguments: protocol.arguments.clone(),
+    }
 }
 
 pub fn browser_registrar_task(command: &'static str) -> Task<Message> {
-    Task::run_bundled_executable(
+    browser_registrar_task_for(command, None)
+}
+
+pub fn browser_registrar_task_for(
+    command: &'static str,
+    browser: Option<&'static str>,
+) -> Task<Message> {
+    desktop_shell::run_bundled_executable_task(
         BROWSER_REGISTRAR_EXE,
-        [
-            command,
-            "--bridge-root-name",
-            browser_registrar::RUST_BRIDGE_ROOT_NAME,
-        ],
+        browser_registrar_arguments(command, browser),
     )
+}
+
+pub fn browser_registrar_arguments(command: &str, browser: Option<&str>) -> Vec<String> {
+    let mut arguments = vec![
+        command.to_string(),
+        "--bridge-root-name".to_string(),
+        browser_registrar::RUST_BRIDGE_ROOT_NAME.to_string(),
+    ];
+    match browser {
+        Some("chrome") => arguments.push("--chrome".to_string()),
+        Some("firefox") => arguments.push("--firefox".to_string()),
+        _ => {}
+    }
+    arguments
+}
+
+fn browser_registrar_action_task(
+    command: &'static str,
+    browser: Option<&'static str>,
+) -> Task<Message> {
+    Task::batch([
+        browser_registrar_task_for(command, browser),
+        browser_support_status_task(std::time::Duration::from_millis(600)),
+    ])
+}
+
+fn register_shell_verb_task(verb: desktop_integration::DesktopShellVerb) -> Task<Message> {
+    Task::perform(
+        async move {
+            let _ = desktop_integration::register_shell_verb(verb);
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn unregister_shell_verb_task(verb: desktop_integration::DesktopShellVerb) -> Task<Message> {
+    Task::perform(
+        async move {
+            let _ = desktop_integration::unregister_shell_verb(verb);
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn protocol_registration_task() -> Task<Message> {
+    Task::perform(
+        async move {
+            for protocol in default_desktop_protocol_registrations() {
+                let _ = desktop_integration::register_protocol(protocol);
+            }
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn browser_support_status_task(delay: std::time::Duration) -> Task<Message> {
+    Task::perform(
+        async move {
+            if !delay.is_zero() {
+                std::thread::sleep(delay);
+            }
+            load_browser_support_status()
+        },
+        Message::BrowserSupportStatusLoaded,
+    )
+}
+
+pub fn load_browser_support_status() -> Result<browser_registrar::StatusOutput, String> {
+    let local_app_data = std::env::var_os("LOCALAPPDATA")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| {
+            "LOCALAPPDATA is not set; cannot resolve browser bridge directory".to_string()
+        })?;
+    let bridge_directory = browser_registrar::bridge_directory_for_root(
+        local_app_data,
+        browser_registrar::RUST_BRIDGE_ROOT_NAME,
+    );
+    let core =
+        browser_registrar::BrowserRegistrarCore::new(bridge_directory, CurrentUserBrowserRegistry);
+    Ok(core.status())
+}
+
+struct CurrentUserBrowserRegistry;
+
+impl browser_registrar::BrowserRegistry for CurrentUserBrowserRegistry {
+    fn write_default_value(&mut self, key_path: &str, value: &str) -> std::io::Result<()> {
+        easydict_windows_registry::write_current_user_default_string(key_path, value)
+            .map_err(browser_registry_error)
+    }
+
+    fn delete_key(&mut self, key_path: &str) -> std::io::Result<()> {
+        easydict_windows_registry::delete_current_user_key(key_path).map_err(browser_registry_error)
+    }
+
+    fn read_default_value(&self, key_path: &str) -> std::io::Result<Option<String>> {
+        easydict_windows_registry::read_current_user_default_string(key_path)
+            .map_err(browser_registry_error)
+    }
+}
+
+fn browser_registry_error(
+    error: easydict_windows_registry::WindowsRegistryError,
+) -> std::io::Error {
+    std::io::Error::other(error.to_string())
 }
 
 /// Async task that checks on-disk availability of downloadable settings assets
@@ -1623,6 +2076,135 @@ fn pop_button_auto_dismiss_task(generation: u64) -> Task<Message> {
         },
         Message::PopButtonAutoDismiss,
     )
+}
+
+fn selected_text_capture_task() -> Task<Message> {
+    Task::perform(
+        async move { text_selection::capture_native_selected_text_after_hotkey_delay() },
+        |text| match text {
+            Some(text) if !text.trim().is_empty() => Message::ClipboardTextReceived(Some(text)),
+            _ => Message::Noop,
+        },
+    )
+}
+
+fn capture_text_insertion_target_task() -> Task<Message> {
+    Task::perform(
+        async move {
+            let _ = text_insertion::capture_text_insertion_target();
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn insert_text_task(text: String) -> Task<Message> {
+    if text.is_empty() {
+        return Task::none();
+    }
+
+    Task::perform(
+        async move {
+            let _ = text_insertion::insert_text_into_captured_target(text);
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn tray_clipboard_read_task() -> Task<Message> {
+    Task::perform(
+        async move { clipboard::read_clipboard_text().ok().flatten() },
+        Message::TrayClipboardTextReceived,
+    )
+}
+
+fn clipboard_monitor_task_for_settings(settings: &SettingsState) -> Task<Message> {
+    if !settings.monitor_clipboard {
+        clipboard::stop_clipboard_monitor();
+        return Task::none();
+    }
+
+    clipboard::clipboard_monitor_stream(|text| Message::ClipboardTextReceived(Some(text)))
+        .map(Task::stream)
+        .unwrap_or_else(Task::none)
+}
+
+fn clipboard_write_task(text: String) -> Task<Message> {
+    Task::perform(
+        async move {
+            let _ = clipboard::write_clipboard_text(text);
+        },
+        |_| Message::Noop,
+    )
+}
+
+fn speak_text_task(text: String, language: Option<String>) -> Task<Message> {
+    if text.trim().is_empty() {
+        return Task::none();
+    }
+
+    Task::perform(
+        async move {
+            let _ = tts::speak_text(text, language);
+        },
+        |_| Message::Noop,
+    )
+}
+
+pub fn mouse_selection_capture_result_message(
+    request: MouseSelectionCaptureRequest,
+    text: Option<String>,
+) -> Message {
+    let Some(text) = text.filter(|text| !text.trim().is_empty()) else {
+        return Message::Noop;
+    };
+
+    let ready = request.selection_text_ready(text);
+    Message::SelectionTextReady {
+        text: ready.text,
+        anchor_x: ready.anchor_x,
+        anchor_y: ready.anchor_y,
+        generation: ready.generation,
+    }
+}
+
+pub fn mouse_selection_capture_task(request: MouseSelectionCaptureRequest) -> Task<Message> {
+    Task::perform(
+        async move { text_selection::capture_native_selected_text_after_hotkey_delay() },
+        move |text| mouse_selection_capture_result_message(request, text),
+    )
+}
+
+pub fn mouse_selection_producer_action_task(action: MouseSelectionProducerAction) -> Task<Message> {
+    match action {
+        MouseSelectionProducerAction::DismissPopButton { .. } => {
+            Task::message(Message::DismissPopButton)
+        }
+        MouseSelectionProducerAction::CaptureSelectionText(request) => {
+            mouse_selection_capture_task(request)
+        }
+        MouseSelectionProducerAction::CancelPendingMultiClick { .. }
+        | MouseSelectionProducerAction::SchedulePendingMultiClick { .. } => Task::none(),
+    }
+}
+
+pub fn mouse_selection_producer_actions_task(
+    actions: Vec<MouseSelectionProducerAction>,
+) -> Task<Message> {
+    Task::batch(
+        actions
+            .into_iter()
+            .map(mouse_selection_producer_action_task),
+    )
+}
+
+pub fn mouse_selection_pending_timer(action: &MouseSelectionProducerAction) -> Option<(u64, u64)> {
+    match action {
+        MouseSelectionProducerAction::SchedulePendingMultiClick {
+            pending,
+            generation,
+        } => Some((*generation, pending.delay_ms)),
+        _ => None,
+    }
 }
 
 fn built_in_ai_device_registration_task(settings: &SettingsState) -> Task<Message> {
@@ -1789,9 +2371,59 @@ fn result_action_task_for_message(
 
 fn result_action_task(intent: ResultActionIntent) -> Task<Message> {
     match intent.kind {
-        ResultActionKind::Copy => Task::clipboard_text(intent.text),
-        ResultActionKind::Speak => Task::speak_text(intent.text, Some(intent.language)),
-        ResultActionKind::Replace => Task::insert_text(intent.text),
+        ResultActionKind::Copy => clipboard_write_task(intent.text),
+        ResultActionKind::Speak => speak_text_task(intent.text, Some(intent.language)),
+        ResultActionKind::Replace => insert_text_task(intent.text),
+    }
+}
+
+fn auto_play_translation_task(
+    state: &EasydictUiState,
+    update: &quick_translate::QuickTranslateServiceUpdate,
+) -> Task<Message> {
+    if !state.settings.auto_play_translation {
+        return Task::none();
+    }
+
+    let Ok(result) = &update.outcome.result else {
+        return Task::none();
+    };
+
+    let text = result.translated_text.trim();
+    if text.is_empty() {
+        return Task::none();
+    }
+
+    let Some((success_count, target_language)) = auto_play_query_context(state, update.query_id)
+    else {
+        return Task::none();
+    };
+
+    if success_count > 0 {
+        return Task::none();
+    }
+
+    speak_text_task(text.to_string(), Some(target_language))
+}
+
+fn auto_play_query_context(state: &EasydictUiState, query_id: u64) -> Option<(usize, String)> {
+    if state.active_query_id == Some(query_id) {
+        Some((
+            state.active_query_success_count,
+            state.target_language.clone(),
+        ))
+    } else if state.mini.active_query_id == Some(query_id) {
+        Some((
+            state.mini.active_query_success_count,
+            state.mini.target_language.clone(),
+        ))
+    } else if state.fixed.active_query_id == Some(query_id) {
+        Some((
+            state.fixed.active_query_success_count,
+            state.fixed.target_language.clone(),
+        ))
+    } else {
+        None
     }
 }
 
@@ -1873,18 +2505,34 @@ fn local_dictionary_suggestion_task(
     )
 }
 
-fn long_document_file_dialog_options(state: &EasydictUiState) -> FileDialogOptions {
-    let mut options = FileDialogOptions::new("Open document")
-        .filter(FileDialogFilter::new(
+fn open_file_dialog_task(
+    options: file_dialog::AppOpenFileDialogOptions,
+    map: fn(Option<String>) -> Message,
+) -> Task<Message> {
+    Task::perform(async move { file_dialog::open_file_dialog(options) }, map)
+}
+
+fn open_folder_dialog_task(
+    options: file_dialog::AppOpenFolderDialogOptions,
+    map: fn(Option<String>) -> Message,
+) -> Task<Message> {
+    Task::perform(async move { file_dialog::open_folder_dialog(options) }, map)
+}
+
+fn long_document_file_dialog_options(
+    state: &EasydictUiState,
+) -> file_dialog::AppOpenFileDialogOptions {
+    let mut options = file_dialog::AppOpenFileDialogOptions::new("Open document")
+        .filter(file_dialog::file_filter(
             "Supported documents",
             ["*.pdf", "*.md", "*.markdown", "*.txt"],
         ))
-        .filter(FileDialogFilter::new("PDF files", ["*.pdf"]))
-        .filter(FileDialogFilter::new(
+        .filter(file_dialog::file_filter("PDF files", ["*.pdf"]))
+        .filter(file_dialog::file_filter(
             "Markdown files",
             ["*.md", "*.markdown"],
         ))
-        .filter(FileDialogFilter::new("Text files", ["*.txt"]));
+        .filter(file_dialog::file_filter("Text files", ["*.txt"]));
 
     let output_folder = state.long_document.output_folder.trim();
     if !output_folder.is_empty() && !output_folder.starts_with('(') {
@@ -1894,8 +2542,10 @@ fn long_document_file_dialog_options(state: &EasydictUiState) -> FileDialogOptio
     options
 }
 
-fn long_document_output_folder_dialog_options(state: &EasydictUiState) -> FolderDialogOptions {
-    let mut options = FolderDialogOptions::new("Select output folder");
+fn long_document_output_folder_dialog_options(
+    state: &EasydictUiState,
+) -> file_dialog::AppOpenFolderDialogOptions {
+    let mut options = file_dialog::AppOpenFolderDialogOptions::new("Select output folder");
     let output_folder = state.long_document.output_folder.trim();
     if !output_folder.is_empty() && !output_folder.starts_with('(') {
         options = options.initial_directory(output_folder);
@@ -1904,8 +2554,8 @@ fn long_document_output_folder_dialog_options(state: &EasydictUiState) -> Folder
     options
 }
 
-fn mdx_dictionary_file_dialog_options() -> FileDialogOptions {
-    FileDialogOptions::new("Import MDX dictionary")
-        .filter(FileDialogFilter::new("MDX dictionaries", ["*.mdx"]))
-        .filter(FileDialogFilter::new("All files", ["*.*"]))
+fn mdx_dictionary_file_dialog_options() -> file_dialog::AppOpenFileDialogOptions {
+    file_dialog::AppOpenFileDialogOptions::new("Import MDX dictionary")
+        .filter(file_dialog::file_filter("MDX dictionaries", ["*.mdx"]))
+        .filter(file_dialog::file_filter("All files", ["*.*"]))
 }

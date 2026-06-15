@@ -3,7 +3,7 @@ use crate::subscription::Subscription;
 use crate::task::Task;
 use crate::theme::{ThemeMode, ThemeTokens};
 use crate::view::View;
-use crate::window::WindowId;
+use crate::window::{WindowId, WindowOptions};
 
 pub trait Application: Sized + 'static {
     type Message: Clone + Send + 'static;
@@ -16,6 +16,10 @@ pub trait Application: Sized + 'static {
     fn view(&self, window: &WindowId) -> View<Self::Message>;
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message>;
+
+    fn window_options(&self, _window: &WindowId) -> Option<WindowOptions> {
+        None
+    }
 
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::none()

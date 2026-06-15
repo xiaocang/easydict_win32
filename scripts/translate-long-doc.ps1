@@ -121,6 +121,7 @@ function New-RustLongDocArguments {
 function Test-RetainedDotnetRuntimeOrWorkerPath {
     param([string]$Path)
 
+    $normalizedPath = $Path.Trim().Trim('"').Replace('\', '/').ToLowerInvariant()
     $leafName = [System.IO.Path]::GetFileName($Path)
     if (-not $leafName) {
         return $false
@@ -138,6 +139,33 @@ function Test-RetainedDotnetRuntimeOrWorkerPath {
 
     if ($leafName.StartsWith("easydict.compathost")) {
         return $true
+    }
+
+    if ($leafName.StartsWith("easydict.nativebridge")) {
+        return $true
+    }
+
+    if ($normalizedPath.Contains("/host/fxr/")) {
+        return $true
+    }
+
+    if ($normalizedPath.Contains("/shared/microsoft.netcore.app/") -or
+        $normalizedPath.Contains("/shared/microsoft.windowsdesktop.app/") -or
+        $normalizedPath.Contains("/shared/microsoft.aspnetcore.app/")) {
+        return $true
+    }
+
+    $components = $normalizedPath.Split('/', [System.StringSplitOptions]::RemoveEmptyEntries)
+    if ($components -contains "dotnet" -or $components -contains "workers") {
+        return $true
+    }
+
+    foreach ($component in $components) {
+        if ($component.StartsWith("easydict.workers.") -or
+            $component.StartsWith("easydict.compathost") -or
+            $component.StartsWith("easydict.nativebridge")) {
+            return $true
+        }
     }
 
     return $false
@@ -172,13 +200,21 @@ function Resolve-RustHelper {
 
     foreach ($candidatePath in $candidatePaths) {
         if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
-            return (Resolve-Path -LiteralPath $candidatePath).Path
+            $resolvedCandidatePath = (Resolve-Path -LiteralPath $candidatePath).Path
+            Assert-RustHelperPathAllowed -Path $resolvedCandidatePath
+            return $resolvedCandidatePath
         }
     }
 
-    $pathCommand = Get-Command "easydict_long_doc.exe" -ErrorAction SilentlyContinue
+    $pathCommand = @(Get-Command "easydict_long_doc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1)
     if ($pathCommand) {
-        return $pathCommand.Source
+        $resolvedPathCommand = if (Test-Path -LiteralPath $pathCommand.Source -PathType Leaf) {
+            (Resolve-Path -LiteralPath $pathCommand.Source).Path
+        } else {
+            $pathCommand.Source
+        }
+        Assert-RustHelperPathAllowed -Path $resolvedPathCommand
+        return $resolvedPathCommand
     }
 
     return $null

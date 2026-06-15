@@ -95,7 +95,10 @@ impl WorkerCommand {
     }
 
     fn ensure_retained_worker_is_enabled(&self) -> Result<(), WorkerClientError> {
-        let Some(kind) = self.retained_worker_kind else {
+        let Some(kind) = self
+            .retained_worker_kind
+            .or_else(|| RetainedWorkerKind::from_program_path(&self.program))
+        else {
             return Ok(());
         };
 
@@ -116,6 +119,28 @@ enum RetainedWorkerKind {
 }
 
 impl RetainedWorkerKind {
+    fn from_program_path(program: &Path) -> Option<Self> {
+        let filename = program
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_ascii_lowercase());
+        if let Some(filename) = filename.as_deref() {
+            if filename == "easydict.workers.longdoc.exe" {
+                return Some(Self::LongDoc);
+            }
+
+            if filename == "easydict.workers.localai.exe" {
+                return Some(Self::LocalAi);
+            }
+
+            if filename.starts_with("easydict.workers.") || is_dotnet_runtime_program(filename) {
+                return Some(Self::Other);
+            }
+        }
+
+        retained_worker_kind_from_path_components(program)
+    }
+
     fn from_worker_subdir(worker_subdir: &str) -> Self {
         if worker_subdir.eq_ignore_ascii_case("longdoc") {
             return Self::LongDoc;
@@ -145,6 +170,43 @@ impl RetainedWorkerKind {
 
         format!("{base} Set EASYDICT_RUNTIME_PROFILE=hybrid to enable retained .NET workers.")
     }
+}
+
+fn is_dotnet_runtime_program(filename: &str) -> bool {
+    matches!(
+        filename,
+        "dotnet.exe"
+            | "dotnet"
+            | "hostfxr.dll"
+            | "hostpolicy.dll"
+            | "coreclr.dll"
+            | "clrjit.dll"
+            | "singlefilehost.exe"
+    )
+}
+
+fn retained_worker_kind_from_path_components(program: &Path) -> Option<RetainedWorkerKind> {
+    let components = program
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .map(|component| component.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    components
+        .windows(2)
+        .find_map(|pair| {
+            if pair[0] != "workers" {
+                return None;
+            }
+
+            Some(RetainedWorkerKind::from_worker_subdir(&pair[1]))
+        })
+        .or_else(|| {
+            components
+                .iter()
+                .any(|component| component == "dotnet")
+                .then_some(RetainedWorkerKind::Other)
+        })
 }
 
 pub struct DirectWorkerFacade {

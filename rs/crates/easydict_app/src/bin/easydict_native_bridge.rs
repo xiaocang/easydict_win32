@@ -5,7 +5,7 @@ use easydict_app::OCR_TRANSLATE_EVENT_NAME;
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("[Easydict NativeBridge] {error}");
+        eprintln!("[easydict-native-bridge] {error}");
         std::process::exit(1);
     }
 }
@@ -15,10 +15,8 @@ fn run() -> io::Result<()> {
     let stdout = io::stdout();
 
     run_native_bridge(stdin.lock(), stdout.lock(), || {
-        win_fluent_platform_win::WindowsPlatformAdapter::signal_named_event(
-            OCR_TRANSLATE_EVENT_NAME,
-        )
-        .map_err(|error| io::Error::other(format!("{error:?}")))
+        easydict_windows_ipc::signal_named_event(OCR_TRANSLATE_EVENT_NAME)
+            .map_err(|error| io::Error::other(format!("{error:?}")))
     })?;
 
     Ok(())

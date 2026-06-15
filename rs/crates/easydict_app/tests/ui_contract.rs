@@ -1,12 +1,12 @@
 use easydict_app::{
     capture_overlay_view, capture_overlay_view_with_state, capture_overlay_window_options,
     easydict_theme_tokens, fixed_window_options, fixed_window_view,
-    fixed_window_view_with_settings, main_window_options, main_window_view, mini_window_options,
-    mini_window_view, mini_window_view_with_settings, pop_button_view, pop_button_view_with_state,
-    pop_button_window_options, settings_view, settings_window_options, CaptureInteractionState,
-    CapturePhase, CaptureRect, EasydictUiState, GrammarCorrectionPreview, ImportedMdxDictionary,
-    PreviewScenario, QuickTranslateSurface, SettingsLink, TranslationResultPreview,
-    HOTKEY_SHOW_MAIN,
+    fixed_window_view_with_settings, main_window_options, main_window_options_for_settings,
+    main_window_view, mini_window_options, mini_window_view, mini_window_view_with_settings,
+    pop_button_view, pop_button_view_with_state, pop_button_window_options, settings_view,
+    settings_window_options, CaptureInteractionState, CapturePhase, CaptureRect, EasydictUiState,
+    GrammarCorrectionPreview, ImportedMdxDictionary, PreviewScenario, QuickTranslateSurface,
+    SettingsLink, TranslationResultPreview, HOTKEY_SHOW_MAIN,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -809,14 +809,25 @@ fn services_settings_default_view_matches_winui_overview_structure() {
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
 
     assert_control_contains(&snapshot, "settings.services", "spacing=24");
+    assert_control_contains(&snapshot, "settings.services", "width=Fill");
     assert_control_contains(&snapshot, "EnabledServicesSection", "spacing=12");
+    assert_control_contains(&snapshot, "EnabledServicesSection", "width=Fill");
     assert!(snapshot.contains("id=\"EnabledServicesHeaderText\""));
     assert!(snapshot.contains("id=\"EnabledServicesHelpIcon\""));
     assert!(snapshot.contains("id=\"EnabledServicesDescriptionText\""));
     assert!(snapshot.contains("id=\"ImportMdxDictionaryButton\""));
+    assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "height=Fixed(29)");
     assert!(snapshot.contains("id=\"ImportedMdxSummaryText\""));
     assert!(snapshot.contains("id=\"settings.services.international\""));
+    assert_control_contains(
+        &snapshot,
+        "settings.services.international",
+        "height=Fixed(76)",
+    );
+    assert_control_contains(&snapshot, "settings.services.international", "padding=12");
     assert!(snapshot.contains("id=\"ServiceConfigurationSection\""));
+    assert_control_contains(&snapshot, "ServiceConfigurationSection", "spacing=12");
+    assert_control_contains(&snapshot, "ServiceConfigurationSection", "width=Fill");
     assert!(snapshot.contains("id=\"ServiceConfigurationHeaderText\""));
     assert!(snapshot.contains("id=\"ServiceConfigHelpIcon\""));
     assert!(snapshot.contains("id=\"ServiceConfigurationDescriptionText\""));
@@ -825,6 +836,30 @@ fn services_settings_default_view_matches_winui_overview_structure() {
 
     assert_control_contains(&snapshot, "DeepLServiceExpander", "expanded=false");
     assert_control_contains(&snapshot, "DeepLServiceExpander", "icon=service-deepl");
+    assert_control_contains(&snapshot, "DeepLServiceExpander", "hovered=false");
+    assert_control_contains(&snapshot, "DeepLServiceExpander", "pressed=false");
+    assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "hovered=false");
+    assert_control_contains(&snapshot, "ImportMdxDictionaryButton", "pressed=false");
+    assert_control_contains(
+        &snapshot,
+        "EnableInternationalServicesToggle",
+        "width=Fixed(66)",
+    );
+    assert_control_contains(
+        &snapshot,
+        "EnableInternationalServicesToggle",
+        "height=Fixed(40)",
+    );
+    assert_control_contains(
+        &snapshot,
+        "EnableInternationalServicesToggle",
+        "hovered=false",
+    );
+    assert_control_contains(
+        &snapshot,
+        "EnableInternationalServicesToggle",
+        "pressed=false",
+    );
     assert_control_contains(&snapshot, "WindowsLocalAIExpander", "expanded=false");
     assert_control_contains(
         &snapshot,
@@ -869,6 +904,48 @@ fn services_settings_default_view_matches_winui_overview_structure() {
     assert!(deepl < local_ai);
     assert!(local_ai < ollama);
     assert!(ollama < openai);
+
+    let mut import_hover_state = state.clone();
+    import_hover_state.settings.import_mdx_button_state = ControlState::default().hovered(true);
+    let import_hover_snapshot =
+        win_fluent_testkit::view_snapshot(&settings_view(&import_hover_state.settings));
+    assert_control_contains(
+        &import_hover_snapshot,
+        "ImportMdxDictionaryButton",
+        "hovered=true",
+    );
+
+    let mut toggle_pressed_state = state.clone();
+    toggle_pressed_state
+        .settings
+        .international_services_toggle_state = ControlState::default().hovered(true).pressed(true);
+    let toggle_pressed_snapshot =
+        win_fluent_testkit::view_snapshot(&settings_view(&toggle_pressed_state.settings));
+    assert_control_contains(
+        &toggle_pressed_snapshot,
+        "EnableInternationalServicesToggle",
+        "hovered=true",
+    );
+    assert_control_contains(
+        &toggle_pressed_snapshot,
+        "EnableInternationalServicesToggle",
+        "pressed=true",
+    );
+
+    let mut deepl_hover_state = state.clone();
+    deepl_hover_state.settings.deepl_service_expander_state = ControlState::default().hovered(true);
+    let deepl_hover_snapshot =
+        win_fluent_testkit::view_snapshot(&settings_view(&deepl_hover_state.settings));
+    assert_control_contains(
+        &deepl_hover_snapshot,
+        "DeepLServiceExpander",
+        "hovered=true",
+    );
+    assert_control_contains(
+        &deepl_hover_snapshot,
+        "DeepLServiceExpander",
+        "pressed=false",
+    );
 }
 
 #[test]
@@ -884,15 +961,32 @@ fn services_settings_deepl_expander_exposes_configuration_controls() {
 
     assert!(snapshot.contains("id=\"DeepLServiceExpander\""));
     assert_control_contains(&snapshot, "DeepLServiceExpander", "expanded=true");
+    assert_control_contains(&snapshot, "settings.services.deepl.content", "spacing=12");
+    assert_control_contains(&snapshot, "settings.services.deepl.content", "width=Fill");
     assert!(snapshot.contains("id=\"DeepLKeyBox\""));
     assert_control_contains(&snapshot, "DeepLKeyBox", "action=text_input");
+    assert_control_contains(&snapshot, "DeepLKeyBox", "width=Fixed(350)");
+    assert!(snapshot.contains("id=\"DeepLKeyField.editor\""));
+    assert_control_contains(&snapshot, "DeepLKeyField", "spacing=4");
+    assert_control_contains(&snapshot, "DeepLKeyField", "width=Fixed(350)");
+    assert_control_contains(&snapshot, "DeepLKeyField.editor", "height=Fixed(36)");
+    assert_control_contains(&snapshot, "DeepLKeyField.editor", "width=Fill");
     assert!(snapshot.contains("id=\"DeepLKeyRevealButton\""));
+    assert_control_contains(&snapshot, "DeepLKeyRevealButton", "kind=Icon");
+    assert_control_contains(&snapshot, "DeepLKeyRevealButton", "icon=reveal-secret");
+    assert_control_contains(&snapshot, "DeepLKeyRevealButton", "width=Fixed(28)");
+    assert_control_contains(&snapshot, "DeepLKeyRevealButton", "height=Fixed(28)");
+    assert_control_contains(&snapshot, "DeepLFreeCheckRow", "height=Fixed(32)");
+    assert_control_contains(&snapshot, "DeepLFreeCheckRow", "width=Fill");
     assert!(snapshot.contains("id=\"DeepLFreeCheck\""));
     assert_control_contains(&snapshot, "DeepLFreeCheck", "checked=true");
+    assert_control_contains(&snapshot, "DeepLQualityCheckRow", "height=Fixed(32)");
+    assert_control_contains(&snapshot, "DeepLQualityCheckRow", "width=Fill");
     assert!(snapshot.contains("id=\"DeepLQualityCheck\""));
     assert_control_contains(&snapshot, "DeepLQualityCheck", "checked=false");
     assert!(snapshot.contains("id=\"DeepLDescriptionText\""));
     assert!(snapshot.contains("id=\"TestDeepLButton\""));
+    assert_control_contains(&snapshot, "TestDeepLButton", "height=Fixed(29)");
 
     state.apply(easydict_app::Message::ToggleDeepLUseQualityOptimized(true));
     state.apply(easydict_app::Message::DeepLApiKeyChanged(
@@ -927,40 +1021,26 @@ fn services_settings_local_ai_exposes_provider_configuration() {
         "WindowsLocalAIStatusBadge",
         "LocalAIProviderLabelText",
         "LocalAIProviderCombo",
-        "LocalAIProviderWindowsAIItem",
-        "LocalAIProviderWindowsAIRatingText",
-        "LocalAIProviderFoundryLocalItem",
-        "LocalAIProviderFoundryLocalRatingText",
-        "LocalAIProviderOpenVINOItem",
-        "LocalAIProviderOpenVINORatingText",
         "WindowsLocalAIDescriptionText",
         "WindowsLocalAIConfigPanel",
         "WindowsLocalAISectionTitleText",
         "WindowsLocalAISectionRatingText",
         "WindowsLocalAIStatusBar",
         "WindowsLocalAIPrepareButton",
-        "WindowsLocalAIPrepareProgressPanel",
-        "WindowsLocalAIPrepareProgressText",
-        "WindowsLocalAIPrepareProgressBar",
-        "WindowsLocalAIWindowsUpdateLink",
         "FoundryLocalConfigPanel",
         "FoundryLocalTitleText",
         "FoundryLocalRatingText",
+        "FoundryLocalEndpointBoxField",
+        "FoundryLocalEndpointLabelText",
         "FoundryLocalEndpointBox",
+        "FoundryLocalModelBoxField",
+        "FoundryLocalModelLabelText",
         "FoundryLocalModelBox",
-        "FoundryLocalStatusBar",
-        "FoundryLocalStartButton",
-        "FoundryLocalInstallLink",
-        "FoundryLocalDocsLink",
-        "FoundryLocalDescriptionText",
         "OpenVinoConfigPanel",
         "OpenVinoTitleText",
         "OpenVinoRatingText",
         "OpenVinoStatusBadge",
-        "OpenVinoDeviceCombo",
         "OpenVinoStatusBar",
-        "OpenVinoDownloadProgress",
-        "OpenVinoDownloadProgressText",
         "OpenVinoDownloadButton",
         "OpenVinoDescriptionText",
     ] {
@@ -968,28 +1048,62 @@ fn services_settings_local_ai_exposes_provider_configuration() {
     }
 
     assert_control_contains(&snapshot, "WindowsLocalAIExpander", "expanded=true");
+    assert_control_contains(
+        &snapshot,
+        "settings.services.local_ai.content",
+        "spacing=12",
+    );
+    assert_control_contains(
+        &snapshot,
+        "settings.services.local_ai.content",
+        "width=Fill",
+    );
+    assert_control_contains(&snapshot, "LocalAIProviderPanel", "spacing=6");
     assert_control_contains(&snapshot, "LocalAIProviderCombo", "selected=\"Auto\"");
+    assert_control_contains(&snapshot, "LocalAIProviderCombo", "width=Fixed(520)");
+    assert_control_contains(&snapshot, "LocalAIProviderCombo", "height=Fixed(48)");
     assert_control_contains(
         &snapshot,
         "LocalAIProviderCombo",
-        "Auto (Phi Silica -> Foundry Local -> OpenVINO)",
+        "Auto (Phi Silica → Foundry Local → OpenVINO)",
     );
-    assert_control_contains(&snapshot, "LocalAIProviderCombo", "WindowsAI");
+    assert_control_contains(&snapshot, "LocalAIProviderCombo", "★★★★★");
+    assert_control_contains(&snapshot, "WindowsLocalAISectionRatingText", "★★★★★");
     assert_control_contains(
         &snapshot,
         "WindowsLocalAIDescriptionText",
         "Phi Silica first, then Foundry Local, then OpenVINO",
     );
-    assert_control_contains(&snapshot, "LocalAIProviderWindowsAIRatingText", "5 stars");
+    assert_control_contains(&snapshot, "FoundryLocalRatingText", "★★★★");
+    assert_control_contains(&snapshot, "OpenVinoRatingText", "★★");
     assert_control_contains(
         &snapshot,
-        "LocalAIProviderFoundryLocalRatingText",
-        "4 stars",
+        "FoundryLocalEndpointBoxField",
+        "height=Fixed(59)",
     );
-    assert_control_contains(&snapshot, "LocalAIProviderOpenVINORatingText", "2 stars");
-    assert_control_contains(&snapshot, "FoundryLocalEndpointBox", "action=text_input");
-    assert_control_contains(&snapshot, "FoundryLocalModelBox", "action=text_input");
-    assert_control_contains(&snapshot, "OpenVinoDeviceCombo", "selected=\"Auto\"");
+    assert_control_contains(
+        &snapshot,
+        "FoundryLocalEndpointBoxField",
+        "width=Fixed(762)",
+    );
+    assert_control_contains(&snapshot, "FoundryLocalModelBoxField", "height=Fixed(56)");
+    assert_control_contains(&snapshot, "FoundryLocalModelBoxField", "width=Fixed(762)");
+    assert_control_contains(&snapshot, "FoundryLocalConfigPanel", "spacing=10");
+    assert_control_contains(&snapshot, "FoundryLocalEndpointBox", "TextEditor");
+    assert_control_contains(&snapshot, "FoundryLocalEndpointBox", "max_height=32");
+    assert_control_contains(&snapshot, "FoundryLocalEndpointBox", "width=Fixed(762)");
+    assert_control_contains(&snapshot, "FoundryLocalModelBox", "TextEditor");
+    assert_control_contains(&snapshot, "FoundryLocalModelBox", "max_height=32");
+    assert_control_contains(&snapshot, "FoundryLocalModelBox", "width=Fixed(762)");
+    assert_control_contains(&snapshot, "WindowsLocalAIConfigPanel", "spacing=10");
+    assert_control_contains(&snapshot, "OpenVinoConfigPanel", "spacing=10");
+    assert!(!snapshot.contains("id=\"WindowsLocalAIPrepareProgressPanel\""));
+    assert!(!snapshot.contains("id=\"OpenVinoDownloadProgress\""));
+    assert!(!snapshot.contains("id=\"OpenVinoDeviceCombo\""));
+    assert!(!snapshot.contains("id=\"FoundryLocalStatusBar\""));
+    assert!(!snapshot.contains("id=\"FoundryLocalStartButton\""));
+    assert!(!snapshot.contains("id=\"FoundryLocalInstallLink\""));
+    assert!(!snapshot.contains("id=\"FoundryLocalDocsLink\""));
 
     state.apply(easydict_app::Message::LocalAiProviderChanged(
         "FoundryLocal".to_string(),
@@ -1051,12 +1165,29 @@ fn services_settings_local_ai_exposes_provider_configuration() {
         "FoundryLocalStatusBar",
         "Starting Foundry Local service...",
     );
-    assert_control_contains(&snapshot, "OpenVinoDeviceCombo", "selected=\"GPU\"");
+    assert!(!snapshot.contains("id=\"OpenVinoDownloadProgress\""));
+    assert!(!snapshot.contains("id=\"WindowsLocalAIPrepareProgressText\""));
+
+    state.apply(easydict_app::Message::LocalAiProviderChanged(
+        "OpenVINO".to_string(),
+    ));
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert_control_contains(&snapshot, "OpenVinoDownloadProgress", "label=\"Queued\"");
+    assert_control_contains(&snapshot, "OpenVinoDownloadProgress", "height=Fixed(4)");
+
+    state.apply(easydict_app::Message::LocalAiProviderChanged(
+        "WindowsAI".to_string(),
+    ));
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert_control_contains(
         &snapshot,
         "WindowsLocalAIPrepareProgressText",
         "Windows Update progress link requested",
+    );
+    assert_control_contains(
+        &snapshot,
+        "WindowsLocalAIPrepareProgressBar",
+        "height=Fixed(4)",
     );
 }
 
@@ -1092,12 +1223,20 @@ fn services_settings_openai_and_ollama_expose_provider_configuration() {
         assert!(snapshot.contains(&format!("id=\"{id}\"")), "missing {id}");
     }
     assert_control_contains(&snapshot, "OpenAIKeyBox", "action=text_input");
+    assert!(snapshot.contains("id=\"OpenAIKeyField.editor\""));
+    assert_control_contains(&snapshot, "OpenAIKeyHeaderText", "style=Body");
+    assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "kind=Icon");
+    assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "icon=reveal-secret");
+    assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "width=Fixed(28)");
+    assert_control_contains(&snapshot, "OpenAIKeyRevealButton", "height=Fixed(28)");
     assert_control_contains(&snapshot, "OpenAIEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "OpenAIApiFormatCombo", "selected=\"Auto\"");
     assert_control_contains(&snapshot, "OpenAIDetectedFormatText", "Responses API");
     assert_control_contains(&snapshot, "OpenAIModelCombo", "selected=\"gpt-5.4-mini\"");
+    assert_control_contains(&snapshot, "TestOpenAIButton", "height=Fixed(29)");
     assert_control_contains(&snapshot, "OllamaEndpointBox", "action=text_input");
     assert_control_contains(&snapshot, "OllamaModelCombo", "selected=\"llama3.2\"");
+    assert_control_contains(&snapshot, "TestOllamaButton", "height=Fixed(29)");
 
     state.apply(easydict_app::Message::OpenAIApiKeyChanged(
         "sk-test".to_string(),
@@ -1402,6 +1541,7 @@ fn services_settings_render_no_config_service_section() {
         "settings.services.free_services",
         "FreeServicesHeaderText",
         "FreeServiceGoogleTranslateRow",
+        "FreeServiceGoogleTranslateRow.icon",
         "FreeServicesDescriptionText",
     ] {
         assert!(snapshot.contains(&format!("id=\"{id}\"")), "missing {id}");
@@ -1413,6 +1553,16 @@ fn services_settings_render_no_config_service_section() {
         "Free Services (No Configuration Required)",
     );
     assert!(snapshot.contains("Text value=\"Google Translate\""));
+    assert_control_contains(
+        &snapshot,
+        "FreeServiceGoogleTranslateRow.icon",
+        "icon=service-google",
+    );
+    assert_control_contains(
+        &snapshot,
+        "FreeServiceGoogleTranslateRow.icon",
+        "width=Fixed(18)",
+    );
     assert!(!snapshot.contains("Text value=\"Google Dict\""));
     assert!(!snapshot.contains("StatusBadge label=\"Ready\""));
     assert_control_contains(&snapshot, "FreeServicesDescriptionText", "without API keys");
@@ -2706,6 +2856,25 @@ fn main_window_keeps_saved_default_size_contract() {
     assert_eq!(options.min_width, Some(400.0));
     assert_eq!(options.min_height, Some(500.0));
     assert_eq!(options.frame, WindowFrame::Borderless);
+}
+
+#[test]
+fn main_window_startup_tray_options_keep_absolute_size_but_start_hidden() {
+    let mut state = EasydictUiState::default();
+    state.settings.minimize_to_tray = true;
+    state.settings.start_minimized = true;
+
+    let options = main_window_options_for_settings(&state.settings);
+
+    assert_eq!(options.id.as_str(), "main");
+    assert_eq!(options.width, 940.0);
+    assert_eq!(options.height, 1220.0);
+    assert_eq!(options.min_width, Some(400.0));
+    assert_eq!(options.min_height, Some(500.0));
+    assert!(!options.visible_on_start);
+
+    state.settings.minimize_to_tray = false;
+    assert!(main_window_options_for_settings(&state.settings).visible_on_start);
 }
 
 #[test]

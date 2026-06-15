@@ -23,6 +23,8 @@ param(
 
     [switch]$RequireManifest,
 
+    [switch]$ManifestOnly,
+
     [switch]$SkipSelfTest,
 
     [int]$MaxSummaryLines = 160
@@ -164,6 +166,10 @@ if ($FailOnCriticalCoverageMissing) {
 
 if ($RequireManifest) {
     $arguments += "--require-manifest"
+}
+
+if ($ManifestOnly) {
+    $arguments += "--manifest-only"
 }
 
 & cargo @arguments

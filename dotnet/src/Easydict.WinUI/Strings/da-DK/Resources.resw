@@ -923,6 +923,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Vis afspil-knap</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Afspil kildetekst</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Vis ombyt-knap</value>
   </data>

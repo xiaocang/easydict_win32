@@ -1299,9 +1299,11 @@ namespace Easydict.WinUI.Views
             ToolTipService.SetToolTip(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButton, loc.GetString("SwapLanguagesTooltip"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapLanguageButtonNarrow, loc.GetString("SwapLanguagesTooltip"));
+            var sourcePlayTooltip = loc.GetString("PlaySourceTextTooltip");
+            ToolTipService.SetToolTip(SourcePlayButton, sourcePlayTooltip);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 SourcePlayButton,
-                loc.GetStringOrDefault("PlaySourceTextTooltip", "Play source text"));
+                sourcePlayTooltip);
             ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(TranslateButtonNarrow, loc.GetString("TranslateTooltip"));
             ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));

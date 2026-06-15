@@ -1335,6 +1335,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Hiển thị nút phát</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Phát văn bản nguồn</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Hiển thị nút hoán đổi</value>
   </data>

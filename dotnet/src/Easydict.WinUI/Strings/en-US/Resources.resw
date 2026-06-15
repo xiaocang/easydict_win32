@@ -728,6 +728,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Show play button</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Play source text</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Show swap button</value>
   </data>

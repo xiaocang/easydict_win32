@@ -728,6 +728,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>显示朗读按钮</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>朗读源文本</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>显示交换按钮</value>
   </data>

@@ -1340,6 +1340,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Afficher le bouton de lecture</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Lire le texte source</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Afficher le bouton d'échange</value>
   </data>

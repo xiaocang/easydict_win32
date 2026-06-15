@@ -1340,6 +1340,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>재생 버튼 표시</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>원문 재생</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>교체 버튼 표시</value>
   </data>

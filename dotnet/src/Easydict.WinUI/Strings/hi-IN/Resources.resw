@@ -923,6 +923,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>प्ले बटन दिखाएं</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>स्रोत टेक्स्ट चलाएं</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>स्वैप बटन दिखाएं</value>
   </data>

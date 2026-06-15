@@ -1289,6 +1289,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>แสดงปุ่มเล่น</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>เล่นข้อความต้นฉบับ</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>แสดงปุ่มสลับ</value>
   </data>

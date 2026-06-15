@@ -1327,6 +1327,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Mostra pulsante riproduci</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Riproduci testo sorgente</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Mostra pulsante scambia</value>
   </data>

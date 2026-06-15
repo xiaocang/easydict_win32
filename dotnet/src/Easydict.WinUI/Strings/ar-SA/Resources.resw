@@ -1335,6 +1335,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>إظهار زر التشغيل</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>تشغيل النص المصدر</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>إظهار زر التبديل</value>
   </data>

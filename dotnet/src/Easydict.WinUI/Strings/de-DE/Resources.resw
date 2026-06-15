@@ -1340,6 +1340,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Wiedergabe-Schaltfläche anzeigen</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Ausgangstext vorlesen</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Tausch-Schaltfläche anzeigen</value>
   </data>

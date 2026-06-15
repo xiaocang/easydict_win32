@@ -1340,6 +1340,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>再生ボタンを表示</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>原文を再生</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>入れ替えボタンを表示</value>
   </data>

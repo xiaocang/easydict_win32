@@ -204,9 +204,11 @@ public sealed partial class MiniWindow : Window
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SwapButton, loc.GetString("SwapLanguagesTooltip"));
+        var sourcePlayTooltip = loc.GetString("PlaySourceTextTooltip");
+        ToolTipService.SetToolTip(SourcePlayButton, sourcePlayTooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
             SourcePlayButton,
-            loc.GetStringOrDefault("PlaySourceTextTooltip", "Play source text"));
+            sourcePlayTooltip);
         ToolTipService.SetToolTip(TargetLangCombo, loc.GetString("TargetLanguageTooltip"));
         ToolTipService.SetToolTip(TranslateButton, loc.GetString("TranslateTooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateButton, loc.GetString("TranslateTooltip"));

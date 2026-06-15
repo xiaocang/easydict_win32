@@ -923,6 +923,9 @@
   <data name="ShowSourcePlayButton" xml:space="preserve">
     <value>Tunjukkan butang main</value>
   </data>
+  <data name="PlaySourceTextTooltip" xml:space="preserve">
+    <value>Mainkan teks sumber</value>
+  </data>
   <data name="ShowSwapButton" xml:space="preserve">
     <value>Tunjukkan butang tukar</value>
   </data>

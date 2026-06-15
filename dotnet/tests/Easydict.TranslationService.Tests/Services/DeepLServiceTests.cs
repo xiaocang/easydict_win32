@@ -37,17 +37,37 @@ public class DeepLServiceTests
     }
 
     [Theory]
+    // Regression set for #174 (initially missing) ...
     [InlineData(Language.Vietnamese)]
     [InlineData(Language.Arabic)]
     [InlineData(Language.Thai)]
     [InlineData(Language.Hebrew)]
     [InlineData(Language.Tamil)]
     [InlineData(Language.Telugu)]
+    // ... plus the rest of DeepL's current (100+ language, next-gen model) support present in the enum.
+    [InlineData(Language.Hindi)]
+    [InlineData(Language.Bengali)]
+    [InlineData(Language.Urdu)]
+    [InlineData(Language.Malay)]
+    [InlineData(Language.Filipino)]
+    [InlineData(Language.Persian)]
+    [InlineData(Language.Estonian)]
+    [InlineData(Language.Latvian)]
+    [InlineData(Language.Lithuanian)]
+    [InlineData(Language.Slovak)]
+    [InlineData(Language.Slovenian)]
     public void SupportedLanguages_ContainsDeepLSupportedLanguages(Language language)
     {
-        // Regression test for #174: these languages are supported by DeepL but were
-        // missing from the supported-languages list, causing local validation to reject them.
+        // DeepL supports these and they exist in the app's Language enum, so local validation
+        // (the only consumer of SupportedLanguages) must not reject them.
         _service.SupportedLanguages.Should().Contain(language);
+    }
+
+    [Fact]
+    public void SupportedLanguages_ExcludesClassicalChinese()
+    {
+        // DeepL has no Classical/Literary Chinese target; it is the one enum language DeepL omits.
+        _service.SupportedLanguages.Should().NotContain(Language.ClassicalChinese);
     }
 
     [Fact]

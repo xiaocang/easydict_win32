@@ -8,6 +8,9 @@ namespace Easydict.TranslationService.Tests.Mocks;
 /// </summary>
 public class MockHttpMessageHandler : HttpMessageHandler
 {
+    // Guards all collections below. Services may issue background requests (e.g. DeepL's
+    // fire-and-forget language refresh) concurrently with the test thread reading state.
+    private readonly object _lock = new();
     private readonly Queue<HttpResponseMessage> _responses = new();
     private readonly List<HttpRequestMessage> _requests = new();
     private readonly List<string?> _requestBodies = new();
@@ -15,18 +18,27 @@ public class MockHttpMessageHandler : HttpMessageHandler
     /// <summary>
     /// Gets all requests that were sent through this handler.
     /// </summary>
-    public IReadOnlyList<HttpRequestMessage> Requests => _requests.AsReadOnly();
+    public IReadOnlyList<HttpRequestMessage> Requests
+    {
+        get { lock (_lock) { return _requests.ToList(); } }
+    }
 
     /// <summary>
     /// Gets the last request that was sent, or null if no requests have been made.
     /// </summary>
-    public HttpRequestMessage? LastRequest => _requests.Count > 0 ? _requests[^1] : null;
+    public HttpRequestMessage? LastRequest
+    {
+        get { lock (_lock) { return _requests.Count > 0 ? _requests[^1] : null; } }
+    }
 
     /// <summary>
     /// Gets the body content of the last request as a string.
     /// This is captured before the request is processed to avoid disposal issues.
     /// </summary>
-    public string? LastRequestBody => _requestBodies.Count > 0 ? _requestBodies[^1] : null;
+    public string? LastRequestBody
+    {
+        get { lock (_lock) { return _requestBodies.Count > 0 ? _requestBodies[^1] : null; } }
+    }
 
     /// <summary>
     /// Enqueue a response to be returned for the next request.
@@ -34,7 +46,10 @@ public class MockHttpMessageHandler : HttpMessageHandler
     /// </summary>
     public void EnqueueResponse(HttpResponseMessage response)
     {
-        _responses.Enqueue(response);
+        lock (_lock)
+        {
+            _responses.Enqueue(response);
+        }
     }
 
     /// <summary>
@@ -46,7 +61,10 @@ public class MockHttpMessageHandler : HttpMessageHandler
         {
             Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
         };
-        _responses.Enqueue(response);
+        lock (_lock)
+        {
+            _responses.Enqueue(response);
+        }
     }
 
     /// <summary>
@@ -59,7 +77,10 @@ public class MockHttpMessageHandler : HttpMessageHandler
         {
             Content = new StringContent(content, System.Text.Encoding.UTF8, "text/event-stream")
         };
-        _responses.Enqueue(response);
+        lock (_lock)
+        {
+            _responses.Enqueue(response);
+        }
     }
 
     /// <summary>
@@ -77,25 +98,28 @@ public class MockHttpMessageHandler : HttpMessageHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        _requests.Add(request);
-
         // Capture request body before it could be disposed
         string? body = null;
         if (request.Content != null)
         {
             body = await request.Content.ReadAsStringAsync(cancellationToken);
         }
-        _requestBodies.Add(body);
 
-        if (_responses.Count == 0)
+        lock (_lock)
         {
-            throw new InvalidOperationException(
-                "No responses queued. Call EnqueueResponse or EnqueueJsonResponse before making requests.");
-        }
+            _requests.Add(request);
+            _requestBodies.Add(body);
 
-        var response = _responses.Dequeue();
-        response.RequestMessage ??= request;
-        return response;
+            if (_responses.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "No responses queued. Call EnqueueResponse or EnqueueJsonResponse before making requests.");
+            }
+
+            var response = _responses.Dequeue();
+            response.RequestMessage ??= request;
+            return response;
+        }
     }
 
     /// <summary>
@@ -109,7 +133,10 @@ public class MockHttpMessageHandler : HttpMessageHandler
             Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
             RequestMessage = new HttpRequestMessage(HttpMethod.Get, resolvedUri)
         };
-        _responses.Enqueue(response);
+        lock (_lock)
+        {
+            _responses.Enqueue(response);
+        }
     }
 
     /// <summary>
@@ -117,8 +144,11 @@ public class MockHttpMessageHandler : HttpMessageHandler
     /// </summary>
     public void Reset()
     {
-        _responses.Clear();
-        _requests.Clear();
-        _requestBodies.Clear();
+        lock (_lock)
+        {
+            _responses.Clear();
+            _requests.Clear();
+            _requestBodies.Clear();
+        }
     }
 }

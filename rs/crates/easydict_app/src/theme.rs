@@ -70,8 +70,9 @@ fn easydict_light() -> ThemeTokens {
         input_surface: Color::rgb(241, 244, 248),
         result_surface: Color::rgb(255, 255, 255),
         result_header: Color::rgb(251, 252, 254),
+        result_header_foreground: Color::rgb(31, 35, 40),
         result_header_hover: Color::rgb(241, 244, 248),
-        button_hover: Color::rgb(241, 244, 248),
+        button_hover: Color::rgb(238, 243, 248),
         button_pressed: Color::rgb(236, 236, 233),
         floating_input_surface: Color::rgb(241, 244, 248),
         floating_input_border: Color::rgb(225, 231, 239),
@@ -152,6 +153,7 @@ fn easydict_dark() -> ThemeTokens {
         input_surface: Color::rgb(42, 47, 57),
         result_surface: Color::rgb(34, 39, 49),
         result_header: Color::rgb(40, 45, 55),
+        result_header_foreground: Color::rgb(242, 244, 248),
         result_header_hover: Color::rgb(50, 57, 70),
         button_hover: Color::rgb(50, 57, 70),
         button_pressed: Color::rgb(56, 60, 72),
@@ -187,9 +189,10 @@ fn easydict_minimal() -> ThemeTokens {
     theme.input_surface = Color::rgb(255, 255, 255);
     theme.result_surface = Color::rgb(255, 255, 255);
     theme.result_header = Color::rgb(255, 255, 255);
-    theme.result_header_hover = Color::rgb(224, 224, 224);
-    theme.button_hover = Color::rgb(224, 224, 224);
-    theme.button_pressed = Color::rgb(192, 192, 192);
+    theme.result_header_foreground = Color::rgb(17, 17, 17);
+    theme.result_header_hover = Color::rgb(247, 247, 247);
+    theme.button_hover = Color::rgb(247, 247, 247);
+    theme.button_pressed = Color::rgb(238, 238, 238);
     theme.floating_input_surface = Color::rgb(255, 255, 255);
     theme.floating_input_border = Color::rgb(153, 153, 153);
     theme.floating_action_surface = Color::rgb(255, 255, 255);
@@ -197,6 +200,8 @@ fn easydict_minimal() -> ThemeTokens {
     theme.effects.floating_action_rest_opacity = 1.0;
     theme.effects.floating_action_hover_opacity = 1.0;
     theme.effects.floating_action_pressed_opacity = 0.85;
+    theme.text_primary = Color::rgb(17, 17, 17);
+    theme.text_secondary = Color::rgb(102, 102, 102);
     theme.border = Color::rgb(153, 153, 153);
     theme
 }

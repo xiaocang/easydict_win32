@@ -41,6 +41,7 @@ pub enum BrowserRegistrarParseError {
     Help,
     MissingCommand,
     UnknownCommand(String),
+    UnknownOption(String),
     MissingValue(String),
     InvalidValue { option: String, value: String },
 }
@@ -51,6 +52,7 @@ impl fmt::Display for BrowserRegistrarParseError {
             Self::Help => formatter.write_str("help requested"),
             Self::MissingCommand => formatter.write_str("missing command"),
             Self::UnknownCommand(command) => write!(formatter, "unknown command: {command}"),
+            Self::UnknownOption(option) => write!(formatter, "unknown option: {option}"),
             Self::MissingValue(option) => write!(formatter, "missing value for {option}"),
             Self::InvalidValue { option, value } => {
                 write!(formatter, "invalid value for {option}: {value}")
@@ -114,7 +116,7 @@ where
                 }
                 "--chrome-ext-id" => chrome_ext_ids = parse_chrome_ext_ids(value),
                 "--firefox-ext-id" => firefox_ext_id = value.to_string(),
-                _ => {}
+                _ => return Err(BrowserRegistrarParseError::UnknownOption(name.to_string())),
             }
             continue;
         }
@@ -138,7 +140,7 @@ where
             "--firefox-ext-id" => {
                 firefox_ext_id = next_value(&mut rest, "--firefox-ext-id")?;
             }
-            _ => {}
+            _ => return Err(BrowserRegistrarParseError::UnknownOption(arg)),
         }
     }
 

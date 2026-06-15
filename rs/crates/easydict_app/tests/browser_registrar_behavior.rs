@@ -122,6 +122,22 @@ fn parser_reports_missing_and_unknown_commands_like_the_registrar_cli() {
 }
 
 #[test]
+fn parser_rejects_unknown_or_legacy_options_instead_of_silently_ignoring_them() {
+    for args in [
+        vec!["install", "--legacy-host", "com.easydict.bridge"],
+        vec!["install", "--native-host-name=com.easydict.bridge"],
+        vec!["install", "Easydict.NativeBridge.exe"],
+    ] {
+        let error = parse_browser_registrar_args(args.clone())
+            .expect_err("unknown or legacy registrar argument should be rejected");
+        assert!(
+            matches!(error, BrowserRegistrarParseError::UnknownOption(_)),
+            "{args:?} should fail as an unknown option, got {error:?}"
+        );
+    }
+}
+
+#[test]
 fn browser_registrar_usage_names_rust_binary_not_legacy_alias() {
     let usage = usage();
 

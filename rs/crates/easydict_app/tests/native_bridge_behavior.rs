@@ -65,6 +65,14 @@ fn native_bridge_rejects_invalid_or_missing_action_before_signal() {
             br#"{"action":123}"#.as_slice(),
             "invalid native message JSON",
         ),
+        (
+            br#"{"action":""}"#.as_slice(),
+            "native message action must be non-empty",
+        ),
+        (
+            br#"{"action":"   "}"#.as_slice(),
+            "native message action must be non-empty",
+        ),
     ] {
         let error = parse_native_action(payload).expect_err("invalid action should be rejected");
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
@@ -97,7 +105,7 @@ fn native_bridge_signals_ocr_and_writes_success_response() {
 }
 
 #[test]
-fn native_bridge_reports_false_when_ocr_event_is_not_available() {
+fn native_bridge_reports_unavailable_ocr_event_as_json_error() {
     let input = encode_native_message(&serde_json::json!({ "action": OCR_TRANSLATE_ACTION }))
         .expect("input frame");
     let mut output = Vec::new();
@@ -111,14 +119,17 @@ fn native_bridge_reports_false_when_ocr_event_is_not_available() {
 
     assert_eq!(responses, 1);
     assert_eq!(signal_count, 1);
+    let response = decode_single_response(&output);
+    assert!(!response.success);
+    assert_eq!(response.action, OCR_TRANSLATE_ACTION);
     assert_eq!(
-        decode_single_response(&output),
-        BridgeResponse::new(false, OCR_TRANSLATE_ACTION)
+        response.error.as_deref(),
+        Some("OCR translate event is not available")
     );
 }
 
 #[test]
-fn native_bridge_reports_false_for_unknown_actions_without_signal() {
+fn native_bridge_reports_unknown_actions_as_json_error_without_signal() {
     let input =
         encode_native_message(&serde_json::json!({ "action": "status" })).expect("input frame");
     let mut output = Vec::new();
@@ -132,9 +143,12 @@ fn native_bridge_reports_false_for_unknown_actions_without_signal() {
 
     assert_eq!(responses, 1);
     assert_eq!(signal_count, 0);
+    let response = decode_single_response(&output);
+    assert!(!response.success);
+    assert_eq!(response.action, "status");
     assert_eq!(
-        decode_single_response(&output),
-        BridgeResponse::new(false, "status")
+        response.error.as_deref(),
+        Some("unsupported native message action: status")
     );
 }
 
@@ -153,6 +167,14 @@ fn native_bridge_rejects_malformed_or_missing_action_without_signal() {
         (
             br#"{"action":123}"#.as_slice(),
             "invalid native message JSON",
+        ),
+        (
+            br#"{"action":""}"#.as_slice(),
+            "native message action must be non-empty",
+        ),
+        (
+            br#"{"action":"   "}"#.as_slice(),
+            "native message action must be non-empty",
         ),
     ] {
         let input = encode_raw_native_message(payload);
@@ -183,6 +205,33 @@ fn native_bridge_rejects_malformed_or_missing_action_without_signal() {
 }
 
 #[test]
+fn native_bridge_reports_signal_backend_errors_as_json_without_process_error() {
+    let input = encode_native_message(&serde_json::json!({ "action": OCR_TRANSLATE_ACTION }))
+        .expect("input frame");
+    let mut output = Vec::new();
+    let mut signal_count = 0usize;
+
+    let responses = run_native_bridge(Cursor::new(input), &mut output, || {
+        signal_count += 1;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "named event access denied",
+        ))
+    })
+    .expect("signal backend errors should be serialized as a response");
+
+    assert_eq!(responses, 1);
+    assert_eq!(signal_count, 1);
+
+    let response = decode_single_response(&output);
+    assert!(!response.success);
+    assert_eq!(response.action, OCR_TRANSLATE_ACTION);
+    let error = response.error.as_deref().expect("signal error");
+    assert!(error.contains("failed to signal OCR translate event"));
+    assert!(error.contains("named event access denied"));
+}
+
+#[test]
 fn native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_signal() {
     let input =
         encode_native_message(&serde_json::json!({ "action": "status" })).expect("input frame");
@@ -210,9 +259,12 @@ fn native_bridge_binary_handles_unknown_action_without_dotnet_host_or_event_sign
         "native bridge binary should handle unknown actions locally\nstderr:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let response = decode_single_response(&output.stdout);
+    assert!(!response.success);
+    assert_eq!(response.action, "status");
     assert_eq!(
-        decode_single_response(&output.stdout),
-        BridgeResponse::new(false, "status")
+        response.error.as_deref(),
+        Some("unsupported native message action: status")
     );
 
     let combined = format!(

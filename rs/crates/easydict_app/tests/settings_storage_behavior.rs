@@ -49,6 +49,41 @@ fn settings_storage_default_path_honors_settings_directory_env() {
     );
 }
 
+#[test]
+fn settings_storage_load_file_reports_machine_id_persistence_warnings() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp = TempDir::new("settings-storage-machine-id-warning");
+    let blocked_settings_dir = temp.path().join("blocked-settings-dir");
+    let settings_path = temp.path().join("settings.json");
+    fs::write(&blocked_settings_dir, "not a directory").unwrap();
+    fs::write(&settings_path, "{}").unwrap();
+    let _guard = EnvVarGuard::set(
+        "EASYDICT_SETTINGS_DIR",
+        blocked_settings_dir.to_string_lossy().to_string(),
+    );
+
+    let result =
+        load_settings_file(&settings_path).expect("settings load should remain best-effort");
+
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Could not create machine-id directory")),
+        "machine-id directory warning should be surfaced: {:?}",
+        result.warnings
+    );
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Could not persist machine-id")
+                || warning.contains("Could not copy legacy machine-id")),
+        "machine-id write warning should be surfaced: {:?}",
+        result.warnings
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn settings_storage_saves_legacy_keys_and_protects_sensitive_values() {

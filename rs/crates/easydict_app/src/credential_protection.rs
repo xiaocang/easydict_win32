@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -64,6 +65,12 @@ pub struct CredentialPlaintext {
     pub value: Option<String>,
     pub needs_migration: bool,
     pub decrypt_failed: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MachineIdLoadResult {
+    pub machine_id: String,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -363,49 +370,101 @@ fn dpapi_optional_entropy_for_purpose(purpose: &str, scope: CredentialProtection
 }
 
 pub fn get_or_create_persisted_machine_id(directory: impl AsRef<Path>) -> String {
-    let directory = directory.as_ref();
-    fs::create_dir_all(directory).ok();
+    get_or_create_persisted_machine_id_with_diagnostics(directory).machine_id
+}
 
-    if let Some(existing) = read_machine_id_from_directory(directory) {
-        return existing;
+pub fn get_or_create_persisted_machine_id_with_diagnostics(
+    directory: impl AsRef<Path>,
+) -> MachineIdLoadResult {
+    let directory = directory.as_ref();
+    let mut warnings = Vec::new();
+    if let Err(error) = fs::create_dir_all(directory) {
+        push_machine_id_io_warning(
+            &mut warnings,
+            "create machine-id directory",
+            directory,
+            error,
+        );
+    }
+
+    if let Some(existing) = read_machine_id_from_directory(directory, &mut warnings) {
+        return MachineIdLoadResult {
+            machine_id: existing,
+            warnings,
+        };
     }
 
     let created = machine_guid_hash().unwrap_or_else(create_machine_id);
-    if fs::write(directory.join(MACHINE_ID_FILE_NAME), &created).is_ok() {
-        return created;
+    let path = directory.join(MACHINE_ID_FILE_NAME);
+    if write_machine_id_or_warn(&path, &created, "persist machine-id", &mut warnings) {
+        return MachineIdLoadResult {
+            machine_id: created,
+            warnings,
+        };
     }
 
-    std::env::var("COMPUTERNAME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(created)
+    MachineIdLoadResult {
+        machine_id: fallback_machine_id_after_persistence_failure(created),
+        warnings,
+    }
 }
 
 pub fn get_or_create_persisted_machine_id_with_legacy_fallback(
     directory: impl AsRef<Path>,
     legacy_directory: impl AsRef<Path>,
 ) -> String {
-    let directory = directory.as_ref();
-    fs::create_dir_all(directory).ok();
+    get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics(directory, legacy_directory)
+        .machine_id
+}
 
-    if let Some(existing) = read_machine_id_from_directory(directory) {
-        return existing;
+pub fn get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics(
+    directory: impl AsRef<Path>,
+    legacy_directory: impl AsRef<Path>,
+) -> MachineIdLoadResult {
+    let directory = directory.as_ref();
+    let mut warnings = Vec::new();
+    if let Err(error) = fs::create_dir_all(directory) {
+        push_machine_id_io_warning(
+            &mut warnings,
+            "create machine-id directory",
+            directory,
+            error,
+        );
     }
 
-    if let Some(legacy) = read_machine_id_from_legacy_directory(legacy_directory.as_ref()) {
-        fs::write(directory.join(MACHINE_ID_FILE_NAME), &legacy).ok();
-        return legacy;
+    if let Some(existing) = read_machine_id_from_directory(directory, &mut warnings) {
+        return MachineIdLoadResult {
+            machine_id: existing,
+            warnings,
+        };
+    }
+
+    if let Some(legacy) =
+        read_machine_id_from_legacy_directory(legacy_directory.as_ref(), &mut warnings)
+    {
+        let path = directory.join(MACHINE_ID_FILE_NAME);
+        if let Err(error) = fs::write(&path, &legacy) {
+            push_machine_id_io_warning(&mut warnings, "copy legacy machine-id", &path, error);
+        }
+        return MachineIdLoadResult {
+            machine_id: legacy,
+            warnings,
+        };
     }
 
     let created = machine_guid_hash().unwrap_or_else(create_machine_id);
-    if fs::write(directory.join(MACHINE_ID_FILE_NAME), &created).is_ok() {
-        return created;
+    let path = directory.join(MACHINE_ID_FILE_NAME);
+    if write_machine_id_or_warn(&path, &created, "persist machine-id", &mut warnings) {
+        return MachineIdLoadResult {
+            machine_id: created,
+            warnings,
+        };
     }
 
-    std::env::var("COMPUTERNAME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(created)
+    MachineIdLoadResult {
+        machine_id: fallback_machine_id_after_persistence_failure(created),
+        warnings,
+    }
 }
 
 fn default_machine_id() -> &'static str {
@@ -419,35 +478,78 @@ fn default_machine_id() -> &'static str {
         .as_str()
 }
 
-fn read_machine_id_from_directory(directory: &Path) -> Option<String> {
+fn read_machine_id_from_directory(directory: &Path, warnings: &mut Vec<String>) -> Option<String> {
     let path = directory.join(MACHINE_ID_FILE_NAME);
-    if let Some(existing) = read_non_empty_trimmed(&path) {
+    if let Some(existing) = read_non_empty_trimmed(&path, warnings) {
         return Some(existing);
     }
 
     let legacy_path = directory.join(LEGACY_MACHINE_ID_FILE_NAME);
-    if let Some(legacy) = read_non_empty_trimmed(&legacy_path) {
-        fs::write(&path, &legacy).ok();
+    if let Some(legacy) = read_non_empty_trimmed(&legacy_path, warnings) {
+        if let Err(error) = fs::write(&path, &legacy) {
+            push_machine_id_io_warning(warnings, "migrate legacy local-machine-id", &path, error);
+        }
         return Some(legacy);
     }
 
     None
 }
 
-fn read_machine_id_from_legacy_directory(directory: &Path) -> Option<String> {
+fn write_machine_id_or_warn(
+    path: &Path,
+    value: &str,
+    action: &str,
+    warnings: &mut Vec<String>,
+) -> bool {
+    match fs::write(path, value) {
+        Ok(()) => true,
+        Err(error) => {
+            push_machine_id_io_warning(warnings, action, path, error);
+            false
+        }
+    }
+}
+
+fn read_machine_id_from_legacy_directory(
+    directory: &Path,
+    warnings: &mut Vec<String>,
+) -> Option<String> {
     let path = directory.join(MACHINE_ID_FILE_NAME);
-    if let Some(existing) = read_non_empty_trimmed(&path) {
+    if let Some(existing) = read_non_empty_trimmed(&path, warnings) {
         return Some(existing);
     }
 
-    read_non_empty_trimmed(&directory.join(LEGACY_MACHINE_ID_FILE_NAME))
+    read_non_empty_trimmed(&directory.join(LEGACY_MACHINE_ID_FILE_NAME), warnings)
 }
 
-fn read_non_empty_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path)
+fn read_non_empty_trimmed(path: &Path, warnings: &mut Vec<String>) -> Option<String> {
+    match fs::read_to_string(path) {
+        Ok(value) => {
+            let value = value.trim().to_string();
+            (!value.is_empty()).then_some(value)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => {
+            push_machine_id_io_warning(warnings, "read machine-id", path, error);
+            None
+        }
+    }
+}
+
+fn fallback_machine_id_after_persistence_failure(created: String) -> String {
+    std::env::var("COMPUTERNAME")
         .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(created)
+}
+
+fn push_machine_id_io_warning(
+    warnings: &mut Vec<String>,
+    action: &str,
+    path: &Path,
+    error: io::Error,
+) {
+    warnings.push(format!("Could not {action} '{}': {error}", path.display()));
 }
 
 fn create_machine_id() -> String {

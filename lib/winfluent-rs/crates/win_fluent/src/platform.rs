@@ -256,6 +256,7 @@ impl FolderDialogOptions {
 pub struct TrayMenu<Message> {
     pub tooltip: String,
     pub icon_path: Option<String>,
+    pub presenter_min_width: Option<u16>,
     pub default_item_id: Option<String>,
     pub items: Vec<TrayMenuItem<Message>>,
 }
@@ -265,6 +266,7 @@ impl<Message> TrayMenu<Message> {
         Self {
             tooltip: tooltip.into(),
             icon_path: None,
+            presenter_min_width: None,
             default_item_id: None,
             items: Vec::new(),
         }
@@ -272,6 +274,11 @@ impl<Message> TrayMenu<Message> {
 
     pub fn icon_path(mut self, path: impl Into<String>) -> Self {
         self.icon_path = Some(path.into());
+        self
+    }
+
+    pub fn presenter_min_width(mut self, width: u16) -> Self {
+        self.presenter_min_width = Some(width);
         self
     }
 
@@ -295,6 +302,7 @@ impl<Message> TrayMenu<Message> {
 pub struct TrayMenuItem<Message> {
     pub id: String,
     pub label: String,
+    pub tooltip: Option<String>,
     pub action: Action<Message>,
     pub enabled: bool,
     pub children: Vec<TrayMenuItem<Message>>,
@@ -306,6 +314,7 @@ impl<Message> TrayMenuItem<Message> {
         Self {
             id: id.into(),
             label: label.into(),
+            tooltip: None,
             action: Action::None,
             enabled: true,
             children: Vec::new(),
@@ -317,6 +326,7 @@ impl<Message> TrayMenuItem<Message> {
         Self {
             id: String::new(),
             label: String::new(),
+            tooltip: None,
             action: Action::None,
             enabled: false,
             children: Vec::new(),
@@ -335,6 +345,11 @@ impl<Message> TrayMenuItem<Message> {
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
         self
     }
 

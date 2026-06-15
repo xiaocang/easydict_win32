@@ -1,7 +1,7 @@
 use crate::app_data::legacy_user_data_directory;
 use crate::credential_protection::{
-    get_or_create_persisted_machine_id_with_legacy_fallback, protect_credential,
-    unprotect_or_return_plaintext_with_machine_id,
+    get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics, protect_credential,
+    unprotect_or_return_plaintext_with_machine_id, MachineIdLoadResult,
 };
 use crate::mdx_native::discover_mdd_file_paths;
 use crate::protocol::normalize_local_ai_provider_mode;
@@ -94,12 +94,12 @@ pub fn load_settings_file(
     let path = path.as_ref();
     let json = fs::read_to_string(path)?;
     let (migrated_json, changed) = migrate_settings_json(&json)?;
-    let machine_id = default_storage_machine_id();
+    let machine_id = default_storage_machine_id_with_diagnostics();
     let mut root = serde_json::from_str::<Value>(&migrated_json)?
         .as_object()
         .cloned()
         .unwrap_or_default();
-    let sensitive_changed = normalize_sensitive_settings(&mut root, &machine_id)?;
+    let sensitive_changed = normalize_sensitive_settings(&mut root, &machine_id.machine_id)?;
     let local_ai_provider_changed = normalize_local_ai_provider_storage(&mut root);
 
     let normalized_json = if changed || sensitive_changed || local_ai_provider_changed {
@@ -110,7 +110,9 @@ pub fn load_settings_file(
         migrated_json
     };
 
-    load_settings_json_with_machine_id(&normalized_json, &machine_id)
+    let mut result = load_settings_json_with_machine_id(&normalized_json, &machine_id.machine_id)?;
+    prepend_warnings(&mut result.warnings, machine_id.warnings);
+    Ok(result)
 }
 
 fn normalize_sensitive_settings(
@@ -167,8 +169,10 @@ pub fn save_settings_file(
 }
 
 pub fn load_settings_json(json: &str) -> Result<SettingsLoadResult, SettingsStorageError> {
-    let machine_id = default_storage_machine_id();
-    load_settings_json_with_machine_id(json, &machine_id)
+    let machine_id = default_storage_machine_id_with_diagnostics();
+    let mut result = load_settings_json_with_machine_id(json, &machine_id.machine_id)?;
+    prepend_warnings(&mut result.warnings, machine_id.warnings);
+    Ok(result)
 }
 
 pub fn load_settings_json_with_machine_id(
@@ -1150,10 +1154,22 @@ fn theme_to_storage(theme: ThemeMode) -> &'static str {
     }
 }
 
-fn default_storage_machine_id() -> String {
+fn default_storage_machine_id_with_diagnostics() -> MachineIdLoadResult {
     let directory = default_settings_storage_path()
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
-    get_or_create_persisted_machine_id_with_legacy_fallback(directory, legacy_user_data_directory())
+    get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics(
+        directory,
+        legacy_user_data_directory(),
+    )
+}
+
+fn prepend_warnings(warnings: &mut Vec<String>, mut prefix: Vec<String>) {
+    if prefix.is_empty() {
+        return;
+    }
+
+    prefix.append(warnings);
+    *warnings = prefix;
 }

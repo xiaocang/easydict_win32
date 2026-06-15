@@ -307,26 +307,11 @@ function ConvertTo-DryRunText {
         [string]$GstepCommitMessage
     )
 
-    $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add("Dry run; validation step(s) that would run:")
-    foreach ($step in @($Steps)) {
-        $lines.Add("  - $($step.Name): $($step.Command -join ' ')")
-    }
-
-    if ($null -ne $TrailingWhitespacePaths) {
-        if ($TrailingWhitespacePaths.Count -eq 0) {
-            $lines.Add("  - trailing whitespace check: no changed text files would be scanned")
-        }
-        else {
-            $lines.Add("  - trailing whitespace check: rg -n ""[ \t]+$"" -- $($TrailingWhitespacePaths -join ' ')")
-        }
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($GstepCommitMessage)) {
-        $lines.Add("  - gstep checkpoint after successful validation: $(Format-GstepCommitCommandForDisplay -Message $GstepCommitMessage)")
-    }
-
-    $lines -join "`n"
+    Format-ValidationDryRunText `
+        -Steps $Steps `
+        -CheckTrailingWhitespace:($PSBoundParameters.ContainsKey("TrailingWhitespacePaths")) `
+        -TrailingWhitespacePaths $TrailingWhitespacePaths `
+        -GstepCommitMessage $GstepCommitMessage
 }
 
 function Get-ProfileDryRunText {
@@ -362,7 +347,7 @@ function Get-RecommendedDryRunText {
 . ([scriptblock]::Create((Get-ValidationWrapperDefinitionText)))
 
 Invoke-TestCase "profile list includes tooling lane" {
-    foreach ($profileName in @("core-validation-tooling", "app-core-catalog", "app-preview-window", "asset-downloads", "cli-translate", "longdoc-cli", "longdoc-script", "mdx-native", "openai-compatible", "retained-worker-ipc", "pdf-to-images", "store-listings", "encrypt-secret", "msix-validate", "icon-generator", "rust-helper-build", "dotnet-runtime-extract", "msix-runtime-profile", "startup-activation", "translation-cache", "windows-ai-native")) {
+    foreach ($profileName in @("core-validation-tooling", "app-core-catalog", "app-preview-window", "asset-downloads", "cli-translate", "longdoc-cli", "longdoc-script", "mdx-native", "openai-compatible", "retained-worker-ipc", "pdf-to-images", "pdf-overlay", "store-listings", "encrypt-secret", "msix-validate", "icon-generator", "runtime-guards", "windows-registry", "nllb-native", "rust-helper-build", "dotnet-runtime-extract", "msix-runtime-profile", "startup-activation", "translation-cache", "windows-ai-native")) {
         if (-not $validationProfiles.Contains($profileName)) {
             throw "Expected validation profile '$profileName' to exist."
         }
@@ -392,11 +377,45 @@ Invoke-TestCase "cleanup restore path retries transient file-copy locks" {
     Assert-Contains -Text $wrapperText -Needle "cleanupErrors" -Context $wrapper
 }
 
+Invoke-TestCase "checkpoint re-isolates late parallel UI drift before scope guard" {
+    Assert-Contains -Text $wrapperText -Needle "late parallel UI/parity or generated file(s) before checkpoint" -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle "gstep-at-checkpoint" -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle '$alreadyIsolated = $normalizedAlreadyIsolatedFiles -contains $normalizedRelativePath' -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle "if (-not `$alreadyIsolated)" -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle "backup late `$relativePath" -Context $wrapper
+    Assert-Contains -Text $wrapperText -Needle "re-isolate late `$relativePath" -Context $wrapper
+    Assert-NotContains -Text $wrapperText -Needle '$normalizedAlreadyIsolatedFiles -notcontains $normalizedPath' -Context $wrapper
+
+    $lateIndex = $wrapperText.IndexOf("late parallel UI/parity or generated file(s) before checkpoint", [System.StringComparison]::Ordinal)
+    $guardIndex = $wrapperText.LastIndexOf('$unexpectedPaths = @(Get-UnexpectedCheckpointPaths', [System.StringComparison]::Ordinal)
+    $commitIndex = $wrapperText.IndexOf('Running post-validation checkpoint:', [System.StringComparison]::Ordinal)
+    if ($lateIndex -lt 0 -or $guardIndex -lt 0 -or $commitIndex -lt 0 -or $lateIndex -gt $guardIndex -or $guardIndex -gt $commitIndex) {
+        throw "Late parallel UI isolation must run before the checkpoint scope guard and before gstep commit."
+    }
+}
+
 Invoke-TestCase "tooling changes only recommend tooling lane" {
     Assert-RecommendationExact `
         -ChangedPath @("rs\scripts\Invoke-RsCoreSliceValidation.ps1") `
         -ExpectedProfiles @("core-validation-tooling") `
         -Context "tooling path recommendation"
+}
+
+Invoke-TestCase "planned changed paths still recommend profiles with an empty diff" {
+    $filteredDiff = Get-RecommendationDiffText `
+        -DiffText "" `
+        -AllowedPaths @("rs\crates\easydict_icon_generator\src\lib.rs")
+    if ($filteredDiff -ne "") {
+        throw "Empty clean-tree recommendation diff should remain empty."
+    }
+
+    $recommendation = Get-ProfileRecommendations `
+        -Paths @("rs\crates\easydict_icon_generator\src\lib.rs") `
+        -DiffText $filteredDiff
+    Assert-SameStringSequence `
+        -Expected @("icon-generator") `
+        -Actual @($recommendation.Results | ForEach-Object { $_.Profile }) `
+        -Context "empty diff planned path recommendation"
 }
 
 $recommendationCases = @(
@@ -431,6 +450,7 @@ $recommendationCases = @(
     @{ Name = "translation service catalog changes recommend core catalog lane"; Path = "rs\crates\easydict_app\src\translation_services.rs"; Profiles = @("app-core-catalog") },
     @{ Name = "app preview binary changes recommend preview/window lane"; Path = "rs\crates\easydict_app\src\main.rs"; Profiles = @("app-preview-window") },
     @{ Name = "window options changes recommend preview/window lane"; Path = "rs\crates\easydict_app\src\window_options.rs"; Profiles = @("app-preview-window") },
+    @{ Name = "preview iced binary changes recommend preview/window lane"; Path = "rs\crates\easydict_preview_iced\src\main.rs"; Profiles = @("app-preview-window") },
     @{ Name = "CLI parser changes recommend CLI translate lane"; Path = "rs\crates\easydict_app\src\cli_translate.rs"; Profiles = @("cli-translate") },
     @{ Name = "CLI binary entrypoint changes recommend CLI translate lane"; Path = "rs\crates\easydict_app\src\bin\easydict_cli.rs"; Profiles = @("cli-translate") },
     @{ Name = "LongDoc CLI parser changes recommend LongDoc CLI lane"; Path = "rs\crates\easydict_app\src\long_document_cli.rs"; Profiles = @("longdoc-cli") },
@@ -450,6 +470,7 @@ $recommendationCases = @(
     @{ Name = "PDF render helper changes recommend PDF-to-images lane"; Path = "lib\easydict-pdf-render\src\lib.rs"; Profiles = @("pdf-to-images") },
     @{ Name = "PDF-to-images CLI changes recommend PDF-to-images lane"; Path = "rs\crates\easydict_pdf_to_images\src\main.rs"; Profiles = @("pdf-to-images") },
     @{ Name = "PDF-to-images shim changes recommend PDF-to-images lane"; Path = "dotnet\scripts\pdf-to-images.ps1"; Profiles = @("pdf-to-images") },
+    @{ Name = "PDF overlay helper changes recommend PDF overlay lane"; Path = "lib\easydict-pdf-overlay\src\lib.rs"; Profiles = @("pdf-overlay") },
     @{ Name = "Store listing Rust tool changes recommend store-listings lane"; Path = "rs\crates\easydict_store_listings\src\lib.rs"; Profiles = @("store-listings") },
     @{ Name = "Store listing metadata changes recommend store-listings lane"; Path = ".winstore\listings\en-us.yaml"; Profiles = @("store-listings") },
     @{ Name = "Store listing shim changes recommend store-listings lane"; Path = ".winstore\scripts\Sync-StoreListings.ps1"; Profiles = @("store-listings") },
@@ -457,6 +478,9 @@ $recommendationCases = @(
     @{ Name = "Encrypt secret Rust tool changes recommend encrypt-secret lane"; Path = "rs\crates\easydict_encrypt_secret\src\lib.rs"; Profiles = @("encrypt-secret") },
     @{ Name = "MSIX validator Rust tool changes recommend msix-validate lane"; Path = "rs\crates\easydict_msix_validate\src\lib.rs"; Profiles = @("msix-validate") },
     @{ Name = "Icon generator Rust tool changes recommend icon-generator lane"; Path = "rs\crates\easydict_icon_generator\src\lib.rs"; Profiles = @("icon-generator") },
+    @{ Name = "runtime guard changes recommend runtime-guards lane"; Path = "lib\easydict-runtime-guards\src\lib.rs"; Profiles = @("runtime-guards") },
+    @{ Name = "Windows registry helper changes recommend windows-registry lane"; Path = "lib\easydict-windows-registry\src\lib.rs"; Profiles = @("windows-registry") },
+    @{ Name = "NLLB helper changes recommend NLLB native lane"; Path = "lib\easydict-nllb\src\lib.rs"; Profiles = @("nllb-native") },
     @{ Name = "Windows asset shim changes recommend icon-generator lane"; Path = "dotnet\scripts\generate-windows-assets.ps1"; Profiles = @("icon-generator") },
     @{ Name = "macOS icon refresh shim changes recommend icon-generator lane"; Path = "dotnet\scripts\generate-assets-from-macos-icon.ps1"; Profiles = @("icon-generator") },
     @{ Name = "service icon shim changes recommend icon-generator lane"; Path = "dotnet\scripts\convert-service-icons.ps1"; Profiles = @("icon-generator") },
@@ -623,6 +647,12 @@ Invoke-TestCase "shared text-selection recommendation output preserves combined 
     Assert-Contains -Text $output -Needle "Default selected profile(s) for -RunRecommendedProfiles:" -Context "shared text-selection recommendation output"
     Assert-Contains -Text $output -Needle "input-actions, mouse-selection, text-selection" -Context "shared text-selection recommendation output"
     Assert-Contains -Text $output -Needle "Default selected unique validation step count:" -Context "shared text-selection recommendation output"
+    Assert-Contains -Text $output -Needle "Default selected validation step(s):" -Context "shared text-selection recommendation output"
+    Assert-Contains -Text $output -Needle "input-actions / Windows text-selection clipboard/insertion helper contracts" -Context "shared text-selection recommendation output"
+    Assert-Contains -Text $output -Needle "Default fast close-out:" -Context "shared text-selection recommendation output"
+    Assert-Contains -Text $output -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs" -Context "shared text-selection recommendation output"
+    Assert-Contains -Text $output -Needle "Default fast close-out dry-run:" -Context "shared text-selection recommendation output"
+    Assert-Contains -Text $output -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -DryRun" -Context "shared text-selection recommendation output"
     Assert-Contains -Text $output -Needle "Default recommended close-out:" -Context "shared text-selection recommendation output"
     Assert-Contains -Text $output -Needle "Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -CheckTrailingWhitespace" -Context "shared text-selection recommendation output"
     Assert-Contains -Text $output -Needle "Default recommended close-out dry-run:" -Context "shared text-selection recommendation output"
@@ -656,8 +686,12 @@ Invoke-TestCase "recommendation report keeps selector, selected profiles, comman
         -Needle "Invoke-RsCoreSliceValidation.ps1 -RunRecommendedProfiles -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -CheckTrailingWhitespace" `
         -Context "recommendation report default close-out command"
     Assert-Contains `
+        -Text $report.Commands.DefaultFastCloseOut `
+        -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs" `
+        -Context "recommendation report default fast close-out command"
+    Assert-Contains `
         -Text $report.Commands.AllRecommendedCloseOut `
-        -Needle "-AllRecommendedProfiles -CheckTrailingWhitespace" `
+        -Needle "-CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -AllRecommendedProfiles" `
         -Context "recommendation report all-recommended close-out command"
 
     $inputActions = @($report.Results | Where-Object { $_.Profile -eq "input-actions" })[0]
@@ -665,6 +699,49 @@ Invoke-TestCase "recommendation report keeps selector, selected profiles, comman
         -Text (@($inputActions.Steps | ForEach-Object { $_.Name }) -join "`n") `
         -Needle "Windows text-selection clipboard/insertion helper contracts" `
         -Context "recommendation report profile steps"
+}
+
+Invoke-TestCase "recommendation JSON keeps default selected fields as stable arrays" {
+    $singleResult = Invoke-ValidationWrapper -Arguments @(
+        "-RecommendProfiles",
+        "-ChangedPath",
+        "rs\scripts\Invoke-RsCoreSliceValidation.ps1",
+        "-Json"
+    )
+    Assert-ExitCode -Result $singleResult -Expected 0
+    $singleReport = $singleResult.Output | ConvertFrom-Json
+    if ($singleReport.DefaultSelectedProfiles -isnot [array]) {
+        throw "Single-profile recommendation JSON should keep DefaultSelectedProfiles as an array. Output:`n$($singleResult.Output)"
+    }
+    if ($singleReport.DefaultSelectedSteps -isnot [array]) {
+        throw "Single-profile recommendation JSON should keep DefaultSelectedSteps as an array. Output:`n$($singleResult.Output)"
+    }
+    Assert-SameStringSequence `
+        -Expected @("core-validation-tooling") `
+        -Actual @($singleReport.DefaultSelectedProfiles) `
+        -Context $singleResult.Command
+    Assert-Contains `
+        -Text (@($singleReport.DefaultSelectedSteps | ForEach-Object { $_.Name }) -join "`n") `
+        -Needle "core-validation-tooling / validation wrapper self-tests" `
+        -Context $singleResult.Command
+
+    $emptyResult = Invoke-ValidationWrapper -Arguments @(
+        "-RecommendProfiles",
+        "-ChangedPath",
+        "experience.md",
+        "-Json"
+    )
+    Assert-ExitCode -Result $emptyResult -Expected 0
+    $emptyReport = $emptyResult.Output | ConvertFrom-Json
+    if ($emptyReport.DefaultSelectedProfiles -isnot [array]) {
+        throw "Empty recommendation JSON should keep DefaultSelectedProfiles as an array. Output:`n$($emptyResult.Output)"
+    }
+    if ($emptyReport.DefaultSelectedSteps -isnot [array]) {
+        throw "Empty recommendation JSON should keep DefaultSelectedSteps as an array. Output:`n$($emptyResult.Output)"
+    }
+    if (@($emptyReport.DefaultSelectedProfiles).Count -ne 0 -or @($emptyReport.DefaultSelectedSteps).Count -ne 0) {
+        throw "Empty recommendation JSON should keep default selected arrays empty. Output:`n$($emptyResult.Output)"
+    }
 }
 
 Invoke-TestCase "dry-run JSON report keeps exact selected execution plan aligned" {
@@ -687,6 +764,16 @@ Invoke-TestCase "dry-run JSON report keeps exact selected execution plan aligned
         -Context "dry-run JSON selected profiles"
     if ($report.StepCount -ne @($plan.Steps).Count) {
         throw "dry-run JSON should expose the exact selected unique step count. Expected $(@($plan.Steps).Count), got $($report.StepCount)."
+    }
+    Assert-SameStringSequence `
+        -Expected @("input-actions", "mouse-selection", "text-selection") `
+        -Actual @($report.ProfileStepCoverage | ForEach-Object { $_.Profile }) `
+        -Context "dry-run JSON profile step coverage"
+    foreach ($profileCoverage in @($report.ProfileStepCoverage)) {
+        $expectedStepCount = @($validationProfiles[$profileCoverage.Profile].Steps).Count
+        if ($profileCoverage.StepCount -ne $expectedStepCount) {
+            throw "dry-run JSON profile coverage for '$($profileCoverage.Profile)' should expose $expectedStepCount raw step(s), got $($profileCoverage.StepCount)."
+        }
     }
     Assert-Contains `
         -Text (@($report.Steps | ForEach-Object { $_.Name }) -join "`n") `
@@ -759,6 +846,42 @@ Invoke-TestCase "dry-run JSON commands preserve all-recommended and capped recom
         -Context "capped dry-run JSON command"
 }
 
+Invoke-TestCase "close-out dry-run JSON uses shortcut while preserving selected profile equivalent" {
+    $changedPath = @("lib\easydict-windows-text-selection\src\lib.rs")
+    $recommendation = Get-TestRecommendation -ChangedPath $changedPath
+    $plan = New-RecommendedValidationPlan -Recommendation $recommendation
+    $report = New-ValidationDryRunReport `
+        -Mode "close-out" `
+        -SelectedProfiles @($plan.SelectedResults | ForEach-Object { $_.Profile }) `
+        -Steps $plan.Steps `
+        -CheckTrailingWhitespace $true `
+        -TrailingWhitespacePaths @("lib/easydict-windows-text-selection/src/lib.rs") `
+        -GstepCommitMessage "Checkpoint validation plan" `
+        -Recommendation $recommendation `
+        -ChangedPath $changedPath
+
+    Assert-SameStringSequence `
+        -Expected @("input-actions", "mouse-selection", "text-selection") `
+        -Actual @($report.SelectedProfiles) `
+        -Context "close-out JSON selected profiles"
+    Assert-Contains `
+        -Text $report.Commands.CurrentCloseOut `
+        -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -GstepCommitMessage 'Checkpoint validation plan'" `
+        -Context "close-out JSON current command"
+    Assert-NotContains `
+        -Text $report.Commands.CurrentCloseOut `
+        -Needle "-CheckTrailingWhitespace" `
+        -Context "close-out JSON current command"
+    Assert-Contains `
+        -Text $report.Commands.SelectedProfileCloseOut `
+        -Needle "Invoke-RsCoreSliceValidation.ps1 -Profile input-actions,mouse-selection,text-selection -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -CheckTrailingWhitespace -GstepCommitMessage 'Checkpoint validation plan'" `
+        -Context "close-out JSON selected profile equivalent"
+    Assert-Contains `
+        -Text $report.Commands.CurrentDryRunJson `
+        -Needle "-CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -GstepCommitMessage 'Checkpoint validation plan' -DryRun -Json" `
+        -Context "close-out JSON dry-run replay command"
+}
+
 Invoke-TestCase "dry-run JSON commands preserve explicit diff selectors with changed paths" {
     $changedPath = @("rs\crates\easydict_app\tests\cli_translate_behavior.rs")
     $recommendation = Get-TestRecommendation `
@@ -793,12 +916,26 @@ Invoke-TestCase "dry-run JSON commands preserve explicit diff selectors with cha
 Invoke-TestCase "generated dependency lock drift remains profile-exempt" {
     foreach ($path in @(
             "lib\easydict-windows-credentials\Cargo.lock",
-            "lib\easydict-windows-dialogs\Cargo.lock"
+            "lib\easydict-windows-dialogs\Cargo.lock",
+            "lib\easydict-pdf-overlay\Cargo.lock",
+            "lib\easydict-windows-registry\Cargo.lock"
         )) {
         $recommendation = Get-TestRecommendation -ChangedPath @($path)
         if ($recommendation.CorePaths.Count -ne 0 -or $recommendation.Results.Count -ne 0) {
             throw "$path should be profile-exempt. Core paths: $($recommendation.CorePaths -join ', '). Results: $(@($recommendation.Results | ForEach-Object { $_.Profile }) -join ', ')."
         }
+    }
+}
+
+Invoke-TestCase "generated dependency lock drift is cleaned before checkpoint scope guard" {
+    $cleanupIndex = $wrapperText.IndexOf(
+        'Remove-GeneratedCargoLockDrift -Paths $generatedCargoLockFilesAbsentBeforeRun',
+        [System.StringComparison]::Ordinal)
+    $scopeIndex = $wrapperText.IndexOf(
+        '$checkpointDirtyPaths = @(Get-GstepDirtyPaths -From "gstep:@" -To "worktree")',
+        [System.StringComparison]::Ordinal)
+    if ($cleanupIndex -lt 0 -or $scopeIndex -lt 0 -or $cleanupIndex -gt $scopeIndex) {
+        throw "Generated dependency lock drift must be removed before checkpoint scope guard runs."
     }
 }
 
@@ -985,7 +1122,7 @@ $profileDryRunCases = @(
     @{
         Name = "app preview/window profile dry-run includes preview binary, window contracts, and no-runtime coverage"
         Profiles = @("app-preview-window")
-        Needles = @("format app preview/window slice", "app preview binary builds", "main window preview scenarios render", "window option and window-specific contracts", "default process spawn no-runtime boundary")
+        Needles = @("format app preview/window slice", "app preview binary builds", "preview iced portable GUI contracts", "preview iced portable GUI builds", "main window preview scenarios render", "window option and window-specific contracts", "default process spawn no-runtime boundary")
     },
     @{
         Name = "CLI translate profile dry-run includes parser, native default, legacy flags, and no-worker coverage"
@@ -1108,6 +1245,26 @@ $profileDryRunCases = @(
         Needles = @("format icon generator slice", "PowerShell parse icon generator shims", "icon generator Rust contracts")
     },
     @{
+        Name = "runtime guards profile dry-run includes default and retained-feature coverage"
+        Profiles = @("runtime-guards")
+        Needles = @("format runtime guards crate", "runtime guards default contracts", "runtime guards retained-feature contracts")
+    },
+    @{
+        Name = "Windows registry profile dry-run includes helper contracts"
+        Profiles = @("windows-registry")
+        Needles = @("format Windows registry helper crate", "Windows registry helper contracts")
+    },
+    @{
+        Name = "NLLB native profile dry-run includes default and ORT/OpenVINO coverage"
+        Profiles = @("nllb-native")
+        Needles = @("format NLLB/OpenVINO helper crate", "NLLB default contracts", "NLLB ORT/OpenVINO feature contracts")
+    },
+    @{
+        Name = "PDF overlay profile dry-run includes helper contracts"
+        Profiles = @("pdf-overlay")
+        Needles = @("format PDF overlay helper crate", "PDF overlay helper contracts")
+    },
+    @{
         Name = "Rust helper build profile dry-run includes shim, child env, and legacy alias coverage"
         Profiles = @("rust-helper-build")
         Needles = @("format Rust helper build release-contract slice", "PowerShell parse Rust helper build shim", "release orchestration uses Rust helpers", "Rust helper build child env and shim contracts")
@@ -1202,6 +1359,7 @@ Invoke-TestCase "run recommended profiles dry-run selects app preview/window lan
     $dryRun = Get-RecommendedDryRunText -ChangedPath @("rs\crates\easydict_app\src\main.rs")
     Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): app-preview-window" -Context "app preview run-recommended dry-run"
     Assert-Contains -Text $dryRun -Needle "app-preview-window / app preview binary builds" -Context "app preview run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "app-preview-window / preview iced portable GUI contracts" -Context "app preview run-recommended dry-run"
     Assert-Contains -Text $dryRun -Needle "app-preview-window / main window preview scenarios render" -Context "app preview run-recommended dry-run"
 }
 
@@ -1209,6 +1367,14 @@ Invoke-TestCase "run recommended profiles dry-run selects window options lane" {
     $dryRun = Get-RecommendedDryRunText -ChangedPath @("rs\crates\easydict_app\src\window_options.rs")
     Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): app-preview-window" -Context "window options run-recommended dry-run"
     Assert-Contains -Text $dryRun -Needle "app-preview-window / window option and window-specific contracts" -Context "window options run-recommended dry-run"
+}
+
+Invoke-TestCase "run recommended profiles dry-run selects preview iced binary lane" {
+    $dryRun = Get-RecommendedDryRunText -ChangedPath @("rs\crates\easydict_preview_iced\src\main.rs")
+    Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): app-preview-window" -Context "preview iced run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "app-preview-window / preview iced portable GUI contracts" -Context "preview iced run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "app-preview-window / preview iced portable GUI builds" -Context "preview iced run-recommended dry-run"
+    Assert-NotContains -Text $dryRun -Needle "Selected recommended validation profile(s): rust-only-boundary" -Context "preview iced run-recommended dry-run"
 }
 
 Invoke-TestCase "run recommended profiles dry-run selects CLI translate lane" {
@@ -1283,6 +1449,37 @@ Invoke-TestCase "run recommended profiles dry-run selects icon generator lane" {
     Assert-Contains -Text $dryRun -Needle "icon-generator / format icon generator slice" -Context "icon generator run-recommended dry-run"
     Assert-Contains -Text $dryRun -Needle "icon-generator / PowerShell parse icon generator shims" -Context "icon generator run-recommended dry-run"
     Assert-Contains -Text $dryRun -Needle "icon-generator / icon generator Rust contracts" -Context "icon generator run-recommended dry-run"
+}
+
+Invoke-TestCase "run recommended profiles dry-run selects runtime guards lane" {
+    $dryRun = Get-RecommendedDryRunText -ChangedPath @("lib\easydict-runtime-guards\src\lib.rs")
+    Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): runtime-guards" -Context "runtime guards run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "runtime-guards / runtime guards default contracts" -Context "runtime guards run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "runtime-guards / runtime guards retained-feature contracts" -Context "runtime guards run-recommended dry-run"
+    Assert-NotContains -Text $dryRun -Needle "Selected recommended validation profile(s): rust-only-boundary" -Context "runtime guards run-recommended dry-run"
+}
+
+Invoke-TestCase "run recommended profiles dry-run selects Windows registry lane" {
+    $dryRun = Get-RecommendedDryRunText -ChangedPath @("lib\easydict-windows-registry\src\lib.rs")
+    Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): windows-registry" -Context "Windows registry run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "windows-registry / Windows registry helper contracts" -Context "Windows registry run-recommended dry-run"
+    Assert-NotContains -Text $dryRun -Needle "Selected recommended validation profile(s): desktop-settings" -Context "Windows registry run-recommended dry-run"
+}
+
+Invoke-TestCase "run recommended profiles dry-run selects NLLB native lane" {
+    $dryRun = Get-RecommendedDryRunText -ChangedPath @("lib\easydict-nllb\src\lib.rs")
+    Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): nllb-native" -Context "NLLB native run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "nllb-native / NLLB default contracts" -Context "NLLB native run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "nllb-native / NLLB ORT/OpenVINO feature contracts" -Context "NLLB native run-recommended dry-run"
+    Assert-NotContains -Text $dryRun -Needle "Selected recommended validation profile(s): openvino-download" -Context "NLLB native run-recommended dry-run"
+}
+
+Invoke-TestCase "run recommended profiles dry-run selects PDF overlay lane" {
+    $dryRun = Get-RecommendedDryRunText -ChangedPath @("lib\easydict-pdf-overlay\src\lib.rs")
+    Assert-Contains -Text $dryRun -Needle "Selected recommended validation profile(s): pdf-overlay" -Context "PDF overlay run-recommended dry-run"
+    Assert-Contains -Text $dryRun -Needle "pdf-overlay / PDF overlay helper contracts" -Context "PDF overlay run-recommended dry-run"
+    Assert-NotContains -Text $dryRun -Needle "Selected recommended validation profile(s): pdf-to-images" -Context "PDF overlay run-recommended dry-run"
+    Assert-NotContains -Text $dryRun -Needle "Selected recommended validation profile(s): longdoc-export" -Context "PDF overlay run-recommended dry-run"
 }
 
 Invoke-TestCase "run recommended profiles dry-run selects Rust helper build lane" {
@@ -1388,6 +1585,26 @@ Invoke-TestCase "checkpoint scope guard reports unexpected paths" {
         -Context "checkpoint unexpected path guard"
 }
 
+Invoke-TestCase "checkpoint scope guard accepts no remaining dirty paths" {
+    $unexpected = @(Get-UnexpectedCheckpointPaths `
+            -AllowedPaths @("rs\scripts\Invoke-RsCoreSliceValidation.ps1", "experience.md") `
+            -DirtyPaths @())
+    if ($unexpected.Count -ne 0) {
+        throw "Checkpoint no-op dirty path guard should not report unexpected paths. Actual: $($unexpected -join ', ')."
+    }
+
+    Assert-Contains `
+        -Text $wrapperText `
+        -Needle "Skipping post-validation checkpoint because no dirty paths remain after validation." `
+        -Context "checkpoint no-op dirty path guard"
+    $dirtyIndex = $wrapperText.IndexOf('$checkpointDirtyPaths = @(Get-GstepDirtyPaths', [System.StringComparison]::Ordinal)
+    $skipIndex = $wrapperText.IndexOf('Skipping post-validation checkpoint because no dirty paths remain after validation.', [System.StringComparison]::Ordinal)
+    $commitIndex = $wrapperText.IndexOf('Running post-validation checkpoint:', [System.StringComparison]::Ordinal)
+    if ($dirtyIndex -lt 0 -or $skipIndex -lt 0 -or $commitIndex -lt 0 -or $dirtyIndex -gt $skipIndex -or $skipIndex -gt $commitIndex) {
+        throw "Checkpoint no-op guard should check dirty paths and skip before invoking gstep commit."
+    }
+}
+
 Invoke-TestCase "black-box profile dry-run avoids isolation and cargo execution" {
     $result = Invoke-ValidationWrapper -Arguments @(
         "-Profile",
@@ -1413,6 +1630,104 @@ Invoke-TestCase "black-box checkpoint dry-run avoids isolation and previews chec
     Assert-Contains -Text $result.Output -Needle 'gstep checkpoint after successful validation: gstep commit -m "Checkpoint validation tooling"' -Context $result.Command
     Assert-Contains -Text $result.Output -Needle "trailing whitespace check: rg -n" -Context $result.Command
     Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
+}
+
+Invoke-TestCase "black-box plan close-out JSON returns executable recommendation plan" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-PlanCloseOut",
+        "-ChangedPath",
+        "lib\easydict-windows-text-selection\src\lib.rs",
+        "-GstepCommitMessage",
+        "Checkpoint validation plan",
+        "-Json"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
+
+    $report = $result.Output | ConvertFrom-Json
+    Assert-SameStringSequence `
+        -Expected @("input-actions", "mouse-selection", "text-selection") `
+        -Actual @($report.SelectedProfiles) `
+        -Context $result.Command
+    if (-not $report.CheckTrailingWhitespace) {
+        throw "Plan close-out JSON should enable trailing whitespace checking by default. Output:`n$($result.Output)"
+    }
+    Assert-Contains `
+        -Text (@($report.Steps | ForEach-Object { $_.Name }) -join "`n") `
+        -Needle "input-actions / Windows text-selection clipboard/insertion helper contracts" `
+        -Context $result.Command
+    Assert-SameStringSequence `
+        -Expected @("input-actions", "mouse-selection", "text-selection") `
+        -Actual @($report.ProfileStepCoverage | ForEach-Object { $_.Profile }) `
+        -Context $result.Command
+    Assert-Contains `
+        -Text (@($report.TrailingWhitespacePaths) -join "`n") `
+        -Needle "lib/easydict-windows-text-selection/src/lib.rs" `
+        -Context $result.Command
+    Assert-Contains `
+        -Text $report.Commands.CurrentCloseOut `
+        -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath lib/easydict-windows-text-selection/src/lib.rs -GstepCommitMessage 'Checkpoint validation plan'" `
+        -Context $result.Command
+    Assert-Contains `
+        -Text $report.Commands.CurrentDryRunJson `
+        -Needle "-DryRun -Json" `
+        -Context $result.Command
+}
+
+Invoke-TestCase "black-box plan close-out human output stays dry and copyable" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-PlanCloseOut",
+        "-ChangedPath",
+        "rs\scripts\Invoke-RsCoreSliceValidation.ps1"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "Default selected profile(s) for -RunRecommendedProfiles:" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "Close-out plan; validation step(s) that would run:" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "Profile coverage:" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "core-validation-tooling: 1 raw step(s)" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "ready close-out command:" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath rs/scripts/Invoke-RsCoreSliceValidation.ps1" -Context $result.Command
+    Assert-NotContains -Text $result.Output -Needle "Waiting for core validation isolation lock." -Context $result.Command
+}
+
+Invoke-TestCase "black-box close-out dry-run JSON is parseable and runs trailing whitespace by default" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-CloseOut",
+        "-ChangedPath",
+        "rs\scripts\Invoke-RsCoreSliceValidation.ps1,experience.md",
+        "-DryRun",
+        "-Json",
+        "-GstepCommitMessage",
+        "Checkpoint validation tooling"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-NotContains -Text $result.Output -Needle "Recommended validation profile(s):" -Context $result.Command
+    Assert-NotContains -Text $result.Output -Needle "Dry run; validation step(s) that would run:" -Context $result.Command
+
+    $report = $result.Output | ConvertFrom-Json
+    Assert-SameStringSequence `
+        -Expected @("core-validation-tooling") `
+        -Actual @($report.SelectedProfiles) `
+        -Context $result.Command
+    if (-not $report.CheckTrailingWhitespace) {
+        throw "Close-out dry-run JSON should enable trailing whitespace by default. Output:`n$($result.Output)"
+    }
+    Assert-Contains `
+        -Text (@($report.TrailingWhitespacePaths) -join "`n") `
+        -Needle "rs/scripts/Invoke-RsCoreSliceValidation.ps1" `
+        -Context $result.Command
+    Assert-Contains `
+        -Text $report.Commands.CurrentCloseOut `
+        -Needle "Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath rs/scripts/Invoke-RsCoreSliceValidation.ps1,experience.md -GstepCommitMessage 'Checkpoint validation tooling'" `
+        -Context $result.Command
+    Assert-NotContains `
+        -Text $report.Commands.CurrentCloseOut `
+        -Needle "-CheckTrailingWhitespace" `
+        -Context $result.Command
+    Assert-Contains `
+        -Text $report.Commands.SelectedProfileCloseOut `
+        -Needle "Invoke-RsCoreSliceValidation.ps1 -Profile core-validation-tooling -ChangedPath rs/scripts/Invoke-RsCoreSliceValidation.ps1,experience.md -CheckTrailingWhitespace -GstepCommitMessage 'Checkpoint validation tooling'" `
+        -Context $result.Command
 }
 
 Invoke-TestCase "black-box run-recommended dry-run JSON is parseable and quiet" {
@@ -1457,6 +1772,23 @@ Invoke-TestCase "black-box run-recommended dry-run JSON is parseable and quiet" 
         -Context $result.Command
 }
 
+Invoke-TestCase "black-box run-recommended planned changed-path dry-run works with empty diff" {
+    $result = Invoke-ValidationWrapper -Arguments @(
+        "-RunRecommendedProfiles",
+        "-ChangedPath",
+        "rs\crates\easydict_icon_generator\src\lib.rs",
+        "-DiffFrom",
+        "gstep:@",
+        "-DiffTo",
+        "gstep:@",
+        "-DryRun"
+    )
+    Assert-ExitCode -Result $result -Expected 0
+    Assert-Contains -Text $result.Output -Needle "Selected recommended validation profile(s): icon-generator" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "icon-generator / icon generator Rust contracts" -Context $result.Command
+    Assert-NotContains -Text $result.Output -Needle "Cannot bind argument to parameter 'DiffText'" -Context $result.Command
+}
+
 Invoke-TestCase "black-box recommendation json is parseable and preserves close-out commands" {
     $result = Invoke-ValidationWrapper -Arguments @(
         "-RecommendProfiles",
@@ -1495,7 +1827,7 @@ Invoke-TestCase "all recommended profiles flag requires run-recommended mode" {
     if ($result.ExitCode -eq 0) {
         throw "Expected -AllRecommendedProfiles without -RunRecommendedProfiles to fail. Output:`n$($result.Output)"
     }
-    Assert-Contains -Text $result.Output -Needle "-AllRecommendedProfiles is only valid with -RunRecommendedProfiles" -Context $result.Command
+    Assert-Contains -Text $result.Output -Needle "-AllRecommendedProfiles is only valid with -RunRecommendedProfiles, -CloseOut, or -PlanCloseOut" -Context $result.Command
 }
 
 Invoke-TestCase "checkpoint message keeps isolation enabled" {

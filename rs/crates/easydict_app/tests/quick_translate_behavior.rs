@@ -9647,6 +9647,7 @@ fn default_tray_menu_covers_migration_contract() {
         .collect::<Vec<_>>();
 
     assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
+    assert_eq!(menu.presenter_min_width, Some(300));
     let icon_path = menu.icon_path.as_deref().expect("tray icon path");
     assert!(
         icon_path.ends_with("AppIcon.ico"),
@@ -9675,8 +9676,14 @@ fn default_tray_menu_covers_migration_contract() {
     assert!(labels.contains(&"OCR Translate (Ctrl+Alt+S)"));
     assert!(labels.contains(&"Browser Support"));
     assert!(labels.contains(&"Settings"));
+    assert_eq!(menu.items[0].tooltip.as_deref(), Some("Show Easydict"));
+    assert_eq!(
+        menu.items[2].tooltip.as_deref(),
+        Some("OCR Translate (Ctrl+Alt+S)")
+    );
     assert!(menu.items[5].is_separator());
     assert!(menu.items[6].is_submenu());
+    assert_eq!(menu.items[6].tooltip.as_deref(), Some("Browser Support"));
     assert!(menu.items[8].is_separator());
     let browser_menu = &menu.items[6];
     assert_eq!(
@@ -9698,6 +9705,8 @@ fn default_tray_menu_covers_migration_contract() {
     assert!(browser_menu.children[2].is_separator());
     let chrome_menu = &browser_menu.children[0];
     let firefox_menu = &browser_menu.children[1];
+    assert_eq!(chrome_menu.tooltip.as_deref(), Some("Chrome"));
+    assert_eq!(firefox_menu.tooltip.as_deref(), Some("Firefox"));
     assert_eq!(
         chrome_menu
             .children
@@ -9723,6 +9732,10 @@ fn default_tray_menu_covers_migration_contract() {
         ]
     );
     assert!(chrome_menu.children[0].enabled);
+    assert_eq!(
+        chrome_menu.children[0].tooltip.as_deref(),
+        Some("① Install Chrome Support")
+    );
     assert!(!chrome_menu.children[1].enabled);
     assert!(firefox_menu.children[0].enabled);
     assert!(!firefox_menu.children[1].enabled);
@@ -9822,6 +9835,7 @@ fn default_tray_menu_keeps_native_tray_shape_without_platform_adapter() {
     let menu = default_tray_menu();
 
     assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
+    assert_eq!(menu.presenter_min_width, Some(300));
     assert_eq!(menu.default_item_id.as_deref(), Some(TRAY_SHOW_MAIN));
     assert_eq!(count_tray_items(&menu.items), 21);
     assert_eq!(count_tray_separators(&menu.items), 3);

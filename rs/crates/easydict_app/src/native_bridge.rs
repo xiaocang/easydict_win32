@@ -62,13 +62,23 @@ where
                 continue;
             }
         };
-        let success = if action == OCR_TRANSLATE_ACTION {
-            signal_ocr_translate()?
+        let response = if action == OCR_TRANSLATE_ACTION {
+            match signal_ocr_translate() {
+                Ok(true) => BridgeResponse::new(true, action),
+                Ok(false) => BridgeResponse::error(action, "OCR translate event is not available"),
+                Err(error) => BridgeResponse::error(
+                    action,
+                    format!("failed to signal OCR translate event: {error}"),
+                ),
+            }
         } else {
-            false
+            BridgeResponse::error(
+                action.clone(),
+                format!("unsupported native message action: {action}"),
+            )
         };
 
-        write_native_message(&mut writer, &BridgeResponse::new(success, action))?;
+        write_native_message(&mut writer, &response)?;
         responses += 1;
     }
 
@@ -82,9 +92,17 @@ pub fn parse_native_action(payload: &[u8]) -> io::Result<String> {
             format!("invalid native message JSON: {error}"),
         )
     })?;
-    request
-        .action
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing native message action"))
+    let action = request.action.ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "missing native message action")
+    })?;
+    if action.trim().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "native message action must be non-empty",
+        ));
+    }
+
+    Ok(action)
 }
 
 pub fn encode_native_message<T: Serialize>(message: &T) -> io::Result<Vec<u8>> {

@@ -132,7 +132,10 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
             children.extend(token.layers.iter().map(|layer| layer.content.as_ref()));
             children
         }
-        ViewToken::AdaptiveSwitch(token) => vec![token.wide.as_ref(), token.narrow.as_ref()],
+        ViewToken::AdaptiveSwitch(token) => match token.resolved_branch() {
+            Some(branch) => vec![branch],
+            None => vec![token.wide.as_ref(), token.narrow.as_ref()],
+        },
         ViewToken::Lazy(token) => vec![token.content.as_ref()],
         ViewToken::ScrollView(token) => token.content.iter().map(Box::as_ref).collect(),
         ViewToken::Card(token) => {
@@ -269,16 +272,27 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.close_action.kind()
         ),
         ViewToken::Text(token) => format!(
-            "{:?}|{:?}|{:?}|{}",
-            token.value, token.style, token.wrapping, token.selectable
+            "{:?}|{:?}|font_size={:?}|{:?}|{}|margin={:?}|align_x={:?}|align_y={:?}",
+            token.value,
+            token.style,
+            token.font_size,
+            token.wrapping,
+            token.selectable,
+            token.margin,
+            token.align_x,
+            token.align_y
         ),
         ViewToken::Button(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|padding={:?}|text_style={:?}|font_size={:?}|margin={:?}|{}|{:?}",
             token.label,
             token.kind,
             token.icon.as_ref().map(|icon| icon.name),
             token.width,
             token.height,
+            token.padding,
+            token.text_style,
+            token.font_size,
+            token.margin,
             token.state,
             token.action.kind()
         ),
@@ -315,31 +329,37 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.label
         ),
         ViewToken::Card(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|trailing={}",
+            "{:?}|{:?}|{:?}|{:?}|margin={:?}|max_height={:?}|trailing={}",
             token.title,
             token.description,
             token.kind,
             token.icon.as_ref().map(|icon| icon.name),
+            token.margin,
+            token.max_height,
             token.trailing.len()
         ),
         ViewToken::Spacer(token) => format!("{:?}|{:?}", token.width, token.height),
         ViewToken::TextEditor(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|keys={}",
+            "{:?}|{:?}|{:?}|{:?}|padding={:?}|{:?}|{:?}|secure={}|{}|{}|{:?}|keys={}",
             token.placeholder,
             token.width,
             token.min_height,
             token.max_height,
+            token.padding,
             token.text_style,
             token.chrome,
+            token.secure,
             token.read_only,
             token.state,
             token.action.kind(),
             token.key_bindings.len()
         ),
         ViewToken::ToggleSwitch(token) => format!(
-            "{:?}|{}|{}|{:?}",
+            "{:?}|{}|margin={:?}|align_y={:?}|{}|{:?}",
             token.label,
             token.checked,
+            token.margin,
+            token.align_y,
             token.state,
             token.action.kind()
         ),
@@ -392,12 +412,14 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.secondary.is_some()
         ),
         ViewToken::Layout(token) => format!(
-            "padding={}|spacing={}|{:?}|{:?}|max_width={:?}|center_x={}|margin={:?}|{:?}|{:?}|style={:?}",
+            "padding={}|padding_edges={:?}|spacing={}|{:?}|{:?}|max_width={:?}|max_height={:?}|center_x={}|margin={:?}|{:?}|{:?}|style={:?}",
             token.padding,
+            token.padding_edges,
             token.spacing,
             token.width,
             token.height,
             token.max_width,
+            token.max_height,
             token.center_x,
             token.margin,
             token.align,
@@ -431,8 +453,9 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.horizontal, token.vertical, token.scrollbars_visible
         ),
         ViewToken::Expander(token) => format!(
-            "{:?}|{:?}|expanded={}|header_style={}|content_style={}|action={:?}|{:?}",
+            "{:?}|title_id={:?}|{:?}|expanded={}|header_style={}|content_style={}|action={:?}|{:?}",
             token.title,
+            token.title_id,
             token.description,
             token.expanded,
             token.header_style.summary(),
@@ -441,12 +464,15 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.icon.as_ref().map(|icon| icon.name)
         ),
         ViewToken::SettingsRow(token) => format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|margin={:?}|align_x={:?}|content_align_x={:?}|{:?}",
             token.title,
             token.title_id,
             token.description,
             token.description_id,
             token.kind,
+            token.margin,
+            token.align_x,
+            token.content_align_x,
             token.icon.as_ref().map(|icon| icon.name)
         ),
         ViewToken::ResultCard(token) => format!(
@@ -460,9 +486,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.collapse_transition.duration_ms
         ),
         ViewToken::ResultList(token) => format!(
-            "items={}|virtualized={}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "items={}|virtualized={}|max_height={:?}|padding={:?}|border_width={:?}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
             token.items.len(),
             token.virtualized,
+            token.max_height,
+            token.padding,
+            token.border_width,
             token.collapse_transition.duration_ms,
             token
                 .items

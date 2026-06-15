@@ -91,7 +91,7 @@ pub fn accessibility_audit_snapshot<Message>(view: &View<Message>) -> String {
 
 pub fn theme_snapshot(theme: &ThemeTokens) -> String {
     format!(
-        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} selected_surface=#{:02x}{:02x}{:02x} selected_foreground=#{:02x}{:02x}{:02x} selected_border=#{:02x}{:02x}{:02x} tile_surface=#{:02x}{:02x}{:02x}{:02x} tile_foreground=#{:02x}{:02x}{:02x} tile_border=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_input_surface=#{:02x}{:02x}{:02x} floating_input_border=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
+        "ResolvedTheme mode={:?} background=#{:02x}{:02x}{:02x} surface=#{:02x}{:02x}{:02x} surface_alt=#{:02x}{:02x}{:02x} selected_surface=#{:02x}{:02x}{:02x} selected_foreground=#{:02x}{:02x}{:02x} selected_border=#{:02x}{:02x}{:02x} tile_surface=#{:02x}{:02x}{:02x}{:02x} tile_foreground=#{:02x}{:02x}{:02x} tile_border=#{:02x}{:02x}{:02x} input_surface=#{:02x}{:02x}{:02x} result_surface=#{:02x}{:02x}{:02x} result_header=#{:02x}{:02x}{:02x} result_header_foreground=#{:02x}{:02x}{:02x} result_header_hover=#{:02x}{:02x}{:02x} button_hover=#{:02x}{:02x}{:02x} button_pressed=#{:02x}{:02x}{:02x} floating_input_surface=#{:02x}{:02x}{:02x} floating_input_border=#{:02x}{:02x}{:02x} floating_action_surface=#{:02x}{:02x}{:02x} floating_action_border=#{:02x}{:02x}{:02x} accent_hover=#{:02x}{:02x}{:02x} accent_pressed=#{:02x}{:02x}{:02x} accent_foreground=#{:02x}{:02x}{:02x} status_connected=#{:02x}{:02x}{:02x} status_disconnected=#{:02x}{:02x}{:02x} status_error=#{:02x}{:02x}{:02x} text_primary=#{:02x}{:02x}{:02x} text_secondary=#{:02x}{:02x}{:02x} border=#{:02x}{:02x}{:02x} focus=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} radius_control={} spacing_md={} density={:?} backdrop={:?} stroke_control={} stroke_focus={} elevation_rest={} elevation_raised={} elevation_overlay={} elevation_flyout={} disabled_opacity={} dimmed_opacity={} floating_action_rest_opacity={} floating_action_hover_opacity={} floating_action_pressed_opacity={} control_height={} control_compact_height={} control_icon_button={} control_compact_icon_button={} result_action_button={} primary_round_button={} floating_action_button={} control_min_touch_target={} title_bar_height={} caption_button_width={} card_padding={} result_header_height={}",
         theme.mode,
         theme.background.r,
         theme.background.g,
@@ -130,6 +130,9 @@ pub fn theme_snapshot(theme: &ThemeTokens) -> String {
         theme.result_header.r,
         theme.result_header.g,
         theme.result_header.b,
+        theme.result_header_foreground.r,
+        theme.result_header_foreground.g,
+        theme.result_header_foreground.b,
         theme.result_header_hover.r,
         theme.result_header_hover.g,
         theme.result_header_hover.b,
@@ -429,14 +432,15 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             };
             let _ = writeln!(
                 output,
-                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} max_width={:?} center_x={} margin={:?} align={:?} distribution={:?}",
+                "{pad}{label} id={:?} children={} padding={} spacing={} width={:?} height={:?} max_width={:?} max_height={:?} center_x={} margin={:?} align={:?} distribution={:?}",
                 token.id,
                 token.children.len(),
-                token.padding,
+                layout_padding(token.padding, token.padding_edges),
                 token.spacing,
                 token.width,
                 token.height,
                 token.max_width,
+                token.max_height,
                 token.center_x,
                 token.margin,
                 token.align,
@@ -498,10 +502,16 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::FlyoutButton(token) => {
             let _ = writeln!(
                 output,
-                "{pad}FlyoutButton id={:?} items={} selected={:?}",
+                "{pad}FlyoutButton id={:?} items={} selected={:?} min_width={:?} min_height={:?} padding={:?} border_width={:?} radius={:?} align_y={:?}",
                 token.id,
                 token.items.len(),
-                token.selected
+                token.selected,
+                token.min_width,
+                token.min_height,
+                token.padding,
+                token.border_width,
+                token.radius,
+                token.align_y
             );
         }
         ViewToken::ProgressRing(token) => {
@@ -558,8 +568,13 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 "{pad}AdaptiveSwitch id={:?} breakpoint_width={}",
                 token.id, token.breakpoint_width
             );
-            write_layout(output, &token.wide, indent + 2);
-            write_layout(output, &token.narrow, indent + 2);
+            match token.resolved_branch() {
+                Some(branch) => write_layout(output, branch, indent + 2),
+                None => {
+                    write_layout(output, &token.wide, indent + 2);
+                    write_layout(output, &token.narrow, indent + 2);
+                }
+            }
         }
         ViewToken::ScrollView(token) => {
             let _ = writeln!(
@@ -574,10 +589,12 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Card(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Card id={:?} trailing={} content_spacing={}",
+                "{pad}Card id={:?} trailing={} content_spacing={} margin={:?} max_height={:?}",
                 token.id,
                 token.trailing.len(),
-                token.content_spacing
+                token.content_spacing,
+                token.margin,
+                token.max_height
             );
             if let Some(content) = &token.content {
                 write_layout(output, content, indent + 2);
@@ -688,6 +705,12 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_) => {}
     }
+}
+
+fn layout_padding(uniform: u16, edges: Option<win_fluent::view::Edges>) -> String {
+    edges
+        .map(|value| format!("{value:?}"))
+        .unwrap_or_else(|| uniform.to_string())
 }
 
 fn write_a11y(output: &mut String, node: &A11yNode, indent: usize) {

@@ -1,6 +1,8 @@
 use easydict_app::{
-    get_or_create_persisted_machine_id, get_or_create_persisted_machine_id_with_legacy_fallback,
-    is_protected_credential, protect_credential_legacy, try_unprotect_credential_legacy,
+    get_or_create_persisted_machine_id, get_or_create_persisted_machine_id_with_diagnostics,
+    get_or_create_persisted_machine_id_with_legacy_fallback,
+    get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics, is_protected_credential,
+    protect_credential_legacy, try_unprotect_credential_legacy,
     try_unprotect_credential_with_machine_id, unprotect_or_return_plaintext_with_machine_id,
     CredentialProtectionScope, MAX_NESTED_PROTECTED_VALUE_DEPTH,
 };
@@ -342,6 +344,19 @@ fn credential_protection_machine_id_creates_file() {
 }
 
 #[test]
+fn credential_protection_machine_id_reports_unwritable_rs_directory() {
+    let temp = TempDir::new("credential-machine-id-unwritable-directory");
+    let blocked_directory = temp.path().join("blocked-rs-dir");
+    fs::write(&blocked_directory, "not a directory").unwrap();
+
+    let result = get_or_create_persisted_machine_id_with_diagnostics(&blocked_directory);
+
+    assert!(!result.machine_id.trim().is_empty());
+    assert_warning_contains(&result.warnings, "Could not create machine-id directory");
+    assert_warning_contains(&result.warnings, "Could not persist machine-id");
+}
+
+#[test]
 fn credential_protection_machine_id_uses_rs_directory_before_legacy_fallback() {
     let temp = TempDir::new("credential-machine-id-rs-first");
     let rs_dir = temp.path().join("EasydictRs");
@@ -362,6 +377,27 @@ fn credential_protection_machine_id_uses_rs_directory_before_legacy_fallback() {
     let machine_id = get_or_create_persisted_machine_id_with_legacy_fallback(&rs_dir, &legacy_dir);
 
     assert_eq!(machine_id, "rs-machine-id");
+}
+
+#[test]
+fn credential_protection_machine_id_reports_failed_legacy_copy_without_losing_legacy_id() {
+    let temp = TempDir::new("credential-machine-id-legacy-copy-warning");
+    let rs_dir = temp.path().join("blocked-rs-dir");
+    let legacy_dir = temp.path().join("Easydict");
+    fs::write(&rs_dir, "not a directory").unwrap();
+    fs::create_dir_all(&legacy_dir).unwrap();
+    fs::write(
+        legacy_dir.join(easydict_app::credential_protection::MACHINE_ID_FILE_NAME),
+        "legacy-machine-id",
+    )
+    .unwrap();
+
+    let result =
+        get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics(&rs_dir, &legacy_dir);
+
+    assert_eq!(result.machine_id, "legacy-machine-id");
+    assert_warning_contains(&result.warnings, "Could not create machine-id directory");
+    assert_warning_contains(&result.warnings, "Could not copy legacy machine-id");
 }
 
 #[test]
@@ -449,6 +485,13 @@ fn flip_last_base64_trailing_bit(value: &str) -> String {
 
     bytes[index] = ALPHABET[value ^ 1];
     String::from_utf8(bytes).expect("mutated payload should remain UTF-8")
+}
+
+fn assert_warning_contains(warnings: &[String], expected: &str) {
+    assert!(
+        warnings.iter().any(|warning| warning.contains(expected)),
+        "expected warning containing '{expected}', got {warnings:?}"
+    );
 }
 
 impl Drop for TempDir {

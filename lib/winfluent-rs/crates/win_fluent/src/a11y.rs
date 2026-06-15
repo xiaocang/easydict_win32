@@ -353,9 +353,14 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
         }
         ViewToken::AdaptiveSwitch(token) => {
             let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
-            node.children.push(resolve_accessibility_tree(&token.wide));
-            node.children
-                .push(resolve_accessibility_tree(&token.narrow));
+            match token.resolved_branch() {
+                Some(branch) => node.children.push(resolve_accessibility_tree(branch)),
+                None => {
+                    node.children.push(resolve_accessibility_tree(&token.wide));
+                    node.children
+                        .push(resolve_accessibility_tree(&token.narrow));
+                }
+            }
             node
         }
         ViewToken::Lazy(token) => {

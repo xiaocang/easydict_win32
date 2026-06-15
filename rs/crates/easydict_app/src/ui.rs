@@ -180,6 +180,12 @@ fn settings_header(locale: &str) -> View<Message> {
                 .tooltip(back_label.clone())
                 .width(Length::Fixed(32))
                 .height(Length::Fixed(32))
+                .padding(Edges {
+                    top: 8,
+                    right: 8,
+                    bottom: 8,
+                    left: 8,
+                })
                 .a11y(A11yHint::named(back_label))
                 .on_press(Message::Back),
         ))
@@ -205,7 +211,7 @@ fn settings_header(locale: &str) -> View<Message> {
 fn settings_loading_indicator() -> View<Message> {
     column((
         progress_ring()
-            .id("SettingsLoadingRing")
+            .id("LoadingOverlayRing")
             .active(true)
             .size(32),
         styled_text_id(
@@ -214,7 +220,7 @@ fn settings_loading_indicator() -> View<Message> {
             TextStyle::Caption,
         ),
     ))
-    .id("settings.loading_overlay")
+    .id("LoadingOverlay")
     .spacing(12)
     .align(Alignment::Center)
     .into_view()
@@ -228,15 +234,21 @@ fn settings_save_bar(locale: &str) -> View<Message> {
             .id("SaveButton")
             .width(Length::Fixed(105))
             .height(Length::Fixed(44))
+            .padding(Edges {
+                top: 12,
+                right: 24,
+                bottom: 12,
+                left: 24,
+            })
+            .margin(Edges {
+                right: 32,
+                bottom: 32,
+                ..Edges::ZERO
+            })
             .on_press(Message::SaveSettingsChanges),
     ))
     .id("settings.save_floating_bar")
     .tw("shadow-lg")
-    .margin(Edges {
-        right: 32,
-        bottom: 32,
-        ..Edges::ZERO
-    })
     .into_view()
 }
 
@@ -668,6 +680,8 @@ pub fn pop_button_view_with_state(state: ControlState) -> View<Message> {
                 .floating_action()
                 .width(Length::Fixed(30))
                 .height(Length::Fixed(30))
+                .padding(Edges::ZERO)
+                .font_size(14)
                 .tooltip("Translate selection")
                 .state(state)
                 .on_press(Message::PopButtonClicked),
@@ -686,10 +700,21 @@ fn main_header(state: &EasydictUiState) -> View<Message> {
         AppMode::LongDocument => "Long Document",
     };
     let mut title_stack_children = vec![row((
-        styled_text_id("ModeTitleText", "Easydict", TextStyle::Subtitle),
+        styled_text_id_with_font_size("ModeTitleText", "Easydict", TextStyle::Subtitle, 22),
         flyout_button("")
             .id("ModeMenuButton")
             .selected(state.mode.id())
+            .min_width(0)
+            .min_height(0)
+            .padding(Edges {
+                top: 2,
+                right: 4,
+                bottom: 2,
+                left: 4,
+            })
+            .border_width(0)
+            .radius(10)
+            .align_y(Alignment::Center)
             .items([
                 FlyoutMenuItem::radio(
                     AppMode::QuickTranslate.id(),
@@ -760,6 +785,9 @@ fn quick_translate_content(state: &EasydictUiState) -> View<Message> {
         main_translate_action_bar(state),
         main_results_card(state),
     ];
+    if should_show_local_model_preparation_progress(&state.settings) {
+        content_children.push(local_model_preparation_progress_panel(&state.settings));
+    }
     if state.settings.theme != ThemeMode::Minimal && state.services_completed > 0 {
         content_children.push(styled_text(
             tr_count(
@@ -782,6 +810,42 @@ fn quick_translate_content(state: &EasydictUiState) -> View<Message> {
             .tw("p-0 gap-3 w-full"),
     )
     .id("QuickTranslateContent")
+    .into_view()
+}
+
+fn should_show_local_model_preparation_progress(settings: &SettingsState) -> bool {
+    !matches!(
+        settings.local_ai_prepare_progress.trim(),
+        "" | "Idle" | "Ready" | "Needs preparation" | "Not compatible" | "Failed"
+    )
+}
+
+fn local_model_preparation_progress_panel(settings: &SettingsState) -> View<Message> {
+    let status = settings.local_ai_prepare_progress.trim();
+    let status = if status.is_empty() {
+        settings.local_ai_status.as_str()
+    } else {
+        status
+    };
+
+    column((
+        styled_text_id_with_font_size(
+            "LocalModelPreparationStatusText",
+            status.to_string(),
+            TextStyle::Caption,
+            12,
+        ),
+        progress_bar()
+            .id("LocalModelPreparationProgressBar")
+            .active(true)
+            .indeterminate()
+            .height(3)
+            .label(status.to_string())
+            .into_view(),
+    ))
+    .id("LocalModelPreparationProgressPanel")
+    .spacing(3)
+    .width(Length::Fill)
     .into_view()
 }
 
@@ -812,6 +876,10 @@ fn main_results_card(state: &EasydictUiState) -> View<Message> {
         .id("QuickOutputCard")
         .kind(CardKind::Elevated)
         .content_spacing(4)
+        .margin(Edges {
+            top: 2,
+            ..Edges::ZERO
+        })
         .content(content)
         .into_view()
 }
@@ -825,13 +893,7 @@ fn main_results_should_hold_initial_height(results: &[TranslationResultPreview])
 
 fn source_text_card(state: &EasydictUiState) -> View<Message> {
     let minimal = state.settings.theme == ThemeMode::Minimal;
-    let mut source_children: Vec<View<Message>> = Vec::new();
-
-    if !state.local_dictionary_suggestions.is_empty()
-        || state.local_dictionary_suggestion_error.is_some()
-    {
-        source_children.push(local_dictionary_suggestions_view(state));
-    }
+    let mut body_children: Vec<View<Message>> = Vec::new();
 
     let suggestions_available = !state.local_dictionary_suggestions.is_empty();
     let suggestion_popup_visible =
@@ -846,9 +908,10 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
             "main.source_placeholder",
             "Enter or paste text to translate...",
         ))
-        .min_height(96)
-        .max_height(112)
+        .min_height(80)
+        .max_height(80)
         .text_style(TextStyle::BodyLarge)
+        .frameless()
         .state(source_text_state)
         .on_key(
             TextEditorKey::Enter,
@@ -888,72 +951,125 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
         );
     }
 
-    source_children.push(
-        source_editor
-            .on_input(Message::SourceTextChanged)
-            .into_view(),
+    body_children.push(
+        column((
+            state
+                .detected_language
+                .as_ref()
+                .map(|detected_language| {
+                    styled_text_id_with_font_size(
+                        "DetectedLanguageText",
+                        detected_language.clone(),
+                        TextStyle::Caption,
+                        11,
+                    )
+                })
+                .unwrap_or_else(|| {
+                    spacer()
+                        .id("DetectedLanguageText.placeholder")
+                        .height(Length::Fixed(0))
+                        .into_view()
+                }),
+            source_editor
+                .on_input(Message::SourceTextChanged)
+                .into_view(),
+            spacer()
+                .width(Length::Fixed(0))
+                .height(Length::Fixed(0))
+                .into_view(),
+        ))
+        .id("InputTextContainer")
+        .padding(0)
+        .margin(Edges {
+            top: 4,
+            ..Edges::ZERO
+        })
+        .width(Length::Fill)
+        .tw("w-full")
+        .into_view(),
     );
 
-    let source_title = format!("{} ?", tr("main.source_text", "Source Text"));
-    let mut source_card = card(source_title)
-        .id("QuickInputCard")
-        .kind(CardKind::Elevated)
-        .content_spacing(4)
-        .content(
-            column(source_children)
-                .id("main.quick.source_content")
-                .spacing(8)
-                .width(Length::Fill),
-        );
-
-    let mut trailing_children = local_dictionary_suggestion_header_buttons(state);
+    let mut header_trailing = Vec::new();
     if !minimal {
-        trailing_children.push(
+        header_trailing.push(
             button("Play source")
                 .id("main.quick.play_source")
                 .icon(icon::play())
                 .icon_only()
-                .width(Length::Fixed(28))
-                .height(Length::Fixed(28))
+                .width(Length::Fixed(24))
+                .height(Length::Fixed(24))
+                .padding(Edges::ZERO)
+                .font_size(12)
                 .tooltip("Play source text")
                 .on_press(Message::SpeakResult)
                 .into_view(),
         );
     }
-    if !trailing_children.is_empty() {
-        source_card = source_card.trailing(trailing_children);
-    }
 
-    if let Some(detected_language) = &state.detected_language {
-        source_card = source_card.description(detected_language.clone());
-    }
+    let header = row((
+        styled_text_id_with_font_size(
+            "SourceTextTitle",
+            tr("main.source_text", "Source Text"),
+            TextStyle::BodyStrong,
+            13,
+        ),
+        styled_text_id_with_font_size("InputHelpIcon", "?", TextStyle::Caption, 12),
+        spacer().width(Length::Fill).into_view(),
+        row(header_trailing)
+            .id("QuickInputHeaderActions")
+            .spacing(8)
+            .align(Alignment::Center),
+    ))
+    .id("QuickInputHeader")
+    .spacing(4)
+    .align(Alignment::Center)
+    .width(Length::Fill)
+    .into_view();
 
-    source_card.into_view()
-}
+    let content = column((
+        header,
+        column(body_children)
+            .id("main.quick.source_content")
+            .spacing(8)
+            .width(Length::Fill),
+    ))
+    .id("QuickInputCardContent")
+    .spacing(4)
+    .margin(Edges {
+        top: 4,
+        right: 4,
+        bottom: 4,
+        left: 4,
+    })
+    .width(Length::Fill);
 
-fn local_dictionary_suggestion_header_buttons(state: &EasydictUiState) -> Vec<View<Message>> {
-    state
-        .local_dictionary_suggestions
-        .iter()
-        .enumerate()
-        .take(2)
-        .map(|(index, suggestion)| {
-            button(format!(
-                "{} · {}",
-                suggestion.key, suggestion.dictionary_name
-            ))
-            .id(format!("main.local_dictionary_suggestions.header.{index}"))
-            .focused(state.local_dictionary_suggestion_active_index == Some(index))
-            .on_press(Message::ApplyLocalDictionarySuggestion(
-                suggestion.key.clone(),
-            ))
-            .into_view()
+    let card = card("")
+        .id("QuickInputCard")
+        .kind(CardKind::Elevated)
+        .content_spacing(0)
+        .max_height(480)
+        .margin(Edges {
+            bottom: 2,
+            ..Edges::ZERO
         })
-        .collect()
+        .content(content)
+        .into_view();
+
+    if suggestion_popup_visible {
+        overlay(card)
+            .id("SuggestionPopup")
+            .layer(
+                OverlayLayer::new(local_dictionary_suggestions_popup(state, minimal))
+                    .align(Alignment::Start, Alignment::Start),
+            )
+            .into_view()
+    } else {
+        card
+    }
 }
 
-fn local_dictionary_suggestions_view(state: &EasydictUiState) -> View<Message> {
-    let mut children = vec![styled_text("Dictionary suggestions", TextStyle::Caption)];
+fn local_dictionary_suggestions_popup(state: &EasydictUiState, minimal: bool) -> View<Message> {
+    let mut children = Vec::new();
 
     if let Some(error) = &state.local_dictionary_suggestion_error {
         children.push(styled_text_id(
@@ -970,30 +1086,52 @@ fn local_dictionary_suggestions_view(state: &EasydictUiState) -> View<Message> {
                     .local_dictionary_suggestions
                     .iter()
                     .enumerate()
-                    .take(8)
+                    .take(10)
                     .map(|(index, suggestion)| {
                         button(format!(
-                            "{} · {}",
+                            "{}\n{}",
                             suggestion.key, suggestion.dictionary_name
                         ))
                         .id(format!("main.local_dictionary_suggestions.item.{index}"))
                         .focused(state.local_dictionary_suggestion_active_index == Some(index))
+                        .font_size(14)
+                        .padding(Edges {
+                            top: 4,
+                            right: 6,
+                            bottom: 4,
+                            left: 6,
+                        })
                         .on_press(
                             Message::ApplyLocalDictionarySuggestion(suggestion.key.clone()),
                         )
                     })
                     .collect::<Vec<_>>(),
             )
-            .id("main.local_dictionary_suggestions.items")
-            .spacing(6)
+            .id("SuggestionListView")
+            .spacing(0)
             .into_view(),
         );
     }
 
+    let popup_style = if minimal {
+        "surface-card border rounded-none shadow-none"
+    } else {
+        "surface-card border rounded-[10px]"
+    };
+
     column(children)
-        .id("main.local_dictionary_suggestions")
-        .spacing(6)
-        .width(Length::Fill)
+        .id("SuggestionPopupBorder")
+        .padding(4)
+        .spacing(0)
+        .width(Length::Fixed(220))
+        .max_width(320)
+        .max_height(200)
+        .margin(Edges {
+            top: 112,
+            left: 12,
+            ..Edges::ZERO
+        })
+        .tw(popup_style)
         .into_view()
 }
 fn long_document_content(state: &LongDocumentState, settings: &SettingsState) -> View<Message> {
@@ -1012,46 +1150,59 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
 
     scroll_view(
         column((
-            settings_row(semantic_header(theme, "📝", "Source Text"))
-                .id("main.long-doc.input_card")
-                .description(state.selected_file.clone())
-                .trailing((button("Browse...")
-                    .id("main.long-doc.browse")
-                    .icon(icon::add())
-                    .enabled(can_edit)
-                    .on_press(Message::BrowseFile),))
-                .content(
-                    text_editor(state.source_text.clone())
-                        .id("main.long-doc.source_text")
-                        .placeholder("Paste long text, Markdown, or choose a PDF file.")
-                        .min_height(160)
-                        .enabled(can_edit)
-                        .on_input(Message::LongDocumentSourceTextChanged),
-                ),
+            long_document_input_card(state, can_edit),
             long_document_control_bar(state, settings),
-            settings_row(semantic_header(theme, "⚡", "Translation Result"))
-                .id("main.long-doc.output_card")
-                .trailing((button("Retry Failed")
-                    .id("main.long-doc.retry")
-                    .enabled(state.last_error.is_some() && !state.is_translating)
-                    .on_press(Message::RetryLongDocument),))
-                .content(long_document_output_content(state, output_text)),
-            text(state.status_text.clone()),
+            long_document_output_card(state, output_text),
+            styled_text_id_with_font_size(
+                "LongDocStatusText",
+                state.status_text.clone(),
+                TextStyle::Caption,
+                12,
+            )
+            .text_margin(Edges {
+                top: 4,
+                ..Edges::ZERO
+            }),
             settings_row(semantic_header(theme, "📑", "History"))
                 .id("main.long-doc.history")
                 .kind(SettingsRowKind::Expander)
+                .margin(Edges {
+                    top: 8,
+                    ..Edges::ZERO
+                })
+                .align_x(Alignment::Stretch)
+                .content_align_x(Alignment::Stretch)
                 .trailing((button("Clear")
                     .id("main.long-doc.clear_history")
+                    .font_size(12)
+                    .padding(Edges {
+                        top: 4,
+                        right: 8,
+                        bottom: 4,
+                        left: 8,
+                    })
+                    .margin(Edges {
+                        left: 8,
+                        ..Edges::ZERO
+                    })
                     .on_press(Message::ClearHistory),))
-                .content(results_list(
-                    "main.long-doc.history_list",
-                    &state.history,
-                    Message::ToggleResultExpanded,
-                    |_| Message::Noop,
-                    |_| Message::Noop,
-                    |_| Message::Noop,
-                    |_| Message::Noop,
-                )),
+                .content(
+                    result_list(
+                        state
+                            .history
+                            .iter()
+                            .map(TranslationResultPreview::to_result_item),
+                    )
+                    .id("main.long-doc.history_list")
+                    .max_height(200)
+                    .padding(Edges::ZERO)
+                    .border_width(0)
+                    .on_toggle(Message::ToggleResultExpanded)
+                    .on_copy_item(|_| Message::Noop)
+                    .on_speak_item(|_| Message::Noop)
+                    .on_replace_item(|_| Message::Noop)
+                    .on_retry_item(|_| Message::Noop),
+                ),
         ))
         .id("main.long-doc.content")
         .padding(4)
@@ -1064,6 +1215,140 @@ fn long_document_content(state: &LongDocumentState, settings: &SettingsState) ->
     )
     .id("main.long-doc.scroll")
     .into_view()
+}
+
+fn long_document_input_card(state: &LongDocumentState, can_edit: bool) -> View<Message> {
+    let file_row = row((
+        sized_styled_text_id(
+            "LongDocFilePathDisplay",
+            state.selected_file.clone(),
+            TextStyle::Body,
+            Length::Fill,
+            Length::Shrink,
+        )
+        .text_align_y(Alignment::Center),
+        button("Browse...")
+            .id("main.long-doc.browse")
+            .icon(icon::add())
+            .margin(Edges {
+                left: 8,
+                ..Edges::ZERO
+            })
+            .enabled(can_edit)
+            .on_press(Message::BrowseFile),
+    ))
+    .id("LongDocFilePickerRow")
+    .spacing(8)
+    .align(Alignment::Center)
+    .width(Length::Fill)
+    .into_view();
+
+    let file_panel = column((
+        file_row,
+        text_editor(state.source_text.clone())
+            .id("main.long-doc.source_text")
+            .placeholder("Paste long text, Markdown, or choose a PDF file.")
+            .min_height(160)
+            .enabled(can_edit)
+            .on_input(Message::LongDocumentSourceTextChanged),
+    ))
+    .id("LongDocFilePanel")
+    .spacing(8)
+    .width(Length::Fill)
+    .into_view();
+
+    long_document_card_shell(
+        "main.long-doc.input_card",
+        Edges {
+            bottom: 2,
+            ..Edges::ZERO
+        },
+        column((
+            styled_text_id_with_font_size(
+                "LongDocInputTitle",
+                "Source Text",
+                TextStyle::BodyStrong,
+                13,
+            )
+            .text_margin(Edges {
+                bottom: 4,
+                ..Edges::ZERO
+            }),
+            file_panel,
+        ))
+        .id("LongDocInputCardContent")
+        .spacing(0)
+        .margin(Edges {
+            top: 4,
+            right: 4,
+            bottom: 4,
+            left: 4,
+        })
+        .width(Length::Fill),
+    )
+}
+
+fn long_document_output_card(state: &LongDocumentState, output_text: String) -> View<Message> {
+    let header = row((
+        styled_text_id_with_font_size(
+            "LongDocOutputTitle",
+            "Translation Result",
+            TextStyle::BodyStrong,
+            13,
+        ),
+        spacer().width(Length::Fill).into_view(),
+        button("Retry Failed")
+            .id("main.long-doc.retry")
+            .font_size(12)
+            .padding(Edges {
+                top: 4,
+                right: 8,
+                bottom: 4,
+                left: 8,
+            })
+            .enabled(state.last_error.is_some() && !state.is_translating)
+            .on_press(Message::RetryLongDocument),
+    ))
+    .id("LongDocOutputHeaderRow")
+    .spacing(8)
+    .align(Alignment::Center)
+    .width(Length::Fill)
+    .margin(Edges {
+        bottom: 4,
+        ..Edges::ZERO
+    })
+    .into_view();
+
+    long_document_card_shell(
+        "main.long-doc.output_card",
+        Edges {
+            top: 2,
+            ..Edges::ZERO
+        },
+        column((header, long_document_output_content(state, output_text)))
+            .id("LongDocOutputCardContent")
+            .spacing(0)
+            .margin(Edges {
+                top: 4,
+                right: 4,
+                bottom: 4,
+                left: 4,
+            })
+            .width(Length::Fill),
+    )
+}
+
+fn long_document_card_shell(
+    id: &'static str,
+    margin: Edges,
+    content: impl IntoView<Message>,
+) -> View<Message> {
+    column((content.into_view(),))
+        .id(id)
+        .margin(margin)
+        .width(Length::Fill)
+        .tw("surface-card border rounded-lg w-full")
+        .into_view()
 }
 
 fn long_document_output_content(state: &LongDocumentState, output_text: String) -> View<Message> {
@@ -1087,6 +1372,10 @@ fn long_document_output_content(state: &LongDocumentState, output_text: String) 
             .into_view(),
             button("Browse...")
                 .id("main.long-doc.output_browse")
+                .margin(Edges {
+                    left: 8,
+                    ..Edges::ZERO
+                })
                 .enabled(!state.is_translating)
                 .on_press(Message::BrowseOutputFolder),
         ))
@@ -1095,10 +1384,11 @@ fn long_document_output_content(state: &LongDocumentState, output_text: String) 
         .align(Alignment::Center)
         .width(Length::Fill)
         .into_view(),
-        styled_text_id(
+        styled_text_id_with_font_size(
             "main.long-doc.output_naming_hint",
             output_text,
             TextStyle::Caption,
+            11,
         ),
     ];
 
@@ -1116,7 +1406,7 @@ fn long_document_output_content(state: &LongDocumentState, output_text: String) 
 
     column(children)
         .id("main.long-doc.output_content")
-        .spacing(6)
+        .spacing(8)
         .width(Length::Fill)
         .into_view()
 }
@@ -1136,7 +1426,7 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
         row((
             long_document_control_cell(
                 "main.long-doc.source_language_cell",
-                "🌐 Source",
+                long_document_plain_header("main.long-doc.source_language_cell.label", "🌐 Source"),
                 combo_box(selected_language_items(true, settings))
                     .id("main.long-doc.source_language")
                     .label("Source")
@@ -1147,7 +1437,7 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
             ),
             long_document_control_cell(
                 "main.long-doc.target_language_cell",
-                "🎯 Target",
+                long_document_plain_header("main.long-doc.target_language_cell.label", "🎯 Target"),
                 combo_box(selected_language_items(false, settings))
                     .id("main.long-doc.target_language")
                     .label("Target")
@@ -1156,9 +1446,13 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
                     .enabled(can_edit)
                     .on_change(Message::LongDocumentTargetLanguageChanged),
             ),
-            long_document_control_cell(
+            long_document_control_cell_with_width(
                 "main.long-doc.service_cell",
-                "🤖 Service",
+                long_document_hint_header(
+                    "main.long-doc.service_cell.label",
+                    "🤖 Service",
+                    "LongDocServiceHint",
+                ),
                 combo_box(service_items())
                     .id("main.long-doc.service")
                     .label("Service")
@@ -1167,14 +1461,19 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
                     .width(Length::Fill)
                     .enabled(can_edit)
                     .on_change(Message::LongDocumentServiceChanged),
+                Length::FillPortion(2),
             ),
         ))
-        .spacing(12)
+        .spacing(8)
         .width(Length::Fill),
         row((
             long_document_control_cell(
                 "main.long-doc.input_mode_cell",
-                "📄 Input",
+                long_document_hint_header(
+                    "main.long-doc.input_mode_cell.label",
+                    "📄 Input",
+                    "LongDocInputModeHint",
+                ),
                 combo_box([
                     ComboBoxItem::new("plaintext", "Text"),
                     ComboBoxItem::new("markdown", "Markdown"),
@@ -1189,7 +1488,11 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
             ),
             long_document_control_cell(
                 "main.long-doc.output_mode_cell",
-                "📝 Output",
+                long_document_hint_header(
+                    "main.long-doc.output_mode_cell.label",
+                    "📝 Output",
+                    "LongDocOutputModeHint",
+                ),
                 combo_box([
                     ComboBoxItem::new("mono", "Mono"),
                     ComboBoxItem::new("bilingual", "Bilingual"),
@@ -1202,62 +1505,121 @@ fn long_document_control_bar(state: &LongDocumentState, settings: &SettingsState
                 .enabled(can_edit)
                 .on_change(Message::LongDocumentOutputModeChanged),
             ),
-            long_document_control_cell(
+            long_document_control_cell_with_header(
                 "main.long-doc.concurrency_cell",
-                "⚡ Threads",
+                long_document_hint_header(
+                    "main.long-doc.concurrency_cell.label",
+                    "⚡ Threads",
+                    "LongDocConcurrencyHint",
+                ),
                 text_editor(state.concurrency.clone())
                     .id("main.long-doc.concurrency")
                     .placeholder("Threads")
+                    .width(Length::Fill)
                     .max_height(36)
                     .enabled(can_edit)
                     .on_input(Message::LongDocumentConcurrencyChanged),
+                Length::Fill,
             ),
-            long_document_control_cell(
+            long_document_control_cell_with_width(
                 "main.long-doc.page_range_cell",
-                "📑 Pages",
+                long_document_hint_header(
+                    "main.long-doc.page_range_cell.label",
+                    "📑 Pages",
+                    "LongDocPageRangeHint",
+                ),
                 text_editor(state.page_range.clone())
                     .id("main.long-doc.page_range")
                     .placeholder("1-3,5,7-10")
+                    .width(Length::Fill)
                     .max_height(36)
                     .enabled(can_edit)
                     .on_input(Message::LongDocumentPageRangeChanged),
+                Length::Fixed(110),
             ),
         ))
-        .spacing(12)
+        .spacing(8)
         .width(Length::Fill),
         row((
             toggle_switch("Use document context pass", state.two_pass_context)
                 .id("main.long-doc.two_pass")
+                .width(Length::FillPortion(3))
                 .enabled(can_edit)
                 .on_toggle(Message::ToggleTwoPassContext),
-            primary_button("Translate")
+            primary_button("")
                 .id("main.long-doc.translate")
+                .primary_round()
                 .icon(icon::translate())
+                .font_size(16)
+                .width(Length::Fixed(40))
+                .height(Length::Fixed(40))
+                .tooltip("Translate")
                 .enabled(!state.is_translating)
                 .on_press(Message::Translate),
         ))
-        .spacing(12)
-        .align(Alignment::Center),
+        .spacing(8)
+        .align(Alignment::Center)
+        .width(Length::Fill),
     ))
     .id("main.long-doc.control_bar")
-    .spacing(8)
+    .spacing(4)
+    .margin(Edges {
+        top: 4,
+        bottom: 4,
+        ..Edges::ZERO
+    })
     .width(Length::Fill)
     .into_view()
 }
 
 fn long_document_control_cell(
     id: &'static str,
-    label: &'static str,
+    header: impl IntoView<Message>,
     control: impl IntoView<Message>,
 ) -> View<Message> {
-    column((
-        styled_text_id(format!("{id}.label"), label, TextStyle::Caption),
-        control,
+    long_document_control_cell_with_width(id, header, control, Length::Fill)
+}
+
+fn long_document_control_cell_with_width(
+    id: &'static str,
+    header: impl IntoView<Message>,
+    control: impl IntoView<Message>,
+    width: Length,
+) -> View<Message> {
+    long_document_control_cell_with_header(id, header, control, width)
+}
+
+fn long_document_plain_header(id: &'static str, label: &'static str) -> View<Message> {
+    styled_text_id(id, label, TextStyle::Caption)
+}
+
+fn long_document_hint_header(
+    label_id: &'static str,
+    label: &'static str,
+    hint_id: &'static str,
+) -> View<Message> {
+    row((
+        styled_text_id(label_id, label, TextStyle::Caption),
+        styled_text_id_with_font_size(hint_id, "\u{E897}", TextStyle::Caption, 11),
     ))
-    .id(id)
-    .spacing(3)
+    .id(format!("{label_id}.header"))
+    .spacing(4)
+    .align(Alignment::Center)
     .width(Length::Fill)
     .into_view()
+}
+
+fn long_document_control_cell_with_header(
+    id: &'static str,
+    header: impl IntoView<Message>,
+    control: impl IntoView<Message>,
+    width: Length,
+) -> View<Message> {
+    column((header, control))
+        .id(id)
+        .spacing(3)
+        .width(width)
+        .into_view()
 }
 
 fn floating_translate_view(
@@ -1318,10 +1680,11 @@ fn floating_detected_language_label(
         .as_deref()
         .filter(|value| !value.is_empty())
     {
-        Some(value) => styled_text_id(
-            format!("{id_prefix}.detected_language"),
+        Some(value) => styled_text_id_with_font_size(
+            "DetectedLangText",
             value.to_string(),
             TextStyle::Caption,
+            10,
         ),
         None => spacer()
             .id(format!("{id_prefix}.detected_language_placeholder"))
@@ -1384,11 +1747,17 @@ fn floating_input_surface(
                 .icon_only()
                 .width(Length::Fixed(28))
                 .height(Length::Fixed(28))
+                .padding(Edges::ZERO)
+                .font_size(14)
+                .margin(Edges {
+                    left: 4,
+                    ..Edges::ZERO
+                })
                 .tooltip("Play source text")
                 .on_press(Message::SpeakResult),
         ))
         .id(format!("{id_prefix}.input_content"))
-        .spacing(4)
+        .spacing(0)
         .align(Alignment::Start)
         .width(Length::Fill)
         .into_view()
@@ -1423,10 +1792,36 @@ fn floating_header(
             .icon_only()
             .width(Length::Fixed(28))
             .height(Length::Fixed(28))
+            .padding(Edges::ZERO)
+            .font_size(14)
             .tooltip("Pin window (stay on top)")
             .on_press(Message::TogglePin(!state.pinned))
     } else {
         spacer().width(Length::Fixed(28)).into_view()
+    };
+
+    let close_button = if id_prefix == "mini" {
+        button("Close")
+            .id("MiniWindowCloseButton")
+            .icon(icon::clear())
+            .icon_only()
+            .width(Length::Fixed(28))
+            .height(Length::Fixed(28))
+            .padding(Edges::ZERO)
+            .font_size(14)
+            .tooltip("Close")
+            .on_press(Message::CloseWindow)
+    } else {
+        button("Close")
+            .id("CloseButton")
+            .icon(icon::clear())
+            .icon_only()
+            .width(Length::Fixed(28))
+            .height(Length::Fixed(28))
+            .padding(Edges::ZERO)
+            .font_size(14)
+            .tooltip("Close")
+            .on_press(Message::CloseWindow)
     };
 
     row((
@@ -1436,14 +1831,7 @@ fn floating_header(
             state.title.clone(),
             TextStyle::Caption,
         ),
-        button("Close")
-            .id(format!("{id_prefix}.close"))
-            .icon(icon::clear())
-            .icon_only()
-            .width(Length::Fixed(28))
-            .height(Length::Fixed(28))
-            .tooltip("Close")
-            .on_press(Message::CloseWindow),
+        close_button,
     ))
     .id(format!("{id_prefix}.header"))
     .spacing(4)
@@ -1471,6 +1859,10 @@ fn main_translate_action_bar(state: &EasydictUiState) -> View<Message> {
         main_translate_action_bar_narrow(state),
     )
     .id("main.quick.action_bar")
+    // Pin the captured/default main-window width so the schema + a11y tree report
+    // only the branch that is actually painted (419 DIP >= 360 => wide inline
+    // layout), instead of double-counting the hidden narrow combobox/buttons.
+    .resolved_width(crate::window_options::MAIN_WINDOW_DEFAULT_WIDTH_DIPS)
     .into_view()
 }
 
@@ -1489,6 +1881,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .icon_only()
             .width(Length::Fixed(36))
             .height(Length::Fixed(36))
+            .font_size(16)
             .tooltip("Swap source and target languages")
             .on_press(Message::SwapLanguages),
         combo_box(selected_language_items(true, &state.settings))
@@ -1500,7 +1893,7 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
             .on_change(Message::TargetLanguageChanged),
     ];
     if state.settings.theme != ThemeMode::Minimal {
-        children.push(language_help_button());
+        children.push(language_help_button("LangHelpIcon"));
     }
     children.push(main_translate_button(
         "TranslateButton",
@@ -1511,6 +1904,11 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
     row(children)
         .id("ActionBarWide")
         .tw("gap-2 w-full items-center")
+        .margin(Edges {
+            top: 4,
+            bottom: 4,
+            ..Edges::ZERO
+        })
         .into_view()
 }
 
@@ -1529,6 +1927,7 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
             .icon_only()
             .width(Length::Fixed(36))
             .height(Length::Fixed(36))
+            .font_size(16)
             .tooltip("Swap source and target languages")
             .on_press(Message::SwapLanguages),
         combo_box(selected_language_items(true, &state.settings))
@@ -1540,7 +1939,7 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
             .on_change(Message::TargetLanguageChanged),
     ];
     if state.settings.theme != ThemeMode::Minimal {
-        language_row_children.push(language_help_button());
+        language_row_children.push(language_help_button("LangHelpIconNarrow"));
     }
 
     column((
@@ -1557,16 +1956,28 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
     .spacing(4)
     .align(Alignment::Center)
     .width(Length::Fill)
+    .margin(Edges {
+        top: 4,
+        bottom: 4,
+        ..Edges::ZERO
+    })
     .into_view()
 }
 
 fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState) -> View<Message> {
     if is_loading {
-        progress_ring()
-            .id(id)
-            .size(16)
-            .a11y(A11yHint::named("Translating"))
-            .into_view()
+        match id {
+            "TranslateButtonNarrow" => progress_ring()
+                .id("LoadingRingNarrow")
+                .size(16)
+                .a11y(A11yHint::named("Translating"))
+                .into_view(),
+            _ => progress_ring()
+                .id("LoadingRing")
+                .size(16)
+                .a11y(A11yHint::named("Translating"))
+                .into_view(),
+        }
     } else {
         primary_button("")
             .id(id)
@@ -1574,6 +1985,8 @@ fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState
             .primary_round()
             .width(Length::Fixed(40))
             .height(Length::Fixed(40))
+            .padding(Edges::ZERO)
+            .font_size(16)
             .tooltip(tr("main.translate", "Translate"))
             .state(state)
             .a11y(A11yHint::named(tr("main.translate", "Translate")))
@@ -1581,8 +1994,8 @@ fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState
     }
 }
 
-fn language_help_button() -> View<Message> {
-    styled_text_id("LanguageHelpButton", "?", TextStyle::Body)
+fn language_help_button(id: &'static str) -> View<Message> {
+    styled_text_id_with_font_size(id, "?", TextStyle::Body, 14)
 }
 
 fn mode_menu_label(mode: AppMode, minimal: bool) -> &'static str {
@@ -1643,6 +2056,13 @@ fn translate_language_bar(
             .icon_only()
             .width(Length::Fixed(28))
             .height(Length::Fixed(28))
+            .padding(Edges::ZERO)
+            .font_size(12)
+            .margin(Edges {
+                left: 4,
+                right: 4,
+                ..Edges::ZERO
+            })
             .tooltip("Swap languages")
             .on_press(Message::SwapFloatingLanguages(surface)),
         combo_box(language_items)
@@ -1679,11 +2099,18 @@ fn floating_translate_button(
     state: ControlState,
 ) -> View<Message> {
     if is_loading {
-        progress_ring()
-            .id(id)
-            .size(14)
-            .a11y(A11yHint::named("Translating"))
-            .into_view()
+        match surface {
+            QuickTranslateSurface::Main => progress_ring()
+                .id("LoadingRing")
+                .size(16)
+                .a11y(A11yHint::named("Translating"))
+                .into_view(),
+            QuickTranslateSurface::Mini | QuickTranslateSurface::Fixed => progress_ring()
+                .id("LoadingRing")
+                .size(14)
+                .a11y(A11yHint::named("Translating"))
+                .into_view(),
+        }
     } else {
         primary_button("")
             .id(id)
@@ -1691,6 +2118,12 @@ fn floating_translate_button(
             .primary_round()
             .width(Length::Fixed(32))
             .height(Length::Fixed(32))
+            .padding(Edges::ZERO)
+            .font_size(14)
+            .margin(Edges {
+                left: 4,
+                ..Edges::ZERO
+            })
             .tooltip(tr("main.translate", "Translate"))
             .state(state)
             .a11y(A11yHint::named(tr("main.translate", "Translate")))
@@ -1703,9 +2136,13 @@ fn styled_text(value: impl Into<String>, style: TextStyle) -> View<Message> {
         id: None,
         value: value.into(),
         style,
+        font_size: None,
         width: None,
         height: None,
-        wrapping: TextWrapping::Word,
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        align_y: Alignment::Start,
+        wrapping: TextWrapping::None,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1720,8 +2157,12 @@ fn styled_text_id(
         id: Some(id.into()),
         value: value.into(),
         style,
+        font_size: None,
         width: None,
         height: None,
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        align_y: Alignment::Start,
         wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
@@ -1737,9 +2178,35 @@ fn single_line_styled_text_id(
         id: Some(id.into()),
         value: value.into(),
         style,
+        font_size: None,
         width: None,
         height: None,
-        wrapping: TextWrapping::None,
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        align_y: Alignment::Start,
+        wrapping: TextWrapping::Word,
+        selectable: false,
+        a11y: A11yHint::default(),
+    }))
+}
+
+fn styled_text_id_with_font_size(
+    id: impl Into<String>,
+    value: impl Into<String>,
+    style: TextStyle,
+    font_size: u16,
+) -> View<Message> {
+    View::new(ViewToken::Text(TextToken {
+        id: Some(id.into()),
+        value: value.into(),
+        style,
+        font_size: Some(font_size),
+        width: None,
+        height: None,
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        align_y: Alignment::Start,
+        wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
     }))
@@ -1756,8 +2223,12 @@ fn sized_styled_text_id(
         id: Some(id.into()),
         value: value.into(),
         style,
+        font_size: None,
         width: Some(width),
         height: Some(height),
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        align_y: Alignment::Start,
         wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
@@ -1965,7 +2436,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
         styled_text_id(
             "SettingsGeneralBehaviorHeader",
             tr_locale(locale, "settings.general.behavior", "Behavior"),
-            TextStyle::Subtitle,
+            TextStyle::SectionTitle,
         ),
         column(behavior_controls)
             .id("BehaviorSectionCard")
@@ -2037,7 +2508,7 @@ fn settings_general_content(state: &SettingsState, locale: &str) -> View<Message
         styled_text_id(
             "TtsSettingsHeaderText",
             tr_locale(locale, "settings.general.tts.header", "TTS Output Settings"),
-            TextStyle::Subtitle,
+            TextStyle::SectionTitle,
         ),
         tts_card.into_view(),
     ];
@@ -2122,12 +2593,19 @@ fn local_dictionary_suggestions_row(state: &SettingsState, locale: &str) -> View
                     "Enable custom dictionary input suggestions",
                 ),
                 TextStyle::Body,
-            ),
-            styled_text_id(
+            )
+            .text_align_y(Alignment::Center),
+            styled_text_id_with_font_size(
                 "ExperimentalLabelText",
                 tr_locale(locale, "settings.general.experimental", "Experimental"),
                 TextStyle::Caption,
-            ),
+                11,
+            )
+            .text_margin(Edges {
+                top: 1,
+                ..Edges::ZERO
+            })
+            .text_align_y(Alignment::Center),
         ))
         .id("EnableLocalDictionarySuggestionsHeader")
         .spacing(6)
@@ -2143,15 +2621,22 @@ fn local_dictionary_suggestions_row(state: &SettingsState, locale: &str) -> View
     ];
 
     if show_hint {
-        children.push(styled_text_id(
-            "EnableLocalDictionarySuggestionsHintText",
-            tr_locale(
-                locale,
-                "settings.general.local_dictionary_suggestions.empty",
-                "Import an MDX dictionary to enable local input suggestions.",
-            ),
-            TextStyle::Caption,
-        ));
+        children.push(
+            styled_text_id_with_font_size(
+                "EnableLocalDictionarySuggestionsHintText",
+                tr_locale(
+                    locale,
+                    "settings.general.local_dictionary_suggestions.empty",
+                    "Import an MDX dictionary to enable local input suggestions.",
+                ),
+                TextStyle::Caption,
+                11,
+            )
+            .text_margin(Edges {
+                left: 44,
+                ..Edges::ZERO
+            }),
+        );
     }
 
     let mut row = column(children)
@@ -2288,6 +2773,7 @@ fn settings_services_content(state: &SettingsState, locale: &str) -> View<Messag
                 ))
                 .id("ImportMdxDictionaryButton")
                 .state(state.import_mdx_button_state.clone())
+                .padding(service_button_padding(10, 4))
                 .height(Length::Fixed(29))
                 .on_press(Message::ImportMdxDictionary),
                 styled_text_id(
@@ -2344,7 +2830,7 @@ fn services_section_header(
 fn services_international_panel(state: &SettingsState, locale: &str) -> View<Message> {
     column((
         row((
-            styled_text_id(
+            styled_text_id_with_font_size(
                 "EnableInternationalServicesHeaderText",
                 tr_locale(
                     locale,
@@ -2352,6 +2838,7 @@ fn services_international_panel(state: &SettingsState, locale: &str) -> View<Mes
                     "Enable International Services",
                 ),
                 TextStyle::Body,
+                13,
             ),
             spacer().width(Length::Fill).into_view(),
             toggle_switch(
@@ -2412,6 +2899,11 @@ fn service_expander(
         .content(
             column(content)
                 .id(content_id)
+                .padding_edges(Edges {
+                    top: 8,
+                    bottom: 8,
+                    ..Edges::ZERO
+                })
                 .spacing(12)
                 .width(Length::Fill),
         );
@@ -2421,6 +2913,9 @@ fn service_expander(
     }
     if let Some(content_style) = settings_service_expander_content_style(&service_id) {
         builder = builder.content_style(content_style);
+    }
+    if let Some(title_id) = settings_service_expander_title_id(&service_id) {
+        builder = builder.title_id(title_id);
     }
 
     if let Some(status) = service_header_status(&service_id, status.into()) {
@@ -2454,6 +2949,13 @@ fn settings_service_expander_header_style(service_id: &str) -> Option<&'static s
 fn settings_service_expander_content_style(service_id: &str) -> Option<&'static str> {
     let _ = service_id;
     None
+}
+
+fn settings_service_expander_title_id(service_id: &str) -> Option<&'static str> {
+    match service_id {
+        "windows-local-ai" => Some("WindowsLocalAITitleText"),
+        _ => None,
+    }
 }
 
 fn settings_service_expander_header_state(state: &SettingsState, service_id: &str) -> ControlState {
@@ -2654,6 +3156,13 @@ fn text_editor_view_width_with_trailing_icon(
     match view.into_token() {
         ViewToken::TextEditor(mut token) => {
             token.width = Some(Length::Fixed(width));
+            token.padding = Some(Edges {
+                top: 5,
+                right: 40,
+                bottom: 5,
+                left: 12,
+            });
+            token.secure = true;
             token.trailing_icon = Some(win_fluent::view::TextEditorTrailingIcon {
                 id: reveal_id.into(),
                 icon: win_fluent::IconToken::with_glyph("reveal-secret", '\u{E890}'),
@@ -2919,6 +3428,7 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
         button("Prepare model")
             .id("WindowsLocalAIPrepareButton")
             .icon(icon::refresh())
+            .padding(service_button_padding(14, 0))
             .height(Length::Fixed(40))
             .on_press(Message::PrepareLocalAiModel)
             .into_view(),
@@ -2941,6 +3451,9 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
                 button("Track download progress in Windows Update")
                     .id("WindowsLocalAIWindowsUpdateLink")
                     .icon(icon::settings())
+                    .link()
+                    .text_style(TextStyle::Caption)
+                    .padding(Edges::ZERO)
                     .on_press(Message::OpenWindowsAiUpdate)
                     .into_view(),
             ])
@@ -3009,11 +3522,14 @@ fn foundry_local_config_panel(state: &SettingsState) -> View<Message> {
                 button("Start Foundry Local")
                     .id("FoundryLocalStartButton")
                     .icon(icon::play())
+                    .padding(service_button_padding(14, 0))
                     .height(Length::Fixed(40))
                     .on_press(Message::StartFoundryLocal),
                 button("Install Foundry Local")
                     .id("FoundryLocalInstallLink")
                     .icon(icon::add())
+                    .link()
+                    .padding(Edges::ZERO)
                     .height(Length::Fixed(40))
                     .on_press(Message::InstallFoundryLocal),
                 button("Install/use docs")
@@ -3048,20 +3564,33 @@ fn should_show_foundry_local_recovery(status: &str) -> bool {
 fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
     let mut content = vec![
         row((
-            styled_text_id(
-                "OpenVinoTitleText",
-                "OpenVINO (local NLLB)",
-                TextStyle::BodyStrong,
-            ),
-            styled_text_id("OpenVinoRatingText", "★★", TextStyle::Caption),
-            styled_text_id(
-                "OpenVinoStatusBadge",
+            row((
+                styled_text_id(
+                    "OpenVinoTitleText",
+                    "OpenVINO (local NLLB)",
+                    TextStyle::BodyStrong,
+                ),
+                styled_text_id("OpenVinoRatingText", "★★", TextStyle::Caption),
+            ))
+            .spacing(8)
+            .align(Alignment::Center)
+            .into_view(),
+            spacer().width(Length::Fill).into_view(),
+            row((styled_text(
                 state.open_vino_status.clone(),
                 TextStyle::Caption,
-            ),
+            ),))
+            .id("OpenVinoStatusBadge")
+            .margin(Edges {
+                right: 8,
+                ..Edges::ZERO
+            })
+            .align(Alignment::Center)
+            .into_view(),
         ))
-        .spacing(8)
+        .spacing(0)
         .align(Alignment::Center)
+        .width(Length::Fill)
         .into_view(),
         status_badge(state.open_vino_status.clone(), ValidationSeverity::Info)
             .id("OpenVinoStatusBar")
@@ -3083,6 +3612,7 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
         button("Download model")
             .id("OpenVinoDownloadButton")
             .icon(icon::refresh())
+            .padding(service_button_padding(14, 0))
             .height(Length::Fixed(40))
             .on_press(Message::DownloadOpenVinoModel)
             .into_view(),
@@ -3203,10 +3733,12 @@ fn ollama_service_expander(state: &SettingsState, locale: &str) -> View<Message>
                     "Refresh",
                 ))
                 .id("RefreshOllamaButton")
+                .padding(service_button_padding(12, 6))
                 .height(Length::Fixed(32))
                 .on_press(Message::RefreshOllamaModels),
                 button(tr_locale(locale, "settings.services.test", "Test"))
                     .id("TestOllamaButton")
+                    .padding(service_button_padding(8, 4))
                     .height(Length::Fixed(29))
                     .on_press(Message::TestOllama),
             ))
@@ -3302,6 +3834,7 @@ fn open_ai_service_expander(state: &SettingsState, locale: &str) -> View<Message
         ),
         button(service_test_label(locale))
             .id("TestOpenAIButton")
+            .padding(service_button_padding(8, 4))
             .height(Length::Fixed(29))
             .on_press(Message::TestOpenAI)
             .into_view(),
@@ -3429,6 +3962,7 @@ fn llm_provider_service_expander(
         styled_text(descriptor.description, TextStyle::Caption),
         button(service_test_label(locale))
             .id(descriptor.test_button_id)
+            .padding(service_button_padding(8, 4))
             .height(Length::Fixed(29))
             .on_press(Message::TestServiceProvider(
                 descriptor.service_id.to_string(),
@@ -3569,6 +4103,7 @@ fn builtin_ai_service_expander(
         ),
         button(service_test_label(locale))
             .id(descriptor.test_button_id)
+            .padding(service_button_padding(8, 4))
             .height(Length::Fixed(29))
             .on_press(Message::TestServiceProvider(
                 descriptor.service_id.to_string(),
@@ -3694,6 +4229,15 @@ fn service_model_label(locale: &str) -> String {
 
 fn service_test_label(locale: &str) -> String {
     tr_locale(locale, "settings.services.test", "Test")
+}
+
+fn service_button_padding(horizontal: u16, vertical: u16) -> Edges {
+    Edges {
+        top: vertical,
+        right: horizontal,
+        bottom: vertical,
+        left: horizontal,
+    }
 }
 
 fn service_provider_key_label(locale: &str, label: &str) -> String {
@@ -3836,6 +4380,7 @@ fn caiyun_service_expander(state: &SettingsState, locale: &str) -> View<Message>
             ),
             button(service_test_label(locale))
                 .id("TestCaiyunButton")
+                .padding(service_button_padding(8, 4))
                 .height(Length::Fixed(29))
                 .on_press(Message::TestCaiyun)
                 .into_view(),
@@ -3877,6 +4422,7 @@ fn niu_trans_service_expander(state: &SettingsState, locale: &str) -> View<Messa
             ),
             button(service_test_label(locale))
                 .id("TestNiuTransButton")
+                .padding(service_button_padding(8, 4))
                 .height(Length::Fixed(29))
                 .on_press(Message::TestNiuTrans)
                 .into_view(),
@@ -3946,6 +4492,7 @@ fn youdao_service_expander(state: &SettingsState, locale: &str) -> View<Message>
                 ),
                 button(service_test_label(locale))
                     .id("TestYoudaoButton")
+                    .padding(service_button_padding(8, 4))
                     .height(Length::Fixed(29))
                     .on_press(Message::TestYoudao)
                     .into_view(),
@@ -4012,6 +4559,7 @@ fn volcano_service_expander(state: &SettingsState, locale: &str) -> View<Message
                 ),
                 button(service_test_label(locale))
                     .id("TestVolcanoButton")
+                    .padding(service_button_padding(8, 4))
                     .height(Length::Fixed(29))
                     .on_press(Message::TestVolcano)
                     .into_view(),
@@ -4084,6 +4632,7 @@ fn deepl_service_expander(state: &SettingsState) -> View<Message> {
             ),
             button(tr("settings.services.test", "Test"))
                 .id("TestDeepLButton")
+                .padding(service_button_padding(8, 4))
                 .height(Length::Fixed(29))
                 .on_press(Message::Translate)
                 .into_view(),
@@ -4153,7 +4702,7 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
         styled_text_id(
             "WindowResultsHeaderText",
             tr_locale(locale, "settings.views.title", "Window Results"),
-            TextStyle::Subtitle,
+            TextStyle::SectionTitle,
         ),
         styled_text_id(
             "WindowResultsDescriptionText",
@@ -4169,7 +4718,8 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
             vec![
                 settings_view_window_results_section(
                     tr_locale(locale, "settings.views.main_window", "Main Window"),
-                    "settings.views.main",
+                    "MainWindowSection",
+                    "MainWindowHeaderText",
                     "MainWindowReorderModeButton",
                     "main",
                     QuickTranslateSurface::Main,
@@ -4180,7 +4730,8 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
                 settings_divider("settings.views.main.divider"),
                 settings_view_window_results_section(
                     tr_locale(locale, "settings.views.mini_window", "Mini Window"),
-                    "settings.views.mini",
+                    "MiniWindowSection",
+                    "MiniWindowHeaderText",
                     "MiniWindowReorderModeButton",
                     "mini",
                     QuickTranslateSurface::Mini,
@@ -4191,7 +4742,8 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
                 settings_divider("settings.views.mini.divider"),
                 settings_view_window_results_section(
                     tr_locale(locale, "settings.views.fixed_window", "Fixed Window"),
-                    "settings.views.fixed",
+                    "FixedWindowSection",
+                    "FixedWindowHeaderText",
                     "FixedWindowReorderModeButton",
                     "fixed",
                     QuickTranslateSurface::Fixed,
@@ -4211,6 +4763,7 @@ fn settings_views_content(state: &SettingsState, locale: &str) -> View<Message> 
 fn settings_view_window_results_section(
     title: String,
     section_id: &'static str,
+    header_id: &'static str,
     reorder_button_id: &'static str,
     control_prefix: &'static str,
     surface: QuickTranslateSurface,
@@ -4220,15 +4773,23 @@ fn settings_view_window_results_section(
 ) -> View<Message> {
     column((
         row((
-            column((styled_text(title, TextStyle::BodyStrong),))
-                .id(format!("{section_id}.header_text"))
-                .width(Length::Fill),
+            column((styled_text_id_with_font_size(
+                header_id,
+                title,
+                TextStyle::BodyStrong,
+                13,
+            ),))
+            .id(format!("{section_id}.header_text"))
+            .width(Length::Fill),
             button(if reorder_mode {
                 tr_locale(locale, "settings.views.done", "Done")
             } else {
                 tr_locale(locale, "settings.views.reorder", "Reorder")
             })
             .id(reorder_button_id)
+            .height(Length::Fixed(24))
+            .padding(service_button_padding(6, 1))
+            .text_style(TextStyle::CaptionSmall)
             .on_press(Message::ToggleWindowReorderMode(surface)),
         ))
         .id(format!("{section_id}.header"))
@@ -4424,122 +4985,134 @@ fn window_service_display_label(service: &WindowServiceSetting) -> String {
 
 fn settings_hotkeys_content(state: &SettingsState, locale: &str) -> View<Message> {
     column((
-        row((
-            styled_text_id(
-                "HotkeysHeaderText",
-                tr_locale(locale, "settings.hotkeys.title", "Hotkeys"),
-                TextStyle::Subtitle,
-            ),
-            button("")
-                .id("HotkeysHelpIcon")
-                .icon(icon::help())
-                .icon_only()
-                .width(Length::Fixed(20))
-                .height(Length::Fixed(20))
-                .tooltip(tr_locale(
-                    locale,
-                    "settings.hotkeys.help",
-                    "Hotkey changes apply after restart",
-                ))
-                .a11y(A11yHint::named(tr_locale(
-                    locale,
-                    "settings.hotkeys.help",
-                    "Hotkey changes apply after restart",
-                ))),
-        ))
-        .id("settings.hotkeys.header")
-        .spacing(8)
-        .align(Alignment::Center),
-        card("").id("settings.hotkeys.card").content(
+        column((
             column((
-                hotkey_row(
-                    locale,
-                    "settings.hotkeys.show_window.label",
-                    "Show Window",
-                    "settings.hotkeys.show_window",
-                    "ShowHotkeyBox",
-                    "ShowHotkeyEnabledToggle",
-                    "Ctrl+Alt+T",
-                    HOTKEY_SHOW_MAIN,
-                    &state.show_main_hotkey,
-                ),
-                hotkey_row(
-                    locale,
-                    "settings.hotkeys.translate_selection.label",
-                    "Translate Selection",
-                    "settings.hotkeys.translate_clipboard",
-                    "TranslateHotkeyBox",
-                    "TranslateHotkeyEnabledToggle",
-                    "Ctrl+Alt+D",
-                    HOTKEY_TRANSLATE_CLIPBOARD,
-                    &state.translate_clipboard_hotkey,
-                ),
-                hotkey_row(
-                    locale,
-                    "settings.hotkeys.show_mini.label",
-                    "Show Mini Window",
-                    "settings.hotkeys.show_mini",
-                    "ShowMiniHotkeyBox",
-                    "ShowMiniHotkeyEnabledToggle",
-                    "Ctrl+Alt+M",
-                    HOTKEY_SHOW_MINI,
-                    &state.show_mini_hotkey,
-                ),
-                hotkey_row(
-                    locale,
-                    "settings.hotkeys.show_fixed.label",
-                    "Show Fixed Window",
-                    "settings.hotkeys.show_fixed",
-                    "ShowFixedHotkeyBox",
-                    "ShowFixedHotkeyEnabledToggle",
-                    "Ctrl+Alt+F",
-                    HOTKEY_SHOW_FIXED,
-                    &state.show_fixed_hotkey,
-                ),
-                hotkey_row(
-                    locale,
-                    "settings.hotkeys.ocr_translate.label",
-                    "OCR Screenshot Translate",
-                    "settings.hotkeys.ocr_translate",
-                    "OcrTranslateHotkeyBox",
-                    "OcrTranslateHotkeyEnabledToggle",
-                    "Ctrl+Alt+S",
-                    HOTKEY_OCR_TRANSLATE,
-                    &state.ocr_translate_hotkey,
-                ),
-                hotkey_row(
-                    locale,
-                    "settings.hotkeys.silent_ocr.label",
-                    "Silent OCR",
-                    "settings.hotkeys.silent_ocr",
-                    "SilentOcrHotkeyBox",
-                    "SilentOcrHotkeyEnabledToggle",
-                    "Ctrl+Alt+Shift+S",
-                    HOTKEY_SILENT_OCR,
-                    &state.silent_ocr_hotkey,
-                ),
-                styled_text_id(
-                    "HotkeysDescriptionText",
-                    tr_locale(
-                        locale,
-                        "settings.hotkeys.note",
-                        "Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).",
+                row((
+                    styled_text_id(
+                        "HotkeysHeaderText",
+                        tr_locale(locale, "settings.hotkeys.title", "Hotkeys"),
+                        TextStyle::SectionTitle,
                     ),
-                    TextStyle::Caption,
+                    button("")
+                        .id("HotkeysHelpIcon")
+                        .icon(icon::help())
+                        .icon_only()
+                        .width(Length::Fixed(20))
+                        .height(Length::Fixed(20))
+                        .padding(Edges::ZERO)
+                        .tooltip(tr_locale(
+                            locale,
+                            "settings.hotkeys.help",
+                            "Hotkey changes apply after restart",
+                        ))
+                        .a11y(A11yHint::named(tr_locale(
+                            locale,
+                            "settings.hotkeys.help",
+                            "Hotkey changes apply after restart",
+                        ))),
+                ))
+                .id("settings.hotkeys.header")
+                .spacing(8)
+                .align(Alignment::Center),
+                card("").id("settings.hotkeys.card").content(
+                    column((
+                        hotkey_row(
+                            locale,
+                            "settings.hotkeys.show_window.label",
+                            "Show Window",
+                            "settings.hotkeys.show_window",
+                            "ShowHotkeyBox",
+                            "ShowHotkeyEnabledToggle",
+                            "Ctrl+Alt+T",
+                            HOTKEY_SHOW_MAIN,
+                            &state.show_main_hotkey,
+                        ),
+                        hotkey_row(
+                            locale,
+                            "settings.hotkeys.translate_selection.label",
+                            "Translate Selection",
+                            "settings.hotkeys.translate_clipboard",
+                            "TranslateHotkeyBox",
+                            "TranslateHotkeyEnabledToggle",
+                            "Ctrl+Alt+D",
+                            HOTKEY_TRANSLATE_CLIPBOARD,
+                            &state.translate_clipboard_hotkey,
+                        ),
+                        hotkey_row(
+                            locale,
+                            "settings.hotkeys.show_mini.label",
+                            "Show Mini Window",
+                            "settings.hotkeys.show_mini",
+                            "ShowMiniHotkeyBox",
+                            "ShowMiniHotkeyEnabledToggle",
+                            "Ctrl+Alt+M",
+                            HOTKEY_SHOW_MINI,
+                            &state.show_mini_hotkey,
+                        ),
+                        hotkey_row(
+                            locale,
+                            "settings.hotkeys.show_fixed.label",
+                            "Show Fixed Window",
+                            "settings.hotkeys.show_fixed",
+                            "ShowFixedHotkeyBox",
+                            "ShowFixedHotkeyEnabledToggle",
+                            "Ctrl+Alt+F",
+                            HOTKEY_SHOW_FIXED,
+                            &state.show_fixed_hotkey,
+                        ),
+                        hotkey_row(
+                            locale,
+                            "settings.hotkeys.ocr_translate.label",
+                            "OCR Screenshot Translate",
+                            "settings.hotkeys.ocr_translate",
+                            "OcrTranslateHotkeyBox",
+                            "OcrTranslateHotkeyEnabledToggle",
+                            "Ctrl+Alt+S",
+                            HOTKEY_OCR_TRANSLATE,
+                            &state.ocr_translate_hotkey,
+                        ),
+                        hotkey_row(
+                            locale,
+                            "settings.hotkeys.silent_ocr.label",
+                            "Silent OCR",
+                            "settings.hotkeys.silent_ocr",
+                            "SilentOcrHotkeyBox",
+                            "SilentOcrHotkeyEnabledToggle",
+                            "Ctrl+Alt+Shift+S",
+                            HOTKEY_SILENT_OCR,
+                            &state.silent_ocr_hotkey,
+                        ),
+                        styled_text_id(
+                            "HotkeysDescriptionText",
+                            tr_locale(
+                                locale,
+                                "settings.hotkeys.note",
+                                "Note: Restart app to apply hotkey changes. Toggle hotkeys use the same key with Shift added (e.g., Ctrl+Alt+Shift+M).",
+                            ),
+                            TextStyle::Caption,
+                        ),
+                    ))
+                    .id("settings.hotkeys.card.content")
+                    .spacing(24)
+                    .margin(Edges {
+                        top: 4,
+                        right: 4,
+                        bottom: 4,
+                        left: 4,
+                    }),
                 ),
             ))
-            .id("settings.hotkeys.card.content")
-            .spacing(24)
-            .margin(Edges {
-                top: 4,
-                right: 4,
-                bottom: 4,
-                left: 4,
-            }),
+            .id("HotkeysSection")
+            .spacing(12)
+            .width(Length::Fill),
         ),
+        )
+        .id("HotkeysTabContent")
+        .spacing(24)
+        .width(Length::Fill),
     ))
     .id("settings.hotkeys")
-    .spacing(12)
+    .spacing(0)
     .width(Length::Fill)
     .into_view()
 }
@@ -4565,6 +5138,7 @@ fn hotkey_row(
             row((text_editor(setting.shortcut.clone())
                 .id(box_id)
                 .placeholder(placeholder)
+                .width(Length::Fixed(200))
                 .max_height(36)
                 .on_input(move |value| {
                     Message::HotkeyShortcutChanged(editor_hotkey_id.clone(), value)
@@ -4577,6 +5151,11 @@ fn hotkey_row(
         .width(Length::Fixed(200)),
         toggle_switch("", setting.enabled)
             .id(toggle_id)
+            .margin(Edges {
+                bottom: 4,
+                ..Edges::ZERO
+            })
+            .align_y(Alignment::End)
             .on_toggle(move |value| Message::ToggleHotkey(toggle_hotkey_id.clone(), value)),
     ))
     .id(row_id)
@@ -4620,6 +5199,32 @@ fn settings_form_field(
         .into_view()
 }
 
+fn settings_advanced_section(
+    section_id: &'static str,
+    header_id: &'static str,
+    title: &'static str,
+    description: Option<(&'static str, &'static str)>,
+    panel_id: &'static str,
+    panel_children: Vec<View<Message>>,
+) -> View<Message> {
+    let mut children = vec![styled_text_id(header_id, title, TextStyle::SectionTitle)];
+    if let Some((description_id, description_text)) = description {
+        children.push(styled_text_id_with_font_size(
+            description_id,
+            description_text,
+            TextStyle::Caption,
+            12,
+        ));
+    }
+    children.push(settings_panel(panel_id, panel_children));
+
+    column(children)
+        .id(section_id)
+        .spacing(12)
+        .width(Length::Fill)
+        .into_view()
+}
+
 fn settings_advanced_content(state: &SettingsState) -> View<Message> {
     let mut ocr_fields: Vec<View<Message>> = vec![
         settings_form_field(
@@ -4645,58 +5250,79 @@ fn settings_advanced_content(state: &SettingsState) -> View<Message> {
     ];
 
     if is_advanced_ocr_engine(&state.ocr_engine) {
-        ocr_fields.push(settings_form_field(
-            "settings.advanced.ocr.connection",
-            "OCR Connection",
-            Some("Advanced OCR engines use a local VLM or OpenAI-compatible API."),
+        ocr_fields.push(
             column((
-                row((
-                    text_editor(state.ocr_api_key.clone())
-                        .id("OcrApiKeyBox")
-                        .placeholder("API key")
-                        .on_input(Message::OcrApiKeyChanged),
-                    button("Reveal")
-                        .id("OcrApiKeyRevealButton")
-                        .on_press(Message::Noop),
+                column((
+                    styled_text_id("OcrApiKeyHeaderText", "API Key (Optional)", TextStyle::Body),
+                    row((
+                        text_editor(state.ocr_api_key.clone())
+                            .id("OcrApiKeyBox")
+                            .placeholder("Enter API key if required")
+                            .width(Length::Fixed(350))
+                            .password()
+                            .on_input(Message::OcrApiKeyChanged),
+                        button("")
+                            .id("OcrApiKeyRevealButton")
+                            .icon(win_fluent::IconToken::with_glyph(
+                                "reveal-secret",
+                                '\u{E890}',
+                            ))
+                            .icon_only()
+                            .width(Length::Fixed(28))
+                            .height(Length::Fixed(28))
+                            .on_press(Message::Noop),
+                    ))
+                    .id("OcrApiKeyField")
+                    .spacing(6)
+                    .align(Alignment::Center),
                 ))
-                .spacing(8),
+                .id("OcrApiKeyStack")
+                .spacing(4)
+                .align(Alignment::Start)
+                .width(Length::Fixed(350)),
                 text_editor(state.ocr_endpoint.clone())
                     .id("OcrEndpointBox")
-                    .placeholder("Endpoint")
+                    .placeholder("http://localhost:11434/api/generate")
+                    .width(Length::Fixed(350))
                     .on_input(Message::OcrEndpointChanged),
                 text_editor(state.ocr_model.clone())
                     .id("OcrModelBox")
-                    .placeholder("Model")
+                    .placeholder("glm-ocr")
+                    .width(Length::Fixed(350))
                     .on_input(Message::OcrModelChanged),
                 text_editor(state.ocr_system_prompt.clone())
                     .id("OcrSystemPromptBox")
-                    .placeholder("System prompt")
-                    .min_height(80)
+                    .placeholder("Enter system prompt for OCR...")
+                    .width(Length::Fixed(350))
+                    .min_height(100)
+                    .max_height(100)
                     .on_input(Message::OcrSystemPromptChanged),
-                row((
-                    button("Test OCR Connection")
-                        .id("TestOcrConnectionButton")
-                        .on_press(Message::TestOcrConnection),
-                    text_editor(state.ocr_test_result.clone())
-                        .id("OcrTestResultBox")
-                        .read_only(true),
-                ))
-                .spacing(8),
+                button("Test OCR Connection")
+                    .id("TestOcrConnectionButton")
+                    .on_press(Message::TestOcrConnection),
+                text_editor(state.ocr_test_result.clone())
+                    .id("OcrTestStatusBox")
+                    .placeholder("Test Result")
+                    .width(Length::Fixed(350))
+                    .min_height(32)
+                    .read_only(true),
             ))
-            .id("settings.advanced.ocr.connection")
-            .spacing(8)
+            .id("AdvancedOcrPanel")
+            .spacing(12)
+            .align(Alignment::Start)
+            .width(Length::Fill)
             .into_view(),
-        ));
+        );
     }
 
-    let mut children: Vec<View<Message>> = vec![
-        styled_text_id(
-            "AdvancedOcrHeaderText",
-            "OCR (Text Recognition) Settings",
-            TextStyle::Subtitle,
-        ),
-        settings_panel("settings.advanced.ocr.panel", ocr_fields),
-    ];
+    let mut children: Vec<View<Message>> = vec![settings_advanced_section(
+        "OcrSettingsSection",
+        "OcrSettingsHeaderText",
+        "OCR (Text Recognition) Settings",
+        None,
+        "settings.advanced.ocr.panel",
+        ocr_fields,
+    )];
 
     let mut layout_fields: Vec<View<Message>> = vec![settings_form_field(
         "settings.advanced.layout",
@@ -4710,170 +5336,249 @@ fn settings_advanced_content(state: &SettingsState) -> View<Message> {
     )];
 
     if shows_layout_model_panel(&state.layout_detection_mode) {
-        layout_fields.push(settings_form_field(
-            "settings.advanced.layout.onnx",
-            "Local ONNX Model",
-            Some("DocLayout-YOLO model used by Auto and Local ONNX detection."),
-            row((
-                button("Download Model (~75MB)")
-                    .id("DownloadLayoutModelButton")
-                    .on_press(Message::DownloadLayoutModel),
-                button("Delete")
-                    .id("DeleteLayoutModelButton")
-                    .on_press(Message::DeleteLayoutModel),
-                progress_ring()
-                    .id("LayoutModelProgressRing")
+        layout_fields.push(
+            column((
+                row((
+                    styled_text_id(
+                        "OnnxModelStatusText",
+                        state.layout_model_status.clone(),
+                        TextStyle::Body,
+                    ),
+                    progress_ring()
+                        .id("OnnxModelStatusIcon")
+                        .active(state.layout_model_status.contains("ready"))
+                        .size(14)
+                        .label("ONNX model ready"),
+                ))
+                .id("OnnxModelStatusRow")
+                .spacing(8)
+                .align(Alignment::Center),
+                row((
+                    button("Download Model (~75MB)")
+                        .id("DownloadOnnxModelButton")
+                        .on_press(Message::DownloadLayoutModel),
+                    button("Delete")
+                        .id("DeleteOnnxModelButton")
+                        .on_press(Message::DeleteLayoutModel),
+                ))
+                .id("OnnxModelButtonsRow")
+                .spacing(8),
+                progress_bar()
+                    .id("OnnxDownloadProgress")
                     .active(state.layout_model_status.contains("queued"))
-                    .size(20)
-                    .label("Layout model"),
-                styled_text_id(
-                    "LayoutModelStatusText",
+                    .height(4)
+                    .label("ONNX model download")
+                    .into_view(),
+                styled_text_id_with_font_size(
+                    "OnnxDownloadProgressText",
                     state.layout_model_status.clone(),
                     TextStyle::Caption,
+                    12,
                 ),
             ))
-            .id("settings.advanced.layout.onnx.panel")
+            .id("OnnxModelPanel")
             .spacing(8)
-            .align(Alignment::Center)
             .into_view(),
-        ));
+        );
     }
 
     if state.layout_detection_mode == "VisionLLM" {
-        layout_fields.push(settings_form_field(
-            "settings.advanced.layout.vision",
-            "Vision LLM",
-            Some("Use a vision-capable service for page layout detection."),
-            combo_box(vision_layout_service_items())
-                .id("VisionLayoutServiceCombo")
-                .selected(state.vision_layout_service.clone())
-                .width(Length::Fixed(300))
-                .on_change(Message::VisionLayoutServiceChanged),
-        ));
+        layout_fields.push(
+            column((
+                combo_box(vision_layout_service_items())
+                    .id("VisionLayoutServiceCombo")
+                    .label("Vision Service")
+                    .selected(state.vision_layout_service.clone())
+                    .width(Length::Fixed(300))
+                    .on_change(Message::VisionLayoutServiceChanged),
+                styled_text_id_with_font_size(
+                    "VisionLLMDescriptionText",
+                    "Requires a configured API key for the selected service.",
+                    TextStyle::Caption,
+                    12,
+                ),
+            ))
+            .id("VisionLLMPanel")
+            .spacing(8)
+            .into_view(),
+        );
     }
 
-    children.extend([
-        styled_text_id(
-            "AdvancedLayoutDetectionHeaderText",
-            "Layout Detection",
-            TextStyle::Subtitle,
-        ),
-        settings_panel("settings.advanced.layout.panel", layout_fields),
-    ]);
+    children.push(settings_advanced_section(
+        "LayoutDetectionSection",
+        "LayoutDetectionHeaderText",
+        "Layout Detection",
+        Some((
+            "LayoutDetectionDescriptionText",
+            "ML-based layout detection for long document translation. Improves accuracy for academic papers with figures, tables, and formulas.",
+        )),
+        "settings.advanced.layout.panel",
+        layout_fields,
+    ));
 
-    children.extend([
-        styled_text_id("AdvancedCjkFontHeaderText", "CJK Font", TextStyle::Subtitle),
-        settings_row("Noto Sans CJK")
-            .id("settings.advanced.cjk_font")
-            .description("Download Noto Sans CJK for PDF export without missing glyphs.")
-            .content(
-                row((
-                    button("Download CJK Font")
-                        .id("DownloadCjkFontButton")
-                        .on_press(Message::DownloadCjkFont),
-                    button("Delete")
-                        .id("DeleteCjkFontButton")
-                        .on_press(Message::DeleteCjkFont),
-                    progress_ring()
-                        .id("CjkFontProgressRing")
-                        .active(state.cjk_font_status.contains("queued"))
-                        .size(20)
-                        .label("CJK font"),
-                    styled_text_id(
-                        "CjkFontStatusText",
-                        state.cjk_font_status.clone(),
-                        TextStyle::Caption,
-                    ),
-                ))
-                .id("settings.advanced.cjk_font.panel")
-                .spacing(8)
-                .align(Alignment::Center),
-            )
-            .into_view(),
-        styled_text_id(
-            "AdvancedFormulaDetectionHeaderText",
-            "Formula Detection",
-            TextStyle::Subtitle,
-        ),
-        settings_row("Formula patterns")
-            .id("settings.advanced.formula")
-            .description("Empty values use the built-in formula protection rules.")
-            .content(
-                column((
-                    text_editor(state.formula_font_pattern.clone())
-                        .id("FormulaFontPatternBox")
-                        .placeholder("Font Pattern regex")
-                        .on_input(Message::FormulaFontPatternChanged),
-                    text_editor(state.formula_char_pattern.clone())
-                        .id("FormulaCharPatternBox")
-                        .placeholder("Character Pattern regex")
-                        .on_input(Message::FormulaCharPatternChanged),
-                ))
-                .id("settings.advanced.formula.patterns")
-                .spacing(8),
-            )
-            .into_view(),
-        styled_text_id(
-            "AdvancedTranslationCacheHeaderText",
-            "Translation Cache",
-            TextStyle::Subtitle,
-        ),
-        settings_row("Enable Translation Cache")
-            .id("settings.advanced.translation_cache")
-            .description("Reuse short-text and long-document translation results when possible.")
-            .content(styled_text_id(
-                "TranslationCacheStatusText",
-                state.translation_cache_status.clone(),
-                TextStyle::Caption,
+    children.push(settings_advanced_section(
+        "CjkFontSection",
+        "CjkFontHeaderText",
+        "CJK Font",
+        Some((
+            "CjkFontDescriptionText",
+            "Download CJK fonts for proper Chinese, Japanese, and Korean text rendering in PDF output.",
+        )),
+        "settings.advanced.cjk_font.panel",
+        vec![
+            row((
+                button("Download CJK Font")
+                    .id("CjkFontDownloadButton")
+                    .on_press(Message::DownloadCjkFont),
+                button("Delete")
+                    .id("CjkFontDeleteButton")
+                    .on_press(Message::DeleteCjkFont),
             ))
-            .trailing((
-                toggle_switch("Enable Translation Cache", state.translation_cache_enabled)
-                    .id("TranslationCacheToggle")
-                    .on_toggle(Message::ToggleTranslationCache),
+            .id("CjkFontButtonsRow")
+            .spacing(12)
+            .into_view(),
+            progress_bar()
+                .id("CjkFontProgressBar")
+                .active(state.cjk_font_status.contains("queued"))
+                .height(4)
+                .label("CJK font download")
+                .into_view(),
+            styled_text_id_with_font_size(
+                "CjkFontStatusText",
+                state.cjk_font_status.clone(),
+                TextStyle::Caption,
+                12,
+            ),
+            styled_text_id_with_font_size(
+                "CjkFontNoteText",
+                "Downloads Noto Sans CJK (~16MB per language). Required for CJK text in PDF overlay rendering.",
+                TextStyle::Caption,
+                12,
+            ),
+        ],
+    ));
+
+    children.push(settings_advanced_section(
+        "FormulaDetectionSection",
+        "FormulaDetectionHeaderText",
+        "Formula Detection",
+        Some((
+            "FormulaDetectionDescriptionText",
+            "Advanced formula detection uses font names and Unicode math characters to protect formulas from translation.",
+        )),
+        "settings.advanced.formula.panel",
+        vec![
+            text_editor(state.formula_font_pattern.clone())
+                .id("FormulaFontPatternBox")
+                .placeholder("e.g. CMSY|CMMI|Symbol|Mathematica")
+                .width(Length::Fixed(450))
+                .on_input(Message::FormulaFontPatternChanged),
+            text_editor(state.formula_char_pattern.clone())
+                .id("FormulaCharPatternBox")
+                .placeholder("e.g. [\\u2200-\\u22FF\\u0370-\\u03FF]")
+                .width(Length::Fixed(450))
+                .on_input(Message::FormulaCharPatternChanged),
+            styled_text_id_with_font_size(
+                "FormulaDetectionNoteText",
+                "Leave empty to use built-in patterns. Font pattern matches PDF font names (Level 2). Character pattern matches Unicode ranges (Level 3).",
+                TextStyle::Caption,
+                12,
+            ),
+        ],
+    ));
+
+    children.push(settings_advanced_section(
+        "TranslationCacheSection",
+        "TranslationCacheHeaderText",
+        "Translation Cache",
+        Some((
+            "TranslationCacheDescriptionText",
+            "Cache translated segments locally to speed up repeated translations and save API costs.",
+        )),
+        "settings.advanced.translation_cache.panel",
+        vec![
+            toggle_switch("Enable Translation Cache", state.translation_cache_enabled)
+                .id("TranslationCacheToggle")
+                .on_toggle(Message::ToggleTranslationCache),
+            row((
                 button("Clear Cache")
                     .id("ClearCacheButton")
                     .on_press(Message::ClearTranslationCache),
+                styled_text_id_with_font_size(
+                    "CacheStatusText",
+                    state.translation_cache_status.clone(),
+                    TextStyle::Caption,
+                    12,
+                ),
             ))
+            .id("TranslationCacheActionRow")
+            .spacing(12)
+            .align(Alignment::Center)
             .into_view(),
-        styled_text_id(
-            "AdvancedCustomPromptHeaderText",
-            "Custom Translation Prompt",
-            TextStyle::Subtitle,
-        ),
-        settings_row("Long document prompt")
-            .id("settings.advanced.custom_prompt")
-            .description("Additional instructions for long-document and LLM translation.")
-            .content(
-                text_editor(state.custom_translation_prompt.clone())
-                    .id("CustomTranslationPromptBox")
-                    .placeholder("Custom translation instructions")
-                    .min_height(120)
-                    .max_height(120)
-                    .on_input(Message::CustomTranslationPromptChanged),
-            )
-            .into_view(),
-        styled_text_id("AdvancedProxyHeaderText", "HTTP Proxy", TextStyle::Subtitle),
-        settings_row("Use HTTP Proxy")
-            .id("settings.advanced.proxy")
-            .description("Proxy URL must be an absolute URI when enabled.")
-            .content(
-                column((
-                    text_editor(state.proxy_url.clone())
-                        .id("ProxyUriBox")
-                        .placeholder("http://127.0.0.1:7890")
-                        .enabled(state.proxy_enabled)
-                        .on_input(Message::ProxyUrlChanged),
-                    toggle_switch("Bypass proxy for localhost", state.proxy_bypass_local)
-                        .id("ProxyBypassLocalToggle")
-                        .on_toggle(Message::ToggleProxyBypassLocal),
-                ))
-                .id("settings.advanced.proxy.panel")
-                .spacing(8),
-            )
-            .trailing((toggle_switch("Use HTTP Proxy", state.proxy_enabled)
+            styled_text_id_with_font_size(
+                "TranslationCacheNoteText",
+                "Cached translations are stored locally in SQLite. Clear cache if translations become stale.",
+                TextStyle::Caption,
+                12,
+            ),
+        ],
+    ));
+
+    children.push(settings_advanced_section(
+        "CustomPromptSection",
+        "CustomPromptHeaderText",
+        "Custom Translation Prompt",
+        Some((
+            "CustomPromptDescriptionText",
+            "Add custom instructions for LLM-based translation services (OpenAI, DeepSeek, Gemini, etc.).",
+        )),
+        "settings.advanced.custom_prompt.panel",
+        vec![
+            text_editor(state.custom_translation_prompt.clone())
+                .id("CustomPromptBox")
+                .placeholder("e.g. You are translating a medical research paper. Preserve all LaTeX commands and scientific terminology.")
+                .width(Length::Fixed(450))
+                .min_height(120)
+                .max_height(120)
+                .on_input(Message::CustomTranslationPromptChanged),
+            styled_text_id_with_font_size(
+                "CustomPromptNoteText",
+                "These instructions are appended to the system prompt for LLM services. Has no effect on non-LLM services (Google, DeepL, etc.).",
+                TextStyle::Caption,
+                12,
+            ),
+        ],
+    ));
+
+    children.push(settings_advanced_section(
+        "HttpProxySection",
+        "HttpProxyHeaderText",
+        "HTTP Proxy",
+        None,
+        "settings.advanced.proxy.panel",
+        vec![
+            toggle_switch("Use HTTP Proxy", state.proxy_enabled)
                 .id("ProxyEnabledToggle")
-                .on_toggle(Message::ToggleProxyEnabled),))
-            .into_view(),
+                .on_toggle(Message::ToggleProxyEnabled),
+            text_editor(state.proxy_url.clone())
+                .id("ProxyUriBox")
+                .placeholder("http://127.0.0.1:7890")
+                .width(Length::Fixed(300))
+                .enabled(state.proxy_enabled)
+                .on_input(Message::ProxyUrlChanged),
+            toggle_switch("Bypass proxy for localhost", state.proxy_bypass_local)
+                .id("ProxyBypassLocalToggle")
+                .on_toggle(Message::ToggleProxyBypassLocal),
+            styled_text_id_with_font_size(
+                "HttpProxyNoteText",
+                "Proxy changes take effect after app restart. Localhost bypass ensures Ollama works without proxy.",
+                TextStyle::Caption,
+                12,
+            ),
+        ],
+    ));
+
+    children.extend([
         settings_row("Shell context menu")
             .id("settings.advanced.shell")
             .description("Right-click files or desktop background to start OCR Translate.")
@@ -4895,8 +5600,8 @@ fn settings_advanced_content(state: &SettingsState) -> View<Message> {
     ]);
 
     column(children)
-        .id("settings.advanced")
-        .spacing(12)
+        .id("AdvancedTabContent")
+        .spacing(24)
         .width(Length::Fill)
         .into_view()
 }
@@ -4911,15 +5616,15 @@ fn shows_layout_model_panel(mode: &str) -> bool {
 
 fn ocr_engine_items() -> [ComboBoxItem; 3] {
     [
-        ComboBoxItem::new("WindowsNative", "Default / Windows Native"),
-        ComboBoxItem::new("Ollama", "Ollama Local VLM"),
+        ComboBoxItem::new("WindowsNative", "Default (Windows Native)"),
+        ComboBoxItem::new("Ollama", "Ollama (Local VLM)"),
         ComboBoxItem::new("CustomApi", "Custom API"),
     ]
 }
 
 fn layout_detection_items() -> [ComboBoxItem; 4] {
     [
-        ComboBoxItem::new("Auto", "Auto"),
+        ComboBoxItem::new("Auto", "Auto (Recommended)"),
         ComboBoxItem::new("OnnxLocal", "Local ONNX Model"),
         ComboBoxItem::new("VisionLLM", "Vision LLM"),
         ComboBoxItem::new("Heuristic", "Heuristic Only"),
@@ -4928,7 +5633,7 @@ fn layout_detection_items() -> [ComboBoxItem; 4] {
 
 fn vision_layout_service_items() -> [ComboBoxItem; 3] {
     [
-        ComboBoxItem::new("openai", "OpenAI"),
+        ComboBoxItem::new("openai", "OpenAI (GPT-4o)"),
         ComboBoxItem::new("gemini", "Gemini"),
         ComboBoxItem::new("custom-openai", "Custom OpenAI"),
     ]
@@ -4957,7 +5662,7 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
         })
         .collect::<Vec<_>>();
 
-    column((
+    let preferences_section = column((
         styled_text_id(
             "LanguagePreferencesHeaderText",
             tr_locale(
@@ -4965,7 +5670,7 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                 "settings.language.preferences",
                 "Language Preferences",
             ),
-            TextStyle::Subtitle,
+            TextStyle::SectionTitle,
         ),
         card("").id("settings.language.preferences.card").content(
             column((
@@ -4993,14 +5698,15 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                         .width(Length::Fixed(250))
                         .on_change(Message::SecondLanguageChanged),
                 ),
-                styled_text_id(
-                    "LanguagePreferenceRuleDescriptionText",
+                styled_text_id_with_font_size(
+                    "LanguagePreferencesDescriptionText",
                     tr_locale(
                         locale,
                         "settings.language.preference_rule.description",
                         "When detected language matches your First Language, translation target will be your Second Language, and vice versa.",
                     ),
                     TextStyle::Caption,
+                    12,
                 ),
                 column((
                     styled_text_id(
@@ -5052,39 +5758,57 @@ fn settings_language_content(state: &SettingsState, locale: &str) -> View<Messag
                 left: 4,
             }),
         ),
-        expander(tr_locale(
-            locale,
-            "settings.language.translation_languages",
-            "Available Languages",
-        ))
-        .id("settings.language.translation_languages")
-        .expanded(state.translation_languages_expanded)
-        .on_toggle(Message::ToggleTranslationLanguagesExpanded)
-        .content(
-            column((
-                styled_text_id(
-                    "AvailableLanguagesDescText",
-                    tr_locale(
-                        locale,
-                        "settings.language.available.description",
-                        "Select languages available in source/target pickers. At least 2 required.",
-                    ),
-                    TextStyle::Caption,
-                ),
-                wrap(language_rows)
-                    .id("settings.language.selected_languages")
-                    .max_columns(4)
-                    .spacing(8)
-                    .run_spacing(4),
-                spacer()
-                    .id("settings.language.selected_languages.bottom_spacer")
-                    .height(Length::Fixed(10)),
-            ))
-            .id("settings.language.selected_languages.content")
-            .spacing(8)
-            .width(Length::Fill),
-        ),
     ))
+    .id("LanguagePreferencesSection")
+    .spacing(12)
+    .width(Length::Fill)
+    .into_view();
+
+    let available_languages = expander(tr_locale(
+        locale,
+        "settings.language.translation_languages",
+        "Available Languages",
+    ))
+    .id("settings.language.translation_languages")
+    .title_id("AvailableLanguagesHeaderText")
+    .expanded(state.translation_languages_expanded)
+    .on_toggle(Message::ToggleTranslationLanguagesExpanded)
+    .content(
+        column((
+            styled_text_id(
+                "AvailableLanguagesDescText",
+                tr_locale(
+                    locale,
+                    "settings.language.available.description",
+                    "Select languages available in source/target pickers. At least 2 required.",
+                ),
+                TextStyle::Caption,
+            ),
+            wrap(language_rows)
+                .id("settings.language.selected_languages")
+                .max_columns(4)
+                .spacing(8)
+                .run_spacing(4),
+            spacer()
+                .id("settings.language.selected_languages.bottom_spacer")
+                .height(Length::Fixed(10)),
+        ))
+        .id("settings.language.selected_languages.content")
+        .spacing(8)
+        .padding_edges(Edges {
+            top: 4,
+            right: 4,
+            bottom: 4,
+            left: 4,
+        })
+        .width(Length::Fill),
+    );
+
+    column((column((preferences_section, available_languages))
+        .id("LanguageTabContent")
+        .spacing(24)
+        .width(Length::Fill)
+        .into_view(),))
     .id("settings.language")
     .spacing(12)
     .width(Length::Fill)
@@ -5109,11 +5833,11 @@ fn language_combo_field(
 }
 
 fn settings_about_content(locale: &str) -> View<Message> {
-    column((
+    column((column((column((
         sized_styled_text_id(
             "AboutHeaderText",
             tr_locale(locale, "settings.about.title", "About"),
-            TextStyle::Subtitle,
+            TextStyle::SectionTitle,
             Length::Fill,
             Length::Fixed(24),
         ),
@@ -5168,6 +5892,14 @@ fn settings_about_content(locale: &str) -> View<Message> {
     ))
     .id("settings.about")
     .spacing(12)
+    .width(Length::Fill)
+    .into_view(),))
+    .id("AboutSection")
+    .spacing(12)
+    .width(Length::Fill)
+    .into_view(),))
+    .id("AboutTabContent")
+    .spacing(24)
     .width(Length::Fill)
     .into_view()
 }

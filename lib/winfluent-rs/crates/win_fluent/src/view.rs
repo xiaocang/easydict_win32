@@ -26,6 +26,35 @@ impl<Message> View<Message> {
     pub fn into_token(self) -> ViewToken<Message> {
         self.token
     }
+
+    pub fn text_margin(mut self, margin: Edges) -> Self {
+        if let ViewToken::Text(token) = &mut self.token {
+            token.margin = margin;
+        }
+        self
+    }
+
+    pub fn text_align_x(mut self, align: Alignment) -> Self {
+        if let ViewToken::Text(token) = &mut self.token {
+            token.align_x = align;
+        }
+        self
+    }
+
+    pub fn text_align_y(mut self, align: Alignment) -> Self {
+        if let ViewToken::Text(token) = &mut self.token {
+            token.align_y = align;
+        }
+        self
+    }
+
+    pub fn text_align(mut self, x: Alignment, y: Alignment) -> Self {
+        if let ViewToken::Text(token) = &mut self.token {
+            token.align_x = x;
+            token.align_y = y;
+        }
+        self
+    }
 }
 
 pub trait IntoView<Message> {
@@ -139,6 +168,7 @@ pub enum ViewToken<Message> {
 pub enum Length {
     Shrink,
     Fill,
+    FillPortion(u16),
     Fixed(u16),
 }
 
@@ -351,8 +381,12 @@ pub struct TextToken {
     pub id: Option<String>,
     pub value: String,
     pub style: TextStyle,
+    pub font_size: Option<u16>,
     pub width: Option<Length>,
     pub height: Option<Length>,
+    pub margin: Edges,
+    pub align_x: Alignment,
+    pub align_y: Alignment,
     pub wrapping: TextWrapping,
     pub selectable: bool,
     pub a11y: A11yHint,
@@ -367,7 +401,10 @@ pub struct ButtonToken<Message> {
     pub tooltip: Option<String>,
     pub width: Option<Length>,
     pub height: Option<Length>,
+    pub padding: Option<Edges>,
     pub text_style: Option<TextStyle>,
+    pub font_size: Option<u16>,
+    pub margin: Edges,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -431,6 +468,12 @@ pub struct FlyoutButtonToken<Message> {
     pub tooltip: Option<String>,
     pub selected: Option<String>,
     pub items: Vec<FlyoutMenuItem>,
+    pub min_width: Option<u16>,
+    pub min_height: Option<u16>,
+    pub padding: Option<Edges>,
+    pub border_width: Option<u16>,
+    pub radius: Option<u16>,
+    pub align_y: Alignment,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -485,6 +528,8 @@ pub struct CardToken<Message> {
     pub icon: Option<IconToken>,
     pub kind: CardKind,
     pub content_spacing: u16,
+    pub margin: Edges,
+    pub max_height: Option<u16>,
     pub content: Option<Box<View<Message>>>,
     pub trailing: Vec<View<Message>>,
     pub a11y: A11yHint,
@@ -505,8 +550,10 @@ pub struct TextEditorToken<Message> {
     pub width: Option<Length>,
     pub min_height: Option<u16>,
     pub max_height: Option<u16>,
+    pub padding: Option<Edges>,
     pub text_style: TextStyle,
     pub chrome: TextEditorChrome,
+    pub secure: bool,
     pub read_only: bool,
     pub state: ControlState,
     pub action: Action<Message>,
@@ -533,6 +580,8 @@ pub struct ToggleSwitchToken<Message> {
     pub checked: bool,
     pub width: Option<Length>,
     pub height: Option<Length>,
+    pub margin: Edges,
+    pub align_y: Alignment,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -657,10 +706,12 @@ pub struct LayoutToken<Message> {
     pub kind: LayoutKind,
     pub children: Vec<View<Message>>,
     pub padding: u16,
+    pub padding_edges: Option<Edges>,
     pub spacing: u16,
     pub width: Length,
     pub height: Length,
     pub max_width: Option<u16>,
+    pub max_height: Option<u16>,
     pub center_x: bool,
     pub margin: Edges,
     pub align: Alignment,
@@ -753,7 +804,26 @@ pub struct AdaptiveSwitchToken<Message> {
     pub breakpoint_width: u16,
     pub wide: Box<View<Message>>,
     pub narrow: Box<View<Message>>,
+    /// When set, schema/a11y/diff resolve to the single branch that is actually
+    /// painted at this layout width (`width >= breakpoint_width` => `wide`),
+    /// matching the iced `responsive` render. When `None`, both branches are
+    /// reported (width-agnostic, back-compat default).
+    pub resolved_width: Option<f32>,
     pub a11y: A11yHint,
+}
+
+impl<Message> AdaptiveSwitchToken<Message> {
+    /// Returns the branch that is painted at `resolved_width`, or `None` when no
+    /// resolution width is set (caller should report both branches).
+    pub fn resolved_branch(&self) -> Option<&View<Message>> {
+        self.resolved_width.map(|width| {
+            if width >= f32::from(self.breakpoint_width) {
+                self.wide.as_ref()
+            } else {
+                self.narrow.as_ref()
+            }
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -778,6 +848,7 @@ pub struct ScrollViewToken<Message> {
 pub struct ExpanderToken<Message> {
     pub id: Option<String>,
     pub title: String,
+    pub title_id: Option<String>,
     pub description: Option<String>,
     pub icon: Option<IconToken>,
     pub expanded: bool,
@@ -799,6 +870,9 @@ pub struct SettingsRowToken<Message> {
     pub description_id: Option<String>,
     pub icon: Option<IconToken>,
     pub kind: SettingsRowKind,
+    pub margin: Edges,
+    pub align_x: Alignment,
+    pub content_align_x: Alignment,
     pub content: Option<Box<View<Message>>>,
     pub trailing: Vec<View<Message>>,
     pub a11y: A11yHint,
@@ -1054,6 +1128,9 @@ pub struct ResultListToken<Message> {
     pub retry_action: Action<Message>,
     pub toggle_action: Action<Message>,
     pub virtualized: bool,
+    pub max_height: Option<u16>,
+    pub padding: Option<Edges>,
+    pub border_width: Option<u16>,
     pub collapse_transition: CollapseTransition,
     pub a11y: A11yHint,
 }
@@ -1261,8 +1338,12 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
         id: None,
         value: value.into(),
         style: TextStyle::Body,
+        font_size: None,
         width: None,
         height: None,
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        align_y: Alignment::Start,
         wrapping: TextWrapping::Word,
         selectable: false,
         a11y: A11yHint::default(),
@@ -1285,6 +1366,12 @@ pub fn flyout_button<Message>(label: impl Into<String>) -> FlyoutButtonBuilder<M
         tooltip: None,
         selected: None,
         items: Vec::new(),
+        min_width: None,
+        min_height: None,
+        padding: None,
+        border_width: None,
+        radius: None,
+        align_y: Alignment::Start,
         state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
@@ -1368,6 +1455,8 @@ pub fn card<Message>(title: impl Into<String>) -> CardBuilder<Message> {
         icon: None,
         kind: CardKind::Surface,
         content_spacing: 12,
+        margin: Edges::ZERO,
+        max_height: None,
         content: None,
         trailing: Vec::new(),
         a11y: A11yHint::default(),
@@ -1391,8 +1480,10 @@ pub fn text_editor<Message>(text: impl Into<String>) -> TextEditorBuilder<Messag
         width: None,
         min_height: None,
         max_height: None,
+        padding: None,
         text_style: TextStyle::Body,
         chrome: TextEditorChrome::Standard,
+        secure: false,
         read_only: false,
         state: ControlState::default(),
         action: Action::None,
@@ -1413,6 +1504,8 @@ pub fn toggle_switch<Message>(
         checked,
         width: None,
         height: None,
+        margin: Edges::ZERO,
+        align_y: Alignment::Start,
         state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
@@ -1564,6 +1657,7 @@ where
         breakpoint_width,
         wide: Box::new(wide.into_view()),
         narrow: Box::new(narrow.into_view()),
+        resolved_width: None,
         a11y: A11yHint::default(),
     }
 }
@@ -1632,6 +1726,7 @@ pub fn expander<Message>(title: impl Into<String>) -> ExpanderBuilder<Message> {
     ExpanderBuilder {
         id: None,
         title: title.into(),
+        title_id: None,
         description: None,
         icon: None,
         expanded: false,
@@ -1654,6 +1749,9 @@ pub fn settings_row<Message>(title: impl Into<String>) -> SettingsRowBuilder<Mes
         description_id: None,
         icon: None,
         kind: SettingsRowKind::Normal,
+        margin: Edges::ZERO,
+        align_x: Alignment::Start,
+        content_align_x: Alignment::Start,
         content: None,
         trailing: Vec::new(),
         a11y: A11yHint::default(),
@@ -1686,6 +1784,9 @@ pub fn result_list<Message>(
         retry_action: Action::None,
         toggle_action: Action::None,
         virtualized: true,
+        max_height: None,
+        padding: None,
+        border_width: None,
         collapse_transition: CollapseTransition::default(),
         a11y: A11yHint::default(),
     }
@@ -1831,7 +1932,10 @@ pub struct ButtonBuilder<Message> {
     tooltip: Option<String>,
     width: Option<Length>,
     height: Option<Length>,
+    padding: Option<Edges>,
     text_style: Option<TextStyle>,
+    font_size: Option<u16>,
+    margin: Edges,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -1847,7 +1951,10 @@ impl<Message> ButtonBuilder<Message> {
             tooltip: None,
             width: None,
             height: None,
+            padding: None,
             text_style: None,
+            font_size: None,
+            margin: Edges::ZERO,
             state: ControlState::default(),
             action: Action::None,
             a11y: A11yHint::default(),
@@ -1879,8 +1986,23 @@ impl<Message> ButtonBuilder<Message> {
         self
     }
 
+    pub fn padding(mut self, value: Edges) -> Self {
+        self.padding = Some(value);
+        self
+    }
+
     pub fn text_style(mut self, style: TextStyle) -> Self {
         self.text_style = Some(style);
+        self
+    }
+
+    pub fn font_size(mut self, size: u16) -> Self {
+        self.font_size = Some(size);
+        self
+    }
+
+    pub fn margin(mut self, value: Edges) -> Self {
+        self.margin = value;
         self
     }
 
@@ -1982,7 +2104,10 @@ impl<Message> IntoView<Message> for ButtonBuilder<Message> {
             tooltip: self.tooltip,
             width: self.width,
             height: self.height,
+            padding: self.padding,
             text_style: self.text_style,
+            font_size: self.font_size,
+            margin: self.margin,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -1998,6 +2123,12 @@ pub struct FlyoutButtonBuilder<Message> {
     tooltip: Option<String>,
     selected: Option<String>,
     items: Vec<FlyoutMenuItem>,
+    min_width: Option<u16>,
+    min_height: Option<u16>,
+    padding: Option<Edges>,
+    border_width: Option<u16>,
+    radius: Option<u16>,
+    align_y: Alignment,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -2031,6 +2162,36 @@ impl<Message> FlyoutButtonBuilder<Message> {
 
     pub fn item(mut self, item: FlyoutMenuItem) -> Self {
         self.items.push(item);
+        self
+    }
+
+    pub fn min_width(mut self, value: u16) -> Self {
+        self.min_width = Some(value);
+        self
+    }
+
+    pub fn min_height(mut self, value: u16) -> Self {
+        self.min_height = Some(value);
+        self
+    }
+
+    pub fn padding(mut self, value: Edges) -> Self {
+        self.padding = Some(value);
+        self
+    }
+
+    pub fn border_width(mut self, value: u16) -> Self {
+        self.border_width = Some(value);
+        self
+    }
+
+    pub fn radius(mut self, value: u16) -> Self {
+        self.radius = Some(value);
+        self
+    }
+
+    pub fn align_y(mut self, align_y: Alignment) -> Self {
+        self.align_y = align_y;
         self
     }
 
@@ -2087,6 +2248,12 @@ impl<Message> IntoView<Message> for FlyoutButtonBuilder<Message> {
             tooltip: self.tooltip,
             selected: self.selected,
             items: self.items,
+            min_width: self.min_width,
+            min_height: self.min_height,
+            padding: self.padding,
+            border_width: self.border_width,
+            radius: self.radius,
+            align_y: self.align_y,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -2329,6 +2496,8 @@ pub struct CardBuilder<Message> {
     icon: Option<IconToken>,
     kind: CardKind,
     content_spacing: u16,
+    margin: Edges,
+    max_height: Option<u16>,
     content: Option<Box<View<Message>>>,
     trailing: Vec<View<Message>>,
     a11y: A11yHint,
@@ -2360,6 +2529,16 @@ impl<Message> CardBuilder<Message> {
         self
     }
 
+    pub fn margin(mut self, value: Edges) -> Self {
+        self.margin = value;
+        self
+    }
+
+    pub fn max_height(mut self, value: u16) -> Self {
+        self.max_height = Some(value);
+        self
+    }
+
     pub fn content(mut self, content: impl IntoView<Message>) -> Self {
         self.content = Some(Box::new(content.into_view()));
         self
@@ -2385,6 +2564,8 @@ impl<Message> IntoView<Message> for CardBuilder<Message> {
             icon: self.icon,
             kind: self.kind,
             content_spacing: self.content_spacing,
+            margin: self.margin,
+            max_height: self.max_height,
             content: self.content,
             trailing: self.trailing,
             a11y: self.a11y,
@@ -2435,8 +2616,10 @@ pub struct TextEditorBuilder<Message> {
     width: Option<Length>,
     min_height: Option<u16>,
     max_height: Option<u16>,
+    padding: Option<Edges>,
     text_style: TextStyle,
     chrome: TextEditorChrome,
+    secure: bool,
     read_only: bool,
     state: ControlState,
     action: Action<Message>,
@@ -2471,6 +2654,11 @@ impl<Message> TextEditorBuilder<Message> {
         self
     }
 
+    pub fn padding(mut self, value: Edges) -> Self {
+        self.padding = Some(value);
+        self
+    }
+
     pub fn text_style(mut self, style: TextStyle) -> Self {
         self.text_style = style;
         self
@@ -2484,6 +2672,15 @@ impl<Message> TextEditorBuilder<Message> {
     pub fn frameless(mut self) -> Self {
         self.chrome = TextEditorChrome::Frameless;
         self
+    }
+
+    pub fn secure(mut self, secure: bool) -> Self {
+        self.secure = secure;
+        self
+    }
+
+    pub fn password(self) -> Self {
+        self.secure(true)
     }
 
     pub fn read_only(mut self, read_only: bool) -> Self {
@@ -2575,8 +2772,10 @@ impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
             width: self.width,
             min_height: self.min_height,
             max_height: self.max_height,
+            padding: self.padding,
             text_style: self.text_style,
             chrome: self.chrome,
+            secure: self.secure,
             read_only: self.read_only,
             state: self.state,
             action: self.action,
@@ -2595,6 +2794,8 @@ pub struct ToggleSwitchBuilder<Message> {
     checked: bool,
     width: Option<Length>,
     height: Option<Length>,
+    margin: Edges,
+    align_y: Alignment,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -2618,6 +2819,16 @@ impl<Message> ToggleSwitchBuilder<Message> {
 
     pub fn height(mut self, height: Length) -> Self {
         self.height = Some(height);
+        self
+    }
+
+    pub fn margin(mut self, margin: Edges) -> Self {
+        self.margin = margin;
+        self
+    }
+
+    pub fn align_y(mut self, align_y: Alignment) -> Self {
+        self.align_y = align_y;
         self
     }
 
@@ -2674,6 +2885,8 @@ impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
             checked: self.checked,
             width: self.width,
             height: self.height,
+            margin: self.margin,
+            align_y: self.align_y,
             state: self.state,
             action: self.action,
             a11y: self.a11y,
@@ -3138,10 +3351,12 @@ pub struct LayoutBuilder<Message> {
     kind: LayoutKind,
     children: Vec<View<Message>>,
     padding: u16,
+    padding_edges: Option<Edges>,
     spacing: u16,
     width: Length,
     height: Length,
     max_width: Option<u16>,
+    max_height: Option<u16>,
     center_x: bool,
     margin: Edges,
     align: Alignment,
@@ -3157,10 +3372,12 @@ impl<Message> LayoutBuilder<Message> {
             kind,
             children,
             padding: 0,
+            padding_edges: None,
             spacing: 0,
             width: Length::Shrink,
             height: Length::Shrink,
             max_width: None,
+            max_height: None,
             center_x: false,
             margin: Edges::ZERO,
             align: Alignment::Start,
@@ -3177,6 +3394,12 @@ impl<Message> LayoutBuilder<Message> {
 
     pub fn padding(mut self, value: u16) -> Self {
         self.padding = value;
+        self.padding_edges = None;
+        self
+    }
+
+    pub fn padding_edges(mut self, value: Edges) -> Self {
+        self.padding_edges = Some(value);
         self
     }
 
@@ -3208,6 +3431,12 @@ impl<Message> LayoutBuilder<Message> {
     /// Caps the layout's width, filling available space up to `value` dips.
     pub fn max_width(mut self, value: u16) -> Self {
         self.max_width = Some(value);
+        self
+    }
+
+    /// Caps the layout's height to `value` dips.
+    pub fn max_height(mut self, value: u16) -> Self {
+        self.max_height = Some(value);
         self
     }
 
@@ -3244,6 +3473,8 @@ impl<Message> LayoutBuilder<Message> {
                 self.spacing = value;
             } else if let Some(value) = class.strip_prefix("max-w-").and_then(utility_scale) {
                 self.max_width = Some(value);
+            } else if let Some(value) = class.strip_prefix("max-h-").and_then(utility_scale) {
+                self.max_height = Some(value);
             } else {
                 match class {
                     "w-full" | "w-fill" => self.width = Length::Fill,
@@ -3315,10 +3546,12 @@ impl<Message> IntoView<Message> for LayoutBuilder<Message> {
             kind: self.kind,
             children: self.children,
             padding: self.padding,
+            padding_edges: self.padding_edges,
             spacing: self.spacing,
             width: self.width,
             height: self.height,
             max_width: self.max_width,
+            max_height: self.max_height,
             center_x: self.center_x,
             margin: self.margin,
             align: self.align,
@@ -3430,6 +3663,7 @@ pub struct AdaptiveSwitchBuilder<Message> {
     breakpoint_width: u16,
     wide: Box<View<Message>>,
     narrow: Box<View<Message>>,
+    resolved_width: Option<f32>,
     a11y: A11yHint,
 }
 
@@ -3441,6 +3675,13 @@ impl<Message> AdaptiveSwitchBuilder<Message> {
 
     pub fn breakpoint_width(mut self, breakpoint_width: u16) -> Self {
         self.breakpoint_width = breakpoint_width;
+        self
+    }
+
+    /// Pin the layout width used by schema/a11y/diff to resolve to a single
+    /// painted branch (matches the iced `responsive` rule `width >= breakpoint`).
+    pub fn resolved_width(mut self, resolved_width: f32) -> Self {
+        self.resolved_width = Some(resolved_width);
         self
     }
 
@@ -3457,6 +3698,7 @@ impl<Message> IntoView<Message> for AdaptiveSwitchBuilder<Message> {
             breakpoint_width: self.breakpoint_width,
             wide: self.wide,
             narrow: self.narrow,
+            resolved_width: self.resolved_width,
             a11y: self.a11y,
         }))
     }
@@ -3801,6 +4043,9 @@ pub struct SettingsRowBuilder<Message> {
     description_id: Option<String>,
     icon: Option<IconToken>,
     kind: SettingsRowKind,
+    margin: Edges,
+    align_x: Alignment,
+    content_align_x: Alignment,
     content: Option<Box<View<Message>>>,
     trailing: Vec<View<Message>>,
     a11y: A11yHint,
@@ -3810,6 +4055,7 @@ pub struct SettingsRowBuilder<Message> {
 pub struct ExpanderBuilder<Message> {
     id: Option<String>,
     title: String,
+    title_id: Option<String>,
     description: Option<String>,
     icon: Option<IconToken>,
     expanded: bool,
@@ -3825,6 +4071,11 @@ pub struct ExpanderBuilder<Message> {
 impl<Message> ExpanderBuilder<Message> {
     pub fn id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(id.into());
+        self
+    }
+
+    pub fn title_id(mut self, id: impl Into<String>) -> Self {
+        self.title_id = Some(id.into());
         self
     }
 
@@ -3894,6 +4145,7 @@ impl<Message> IntoView<Message> for ExpanderBuilder<Message> {
         View::new(ViewToken::Expander(ExpanderToken {
             id: self.id,
             title: self.title,
+            title_id: self.title_id,
             description: self.description,
             icon: self.icon,
             expanded: self.expanded,
@@ -3939,6 +4191,21 @@ impl<Message> SettingsRowBuilder<Message> {
         self
     }
 
+    pub fn margin(mut self, margin: Edges) -> Self {
+        self.margin = margin;
+        self
+    }
+
+    pub fn align_x(mut self, align_x: Alignment) -> Self {
+        self.align_x = align_x;
+        self
+    }
+
+    pub fn content_align_x(mut self, align_x: Alignment) -> Self {
+        self.content_align_x = align_x;
+        self
+    }
+
     pub fn content(mut self, content: impl IntoView<Message>) -> Self {
         self.content = Some(Box::new(content.into_view()));
         self
@@ -3960,6 +4227,9 @@ impl<Message> IntoView<Message> for SettingsRowBuilder<Message> {
             description_id: self.description_id,
             icon: self.icon,
             kind: self.kind,
+            margin: self.margin,
+            align_x: self.align_x,
+            content_align_x: self.content_align_x,
             content: self.content,
             trailing: self.trailing,
             a11y: self.a11y,
@@ -4077,6 +4347,9 @@ pub struct ResultListBuilder<Message> {
     retry_action: Action<Message>,
     toggle_action: Action<Message>,
     virtualized: bool,
+    max_height: Option<u16>,
+    padding: Option<Edges>,
+    border_width: Option<u16>,
     collapse_transition: CollapseTransition,
     a11y: A11yHint,
 }
@@ -4146,6 +4419,21 @@ impl<Message> ResultListBuilder<Message> {
         self
     }
 
+    pub fn max_height(mut self, value: u16) -> Self {
+        self.max_height = Some(value);
+        self
+    }
+
+    pub fn padding(mut self, value: Edges) -> Self {
+        self.padding = Some(value);
+        self
+    }
+
+    pub fn border_width(mut self, value: u16) -> Self {
+        self.border_width = Some(value);
+        self
+    }
+
     pub fn collapse_transition(mut self, transition: CollapseTransition) -> Self {
         self.collapse_transition = transition;
         self
@@ -4168,6 +4456,9 @@ impl<Message> IntoView<Message> for ResultListBuilder<Message> {
             retry_action: self.retry_action,
             toggle_action: self.toggle_action,
             virtualized: self.virtualized,
+            max_height: self.max_height,
+            padding: self.padding,
+            border_width: self.border_width,
             collapse_transition: self.collapse_transition,
             a11y: self.a11y,
         }))

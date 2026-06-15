@@ -48,14 +48,14 @@ use win_fluent::subscription::{
 use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
-    AdaptiveSwitchToken, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind, CardToken,
-    CheckBoxToken, CollapseTransition, ComboBoxItem, ExpanderToken, FlyoutButtonToken,
-    LayoutDistribution, LayoutKind, LayoutToken, Length, OverlayToken, PointerPosition,
-    PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken, ProgressRingToken,
-    ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy, SettingsRowToken,
-    SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey, TextEditorKeyBinding,
-    TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken, TextWrapping, TitleBarToken,
-    View, ViewToken, WrapToken,
+    AdaptiveSwitchToken, Alignment, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind,
+    CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem, Edges, ExpanderToken,
+    FlyoutButtonToken, LayoutDistribution, LayoutKind, LayoutToken, Length, OverlayToken,
+    PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken,
+    ProgressRingToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy,
+    SettingsRowToken, SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey,
+    TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken,
+    TextWrapping, TitleBarToken, View, ViewToken, WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -1562,6 +1562,7 @@ where
                 kind,
                 token.icon.as_ref(),
                 token.text_style,
+                token.font_size,
                 visual,
                 state.selected,
             ))
@@ -1573,35 +1574,51 @@ where
             control = match kind {
                 ButtonKind::Icon => control
                     .width(IcedLength::Fixed(visual.icon_button_size))
-                    .height(IcedLength::Fixed(visual.icon_button_size))
-                    .padding(0),
+                    .height(IcedLength::Fixed(visual.icon_button_size)),
                 ButtonKind::ResultAction => control
                     .width(IcedLength::Fixed(visual.result_action_button_size))
-                    .height(IcedLength::Fixed(visual.result_action_button_size))
-                    .padding(0),
+                    .height(IcedLength::Fixed(visual.result_action_button_size)),
                 ButtonKind::FloatingAction => control
                     .width(IcedLength::Fixed(visual.floating_action_button_size))
-                    .height(IcedLength::Fixed(visual.floating_action_button_size))
-                    .padding(0),
+                    .height(IcedLength::Fixed(visual.floating_action_button_size)),
                 ButtonKind::PrimaryRound => control
                     .width(IcedLength::Fixed(visual.primary_icon_button_size()))
-                    .height(IcedLength::Fixed(visual.primary_icon_button_size()))
-                    .padding(0),
+                    .height(IcedLength::Fixed(visual.primary_icon_button_size())),
                 ButtonKind::Primary if token.icon.is_some() && token.label.trim().is_empty() => {
                     control
                         .width(IcedLength::Fixed(visual.primary_icon_button_size()))
                         .height(IcedLength::Fixed(visual.primary_icon_button_size()))
-                        .padding(0)
                 }
-                ButtonKind::Primary => control.padding([8, 14]),
-                ButtonKind::Chip => control.padding([7, 12]),
                 ButtonKind::Tile => control
                     .width(IcedLength::Fixed(86.0))
-                    .height(IcedLength::Fixed(76.0))
-                    .padding([8, 10]),
-                ButtonKind::Subtle => control.padding([6, 10]),
-                ButtonKind::Link => control.padding(0),
-                ButtonKind::Standard => control.padding([6, 12]),
+                    .height(IcedLength::Fixed(76.0)),
+                ButtonKind::Primary
+                | ButtonKind::Chip
+                | ButtonKind::Subtle
+                | ButtonKind::Link
+                | ButtonKind::Standard => control,
+            };
+
+            control = if let Some(padding) = token.padding {
+                control.padding(layout_padding(0, Some(padding)))
+            } else {
+                match kind {
+                    ButtonKind::Icon
+                    | ButtonKind::ResultAction
+                    | ButtonKind::FloatingAction
+                    | ButtonKind::PrimaryRound => control.padding(0),
+                    ButtonKind::Primary
+                        if token.icon.is_some() && token.label.trim().is_empty() =>
+                    {
+                        control.padding(0)
+                    }
+                    ButtonKind::Primary => control.padding([8, 14]),
+                    ButtonKind::Chip => control.padding([7, 12]),
+                    ButtonKind::Tile => control.padding([8, 10]),
+                    ButtonKind::Subtle => control.padding([6, 10]),
+                    ButtonKind::Link => control.padding(0),
+                    ButtonKind::Standard => control.padding([6, 12]),
+                }
             };
 
             if let Some(width) = token.width {
@@ -1617,7 +1634,13 @@ where
                 }
             }
 
-            control.into()
+            let mut element: IcedElement<'a, Message> = control.into();
+            if !token.margin.is_zero() {
+                element = iced_container(element)
+                    .padding(layout_padding(0, Some(token.margin)))
+                    .into();
+            }
+            element
         }
         ViewToken::FlyoutButton(token) => compile_flyout_button(token, visual),
         ViewToken::StatusBadge(token) => compile_status_badge(token, visual),
@@ -1669,7 +1692,7 @@ where
                 control = frame.into();
             }
 
-            if let Some(header) = token
+            let mut element: IcedElement<'a, Message> = if let Some(header) = token
                 .header
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -1679,7 +1702,26 @@ where
                     .into()
             } else {
                 control
+            };
+
+            if !token.margin.is_zero() || token.align_y != Alignment::Start {
+                let mut frame = iced_container(element);
+                if !token.margin.is_zero() {
+                    let margin = token.margin;
+                    frame = frame.padding(IcedPadding {
+                        top: f32::from(margin.top),
+                        right: f32::from(margin.right),
+                        bottom: f32::from(margin.bottom),
+                        left: f32::from(margin.left),
+                    });
+                }
+                if token.align_y != Alignment::Start {
+                    frame = frame.align_y(vertical_alignment(token.align_y));
+                }
+                element = frame.into();
             }
+
+            element
         }
         ViewToken::Slider(token) => compile_slider(token, visual),
         ViewToken::ComboBox(token) => compile_combo_box(
@@ -1799,14 +1841,14 @@ where
             let children = distribute_children(children, token.kind, token.distribution);
             let content: IcedElement<'a, Message> = match token.kind {
                 LayoutKind::Column => iced_column(children)
-                    .padding(token.padding)
+                    .padding(layout_padding(token.padding, token.padding_edges))
                     .spacing(u32::from(token.spacing))
                     .width(iced_length(token.width))
                     .height(iced_length(token.height))
                     .align_x(horizontal_alignment(token.align))
                     .into(),
                 LayoutKind::Row => iced_row(children)
-                    .padding(token.padding)
+                    .padding(layout_padding(token.padding, token.padding_edges))
                     .spacing(u32::from(token.spacing))
                     .width(iced_length(token.width))
                     .height(iced_length(token.height))
@@ -2026,11 +2068,23 @@ where
 {
     let text = iced_text(token.value.clone())
         .font(text_font_for_value(token.style, &token.value))
-        .size(text_size(token.style, visual))
+        .size(
+            token
+                .font_size
+                .map(f32::from)
+                .unwrap_or_else(|| text_size(token.style, visual)),
+        )
         .color(text_color(token.style, visual))
         .wrapping(iced_text_wrapping(token.wrapping));
 
-    if token.width.is_none() && token.height.is_none() {
+    let has_custom_alignment = token.align_x != win_fluent::view::Alignment::Start
+        || token.align_y != win_fluent::view::Alignment::Start;
+    if token.width.is_none()
+        && token.height.is_none()
+        && token.margin.is_zero()
+        && !has_custom_alignment
+        && !is_private_use_icon_text(&token.value)
+    {
         return text.into();
     }
 
@@ -2040,6 +2094,20 @@ where
     }
     if let Some(height) = token.height {
         container = container.height(iced_length(height));
+    }
+    if !token.margin.is_zero() {
+        let margin = token.margin;
+        container = container.padding(iced::Padding {
+            top: f32::from(margin.top),
+            right: f32::from(margin.right),
+            bottom: f32::from(margin.bottom),
+            left: f32::from(margin.left),
+        });
+    }
+    if has_custom_alignment {
+        container = container
+            .align_x(horizontal_alignment(token.align_x))
+            .align_y(vertical_alignment(token.align_y));
     }
     if is_private_use_icon_text(&token.value) {
         container = container
@@ -2588,32 +2656,58 @@ where
             IcedLength::Shrink
         };
 
-        return iced_pick_list(choices, Option::<ComboChoice>::None, move |choice| {
+        let padding = token
+            .padding
+            .map(edges_padding)
+            .unwrap_or_else(|| IcedPadding::from([2.0, 4.0]));
+        let border_width = token.border_width.map(f32::from).unwrap_or(0.0);
+        let radius = token.radius.map(f32::from).unwrap_or(visual.radius_control);
+
+        let pick_list = iced_pick_list(choices, Option::<ComboChoice>::None, move |choice| {
             action
                 .input_text(choice.id)
                 .expect("flyout selection action must produce a message")
         })
         .placeholder(token.label.clone())
         .width(trigger_width)
-        .padding([2, 4])
+        .padding(padding)
         .text_size(text_size(TextStyle::Body, visual))
-        .style(move |_, status| flyout_pick_list_style(visual, status))
-        .menu_style(move |_| menu_style(visual))
-        .into();
+        .style(move |_, status| flyout_pick_list_style(visual, status, border_width, radius))
+        .menu_style(move |_| menu_style(visual));
+
+        return if token.align_y != Alignment::Start {
+            iced_container(pick_list)
+                .align_y(vertical_alignment(token.align_y))
+                .into()
+        } else {
+            pick_list.into()
+        };
     }
 
     let kind = ButtonKind::Subtle;
-    iced_button(button_content(
+    let padding = token
+        .padding
+        .map(edges_padding)
+        .unwrap_or_else(|| IcedPadding::from([4.0, 8.0]));
+    let control = iced_button(button_content(
         &token.label,
         kind,
         token.icon.as_ref(),
         None,
+        None,
         visual,
         false,
     ))
-    .padding([4, 8])
-    .style(move |_, status| button_style(visual, kind, status))
-    .into()
+    .padding(padding)
+    .style(move |_, status| button_style(visual, kind, status));
+
+    if token.align_y != Alignment::Start {
+        iced_container(control)
+            .align_y(vertical_alignment(token.align_y))
+            .into()
+    } else {
+        control.into()
+    }
 }
 
 fn compile_progress_ring<'a, Message>(
@@ -3359,6 +3453,7 @@ where
 
 fn layout_style_needs_container(style: &FluentStyle) -> bool {
     style.has("surface-card")
+        || style.has("input-surface")
         || style.has("capture-tip")
         || style.has("info-bar")
         || style.has_prefix("bg-")
@@ -3401,19 +3496,26 @@ where
         element = iced_container(element).center_x(IcedLength::Fill).into();
     }
 
+    if let Some(max) = token.max_height {
+        element = iced_container(element).max_height(f32::from(max)).into();
+    }
+
     if !token.margin.is_zero() {
-        let margin = token.margin;
         element = iced_container(element)
-            .padding(IcedPadding {
-                top: f32::from(margin.top),
-                right: f32::from(margin.right),
-                bottom: f32::from(margin.bottom),
-                left: f32::from(margin.left),
-            })
+            .padding(iced_padding_from_edges(token.margin))
             .into();
     }
 
     element
+}
+
+fn iced_padding_from_edges(edges: Edges) -> IcedPadding {
+    IcedPadding {
+        top: f32::from(edges.top),
+        right: f32::from(edges.right),
+        bottom: f32::from(edges.bottom),
+        left: f32::from(edges.left),
+    }
 }
 
 fn compile_card<'a, Message, Provider>(
@@ -3430,9 +3532,14 @@ where
         && token.icon.is_none()
         && token.trailing.is_empty();
     let card_padding = if token.kind == CardKind::FloatingInput {
-        10.0
+        iced::Padding {
+            top: 10.0,
+            right: 12.0,
+            bottom: 10.0,
+            left: 12.0,
+        }
     } else {
-        visual.card_padding
+        iced::Padding::from(visual.card_padding)
     };
     let mut layout = iced_column(Vec::new())
         .padding(card_padding)
@@ -3441,8 +3548,12 @@ where
 
     if !is_headerless_card {
         let title = label_with_icon(&token.title, token.icon.as_ref(), visual);
-        let mut text_column =
-            iced_column(vec![compile_text(&title, TextStyle::BodyStrong, visual)]).spacing(4);
+        let mut text_column = iced_column(vec![iced_text(title.clone())
+            .font(text_font_for_value(TextStyle::BodyStrong, &title))
+            .size(13.0)
+            .color(visual.text_secondary)
+            .into()])
+        .spacing(4);
 
         if let Some(description) = &token.description {
             text_column = text_column.push(compile_text(description, TextStyle::Caption, visual));
@@ -3476,13 +3587,20 @@ where
         ));
     }
 
-    iced_container(layout)
-        .width(IcedLength::Fill)
-        .style({
-            let kind = token.kind;
-            move |_| card_container_style(visual, kind)
-        })
-        .into()
+    let mut container = iced_container(layout).width(IcedLength::Fill).style({
+        let kind = token.kind;
+        move |_| card_container_style(visual, kind)
+    });
+    if let Some(max_height) = token.max_height {
+        container = container.max_height(f32::from(max_height));
+    }
+    let mut element: IcedElement<'a, Message> = container.into();
+    if !token.margin.is_zero() {
+        element = iced_container(element)
+            .padding(iced_padding_from_edges(token.margin))
+            .into();
+    }
+    element
 }
 
 fn compile_text_editor<'a, Message, Provider>(
@@ -3495,9 +3613,10 @@ where
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
     let placeholder = token.placeholder.as_deref().unwrap_or_default();
-    let use_single_line_input = token.min_height.is_none()
-        && token.max_height.is_some_and(|height| height <= 40)
-        && token.key_bindings.is_empty();
+    let use_single_line_input = token.secure
+        || token.min_height.is_none()
+            && token.max_height.is_some_and(|height| height <= 40)
+            && token.key_bindings.is_empty();
 
     if !use_single_line_input {
         if let Some(content) = token.id.as_deref().and_then(provider) {
@@ -3519,6 +3638,10 @@ where
 
             if let Some(id) = &token.id {
                 control = control.id(id.clone());
+            }
+
+            if let Some(padding) = token.padding {
+                control = control.padding(edges_padding(padding));
             }
 
             if let Some(Length::Fixed(width)) = token.width {
@@ -3565,6 +3688,7 @@ where
     let mut control = iced_text_input(placeholder, &token.text)
         .font(text_font(token.text_style))
         .size(text_size(token.text_style, visual))
+        .secure(token.secure)
         .style({
             let chrome = token.chrome;
             let state = token.state.clone();
@@ -3586,6 +3710,10 @@ where
 
     if let Some(id) = &token.id {
         control = control.id(id.clone());
+    }
+
+    if let Some(padding) = token.padding {
+        control = control.padding(edges_padding(padding));
     }
 
     if let Some(width) = token.width {
@@ -3732,6 +3860,21 @@ fn combo_box_padding_for_height(height: Length) -> IcedPadding {
         _ => 8.0,
     };
     IcedPadding::from([vertical, 12.0])
+}
+
+fn layout_padding(uniform: u16, edges: Option<Edges>) -> IcedPadding {
+    edges
+        .map(edges_padding)
+        .unwrap_or_else(|| IcedPadding::from(f32::from(uniform)))
+}
+
+fn edges_padding(edges: Edges) -> IcedPadding {
+    IcedPadding {
+        top: f32::from(edges.top),
+        right: f32::from(edges.right),
+        bottom: f32::from(edges.bottom),
+        left: f32::from(edges.left),
+    }
 }
 
 fn compile_expander<'a, Message, Provider>(
@@ -3948,10 +4091,27 @@ where
         layout = layout.push(compile_text(description, TextStyle::Caption, visual));
     }
 
-    iced_container(layout)
+    if token.content_align_x != Alignment::Start {
+        layout = layout.align_x(horizontal_alignment(token.content_align_x));
+    }
+
+    let mut container = iced_container(layout)
         .width(IcedLength::Fill)
-        .style(move |_| settings_row_container_style(visual))
-        .into()
+        .style(move |_| settings_row_container_style(visual));
+
+    if token.align_x != Alignment::Start {
+        container = container.align_x(horizontal_alignment(token.align_x));
+    }
+
+    let mut element: IcedElement<'a, Message> = container.into();
+
+    if !token.margin.is_zero() {
+        element = iced_container(element)
+            .padding(iced_padding_from_edges(token.margin))
+            .into();
+    }
+
+    element
 }
 
 fn compile_result_card<'a, Message>(
@@ -4008,7 +4168,25 @@ where
         );
     }
 
-    list.width(IcedLength::Fill).into()
+    let needs_container =
+        token.max_height.is_some() || token.padding.is_some() || token.border_width.is_some();
+    if !needs_container {
+        return list.width(IcedLength::Fill).into();
+    }
+
+    let mut container = iced_container(list.width(IcedLength::Fill)).width(IcedLength::Fill);
+    if let Some(padding) = token.padding {
+        container = container.padding(iced_padding_from_edges(padding));
+    }
+    if let Some(max_height) = token.max_height {
+        container = container.max_height(f32::from(max_height));
+    }
+    if let Some(border_width) = token.border_width {
+        container =
+            container.style(move |_| result_list_container_style(visual, f32::from(border_width)));
+    }
+
+    container.into()
 }
 
 fn result_item_column<'a, Message>(
@@ -4126,7 +4304,7 @@ where
                 "\u{E70D}"
             })
             .font(caption_icon_font())
-            .size(12.0)
+            .size(10.0)
             .color(secondary_color)
             .into(),
         );
@@ -4628,6 +4806,7 @@ fn push_result_action<'a, Message>(
         label,
         ButtonKind::ResultAction,
         Some(&icon),
+        None,
         None,
         visual,
         false,
@@ -5134,6 +5313,7 @@ where
         ButtonKind::Standard,
         command.icon.as_ref(),
         None,
+        None,
         visual,
         false,
     ))
@@ -5365,6 +5545,7 @@ fn button_content<'a, Message>(
     kind: ButtonKind,
     icon: Option<&win_fluent::IconToken>,
     text_style: Option<TextStyle>,
+    font_size: Option<u16>,
     visual: IcedVisualTheme,
     selected: bool,
 ) -> IcedElement<'a, Message>
@@ -5377,14 +5558,24 @@ where
     } else {
         text_style.unwrap_or(TextStyle::Body)
     };
+    let text_size = font_size
+        .map(f32::from)
+        .unwrap_or_else(|| text_size(text_style, visual));
+    let icon_size = font_size
+        .map(f32::from)
+        .unwrap_or_else(|| button_icon_size(kind));
 
     match (kind, icon, label.trim().is_empty()) {
         (ButtonKind::Tile, Some(icon), false) => {
             let content = iced_column(vec![
-                icon_element(icon, button_icon_size(kind), icon_color),
+                icon_element(icon, icon_size, icon_color),
                 iced_text(label.to_string())
                     .font(text_font_for_value(text_style, label))
-                    .size(button_text_size(kind, visual))
+                    .size(
+                        font_size
+                            .map(f32::from)
+                            .unwrap_or_else(|| button_text_size(kind, visual)),
+                    )
                     .color(icon_color)
                     .into(),
             ])
@@ -5403,12 +5594,12 @@ where
             Some(icon),
             _,
         )
-        | (_, Some(icon), true) => icon_element(icon, button_icon_size(kind), icon_color),
+        | (_, Some(icon), true) => icon_element(icon, icon_size, icon_color),
         (_, Some(icon), false) => iced_row(vec![
-            icon_element(icon, button_icon_size(kind), icon_color),
+            icon_element(icon, icon_size, icon_color),
             iced_text(label.to_string())
                 .font(text_font_for_value(text_style, label))
-                .size(text_size(text_style, visual))
+                .size(text_size)
                 .color(icon_color)
                 .into(),
         ])
@@ -5417,7 +5608,7 @@ where
         .into(),
         (_, None, _) => iced_text(label.to_string())
             .font(text_font_for_value(text_style, label))
-            .size(text_size(text_style, visual))
+            .size(text_size)
             .color(icon_color)
             .into(),
     }
@@ -5560,7 +5751,8 @@ fn button_icon_size(kind: ButtonKind) -> f32 {
     match kind {
         ButtonKind::Icon | ButtonKind::ResultAction => 18.0,
         ButtonKind::FloatingAction => 16.0,
-        ButtonKind::Primary | ButtonKind::PrimaryRound => 20.0,
+        ButtonKind::Primary => 20.0,
+        ButtonKind::PrimaryRound => 16.0,
         ButtonKind::Standard | ButtonKind::Subtle | ButtonKind::Link | ButtonKind::Chip => 16.0,
         ButtonKind::Tile => 22.0,
     }
@@ -5691,6 +5883,7 @@ fn iced_length(length: Length) -> IcedLength {
     match length {
         Length::Shrink => IcedLength::Shrink,
         Length::Fill => IcedLength::Fill,
+        Length::FillPortion(value) => IcedLength::FillPortion(value),
         Length::Fixed(value) => IcedLength::Fixed(f32::from(value)),
     }
 }
@@ -5783,6 +5976,7 @@ struct IcedVisualTheme {
     input_surface: Color,
     result_surface: Color,
     result_header: Color,
+    result_header_foreground: Color,
     result_header_hover: Color,
     button_hover: Color,
     button_pressed: Color,
@@ -5853,6 +6047,7 @@ impl IcedVisualTheme {
             input_surface: iced_color(theme.input_surface),
             result_surface: iced_color(theme.result_surface),
             result_header: iced_color(theme.result_header),
+            result_header_foreground: iced_color(theme.result_header_foreground),
             result_header_hover: iced_color(theme.result_header_hover),
             button_hover: iced_color(theme.button_hover),
             button_pressed: iced_color(theme.button_pressed),
@@ -5936,7 +6131,7 @@ fn status_badge_container_style(
         .background(background)
         .color(visual.text_on_accent)
         .border(Border {
-            // .NET StatusIndicator uses EasydictStatusCornerRadius = 12 DIP.
+            // .NET status pill uses a 12 DIP corner radius (Colors.xaml).
             radius: 12.0.into(),
             ..Border::default()
         })
@@ -6024,6 +6219,8 @@ fn utility_container_style(
             .color(Color::WHITE);
     } else if style.has("info-bar") {
         container = container.background(info_bar_background_color(visual));
+    } else if style.has("input-surface") {
+        container = container.background(visual.input_surface);
     } else if style.has("surface-card") {
         container = container.background(visual.surface);
     } else if style.has("bg-app") {
@@ -6047,6 +6244,8 @@ fn utility_container_style(
 
     let border_color = if style.has("info-bar") {
         info_bar_border_color(visual)
+    } else if style.has("input-surface") {
+        visual.floating_input_border
     } else {
         visual.border
     };
@@ -6089,9 +6288,19 @@ fn utility_radius(style: &FluentStyle, visual: IcedVisualTheme) -> f32 {
         Some("rounded-xl") => 12.0,
         Some("rounded-2xl") => 16.0,
         Some("rounded-full") => 999.0,
+        Some(value) => exact_rounded_radius(value).unwrap_or(0.0),
         _ if style.has("surface-card") => 12.0,
         _ => 0.0,
     }
+}
+
+fn exact_rounded_radius(class: &str) -> Option<f32> {
+    let value = class.strip_prefix("rounded-[")?.strip_suffix(']')?;
+    value
+        .strip_suffix("px")
+        .unwrap_or(value)
+        .parse::<f32>()
+        .ok()
 }
 
 fn utility_shadow(style: &FluentStyle, visual: IcedVisualTheme) -> Option<Shadow> {
@@ -6444,7 +6653,7 @@ fn result_header_button_style(
 
     iced::widget::button::Style {
         background: Some(Background::Color(visual.result_header)),
-        text_color: visual.text_primary,
+        text_color: visual.result_header_foreground,
         border: control_border_with_radius(Color::TRANSPARENT, 0.0, visual.radius_control),
         shadow: Shadow::default(),
         ..iced::widget::button::Style::default()
@@ -6495,18 +6704,24 @@ fn text_editor_style(
     status: iced::widget::text_editor::Status,
     chrome: TextEditorChrome,
 ) -> iced::widget::text_editor::Style {
+    // Standard-chrome text editors (e.g. the main window InputTextBox) use a
+    // dedicated input-border color that is intentionally distinct from the
+    // surrounding card border, mirroring the .NET WinUI app where the text
+    // control border (#E1E7EF) differs from the card border (#DDE4EE). Without
+    // this the 1px inner border has no contrast against the white card edge and
+    // is effectively invisible.
     let border = match (chrome, status) {
         (TextEditorChrome::Frameless, _) => control_border(visual, visual.border, 0.0),
         (_, iced::widget::text_editor::Status::Focused { .. }) => {
-            control_border(visual, visual.border, visual.stroke_control)
+            control_border(visual, visual.floating_input_border, visual.stroke_control)
         }
         (_, iced::widget::text_editor::Status::Hovered) => {
-            control_border(visual, visual.border, visual.stroke_control)
+            control_border(visual, visual.floating_input_border, visual.stroke_control)
         }
         (
             _,
             iced::widget::text_editor::Status::Disabled | iced::widget::text_editor::Status::Active,
-        ) => control_border(visual, visual.border, visual.stroke_control),
+        ) => control_border(visual, visual.floating_input_border, visual.stroke_control),
     };
 
     let value = if status == iced::widget::text_editor::Status::Disabled {
@@ -6939,6 +7154,8 @@ fn progress_bar_style(visual: IcedVisualTheme, active: bool) -> iced::widget::pr
 fn flyout_pick_list_style(
     visual: IcedVisualTheme,
     status: iced::widget::pick_list::Status,
+    border_width: f32,
+    radius: f32,
 ) -> iced::widget::pick_list::Style {
     let background = match status {
         iced::widget::pick_list::Status::Active => visual.surface.scale_alpha(0.0),
@@ -6951,7 +7168,7 @@ fn flyout_pick_list_style(
         placeholder_color: visual.text_primary,
         handle_color: visual.text_secondary,
         background: Background::Color(background),
-        border: control_border(visual, visual.border.scale_alpha(0.0), 0.0),
+        border: control_border_with_radius(visual.border.scale_alpha(0.0), border_width, radius),
     }
 }
 
@@ -7151,10 +7368,33 @@ fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::contain
     iced::widget::container::Style::default()
         .background(visual.result_surface)
         .color(visual.text_primary)
-        .border(control_border(visual, visual.border, visual.stroke_control))
+        .border(control_border(
+            visual,
+            // WinUI card stroke color (light-blue #DDE4EE in Light, #3A4250 in
+            // Dark), not the grayer generic control border.
+            match visual.mode {
+                ThemeMode::Light => Color::from_rgb8(0xDD, 0xE4, 0xEE),
+                ThemeMode::Dark => Color::from_rgb8(0x3A, 0x42, 0x50),
+                _ => visual.border,
+            },
+            visual.stroke_control,
+        ))
         // The WinUI reference uses flat outlined result rows in the main list.
         // Keep them visually quiet so hover/pressed effects are not polluted by elevation.
         .shadow(Shadow::default())
+}
+
+fn result_list_container_style(
+    visual: IcedVisualTheme,
+    border_width: f32,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .color(visual.text_primary)
+        .border(control_border_with_radius(
+            Color::TRANSPARENT,
+            border_width,
+            0.0,
+        ))
 }
 
 fn control_border(visual: IcedVisualTheme, color: Color, width: f32) -> Border {
@@ -7479,6 +7719,7 @@ struct NamedEventSubscriptionData {
 struct TraySubscriptionData {
     tooltip: String,
     icon_path: Option<String>,
+    presenter_min_width: Option<u16>,
     callback_message: u32,
     item_count: usize,
     default_command_id: Option<u32>,
@@ -7489,6 +7730,7 @@ struct TraySubscriptionData {
 struct TrayItemSubscriptionData {
     id: String,
     label: String,
+    tooltip: Option<String>,
     enabled: bool,
     command_id: u32,
     action_kind: ActionKind,
@@ -7518,6 +7760,7 @@ impl TraySubscriptionData {
         win_fluent_platform_win::WindowsTrayPlan {
             tooltip: self.tooltip.clone(),
             icon_path: self.icon_path.clone(),
+            presenter_min_width: self.presenter_min_width,
             callback_message: self.callback_message,
             item_count: self.item_count,
             default_command_id: self.default_command_id,
@@ -7531,6 +7774,7 @@ impl TrayItemSubscriptionData {
         win_fluent_platform_win::WindowsTrayItemPlan {
             id: self.id.clone(),
             label: self.label.clone(),
+            tooltip: self.tooltip.clone(),
             enabled: self.enabled,
             command_id: self.command_id,
             action_kind: self.action_kind,
@@ -7563,6 +7807,7 @@ impl From<win_fluent_platform_win::WindowsTrayPlan> for TraySubscriptionData {
         Self {
             tooltip: plan.tooltip,
             icon_path: plan.icon_path,
+            presenter_min_width: plan.presenter_min_width,
             callback_message: plan.callback_message,
             item_count: plan.item_count,
             default_command_id: plan.default_command_id,
@@ -7572,6 +7817,7 @@ impl From<win_fluent_platform_win::WindowsTrayPlan> for TraySubscriptionData {
                 .map(|item| TrayItemSubscriptionData {
                     id: item.id,
                     label: item.label,
+                    tooltip: item.tooltip,
                     enabled: item.enabled,
                     command_id: item.command_id,
                     action_kind: item.action_kind,
@@ -7592,6 +7838,7 @@ impl From<win_fluent_platform_win::WindowsTrayItemPlan> for TrayItemSubscription
         Self {
             id: item.id,
             label: item.label,
+            tooltip: item.tooltip,
             enabled: item.enabled,
             command_id: item.command_id,
             action_kind: item.action_kind,
@@ -8660,6 +8907,27 @@ mod tests {
         );
         assert_eq!(divider.border.width, 0.0);
 
+        let input_container = utility_container_style(
+            &FluentStyle::from_classes("input-surface border rounded-2xl"),
+            visual,
+        );
+        assert_eq!(
+            optional_background_color(input_container.background),
+            iced_color(theme.input_surface)
+        );
+        assert_eq!(
+            input_container.border.color,
+            iced_color(theme.floating_input_border)
+        );
+        assert_eq!(input_container.border.width, theme.stroke.control);
+        assert_eq!(input_container.border.radius.top_left, 16.0);
+        let exact_radius_container = utility_container_style(
+            &FluentStyle::from_classes("surface-card border rounded-[10px]"),
+            visual,
+        );
+        assert_eq!(exact_radius_container.border.width, theme.stroke.control);
+        assert_eq!(exact_radius_container.border.radius.top_left, 10.0);
+
         let result_card = result_card_container_style(visual);
         assert_eq!(
             optional_background_color(result_card.background),
@@ -9232,7 +9500,7 @@ mod tests {
             editor.background,
             Background::Color(iced_color(theme.surface))
         );
-        assert_eq!(editor.border.color, iced_color(theme.border));
+        assert_eq!(editor.border.color, iced_color(theme.floating_input_border));
         assert_eq!(editor.border.width, theme.stroke.control);
 
         let result_card = result_card_container_style(visual);
@@ -9400,6 +9668,7 @@ mod tests {
         let plan = win_fluent_platform_win::WindowsTrayPlan {
             tooltip: "Easydict".to_string(),
             icon_path: Some("C:\\Easydict\\AppIcon.ico".to_string()),
+            presenter_min_width: Some(300),
             callback_message: 1025,
             item_count: 2,
             default_command_id: Some(1000),
@@ -9407,6 +9676,7 @@ mod tests {
                 win_fluent_platform_win::WindowsTrayItemPlan {
                     id: "show-main".to_string(),
                     label: "Show Easydict".to_string(),
+                    tooltip: Some("Show Easydict".to_string()),
                     enabled: true,
                     command_id: 1000,
                     action_kind: ActionKind::Message,
@@ -9416,6 +9686,7 @@ mod tests {
                 win_fluent_platform_win::WindowsTrayItemPlan {
                     id: "settings".to_string(),
                     label: "Settings".to_string(),
+                    tooltip: Some("Settings".to_string()),
                     enabled: false,
                     command_id: 1001,
                     action_kind: ActionKind::Message,
@@ -9430,10 +9701,15 @@ mod tests {
 
         assert_eq!(round_trip.tooltip, plan.tooltip);
         assert_eq!(round_trip.icon_path, plan.icon_path);
+        assert_eq!(round_trip.presenter_min_width, Some(300));
         assert_eq!(round_trip.callback_message, plan.callback_message);
         assert_eq!(round_trip.item_count, plan.item_count);
         assert_eq!(round_trip.default_command_id, Some(1000));
         assert_eq!(round_trip.items[0].id, "show-main");
+        assert_eq!(
+            round_trip.items[0].tooltip.as_deref(),
+            Some("Show Easydict")
+        );
         assert_eq!(round_trip.items[0].command_id, 1000);
         assert!(round_trip.items[0].enabled);
         assert_eq!(round_trip.items[1].id, "settings");
@@ -9446,6 +9722,7 @@ mod tests {
         let plan = win_fluent_platform_win::WindowsTrayPlan {
             tooltip: "Easydict".to_string(),
             icon_path: Some("C:\\Easydict\\AppIcon.ico".to_string()),
+            presenter_min_width: Some(300),
             callback_message: 1025,
             item_count: 2,
             default_command_id: Some(1000),
@@ -9453,6 +9730,7 @@ mod tests {
                 win_fluent_platform_win::WindowsTrayItemPlan {
                     id: String::new(),
                     label: String::new(),
+                    tooltip: None,
                     enabled: false,
                     command_id: 0,
                     action_kind: ActionKind::None,
@@ -9462,6 +9740,7 @@ mod tests {
                 win_fluent_platform_win::WindowsTrayItemPlan {
                     id: "browser-support".to_string(),
                     label: "Browser Support".to_string(),
+                    tooltip: Some("Browser Support".to_string()),
                     enabled: true,
                     command_id: 0,
                     action_kind: ActionKind::None,
@@ -9470,6 +9749,7 @@ mod tests {
                         win_fluent_platform_win::WindowsTrayItemPlan {
                             id: "browser-install".to_string(),
                             label: "Install Browser Support".to_string(),
+                            tooltip: Some("Install Browser Support".to_string()),
                             enabled: true,
                             command_id: 1000,
                             action_kind: ActionKind::Message,
@@ -9479,6 +9759,7 @@ mod tests {
                         win_fluent_platform_win::WindowsTrayItemPlan {
                             id: "browser-uninstall".to_string(),
                             label: "Uninstall Browser Support".to_string(),
+                            tooltip: Some("Uninstall Browser Support".to_string()),
                             enabled: false,
                             command_id: 1001,
                             action_kind: ActionKind::Message,
@@ -9497,6 +9778,7 @@ mod tests {
             Some("C:\\Easydict\\AppIcon.ico")
         );
         assert_eq!(round_trip.item_count, 2);
+        assert_eq!(round_trip.presenter_min_width, Some(300));
         assert_eq!(round_trip.default_command_id, Some(1000));
         assert_eq!(
             round_trip.items[0].kind,
@@ -9507,6 +9789,10 @@ mod tests {
             win_fluent_platform_win::WindowsTrayItemKind::Submenu
         );
         assert_eq!(round_trip.items[1].children[0].id, "browser-install");
+        assert_eq!(
+            round_trip.items[1].tooltip.as_deref(),
+            Some("Browser Support")
+        );
         assert_eq!(round_trip.items[1].children[0].command_id, 1000);
         assert!(round_trip.items[1].children[0].enabled);
         assert_eq!(round_trip.items[1].children[1].id, "browser-uninstall");
@@ -9534,10 +9820,12 @@ mod tests {
             kind: LayoutKind::Column,
             children: Vec::new(),
             padding: 0,
+            padding_edges: None,
             spacing: 0,
             width: Length::Fill,
             height: Length::Shrink,
             max_width,
+            max_height: None,
             center_x,
             margin,
             align: Alignment::Start,

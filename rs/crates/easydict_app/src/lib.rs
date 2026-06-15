@@ -557,12 +557,14 @@ pub use activation::{
     startup_activation_message_for_args, StartupActivation, StartupActivationDisposition,
 };
 pub use credential_protection::{
-    get_or_create_persisted_machine_id, get_or_create_persisted_machine_id_with_legacy_fallback,
-    is_protected_credential, protect_credential, protect_credential_legacy,
-    protect_credential_with_scope, try_unprotect_credential, try_unprotect_credential_legacy,
+    get_or_create_persisted_machine_id, get_or_create_persisted_machine_id_with_diagnostics,
+    get_or_create_persisted_machine_id_with_legacy_fallback,
+    get_or_create_persisted_machine_id_with_legacy_fallback_diagnostics, is_protected_credential,
+    protect_credential, protect_credential_legacy, protect_credential_with_scope,
+    try_unprotect_credential, try_unprotect_credential_legacy,
     try_unprotect_credential_with_machine_id, unprotect_or_return_plaintext,
     unprotect_or_return_plaintext_with_machine_id, CredentialPlaintext, CredentialProtectionError,
-    CredentialProtectionScope, MAX_NESTED_PROTECTED_VALUE_DEPTH,
+    CredentialProtectionScope, MachineIdLoadResult, MAX_NESTED_PROTECTED_VALUE_DEPTH,
 };
 pub use grammar_correction::{
     build_grammar_correction_plain_text_prompt, build_grammar_correction_user_prompt,
@@ -1859,7 +1861,9 @@ pub fn tray_menu_for_browser_support_locale(
 ) -> TrayMenu<Message> {
     let any_not_installed = !browser.chrome_installed || !browser.firefox_installed;
     let any_installed = browser.chrome_installed || browser.firefox_installed;
-    let tray = TrayMenu::new("Easydict - Dictionary & Translation").default_item(TRAY_SHOW_MAIN);
+    let tray = TrayMenu::new("Easydict - Dictionary & Translation")
+        .presenter_min_width(300)
+        .default_item(TRAY_SHOW_MAIN);
     let tray = if let Some(icon_path) = default_tray_icon_path() {
         tray.icon_path(icon_path)
     } else {
@@ -1867,21 +1871,21 @@ pub fn tray_menu_for_browser_support_locale(
     };
 
     tray.item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_SHOW_MAIN,
             crate::i18n::tr_locale(locale, "tray.show", "Show Easydict"),
         )
         .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
     )
     .item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_TRANSLATE_CLIPBOARD,
             crate::i18n::tr_locale(locale, "tray.translate_clipboard", "Translate Clipboard"),
         )
         .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
     )
     .item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_OCR_TRANSLATE,
             format!(
                 "{} (Ctrl+Alt+S)",
@@ -1891,7 +1895,7 @@ pub fn tray_menu_for_browser_support_locale(
         .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
     )
     .item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_SHOW_MINI,
             format!(
                 "{} (Ctrl+Alt+M)",
@@ -1901,7 +1905,7 @@ pub fn tray_menu_for_browser_support_locale(
         .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
     )
     .item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_SHOW_FIXED,
             format!(
                 "{} (Ctrl+Alt+F)",
@@ -1912,17 +1916,17 @@ pub fn tray_menu_for_browser_support_locale(
     )
     .separator()
     .item(
-        TrayMenuItem::submenu(
+        tray_submenu_item(
             "browser-support",
             crate::i18n::tr_locale(locale, "tray.browser_support", "Browser Support"),
         )
         .item(
-            TrayMenuItem::submenu(
+            tray_submenu_item(
                 "browser-chrome",
                 crate::i18n::tr_locale(locale, "tray.browser.chrome", "Chrome"),
             )
             .item(
-                TrayMenuItem::new(
+                tray_command_item(
                     TRAY_BROWSER_INSTALL_CHROME,
                     crate::i18n::tr_locale(
                         locale,
@@ -1936,7 +1940,7 @@ pub fn tray_menu_for_browser_support_locale(
                 )),
             )
             .item(
-                TrayMenuItem::new(
+                tray_command_item(
                     TRAY_BROWSER_UNINSTALL_CHROME,
                     crate::i18n::tr_locale(
                         locale,
@@ -1950,7 +1954,7 @@ pub fn tray_menu_for_browser_support_locale(
                 )),
             )
             .item(
-                TrayMenuItem::new(
+                tray_command_item(
                     TRAY_BROWSER_GET_CHROME_EXTENSION,
                     crate::i18n::tr_locale(
                         locale,
@@ -1964,12 +1968,12 @@ pub fn tray_menu_for_browser_support_locale(
             ),
         )
         .item(
-            TrayMenuItem::submenu(
+            tray_submenu_item(
                 "browser-firefox",
                 crate::i18n::tr_locale(locale, "tray.browser.firefox", "Firefox"),
             )
             .item(
-                TrayMenuItem::new(
+                tray_command_item(
                     TRAY_BROWSER_INSTALL_FIREFOX,
                     crate::i18n::tr_locale(
                         locale,
@@ -1983,7 +1987,7 @@ pub fn tray_menu_for_browser_support_locale(
                 )),
             )
             .item(
-                TrayMenuItem::new(
+                tray_command_item(
                     TRAY_BROWSER_UNINSTALL_FIREFOX,
                     crate::i18n::tr_locale(
                         locale,
@@ -1997,7 +2001,7 @@ pub fn tray_menu_for_browser_support_locale(
                 )),
             )
             .item(
-                TrayMenuItem::new(
+                tray_command_item(
                     TRAY_BROWSER_GET_FIREFOX_EXTENSION,
                     crate::i18n::tr_locale(
                         locale,
@@ -2012,7 +2016,7 @@ pub fn tray_menu_for_browser_support_locale(
         )
         .item(TrayMenuItem::separator())
         .item(
-            TrayMenuItem::new(
+            tray_command_item(
                 TRAY_BROWSER_INSTALL,
                 crate::i18n::tr_locale(locale, "tray.browser.install_all", "Install All"),
             )
@@ -2020,7 +2024,7 @@ pub fn tray_menu_for_browser_support_locale(
             .on_invoke(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string())),
         )
         .item(
-            TrayMenuItem::new(
+            tray_command_item(
                 TRAY_BROWSER_UNINSTALL,
                 crate::i18n::tr_locale(locale, "tray.browser.uninstall_all", "Uninstall All"),
             )
@@ -2029,7 +2033,7 @@ pub fn tray_menu_for_browser_support_locale(
         ),
     )
     .item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_OPEN_SETTINGS,
             crate::i18n::tr_locale(locale, "tray.settings", "Settings"),
         )
@@ -2037,12 +2041,22 @@ pub fn tray_menu_for_browser_support_locale(
     )
     .separator()
     .item(
-        TrayMenuItem::new(
+        tray_command_item(
             TRAY_EXIT,
             crate::i18n::tr_locale(locale, "tray.exit", "Exit"),
         )
         .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
     )
+}
+
+fn tray_command_item(id: &str, label: impl Into<String>) -> TrayMenuItem<Message> {
+    let label = label.into();
+    TrayMenuItem::new(id, label.clone()).tooltip(label)
+}
+
+fn tray_submenu_item(id: &str, label: impl Into<String>) -> TrayMenuItem<Message> {
+    let label = label.into();
+    TrayMenuItem::submenu(id, label.clone()).tooltip(label)
 }
 
 pub fn default_tray_icon_path() -> Option<String> {

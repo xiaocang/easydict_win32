@@ -1,7 +1,9 @@
 use std::fmt::Write;
 
 use crate::command::CommandToken;
-use crate::view::{LayoutKind, ResultCardToken, ResultItem, ResultListToken, View, ViewToken};
+use crate::view::{
+    Alignment, LayoutKind, ResultCardToken, ResultItem, ResultListToken, View, ViewToken,
+};
 
 pub const VIEW_SCHEMA_VERSION: u16 = 1;
 
@@ -104,6 +106,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             let mut node = SchemaNode::new("Text", token.id.clone())
                 .property("value", quoted(&token.value))
                 .property("style", format!("{:?}", token.style))
+                .property("font_size", optional_u16(token.font_size))
                 .property("wrapping", format!("{:?}", token.wrapping))
                 .property("selectable", token.selectable.to_string());
             if let Some(width) = token.width {
@@ -112,24 +115,47 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             if let Some(height) = token.height {
                 node = node.property("height", optional_length(Some(height)));
             }
+            if !token.margin.is_zero() {
+                node = node.property("margin", format!("{:?}", token.margin));
+            }
+            if token.align_x != Alignment::Start {
+                node = node.property("align_x", format!("{:?}", token.align_x));
+            }
+            if token.align_y != Alignment::Start {
+                node = node.property("align_y", format!("{:?}", token.align_y));
+            }
             node
         }
-        ViewToken::Button(token) => SchemaNode::new("Button", token.id.clone())
-            .property("label", quoted(&token.label))
-            .property("kind", format!("{:?}", token.kind))
-            .property("icon", optional_icon(token.icon.as_ref()))
-            .property("tooltip", optional_string(token.tooltip.as_deref()))
-            .property("width", optional_length(token.width))
-            .property("height", optional_length(token.height))
-            .property("text_style", optional_text_style(token.text_style))
-            .property("state", token.state.to_string())
-            .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::Button(token) => {
+            let mut node = SchemaNode::new("Button", token.id.clone())
+                .property("label", quoted(&token.label))
+                .property("kind", format!("{:?}", token.kind))
+                .property("icon", optional_icon(token.icon.as_ref()))
+                .property("tooltip", optional_string(token.tooltip.as_deref()))
+                .property("width", optional_length(token.width))
+                .property("height", optional_length(token.height))
+                .property("padding", optional_edges(token.padding))
+                .property("text_style", optional_text_style(token.text_style))
+                .property("font_size", optional_u16(token.font_size))
+                .property("state", token.state.to_string())
+                .property("action", format!("{:?}", token.action.kind()));
+            if !token.margin.is_zero() {
+                node = node.property("margin", format!("{:?}", token.margin));
+            }
+            node
+        }
         ViewToken::FlyoutButton(token) => SchemaNode::new("FlyoutButton", token.id.clone())
             .property("label", quoted(&token.label))
             .property("icon", optional_icon(token.icon.as_ref()))
             .property("tooltip", optional_string(token.tooltip.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", flyout_items(&token.items))
+            .property("min_width", optional_u16(token.min_width))
+            .property("min_height", optional_u16(token.min_height))
+            .property("padding", optional_edges(token.padding))
+            .property("border_width", optional_u16(token.border_width))
+            .property("radius", optional_u16(token.radius))
+            .property("align_y", format!("{:?}", token.align_y))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::StatusBadge(token) => SchemaNode::new("StatusBadge", token.id.clone())
@@ -166,6 +192,8 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("kind", format!("{:?}", token.kind))
                 .property("content_spacing", token.content_spacing.to_string())
+                .property("margin", format!("{:?}", token.margin))
+                .property("max_height", optional_u16(token.max_height))
                 .property("trailing", token.trailing.len().to_string());
             if let Some(content) = &token.content {
                 node = node.child(schema_node(content));
@@ -190,8 +218,10 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("height", text_editor_evidence_height(token))
                 .property("min_height", optional_u16(token.min_height))
                 .property("max_height", optional_u16(token.max_height))
+                .property("padding", optional_edges(token.padding))
                 .property("text_style", format!("{:?}", token.text_style))
                 .property("chrome", format!("{:?}", token.chrome))
+                .property("secure", token.secure.to_string())
                 .property("read_only", token.read_only.to_string())
                 .property("state", token.state.to_string())
                 .property("action", format!("{:?}", token.action.kind()))
@@ -215,32 +245,41 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             }
             node
         }
-        ViewToken::ToggleSwitch(token) => SchemaNode::new("ToggleSwitch", token.id.clone())
-            .property("label", quoted(&token.label))
-            .property("checked", token.checked.to_string())
-            .property("header", optional_string(token.header.as_deref()))
-            .property(
-                "width",
-                token
-                    .width
-                    .map(|width| format!("{width:?}"))
-                    .unwrap_or_else(|| {
-                        toggle_switch_evidence_width(token.header.as_deref(), &token.label)
-                    }),
-            )
-            .property(
-                "height",
-                token
-                    .height
-                    .map(|height| format!("{height:?}"))
-                    .unwrap_or_else(|| "Fixed(32)".to_string()),
-            )
-            .property(
-                "labeled_height",
-                toggle_switch_labeled_evidence_height(token.header.as_deref()),
-            )
-            .property("state", token.state.to_string())
-            .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::ToggleSwitch(token) => {
+            let mut node = SchemaNode::new("ToggleSwitch", token.id.clone())
+                .property("label", quoted(&token.label))
+                .property("checked", token.checked.to_string())
+                .property("header", optional_string(token.header.as_deref()))
+                .property(
+                    "width",
+                    token
+                        .width
+                        .map(|width| format!("{width:?}"))
+                        .unwrap_or_else(|| {
+                            toggle_switch_evidence_width(token.header.as_deref(), &token.label)
+                        }),
+                )
+                .property(
+                    "height",
+                    token
+                        .height
+                        .map(|height| format!("{height:?}"))
+                        .unwrap_or_else(|| "Fixed(32)".to_string()),
+                )
+                .property(
+                    "labeled_height",
+                    toggle_switch_labeled_evidence_height(token.header.as_deref()),
+                )
+                .property("state", token.state.to_string())
+                .property("action", format!("{:?}", token.action.kind()));
+            if !token.margin.is_zero() {
+                node = node.property("margin", format!("{:?}", token.margin));
+            }
+            if token.align_y != Alignment::Start {
+                node = node.property("align_y", format!("{:?}", token.align_y));
+            }
+            node
+        }
         ViewToken::CheckBox(token) => SchemaNode::new("CheckBox", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
@@ -297,11 +336,15 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             };
             SchemaNode::new(kind, token.id.clone())
                 .property("children", token.children.len().to_string())
-                .property("padding", token.padding.to_string())
+                .property(
+                    "padding",
+                    layout_padding(token.padding, token.padding_edges),
+                )
                 .property("spacing", token.spacing.to_string())
                 .property("width", format!("{:?}", token.width))
                 .property("height", format!("{:?}", token.height))
                 .property("max_width", optional_u16(token.max_width))
+                .property("max_height", optional_u16(token.max_height))
                 .property("center_x", token.center_x.to_string())
                 .property("margin", format!("{:?}", token.margin))
                 .property("align", format!("{:?}", token.align))
@@ -334,10 +377,16 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("layout", quoted(&layers))
                 .children(children.map(schema_node))
         }
-        ViewToken::AdaptiveSwitch(token) => SchemaNode::new("AdaptiveSwitch", token.id.clone())
-            .property("breakpoint_width", token.breakpoint_width.to_string())
-            .child(schema_node(&token.wide))
-            .child(schema_node(&token.narrow)),
+        ViewToken::AdaptiveSwitch(token) => {
+            let node = SchemaNode::new("AdaptiveSwitch", token.id.clone())
+                .property("breakpoint_width", token.breakpoint_width.to_string());
+            match token.resolved_branch() {
+                Some(branch) => node.child(schema_node(branch)),
+                None => node
+                    .child(schema_node(&token.wide))
+                    .child(schema_node(&token.narrow)),
+            }
+        }
         ViewToken::Lazy(token) => SchemaNode::new("Lazy", token.id.clone())
             .property("key", quoted(&token.key))
             .child(schema_node(&token.content)),
@@ -349,6 +398,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::Expander(token) => {
             let mut node = SchemaNode::new("Expander", token.id.clone())
                 .property("title", quoted(&token.title))
+                .property("title_id", optional_string(token.title_id.as_deref()))
                 .property("description", optional_string(token.description.as_deref()))
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("expanded", token.expanded.to_string())
@@ -357,6 +407,9 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("content_style", token.content_style.summary())
                 .property("action", format!("{:?}", token.action.kind()))
                 .property("trailing", token.trailing.len().to_string());
+            if let Some(id) = &token.title_id {
+                node = node.child(settings_row_text_node(id, &token.title, "BodyStrong"));
+            }
             if token.expanded {
                 if let Some(content) = &token.content {
                     node = node.child(schema_node(content));
@@ -372,6 +425,15 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("kind", format!("{:?}", token.kind))
                 .property("trailing", token.trailing.len().to_string());
+            if !token.margin.is_zero() {
+                node = node.property("margin", format!("{:?}", token.margin));
+            }
+            if token.align_x != Alignment::Start {
+                node = node.property("align_x", format!("{:?}", token.align_x));
+            }
+            if token.content_align_x != Alignment::Start {
+                node = node.property("content_align_x", format!("{:?}", token.content_align_x));
+            }
             if let Some(id) = &token.title_id {
                 node = node.child(settings_row_text_node(id, &token.title, "Subtitle"));
             }
@@ -463,6 +525,9 @@ fn result_list_schema<Message>(token: &ResultListToken<Message>) -> SchemaNode {
     SchemaNode::new("ResultList", token.id.clone())
         .property("items", token.items.len().to_string())
         .property("virtualized", token.virtualized.to_string())
+        .property("max_height", optional_u16(token.max_height))
+        .property("padding", optional_edges(token.padding))
+        .property("border_width", optional_u16(token.border_width))
         .property("copy", format!("{:?}", token.copy_action.kind()))
         .property("speak", format!("{:?}", token.speak_action.kind()))
         .property("replace", format!("{:?}", token.replace_action.kind()))
@@ -632,6 +697,18 @@ fn optional_text_style(value: Option<crate::view::TextStyle>) -> String {
     value
         .map(|value| format!("{value:?}"))
         .unwrap_or_else(|| "none".to_string())
+}
+
+fn optional_edges(value: Option<crate::view::Edges>) -> String {
+    value
+        .map(|value| format!("{value:?}"))
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn layout_padding(uniform: u16, edges: Option<crate::view::Edges>) -> String {
+    edges
+        .map(|value| format!("{value:?}"))
+        .unwrap_or_else(|| uniform.to_string())
 }
 
 fn combo_box_labeled_evidence_height(label: Option<&str>, height: crate::view::Length) -> String {

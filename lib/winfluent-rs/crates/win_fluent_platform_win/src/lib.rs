@@ -169,6 +169,7 @@ pub struct WindowsClipboardFormatSnapshot {
 pub struct WindowsTrayPlan {
     pub tooltip: String,
     pub icon_path: Option<String>,
+    pub presenter_min_width: Option<u16>,
     pub callback_message: u32,
     pub item_count: usize,
     pub default_command_id: Option<u32>,
@@ -179,6 +180,7 @@ pub struct WindowsTrayPlan {
 pub struct WindowsTrayItemPlan {
     pub id: String,
     pub label: String,
+    pub tooltip: Option<String>,
     pub enabled: bool,
     pub command_id: u32,
     pub action_kind: ActionKind,
@@ -400,6 +402,7 @@ impl WindowsPlatformAdapter {
             Some(WindowsTrayPlan {
                 tooltip: tray.tooltip.clone(),
                 icon_path: tray.icon_path.clone(),
+                presenter_min_width: tray.presenter_min_width,
                 callback_message: native::wm_user() + 1,
                 item_count: (next_command_id - 1000) as usize,
                 default_command_id: tray.default_item_id.as_deref().and_then(|id| {
@@ -875,6 +878,7 @@ fn collect_subscription<Message>(
                 registrations.push(WindowsRegistration::Tray(WindowsTrayPlan {
                     tooltip: String::new(),
                     icon_path: None,
+                    presenter_min_width: None,
                     callback_message: native::wm_user() + 1,
                     item_count: 0,
                     default_command_id: None,
@@ -934,6 +938,7 @@ fn plan_tray_item<Message>(
         return WindowsTrayItemPlan {
             id: item.id.clone(),
             label: item.label.clone(),
+            tooltip: item.tooltip.clone(),
             enabled: false,
             command_id: 0,
             action_kind: ActionKind::None,
@@ -946,6 +951,7 @@ fn plan_tray_item<Message>(
         return WindowsTrayItemPlan {
             id: item.id.clone(),
             label: item.label.clone(),
+            tooltip: item.tooltip.clone(),
             enabled: item.enabled,
             command_id: 0,
             action_kind: ActionKind::None,
@@ -963,6 +969,7 @@ fn plan_tray_item<Message>(
     WindowsTrayItemPlan {
         id: item.id.clone(),
         label: item.label.clone(),
+        tooltip: item.tooltip.clone(),
         enabled: item.enabled,
         command_id,
         action_kind: item.action.kind(),
@@ -1378,11 +1385,12 @@ fn squared_distance_to_rect(point: WindowsPoint, area: WindowsRect) -> i64 {
 
 #[cfg(windows)]
 mod native {
+    use std::collections::BTreeMap;
     use std::io::Write;
     #[cfg(feature = "legacy-powershell-tts")]
     use std::process::Command;
     use std::ptr::{null, null_mut};
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use super::{
@@ -1451,18 +1459,21 @@ mod native {
         GetForegroundWindow, GetParent, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect,
         GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
         LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetForegroundWindow,
-        SetWindowLongPtrW, SetWindowPos, TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
-        GWL_EXSTYLE, HICON, HWND_MESSAGE, HWND_NOTOPMOST, HWND_TOPMOST, IDI_APPLICATION,
-        IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
-        MSG, PM_REMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-        SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-        SW_SHOWNORMAL, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CONTEXTMENU, WM_HOTKEY,
-        WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW,
+        SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenu, CS_HREDRAW,
+        CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE, HICON, HWND_MESSAGE, HWND_NOTOPMOST, HWND_TOPMOST,
+        IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_GRAYED, MF_POPUP,
+        MF_SEPARATOR, MF_STRING, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
+        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNORMAL,
+        TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CONTEXTMENU, WM_HOTKEY, WM_LBUTTONDBLCLK,
+        WM_LBUTTONUP, WM_MENUSELECT, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_BORDER,
         WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW,
         WS_POPUP, WS_THICKFRAME,
     };
 
     static TEXT_INSERTION_TARGET: Mutex<isize> = Mutex::new(0);
+    static TRAY_MENU_TOOLTIP_STATES: OnceLock<Mutex<BTreeMap<isize, TrayMenuTooltipState>>> =
+        OnceLock::new();
     pub(super) const NIN_KEYSELECT: u32 = WM_USER + 1;
 
     #[derive(Debug)]
@@ -1483,12 +1494,22 @@ mod native {
         icon_id: u32,
         callback_message: u32,
         owned_icon: Option<HICON>,
+        presenter_min_width: Option<u16>,
         default_command_id: Option<u32>,
         menu_items: Vec<super::WindowsTrayItemPlan>,
     }
 
+    #[derive(Debug, Default)]
+    pub(super) struct TrayMenuTooltipState {
+        pub(super) command_tooltips: BTreeMap<u32, String>,
+        pub(super) submenu_tooltips: BTreeMap<(isize, u32), String>,
+        tooltip_hwnd: isize,
+        visible_text: Option<String>,
+    }
+
     impl Drop for TrayHandle {
         fn drop(&mut self) {
+            clear_tray_menu_tooltip_state(self.hwnd);
             let mut data = tray_icon_data(self.hwnd, self.icon_id, self.callback_message);
             // Safety: data identifies the icon added by create_tray_icon for this hidden HWND.
             let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &mut data as _) };
@@ -1680,6 +1701,7 @@ mod native {
                 icon_id,
                 callback_message: plan.callback_message,
                 owned_icon,
+                presenter_min_width: plan.presenter_min_width,
                 default_command_id: plan.default_command_id,
                 menu_items: plan.items.clone(),
             },
@@ -3021,6 +3043,11 @@ try {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        if message == WM_MENUSELECT {
+            handle_tray_menu_select(hwnd, wparam, lparam);
+            return 0;
+        }
+
         // Safety: This hidden window exists only to receive shell callback messages. All
         // unhandled messages use the default Win32 procedure.
         unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
@@ -3100,6 +3127,235 @@ try {
         }
     }
 
+    fn tray_menu_tooltip_states() -> &'static Mutex<BTreeMap<isize, TrayMenuTooltipState>> {
+        TRAY_MENU_TOOLTIP_STATES.get_or_init(|| Mutex::new(BTreeMap::new()))
+    }
+
+    fn install_tray_menu_tooltip_state(hwnd: HWND, state: TrayMenuTooltipState) {
+        if state.command_tooltips.is_empty() && state.submenu_tooltips.is_empty() {
+            return;
+        }
+
+        let mut states = tray_menu_tooltip_states()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(mut old_state) = states.insert(hwnd as isize, state) {
+            destroy_tray_menu_tooltip(&mut old_state);
+        }
+    }
+
+    fn clear_tray_menu_tooltip_state(hwnd: HWND) {
+        let mut state = {
+            let mut states = tray_menu_tooltip_states()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            states.remove(&(hwnd as isize))
+        };
+        if let Some(state) = state.as_mut() {
+            destroy_tray_menu_tooltip(state);
+        }
+    }
+
+    fn handle_tray_menu_select(hwnd: HWND, wparam: WPARAM, lparam: LPARAM) {
+        let selected_item = low_word(wparam);
+        let flags = high_word(wparam);
+        let menu = lparam;
+        let mut states = tray_menu_tooltip_states()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(state) = states.get_mut(&(hwnd as isize)) else {
+            return;
+        };
+
+        if tray_menu_select_is_closed(flags, menu) {
+            hide_tray_menu_tooltip(state);
+            return;
+        }
+
+        let tooltip =
+            tray_menu_selected_tooltip(state, selected_item, flags, menu).map(str::to_string);
+        if let Some(tooltip) = tooltip {
+            show_tray_menu_tooltip(state, &tooltip);
+        } else {
+            hide_tray_menu_tooltip(state);
+        }
+    }
+
+    fn low_word(value: WPARAM) -> u16 {
+        (value & 0xffff) as u16
+    }
+
+    fn high_word(value: WPARAM) -> u16 {
+        ((value >> 16) & 0xffff) as u16
+    }
+
+    pub(super) fn tray_menu_select_is_closed(flags: u16, menu: isize) -> bool {
+        flags == 0xffff && menu == 0
+    }
+
+    pub(super) fn tray_menu_selected_tooltip(
+        state: &TrayMenuTooltipState,
+        selected_item: u16,
+        flags: u16,
+        menu: isize,
+    ) -> Option<&str> {
+        if tray_menu_select_is_closed(flags, menu)
+            || menu_select_has_flag(flags, MF_SEPARATOR)
+            || menu_select_has_flag(flags, MF_SYSMENU)
+        {
+            return None;
+        }
+
+        if menu_select_has_flag(flags, MF_POPUP) {
+            return state
+                .submenu_tooltips
+                .get(&(menu, u32::from(selected_item)))
+                .map(String::as_str);
+        }
+
+        state
+            .command_tooltips
+            .get(&u32::from(selected_item))
+            .map(String::as_str)
+    }
+
+    fn menu_select_has_flag(flags: u16, flag: u32) -> bool {
+        u32::from(flags) & flag != 0
+    }
+
+    fn tray_item_tooltip_text(item: &super::WindowsTrayItemPlan) -> Option<String> {
+        item.tooltip
+            .as_deref()
+            .map(str::trim)
+            .filter(|tooltip| !tooltip.is_empty())
+            .map(ToOwned::to_owned)
+    }
+
+    fn show_tray_menu_tooltip(state: &mut TrayMenuTooltipState, text: &str) {
+        let hwnd = match tray_menu_tooltip_window(state) {
+            Some(hwnd) => hwnd,
+            None => return,
+        };
+        let wide_text = wide_null(text);
+        // Safety: hwnd is the tooltip window owned by this state and wide_text is null-terminated.
+        let _ = unsafe { SetWindowTextW(hwnd, wide_text.as_ptr()) };
+
+        let mut cursor = POINT { x: 0, y: 0 };
+        // Safety: cursor is a valid out pointer.
+        if unsafe { GetCursorPos(&mut cursor) } == 0 {
+            return;
+        }
+
+        let (width, height) = tray_menu_tooltip_size(text);
+        let x = clamp_to_virtual_screen(
+            cursor.x + 18,
+            width,
+            // Safety: GetSystemMetrics has no pointer preconditions.
+            unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) },
+            unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
+        );
+        let y = clamp_to_virtual_screen(
+            cursor.y + 22,
+            height,
+            unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) },
+            unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
+        );
+
+        // Safety: hwnd is a valid top-level static window; SetWindowPos shows it without activation.
+        let _ = unsafe {
+            SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                x,
+                y,
+                width,
+                height,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            )
+        };
+        state.visible_text = Some(text.to_string());
+    }
+
+    fn hide_tray_menu_tooltip(state: &mut TrayMenuTooltipState) {
+        state.visible_text = None;
+        let hwnd = state.tooltip_hwnd as HWND;
+        if !hwnd.is_null() {
+            // Safety: hwnd is the tooltip window owned by this state.
+            let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
+        }
+    }
+
+    fn destroy_tray_menu_tooltip(state: &mut TrayMenuTooltipState) {
+        let hwnd = state.tooltip_hwnd as HWND;
+        if !hwnd.is_null() {
+            // Safety: hwnd is the tooltip window owned by this state.
+            let _ = unsafe { DestroyWindow(hwnd) };
+        }
+        state.tooltip_hwnd = 0;
+        state.visible_text = None;
+    }
+
+    fn tray_menu_tooltip_window(state: &mut TrayMenuTooltipState) -> Option<HWND> {
+        let existing = state.tooltip_hwnd as HWND;
+        if !existing.is_null() {
+            return Some(existing);
+        }
+
+        let class_name = wide_null("STATIC");
+        let title = wide_null("");
+        // Safety: STATIC is a predefined window class. The popup is no-activate and owned by
+        // this transient menu tooltip state, then destroyed when TrackPopupMenu returns.
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                class_name.as_ptr(),
+                title.as_ptr(),
+                WS_POPUP | WS_BORDER,
+                CW_USEDEFAULT,
+                0,
+                CW_USEDEFAULT,
+                0,
+                null_mut(),
+                null_mut(),
+                null_mut(),
+                null_mut(),
+            )
+        };
+        if hwnd.is_null() {
+            None
+        } else {
+            state.tooltip_hwnd = hwnd as isize;
+            Some(hwnd)
+        }
+    }
+
+    fn tray_menu_tooltip_size(text: &str) -> (i32, i32) {
+        let line_count = text.lines().count().max(1);
+        let max_columns = text
+            .lines()
+            .map(|line| line.chars().count())
+            .max()
+            .unwrap_or_else(|| text.chars().count())
+            .max(1);
+        let width = ((max_columns as i32 * 7) + 28).clamp(96, 420);
+        let height = ((line_count as i32 * 18) + 12).clamp(30, 160);
+        (width, height)
+    }
+
+    fn clamp_to_virtual_screen(
+        origin: i32,
+        size: i32,
+        screen_start: i32,
+        screen_extent: i32,
+    ) -> i32 {
+        let max = screen_start + screen_extent - size;
+        if max < screen_start {
+            screen_start
+        } else {
+            origin.clamp(screen_start, max)
+        }
+    }
+
     fn show_tray_menu(
         handle: &TrayHandle,
     ) -> Result<Option<NativeTrayMessage>, WindowsPlatformError> {
@@ -3109,7 +3365,13 @@ try {
             return Err(last_error("CreatePopupMenu"));
         }
 
-        if let Err(error) = append_tray_menu_items(menu, &handle.menu_items) {
+        let mut tooltip_state = TrayMenuTooltipState::default();
+        if let Err(error) = append_tray_menu_items(
+            menu,
+            &handle.menu_items,
+            handle.presenter_min_width,
+            &mut tooltip_state,
+        ) {
             // Safety: menu is owned by this function.
             let _ = unsafe { DestroyMenu(menu) };
             return Err(error);
@@ -3126,6 +3388,7 @@ try {
         // Safety: hidden HWND is valid while handle is alive. Foregrounding ensures the menu
         // dismisses when the user clicks elsewhere, per notification area menu guidance.
         let _ = unsafe { SetForegroundWindow(handle.hwnd) };
+        install_tray_menu_tooltip_state(handle.hwnd, tooltip_state);
         // Safety: menu and HWND are valid; TPM_RETURNCMD returns the chosen command id.
         let command = unsafe {
             TrackPopupMenu(
@@ -3140,6 +3403,7 @@ try {
         };
         // Safety: benign message recommended by Shell docs after notification-area popup menus.
         let _ = unsafe { PostMessageW(handle.hwnd, WM_NULL, 0, 0) };
+        clear_tray_menu_tooltip_state(handle.hwnd);
         // Safety: menu is owned by this function.
         let _ = unsafe { DestroyMenu(menu) };
 
@@ -3155,8 +3419,10 @@ try {
     fn append_tray_menu_items(
         menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
         items: &[super::WindowsTrayItemPlan],
+        presenter_min_width: Option<u16>,
+        tooltip_state: &mut TrayMenuTooltipState,
     ) -> Result<(), WindowsPlatformError> {
-        for item in items {
+        for (position, item) in items.iter().enumerate() {
             match item.kind {
                 super::WindowsTrayItemKind::Separator => {
                     // Safety: menu is owned by caller; separator ignores id and label.
@@ -3170,13 +3436,18 @@ try {
                     if submenu.is_null() {
                         return Err(last_error("CreatePopupMenu"));
                     }
-                    if let Err(error) = append_tray_menu_items(submenu, &item.children) {
+                    if let Err(error) = append_tray_menu_items(
+                        submenu,
+                        &item.children,
+                        presenter_min_width,
+                        tooltip_state,
+                    ) {
                         // Safety: submenu is owned by this branch until AppendMenuW succeeds.
                         let _ = unsafe { DestroyMenu(submenu) };
                         return Err(error);
                     }
 
-                    let label = wide_null(&item.label);
+                    let label = wide_null(&tray_menu_label_text(&item.label, presenter_min_width));
                     let flags = if item.enabled {
                         MF_POPUP
                     } else {
@@ -3189,9 +3460,14 @@ try {
                         let _ = unsafe { DestroyMenu(submenu) };
                         return Err(last_error("AppendMenuW"));
                     }
+                    if let Some(tooltip) = tray_item_tooltip_text(item) {
+                        tooltip_state
+                            .submenu_tooltips
+                            .insert((menu as isize, position as u32), tooltip);
+                    }
                 }
                 super::WindowsTrayItemKind::Command => {
-                    let label = wide_null(&item.label);
+                    let label = wide_null(&tray_menu_label_text(&item.label, presenter_min_width));
                     let flags = if item.enabled {
                         MF_STRING
                     } else {
@@ -3204,11 +3480,36 @@ try {
                     {
                         return Err(last_error("AppendMenuW"));
                     }
+                    if let Some(tooltip) = tray_item_tooltip_text(item) {
+                        tooltip_state
+                            .command_tooltips
+                            .insert(item.command_id, tooltip);
+                    }
                 }
             }
         }
 
         Ok(())
+    }
+
+    pub(super) fn tray_menu_label_text(label: &str, presenter_min_width: Option<u16>) -> String {
+        let Some(min_width) = presenter_min_width.filter(|value| *value > 0) else {
+            return label.to_string();
+        };
+        if label.contains('\t') {
+            return label.to_string();
+        }
+
+        let label_columns = label.chars().count();
+        let target_columns = ((usize::from(min_width).saturating_sub(24)) / 7)
+            .max(label_columns)
+            .max(1);
+        let padding_columns = target_columns.saturating_sub(label_columns);
+        if padding_columns == 0 {
+            label.to_string()
+        } else {
+            format!("{label}\t{}", "\u{00A0}".repeat(padding_columns))
+        }
     }
 
     fn first_enabled_tray_command(
@@ -4228,19 +4529,22 @@ mod tests {
     fn maps_tray_and_clipboard_tokens_to_native_plan() {
         let tray = TrayMenu::new("win fluent")
             .icon_path("C:\\Easydict\\AppIcon.ico")
-            .item(TrayMenuItem::new("open", "Open"));
+            .presenter_min_width(300)
+            .item(TrayMenuItem::new("open", "Open").tooltip("Open"));
         let tray_plan = WindowsPlatformAdapter::plan_tray::<Msg>(&tray).expect("tray plan");
 
         assert_eq!(
             tray_plan.icon_path.as_deref(),
             Some("C:\\Easydict\\AppIcon.ico")
         );
+        assert_eq!(tray_plan.presenter_min_width, Some(300));
         assert_eq!(tray_plan.callback_message, native::wm_user() + 1);
         assert_eq!(tray_plan.item_count, 1);
         assert_eq!(tray_plan.default_command_id, None);
         assert_eq!(tray_plan.items.len(), 1);
         assert_eq!(tray_plan.items[0].id, "open");
         assert_eq!(tray_plan.items[0].label, "Open");
+        assert_eq!(tray_plan.items[0].tooltip.as_deref(), Some("Open"));
         assert!(tray_plan.items[0].enabled);
         assert_eq!(tray_plan.items[0].command_id, 1000);
         assert_eq!(tray_plan.items[0].action_kind, ActionKind::None);
@@ -4260,6 +4564,7 @@ mod tests {
             .separator()
             .item(
                 TrayMenuItem::submenu("browser", "Browser Support")
+                    .tooltip("Browser Support")
                     .item(TrayMenuItem::new("install", "Install").on_invoke(Msg::Changed))
                     .item(TrayMenuItem::new("uninstall", "Uninstall").enabled(false)),
             )
@@ -4274,6 +4579,10 @@ mod tests {
         assert_eq!(tray_plan.items[1].command_id, 0);
         assert_eq!(tray_plan.items[2].kind, WindowsTrayItemKind::Submenu);
         assert_eq!(tray_plan.items[2].label, "Browser Support");
+        assert_eq!(
+            tray_plan.items[2].tooltip.as_deref(),
+            Some("Browser Support")
+        );
         assert_eq!(tray_plan.items[2].children[0].id, "install");
         assert_eq!(tray_plan.items[2].children[0].command_id, 1001);
         assert!(tray_plan.items[2].children[0].enabled);
@@ -4339,6 +4648,53 @@ mod tests {
         assert!(native::is_tray_context_menu_message(WM_RBUTTONUP));
         assert!(native::is_tray_context_menu_message(WM_CONTEXTMENU));
         assert!(!native::is_tray_context_menu_message(WM_LBUTTONUP));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_presenter_min_width_applies_native_popup_width_hint() {
+        assert_eq!(native::tray_menu_label_text("Open", None), "Open");
+        assert_eq!(native::tray_menu_label_text("Open", Some(0)), "Open");
+        assert_eq!(
+            native::tray_menu_label_text("Open\tCtrl+O", Some(300)),
+            "Open\tCtrl+O"
+        );
+
+        let padded = native::tray_menu_label_text("Open", Some(300));
+
+        assert!(padded.starts_with("Open\t"));
+        assert!(padded.contains('\u{00A0}'));
+        assert!(padded.chars().count() > "Open".chars().count());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_menu_hover_tooltips_map_win32_selection_messages() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MF_POPUP, MF_SEPARATOR};
+
+        let mut state = native::TrayMenuTooltipState::default();
+        state.command_tooltips.insert(1000, "Show Easydict".into());
+        state
+            .submenu_tooltips
+            .insert((42, 2), "Browser Support".into());
+
+        assert_eq!(
+            native::tray_menu_selected_tooltip(&state, 1000, 0, 42),
+            Some("Show Easydict")
+        );
+        assert_eq!(
+            native::tray_menu_selected_tooltip(&state, 2, MF_POPUP as u16, 42),
+            Some("Browser Support")
+        );
+        assert_eq!(
+            native::tray_menu_selected_tooltip(&state, 2, MF_SEPARATOR as u16, 42),
+            None
+        );
+        assert!(native::tray_menu_select_is_closed(0xffff, 0));
+        assert_eq!(
+            native::tray_menu_selected_tooltip(&state, 1000, 0xffff, 0),
+            None
+        );
     }
 
     #[cfg(windows)]

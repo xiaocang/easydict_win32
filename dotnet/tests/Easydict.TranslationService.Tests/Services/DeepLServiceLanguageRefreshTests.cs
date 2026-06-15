@@ -92,6 +92,22 @@ public class DeepLServiceLanguageRefreshTests
         service.SupportedLanguages.Should().NotContain(Language.ClassicalChinese);
     }
 
+    [Fact]
+    public async Task RefreshSupportedLanguagesAsync_MalformedJson_KeepsBaseline_DoesNotThrow()
+    {
+        var handler = new MockHttpMessageHandler();
+        handler.EnqueueJsonResponse("not-json{");
+
+        var service = CreateService(handler);
+        service.Configure("test-api-key:fx", useWebFirst: true);
+
+        // A malformed/unexpected response must be a no-op, not throw (best-effort refresh).
+        await service.RefreshSupportedLanguagesAsync();
+
+        service.SupportedLanguages.Should().Contain(Language.English);
+        service.SupportedLanguages.Should().Contain(Language.Vietnamese);
+    }
+
     [Theory]
     [InlineData("EN", Language.English)]
     [InlineData("EN-US", Language.English)]

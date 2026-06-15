@@ -29,8 +29,11 @@ public sealed class DeepLService : BaseTranslationService
     /// As of 2026 DeepL's next-generation model supports 100+ languages, covering every language in
     /// this app's <see cref="Language"/> enum except Classical/Literary Chinese (which DeepL has no
     /// target for). This list is only a local validation gate (it does not drive the UI), so it is
-    /// derived from the enum to stay aligned automatically; the exact server-side set is refreshed at
-    /// runtime via <see cref="RefreshSupportedLanguagesAsync"/> when an API key is configured.
+    /// derived from the enum to stay aligned automatically and already reflects DeepL's current
+    /// support. When an API key is configured, <see cref="RefreshSupportedLanguagesAsync"/> can
+    /// additively augment this baseline with DeepL's live <c>/v2/languages</c> list; it is invoked
+    /// best-effort and on-demand from <see cref="SupportsLanguagePair"/> (mainly future-proofing,
+    /// since the enum-derived baseline rarely misses).
     /// </summary>
     private static readonly IReadOnlyList<Language> DeepLLanguages =
         Enum.GetValues<Language>()
@@ -160,7 +163,16 @@ public sealed class DeepLService : BaseTranslationService
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var fetched = ParseLanguages(json);
+        HashSet<Language> fetched;
+        try
+        {
+            fetched = ParseLanguages(json);
+        }
+        catch (JsonException)
+        {
+            return; // malformed/unexpected response; keep baseline (best-effort)
+        }
+
         if (fetched.Count == 0)
         {
             return;
@@ -645,7 +657,8 @@ public sealed class DeepLService : BaseTranslationService
         // NOTE: DeepL's exact Tagalog/Filipino code ("TL" vs "FIL") should be confirmed against a
         // live /v2/languages response; MapDeepLCode accepts both inbound. "TL" matches ToIso639.
         Language.Filipino => "TL",
-        _ => language.ToIso639().ToUpper()
+        // ToUpperInvariant: DeepL codes are ASCII; avoid locale-sensitive casing (e.g. Turkish 'i').
+        _ => language.ToIso639().ToUpperInvariant()
     };
 }
 

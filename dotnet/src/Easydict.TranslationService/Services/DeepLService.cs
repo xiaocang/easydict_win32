@@ -34,9 +34,10 @@ public sealed class DeepLService : BaseTranslationService
     /// <c>/v2/languages</c> list (best-effort, on-demand from <see cref="SupportsLanguagePair"/>).
     /// </summary>
     private static readonly IReadOnlyList<Language> DeepLLanguages =
-        Enum.GetValues<Language>()
-            .Where(l => l is not (Language.Auto or Language.ClassicalChinese))
-            .ToArray();
+        Array.AsReadOnly(
+            Enum.GetValues<Language>()
+                .Where(l => l is not (Language.Auto or Language.ClassicalChinese))
+                .ToArray());
 
     /// <summary>
     /// Languages supported by DeepL's free web JSON-RPC endpoint (<c>LMT_handle_texts</c>), used when
@@ -45,22 +46,24 @@ public sealed class DeepLService : BaseTranslationService
     /// API-only and the web endpoint rejects them with HTTP 400, so they must NOT be offered here.
     /// </summary>
     private static readonly IReadOnlyList<Language> WebClassicLanguages =
-    [
-        Language.SimplifiedChinese, Language.TraditionalChinese, Language.English, Language.Japanese,
-        Language.Korean, Language.French, Language.Spanish, Language.Portuguese,
-        Language.Italian, Language.German, Language.Russian, Language.Dutch,
-        Language.Polish, Language.Bulgarian, Language.Czech, Language.Danish,
-        Language.Estonian, Language.Finnish, Language.Greek, Language.Hungarian,
-        Language.Indonesian, Language.Latvian, Language.Lithuanian, Language.Norwegian,
-        Language.Romanian, Language.Slovak, Language.Slovenian, Language.Swedish,
-        Language.Turkish, Language.Ukrainian
-    ];
+        Array.AsReadOnly(new[]
+        {
+            Language.SimplifiedChinese, Language.TraditionalChinese, Language.English, Language.Japanese,
+            Language.Korean, Language.French, Language.Spanish, Language.Portuguese,
+            Language.Italian, Language.German, Language.Russian, Language.Dutch,
+            Language.Polish, Language.Bulgarian, Language.Czech, Language.Danish,
+            Language.Estonian, Language.Finnish, Language.Greek, Language.Hungarian,
+            Language.Indonesian, Language.Latvian, Language.Lithuanian, Language.Norwegian,
+            Language.Romanian, Language.Slovak, Language.Slovenian, Language.Swedish,
+            Language.Turkish, Language.Ukrainian
+        });
 
     private static readonly TimeSpan LanguageCacheTtl = TimeSpan.FromHours(24);
 
     // Effective supported-language set (baseline ∪ dynamically fetched). Null until a successful
-    // fetch; reads fall back to the baseline. Replaced atomically; arrays are immutable once built.
-    private volatile Language[]? _effectiveLanguages;
+    // fetch; reads fall back to the baseline. Replaced atomically; stored as a read-only view so
+    // callers of SupportedLanguages cannot mutate the underlying array.
+    private volatile IReadOnlyList<Language>? _effectiveLanguages;
     private long _lastLanguageFetchTicks; // UTC ticks of the last fetch attempt; 0 = never
     private int _languageFetchInFlight;   // 0/1 guard to avoid concurrent fetches
 
@@ -107,16 +110,24 @@ public sealed class DeepLService : BaseTranslationService
     protected override void ValidateRequest(TranslationRequest request)
     {
         if (string.IsNullOrEmpty(_apiKey) &&
-            !SupportsLanguagePair(request.FromLanguage, request.ToLanguage) &&
-            IsApiOnlyLanguage(request.ToLanguage))
+            !SupportsLanguagePair(request.FromLanguage, request.ToLanguage))
         {
-            throw new TranslationException(
-                $"DeepL free (web) mode does not support {request.ToLanguage}. " +
-                "Add a DeepL API key in Settings to translate this language.")
+            // The offending language may be the source or the target (e.g. Vietnamese -> English).
+            Language? apiOnly =
+                IsApiOnlyLanguage(request.ToLanguage) ? request.ToLanguage :
+                IsApiOnlyLanguage(request.FromLanguage) ? request.FromLanguage :
+                null;
+
+            if (apiOnly is { } language)
             {
-                ErrorCode = TranslationErrorCode.UnsupportedLanguage,
-                ServiceId = ServiceId
-            };
+                throw new TranslationException(
+                    $"DeepL free (web) mode does not support {language}. " +
+                    "Add a DeepL API key in Settings to translate this language.")
+                {
+                    ErrorCode = TranslationErrorCode.UnsupportedLanguage,
+                    ServiceId = ServiceId
+                };
+            }
         }
 
         base.ValidateRequest(request);
@@ -239,7 +250,7 @@ public sealed class DeepLService : BaseTranslationService
 
         var union = new HashSet<Language>(DeepLLanguages);
         union.UnionWith(fetched);
-        _effectiveLanguages = union.ToArray();
+        _effectiveLanguages = Array.AsReadOnly(union.ToArray());
     }
 
     /// <summary>

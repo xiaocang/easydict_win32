@@ -135,6 +135,23 @@ public class DeepLServiceTests
     }
 
     [Fact]
+    public async Task TranslateAsync_KeylessWebMode_VietnameseSource_ThrowsHelpfulMessage()
+    {
+        // The API-only language may be the source (Vietnamese -> English); still guide to add a key.
+        var request = new TranslationRequest
+        {
+            Text = "Xin chào",
+            FromLanguage = Language.Vietnamese,
+            ToLanguage = Language.English
+        };
+
+        var act = async () => await _service.TranslateAsync(request);
+
+        (await act.Should().ThrowAsync<TranslationException>())
+            .Which.Message.Should().Contain("API key");
+    }
+
+    [Fact]
     public void ServiceId_IsDeepL()
     {
         _service.ServiceId.Should().Be("deepl");

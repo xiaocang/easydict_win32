@@ -263,8 +263,8 @@ pub use openai_compatible::{
     built_in_ai_proxy_service_config, check_foundry_local_runtime_status, clamp_openai_temperature,
     cleanup_openai_translation_text, correct_grammar_openai_compatible,
     custom_openai_service_config, decrypt_built_in_ai_secret, deepseek_service_config,
-    detect_openai_api_format_from_url, execute_openai_stream_request,
-    execute_openai_stream_request_observing_chunks,
+    default_foundry_local_runtime_controller, detect_openai_api_format_from_url,
+    execute_openai_stream_request, execute_openai_stream_request_observing_chunks,
     extract_foundry_local_chat_completions_endpoint,
     extract_foundry_local_chat_completions_endpoint_from_logs,
     foundry_local_models_endpoint_from_chat_completions_endpoint, foundry_local_service_config,
@@ -281,15 +281,15 @@ pub use openai_compatible::{
     try_resolve_foundry_local_model_id, validate_openai_config, zhipu_service_config,
     BuiltInAiDeviceRegistrationHttpClient, BuiltInAiDeviceRegistrationHttpResponse,
     BuiltInAiDeviceRegistrationRequestPlan, BuiltInAiSecretError,
-    CommandFoundryLocalEndpointResolver, FoundryLocalEndpointResolver, FoundryLocalError,
-    FoundryLocalErrorCode, FoundryLocalModelState, FoundryLocalPrepareOutcome,
-    FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
-    FoundryLocalStatusCheck, OllamaModelRefreshOutcome, OpenAiApiFormat, OpenAiCompatibleConfig,
-    OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient, OpenAiHttpGetRequestPlan,
-    OpenAiHttpRequestPlan, OpenAiHttpTextResponse, OpenAiPlanError, OpenAiTranslationRequest,
-    ReqwestOpenAiHttpClient, BUILT_IN_AI_ALLOWED_PROXY_MODELS, BUILT_IN_AI_DEFAULT_MODEL,
-    CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL,
-    FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_DEFAULT_MODEL,
+    CommandFoundryLocalEndpointResolver, DefaultFoundryLocalRuntimeController,
+    FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalErrorCode, FoundryLocalModelState,
+    FoundryLocalPrepareOutcome, FoundryLocalRuntimeController, FoundryLocalRuntimeState,
+    FoundryLocalRuntimeStatus, FoundryLocalStatusCheck, OllamaModelRefreshOutcome, OpenAiApiFormat,
+    OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiExecutionErrorCode, OpenAiHttpClient,
+    OpenAiHttpGetRequestPlan, OpenAiHttpRequestPlan, OpenAiHttpTextResponse, OpenAiPlanError,
+    OpenAiTranslationRequest, ReqwestOpenAiHttpClient, BUILT_IN_AI_ALLOWED_PROXY_MODELS,
+    BUILT_IN_AI_DEFAULT_MODEL, CUSTOM_OPENAI_DEFAULT_MODEL, DEEPSEEK_DEFAULT_ENDPOINT,
+    DEEPSEEK_DEFAULT_MODEL, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_DEFAULT_MODEL,
     GITHUB_MODELS_DEFAULT_ENDPOINT, GITHUB_MODELS_DEFAULT_MODEL, GROQ_DEFAULT_ENDPOINT,
     GROQ_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT, OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_ENDPOINT,
     OPENAI_DEFAULT_MODEL, OPENAI_DEFAULT_TEMPERATURE, OPENAI_LEGACY_CHAT_COMPLETIONS_ENDPOINT,
@@ -1300,11 +1300,16 @@ impl EasydictApp {
             {
                 if !bypass_cache_read {
                     if let Some(result) = self.state.translation_cache.get(&cache_request) {
-                        return Task::message(Message::QuickTranslateServiceFinished(
-                            quick_translate::quick_translate_service_update_from_cache(
-                                &request, result,
-                            ),
-                        ));
+                        let update = quick_translate::quick_translate_service_update_from_cache(
+                            &request, result,
+                        );
+                        if quick_translate::quick_translate_update_needs_youdao_phonetic_enrichment(
+                            &request, &update,
+                        ) {
+                            return quick_translate_phonetic_enrichment_task(request, update);
+                        }
+
+                        return Task::message(Message::QuickTranslateServiceFinished(update));
                     }
                 }
 
@@ -1666,7 +1671,7 @@ fn built_in_ai_device_registration_task(settings: &SettingsState) -> Task<Messag
 fn foundry_local_prepare_task(settings: protocol::SettingsSnapshot) -> Task<Message> {
     Task::perform(
         async move {
-            let mut controller = openai_compatible::CommandFoundryLocalEndpointResolver::default();
+            let mut controller = openai_compatible::default_foundry_local_runtime_controller();
             openai_compatible::prepare_foundry_local_service(&mut controller, &settings)
                 .map_err(|error| error.to_string())
         },
@@ -1810,6 +1815,20 @@ fn quick_translate_backend_service_task(
             Message::QuickTranslateServiceFinished,
         )
     }
+}
+
+fn quick_translate_phonetic_enrichment_task(
+    request: quick_translate::QuickTranslateServiceRequest,
+    update: quick_translate::QuickTranslateServiceUpdate,
+) -> Task<Message> {
+    Task::perform(
+        async move {
+            quick_translate::enrich_quick_translate_update_with_global_youdao_phonetics(
+                &request, update,
+            )
+        },
+        Message::QuickTranslateServiceFinished,
+    )
 }
 
 fn long_document_task(request: long_document::LongDocumentServiceRequest) -> Task<Message> {

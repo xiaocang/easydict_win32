@@ -3,6 +3,7 @@ name = "easydict_app"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
+autobins = false
 
 [dependencies]
 aes = "0.8"
@@ -41,11 +42,25 @@ zip = "8.6"
 [features]
 default = []
 enable-linguee-service = []
+foundry-sdk = ["easydict_foundry_local/sdk"]
+foundry-sdk-winml = ["easydict_foundry_local/sdk-winml"]
 retained-dotnet-workers = []
 
 [dev-dependencies]
 flate2 = "1"
 win_fluent_testkit = { path = "../../../lib/winfluent-rs/crates/win_fluent_testkit" }
+
+[[bin]]
+name = "easydict_app"
+path = "src/main.rs"
+
+[[bin]]
+name = "easydict_browser_registrar"
+path = "src/bin/easydict_browser_registrar.rs"
+
+[[bin]]
+name = "easydict_cli"
+path = "src/bin/easydict_cli.rs"
 
 [[bin]]
 name = "easydict-native-bridge"

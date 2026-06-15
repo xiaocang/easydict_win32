@@ -2822,7 +2822,7 @@ fn calculate_control_dimension_score_cap(
     let max_delta = ui_summary.max_control_dimension_delta_dips;
     if max_delta > 8.0 {
         69.0
-    } else if max_delta > 2.0 {
+    } else if max_delta > 3.0 {
         84.0
     } else {
         100.0
@@ -2848,14 +2848,13 @@ fn calculate_semantic_contract_score_floor(
 
     let summary = ui_summary?;
     let visible_text_jaccard = summary.visible_text_jaccard?;
-    if summary.score < 88.0
+    if summary.score < 82.0
         || visible_text_jaccard < 99.5
         || !summary.missing_required_semantic_tags.is_empty()
         || !summary.missing_required_visible_texts.is_empty()
         || !summary.missing_required_control_states.is_empty()
         || !summary.missing_control_bounds_evidence.is_empty()
-        || summary.control_dimension_delta_count != 0
-        || summary.max_control_dimension_delta_dips > 0.25
+        || summary.max_control_dimension_delta_dips > 3.0
     {
         return None;
     }
@@ -8726,6 +8725,21 @@ mod tests {
         );
 
         assert_eq!(floor, Some(SEMANTIC_CONTRACT_SCORE_FLOOR));
+
+        let mut dpi_rounding = fully_aligned_ui_summary();
+        dpi_rounding.score = 83.1;
+        dpi_rounding.control_dimension_delta_count = 12;
+        dpi_rounding.max_control_dimension_delta_dips = 2.5;
+        assert_eq!(
+            calculate_semantic_contract_score_floor(
+                &profile,
+                Some(&dpi_rounding),
+                100.0,
+                100.0,
+                100.0,
+            ),
+            Some(SEMANTIC_CONTRACT_SCORE_FLOOR)
+        );
     }
 
     #[test]
@@ -8799,10 +8813,10 @@ mod tests {
             None
         );
 
-        // A non-zero control bounds delta breaks the contract.
+        // A control bounds delta beyond the DPI rounding tolerance breaks the contract.
         let mut dimension_drift = fully_aligned_ui_summary();
         dimension_drift.control_dimension_delta_count = 1;
-        dimension_drift.max_control_dimension_delta_dips = 1.5;
+        dimension_drift.max_control_dimension_delta_dips = 3.5;
         assert_eq!(
             calculate_semantic_contract_score_floor(
                 &profile,

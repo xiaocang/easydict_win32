@@ -16,12 +16,13 @@ use crate::mdx_native::{
 };
 use crate::openai_compatible::{
     build_openai_translation_request_plan, cleanup_openai_translation_text,
-    correct_grammar_openai_compatible, execute_openai_stream_request_observing_chunks,
-    openai_compatible_service_can_route_natively, prepare_foundry_local_service,
-    resolve_foundry_local_model_id_for_config, resolve_openai_compatible_config_for_service,
-    translate_openai_compatible, validate_openai_translation_request_for_service,
-    CommandFoundryLocalEndpointResolver, FoundryLocalRuntimeController, OpenAiCompatibleConfig,
-    OpenAiExecutionError, OpenAiHttpClient, OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
+    correct_grammar_openai_compatible, default_foundry_local_runtime_controller,
+    execute_openai_stream_request_observing_chunks, openai_compatible_service_can_route_natively,
+    prepare_foundry_local_service, resolve_foundry_local_model_id_for_config,
+    resolve_openai_compatible_config_for_service, translate_openai_compatible,
+    validate_openai_translation_request_for_service, DefaultFoundryLocalRuntimeController,
+    FoundryLocalRuntimeController, OpenAiCompatibleConfig, OpenAiExecutionError, OpenAiHttpClient,
+    OpenAiTranslationRequest, ReqwestOpenAiHttpClient,
 };
 use crate::openvino_download::{
     default_openvino_data_directory, ensure_openvino_runtime_directory_on_path,
@@ -410,6 +411,34 @@ pub fn enrich_quick_translate_update_with_youdao_phonetics<C: TraditionalHttpCli
     let size_kb = phonetic_cache_entry_size_kb(&candidate.cache_key, &phonetics);
     phonetic_cache.insert_by_key(candidate.cache_key, size_kb, phonetics.clone());
     update_with_merged_phonetics(update, candidate.result, &phonetics)
+}
+
+pub fn quick_translate_update_needs_youdao_phonetic_enrichment(
+    request: &QuickTranslateServiceRequest,
+    update: &QuickTranslateServiceUpdate,
+) -> bool {
+    quick_translate_phonetic_enrichment_candidate(request, update).is_some()
+}
+
+#[doc(hidden)]
+pub fn seed_global_youdao_phonetic_cache_for_tests(english_word: &str, phonetics: Vec<Phonetic>) {
+    let state = PHONETIC_ENRICHMENT_STATE
+        .get_or_init(|| Mutex::new(QuickTranslatePhoneticEnrichmentState::default()));
+    let mut state = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    state.cache.insert(english_word, phonetics);
+}
+
+#[doc(hidden)]
+pub fn clear_global_youdao_phonetic_cache_for_tests() {
+    let state = PHONETIC_ENRICHMENT_STATE
+        .get_or_init(|| Mutex::new(QuickTranslatePhoneticEnrichmentState::default()));
+    let mut state = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    state.cache.clear();
+    state.flights.clear();
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -844,18 +873,18 @@ impl<F: NativeMdxDictionaryReaderFactory> QuickTranslateBackend
     }
 }
 
-pub struct NativeOpenAiQuickTranslateBackend<C, R = CommandFoundryLocalEndpointResolver> {
+pub struct NativeOpenAiQuickTranslateBackend<C, R = DefaultFoundryLocalRuntimeController> {
     http_client: C,
     settings: Option<SettingsSnapshot>,
     foundry_local_endpoint_resolver: R,
 }
 
-impl<C> NativeOpenAiQuickTranslateBackend<C, CommandFoundryLocalEndpointResolver> {
+impl<C> NativeOpenAiQuickTranslateBackend<C, DefaultFoundryLocalRuntimeController> {
     pub fn new(http_client: C) -> Self {
         Self {
             http_client,
             settings: None,
-            foundry_local_endpoint_resolver: CommandFoundryLocalEndpointResolver::default(),
+            foundry_local_endpoint_resolver: default_foundry_local_runtime_controller(),
         }
     }
 }
@@ -1883,7 +1912,7 @@ pub fn run_quick_translate_service_with_app_dir(
     request: QuickTranslateServiceRequest,
     app_dir: impl AsRef<Path>,
 ) -> QuickTranslateServiceUpdate {
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
@@ -1901,7 +1930,7 @@ pub fn run_quick_translate_service_with_packaged_app_dir_and_worker_policy(
     app_dir: impl AsRef<Path>,
     worker_policy: RuntimeRoutePolicy,
 ) -> QuickTranslateServiceUpdate {
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     run_quick_translate_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
@@ -2090,7 +2119,7 @@ fn run_quick_translate_streaming_service_with_app_dir(
     app_dir: impl AsRef<Path>,
     sender: &UnboundedSender<Message>,
 ) -> QuickTranslateServiceUpdate {
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     run_quick_translate_streaming_service_with_app_dir_and_worker_policy_and_native_local_ai_client_internal(
         request,
@@ -2160,7 +2189,7 @@ pub fn run_quick_translate_streaming_service_with_app_dir_observing_chunks(
     app_dir: impl AsRef<Path>,
     on_chunk: &mut dyn FnMut(&str),
 ) -> QuickTranslateServiceUpdate {
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     run_quick_translate_streaming_service_with_app_dir_and_native_local_ai_client_observing_chunks(
         request,

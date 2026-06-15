@@ -1,10 +1,16 @@
+use easydict_app::protocol::SettingsSnapshot;
 use easydict_app::{
     build_vision_layout_request_plan, build_vision_layout_request_plan_from_bgra,
     execute_vision_layout_detection, parse_vision_layout_detection_array,
     parse_vision_layout_response, OpenAiApiFormat, OpenAiCompatibleConfig, OpenAiExecutionError,
-    OpenAiExecutionErrorCode, VisionLayoutHttpClient, VisionLayoutHttpRequestPlan,
-    VisionLayoutHttpResponse, VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
+    OpenAiExecutionErrorCode, ReqwestVisionLayoutHttpClient, VisionLayoutDetection,
+    VisionLayoutHttpClient, VisionLayoutHttpRequestPlan, VisionLayoutHttpResponse,
+    VisionLayoutRegionType, VISION_LAYOUT_DETECTION_PROMPT,
 };
+
+const VISION_LAYOUT_SMOKE_ENDPOINT_ENV: &str = "EASYDICT_VISION_LAYOUT_SMOKE_ENDPOINT";
+const VISION_LAYOUT_SMOKE_MODEL_ENV: &str = "EASYDICT_VISION_LAYOUT_SMOKE_MODEL";
+const VISION_LAYOUT_SMOKE_API_KEY_ENV: &str = "EASYDICT_VISION_LAYOUT_SMOKE_API_KEY";
 
 #[test]
 fn vision_layout_detection_array_parses_percent_rects_to_pixels() {
@@ -327,6 +333,37 @@ fn vision_layout_executor_requires_api_key_unless_config_allows_local_endpoint()
     assert_eq!(authorization_header(&client.requests[0].headers), None);
 }
 
+#[test]
+fn vision_layout_real_provider_smoke_when_env_configured() {
+    let Some(mut config) = smoke_vision_config() else {
+        eprintln!(
+            "skipping real Vision layout smoke; set {VISION_LAYOUT_SMOKE_ENDPOINT_ENV} and {VISION_LAYOUT_SMOKE_MODEL_ENV}"
+        );
+        return;
+    };
+    if let Some(api_key) = optional_env(VISION_LAYOUT_SMOKE_API_KEY_ENV) {
+        config = config.with_api_key(api_key);
+    } else if is_local_vision_endpoint(&config.endpoint) {
+        config = config.without_required_api_key();
+    } else {
+        panic!(
+            "{VISION_LAYOUT_SMOKE_API_KEY_ENV} must be set for non-local Vision layout endpoint {}",
+            config.endpoint
+        );
+    }
+
+    let mut client = ReqwestVisionLayoutHttpClient::from_settings(&SettingsSnapshot::default())
+        .expect("real Vision layout HTTP client should build");
+    let width = 256u32;
+    let height = 160u32;
+    let bgra = synthetic_document_bgra(width as usize, height as usize);
+
+    let detections = execute_vision_layout_detection(&mut client, &config, &bgra, width, height)
+        .expect("real Vision layout endpoint should return a parseable response");
+
+    assert_vision_detection_bounds(&detections, f64::from(width), f64::from(height));
+}
+
 struct FakeVisionLayoutClient {
     response: Result<VisionLayoutHttpResponse, OpenAiExecutionError>,
     requests: Vec<VisionLayoutHttpRequestPlan>,
@@ -356,6 +393,79 @@ fn authorization_header(headers: &[(String, String)]) -> Option<&str> {
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
         .map(|(_, value)| value.as_str())
+}
+
+fn smoke_vision_config() -> Option<OpenAiCompatibleConfig> {
+    let endpoint = optional_env(VISION_LAYOUT_SMOKE_ENDPOINT_ENV);
+    let model = optional_env(VISION_LAYOUT_SMOKE_MODEL_ENV);
+    if endpoint.is_none() && model.is_none() {
+        return None;
+    }
+
+    let endpoint = endpoint.unwrap_or_else(|| {
+        panic!(
+            "{VISION_LAYOUT_SMOKE_ENDPOINT_ENV} must be set when {VISION_LAYOUT_SMOKE_MODEL_ENV} is set"
+        )
+    });
+    let model = model.unwrap_or_else(|| {
+        panic!(
+            "{VISION_LAYOUT_SMOKE_MODEL_ENV} must be set when {VISION_LAYOUT_SMOKE_ENDPOINT_ENV} is set"
+        )
+    });
+    Some(OpenAiCompatibleConfig::new(endpoint, model))
+}
+
+fn optional_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn is_local_vision_endpoint(endpoint: &str) -> bool {
+    let endpoint = endpoint.to_ascii_lowercase();
+    endpoint.contains("://localhost")
+        || endpoint.contains("://127.0.0.1")
+        || endpoint.contains("://[::1]")
+}
+
+fn synthetic_document_bgra(width: usize, height: usize) -> Vec<u8> {
+    let mut bgra = vec![255u8; width * height * 4];
+    fill_rect(&mut bgra, width, 24, 20, 208, 20);
+    fill_rect(&mut bgra, width, 32, 58, 192, 16);
+    fill_rect(&mut bgra, width, 32, 90, 192, 16);
+    fill_rect(&mut bgra, width, 68, 124, 120, 20);
+    bgra
+}
+
+fn fill_rect(bgra: &mut [u8], image_width: usize, x: usize, y: usize, width: usize, height: usize) {
+    let image_height = bgra.len() / image_width / 4;
+    for row in y..(y + height).min(image_height) {
+        for column in x..(x + width).min(image_width) {
+            let offset = (row * image_width + column) * 4;
+            bgra[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+        }
+    }
+}
+
+fn assert_vision_detection_bounds(
+    detections: &[VisionLayoutDetection],
+    image_width: f64,
+    image_height: f64,
+) {
+    for detection in detections {
+        assert!(detection.confidence.is_finite());
+        assert!(detection.x.is_finite());
+        assert!(detection.y.is_finite());
+        assert!(detection.width.is_finite());
+        assert!(detection.height.is_finite());
+        assert!(detection.x >= 0.0);
+        assert!(detection.y >= 0.0);
+        assert!(detection.width >= 0.0);
+        assert!(detection.height >= 0.0);
+        assert!(detection.x + detection.width <= image_width + 1.0);
+        assert!(detection.y + detection.height <= image_height + 1.0);
+    }
 }
 
 fn assert_close(actual: f64, expected: f64) {

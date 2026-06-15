@@ -2239,19 +2239,12 @@ fn translate_traditional_http_service_executes_linguee_plan() {
     );
 }
 
-#[cfg(feature = "enable-linguee-service")]
 #[test]
-fn traditional_http_config_routes_linguee_only_when_feature_enabled() {
+fn traditional_http_config_routes_linguee_by_default() {
     assert_eq!(
         traditional_http_config_for_service("linguee", &SettingsSnapshot::default()),
         Some(TraditionalHttpServiceConfig::Linguee)
     );
-}
-
-#[cfg(not(feature = "enable-linguee-service"))]
-#[test]
-fn traditional_http_config_omits_linguee_without_feature() {
-    assert!(traditional_http_config_for_service("linguee", &SettingsSnapshot::default()).is_none());
 }
 
 struct FakeBingHttpClient {

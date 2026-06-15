@@ -118,13 +118,48 @@ function New-RustLongDocArguments {
     return $longDocArguments
 }
 
+function Test-RetainedDotnetRuntimeOrWorkerPath {
+    param([string]$Path)
+
+    $leafName = [System.IO.Path]::GetFileName($Path)
+    if (-not $leafName) {
+        return $false
+    }
+
+    $leafName = $leafName.ToLowerInvariant()
+    $dotnetCommands = @("dotnet.exe", "dotnet.cmd", "dotnet.bat", "dotnet.com")
+    if ($dotnetCommands -contains $leafName) {
+        return $true
+    }
+
+    if ($leafName.StartsWith("easydict.workers.")) {
+        return $true
+    }
+
+    if ($leafName.StartsWith("easydict.compathost")) {
+        return $true
+    }
+
+    return $false
+}
+
+function Assert-RustHelperPathAllowed {
+    param([string]$Path)
+
+    if (Test-RetainedDotnetRuntimeOrWorkerPath -Path $Path) {
+        throw "Rust helper path points to a retained .NET runtime or worker entry and cannot be used: '$Path'. Pass easydict_long_doc.exe, or use -UseCargo for source checkout development mode."
+    }
+}
+
 function Resolve-RustHelper {
     if ($RustHelperPath) {
         if (-not (Test-Path -LiteralPath $RustHelperPath -PathType Leaf)) {
             throw "Rust helper not found at '$RustHelperPath'."
         }
 
-        return (Resolve-Path -LiteralPath $RustHelperPath).Path
+        $resolvedRustHelperPath = (Resolve-Path -LiteralPath $RustHelperPath).Path
+        Assert-RustHelperPathAllowed -Path $resolvedRustHelperPath
+        return $resolvedRustHelperPath
     }
 
     $candidatePaths = @()

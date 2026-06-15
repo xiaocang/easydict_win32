@@ -26,9 +26,8 @@ fn service_catalog_registers_migration_list_services_in_ui_order() {
         "caiyun",
         "niutrans",
         "volcano",
+        "linguee",
     ];
-    #[cfg(feature = "enable-linguee-service")]
-    expected.push("linguee");
     expected.push("windows-local-ai");
 
     assert_eq!(app_visible_translation_service_ids(), expected);
@@ -115,14 +114,15 @@ fn service_catalog_feeds_default_window_service_state() {
 }
 
 #[test]
-fn service_catalog_excludes_linguee_unless_feature_enabled() {
+fn service_catalog_includes_linguee_by_default() {
     let ids = app_visible_translation_service_ids();
-
-    #[cfg(feature = "enable-linguee-service")]
     assert!(ids.contains(&"linguee"));
 
-    #[cfg(not(feature = "enable-linguee-service"))]
-    assert!(!ids.contains(&"linguee"));
+    let descriptor = find_translation_service_descriptor("linguee")
+        .expect("Linguee should be part of the default Rust service catalog");
+    assert_eq!(descriptor.kind, TranslationServiceKind::Dictionary);
+    assert!(descriptor.configured_by_default);
+    assert!(!descriptor.requires_api_key);
 }
 
 #[test]

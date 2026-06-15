@@ -88,6 +88,8 @@ fn rs_portable_release_path_forces_rust_only_runtime_profile() {
 fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid_assets() {
     let root = repo_root();
     let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let workflow_header = text_between(&workflow, "name: Release and Publish", "\non:");
+    let workflow_dispatch = text_between(&workflow, "  workflow_dispatch:", "\npermissions:");
     let integration_tests_job = text_between(&workflow, "  integration-tests:", "  publish-msix:");
     let publish_msix_job = text_between(&workflow, "  publish-msix:", "  publish-rs-portable:");
     let publish_rs_portable_job =
@@ -113,9 +115,44 @@ fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid
         "release workflow dispatch should default to the rs portable artifact set",
     );
     assert_contains(
+        workflow_dispatch,
+        "runtime_profile:",
+        "release workflow dispatch should still expose a runtime profile for explicit hybrid runs",
+    );
+    assert_contains(
+        workflow_dispatch,
+        "default: ''",
+        "release workflow dispatch should require a caller-provided hybrid runtime profile",
+    );
+    assert_contains(
+        workflow_dispatch,
+        "type: string",
+        "release workflow dispatch runtime_profile should allow blank default instead of a default hybrid choice",
+    );
+    assert_not_contains(
+        workflow_dispatch,
+        "default: 'hybrid'",
+        "release workflow dispatch must not silently default retained runtime packaging to hybrid",
+    );
+    assert_contains(
         &workflow,
         "RELEASE_FLAVOR: ${{ github.event.inputs.release_flavor || 'rs-portable' }}",
         "tag-triggered releases should normalize the absent release flavor to rs-portable",
+    );
+    assert_contains(
+        workflow_header,
+        "formal rs portable release by default",
+        "release workflow comments should describe stable tag pushes as rs portable by default",
+    );
+    assert_contains(
+        workflow_header,
+        "WinGet is submitted only for stable tags when release_flavor=hybrid",
+        "release workflow comments should keep WinGet tied to explicit hybrid release flavor",
+    );
+    assert_not_contains(
+        workflow_header,
+        "formal release (e.g. v1.2.3), submitted to WinGet",
+        "release workflow comments must not imply default stable tags publish the legacy WinGet package",
     );
 
     let publish_rs_portable_header =
@@ -183,6 +220,23 @@ fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid
         "(github.event.inputs.release_flavor || 'rs-portable') == 'rs-portable'",
         "publish-rs-portable should be positively gated to release_flavor == 'rs-portable'",
     );
+    assert_contains(
+        publish_msix_job,
+        "RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}",
+        "publish-msix should require explicit runtime_profile input instead of defaulting to hybrid",
+    );
+    assert_contains(
+        create_bundle_job,
+        "RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}",
+        "create-bundle should require explicit runtime_profile input instead of defaulting to hybrid",
+    );
+    for section in [publish_msix_job, create_bundle_job] {
+        assert_not_contains(
+            section,
+            "github.event.inputs.runtime_profile || 'hybrid'",
+            "hybrid release jobs must not silently default runtime_profile to hybrid",
+        );
+    }
     for forbidden_condition in [
         "!= 'hybrid'",
         "!= \"hybrid\"",
@@ -284,6 +338,26 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
     );
     assert_contains(
         publish_job,
+        "cargo test -p easydict_app runtime_policy --lib",
+        "rs portable release should run default runtime-policy unit tests before packaging",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --features retained-dotnet-workers runtime_policy --lib",
+        "rs portable release should prove retained-worker feature builds still require explicit runtime opt-in",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --features retained-dotnet-workers --test quick_translate_behavior explicit_worker_policy_without_hybrid_runtime_profile_stays_rust_only -- --exact --nocapture",
+        "rs portable release should prove Quick Translate retained-worker policy injection still requires explicit hybrid runtime",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --features retained-dotnet-workers --test long_document_behavior explicit_longdoc_worker_policy_without_hybrid_runtime_profile_stays_rust_only -- --exact --nocapture",
+        "rs portable release should prove LongDoc retained-worker policy injection still requires explicit hybrid runtime",
+    );
+    assert_contains(
+        publish_job,
         "cargo test -p easydict_app --test default_api_boundary_behavior",
         "rs portable release should run default app API/runtime boundary tests before packaging",
     );
@@ -291,6 +365,16 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
         publish_job,
         "cargo test -p easydict_app --test protocol_behavior",
         "rs portable release should run default protocol facade tests before packaging",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers -- --exact --nocapture",
+        "rs portable release should prove CLI --app-dir ignores stale retained .NET payload markers",
+    );
+    assert_contains(
+        publish_job,
+        "cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture",
+        "rs portable release should prove LongDoc --app-dir ignores stale retained .NET payload markers",
     );
     assert_contains(
         publish_job,
@@ -353,6 +437,69 @@ fn rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts() {
 }
 
 #[test]
+fn ci_workflow_runs_default_rs_rust_only_boundary_tests() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/ci.yml"));
+    let rust_only_job = text_between(&workflow, "  rust-only-boundary:", "  build-and-test:");
+
+    assert_contains(
+        rust_only_job,
+        "EASYDICT_RUNTIME_PROFILE: rust-only",
+        "default CI Rust boundary job should force the Easydict runtime profile",
+    );
+    assert_contains(
+        rust_only_job,
+        "RUNTIME_PROFILE: rust-only",
+        "default CI Rust boundary job should force the generic runtime profile",
+    );
+    assert_contains(
+        rust_only_job,
+        "working-directory: rs",
+        "default CI Rust boundary tests should run from the Rust workspace",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior ci_workflow_runs_default_rs_rust_only_boundary_tests",
+        "default CI should keep a self-check for the Rust-only boundary job",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture",
+        "default CI should validate a real rs portable ZIP payload before release tags",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app runtime_policy --lib",
+        "default CI should run Rust runtime-policy tests",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app --test default_api_boundary_behavior",
+        "default CI should run default API/runtime boundary tests",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers -- --exact --nocapture",
+        "default CI should prove CLI --app-dir ignores stale retained .NET payload markers",
+    );
+    assert_contains(
+        rust_only_job,
+        "cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture",
+        "default CI should prove LongDoc --app-dir ignores stale retained .NET payload markers",
+    );
+    assert_not_contains(
+        rust_only_job,
+        "retained-dotnet-workers",
+        "default CI Rust boundary job must not enable retained worker features",
+    );
+    assert_not_contains(
+        rust_only_job,
+        "setup-dotnet",
+        "default CI Rust boundary job must not set up .NET",
+    );
+}
+
+#[test]
 fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
     let root = repo_root();
 
@@ -364,6 +511,7 @@ fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
         let portable_index = text
             .find("easydict-rs-portable-vX.Y.Z-win-x64.zip")
             .unwrap_or_else(|| panic!("{relative_path} should recommend the rs portable ZIP"));
+        let before_default_install = &text[..portable_index];
         let legacy_index = text.find("Legacy/Hybrid").unwrap_or_else(|| {
             panic!("{relative_path} should keep a Legacy/Hybrid install section")
         });
@@ -384,6 +532,21 @@ fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
             expected_notice,
             &format!("{relative_path} should label WinGet as legacy/hybrid instead of default rs install"),
         );
+        for forbidden_marker in [
+            "WinGet",
+            "winget",
+            "apps.microsoft.com",
+            "get.microsoft.com",
+            "Microsoft Store",
+        ] {
+            assert_not_contains(
+                before_default_install,
+                forbidden_marker,
+                &format!(
+                    "{relative_path} should not advertise legacy store/install CTAs before the default rs portable ZIP"
+                ),
+            );
+        }
         let legacy_install_section = &text[legacy_index..winget_index];
         assert_contains(
             legacy_install_section,
@@ -394,6 +557,159 @@ fn root_readmes_mark_winget_as_legacy_hybrid_not_default_rs_install() {
             legacy_install_section,
             "Rust",
             &format!("{relative_path} should say WinGet is not the default Rust portable install"),
+        );
+    }
+}
+
+#[test]
+fn root_readmes_build_from_source_default_to_rs_portable_before_legacy_dotnet() {
+    let root = repo_root();
+
+    for (relative_path, build_heading, legacy_heading) in [
+        (
+            "README.md",
+            "### Build from Source",
+            "#### Legacy/Hybrid .NET Build",
+        ),
+        (
+            "README_ZH.md",
+            "### 从源码构建",
+            "#### Legacy/Hybrid .NET 构建",
+        ),
+    ] {
+        let text = read_text(&root.join(relative_path));
+        let build_index = text
+            .find(build_heading)
+            .unwrap_or_else(|| panic!("{relative_path} should keep a build-from-source section"));
+        let legacy_index = text
+            .find(legacy_heading)
+            .unwrap_or_else(|| panic!("{relative_path} should keep a legacy .NET build section"));
+        let portable_command_index = text[build_index..]
+            .find(r".\rs\scripts\Package-Portable.ps1")
+            .map(|offset| build_index + offset)
+            .unwrap_or_else(|| {
+                panic!("{relative_path} should build the rs portable package by default")
+            });
+        let cargo_run_index = text[build_index..]
+            .find("cargo run -p easydict_app --bin easydict_preview")
+            .map(|offset| build_index + offset)
+            .unwrap_or_else(|| {
+                panic!("{relative_path} should document the Rust app development command")
+            });
+        let dotnet_build_index = text[build_index..]
+            .find("dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj")
+            .map(|offset| build_index + offset)
+            .unwrap_or_else(|| panic!("{relative_path} should still document legacy .NET build"));
+
+        assert!(
+            build_index < portable_command_index,
+            "{relative_path} should put the rs portable command in the build-from-source section",
+        );
+        assert!(
+            portable_command_index < cargo_run_index,
+            "{relative_path} should show packaging before development run",
+        );
+        assert!(
+            cargo_run_index < legacy_index && legacy_index < dotnet_build_index,
+            "{relative_path} should place dotnet build commands only under the legacy/hybrid subsection",
+        );
+
+        let default_build_section = &text[build_index..legacy_index];
+        assert_not_contains(
+            default_build_section,
+            "dotnet build",
+            &format!("{relative_path} default source build should not invoke dotnet"),
+        );
+        assert_not_contains(
+            default_build_section,
+            "dotnet run",
+            &format!("{relative_path} default source run should not invoke dotnet"),
+        );
+    }
+}
+
+#[test]
+fn root_readmes_tech_stack_and_distribution_keep_rs_portable_as_default() {
+    let root = repo_root();
+
+    for (
+        relative_path,
+        tech_heading,
+        distribution_heading,
+        expected_rust_stack,
+        expected_distribution,
+    ) in [
+        (
+            "README.md",
+            "## Tech Stack",
+            "### Distribution",
+            "**Rust** - Default portable app",
+            "**Rust portable ZIP** - Default first rs release path",
+        ),
+        (
+            "README_ZH.md",
+            "## 技术栈",
+            "### 分发",
+            "**Rust** - 默认便携应用",
+            "**Rust 便携 ZIP** - 第一版 rs 默认发布路径",
+        ),
+    ] {
+        let text = read_text(&root.join(relative_path));
+        let tech_index = text
+            .find(tech_heading)
+            .unwrap_or_else(|| panic!("{relative_path} should keep a tech stack section"));
+        let distribution_index = text
+            .find(distribution_heading)
+            .unwrap_or_else(|| panic!("{relative_path} should keep a distribution section"));
+        let next_section = text[distribution_index + distribution_heading.len()..]
+            .find("\n## ")
+            .map(|offset| distribution_index + distribution_heading.len() + offset)
+            .unwrap_or(text.len());
+
+        let tech_section = &text[tech_index..distribution_index];
+        let distribution_section = &text[distribution_index..next_section];
+
+        assert_contains(
+            tech_section,
+            expected_rust_stack,
+            &format!("{relative_path} should present Rust as the default runtime"),
+        );
+        assert_contains(
+            tech_section,
+            "Legacy/hybrid",
+            &format!("{relative_path} should label .NET/WinUI as legacy/hybrid"),
+        );
+        let rust_index = tech_section
+            .find("**Rust**")
+            .expect("Rust stack entry should exist");
+        let dotnet_index = tech_section
+            .find(".NET 8 + WinUI 3")
+            .expect(".NET legacy stack entry should exist");
+        assert!(
+            rust_index < dotnet_index,
+            "{relative_path} should list Rust before the legacy .NET stack entry",
+        );
+
+        assert_contains(
+            distribution_section,
+            expected_distribution,
+            &format!("{relative_path} should list the rs portable ZIP as the default distribution"),
+        );
+        assert_contains(
+            distribution_section,
+            "Legacy/hybrid",
+            &format!("{relative_path} should label Store/WinGet distribution as legacy/hybrid"),
+        );
+        let portable_index = distribution_section
+            .find("Rust")
+            .expect("Rust distribution entry should exist");
+        let store_index = distribution_section
+            .find("Store")
+            .or_else(|| distribution_section.find("Windows 商店"))
+            .expect("Store distribution entry should exist");
+        assert!(
+            portable_index < store_index,
+            "{relative_path} should list the Rust portable distribution before Store/WinGet",
         );
     }
 }
@@ -423,6 +739,97 @@ fn windows_ai_build_script_has_strict_rs_portable_binding_gate() {
         "easydict_windows_ai_winrt_bindings",
         "successful binding generation should still set the native WinRT cfg",
     );
+}
+
+#[test]
+fn rs_portable_release_provisions_windows_ai_winmd_metadata_before_cargo() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_job = text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+
+    let prepare_metadata_index = publish_job
+        .find("Prepare Windows App SDK AI metadata")
+        .expect("publish-rs-portable should prepare WindowsAI WinMD metadata");
+    let verify_contracts_index = publish_job
+        .find("Verify Rust-only release contracts")
+        .expect("publish-rs-portable should run release contract tests");
+    let package_index = publish_job
+        .find("Build Rust portable ZIP")
+        .expect("publish-rs-portable should build the portable ZIP");
+    assert!(
+        prepare_metadata_index < verify_contracts_index && prepare_metadata_index < package_index,
+        "WindowsAI WinMD metadata must be available before cargo tests or packaging run"
+    );
+
+    for required in [
+        "microsoft.windowsappsdk.ai",
+        "https://api.nuget.org/v3-flatcontainer/$packageId/index.json",
+        "Microsoft.Windows.AI.winmd",
+        "Microsoft.Windows.AI.Foundation.winmd",
+        "Microsoft.Windows.AI.Text.winmd",
+        "EASYDICT_WINDOWS_APP_SDK_AI_METADATA_DIR=$metadataDir",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1",
+        "$env:GITHUB_ENV",
+    ] {
+        assert_contains(
+            publish_job,
+            required,
+            &format!(
+                "publish-rs-portable should provision official WindowsAI metadata: {required}"
+            ),
+        );
+    }
+
+    assert_not_contains(
+        publish_job,
+        "actions/setup-dotnet",
+        "rs portable release should not require setup-dotnet to fetch WindowsAI WinMD metadata",
+    );
+}
+
+#[test]
+fn hybrid_msix_paths_provision_windows_ai_winmd_metadata_before_rust_helpers() {
+    let root = repo_root();
+    let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_msix_job = text_between(
+        &release_workflow,
+        "  publish-msix:",
+        "  publish-rs-portable:",
+    );
+    let arm64_smoke_workflow = read_text(&root.join(".github/workflows/arm64-msix-smoke.yml"));
+
+    for (section_name, section) in [
+        ("publish-msix", publish_msix_job),
+        ("arm64-msix-smoke", arm64_smoke_workflow.as_str()),
+    ] {
+        let prepare_metadata_index = section
+            .find("Prepare Windows App SDK AI metadata")
+            .unwrap_or_else(|| panic!("{section_name} should prepare WindowsAI WinMD metadata"));
+        let build_helpers_index = section
+            .find("Build-RustHelpers.ps1")
+            .unwrap_or_else(|| panic!("{section_name} should build Rust helper executables"));
+        assert!(
+            prepare_metadata_index < build_helpers_index,
+            "{section_name} must provision WindowsAI metadata before Build-RustHelpers.ps1"
+        );
+
+        for required in [
+            "microsoft.windowsappsdk.ai",
+            "https://api.nuget.org/v3-flatcontainer/$packageId/index.json",
+            "Microsoft.Windows.AI.winmd",
+            "Microsoft.Windows.AI.Foundation.winmd",
+            "Microsoft.Windows.AI.Text.winmd",
+            "EASYDICT_WINDOWS_APP_SDK_AI_METADATA_DIR=$metadataDir",
+            "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1",
+            "$env:GITHUB_ENV",
+        ] {
+            assert_contains(
+                section,
+                required,
+                &format!("{section_name} should provision official WindowsAI metadata: {required}"),
+            );
+        }
+    }
 }
 
 #[test]
@@ -1339,12 +1746,31 @@ fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
         "Remove-Item Env:RUNTIME_PROFILE",
         "LongDoc helper script should restore an absent generic runtime profile",
     );
+    assert_contains(
+        &script,
+        "Test-RetainedDotnetRuntimeOrWorkerPath",
+        "LongDoc helper script should classify explicit retained runtime helper paths locally",
+    );
+    assert_contains(
+        &script,
+        "\"dotnet.exe\"",
+        "LongDoc helper script should reject explicit RustHelperPath values pointing at dotnet.exe",
+    );
+    assert_contains(
+        &script,
+        "easydict.workers.",
+        "LongDoc helper script should reject explicit RustHelperPath values pointing at retained workers",
+    );
+    assert_contains(
+        &script,
+        "easydict.compathost",
+        "LongDoc helper script should reject explicit RustHelperPath values pointing at CompatHost",
+    );
 
     for retired_marker in [
         "Invoke-DotnetLegacy",
         "New-LegacyLongDocArguments",
         "& dotnet",
-        "dotnet.exe",
         "dotnet run",
         "Start-Process dotnet",
         "dotnetArguments",
@@ -1361,6 +1787,72 @@ fn translate_long_doc_script_is_rust_only_and_rejects_dotnet_legacy_mode() {
             &format!("scripts/translate-long-doc.ps1 must not launch legacy .NET LongDoc mode"),
         );
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_rejects_retained_runtime_rust_helper_paths_before_spawn() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-retained-helper-path");
+    let app_dir = test_root.join("app");
+    let forbidden_tool_record = test_root.join("forbidden-retained-helper.txt");
+    let retained_helper_paths = vec![
+        app_dir.join("dotnet").join("dotnet.cmd"),
+        app_dir
+            .join("workers")
+            .join("longdoc")
+            .join("Easydict.Workers.LongDoc.cmd"),
+        app_dir.join("Easydict.CompatHost.cmd"),
+    ];
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    for retained_helper_path in &retained_helper_paths {
+        write_fake_retained_long_doc_entrypoint(retained_helper_path);
+    }
+    std::env::set_var(
+        "EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD",
+        &forbidden_tool_record,
+    );
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+
+    for retained_helper_path in retained_helper_paths {
+        let _ = fs::remove_file(&forbidden_tool_record);
+        let output = translate_long_doc_script_command(&root)
+            .arg("-ListServices")
+            .arg("-RustHelperPath")
+            .arg(&retained_helper_path)
+            .output()
+            .expect("run translate-long-doc shim");
+
+        assert!(
+            !output.status.success(),
+            "retained RustHelperPath should fail before spawning {}\nstdout:\n{}\nstderr:\n{}",
+            retained_helper_path.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_contains(
+            &stderr,
+            "retained .NET runtime or worker entry",
+            "retained RustHelperPath rejection should explain the no-runtime boundary",
+        );
+        assert!(
+            !forbidden_tool_record.exists(),
+            "retained RustHelperPath must be rejected before invoking {}",
+            retained_helper_path.display()
+        );
+    }
+
+    let _ = fs::remove_dir_all(test_root);
+    drop(environment);
 }
 
 #[cfg(windows)]
@@ -1652,6 +2144,7 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
     let test_root = tempfile_dir("translate-long-doc-use-cargo-retry");
     let fake_bin = test_root.join("bin");
     let app_dir = test_root.join("app");
+    let retained_helper_path = app_dir.join("dotnet").join("dotnet.cmd");
     let cargo_record_path = test_root.join("cargo-args.txt");
     let forbidden_tool_record = test_root.join("forbidden-tools.txt");
     let input_path = test_root.join("input.pdf");
@@ -1662,6 +2155,7 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
     write_fake_long_doc_cargo_script(&fake_bin);
     write_fake_dotnet_forbidden_tool_script(&fake_bin);
     write_stale_dotnet_payload_markers(&app_dir);
+    write_fake_retained_long_doc_entrypoint(&retained_helper_path);
     fs::write(&input_path, b"%PDF-1.7\n").expect("write input");
 
     std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
@@ -1686,6 +2180,8 @@ fn translate_long_doc_script_use_cargo_forwards_retry_sidecar_without_dotnet_too
         .args(["-PdfExportMode", "Overlay", "-PageRange", "2-3"])
         .arg("-AppDir")
         .arg(&app_dir)
+        .arg("-RustHelperPath")
+        .arg(&retained_helper_path)
         .arg("-UseCargo")
         .output()
         .expect("run translate-long-doc shim");
@@ -1971,8 +2467,13 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         text_between(&release_workflow, "  create-bundle:", "  publish-winget:");
     assert_contains(
         create_bundle_job,
-        "RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}",
-        "create-bundle should define the runtime profile used by bundle payload validation",
+        "RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}",
+        "create-bundle should require the caller-provided runtime profile used by bundle payload validation",
+    );
+    assert_not_contains(
+        create_bundle_job,
+        "github.event.inputs.runtime_profile || 'hybrid'",
+        "create-bundle must not silently default retained runtime packaging to hybrid",
     );
     assert_contains(
         create_bundle_job,
@@ -2076,6 +2577,44 @@ fn legacy_dotnet_packaging_paths_reject_rust_only_and_require_hybrid_profile() {
         &makefile,
         "scripts/Build-Installer.ps1 -Platform arm64 -Version $(VERSION) -RuntimeProfile $(RUNTIME_PROFILE)",
         "Makefile installer-arm64 should pass the explicit runtime profile into the legacy installer script",
+    );
+}
+
+#[test]
+fn legacy_publish_create_zip_is_hybrid_named_and_excluded_from_rs_release_contract() {
+    let root = repo_root();
+    let publish_script = read_text(&root.join("dotnet/scripts/publish.ps1"));
+    let release_workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let rs_portable_job = text_between(
+        &release_workflow,
+        "  publish-rs-portable:",
+        "  create-bundle:",
+    );
+    let create_rs_release_job = text_between(
+        &release_workflow,
+        "  create-rs-portable-release:",
+        "  publish-winget:",
+    );
+
+    assert_contains(
+        &publish_script,
+        "Easydict-legacy-hybrid-win-$Platform-$Configuration.zip",
+        "legacy dotnet publish -CreateZip output should be visibly separated from the first rs portable ZIP",
+    );
+    assert_not_contains(
+        &publish_script,
+        "Easydict-win-$Platform-$Configuration.zip",
+        "legacy dotnet publish -CreateZip must not produce the old portable-looking ZIP name",
+    );
+    assert_not_contains(
+        rs_portable_job,
+        "Easydict-legacy-hybrid-win-",
+        "rs portable build job must not upload legacy/hybrid dotnet ZIPs",
+    );
+    assert_not_contains(
+        create_rs_release_job,
+        "Easydict-legacy-hybrid-win-",
+        "first rs release upload job must not include legacy/hybrid dotnet ZIPs",
     );
 }
 
@@ -3151,6 +3690,20 @@ fn write_fake_dotnet_forbidden_tool_script(fake_bin: &Path) {
 exit /b 87\r\n",
     )
     .expect("write fake dotnet forbidden tool");
+}
+
+#[cfg(windows)]
+fn write_fake_retained_long_doc_entrypoint(path: &Path) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("create fake retained LongDoc entrypoint dir");
+    }
+    fs::write(
+        path,
+        "@echo off\r\n\
+>>\"%EASYDICT_LONG_DOC_FORBIDDEN_TOOL_RECORD%\" echo RETAINED_HELPER=%~f0 %*\r\n\
+exit /b 0\r\n",
+    )
+    .expect("write fake retained LongDoc entrypoint");
 }
 
 #[cfg(windows)]

@@ -870,6 +870,27 @@ fn native_mdd_html_inline_decodes_dictassets_urls_and_strips_cache_busters() {
 }
 
 #[test]
+fn native_mdd_html_inline_decodes_utf8_percent_encoded_resource_paths() {
+    let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
+    let mut mdd_factory =
+        RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([(
+            r"\images\标志.png",
+            b"\x89PNG".as_slice(),
+        )]))]);
+
+    let html = inline_mdd_resources_in_html_with_factory(
+        &mut mdd_factory,
+        &dictionary,
+        r#"<div><img src="images/%E6%A0%87%E5%BF%97.png?v=1"></div>"#,
+    )
+    .expect("UTF-8 percent-encoded MDD resource references should be rewritten");
+
+    assert_eq!(mdd_factory.opened, [r"C:\Dicts\demo.mdd"]);
+    assert!(html.contains(r#"src="data:image/png;base64,iVBORw==""#));
+    assert!(!html.contains("%E6%A0%87%E5%BF%97"));
+}
+
+#[test]
 fn native_mdd_html_inline_rewrites_srcset_poster_and_lazy_resource_attrs() {
     let dictionary = mdx_dictionary(false, [r"C:\Dicts\demo.mdd"]);
     let mut mdd_factory = RecordingMddReaderFactory::with_readers([Ok(RecordingMddReader::new([

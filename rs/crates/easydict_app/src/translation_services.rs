@@ -189,9 +189,13 @@ fn build_translation_service_descriptors() -> Vec<TranslationServiceDescriptor> 
         )
         .unconfigured()
         .requires_api_key(),
+        TranslationServiceDescriptor::new(
+            "linguee",
+            "Linguee Dictionary",
+            TranslationServiceKind::Dictionary,
+        ),
     ];
 
-    services.extend(conditional_translation_service_descriptors());
     services.push(
         TranslationServiceDescriptor::new(
             "windows-local-ai",
@@ -205,8 +209,8 @@ fn build_translation_service_descriptors() -> Vec<TranslationServiceDescriptor> 
 }
 
 /// The default service catalog, built once and reused. Descriptors are `Copy`
-/// over `&'static str`, and the set is fixed at compile time (Linguee is gated
-/// by `cfg`), so caching avoids rebuilding the vector on every lookup.
+/// over `&'static str`, and the set is fixed at compile time, so caching avoids
+/// rebuilding the vector on every lookup.
 fn cached_translation_service_descriptors() -> &'static [TranslationServiceDescriptor] {
     static DESCRIPTORS: OnceLock<Vec<TranslationServiceDescriptor>> = OnceLock::new();
     DESCRIPTORS.get_or_init(build_translation_service_descriptors)
@@ -255,18 +259,4 @@ pub fn imported_mdx_service_descriptor(
         display_name,
         TranslationServiceKind::ImportedMdx,
     )
-}
-
-#[cfg(feature = "enable-linguee-service")]
-fn conditional_translation_service_descriptors() -> Vec<TranslationServiceDescriptor> {
-    vec![TranslationServiceDescriptor::new(
-        "linguee",
-        "Linguee Dictionary",
-        TranslationServiceKind::Dictionary,
-    )]
-}
-
-#[cfg(not(feature = "enable-linguee-service"))]
-fn conditional_translation_service_descriptors() -> Vec<TranslationServiceDescriptor> {
-    Vec::new()
 }

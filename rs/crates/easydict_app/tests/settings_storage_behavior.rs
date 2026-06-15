@@ -402,6 +402,47 @@ fn settings_storage_load_discovers_mdd_for_legacy_mdx_entries_without_saved_path
 }
 
 #[test]
+fn settings_storage_load_merges_discovered_companion_mdds_with_saved_paths() {
+    let temp = TempDir::new("settings-storage-mdd-merge");
+    let mdx_path = temp.path().join("Demo Dict.mdx");
+    let saved_mdd_path = temp.path().join("Demo Dict.mdd");
+    let discovered_mdd_path = temp.path().join("Demo Dict.4.mdd");
+    let manual_mdd_path = temp.path().join("Manual Audio.mdd");
+    fs::write(&mdx_path, b"mdx").expect("MDX file should be created");
+    fs::write(&saved_mdd_path, b"saved mdd").expect("saved MDD file should be created");
+    fs::write(&discovered_mdd_path, b"new mdd").expect("numbered MDD file should be created");
+    fs::write(&manual_mdd_path, b"manual mdd").expect("manual MDD file should be created");
+
+    let json = json!({
+        "ImportedMdxDictionaries": [{
+            "ServiceId": "mdx::demo-dict",
+            "DisplayName": "Demo Dict",
+            "FilePath": mdx_path.to_string_lossy(),
+            "IsEncrypted": false,
+            "MddFilePaths": [
+                saved_mdd_path.to_string_lossy(),
+                manual_mdd_path.to_string_lossy()
+            ]
+        }]
+    })
+    .to_string();
+
+    let settings = load_settings_json_with_machine_id(&json, "stable-machine-id")
+        .expect("settings load")
+        .settings;
+
+    assert_eq!(settings.imported_mdx_dictionaries.len(), 1);
+    assert_eq!(
+        settings.imported_mdx_dictionaries[0].mdd_file_paths,
+        vec![
+            saved_mdd_path.to_string_lossy().into_owned(),
+            manual_mdd_path.to_string_lossy().into_owned(),
+            discovered_mdd_path.to_string_lossy().into_owned()
+        ]
+    );
+}
+
+#[test]
 fn settings_storage_save_never_writes_runtime_only_worker_isolation_keys() {
     let settings = SettingsState::default();
 

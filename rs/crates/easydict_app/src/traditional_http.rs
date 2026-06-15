@@ -602,6 +602,9 @@ fn traditional_http_endpoint_override_env_key(
         TraditionalHttpServiceKind::DeepLApi => {
             Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_DEEPL_API")
         }
+        TraditionalHttpServiceKind::DeepLWeb => {
+            Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_DEEPL_WEB")
+        }
         TraditionalHttpServiceKind::NiuTrans => {
             Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_NIUTRANS")
         }
@@ -626,7 +629,6 @@ fn traditional_http_endpoint_override_env_key(
         TraditionalHttpServiceKind::YoudaoWebTranslate => {
             Some("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_YOUDAO_WEB_TRANSLATE")
         }
-        _ => None,
     }
 }
 
@@ -672,10 +674,8 @@ pub fn traditional_http_config_for_service(
                 app_secret: settings.youdao_app_secret.clone().unwrap_or_default(),
             })
         }
-        // Linguee is keyless but conditionally compiled, mirroring the legacy
-        // ENABLE_LINGUEE_SERVICE registration: only route it natively when the
-        // feature is enabled (the service is otherwise absent from the catalog).
-        #[cfg(feature = "enable-linguee-service")]
+        // Linguee is keyless and has a Rust-owned request plan/parser, so the
+        // default rs route no longer needs the legacy ENABLE_LINGUEE_SERVICE gate.
         "linguee" => Some(TraditionalHttpServiceConfig::Linguee),
         _ => None,
     }
@@ -1925,7 +1925,7 @@ pub fn generate_bing_ig() -> Result<String, OpenAiExecutionError> {
 }
 
 // ----------------------------------------------------------------------------
-// Linguee dictionary (keyless public proxy, feature-gated registration).
+// Linguee dictionary (keyless public proxy, default Rust-native registration).
 // A single GET returns translations with context; the first translation is the
 // primary text and subsequent translations are carried as alternatives.
 // ----------------------------------------------------------------------------

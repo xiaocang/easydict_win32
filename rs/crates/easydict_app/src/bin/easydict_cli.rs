@@ -6,15 +6,15 @@ use easydict_app::protocol::{
 use easydict_app::quick_translate_request_can_route_natively;
 use easydict_app::{
     auto_foundry_local_native_probe_request, auto_openvino_native_fallback_request,
-    default_settings_storage_path, find_translation_service_descriptor, load_settings_file,
-    local_ai_quick_translate_local_error, local_ai_quick_translate_native_preflight_error,
+    default_foundry_local_runtime_controller, default_settings_storage_path,
+    find_translation_service_descriptor, load_settings_file, local_ai_quick_translate_local_error,
+    local_ai_quick_translate_native_preflight_error,
     run_quick_translate_service_with_current_app_dir,
     run_quick_translate_service_with_native_route,
     run_quick_translate_streaming_service_with_current_app_dir_observing_chunks,
     run_quick_translate_streaming_service_with_native_route_observing_chunks, settings_snapshot,
-    CommandFoundryLocalEndpointResolver, QuickQueryMode, QuickTranslateBackendError,
-    QuickTranslateExecutionKind, QuickTranslateService, QuickTranslateServiceRequest,
-    QuickTranslateServiceUpdate, SettingsStorageError,
+    QuickQueryMode, QuickTranslateBackendError, QuickTranslateExecutionKind, QuickTranslateService,
+    QuickTranslateServiceRequest, QuickTranslateServiceUpdate, SettingsStorageError,
 };
 use serde_json::json;
 use std::env;
@@ -166,7 +166,7 @@ fn try_run_native_stream_service_update(
         ));
     }
 
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     if let Some(native_request) =
         auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
     {
@@ -223,7 +223,7 @@ fn try_run_native_service_update(
         )));
     }
 
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     if let Some(native_request) =
         auto_foundry_local_native_probe_request(&request, &mut foundry_resolver)
     {

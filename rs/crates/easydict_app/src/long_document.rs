@@ -29,7 +29,7 @@ use crate::ocr::{
     ReqwestOcrHttpClient,
 };
 use crate::openai_compatible::{
-    CommandFoundryLocalEndpointResolver, FoundryLocalRuntimeController, OpenAiCompatibleConfig,
+    default_foundry_local_runtime_controller, FoundryLocalRuntimeController, OpenAiCompatibleConfig,
 };
 #[cfg(test)]
 use crate::openai_compatible::{
@@ -42,6 +42,7 @@ use crate::pdf_export_blocks::{
 };
 use crate::pdf_native_export::{
     export_pdf_with_content_stream_replacement, NativePdfContentStreamExportFailureKind,
+    NativePdfContentStreamExportSummary,
 };
 use crate::pdf_source_extraction::{
     block_context_for_pdf_source_block, pdf_export_chunk_metadata_for_source_block,
@@ -456,7 +457,7 @@ fn run_long_document_request_with_current_app_dir_and_worker_policy(
         NativeLongDocumentDispatch::NeedsWorker(request) => request,
     };
 
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     let request = match try_run_native_text_long_document_request_with_local_ai_client(
         request,
@@ -485,7 +486,7 @@ pub fn run_long_document_request_with_native_route<B: LongDocumentBackend>(
     backend: &mut B,
     request: LongDocumentServiceRequest,
 ) -> LongDocumentOutcome {
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     run_long_document_request_with_native_route_and_local_ai_client(
         backend,
@@ -609,7 +610,7 @@ fn run_long_document_request_with_app_dir_and_worker_policy_internal(
         NativeLongDocumentDispatch::NeedsWorker(request) => request,
     };
 
-    let mut foundry_resolver = CommandFoundryLocalEndpointResolver::default();
+    let mut foundry_resolver = default_foundry_local_runtime_controller();
     let mut windows_ai_client = default_windows_ai_language_model_client();
     let request = match try_run_native_text_long_document_request_with_local_ai_client(
         request,
@@ -1091,6 +1092,13 @@ where
         };
     };
 
+    if let Err(error) = preflight_native_text_output_paths(request, input_kind) {
+        return NativeLongDocumentRun {
+            events: Vec::new(),
+            result: Err(error),
+        };
+    }
+
     let chunks = match source_reader(request, input_kind) {
         Ok(chunks) => chunks,
         Err(error) => {
@@ -1109,13 +1117,6 @@ where
         return NativeLongDocumentRun {
             events: Vec::new(),
             result: Err(LongDocumentBackendError::new(message)),
-        };
-    }
-
-    if let Err(error) = preflight_native_text_output_paths(request, input_kind) {
-        return NativeLongDocumentRun {
-            events: Vec::new(),
-            result: Err(error),
         };
     }
 
@@ -1293,6 +1294,10 @@ where
         )
         .and_then(|export| {
             let result_json_path = normalized_result_json_path(request);
+            let quality_report = native_long_document_quality_report_json(
+                &export.checkpoint,
+                export.backfill_metrics.clone(),
+            )?;
             let result = TranslateDocumentResult {
                 state: if failed_chunk_indexes.is_empty() {
                     "Completed".to_string()
@@ -1305,7 +1310,7 @@ where
                 succeeded_chunks,
                 failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
                     .then(|| failed_chunk_indexes.to_vec()),
-                quality_report: None,
+                quality_report: Some(quality_report),
                 result_json_path: result_json_path.clone(),
             };
             write_native_result_json_sidecar(
@@ -1564,6 +1569,10 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
         )
         .and_then(|export| {
             let result_json_path = normalized_result_json_path(&retry_request);
+            let quality_report = native_long_document_quality_report_json(
+                &export.checkpoint,
+                export.backfill_metrics.clone(),
+            )?;
             let result = TranslateDocumentResult {
                 state: if failed_chunk_indexes.is_empty() {
                     "Completed".to_string()
@@ -1576,7 +1585,7 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
                 succeeded_chunks,
                 failed_chunk_indexes: (!failed_chunk_indexes.is_empty())
                     .then(|| failed_chunk_indexes.to_vec()),
-                quality_report: sidecar.result.quality_report.clone(),
+                quality_report: Some(quality_report),
                 result_json_path: result_json_path.clone(),
             };
             write_native_result_json_sidecar(
@@ -2574,6 +2583,28 @@ struct NativeTextExport {
     bilingual_output_path: Option<String>,
     checkpoint: LongDocumentExportCheckpoint,
     pdf_checkpoint: Option<PdfExportCheckpoint>,
+    backfill_metrics: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeLongDocumentQualityReport {
+    stage_timings_ms: BTreeMap<String, u64>,
+    backfill_metrics: Option<serde_json::Value>,
+    total_blocks: u32,
+    translated_blocks: u32,
+    skipped_blocks: u32,
+    failed_blocks: Vec<NativeLongDocumentFailedBlockInfo>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeLongDocumentFailedBlockInfo {
+    ir_block_id: String,
+    source_block_id: String,
+    page_number: i32,
+    retry_count: u32,
+    error: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -4028,6 +4059,70 @@ mod tests {
     }
 
     #[test]
+    fn native_pdf_result_json_path_prechecked_before_source_reader_or_ocr() {
+        let temp_dir = unique_longdoc_test_dir("pdf-result-json-preflight-before-source");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("scan.pdf");
+        let output_path = temp_dir.join("scan-translated.pdf");
+        let result_json_path = temp_dir.join("scan-result.json");
+        fs::create_dir_all(&result_json_path).expect("conflicting sidecar directory");
+
+        let request = LongDocumentServiceRequest {
+            query_id: 98,
+            input: LongDocumentInput::File(input_path.display().to_string()),
+            params: TranslateDocumentParams {
+                input_path: input_path.display().to_string(),
+                output_path: Some(output_path.display().to_string()),
+                input_mode: "Pdf".to_string(),
+                from: "English".to_string(),
+                to: "SimplifiedChinese".to_string(),
+                service_id: "google".to_string(),
+                output_mode: "Both".to_string(),
+                pdf_export_mode: Some("ContentStreamReplacement".to_string()),
+                layout_detection: None,
+                page_range: None,
+                vision_endpoint: None,
+                vision_api_key: None,
+                vision_model: None,
+                result_json_path: Some(result_json_path.display().to_string()),
+                request_timeout_ms: None,
+            },
+            settings: SettingsSnapshot::default(),
+        };
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let source_calls = Arc::clone(&calls);
+        let mut translator = PrefixNativeLongDocTranslator::default();
+
+        let run = run_native_text_long_document_request_inner_with_source_reader(
+            &mut translator,
+            &request,
+            &|| false,
+            move |_request, input_kind| {
+                source_calls.lock().unwrap().push(format!("{input_kind:?}"));
+                Ok(vec![NativeTextSourceChunk::pdf_ocr(
+                    0,
+                    "OCR should not run".to_string(),
+                    1,
+                )])
+            },
+        );
+        let error = run
+            .result
+            .expect_err("invalid result JSON path should fail before reading PDF source");
+
+        assert!(error.message.contains("Long document output path"));
+        assert!(error.message.contains("is a directory"));
+        assert!(
+            calls.lock().unwrap().is_empty(),
+            "PDF source extraction and OCR fallback should not run when output preflight fails"
+        );
+        assert!(translator.calls().is_empty());
+        assert!(!output_path.exists());
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
     fn native_pdf_runner_source_extractor_error_falls_back_to_content_stream_and_writes_result_json(
     ) {
         let temp_dir = unique_longdoc_test_dir("pdf-source-fallback-runner");
@@ -4143,6 +4238,23 @@ mod tests {
         }
         let sidecar: serde_json::Value =
             serde_json::from_str(&sidecar_json).expect("sidecar should parse");
+        let quality_report_json = sidecar["qualityReport"]
+            .as_str()
+            .expect("native PDF sidecar should include quality report");
+        let quality_report: serde_json::Value =
+            serde_json::from_str(quality_report_json).expect("quality report should parse");
+        assert_eq!(
+            quality_report["backfillMetrics"]["candidateBlocks"],
+            serde_json::json!(1)
+        );
+        assert_eq!(
+            quality_report["backfillMetrics"]["objectReplaceBlocks"],
+            serde_json::json!(1)
+        );
+        assert_eq!(
+            quality_report["backfillMetrics"]["overlayModeBlocks"],
+            serde_json::json!(0)
+        );
         assert_eq!(sidecar["checkpoint"]["inputMode"], "Pdf");
         assert!(sidecar["checkpoint"]["pdf"]["sourceChunks"][0]
             .as_str()
@@ -4686,6 +4798,14 @@ mod tests {
 
         assert_eq!(export.output_path, output_path.display().to_string());
         assert!(export.bilingual_output_path.is_none());
+        let metrics = export
+            .backfill_metrics
+            .as_ref()
+            .expect("overlay PDF export should report backfill metrics");
+        assert_eq!(metrics["candidateBlocks"], serde_json::json!(1));
+        assert_eq!(metrics["renderedBlocks"], serde_json::json!(1));
+        assert_eq!(metrics["objectReplaceBlocks"], serde_json::json!(0));
+        assert_eq!(metrics["overlayModeBlocks"], serde_json::json!(1));
         assert_eq!(
             lopdf::Document::load(&output_path)
                 .expect("native PDF output should open")
@@ -4850,6 +4970,31 @@ mod tests {
     }
 
     #[test]
+    fn native_pdf_overlay_font_rejects_invalid_explicit_managed_cjk_font_path() {
+        let temp_dir = unique_longdoc_test_dir("pdf-cjk-overlay-invalid-managed-explicit-font");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let managed_font_path =
+            crate::font_download::font_cache_dir(&temp_dir).join("NotoSansSC-Regular.ttf");
+        fs::create_dir_all(managed_font_path.parent().expect("font cache parent"))
+            .expect("font cache dir");
+        fs::write(&managed_font_path, b"not a parseable CJK font")
+            .expect("invalid managed font marker");
+
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.display().to_string());
+        request.settings.cjk_font_path = Some(managed_font_path.display().to_string());
+
+        let error = native_pdf_overlay_font_path(&request)
+            .expect_err("invalid managed explicit CJK font should be rejected");
+        assert!(
+            error.contains("Rust-managed Noto Sans CJK"),
+            "LongDoc overlay should reject invalid explicit managed CJK font files: {error}"
+        );
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
     fn native_pdf_export_overlay_mode_uses_overlay_without_content_stream_match() {
         let temp_dir = unique_longdoc_test_dir("pdf-explicit-overlay-export");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -4931,6 +5076,14 @@ mod tests {
 
         assert_eq!(export.output_path, output_path.display().to_string());
         assert!(export.bilingual_output_path.is_none());
+        let metrics = export
+            .backfill_metrics
+            .as_ref()
+            .expect("explicit overlay PDF export should report backfill metrics");
+        assert_eq!(metrics["candidateBlocks"], serde_json::json!(1));
+        assert_eq!(metrics["renderedBlocks"], serde_json::json!(1));
+        assert_eq!(metrics["objectReplaceBlocks"], serde_json::json!(0));
+        assert_eq!(metrics["overlayModeBlocks"], serde_json::json!(1));
         assert_eq!(
             lopdf::Document::load(&output_path)
                 .expect("native overlay PDF output should open")
@@ -5027,6 +5180,14 @@ mod tests {
 
         assert_eq!(export.output_path, output_path.display().to_string());
         assert!(export.bilingual_output_path.is_none());
+        let metrics = export
+            .backfill_metrics
+            .as_ref()
+            .expect("overlay fallback PDF export should report backfill metrics");
+        assert_eq!(metrics["candidateBlocks"], serde_json::json!(1));
+        assert_eq!(metrics["renderedBlocks"], serde_json::json!(1));
+        assert_eq!(metrics["objectReplaceBlocks"], serde_json::json!(0));
+        assert_eq!(metrics["overlayModeBlocks"], serde_json::json!(1));
         assert_eq!(
             lopdf::Document::load(&output_path)
                 .expect("native overlay PDF output should open")
@@ -5969,6 +6130,7 @@ fn export_native_text_document(
                 bilingual_output_path: Some(bilingual_path.display().to_string()),
                 checkpoint,
                 pdf_checkpoint,
+                backfill_metrics: None,
             })
         }
         "Both" => {
@@ -5984,6 +6146,7 @@ fn export_native_text_document(
                 bilingual_output_path: Some(bilingual_path.display().to_string()),
                 checkpoint,
                 pdf_checkpoint,
+                backfill_metrics: None,
             })
         }
         _ => {
@@ -5994,6 +6157,7 @@ fn export_native_text_document(
                 bilingual_output_path: None,
                 checkpoint,
                 pdf_checkpoint,
+                backfill_metrics: None,
             })
         }
     }
@@ -6035,17 +6199,16 @@ fn try_export_native_pdf_document(
     let selected_page_numbers = native_pdf_selected_page_numbers(request, source_chunks);
 
     if native_pdf_export_mode_is_overlay(&request.params) {
-        if export_pdf_with_overlay_text_blocks(
+        let overlay_summary = match export_pdf_with_overlay_text_blocks(
             request,
             input_path,
             &output_path,
             &checkpoint,
             selected_page_numbers.as_deref(),
-        )
-        .is_err()
-        {
-            return Ok(None);
-        }
+        ) {
+            Ok(summary) => summary,
+            Err(_) => return Ok(None),
+        };
 
         return Ok(Some(native_pdf_export_result(
             request,
@@ -6053,6 +6216,7 @@ fn try_export_native_pdf_document(
             bilingual_text,
             text_checkpoint,
             checkpoint,
+            Some(native_pdf_overlay_backfill_metrics(&overlay_summary)),
         )?));
     }
 
@@ -6060,13 +6224,13 @@ fn try_export_native_pdf_document(
         return Ok(None);
     }
 
-    match export_pdf_with_content_stream_replacement(
+    let backfill_metrics = match export_pdf_with_content_stream_replacement(
         input_path,
         &output_path,
         &checkpoint,
         selected_page_numbers.as_deref(),
     ) {
-        Ok(_) => {}
+        Ok(summary) => Some(native_pdf_content_stream_backfill_metrics(&summary)),
         Err(error)
             if matches!(
                 error.kind,
@@ -6074,22 +6238,21 @@ fn try_export_native_pdf_document(
                     | NativePdfContentStreamExportFailureKind::NoReplacements
             ) =>
         {
-            if export_pdf_with_overlay_text_blocks(
+            match export_pdf_with_overlay_text_blocks(
                 request,
                 input_path,
                 &output_path,
                 &checkpoint,
                 selected_page_numbers.as_deref(),
-            )
-            .is_err()
-            {
-                return Ok(None);
+            ) {
+                Ok(summary) => Some(native_pdf_overlay_backfill_metrics(&summary)),
+                Err(_) => return Ok(None),
             }
         }
         Err(_) => {
             return Ok(None);
         }
-    }
+    };
 
     Ok(Some(native_pdf_export_result(
         request,
@@ -6097,6 +6260,7 @@ fn try_export_native_pdf_document(
         bilingual_text,
         text_checkpoint,
         checkpoint,
+        backfill_metrics,
     )?))
 }
 
@@ -6106,6 +6270,7 @@ fn native_pdf_export_result(
     bilingual_text: &str,
     text_checkpoint: &LongDocumentExportCheckpoint,
     pdf_checkpoint: PdfExportCheckpoint,
+    backfill_metrics: Option<serde_json::Value>,
 ) -> Result<NativeTextExport, LongDocumentBackendError> {
     let bilingual_output_path = if request.params.output_mode == "Both" {
         let bilingual_path = native_pdf_bilingual_text_output_path(&output_path);
@@ -6121,6 +6286,39 @@ fn native_pdf_export_result(
         bilingual_output_path,
         checkpoint: text_checkpoint.clone(),
         pdf_checkpoint: Some(pdf_checkpoint),
+        backfill_metrics,
+    })
+}
+
+fn native_pdf_content_stream_backfill_metrics(
+    summary: &NativePdfContentStreamExportSummary,
+) -> serde_json::Value {
+    serde_json::json!({
+        "candidateBlocks": summary.blocks_considered as u64,
+        "renderedBlocks": summary.blocks_patched as u64,
+        "missingBoundingBoxBlocks": 0u64,
+        "shrinkFontBlocks": 0u64,
+        "truncatedBlocks": 0u64,
+        "objectReplaceBlocks": summary.blocks_patched as u64,
+        "overlayModeBlocks": 0u64,
+        "structuredFallbackBlocks": summary.blocks_preserved as u64,
+        "pageMetrics": serde_json::Value::Null,
+        "blockIssues": serde_json::Value::Null,
+    })
+}
+
+fn native_pdf_overlay_backfill_metrics(summary: &PdfOverlaySummary) -> serde_json::Value {
+    serde_json::json!({
+        "candidateBlocks": summary.blocks_requested as u64,
+        "renderedBlocks": summary.blocks_written as u64,
+        "missingBoundingBoxBlocks": 0u64,
+        "shrinkFontBlocks": 0u64,
+        "truncatedBlocks": 0u64,
+        "objectReplaceBlocks": 0u64,
+        "overlayModeBlocks": summary.blocks_written as u64,
+        "structuredFallbackBlocks": summary.blocks_requested.saturating_sub(summary.blocks_written) as u64,
+        "pageMetrics": serde_json::Value::Null,
+        "blockIssues": serde_json::Value::Null,
     })
 }
 
@@ -6230,6 +6428,7 @@ fn native_pdf_explicit_overlay_font_path_is_managed(
     fs::canonicalize(managed_font_dir)
         .map(|managed_font_dir| managed_font_dir == parent)
         .unwrap_or(false)
+        && crate::font_download::is_managed_cjk_font_file(font_path)
 }
 
 fn native_pdf_overlay_blocks(
@@ -6607,6 +6806,71 @@ fn native_export_checkpoint(
             .enumerate()
             .filter_map(|(index, translated)| translated.is_none().then_some(index))
             .collect::<BTreeSet<_>>(),
+    }
+}
+
+fn native_long_document_quality_report_json(
+    checkpoint: &LongDocumentExportCheckpoint,
+    backfill_metrics: Option<serde_json::Value>,
+) -> Result<String, LongDocumentBackendError> {
+    let report = native_long_document_quality_report(checkpoint, backfill_metrics);
+    serde_json::to_string(&report).map_err(|error| {
+        LongDocumentBackendError::new(format!(
+            "Could not serialize native long document quality report: {error}"
+        ))
+    })
+}
+
+fn native_long_document_quality_report(
+    checkpoint: &LongDocumentExportCheckpoint,
+    backfill_metrics: Option<serde_json::Value>,
+) -> NativeLongDocumentQualityReport {
+    let metadata_by_index = checkpoint
+        .chunk_metadata
+        .iter()
+        .map(|metadata| (metadata.chunk_index, metadata))
+        .collect::<BTreeMap<_, _>>();
+    let failed_blocks = checkpoint
+        .failed_chunk_indexes
+        .iter()
+        .copied()
+        .map(|index| {
+            let metadata = metadata_by_index.get(&index);
+            NativeLongDocumentFailedBlockInfo {
+                ir_block_id: format!("checkpoint-{index}"),
+                source_block_id: metadata
+                    .map(|metadata| native_quality_source_block_id(metadata))
+                    .unwrap_or_else(|| format!("chunk-{index}")),
+                page_number: metadata.map(|metadata| metadata.page_number).unwrap_or(0),
+                retry_count: 0,
+                error: "Translation failed or missing translated text.".to_string(),
+            }
+        })
+        .collect();
+
+    NativeLongDocumentQualityReport {
+        stage_timings_ms: BTreeMap::new(),
+        backfill_metrics,
+        total_blocks: checkpoint.source_chunks.len() as u32,
+        translated_blocks: checkpoint.translated_chunks.len() as u32,
+        skipped_blocks: checkpoint
+            .chunk_metadata
+            .iter()
+            .filter(|metadata| metadata.source_block_type == LongDocumentExportBlockType::Formula)
+            .count() as u32,
+        failed_blocks,
+    }
+}
+
+fn native_quality_source_block_id(metadata: &LongDocumentExportChunkMetadata) -> String {
+    if metadata.page_number > 0 {
+        format!(
+            "native-p{}-b{}",
+            metadata.page_number,
+            metadata.order_in_page.max(0) + 1
+        )
+    } else {
+        format!("chunk-{}", metadata.chunk_index)
     }
 }
 

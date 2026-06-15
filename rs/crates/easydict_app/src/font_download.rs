@@ -246,7 +246,7 @@ fn default_data_directory() -> PathBuf {
         .join("Easydict")
 }
 
-fn is_managed_cjk_font_file(path: impl AsRef<Path>) -> bool {
+pub(crate) fn is_managed_cjk_font_file(path: impl AsRef<Path>) -> bool {
     let path = path.as_ref();
     if !path.is_file() {
         return false;

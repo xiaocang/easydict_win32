@@ -12,6 +12,7 @@ use crate::state::{
     WindowServiceSetting,
 };
 use serde_json::{Map, Value};
+use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -810,8 +811,15 @@ fn imported_mdx_dictionaries(root: &Map<String, Value>) -> Vec<ImportedMdxDictio
 
 fn discover_missing_mdd_file_paths(dictionaries: &mut [ImportedMdxDictionary]) {
     for dictionary in dictionaries {
-        if dictionary.mdd_file_paths.is_empty() {
-            dictionary.mdd_file_paths = discover_mdd_file_paths(&dictionary.file_path);
+        let mut seen = dictionary
+            .mdd_file_paths
+            .iter()
+            .map(|path| path.trim().to_ascii_lowercase())
+            .collect::<HashSet<_>>();
+        for discovered in discover_mdd_file_paths(&dictionary.file_path) {
+            if seen.insert(discovered.trim().to_ascii_lowercase()) {
+                dictionary.mdd_file_paths.push(discovered);
+            }
         }
     }
 }

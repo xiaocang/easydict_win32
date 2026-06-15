@@ -11,11 +11,7 @@
 
 <div align="center">
 
-[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![Source:Test LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/xiaocang/easydict_win32/badges/source-test-ratio.json) [![WinGet](https://img.shields.io/winget/v/xiaocang.EasydictforWindows)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/x/xiaocang/EasydictforWindows)
-
-<a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
-  <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" />
-</a>
+[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![Source:Test LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/xiaocang/easydict_win32/badges/source-test-ratio.json)
 
 </div>
 
@@ -34,7 +30,7 @@
 
 ## Introduction
 
-This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The project was developed using **Vibe Coding** - AI-assisted programming to migrate the Swift/SwiftUI codebase to .NET + WinUI 3.
+This is a Windows port of [Easydict](https://github.com/tisfeng/Easydict), originally a macOS translation dictionary app. The current default release is a Rust-native portable app; the older .NET/WinUI build is retained only for legacy/hybrid coexistence work.
 
 Easydict supports **Copilot+ PC enhanced local AI translation**: on supported Copilot+ PCs with a 40+ TOPS NPU, translations run on-device via Phi Silica for fast, private output. Foundry Local is supported on regular Windows PCs, with OpenVINO NLLB-200 as an offline fallback — standard translation services remain fully available on every Windows device.
 
@@ -202,12 +198,23 @@ if ($expected -eq $actual) { "OK" } else { "FAILED" }
 ```powershell
 # Clone repository
 git clone https://github.com/xiaocang/easydict_win32.git
+cd easydict_win32
+
+# Build the default Rust portable package
+.\rs\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release
+
+# Or run the Rust app directly during development
+cd rs
+cargo run -p easydict_app --bin easydict_preview
+```
+
+#### Legacy/Hybrid .NET Build
+
+The .NET/WinUI build is retained only for legacy/hybrid coexistence work.
+
+```powershell
 cd easydict_win32/dotnet
-
-# Build
 dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
-
-# Run
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
 
@@ -215,10 +222,11 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ## Tech Stack
 
-- **.NET** - Runtime framework
-- **WinUI 3 (Windows App SDK)** - Modern Windows UI framework
-- **C#** - Programming language
-- **xUnit + FluentAssertions** - Unit testing
+- **Rust** - Default portable app, core translation runtime, packaging, and native helpers
+- **winfluent-rs / iced** - Rust desktop UI runtime
+- **Windows APIs** - OCR, hotkeys, tray, protocol, and native integration
+- **.NET 8 + WinUI 3** - Legacy/hybrid coexistence build and parity reference
+- **cargo test + xUnit/FluentAssertions** - Rust and legacy parity tests
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 
@@ -284,8 +292,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### Distribution
 
-- [x] **Windows Store** - Published to Microsoft Store
-- [x] ~~**winget**~~ - Published to Windows Package Manager ✅
+- [x] **Rust portable ZIP** - Default first rs release path
+- [x] **Windows Store** - Legacy/hybrid package path
+- [x] ~~**winget**~~ - Legacy/hybrid package path ✅
 
 <p align="right"><a href="#table-of-contents">Back to Top</a></p>
 

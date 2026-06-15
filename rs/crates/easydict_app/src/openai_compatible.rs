@@ -20,15 +20,15 @@ use easydict_foundry_local::{
     prepare_foundry_local_service as prepare_foundry_local_service_for_endpoint,
 };
 pub use easydict_foundry_local::{
-    extract_foundry_local_chat_completions_endpoint,
+    default_foundry_local_runtime_controller, extract_foundry_local_chat_completions_endpoint,
     extract_foundry_local_chat_completions_endpoint_from_logs,
     foundry_local_models_endpoint_from_chat_completions_endpoint,
     normalize_foundry_local_chat_completions_endpoint, parse_foundry_local_runtime_status,
     try_resolve_foundry_local_model_id, CommandFoundryLocalEndpointResolver,
-    FoundryLocalEndpointResolver, FoundryLocalError, FoundryLocalErrorCode, FoundryLocalModelState,
-    FoundryLocalPrepareOutcome, FoundryLocalRuntimeController, FoundryLocalRuntimeState,
-    FoundryLocalRuntimeStatus, FoundryLocalStatusCheck, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE,
-    FOUNDRY_LOCAL_DEFAULT_MODEL,
+    DefaultFoundryLocalRuntimeController, FoundryLocalEndpointResolver, FoundryLocalError,
+    FoundryLocalErrorCode, FoundryLocalModelState, FoundryLocalPrepareOutcome,
+    FoundryLocalRuntimeController, FoundryLocalRuntimeState, FoundryLocalRuntimeStatus,
+    FoundryLocalStatusCheck, FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, FOUNDRY_LOCAL_DEFAULT_MODEL,
 };
 use ring::digest;
 use serde_json::{json, Map, Value};

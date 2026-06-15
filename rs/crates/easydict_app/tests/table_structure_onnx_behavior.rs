@@ -4,9 +4,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use easydict_app::{
     clamp_tatr_table_crop, normalize_tatr_logits_shape, normalize_tatr_pred_boxes_shape,
-    parse_tatr_onnx_outputs, resolve_tatr_input_name, resolve_tatr_output_names, TatrOnnxError,
-    TatrOnnxSession,
+    parse_tatr_onnx_outputs, resolve_tatr_input_name, resolve_tatr_output_names, TableStructure,
+    TatrOnnxError, TatrOnnxSession,
 };
+
+const TATR_ONNX_RUNTIME_DIR_ENV: &str = "EASYDICT_TATR_ONNX_SMOKE_RUNTIME_DIR";
+const TATR_ONNX_MODEL_ENV: &str = "EASYDICT_TATR_ONNX_SMOKE_MODEL";
 
 #[test]
 fn tatr_onnx_uses_first_input_name_like_dotnet_service() {
@@ -152,6 +155,113 @@ fn tatr_onnx_reports_missing_runtime_dll() {
     }
 
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn tatr_onnx_real_provider_smoke_when_env_configured() {
+    let Some((runtime_dir, model_path)) =
+        smoke_paths(TATR_ONNX_RUNTIME_DIR_ENV, TATR_ONNX_MODEL_ENV)
+    else {
+        eprintln!(
+            "skipping real TATR ONNX smoke; set {TATR_ONNX_RUNTIME_DIR_ENV} and {TATR_ONNX_MODEL_ENV}"
+        );
+        return;
+    };
+
+    let mut session = TatrOnnxSession::from_model_paths(runtime_dir, model_path)
+        .expect("real TATR session should load");
+    let width = 640usize;
+    let height = 480usize;
+    let bgra = synthetic_table_page_bgra(width, height);
+
+    let structure = session
+        .recognize_bgra(&bgra, width, height, 80.0, 80.0, 480.0, 300.0)
+        .expect("real TATR session should run inference");
+
+    if let Some(structure) = structure {
+        assert_table_structure_bounds(&structure, width as f64, height as f64);
+    }
+}
+
+fn smoke_paths(runtime_env: &str, model_env: &str) -> Option<(PathBuf, PathBuf)> {
+    let runtime_dir = std::env::var_os(runtime_env).map(PathBuf::from);
+    let model_path = std::env::var_os(model_env).map(PathBuf::from);
+    if runtime_dir.is_none() && model_path.is_none() {
+        return None;
+    }
+
+    let runtime_dir = runtime_dir.unwrap_or_else(|| {
+        panic!("{runtime_env} must be set when {model_env} is set for real ONNX smoke")
+    });
+    let model_path = model_path.unwrap_or_else(|| {
+        panic!("{model_env} must be set when {runtime_env} is set for real ONNX smoke")
+    });
+    assert!(
+        runtime_dir.is_dir(),
+        "{runtime_env} must point to an ONNX Runtime directory: {}",
+        runtime_dir.display()
+    );
+    assert!(
+        model_path.is_file(),
+        "{model_env} must point to a TATR ONNX model: {}",
+        model_path.display()
+    );
+    Some((runtime_dir, model_path))
+}
+
+fn synthetic_table_page_bgra(width: usize, height: usize) -> Vec<u8> {
+    let mut bgra = vec![255u8; width * height * 4];
+    for x in [80, 200, 360, 560] {
+        fill_rect(&mut bgra, width, x, 80, 3, 300);
+    }
+    for y in [80, 180, 280, 380] {
+        fill_rect(&mut bgra, width, 80, y, 480, 3);
+    }
+    bgra
+}
+
+fn fill_rect(bgra: &mut [u8], image_width: usize, x: usize, y: usize, width: usize, height: usize) {
+    let image_height = bgra.len() / image_width / 4;
+    for row in y..(y + height).min(image_height) {
+        for column in x..(x + width).min(image_width) {
+            let offset = (row * image_width + column) * 4;
+            bgra[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+        }
+    }
+}
+
+fn assert_table_structure_bounds(structure: &TableStructure, page_width: f64, page_height: f64) {
+    for detection in structure
+        .rows
+        .iter()
+        .chain(structure.columns.iter())
+        .chain(structure.spanning_cells.iter())
+    {
+        assert!(detection.confidence.is_finite());
+        assert!(detection.x.is_finite());
+        assert!(detection.y.is_finite());
+        assert!(detection.width.is_finite());
+        assert!(detection.height.is_finite());
+        assert!(detection.x >= 0.0);
+        assert!(detection.y >= 0.0);
+        assert!(detection.width >= 0.0);
+        assert!(detection.height >= 0.0);
+        assert!(detection.x + detection.width <= page_width + 1.0);
+        assert!(detection.y + detection.height <= page_height + 1.0);
+    }
+
+    for cell in &structure.cells {
+        assert!(cell.x.is_finite());
+        assert!(cell.y.is_finite());
+        assert!(cell.width.is_finite());
+        assert!(cell.height.is_finite());
+        assert!(cell.x >= 0.0);
+        assert!(cell.y >= 0.0);
+        assert!(cell.width >= 0.0);
+        assert!(cell.height >= 0.0);
+        assert!(cell.x + cell.width <= page_width + 1.0);
+        assert!(cell.y + cell.height <= page_height + 1.0);
+    }
 }
 
 fn set_logit(logits: &mut [f32], query: usize, class: usize, value: f32) {

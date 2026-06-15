@@ -128,7 +128,7 @@ Write-Host "Output: $PublishDir"
 
 # Create ZIP if requested
 if ($CreateZip) {
-    $zipPath = Join-Path $SolutionDir "Easydict-win-$Platform-$Configuration.zip"
+    $zipPath = Join-Path $SolutionDir "Easydict-legacy-hybrid-win-$Platform-$Configuration.zip"
     Write-Host ""
     Write-Host "Creating ZIP archive..." -ForegroundColor Yellow
     

@@ -179,6 +179,7 @@ pub enum PackageBrowserExtensionError {
     ExtensionDirMissing(PathBuf),
     ManifestMissing(PathBuf),
     RequiredFileMissing(PathBuf),
+    UnsupportedSourceEntry(PathBuf),
     MissingVersion(PathBuf),
     ManifestNotObject(PathBuf),
     InvalidManifestJson { path: PathBuf, message: String },
@@ -388,6 +389,11 @@ impl fmt::Display for PackageBrowserExtensionError {
                     path.display()
                 )
             }
+            Self::UnsupportedSourceEntry(path) => write!(
+                formatter,
+                "browser extension package does not support symlink or reparse-point source entries: {}",
+                path.display()
+            ),
             Self::MissingVersion(path) => {
                 write!(
                     formatter,
@@ -699,6 +705,7 @@ pub fn package_browser_extension(
         if !path.is_file() {
             return Err(PackageBrowserExtensionError::RequiredFileMissing(path));
         }
+        ensure_browser_extension_source_entry_supported(&path)?;
     }
 
     let version = browser_extension_version(&extension_dir.join("manifest.json"))?;
@@ -1719,6 +1726,55 @@ fn package_browser_extension_target(
     })
 }
 
+fn ensure_browser_extension_source_entry_supported(
+    path: &Path,
+) -> Result<(), PackageBrowserExtensionError> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|error| PackageBrowserExtensionError::Io {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    if browser_extension_source_entry_is_unsupported_by_flags(
+        metadata.file_type().is_symlink(),
+        browser_extension_source_entry_is_reparse_point(path)?,
+    ) {
+        return Err(PackageBrowserExtensionError::UnsupportedSourceEntry(
+            path.to_path_buf(),
+        ));
+    }
+    Ok(())
+}
+
+fn browser_extension_source_entry_is_unsupported_by_flags(
+    is_symlink: bool,
+    is_reparse_point: bool,
+) -> bool {
+    directory_entry_is_unsupported_by_flags(is_symlink, is_reparse_point)
+}
+
+fn browser_extension_source_entry_is_reparse_point(
+    path: &Path,
+) -> Result<bool, PackageBrowserExtensionError> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        let metadata =
+            fs::symlink_metadata(path).map_err(|error| PackageBrowserExtensionError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        Ok(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(false)
+    }
+}
+
 fn rust_portable_directory_entries(
     package_dir: &Path,
 ) -> Result<Vec<String>, ValidateRustPortableError> {
@@ -1831,6 +1887,11 @@ fn rust_portable_zip_entries(
                 original_name,
             ));
         }
+        if entry.is_symlink() {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                original_name,
+            ));
+        }
         let Some(enclosed_name) = entry.enclosed_name() else {
             return Err(ValidateRustPortableError::InvalidArchiveEntry(
                 original_name,
@@ -1888,6 +1949,11 @@ fn rust_portable_zip_dotnet_marker_entries(
             .by_index(index)
             .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
         let original_name = entry.name().to_string();
+        if archive_entry_path_is_unsafe(&original_name) || entry.is_symlink() {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                original_name,
+            ));
+        }
         let Some(enclosed_name) = entry.enclosed_name() else {
             return Err(ValidateRustPortableError::InvalidArchiveEntry(
                 original_name,
@@ -2084,6 +2150,7 @@ fn read_manifest_json(manifest_path: &Path) -> Result<Value, PackageBrowserExten
             manifest_path.to_path_buf(),
         ));
     }
+    ensure_browser_extension_source_entry_supported(manifest_path)?;
     let text =
         fs::read_to_string(manifest_path).map_err(|error| PackageBrowserExtensionError::Io {
             path: manifest_path.to_path_buf(),
@@ -2727,6 +2794,43 @@ Easydict.Workers.LocalAi\n";
     }
 
     #[test]
+    fn validate_rs_portable_rejects_zip_symlink_entry_before_payload_allowlist() {
+        let package = tempfile_dir("rs-portable-zip-symlink");
+        let zip_path = package.with_extension("zip");
+        let file = File::create(&zip_path).expect("test zip should be created");
+        let mut writer = ZipWriter::new(file);
+        let options = FileOptions::<()>::default().compression_method(CompressionMethod::Stored);
+        for entry in RUST_PORTABLE_REQUIRED_ENTRIES {
+            writer
+                .start_file(entry, options)
+                .expect("required entry should be written");
+            writer
+                .write_all(entry.as_bytes())
+                .expect("required entry contents should be written");
+        }
+        writer
+            .add_symlink(
+                "assets/support.bin",
+                "dotnet/host/fxr/8.0.11/hostfxr.dll",
+                FileOptions::<()>::default(),
+            )
+            .expect("symlink entry should be written");
+        writer.finish().expect("test zip should be finalized");
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            ValidateRustPortableError::InvalidArchiveEntry("assets/support.bin".to_string())
+        );
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
+    }
+
+    #[test]
     fn rust_portable_package_name_matches_coexistence_contract() {
         assert_eq!(
             rust_portable_package_name(None, "x64"),
@@ -3191,6 +3295,49 @@ Easydict.Workers.LocalAi\n";
     }
 
     #[test]
+    fn package_browser_extension_rejects_linked_common_file_before_creating_package() {
+        let extension = browser_extension_source("browser-extension-linked-common-file");
+        let output = tempfile_dir("browser-extension-linked-common-file-output");
+        let linked_source = extension.join("background.js");
+        let retained_payload = extension.join("dotnet/host/fxr/8.0.11/hostfxr.dll");
+        if let Some(parent) = retained_payload.parent() {
+            fs::create_dir_all(parent).expect("create retained payload parent");
+        }
+        fs::write(&retained_payload, b"hostfxr").expect("write retained payload");
+        fs::remove_file(&linked_source).expect("remove fixture source");
+        if let Err(error) = create_file_symlink(&retained_payload, &linked_source) {
+            eprintln!(
+                "skipping linked browser extension source path; symlink creation failed: {error}"
+            );
+            let _ = fs::remove_dir_all(extension);
+            let _ = fs::remove_dir_all(output);
+            return;
+        }
+
+        let error = package_browser_extension(&PackageBrowserExtensionOptions {
+            extension_dir: extension.clone(),
+            output_dir: Some(output.clone()),
+            target: "Chrome".to_string(),
+        })
+        .unwrap_err();
+
+        let PackageBrowserExtensionError::UnsupportedSourceEntry(path) = error else {
+            panic!("expected unsupported source entry error");
+        };
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("background.js")
+        );
+        assert!(
+            !output.join("easydict-ocr-chrome-v1.2.3.zip").exists(),
+            "linked source entries should fail before creating the package archive"
+        );
+
+        let _ = fs::remove_dir_all(extension);
+        let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
     fn package_browser_extension_reports_missing_common_file() {
         let extension = browser_extension_source("browser-extension-missing");
         fs::remove_file(extension.join("setup.js")).expect("remove setup");
@@ -3253,6 +3400,16 @@ Easydict.Workers.LocalAi\n";
 
     #[cfg(not(windows))]
     fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn create_file_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+
+    #[cfg(not(windows))]
+    fn create_file_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
         std::os::unix::fs::symlink(target, link)
     }
 

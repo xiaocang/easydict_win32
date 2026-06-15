@@ -325,6 +325,65 @@ fn map_sdk_error(error: foundry_local_sdk::FoundryLocalError) -> FoundryLocalErr
     FoundryLocalError::new(code, error.to_string())
 }
 
+pub enum DefaultFoundryLocalRuntimeController {
+    #[cfg(feature = "sdk")]
+    Sdk(FoundryLocalSdkProvider),
+    Command(CommandFoundryLocalEndpointResolver),
+}
+
+impl Default for DefaultFoundryLocalRuntimeController {
+    fn default() -> Self {
+        default_foundry_local_runtime_controller()
+    }
+}
+
+impl FoundryLocalEndpointResolver for DefaultFoundryLocalRuntimeController {
+    fn resolve_chat_completions_endpoint(&mut self) -> FoundryLocalResult<Option<String>> {
+        match self {
+            #[cfg(feature = "sdk")]
+            Self::Sdk(provider) => provider.resolve_chat_completions_endpoint(),
+            Self::Command(controller) => controller.resolve_chat_completions_endpoint(),
+        }
+    }
+}
+
+impl FoundryLocalRuntimeController for DefaultFoundryLocalRuntimeController {
+    fn get_status(&mut self) -> FoundryLocalResult<FoundryLocalRuntimeStatus> {
+        match self {
+            #[cfg(feature = "sdk")]
+            Self::Sdk(provider) => provider.get_status(),
+            Self::Command(controller) => controller.get_status(),
+        }
+    }
+
+    fn start_service(&mut self) -> FoundryLocalResult<()> {
+        match self {
+            #[cfg(feature = "sdk")]
+            Self::Sdk(provider) => provider.start_service(),
+            Self::Command(controller) => controller.start_service(),
+        }
+    }
+
+    fn load_model(&mut self, model: &str) -> FoundryLocalResult<()> {
+        match self {
+            #[cfg(feature = "sdk")]
+            Self::Sdk(provider) => FoundryLocalRuntimeController::load_model(provider, model),
+            Self::Command(controller) => controller.load_model(model),
+        }
+    }
+}
+
+pub fn default_foundry_local_runtime_controller() -> DefaultFoundryLocalRuntimeController {
+    #[cfg(feature = "sdk")]
+    {
+        if let Ok(provider) = FoundryLocalSdkProvider::new("Easydict") {
+            return DefaultFoundryLocalRuntimeController::Sdk(provider);
+        }
+    }
+
+    DefaultFoundryLocalRuntimeController::Command(CommandFoundryLocalEndpointResolver::default())
+}
+
 #[derive(Clone, Debug)]
 pub struct CommandFoundryLocalEndpointResolver {
     executable_name: String,
@@ -1035,10 +1094,19 @@ fn is_retained_dotnet_runtime_or_worker_command(value: &str) -> bool {
         leaf,
         "dotnet"
             | "dotnet.exe"
+            | "dotnet.cmd"
+            | "dotnet.bat"
+            | "dotnet.com"
             | "powershell"
             | "powershell.exe"
+            | "powershell.cmd"
+            | "powershell.bat"
+            | "powershell.com"
             | "pwsh"
             | "pwsh.exe"
+            | "pwsh.cmd"
+            | "pwsh.bat"
+            | "pwsh.com"
             | "hostfxr.dll"
             | "hostpolicy.dll"
             | "coreclr.dll"
@@ -1235,6 +1303,17 @@ mod tests {
         assert_provider_traits::<FoundryLocalSdkProvider>();
     }
 
+    #[cfg(not(feature = "sdk"))]
+    #[test]
+    fn default_runtime_controller_uses_cli_boundary_without_sdk_feature() {
+        let controller = default_foundry_local_runtime_controller();
+
+        assert!(matches!(
+            controller,
+            DefaultFoundryLocalRuntimeController::Command(_)
+        ));
+    }
+
     #[test]
     fn normalizes_foundry_local_chat_completion_endpoints() {
         assert_eq!(
@@ -1332,9 +1411,13 @@ mod tests {
     fn cli_executable_override_rejects_retained_dotnet_runtime_commands() {
         for blocked in [
             "dotnet.exe",
+            "dotnet.cmd",
+            "dotnet.bat",
             r"C:\Program Files\dotnet\dotnet.exe",
             "pwsh",
+            "pwsh.cmd",
             "powershell.exe",
+            "powershell.bat",
             "C:/Easydict/Easydict.CompatHost.exe",
             "C:/Easydict/workers/localai/Easydict.Workers.LocalAi.exe",
             "C:/Easydict/Easydict.Workers.LocalAi.runtimeconfig.json",

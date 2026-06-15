@@ -19,6 +19,29 @@ on:
       - 'LICENSE'
 
 jobs:
+  rust-only-boundary:
+    name: Rust-only boundary
+    runs-on: windows-latest
+    env:
+      EASYDICT_RUNTIME_PROFILE: rust-only
+      RUNTIME_PROFILE: rust-only
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Rust-only boundary tests
+        working-directory: rs
+        run: |
+          cargo test -p easydict_packager --test release_contract_behavior ci_workflow_runs_default_rs_rust_only_boundary_tests -- --exact --nocapture
+          cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload -- --exact --nocapture
+          cargo test -p easydict_app runtime_policy --lib -- --nocapture
+          cargo test -p easydict_app --test default_api_boundary_behavior -- --nocapture
+          cargo test -p easydict_app --test cli_translate_behavior local_ai_cli_app_dir_ignores_stale_dotnet_payload_markers -- --exact --nocapture
+          cargo test -p easydict_app --test long_document_cli_behavior app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_lookup -- --exact --nocapture
+
   build-and-test:
     runs-on: windows-latest
 

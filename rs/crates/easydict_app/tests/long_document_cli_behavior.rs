@@ -75,10 +75,21 @@ fn list_services_succeeds_without_document_arguments() {
     assert_success(&output);
     let stdout = stdout(&output);
     let normalized = stdout.to_ascii_lowercase();
-    for expected in ["google", "openai"] {
+    for expected in ["google", "openai", "windows-local-ai"] {
         assert!(
             normalized.contains(expected),
             "service list should include {expected}\nstdout:\n{stdout}"
+        );
+    }
+    for stale_alias in [
+        "foundry-local",
+        "foundry_local",
+        "openvino-local-ai",
+        "open_vino",
+    ] {
+        assert!(
+            !normalized.contains(stale_alias),
+            "service list should expose only the canonical Windows Local AI aggregate, not {stale_alias}\nstdout:\n{stdout}"
         );
     }
     assert!(
@@ -565,6 +576,8 @@ fn app_dir_ignores_stale_dotnet_payload_markers_and_does_not_enable_worker_looku
         ])
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_RUNTIME_PROFILE", "hybrid")
+        .env("RUNTIME_PROFILE", "hybrid")
         .env("EASYDICT_WINDOWS_AI_DISABLE_WINRT", "1")
         .env("EASYDICT_FOUNDRY_LOCAL_CLI", "__missing_foundry_cli__.cmd")
         .output()
@@ -978,6 +991,64 @@ fn foundry_local_cli_override_targeting_retained_worker_is_not_spawned() {
         !marker_path.exists(),
         "Foundry CLI override that points at a retained worker name must not be spawned:\n{stderr}"
     );
+    assert!(
+        !stderr.contains("Long Document worker"),
+        "bad Foundry CLI override should not probe retained LongDoc workers:\n{stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("compat host"),
+        "bad Foundry CLI override should not describe a compat host:\n{stderr}"
+    );
+
+    let _ = fs::remove_dir_all(work_dir);
+}
+
+#[test]
+fn foundry_local_cli_override_targeting_dotnet_cmd_is_not_spawned() {
+    let work_dir = unique_temp_dir("easydict-long-doc-cli-dotnet-cmd-override");
+    let settings_dir = work_dir.join("settings");
+    let fake_foundry_dir = work_dir.join("fake-foundry");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
+    let marker_path = fake_foundry_dir.join("dotnet-cmd-was-spawned.txt");
+    let fake_foundry_path = fake_foundry_dir.join("dotnet.cmd");
+    fs::write(
+        &fake_foundry_path,
+        format!(
+            "@echo off\r\necho spawned >\"{}\"\r\necho Foundry Local endpoint: http://127.0.0.1:1/v1/chat/completions\r\n",
+            marker_path.display()
+        ),
+    )
+    .expect("fake dotnet.cmd should be written");
+    let input_path = work_dir.join("sample.txt");
+    fs::write(&input_path, "Hello Foundry Local long document")
+        .expect("sample input should be written");
+
+    let output = long_doc_cli()
+        .arg("--input")
+        .arg(&input_path)
+        .args([
+            "--target-language",
+            "zh-Hans",
+            "--from",
+            "en",
+            "--service",
+            "foundry-local",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env("EASYDICT_FOUNDRY_LOCAL_CLI", &fake_foundry_path)
+        .output()
+        .expect("long document CLI should run");
+
+    assert_failure(&output);
+    let stderr = stderr(&output);
+    assert!(
+        !marker_path.exists(),
+        "Foundry CLI override that points at dotnet.cmd must not be spawned:\n{stderr}"
+    );
+    assert!(stderr.contains("retained runtime/worker"));
+    assert!(stderr.contains("dotnet.cmd"));
     assert!(
         !stderr.contains("Long Document worker"),
         "bad Foundry CLI override should not probe retained LongDoc workers:\n{stderr}"

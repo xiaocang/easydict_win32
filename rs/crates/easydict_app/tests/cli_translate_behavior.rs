@@ -795,6 +795,150 @@ fn native_google_cli_succeeds_against_local_endpoint_without_worker_or_compat_ho
 }
 
 #[test]
+fn default_translate_uses_native_google_without_retained_runtime_or_shell_wording() {
+    let settings_dir = unique_temp_dir("easydict-cli-default-google-native-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("Google listener should bind");
+    listener
+        .set_nonblocking(true)
+        .expect("listener should become nonblocking");
+    let endpoint = format!(
+        "http://{}/translate_a/single",
+        listener.local_addr().unwrap()
+    );
+    let (request_tx, request_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = accept_with_timeout(listener);
+        let (request, body) = read_http_request(&stream);
+        request_tx.send((request, body)).unwrap();
+
+        let response_body = r#"{"sentences":[{"trans":"Bonjour"}],"src":"en"}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\n\
+             Content-Type: application/json\r\n\
+             Content-Length: {}\r\n\
+             Connection: close\r\n\r\n\
+             {}",
+            response_body.len(),
+            response_body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    });
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args(["--from", "en", "--to", "fr", "--text", "Hello", "--json"])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .env("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_GOOGLE", &endpoint)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    let (request, request_body) = request_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("default CLI should call the native Google endpoint");
+    server.join().expect("server should finish");
+
+    assert!(
+        output.status.success(),
+        "default CLI translate should succeed\nstdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+    assert!(request.starts_with("GET /translate_a/single?"));
+    assert!(request.contains("client=gtx"));
+    assert!(request.contains("sl=en"));
+    assert!(request.contains("tl=fr"));
+    assert!(request.contains("q=Hello"));
+    assert!(request_body.is_empty());
+
+    let stdout = stdout(&output);
+    let stderr = stderr(&output);
+    assert!(stdout.contains("\"translatedText\":\"Bonjour\""));
+    assert!(stdout.contains("\"serviceId\":\"google\""));
+    for forbidden in [
+        "CompatHost",
+        "Easydict.Workers",
+        ".NET",
+        "dotnet",
+        "dotnet.exe",
+        "PowerShell",
+        "powershell",
+        "pwsh",
+        "worker executable",
+        "worker-required",
+        "retained runtime",
+        "retained worker",
+        "No Rust-native quick translate route",
+        "requires a Rust-native route",
+        "hostfxr",
+    ] {
+        assert!(
+            !stdout.contains(forbidden) && !stderr.contains(forbidden),
+            "default native Google CLI should not mention {forbidden}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn native_google_cli_rejects_target_auto_before_provider_http_or_worker_lookup() {
+    let settings_dir = unique_temp_dir("easydict-cli-google-target-auto-no-http");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("unused endpoint should bind");
+    let endpoint = format!(
+        "http://{}/translate_a/single",
+        listener.local_addr().unwrap()
+    );
+    drop(listener);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "google",
+            "--from",
+            "en",
+            "--to",
+            "auto",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .env("EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_GOOGLE", &endpoint)
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    assert!(
+        !output.status.success(),
+        "target Auto should fail locally\nstdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+    let stdout = stdout(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stdout.trim().is_empty(),
+        "unsupported Google CLI should not emit JSON success output:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("Language pair not supported: English -> Auto"),
+        "target Auto should fail during Rust language preflight, before HTTP:\n{stderr}"
+    );
+    assert_no_retained_worker_wording(&stdout, &stderr, "unsupported native Google CLI");
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
 fn native_google_cli_batch_succeeds_against_local_endpoint_without_worker_or_compat_host_wording() {
     let settings_dir = unique_temp_dir("easydict-cli-google-native-batch-settings");
     fs::create_dir_all(&settings_dir).expect("settings directory should be created");
@@ -1137,6 +1281,94 @@ fn native_deepl_cli_succeeds_against_local_api_without_worker_or_compat_host_wor
             "native DeepL CLI should not mention {forbidden}\nstdout:\n{stdout}\nstderr:\n{stderr}"
         );
     }
+
+    let _ = fs::remove_dir_all(settings_dir);
+}
+
+#[test]
+fn native_deepl_web_cli_uses_default_web_mode_without_worker_or_compat_host_wording() {
+    let settings_dir = unique_temp_dir("easydict-cli-deepl-web-native-settings");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("DeepL web listener should bind");
+    listener
+        .set_nonblocking(true)
+        .expect("listener should become nonblocking");
+    let endpoint = format!("http://{}/jsonrpc", listener.local_addr().unwrap());
+    let (request_tx, request_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = accept_with_timeout(listener);
+        let (request, body) = read_http_request(&stream);
+        request_tx.send((request, body)).unwrap();
+
+        let response_body = r#"{"jsonrpc":"2.0","id":100000000,"result":{"texts":[{"text":"Bonjour"}],"lang":"EN"}}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\n\
+             Content-Type: application/json\r\n\
+             Content-Length: {}\r\n\
+             Connection: close\r\n\r\n\
+             {}",
+            response_body.len(),
+            response_body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    });
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "deepl",
+            "--from",
+            "en",
+            "--to",
+            "fr",
+            "--text",
+            "Hello",
+            "--json",
+        ])
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .env(RUNTIME_PROFILE_ENVIRONMENT_VARIABLE, "rust-only")
+        .env(
+            "EASYDICT_TEST_TRADITIONAL_HTTP_ENDPOINT_DEEPL_WEB",
+            &endpoint,
+        )
+        .remove_local_ai_env_overrides()
+        .output()
+        .expect("CLI should run");
+
+    let (request, request_body) = request_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("CLI should call the native DeepL web endpoint");
+    server.join().expect("server should finish");
+
+    assert!(
+        output.status.success(),
+        "DeepL web CLI should succeed\nstdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+
+    assert!(request.starts_with("POST /jsonrpc "));
+    let request_headers = request.to_ascii_lowercase();
+    assert!(request_headers.contains("content-type: application/json"));
+    assert!(request_headers.contains("origin: https://www.deepl.com"));
+    assert!(request_headers.contains("referer: https://www.deepl.com/"));
+
+    let payload: serde_json::Value =
+        serde_json::from_str(&request_body).expect("DeepL web request body should be JSON");
+    assert_eq!(payload["jsonrpc"], "2.0");
+    assert_eq!(payload["method"], "LMT_handle_texts");
+    assert_eq!(payload["params"]["texts"][0]["text"], "Hello");
+    assert_eq!(payload["params"]["lang"]["source_lang_user_selected"], "EN");
+    assert_eq!(payload["params"]["lang"]["target_lang"], "FR");
+
+    let stdout = stdout(&output);
+    let stderr = stderr(&output);
+    assert!(stdout.contains("\"translatedText\":\"Bonjour\""));
+    assert!(stdout.contains("\"serviceId\":\"deepl\""));
+    assert_no_retained_worker_wording(&stdout, &stderr, "native DeepL web CLI");
 
     let _ = fs::remove_dir_all(settings_dir);
 }
@@ -1495,7 +1727,6 @@ fn native_niutrans_cli_succeeds_without_worker_or_compat_host_wording() {
     let _ = fs::remove_dir_all(settings_dir);
 }
 
-#[cfg(feature = "enable-linguee-service")]
 #[test]
 fn native_linguee_cli_succeeds_against_local_api_without_worker_or_compat_host_wording() {
     let settings_dir = unique_temp_dir("easydict-cli-linguee-native-settings");
@@ -3040,8 +3271,9 @@ fn auto_local_ai_cli_probes_foundry_before_native_only_failure() {
         ])
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
         .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
         .output()
         .expect("CLI should run");
 
@@ -3101,8 +3333,9 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_retained_worker_befo
         ])
         .arg(&app_dir)
         .env("EASYDICT_SETTINGS_DIR", &settings_dir)
-        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
         .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
         .output()
         .expect("CLI should run");
 
@@ -3112,6 +3345,62 @@ fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_retained_worker_befo
         !marker_path.exists(),
         "Foundry CLI override that points at a retained worker name must not be spawned:\n{stderr}"
     );
+    assert!(!stderr.contains("Local AI worker executable not found"));
+    assert!(!stderr.to_ascii_lowercase().contains("compat host"));
+
+    let _ = fs::remove_dir_all(app_dir);
+    let _ = fs::remove_dir_all(settings_dir);
+    let _ = fs::remove_dir_all(fake_foundry_dir);
+}
+
+#[test]
+fn auto_local_ai_cli_rejects_foundry_cli_override_targeting_dotnet_cmd_before_spawn() {
+    let app_dir = unique_temp_dir("easydict-cli-auto-foundry-dotnet-cmd-app");
+    let settings_dir = unique_temp_dir("easydict-cli-auto-foundry-dotnet-cmd-settings");
+    let fake_foundry_dir = unique_temp_dir("easydict-cli-dotnet-cmd-override");
+    fs::create_dir_all(&app_dir).expect("app directory should be created");
+    fs::create_dir_all(&settings_dir).expect("settings directory should be created");
+    fs::create_dir_all(&fake_foundry_dir).expect("fake Foundry directory should be created");
+    let marker_path = fake_foundry_dir.join("dotnet-cmd-was-spawned.txt");
+    let fake_foundry_path = fake_foundry_dir.join("dotnet.cmd");
+    fs::write(
+        &fake_foundry_path,
+        format!(
+            "@echo off\r\necho spawned >\"{}\"\r\necho Foundry Local endpoint: http://127.0.0.1:1/v1/chat/completions\r\n",
+            marker_path.display()
+        ),
+    )
+    .expect("fake dotnet.cmd should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_easydict_cli"))
+        .arg("translate")
+        .args([
+            "--service",
+            "windows-local-ai",
+            "--from",
+            "en",
+            "--to",
+            "zh-Hans",
+            "--text",
+            "Hello",
+            "--app-dir",
+        ])
+        .arg(&app_dir)
+        .env("EASYDICT_SETTINGS_DIR", &settings_dir)
+        .remove_local_ai_env_overrides()
+        .env("EASYDICT_LOCAL_AI_PROVIDER", "foundry-local")
+        .env(FOUNDRY_LOCAL_CLI_ENVIRONMENT_VARIABLE, &fake_foundry_path)
+        .output()
+        .expect("CLI should run");
+
+    assert!(!output.status.success());
+    let stderr = stderr(&output);
+    assert!(
+        !marker_path.exists(),
+        "Foundry CLI override that points at dotnet.cmd must not be spawned:\n{stderr}"
+    );
+    assert!(stderr.contains("retained runtime/worker"));
+    assert!(stderr.contains("dotnet.cmd"));
     assert!(!stderr.contains("Local AI worker executable not found"));
     assert!(!stderr.to_ascii_lowercase().contains("compat host"));
 

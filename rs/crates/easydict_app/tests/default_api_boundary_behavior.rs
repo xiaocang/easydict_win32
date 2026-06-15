@@ -81,6 +81,63 @@ fn default_cargo_features_do_not_enable_retained_dotnet_workers() {
 }
 
 #[test]
+fn default_app_manifest_disables_auto_discovered_binary_entrypoints() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let app_manifest = include_str!("../Cargo.toml");
+    let expected_bins = [
+        ("easydict_app", "src/main.rs"),
+        (
+            "easydict_browser_registrar",
+            "src/bin/easydict_browser_registrar.rs",
+        ),
+        ("easydict_cli", "src/bin/easydict_cli.rs"),
+        (
+            "easydict-native-bridge",
+            "src/bin/easydict_native_bridge.rs",
+        ),
+        ("easydict-lex-index", "src/bin/easydict_lex_index.rs"),
+        ("easydict_long_doc", "src/bin/easydict_long_doc.rs"),
+    ];
+
+    assert!(
+        app_manifest.contains("\nautobins = false\n"),
+        "easydict_app must disable Cargo autobins so new src/bin files cannot become default rs entrypoints implicitly"
+    );
+    for (name, path) in expected_bins.iter() {
+        assert!(
+            app_manifest.contains(&format!("name = \"{name}\""))
+                && app_manifest.contains(&format!("path = \"{path}\"")),
+            "easydict_app manifest should explicitly allow bin {name} at {path}"
+        );
+    }
+
+    let mut actual_src_bin_files = fs::read_dir(manifest_dir.join("src/bin"))
+        .expect("src/bin should be readable")
+        .map(|entry| {
+            entry
+                .expect("src/bin entry should be readable")
+                .file_name()
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .filter(|name| name.ends_with(".rs"))
+        .collect::<Vec<_>>();
+    actual_src_bin_files.sort();
+
+    let mut expected_src_bin_files = expected_bins
+        .iter()
+        .filter_map(|(_, path)| path.strip_prefix("src/bin/"))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    expected_src_bin_files.sort();
+
+    assert_eq!(
+        actual_src_bin_files, expected_src_bin_files,
+        "every src/bin/*.rs file must be reviewed and listed explicitly in Cargo.toml"
+    );
+}
+
+#[test]
 fn default_app_keeps_foundry_sdk_adapter_inside_foundry_local_lib() {
     let app_manifest = include_str!("../Cargo.toml");
     assert!(
@@ -170,6 +227,39 @@ fn default_foundry_local_sdk_features_remain_lib_only_and_not_enabled_by_app_man
                 );
             }
         }
+    }
+}
+
+#[test]
+fn default_app_uses_lib_owned_foundry_runtime_controller_factory() {
+    let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut factory_mentions = Vec::new();
+    for path in rust_source_files_under(&src_dir) {
+        let relative_path = relative_slash_path(&src_dir, &path);
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
+        let production = production_source(&source);
+
+        assert!(
+            !production.contains("CommandFoundryLocalEndpointResolver::default()"),
+            "{relative_path} must construct the default Foundry runtime through the lib-owned factory"
+        );
+        if production.contains("default_foundry_local_runtime_controller") {
+            factory_mentions.push(relative_path);
+        }
+    }
+
+    for expected_path in [
+        "bin/easydict_cli.rs",
+        "lib.rs",
+        "long_document.rs",
+        "openai_compatible.rs",
+        "quick_translate.rs",
+    ] {
+        assert!(
+            factory_mentions.iter().any(|path| path == expected_path),
+            "{expected_path} should route default Foundry runtime construction through the lib-owned factory"
+        );
     }
 }
 

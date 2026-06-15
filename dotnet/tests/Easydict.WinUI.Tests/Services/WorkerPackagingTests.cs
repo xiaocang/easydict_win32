@@ -28,7 +28,8 @@ public sealed class WorkerPackagingTests
         workflow.Should().Contain("release_flavor:");
         workflow.Should().Contain("RELEASE_FLAVOR: ${{ github.event.inputs.release_flavor || 'rs-portable' }}");
         workflow.Should().Contain("runtime_profile:");
-        workflow.Should().Contain("    env:\n      RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}");
+        workflow.Should().Contain("    env:\n      RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || '' }}");
+        workflow.Should().NotContain("github.event.inputs.runtime_profile || 'hybrid'");
         workflow.Should().Contain("if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'hybrid' }}");
         workflow.Should().Contain("Require explicit hybrid profile for dotnet/MSIX artifacts");
         workflow.Should().Contain("RETAINED_WORKERS_ENABLED=true");

@@ -624,7 +624,14 @@ fn path_has_forbidden_bridge_source_component(path: &Path) -> bool {
         let Some(value) = component.as_os_str().to_str() else {
             return false;
         };
-        value.eq_ignore_ascii_case("workers") || value.eq_ignore_ascii_case("dotnet")
+        let value = value.to_ascii_lowercase();
+        value == "workers"
+            || value == "dotnet"
+            || value == "easydict.compathost"
+            || value.starts_with("easydict.compathost.")
+            || value == "easydict.nativebridge"
+            || value.starts_with("easydict.nativebridge.")
+            || value.starts_with("easydict.workers.")
     })
 }
 
@@ -661,6 +668,9 @@ mod tests {
         for canonical in [
             PathBuf::from(r"C:\Payload\dotnet\host\fxr\easydict-native-bridge.exe"),
             PathBuf::from(r"C:\Payload\workers\ocr\easydict-native-bridge.exe"),
+            PathBuf::from(r"C:\Payload\Easydict.CompatHost\easydict-native-bridge.exe"),
+            PathBuf::from(r"C:\Payload\Easydict.NativeBridge\easydict-native-bridge.exe"),
+            PathBuf::from(r"C:\Payload\Easydict.Workers.LocalAi\easydict-native-bridge.exe"),
             PathBuf::from(r"C:\Payload\Easydict.CompatHost.exe"),
         ] {
             assert!(

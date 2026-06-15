@@ -8,6 +8,9 @@ use easydict_app::{
     DocLayoutYoloOnnxError, DocLayoutYoloOnnxSession, DocLayoutYoloPreprocessResult,
 };
 
+const DOC_LAYOUT_ONNX_RUNTIME_DIR_ENV: &str = "EASYDICT_DOC_LAYOUT_YOLO_ONNX_SMOKE_RUNTIME_DIR";
+const DOC_LAYOUT_ONNX_MODEL_ENV: &str = "EASYDICT_DOC_LAYOUT_YOLO_ONNX_SMOKE_MODEL";
+
 #[test]
 fn doc_layout_yolo_onnx_prefers_images_input_name() {
     let name = resolve_doc_layout_yolo_input_name(vec![
@@ -123,6 +126,87 @@ fn doc_layout_yolo_onnx_reports_missing_runtime_dll() {
     }
 
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn doc_layout_yolo_onnx_real_provider_smoke_when_env_configured() {
+    let Some((runtime_dir, model_path)) =
+        smoke_paths(DOC_LAYOUT_ONNX_RUNTIME_DIR_ENV, DOC_LAYOUT_ONNX_MODEL_ENV)
+    else {
+        eprintln!(
+            "skipping real DocLayout-YOLO ONNX smoke; set {DOC_LAYOUT_ONNX_RUNTIME_DIR_ENV} and {DOC_LAYOUT_ONNX_MODEL_ENV}"
+        );
+        return;
+    };
+
+    let mut session = DocLayoutYoloOnnxSession::from_model_paths(runtime_dir, model_path)
+        .expect("real DocLayout-YOLO session should load");
+    let width = 320usize;
+    let height = 240usize;
+    let bgra = synthetic_document_bgra(width, height);
+
+    let detections = session
+        .detect_bgra(&bgra, width, height)
+        .expect("real DocLayout-YOLO session should run inference");
+
+    for detection in detections {
+        assert!(detection.confidence.is_finite());
+        assert!(detection.x.is_finite());
+        assert!(detection.y.is_finite());
+        assert!(detection.width.is_finite());
+        assert!(detection.height.is_finite());
+        assert!(detection.x >= 0.0);
+        assert!(detection.y >= 0.0);
+        assert!(detection.width >= 0.0);
+        assert!(detection.height >= 0.0);
+        assert!(detection.x + detection.width <= width as f64 + 1.0);
+        assert!(detection.y + detection.height <= height as f64 + 1.0);
+    }
+}
+
+fn smoke_paths(runtime_env: &str, model_env: &str) -> Option<(PathBuf, PathBuf)> {
+    let runtime_dir = std::env::var_os(runtime_env).map(PathBuf::from);
+    let model_path = std::env::var_os(model_env).map(PathBuf::from);
+    if runtime_dir.is_none() && model_path.is_none() {
+        return None;
+    }
+
+    let runtime_dir = runtime_dir.unwrap_or_else(|| {
+        panic!("{runtime_env} must be set when {model_env} is set for real ONNX smoke")
+    });
+    let model_path = model_path.unwrap_or_else(|| {
+        panic!("{model_env} must be set when {runtime_env} is set for real ONNX smoke")
+    });
+    assert!(
+        runtime_dir.is_dir(),
+        "{runtime_env} must point to an ONNX Runtime directory: {}",
+        runtime_dir.display()
+    );
+    assert!(
+        model_path.is_file(),
+        "{model_env} must point to a DocLayout-YOLO ONNX model: {}",
+        model_path.display()
+    );
+    Some((runtime_dir, model_path))
+}
+
+fn synthetic_document_bgra(width: usize, height: usize) -> Vec<u8> {
+    let mut bgra = vec![255u8; width * height * 4];
+    fill_rect(&mut bgra, width, 24, 24, width.saturating_sub(48), 24);
+    fill_rect(&mut bgra, width, 36, 76, width.saturating_sub(72), 18);
+    fill_rect(&mut bgra, width, 36, 112, width.saturating_sub(72), 18);
+    fill_rect(&mut bgra, width, 72, 160, width.saturating_sub(144), 44);
+    bgra
+}
+
+fn fill_rect(bgra: &mut [u8], image_width: usize, x: usize, y: usize, width: usize, height: usize) {
+    let image_height = bgra.len() / image_width / 4;
+    for row in y..(y + height).min(image_height) {
+        for column in x..(x + width).min(image_width) {
+            let offset = (row * image_width + column) * 4;
+            bgra[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+        }
+    }
 }
 
 fn create_temp_dir(label: &str) -> PathBuf {

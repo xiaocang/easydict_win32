@@ -11,11 +11,7 @@
 
 <div align="center">
 
-[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![Source:Test LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/xiaocang/easydict_win32/badges/source-test-ratio.json) [![WinGet](https://img.shields.io/winget/v/xiaocang.EasydictforWindows)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/x/xiaocang/EasydictforWindows)
-
-<a href="https://apps.microsoft.com/detail/9p7nqvxf9dzj">
-  <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="从 Microsoft 获取" width="200" />
-</a>
+[![CI](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaocang/easydict_win32/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![Source:Test LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/xiaocang/easydict_win32/badges/source-test-ratio.json)
 
 </div>
 
@@ -34,7 +30,7 @@
 
 ## 简介
 
-这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。本项目使用 **Vibe Coding** — AI 辅助编程，将 Swift/SwiftUI 代码库迁移到 .NET + WinUI 3。
+这是 [Easydict](https://github.com/tisfeng/Easydict) 的 Windows 移植版本，原版是一款 macOS 翻译词典应用。当前默认发布是 Rust 原生便携应用；旧的 .NET/WinUI 构建只保留给 legacy/hybrid 共存工作使用。
 
 Easydict 支持 **Copilot+ PC 增强型本地 AI 翻译**：在搭载 40+ TOPS NPU 的 Copilot+ PC 上，翻译通过 Phi Silica 在设备端运行，快速且私密。普通 Windows PC 支持 Foundry Local，OpenVINO NLLB-200 作为离线兜底 — 所有 Windows 设备上的标准翻译服务仍然完全可用。
 
@@ -200,12 +196,23 @@ if ($expected -eq $actual) { "OK" } else { "FAILED" }
 ```powershell
 # 克隆仓库
 git clone https://github.com/xiaocang/easydict_win32.git
+cd easydict_win32
+
+# 构建默认 Rust 便携包
+.\rs\scripts\Package-Portable.ps1 -Platform x64 -Configuration Release
+
+# 或在开发时直接运行 Rust app
+cd rs
+cargo run -p easydict_app --bin easydict_preview
+```
+
+#### Legacy/Hybrid .NET 构建
+
+.NET/WinUI 构建只保留给 legacy/hybrid 共存工作使用。
+
+```powershell
 cd easydict_win32/dotnet
-
-# 构建
 dotnet build src/Easydict.WinUI/Easydict.WinUI.csproj -c Release
-
-# 运行
 dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 ```
 
@@ -213,10 +220,11 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ## 技术栈
 
-- **.NET** - 运行时框架
-- **WinUI 3 (Windows App SDK)** - 现代 Windows UI 框架
-- **C#** - 编程语言
-- **xUnit + FluentAssertions** - 单元测试
+- **Rust** - 默认便携应用、核心翻译运行时、打包和原生 helper
+- **winfluent-rs / iced** - Rust 桌面 UI 运行时
+- **Windows APIs** - OCR、热键、托盘、协议和原生集成
+- **.NET 8 + WinUI 3** - Legacy/hybrid 共存构建和 parity 参考
+- **cargo test + xUnit/FluentAssertions** - Rust 与 legacy parity 测试
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 
@@ -282,8 +290,9 @@ dotnet run --project src/Easydict.WinUI/Easydict.WinUI.csproj
 
 ### 分发
 
-- [x] **Windows 商店** - 已上架 Microsoft Store
-- [x] ~~**winget**~~ - 已发布到 Windows 包管理器 ✅
+- [x] **Rust 便携 ZIP** - 第一版 rs 默认发布路径
+- [x] **Windows 商店** - Legacy/hybrid 包路径
+- [x] ~~**winget**~~ - Legacy/hybrid 包路径 ✅
 
 <p align="right"><a href="#目录">回到顶部</a></p>
 

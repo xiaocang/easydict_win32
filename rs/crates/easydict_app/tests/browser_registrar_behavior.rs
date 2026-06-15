@@ -453,12 +453,16 @@ fn install_rejects_dotnet_and_compat_host_sources_even_when_they_exist() {
 }
 
 #[test]
-fn install_rejects_renamed_bridge_sources_from_legacy_worker_or_dotnet_payload_roots() {
+fn install_rejects_renamed_bridge_sources_from_legacy_payload_roots() {
     let sandbox = TestSandbox::new("reject_renamed_payload_sources");
 
     for forbidden_parent in [
         Path::new("workers").join("ocr"),
         Path::new("dotnet").join("host").join("fxr"),
+        PathBuf::from("Easydict.CompatHost"),
+        PathBuf::from("Easydict.NativeBridge"),
+        PathBuf::from("Easydict.Workers.LongDoc"),
+        PathBuf::from("Easydict.Workers.LocalAi"),
     ] {
         let source_dir = sandbox.root.join(&forbidden_parent);
         fs::create_dir_all(&source_dir).expect("forbidden source dir should be created");

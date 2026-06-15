@@ -682,13 +682,13 @@ pub fn run_native_mdx_lookup_with_factories_and_mdd_policy<
         });
     };
 
-    if !native_mdx_dictionary_can_route_natively(dictionary) {
-        if native_mdx_dictionary_needs_credentials(dictionary) {
-            return Err(NativeMdxLookupError::new(
-                "MDX dictionary credentials are required before lookup",
-            ));
-        }
+    if native_mdx_dictionary_needs_credentials(dictionary) {
+        return Err(NativeMdxLookupError::new(
+            "MDX dictionary credentials are required before lookup",
+        ));
+    }
 
+    if !native_mdx_dictionary_can_route_natively(dictionary) {
         if let Some(error) = native_mdx_dictionary_local_input_error(dictionary) {
             return Err(error);
         }

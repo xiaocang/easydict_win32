@@ -95,6 +95,50 @@ jobs:
             -p:PublishReadyToRun=false `
             -p:WindowsAppSDKSelfContained=false
 
+      - name: Prepare Windows App SDK AI metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packageId = 'microsoft.windowsappsdk.ai'
+          $index = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/$packageId/index.json"
+          $versions = @($index.versions)
+          $version = $versions | Where-Object { $_ -notmatch '-' } | Select-Object -Last 1
+          if (-not $version) {
+            $version = $versions | Select-Object -Last 1
+          }
+          if (-not $version) {
+            throw "No Microsoft.WindowsAppSDK.AI package versions were returned by NuGet"
+          }
+
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'windows-app-sdk-ai'
+          $extractRoot = Join-Path $packageRoot $version
+          New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+
+          $nupkg = Join-Path $packageRoot "$packageId.$version.nupkg"
+          Invoke-WebRequest `
+            -Uri "https://api.nuget.org/v3-flatcontainer/$packageId/$version/$packageId.$version.nupkg" `
+            -OutFile $nupkg
+          tar -xf $nupkg -C $extractRoot
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to extract $nupkg"
+          }
+
+          $metadataDir = Join-Path $extractRoot 'metadata'
+          foreach ($file in @(
+            'Microsoft.Windows.AI.winmd',
+            'Microsoft.Windows.AI.Foundation.winmd',
+            'Microsoft.Windows.AI.Text.winmd'
+          )) {
+            $path = Join-Path $metadataDir $file
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Microsoft.WindowsAppSDK.AI $version did not contain $file under metadata/"
+            }
+          }
+
+          "EASYDICT_WINDOWS_APP_SDK_AI_METADATA_DIR=$metadataDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "Using Microsoft.WindowsAppSDK.AI $version metadata from $metadataDir"
+
       - name: Publish Rust helper executables (arm64)
         working-directory: dotnet
         shell: pwsh

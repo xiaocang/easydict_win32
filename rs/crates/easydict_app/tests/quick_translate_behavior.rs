@@ -81,15 +81,18 @@ use easydict_windows_ai::{
     WindowsAiError, WindowsAiGenerationOptions, WindowsAiLanguageModelClient,
     WindowsAiLanguageModelProbe, WindowsAiReadyState, WindowsAiResponse,
 };
+use flate2::{write::ZlibEncoder, Compression};
 use futures_channel::mpsc::{unbounded, TryRecvError};
 #[cfg(feature = "retained-dotnet-workers")]
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Wake};
 use win_fluent::prelude::{
     Application, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand, PlatformEvent, ResultStatus,
     RuntimePlan, Subscription, SubscriptionKind, Task, WindowCommand, WindowId,
@@ -219,6 +222,76 @@ fn quick_translate_cache_hit_emits_service_finished_message_without_backend_task
         app.state.connection_status,
         easydict_app::ConnectionStatus::Connected
     );
+}
+
+#[test]
+fn quick_translate_cache_hit_enriches_missing_english_phonetics_without_provider_task() {
+    let _guard = ENVIRONMENT_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    easydict_app::quick_translate::clear_global_youdao_phonetic_cache_for_tests();
+    easydict_app::quick_translate::seed_global_youdao_phonetic_cache_for_tests(
+        "hello",
+        vec![Phonetic {
+            text: Some("cache-hit".to_string()),
+            audio_url: Some("https://example.invalid/hello.mp3".to_string()),
+            accent: Some("US".to_string()),
+        }],
+    );
+
+    let mut app = quick_translate_cache_app_with_target(["google"], "en");
+    app.state.source_text = "你好".to_string();
+    app.state.target_language_manually_selected = true;
+    let cache_request = TranslationCacheRequest::new(
+        "google",
+        TranslationLanguage::Auto,
+        TranslationLanguage::English,
+        "你好",
+    );
+    app.state.translation_cache.insert(
+        &cache_request,
+        TranslationResult::success(
+            "hello",
+            "你好",
+            TranslationLanguage::English,
+            "Google Translate",
+        ),
+    );
+
+    let task = app.update(Message::QuickTranslate);
+
+    assert!(contains_future_task(&task));
+    assert!(quick_translate_service_finished_updates(&task).is_empty());
+    assert!(app.state.pending_quick_translate_cache_requests.is_empty());
+
+    let message = ready_future_message(task);
+    let Message::QuickTranslateServiceFinished(update) = message else {
+        panic!("cache-hit phonetic enrichment should finish as a quick translate update");
+    };
+    assert_eq!(update.outcome.service.id, "google");
+    let phonetics = update
+        .outcome
+        .result
+        .as_ref()
+        .expect("cache-hit update should stay successful")
+        .word_result
+        .as_ref()
+        .expect("cache-hit enrichment should create a word result")
+        .phonetics
+        .as_ref()
+        .expect("cache-hit enrichment should merge phonetics");
+    assert_eq!(phonetics.len(), 1);
+    assert_eq!(phonetics[0].accent.as_deref(), Some("US"));
+    assert_eq!(phonetics[0].text.as_deref(), Some("cache-hit"));
+
+    app.update(Message::QuickTranslateServiceFinished(update));
+
+    assert_eq!(app.state.results[0].status, ResultStatus::Ready);
+    assert_eq!(app.state.results[0].body, "hello");
+    assert!(app.state.results[0].word_result.is_some());
+    assert_eq!(app.state.active_query_id, None);
+
+    easydict_app::quick_translate::clear_global_youdao_phonetic_cache_for_tests();
 }
 
 #[test]
@@ -3578,11 +3651,10 @@ fn native_traditional_http_quick_translate_supports_google_and_google_web() {
     assert!(!web_plan.endpoint.contains("dj=1"));
 }
 
-#[cfg(feature = "enable-linguee-service")]
 #[test]
-fn feature_enabled_linguee_catalog_entry_routes_to_native_traditional_http() {
+fn default_linguee_catalog_entry_routes_to_native_traditional_http() {
     let descriptor =
-        find_translation_service_descriptor("linguee").expect("Linguee feature should register");
+        find_translation_service_descriptor("linguee").expect("Linguee should register by default");
     assert_eq!(descriptor.kind, TranslationServiceKind::Dictionary);
 
     let request = QuickTranslateServiceRequest {
@@ -3608,7 +3680,7 @@ fn feature_enabled_linguee_catalog_entry_routes_to_native_traditional_http() {
 
     assert!(
         quick_translate_request_can_route_natively(&request),
-        "feature-enabled Linguee should dispatch through the native traditional HTTP route"
+        "Linguee should dispatch through the native traditional HTTP route by default"
     );
 
     let mut backend = NativeTraditionalHttpQuickTranslateBackend::new(
@@ -3622,7 +3694,7 @@ fn feature_enabled_linguee_catalog_entry_routes_to_native_traditional_http() {
     let result = update
         .outcome
         .result
-        .expect("feature-enabled Linguee native route should succeed");
+        .expect("Linguee native route should succeed");
     assert_eq!(result.translated_text, "Bonjour");
     assert_eq!(result.service_id.as_deref(), Some("linguee"));
     assert_eq!(result.service_name.as_deref(), Some("Linguee Dictionary"));
@@ -5727,6 +5799,66 @@ fn mdx_service_result_drops_rich_html_when_mdd_resources_were_not_inlined() {
 
     assert_eq!(result.translated_text, "A fruit");
     assert_eq!(result.raw_html, None);
+}
+
+#[test]
+fn native_quick_translate_reads_real_mdx_and_inlines_real_mdd_resources() {
+    let temp_dir = unique_temp_dir("easydict-real-mdx-mdd-quick");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let mdx_path = temp_dir.join("Demo Dictionary.mdx");
+    let mdd_path = temp_dir.join("Demo Dictionary.mdd");
+    write_minimal_mdx_fixture(
+        &mdx_path,
+        "apple",
+        r#"<div><span>A fruit</span><img src="images/logo.png"></div>"#,
+    );
+    write_minimal_mdd_fixture(&mdd_path, &[(r"\images\logo.png", b"\x89PNG")]);
+
+    let mut state = EasydictUiState::default();
+    state.source_text = "apple".to_string();
+    state.results = Vec::new();
+    state.apply(Message::MdxDictionarySelected(Some(path_string(&mdx_path))));
+    assert_eq!(
+        state.settings.imported_mdx_dictionaries[0].mdd_file_paths,
+        vec![path_string(&mdd_path)]
+    );
+
+    let plan = begin_quick_translate(&mut state).expect("MDX query should begin");
+    let mut requests = plan.service_requests();
+    let request = requests.remove(0);
+
+    assert!(quick_translate_request_can_route_natively(&request));
+
+    let update = run_quick_translate_service_with_app_dir(request, &temp_dir);
+    let result = update
+        .outcome
+        .result
+        .as_ref()
+        .expect("real MDX/MDD lookup should succeed");
+    let raw_html = result
+        .raw_html
+        .clone()
+        .expect("MDD resources should keep rich HTML");
+
+    assert_eq!(result.translated_text, "A fruit");
+    assert!(!result.translated_text.contains("<span"));
+    assert!(raw_html.contains(r#"src="data:image/png;base64,iVBORw==""#));
+    assert!(!raw_html.contains("images/logo.png"));
+    for forbidden in ["CompatHost", ".NET", "Easydict.Workers"] {
+        assert!(
+            !result.translated_text.contains(forbidden) && !raw_html.contains(forbidden),
+            "real MDX/MDD route should stay Rust-native and avoid {forbidden} wording"
+        );
+    }
+
+    apply_quick_translate_service_update(&mut state, update);
+    assert_eq!(state.results[0].body, "A fruit");
+    assert_eq!(
+        state.results[0].raw_html.as_deref(),
+        Some(raw_html.as_str())
+    );
+
+    fs::remove_dir_all(&temp_dir).expect("temp dir should be removed");
 }
 
 #[test]
@@ -9021,6 +9153,179 @@ fn write_mdx_header(path: &Path, header_xml: &str) {
     fs::write(path, file_bytes).expect("MDX header should be written");
 }
 
+fn write_minimal_mdx_fixture(path: &Path, key: &str, html: &str) {
+    let header_xml = r#"<Dictionary GeneratedByEngineVersion="1.2" RequiredEngineVersion="1.2" Encoding="UTF-8" Encrypted="No" KeyCaseSensitive="No" StripKey="Yes" />"#;
+    let mut header_bytes = header_xml
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    header_bytes.extend_from_slice(&[0, 0]);
+
+    let mut key_block_payload = Vec::new();
+    push_u32_be_vec(&mut key_block_payload, 0);
+    key_block_payload.extend_from_slice(key.as_bytes());
+    key_block_payload.push(0);
+    let key_block = mdx_none_block(&key_block_payload);
+
+    let mut key_info = Vec::new();
+    push_u32_be_vec(&mut key_info, 1);
+    key_info.push(key.len() as u8);
+    key_info.extend_from_slice(key.as_bytes());
+    key_info.push(key.len() as u8);
+    key_info.extend_from_slice(key.as_bytes());
+    push_u32_be_vec(&mut key_info, key_block.len() as u32);
+    push_u32_be_vec(&mut key_info, key_block_payload.len() as u32);
+
+    let record_block = mdx_none_block(html.as_bytes());
+    let mut record_info = Vec::new();
+    push_u32_be_vec(&mut record_info, record_block.len() as u32);
+    push_u32_be_vec(&mut record_info, html.len() as u32);
+
+    let mut file_bytes = Vec::new();
+    file_bytes.extend_from_slice(&(header_bytes.len() as u32).to_be_bytes());
+    file_bytes.extend_from_slice(&header_bytes);
+    file_bytes.extend_from_slice(&[0, 0, 0, 0]);
+    push_u32_be_vec(&mut file_bytes, 1);
+    push_u32_be_vec(&mut file_bytes, 1);
+    push_u32_be_vec(&mut file_bytes, key_info.len() as u32);
+    push_u32_be_vec(&mut file_bytes, key_block.len() as u32);
+    file_bytes.extend_from_slice(&key_info);
+    file_bytes.extend_from_slice(&key_block);
+    push_u32_be_vec(&mut file_bytes, 1);
+    push_u32_be_vec(&mut file_bytes, 1);
+    push_u32_be_vec(&mut file_bytes, record_info.len() as u32);
+    push_u32_be_vec(&mut file_bytes, record_block.len() as u32);
+    file_bytes.extend_from_slice(&record_info);
+    file_bytes.extend_from_slice(&record_block);
+    fs::write(path, file_bytes).expect("minimal MDX fixture should be written");
+}
+
+fn write_minimal_mdd_fixture(path: &Path, resources: &[(&str, &[u8])]) {
+    assert!(!resources.is_empty());
+
+    let mut file = fs::File::create(path).expect("MDD fixture should be created");
+    let header_text = r#"<Dictionary GeneratedByEngineVersion="2.0" RequiredEngineVersion="2.0" Encoding="UTF-8" KeyCaseSensitive="No" StripKey="Yes" />"#;
+    let header_bytes = utf16_le(header_text);
+    write_u32_be_file(&mut file, header_bytes.len() as u32);
+    file.write_all(&header_bytes)
+        .expect("MDD header should be written");
+    file.write_all(&0u32.to_be_bytes())
+        .expect("MDD header checksum should be written");
+
+    let mut key_block_payload = Vec::new();
+    let mut record_payload = Vec::new();
+    for (key, data) in resources {
+        push_u64_be_vec(&mut key_block_payload, record_payload.len() as u64);
+        key_block_payload.extend_from_slice(&utf16_le(key));
+        key_block_payload.extend_from_slice(&[0, 0]);
+        record_payload.extend_from_slice(data);
+    }
+
+    let key_block = mdd_none_block(&key_block_payload);
+    let key_info_payload = mdd_key_info_payload(
+        resources.first().expect("first resource").0,
+        resources.last().expect("last resource").0,
+        resources.len() as u64,
+        key_block.len() as u64,
+        key_block_payload.len() as u64,
+    );
+    let key_info = mdd_zlib_block(&key_info_payload);
+
+    write_u64_be_file(&mut file, 1);
+    write_u64_be_file(&mut file, resources.len() as u64);
+    write_u64_be_file(&mut file, key_info_payload.len() as u64);
+    write_u64_be_file(&mut file, key_info.len() as u64);
+    write_u64_be_file(&mut file, key_block.len() as u64);
+    file.write_all(&0u32.to_be_bytes())
+        .expect("MDD key header checksum should be written");
+    file.write_all(&key_info)
+        .expect("MDD key info should be written");
+    file.write_all(&key_block)
+        .expect("MDD key block should be written");
+
+    let record_block = mdd_none_block(&record_payload);
+    write_u64_be_file(&mut file, 1);
+    write_u64_be_file(&mut file, resources.len() as u64);
+    write_u64_be_file(&mut file, 16);
+    write_u64_be_file(&mut file, record_block.len() as u64);
+    write_u64_be_file(&mut file, record_block.len() as u64);
+    write_u64_be_file(&mut file, record_payload.len() as u64);
+    file.write_all(&record_block)
+        .expect("MDD record block should be written");
+}
+
+fn mdd_key_info_payload(
+    first_key: &str,
+    last_key: &str,
+    resource_count: u64,
+    key_block_pack_size: u64,
+    key_block_unpack_size: u64,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    push_u64_be_vec(&mut payload, resource_count);
+    push_u16_be_vec(&mut payload, first_key.encode_utf16().count() as u16);
+    payload.extend_from_slice(&utf16_le(first_key));
+    payload.extend_from_slice(&[0, 0]);
+    push_u16_be_vec(&mut payload, last_key.encode_utf16().count() as u16);
+    payload.extend_from_slice(&utf16_le(last_key));
+    payload.extend_from_slice(&[0, 0]);
+    push_u64_be_vec(&mut payload, key_block_pack_size);
+    push_u64_be_vec(&mut payload, key_block_unpack_size);
+    payload
+}
+
+fn mdx_none_block(payload: &[u8]) -> Vec<u8> {
+    let mut block = vec![0, 0, 0, 0, 0, 0, 0, 0];
+    block.extend_from_slice(payload);
+    block
+}
+
+fn mdd_none_block(payload: &[u8]) -> Vec<u8> {
+    let mut block = vec![0, 0, 0, 0, 0, 0, 0, 0];
+    block.extend_from_slice(payload);
+    block
+}
+
+fn mdd_zlib_block(payload: &[u8]) -> Vec<u8> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(payload)
+        .expect("MDD key info should compress");
+    let compressed = encoder.finish().expect("MDD key info compression");
+    let mut block = vec![2, 0, 0, 0, 0, 0, 0, 0];
+    block.extend_from_slice(&compressed);
+    block
+}
+
+fn push_u32_be_vec(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_be_bytes());
+}
+
+fn push_u16_be_vec(bytes: &mut Vec<u8>, value: u16) {
+    bytes.extend_from_slice(&value.to_be_bytes());
+}
+
+fn push_u64_be_vec(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_be_bytes());
+}
+
+fn write_u32_be_file(file: &mut fs::File, value: u32) {
+    file.write_all(&value.to_be_bytes())
+        .expect("u32 should be written");
+}
+
+fn write_u64_be_file(file: &mut fs::File, value: u64) {
+    file.write_all(&value.to_be_bytes())
+        .expect("u64 should be written");
+}
+
+fn utf16_le(value: &str) -> Vec<u8> {
+    value
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>()
+}
+
 #[cfg(feature = "retained-dotnet-workers")]
 fn mock_local_ai_worker_facade() -> DirectWorkerFacade {
     DirectWorkerFacade::spawn_worker(
@@ -9380,10 +9685,17 @@ impl From<QuickTranslateResult> for easydict_app::TranslationResultPreview {
 }
 
 fn quick_translate_cache_app<const N: usize>(service_ids: [&'static str; N]) -> EasydictApp {
+    quick_translate_cache_app_with_target(service_ids, "zh-Hans")
+}
+
+fn quick_translate_cache_app_with_target<const N: usize>(
+    service_ids: [&'static str; N],
+    target_language: &str,
+) -> EasydictApp {
     let mut state = EasydictUiState::default();
     state.source_text = "Hello cache".to_string();
     state.source_language = "auto".to_string();
-    state.target_language = "zh-Hans".to_string();
+    state.target_language = target_language.to_string();
     state.results = service_ids
         .into_iter()
         .map(|service_id| {
@@ -9411,12 +9723,15 @@ fn google_cache_request(text: &str) -> TranslationCacheRequest {
 }
 
 fn cache_request(service_id: &str, text: &str) -> TranslationCacheRequest {
-    TranslationCacheRequest::new(
-        service_id,
-        TranslationLanguage::Auto,
-        TranslationLanguage::SimplifiedChinese,
-        text,
-    )
+    cache_request_with_target(service_id, text, TranslationLanguage::SimplifiedChinese)
+}
+
+fn cache_request_with_target(
+    service_id: &str,
+    text: &str,
+    target_language: TranslationLanguage,
+) -> TranslationCacheRequest {
+    TranslationCacheRequest::new(service_id, TranslationLanguage::Auto, target_language, text)
 }
 
 fn phonetic_enrichment_request(to: &str) -> QuickTranslateServiceRequest {
@@ -9768,6 +10083,25 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::OpenFileDialog { .. } => "file_dialog",
         Task::OpenFolderDialog { .. } => "folder_dialog",
     }
+}
+
+fn ready_future_message(task: Task<Message>) -> Message {
+    let mut future = match task {
+        Task::Future(future) => future,
+        other => panic!("expected future task, got {}", task_kind(&other)),
+    };
+    let waker = std::task::Waker::from(Arc::new(NoopWake));
+    let mut context = Context::from_waker(&waker);
+    match future.as_mut().poll(&mut context) {
+        Poll::Ready(message) => message,
+        Poll::Pending => panic!("expected test future to complete without external wakeup"),
+    }
+}
+
+struct NoopWake;
+
+impl Wake for NoopWake {
+    fn wake(self: Arc<Self>) {}
 }
 
 fn quick_translate_service_finished_updates(

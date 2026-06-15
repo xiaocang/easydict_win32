@@ -2126,6 +2126,30 @@ fn native_pdf_text_long_document_runner_extracts_pdf_and_writes_text_outputs() {
     let expected_result = result.clone();
 
     assert_eq!(result.state, "Completed");
+    let quality_report_json = result
+        .quality_report
+        .as_deref()
+        .expect("native PDF result should include a quality report");
+    let quality_report: serde_json::Value =
+        serde_json::from_str(quality_report_json).expect("PDF quality report should parse");
+    assert_eq!(quality_report["totalBlocks"], 1);
+    assert_eq!(quality_report["translatedBlocks"], 1);
+    assert_eq!(
+        quality_report["backfillMetrics"]["candidateBlocks"],
+        serde_json::json!(1)
+    );
+    assert_eq!(
+        quality_report["backfillMetrics"]["renderedBlocks"],
+        serde_json::json!(1)
+    );
+    assert_eq!(
+        quality_report["backfillMetrics"]["objectReplaceBlocks"],
+        serde_json::json!(1)
+    );
+    assert_eq!(
+        quality_report["backfillMetrics"]["overlayModeBlocks"],
+        serde_json::json!(0)
+    );
     let output_path = result.output_path.expect("monolingual output path");
     assert!(
         output_path.ends_with("paper_translated.pdf"),
@@ -2152,6 +2176,10 @@ fn native_pdf_text_long_document_runner_extracts_pdf_and_writes_text_outputs() {
     assert_eq!(sidecar, expected_result);
     let sidecar_value: serde_json::Value =
         serde_json::from_str(&sidecar_json).expect("PDF result JSON sidecar should parse");
+    assert_eq!(
+        sidecar_value["qualityReport"].as_str(),
+        Some(quality_report_json)
+    );
     assert_eq!(sidecar_value["checkpoint"]["inputMode"], "Pdf");
     assert_eq!(
         sidecar_value["checkpoint"]["pdf"]["failedChunkIndexes"],
@@ -3377,8 +3405,24 @@ fn native_text_long_document_writes_result_json_sidecar() {
     let sidecar: TranslateDocumentResult =
         serde_json::from_str(&sidecar_json).expect("result JSON sidecar should deserialize");
     assert_eq!(sidecar, result);
+    let quality_report_json = result
+        .quality_report
+        .as_deref()
+        .expect("native result should include a quality report");
+    let quality_report: serde_json::Value =
+        serde_json::from_str(quality_report_json).expect("quality report should be JSON");
+    assert_eq!(quality_report["totalBlocks"], 1);
+    assert_eq!(quality_report["translatedBlocks"], 1);
+    assert_eq!(quality_report["skippedBlocks"], 0);
+    assert_eq!(quality_report["failedBlocks"], serde_json::json!([]));
+    assert_eq!(quality_report["stageTimingsMs"], serde_json::json!({}));
+    assert_eq!(quality_report["backfillMetrics"], serde_json::Value::Null);
     let sidecar_value: serde_json::Value =
         serde_json::from_str(&sidecar_json).expect("result JSON sidecar value should deserialize");
+    assert_eq!(
+        sidecar_value["qualityReport"].as_str(),
+        Some(quality_report_json)
+    );
     assert_eq!(sidecar_value["checkpoint"]["inputMode"], "PlainText");
     assert_eq!(sidecar_value["checkpoint"]["outputMode"], "Monolingual");
     assert_eq!(sidecar_value["checkpoint"]["serviceId"], "google");
@@ -3451,6 +3495,30 @@ fn native_text_result_json_sidecar_persists_partial_checkpoint() {
     let sidecar: TranslateDocumentResult = serde_json::from_str(&sidecar_json)
         .expect("partial result JSON sidecar should remain result-compatible");
     assert_eq!(sidecar, result);
+    let quality_report: serde_json::Value = serde_json::from_str(
+        result
+            .quality_report
+            .as_deref()
+            .expect("partial native result should include a quality report"),
+    )
+    .expect("partial quality report should parse");
+    assert_eq!(quality_report["totalBlocks"], 3);
+    assert_eq!(quality_report["translatedBlocks"], 2);
+    assert_eq!(quality_report["skippedBlocks"], 0);
+    assert_eq!(
+        quality_report["failedBlocks"][0]["irBlockId"],
+        "checkpoint-1"
+    );
+    assert_eq!(
+        quality_report["failedBlocks"][0]["sourceBlockId"],
+        "native-p1-b2"
+    );
+    assert_eq!(quality_report["failedBlocks"][0]["pageNumber"], 1);
+    assert_eq!(quality_report["failedBlocks"][0]["retryCount"], 0);
+    assert_eq!(
+        quality_report["failedBlocks"][0]["error"],
+        "Translation failed or missing translated text."
+    );
     let sidecar_value: serde_json::Value = serde_json::from_str(&sidecar_json)
         .expect("partial result JSON sidecar value should parse");
     let text_checkpoint = &sidecar_value["checkpoint"]["text"];
@@ -3544,6 +3612,20 @@ fn native_text_result_json_retry_failed_retranslates_only_failed_chunks() {
     let sidecar_value: serde_json::Value =
         serde_json::from_str(&sidecar_json).expect("retry sidecar should parse");
     assert_eq!(sidecar_value["state"], "Completed");
+    let retry_quality_report: serde_json::Value = serde_json::from_str(
+        retry
+            .quality_report
+            .as_deref()
+            .expect("retry result should include a refreshed quality report"),
+    )
+    .expect("retry quality report should parse");
+    assert_eq!(retry_quality_report["totalBlocks"], 3);
+    assert_eq!(retry_quality_report["translatedBlocks"], 3);
+    assert_eq!(retry_quality_report["failedBlocks"], serde_json::json!([]));
+    assert_eq!(
+        sidecar_value["qualityReport"].as_str(),
+        retry.quality_report.as_deref()
+    );
     assert_eq!(
         sidecar_value["checkpoint"]["text"]["failedChunkIndexes"],
         serde_json::json!([])

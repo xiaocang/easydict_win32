@@ -190,6 +190,7 @@ pub enum LongDocumentInput {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LongDocumentStartError {
     MissingInput,
+    MissingRetryCheckpoint,
 }
 
 impl fmt::Display for LongDocumentStartError {
@@ -198,6 +199,9 @@ impl fmt::Display for LongDocumentStartError {
             Self::MissingInput => {
                 formatter.write_str("Select a document or enter text to translate.")
             }
+            Self::MissingRetryCheckpoint => formatter.write_str(
+                "Retry Failed requires a Rust-native result JSON checkpoint for this document.",
+            ),
         }
     }
 }
@@ -348,6 +352,20 @@ pub fn begin_long_document_translate(
     Ok(request)
 }
 
+pub fn begin_long_document_retry_failed(
+    state: &mut EasydictUiState,
+) -> Result<(LongDocumentServiceRequest, String), LongDocumentStartError> {
+    let mut request = build_long_document_request(state, state.next_query_id)?;
+    let Some(result_json_path) = retry_result_json_path_for_request(&request) else {
+        return Err(LongDocumentStartError::MissingRetryCheckpoint);
+    };
+
+    request.params.result_json_path = Some(result_json_path.clone());
+    state.next_query_id += 1;
+    mark_long_document_started(state, &request);
+    Ok((request, result_json_path))
+}
+
 pub fn build_long_document_request(
     state: &EasydictUiState,
     query_id: u64,
@@ -406,12 +424,14 @@ pub fn build_long_document_request(
         )),
     };
 
-    Ok(LongDocumentServiceRequest {
+    let mut request = LongDocumentServiceRequest {
         query_id,
         input,
         params,
         settings: long_document_settings_snapshot(state),
-    })
+    };
+    ensure_default_result_json_path(&mut request);
+    Ok(request)
 }
 
 pub fn run_long_document_request_with_current_app_dir(
@@ -809,6 +829,40 @@ pub fn long_document_request_can_route_natively(request: &LongDocumentServiceReq
     native_quick_translate_request_for_chunk(request, "native route probe")
         .as_ref()
         .is_some_and(quick_translate_request_can_route_natively)
+}
+
+fn ensure_default_result_json_path(request: &mut LongDocumentServiceRequest) {
+    if request
+        .params
+        .result_json_path
+        .as_deref()
+        .and_then(non_empty)
+        .is_some()
+    {
+        return;
+    }
+
+    request.params.result_json_path = default_result_json_path_for_request(request);
+}
+
+fn retry_result_json_path_for_request(request: &LongDocumentServiceRequest) -> Option<String> {
+    request
+        .params
+        .result_json_path
+        .as_deref()
+        .and_then(non_empty)
+        .or_else(|| default_result_json_path_for_request(request))
+}
+
+fn default_result_json_path_for_request(request: &LongDocumentServiceRequest) -> Option<String> {
+    if !long_document_request_can_route_natively(request) {
+        return None;
+    }
+
+    let output_path = request.params.output_path.as_deref().and_then(non_empty)?;
+    let mut result_json_path = PathBuf::from(output_path);
+    result_json_path.set_extension("result.json");
+    Some(result_json_path.display().to_string())
 }
 
 pub fn run_native_text_long_document_request(
@@ -1324,6 +1378,32 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
         };
     }
 
+    let total_chunks = chunks.len() as u32;
+    let mut translations = vec![None; chunks.len()];
+    for (index, translated) in &sidecar.checkpoint.text.translated_chunks {
+        if *index >= translations.len() {
+            return NativeLongDocumentRun {
+                events: Vec::new(),
+                result: Err(LongDocumentBackendError::new(format!(
+                    "Native long document checkpoint translated chunk index {index} is out of range"
+                ))),
+            };
+        }
+        translations[*index] = Some(translated.clone());
+    }
+    let failed_index_set = failed_indexes.iter().copied().collect::<BTreeSet<_>>();
+    for index in &failed_index_set {
+        translations[*index] = None;
+    }
+    if let Err(error) =
+        validate_native_retry_checkpoint_chunk_coverage(&translations, &failed_index_set)
+    {
+        return NativeLongDocumentRun {
+            events: Vec::new(),
+            result: Err(error),
+        };
+    }
+
     let mut retry_request = request.clone();
     retry_request.params.input_mode = sidecar.checkpoint.input_mode.clone();
     retry_request.params.output_mode = sidecar.checkpoint.output_mode.clone();
@@ -1338,20 +1418,6 @@ fn retry_failed_native_text_long_document_from_result_json_inner<
             events: Vec::new(),
             result: Err(error),
         };
-    }
-
-    let total_chunks = chunks.len() as u32;
-    let mut translations = vec![None; chunks.len()];
-    for (index, translated) in &sidecar.checkpoint.text.translated_chunks {
-        if *index >= translations.len() {
-            return NativeLongDocumentRun {
-                events: Vec::new(),
-                result: Err(LongDocumentBackendError::new(format!(
-                    "Native long document checkpoint translated chunk index {index} is out of range"
-                ))),
-            };
-        }
-        translations[*index] = Some(translated.clone());
     }
 
     let mut events = vec![LongDocumentEvent::Status(StatusEventData {
@@ -4548,6 +4614,7 @@ mod tests {
             minimal_longdoc_test_pdf_with_pages(&["First page", "Hello PDF"]),
         )
         .expect("input pdf");
+        let cjk_font_path = install_managed_test_cjk_font(&temp_dir);
 
         let request = LongDocumentServiceRequest {
             query_id: 91,
@@ -4570,7 +4637,8 @@ mod tests {
                 request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
-                cjk_font_path: Some(test_cjk_font_path().display().to_string()),
+                cache_dir: Some(temp_dir.display().to_string()),
+                cjk_font_path: Some(cjk_font_path.display().to_string()),
                 ..SettingsSnapshot::default()
             },
         };
@@ -4643,11 +4711,7 @@ mod tests {
             minimal_longdoc_test_pdf_with_pages(&["Original PDF text"]),
         )
         .expect("input pdf");
-        let cached_font_path =
-            crate::font_download::font_cache_dir(&temp_dir).join("NotoSansSC-Regular.ttf");
-        fs::create_dir_all(cached_font_path.parent().expect("font parent"))
-            .expect("font cache dir");
-        fs::copy(test_cjk_font_path(), &cached_font_path).expect("cache CJK font fixture");
+        install_managed_test_cjk_font(&temp_dir);
 
         let request = LongDocumentServiceRequest {
             query_id: 96,
@@ -4726,6 +4790,66 @@ mod tests {
     }
 
     #[test]
+    fn native_pdf_overlay_font_fallback_rejects_unmanaged_cache_fonts() {
+        let temp_dir = unique_longdoc_test_dir("pdf-cjk-overlay-unmanaged-fonts");
+        let fonts_dir = crate::font_download::font_cache_dir(&temp_dir);
+        fs::create_dir_all(&fonts_dir).expect("font cache dir");
+        fs::write(fonts_dir.join("SomeOtherCjkFont.ttf"), b"font").expect("unmanaged font marker");
+        fs::write(fonts_dir.join("NotoSansSC-Regular.ttf.tmp"), b"font")
+            .expect("temporary font marker");
+
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.display().to_string());
+
+        let error = native_pdf_overlay_font_path(&request)
+            .expect_err("unmanaged cache fonts should not satisfy CJK overlay fallback");
+        assert!(
+            error.contains("no cached CJK PDF overlay font"),
+            "LongDoc overlay should fail through the managed font-cache boundary: {error}"
+        );
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_overlay_font_rejects_unmanaged_explicit_cjk_font_path() {
+        let temp_dir = unique_longdoc_test_dir("pdf-cjk-overlay-unmanaged-explicit-font");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let unmanaged_font_path = temp_dir.join("NotoSansSC-Regular.ttf");
+        fs::copy(test_cjk_font_path(), &unmanaged_font_path).expect("copy unmanaged font fixture");
+
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.join("cache").display().to_string());
+        request.settings.cjk_font_path = Some(unmanaged_font_path.display().to_string());
+
+        let error = native_pdf_overlay_font_path(&request)
+            .expect_err("explicit CJK font outside managed cache should be rejected");
+        assert!(
+            error.contains("Rust-managed Noto Sans CJK"),
+            "LongDoc overlay should reject unmanaged explicit CJK fonts: {error}"
+        );
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn native_pdf_overlay_font_accepts_explicit_managed_cache_path() {
+        let temp_dir = unique_longdoc_test_dir("pdf-cjk-overlay-managed-explicit-font");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let managed_font_path = install_managed_test_cjk_font(&temp_dir);
+
+        let mut request = test_pdf_long_document_request(None);
+        request.settings.cache_dir = Some(temp_dir.display().to_string());
+        request.settings.cjk_font_path = Some(managed_font_path.display().to_string());
+
+        let actual =
+            native_pdf_overlay_font_path(&request).expect("managed explicit CJK font path");
+        assert_eq!(actual, managed_font_path);
+
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
     fn native_pdf_export_overlay_mode_uses_overlay_without_content_stream_match() {
         let temp_dir = unique_longdoc_test_dir("pdf-explicit-overlay-export");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -4736,6 +4860,7 @@ mod tests {
             minimal_longdoc_test_pdf_with_pages(&["Original PDF text"]),
         )
         .expect("input pdf");
+        install_managed_test_cjk_font(&temp_dir);
 
         let request = LongDocumentServiceRequest {
             query_id: 94,
@@ -4758,7 +4883,7 @@ mod tests {
                 request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
-                cjk_font_path: Some(test_cjk_font_path().display().to_string()),
+                cache_dir: Some(temp_dir.display().to_string()),
                 ..SettingsSnapshot::default()
             },
         };
@@ -4831,6 +4956,7 @@ mod tests {
             minimal_longdoc_test_pdf_with_pages(&["Original PDF text"]),
         )
         .expect("input pdf");
+        install_managed_test_cjk_font(&temp_dir);
 
         let request = LongDocumentServiceRequest {
             query_id: 95,
@@ -4853,7 +4979,7 @@ mod tests {
                 request_timeout_ms: None,
             },
             settings: SettingsSnapshot {
-                cjk_font_path: Some(test_cjk_font_path().display().to_string()),
+                cache_dir: Some(temp_dir.display().to_string()),
                 ..SettingsSnapshot::default()
             },
         };
@@ -5280,6 +5406,15 @@ mod tests {
             path.display()
         );
         path
+    }
+
+    fn install_managed_test_cjk_font(cache_root: &Path) -> PathBuf {
+        let managed_font_path =
+            crate::font_download::font_cache_dir(cache_root).join("NotoSansSC-Regular.ttf");
+        fs::create_dir_all(managed_font_path.parent().expect("font cache parent"))
+            .expect("font cache dir");
+        fs::copy(test_cjk_font_path(), &managed_font_path).expect("cache CJK font fixture");
+        managed_font_path
     }
 
     fn minimal_longdoc_test_pdf_with_pages(page_texts: &[&str]) -> Vec<u8> {
@@ -6024,14 +6159,21 @@ fn native_pdf_overlay_font_path(request: &LongDocumentServiceRequest) -> Result<
         .filter(|path| !path.is_empty())
     {
         let font_path = PathBuf::from(font_path);
-        if font_path.is_file() {
-            return Ok(font_path);
+        if !font_path.is_file() {
+            return Err(format!(
+                "configured CJK PDF overlay font '{}' is not a readable file",
+                font_path.display()
+            ));
         }
 
-        return Err(format!(
-            "configured CJK PDF overlay font '{}' is not a readable file",
-            font_path.display()
-        ));
+        if !native_pdf_explicit_overlay_font_path_is_managed(request, &font_path) {
+            return Err(format!(
+                "configured CJK PDF overlay font '{}' is not a Rust-managed Noto Sans CJK font asset",
+                font_path.display()
+            ));
+        }
+
+        return Ok(font_path);
     }
 
     let target_language =
@@ -6057,6 +6199,37 @@ fn native_pdf_overlay_font_path(request: &LongDocumentServiceRequest) -> Result<
             request.params.to
         )
     })
+}
+
+fn native_pdf_explicit_overlay_font_path_is_managed(
+    request: &LongDocumentServiceRequest,
+    font_path: &Path,
+) -> bool {
+    let Some(file_name) = font_path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if !crate::font_download::font_assets()
+        .iter()
+        .any(|asset| asset.file_name.eq_ignore_ascii_case(file_name))
+    {
+        return false;
+    }
+
+    let Some(parent) = font_path.parent() else {
+        return false;
+    };
+    let Ok(parent) = fs::canonicalize(parent) else {
+        return false;
+    };
+
+    let managed_font_dir = request
+        .settings
+        .cache_dir_path()
+        .map(crate::font_download::font_cache_dir)
+        .unwrap_or_else(crate::font_download::default_font_cache_dir);
+    fs::canonicalize(managed_font_dir)
+        .map(|managed_font_dir| managed_font_dir == parent)
+        .unwrap_or(false)
 }
 
 fn native_pdf_overlay_blocks(
@@ -6365,6 +6538,25 @@ fn native_retry_source_block_id(source_block_id: &str, index: usize, prefix: &st
     } else {
         source_block_id.to_string()
     }
+}
+
+fn validate_native_retry_checkpoint_chunk_coverage(
+    translations: &[Option<String>],
+    failed_indexes: &BTreeSet<usize>,
+) -> Result<(), LongDocumentBackendError> {
+    for (index, translated) in translations.iter().enumerate() {
+        let has_translation = translated
+            .as_deref()
+            .map(|text| !text.trim().is_empty())
+            .unwrap_or(false);
+        if !has_translation && !failed_indexes.contains(&index) {
+            return Err(LongDocumentBackendError::new(format!(
+                "Native long document checkpoint chunk {index} has no translated text and is not marked failed"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn preserved_chunk_indexes_from_retry_checkpoint(

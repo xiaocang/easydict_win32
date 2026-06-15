@@ -8,8 +8,9 @@ use easydict_app::protocol::{
 #[cfg(feature = "retained-dotnet-workers")]
 use easydict_app::RetainedWorkerPolicy;
 use easydict_app::{
-    apply_long_document_outcome, begin_long_document_translate, build_long_document_request,
-    long_document_request_can_route_natively, long_document_source_hash,
+    apply_long_document_outcome, begin_long_document_retry_failed, begin_long_document_translate,
+    build_long_document_request, long_document_request_can_route_natively,
+    long_document_source_hash,
     retry_failed_native_text_long_document_from_result_json_with_translator,
     run_long_document_request, run_long_document_request_with_app_dir,
     run_long_document_request_with_app_dir_and_native_local_ai_client,
@@ -79,6 +80,10 @@ fn long_document_translate_builds_file_request_and_marks_loading() {
         request.params.output_path.as_deref(),
         Some(r"C:\Docs\paper_translated.md")
     );
+    assert_eq!(
+        request.params.result_json_path.as_deref(),
+        Some(r"C:\Docs\paper_translated.result.json")
+    );
     assert_eq!(request.params.input_mode, "Markdown");
     assert_eq!(request.params.output_mode, "Both");
     assert_eq!(request.params.from, "English");
@@ -121,6 +126,66 @@ fn long_document_translate_builds_file_request_and_marks_loading() {
     assert_eq!(state.long_document.active_query_id, Some(1));
     assert!(state.long_document.is_translating);
     assert_eq!(state.long_document.status_text, "Translating document");
+}
+
+#[test]
+fn long_document_retry_failed_starts_from_default_result_json_sidecar() {
+    let mut state = EasydictUiState {
+        mode: AppMode::LongDocument,
+        long_document: easydict_app::LongDocumentState {
+            selected_file: r"C:\Docs\notes.txt".to_string(),
+            input_mode: "plaintext".to_string(),
+            service: "google".to_string(),
+            source_language: "en".to_string(),
+            target_language: "zh-Hans".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let (request, result_json_path) =
+        begin_long_document_retry_failed(&mut state).expect("retry request should start");
+
+    assert_eq!(request.query_id, 1);
+    assert_eq!(
+        request.params.output_path.as_deref(),
+        Some(r"C:\Docs\notes_translated.txt")
+    );
+    assert_eq!(
+        request.params.result_json_path.as_deref(),
+        Some(r"C:\Docs\notes_translated.result.json")
+    );
+    assert_eq!(result_json_path, r"C:\Docs\notes_translated.result.json");
+    assert_eq!(state.next_query_id, 2);
+    assert_eq!(state.long_document.active_query_id, Some(1));
+    assert!(state.long_document.is_translating);
+    assert_eq!(state.long_document.status_text, "Translating document");
+}
+
+#[test]
+fn long_document_retry_failed_requires_stable_result_json_sidecar() {
+    let mut state = EasydictUiState {
+        mode: AppMode::LongDocument,
+        long_document: easydict_app::LongDocumentState {
+            selected_file: "No file selected".to_string(),
+            source_text: "Inline text has no stable output folder yet.".to_string(),
+            input_mode: "plaintext".to_string(),
+            service: "google".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let error = begin_long_document_retry_failed(&mut state)
+        .expect_err("inline retry without sidecar should fail locally");
+
+    assert_eq!(
+        error.to_string(),
+        "Retry Failed requires a Rust-native result JSON checkpoint for this document."
+    );
+    assert_eq!(state.next_query_id, 1);
+    assert_eq!(state.long_document.active_query_id, None);
+    assert!(!state.long_document.is_translating);
 }
 
 #[test]
@@ -286,6 +351,7 @@ fn long_document_inline_text_uses_plain_text_input_when_no_file_is_selected() {
     assert_eq!(request.params.input_path, "");
     assert_eq!(request.params.output_path, None);
     assert_eq!(request.params.input_mode, "PlainText");
+    assert_eq!(request.params.result_json_path, None);
 }
 
 #[test]
@@ -404,6 +470,42 @@ fn app_update_long_document_translate_starts_runtime_task_only_in_long_document_
     assert_eq!(task_kind(&long_doc_task), "future");
     assert!(app.state.long_document.is_translating);
     assert_eq!(app.state.long_document.active_query_id, Some(1));
+}
+
+#[test]
+fn app_update_retry_long_document_requires_sidecar_and_starts_retry_task() {
+    let mut app = EasydictApp {
+        state: EasydictUiState::default(),
+    };
+
+    let quick_task = app.update(Message::RetryLongDocument);
+    assert_eq!(task_kind(&quick_task), "none");
+    assert!(!app.state.long_document.is_translating);
+
+    app.state.mode = AppMode::LongDocument;
+    app.state.long_document.selected_file = "No file selected".to_string();
+    app.state.long_document.source_text = "Inline text cannot derive a stable sidecar.".to_string();
+    app.state.long_document.input_mode = "plaintext".to_string();
+
+    let missing_sidecar_task = app.update(Message::RetryLongDocument);
+    assert_eq!(task_kind(&missing_sidecar_task), "none");
+    assert_eq!(
+        app.state.long_document.last_error.as_deref(),
+        Some("Retry Failed requires a Rust-native result JSON checkpoint for this document.")
+    );
+    assert!(!app.state.long_document.is_translating);
+
+    app.state.long_document.selected_file = r"C:\Docs\paper.txt".to_string();
+    app.state.long_document.source_text.clear();
+    app.state.long_document.input_mode = "plaintext".to_string();
+    app.state.long_document.service = "google".to_string();
+
+    let retry_task = app.update(Message::RetryLongDocument);
+
+    assert_eq!(task_kind(&retry_task), "future");
+    assert!(app.state.long_document.is_translating);
+    assert_eq!(app.state.long_document.active_query_id, Some(1));
+    assert_eq!(app.state.long_document.last_error, None);
 }
 
 #[test]
@@ -3450,6 +3552,91 @@ fn native_text_result_json_retry_failed_retranslates_only_failed_chunks() {
         .as_str()
         .unwrap_or_default()
         .starts_with("[zh] fail-1"));
+
+    fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+fn native_text_result_json_retry_failed_rejects_incomplete_checkpoint_without_export() {
+    let temp_dir = unique_temp_dir("longdoc-native-result-json-retry-incomplete");
+    fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+    let output_path = temp_dir.join("translated.txt");
+    let result_json_path = temp_dir.join("translated-result.json");
+
+    let mut request = build_long_document_request(
+        &EasydictUiState {
+            settings: easydict_app::SettingsState {
+                translation_cache_enabled: false,
+                ..Default::default()
+            },
+            long_document: easydict_app::LongDocumentState {
+                selected_file: "No file selected".to_string(),
+                source_text: native_long_text_markers(&["ok-0", "ok-1"]),
+                input_mode: "plaintext".to_string(),
+                output_folder: temp_dir.to_string_lossy().to_string(),
+                source_language: "en".to_string(),
+                target_language: "zh-Hans".to_string(),
+                service: "google".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        80,
+    )
+    .expect("native text incomplete retry checkpoint request");
+    request.params.output_path = Some(output_path.display().to_string());
+    request.params.result_json_path = Some(result_json_path.display().to_string());
+
+    let mut first_translator = RecordingNativeLongDocTranslator::default();
+    run_native_text_long_document_request_with_translator(&mut first_translator, request.clone())
+        .result
+        .expect("completed native text run should write checkpoint sidecar");
+
+    let mut sidecar_value: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&result_json_path).expect("result sidecar should exist"),
+    )
+    .expect("result sidecar should parse");
+    sidecar_value["checkpoint"]["text"]["translatedChunks"]
+        .as_object_mut()
+        .expect("translatedChunks should be an object")
+        .remove("1");
+    sidecar_value["checkpoint"]["text"]["failedChunkIndexes"] = serde_json::json!([]);
+    let corrupted_sidecar =
+        serde_json::to_string_pretty(&sidecar_value).expect("corrupted sidecar should serialize");
+    fs::write(&result_json_path, &corrupted_sidecar).expect("corrupted sidecar should be written");
+    fs::remove_file(&output_path).expect("completed output should be removable");
+
+    let mut retry_translator = RecordingNativeLongDocTranslator::default();
+    let outcome = retry_failed_native_text_long_document_from_result_json_with_translator(
+        &mut retry_translator,
+        request,
+        &result_json_path,
+    );
+    let error = outcome
+        .result
+        .expect_err("incomplete checkpoint should fail before retry/export");
+
+    assert!(error.message.contains("checkpoint chunk 1"));
+    assert!(error.message.contains("has no translated text"));
+    assert!(error.message.contains("not marked failed"));
+    assert!(!error.message.contains("Long Document worker"));
+    assert!(!error.message.contains("CompatHost"));
+    assert!(!error.message.contains(".NET"));
+    assert_eq!(
+        retry_translator.call_count(),
+        0,
+        "incomplete checkpoint should not call the provider"
+    );
+    assert!(
+        !output_path.exists(),
+        "incomplete checkpoint should not write output"
+    );
+    let sidecar_after =
+        fs::read_to_string(&result_json_path).expect("corrupted sidecar should remain readable");
+    assert_eq!(
+        sidecar_after, corrupted_sidecar,
+        "incomplete checkpoint should not rewrite the sidecar"
+    );
 
     fs::remove_dir_all(&temp_dir).ok();
 }

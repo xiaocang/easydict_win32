@@ -410,6 +410,7 @@ jobs:
   # First Rust release artifact: portable-only, named separately from the .NET package.
   publish-rs-portable:
     name: Build Rust Portable Package
+    if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'rs-portable' }}
     runs-on: windows-latest
     needs: prepare
     env:
@@ -463,7 +464,7 @@ jobs:
     name: Create MSIX Bundle
     if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'hybrid' }}
     runs-on: windows-latest
-    needs: [prepare, publish-msix, publish-rs-portable]
+    needs: [prepare, publish-msix]
     env:
       RUNTIME_PROFILE: ${{ github.event.inputs.runtime_profile || 'hybrid' }}
 
@@ -492,13 +493,6 @@ jobs:
         with:
           pattern: easydict-installer-*
           path: installer-packages
-          merge-multiple: true
-
-      - name: Download Rust portable artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: easydict-rs-portable-*
-          path: rs-portable
           merge-multiple: true
 
       - name: Create MSIX Bundle
@@ -566,7 +560,6 @@ jobs:
           files: |
             Easydict-${{ github.ref_name }}.unsigned.msixbundle
             zip-packages/*.zip
-            rs-portable/*.zip
             installer-packages/*.exe
           generate_release_notes: true
 

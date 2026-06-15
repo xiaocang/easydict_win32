@@ -113,6 +113,26 @@ fn temp_dir(name: &str) -> PathBuf {
     ))
 }
 
+fn test_cjk_font_path() -> PathBuf {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join(r"..\..\..\lib\PdfPig\src\UglyToad.PdfPig.Tests\Fonts\TrueType\PMingLiU.ttf");
+    assert!(
+        path.is_file(),
+        "test CJK font fixture should exist at {}",
+        path.display()
+    );
+    path
+}
+
+fn install_test_cjk_font(path: &Path) {
+    fs::create_dir_all(path.parent().expect("font parent")).expect("create font parent");
+    fs::copy(test_cjk_font_path(), path).expect("install CJK font fixture");
+}
+
+fn test_cjk_font_bytes() -> Vec<u8> {
+    fs::read(test_cjk_font_path()).expect("read CJK font fixture")
+}
+
 struct EnvironmentVariableGuard {
     name: &'static str,
     original: Option<String>,
@@ -310,7 +330,7 @@ fn font_download_cache_uses_exact_language_then_any_cjk_fallback() {
     let fonts_dir = font_cache_dir(&dir);
     fs::create_dir_all(&fonts_dir).expect("create fonts dir");
     let japanese_path = fonts_dir.join("NotoSansJP-Regular.ttf");
-    fs::write(&japanese_path, b"jp").expect("write japanese font");
+    install_test_cjk_font(&japanese_path);
 
     assert_eq!(
         cached_font_path_for_directory(&dir, TranslationLanguage::Japanese),
@@ -326,6 +346,29 @@ fn font_download_cache_uses_exact_language_then_any_cjk_fallback() {
 }
 
 #[test]
+fn font_download_cache_ignores_unmanaged_font_files() {
+    let dir = temp_dir("font-cache-unmanaged-files");
+    let fonts_dir = font_cache_dir(&dir);
+    fs::create_dir_all(&fonts_dir).expect("create fonts dir");
+    fs::write(fonts_dir.join("SomeOtherCjkFont.ttf"), b"font").expect("write unmanaged font");
+    fs::write(fonts_dir.join("NotoSansSC-Regular.ttf.tmp"), b"font").expect("write temporary font");
+    fs::write(fonts_dir.join("NotoSansSC-Regular.ttf"), b"not a font")
+        .expect("write invalid managed font");
+
+    assert_eq!(
+        cached_font_path_for_directory(&dir, TranslationLanguage::SimplifiedChinese),
+        None,
+        "only valid Rust-managed NotoSans CJK font files should be treated as cached fonts"
+    );
+    assert!(
+        !has_any_cjk_font_for_directory(&dir),
+        "unmanaged or invalid font files must not make the CJK font status available"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn font_download_ensure_downloads_ordered_asset_and_reports_stage() {
     let dir = temp_dir("font-ensure");
     let asset = font_asset_for_language(TranslationLanguage::SimplifiedChinese)
@@ -335,7 +378,7 @@ fn font_download_ensure_downloads_ordered_asset_and_reports_stage() {
     let mut client = FakeResourceDownloadClient::default()
         .with_probe(first_url, true, 50)
         .with_probe(second_url, true, 5)
-        .with_download(second_url, b"font-bytes");
+        .with_download(second_url, test_cjk_font_bytes());
     let mut stages = Vec::new();
 
     let path = ensure_font_for_directory(
@@ -347,10 +390,7 @@ fn font_download_ensure_downloads_ordered_asset_and_reports_stage() {
     .expect("font download succeeds");
 
     assert_eq!(path, font_cache_dir(&dir).join("NotoSansSC-Regular.ttf"));
-    assert_eq!(
-        fs::read(&path).expect("read downloaded font"),
-        b"font-bytes"
-    );
+    assert!(has_any_cjk_font_for_directory(&dir));
     assert_eq!(client.requested_urls, vec![second_url.to_string()]);
     assert!(stages.iter().all(|stage| stage == "font-zh-Hans"));
 
@@ -363,7 +403,7 @@ fn font_download_settings_entry_uses_configured_cache_dir() {
     let fonts_dir = font_cache_dir(&dir);
     fs::create_dir_all(&fonts_dir).expect("create custom fonts dir");
     let font_path = fonts_dir.join("NotoSansSC-Regular.ttf");
-    fs::write(&font_path, b"cached-font").expect("write cached font");
+    install_test_cjk_font(&font_path);
     let settings = SettingsSnapshot {
         cache_dir: Some(dir.display().to_string()),
         ..SettingsSnapshot::default()
@@ -389,7 +429,7 @@ fn font_download_settings_entry_treats_blank_cache_dir_as_default() {
     let fonts_dir = font_cache_dir(&default_base);
     fs::create_dir_all(&fonts_dir).expect("create default fonts dir");
     let font_path = fonts_dir.join("NotoSansSC-Regular.ttf");
-    fs::write(&font_path, b"default-cached-font").expect("write default cached font");
+    install_test_cjk_font(&font_path);
     let _local_app_data_guard =
         EnvironmentVariableGuard::set("LOCALAPPDATA", &local_app_data.to_string_lossy());
     let settings = SettingsSnapshot {
@@ -407,6 +447,29 @@ fn font_download_settings_entry_treats_blank_cache_dir_as_default() {
     assert_eq!(result, font_path);
 
     let _ = fs::remove_dir_all(&local_app_data);
+}
+
+#[test]
+fn font_download_ensure_rejects_invalid_downloaded_font_file() {
+    let dir = temp_dir("font-invalid-download");
+    let asset = font_asset_for_language(TranslationLanguage::SimplifiedChinese)
+        .expect("simplified CJK asset");
+    let mut client = FakeResourceDownloadClient::default()
+        .with_probe(asset.download_urls[0], true, 1)
+        .with_download(asset.download_urls[0], b"not a font");
+
+    let error = ensure_font_for_directory(
+        &mut client,
+        &dir,
+        TranslationLanguage::SimplifiedChinese,
+        &mut |_| {},
+    )
+    .expect_err("invalid downloaded font should be rejected");
+
+    assert!(matches!(error, FontDownloadError::InvalidFont(_)));
+    assert!(!has_any_cjk_font_for_directory(&dir));
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

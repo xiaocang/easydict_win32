@@ -396,6 +396,10 @@ fn assert_foundry_local_process_spawn_is_cli_only(path: &str, source: &str) {
         "\"powershell.exe\"",
         "\"pwsh.exe\"",
         "\"hostfxr.dll\"",
+        "\"hostpolicy.dll\"",
+        "\"coreclr.dll\"",
+        "\"clrjit.dll\"",
+        "\"singlefilehost.exe\"",
         "easydict.compathost",
         "easydict.workers.",
         ".runtimeconfig.json",
@@ -433,6 +437,10 @@ fn assert_no_foundry_local_runtime_markers_outside_cli_denylist(path: &str, sour
         "host\\fxr",
         "host/fxr",
         "hostfxr",
+        "hostpolicy",
+        "coreclr",
+        "clrjit",
+        "singlefilehost",
     ] {
         if let Some((line_number, line)) = non_comment_lines(source)
             .find(|(_, line)| line.contains(marker) && !is_foundry_local_cli_denylist_line(line))
@@ -454,6 +462,10 @@ fn is_foundry_local_cli_denylist_line(line: &str) -> bool {
         "\"pwsh\"",
         "\"pwsh.exe\"",
         "\"hostfxr.dll\"",
+        "\"hostpolicy.dll\"",
+        "\"coreclr.dll\"",
+        "\"clrjit.dll\"",
+        "\"singlefilehost.exe\"",
         "easydict.compathost",
         "easydict.workers.",
         ".runtimeconfig.json",

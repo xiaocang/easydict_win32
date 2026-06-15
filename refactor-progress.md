@@ -21,6 +21,184 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-12: Covered unknown legacy packaging runtime profiles before tool invocation
+
+- No new dependency was needed; this extends the existing fake-`PATH` release contract around legacy PowerShell packaging scripts.
+- `legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_tools` now executes `dotnet/scripts/publish.ps1`, `package-and-install.ps1`, `Package-Msix.ps1`, `Build-Installer.ps1`, and `Extract-DotnetRuntime.ps1` with omitted, `rust-only`, old `dotnet` / `dotnet-hybrid`, and arbitrary unknown runtime profiles.
+- The scripts must fail locally before touching fake `dotnet`, `cargo`, `winapp`, or `ISCC`; rust-only values still direct callers to rs portable, while unknown legacy spellings remain explicit-Hybrid-only instead of becoming retained `.NET` aliases.
+
+Validation:
+
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo test -p easydict_packager --test release_contract_behavior legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_tools -- --exact --nocapture`
+
+## 2026-06-12: Forced rustup target add to the rs portable child-tool environment
+
+- A packaging subagent found one remaining child-tool environment gap: `pack-rs-portable` and `build-rust-helpers` already forced child `cargo` invocations to `rust-only`, but the preceding optional `rustup target add` step still inherited the caller environment. No new dependency was needed; this is a fixed `std::process::Command` environment policy.
+- `run_rustup_target_add_if_available(...)` now receives the same strict child-tool environment as cargo: `EASYDICT_RUNTIME_PROFILE=rust-only`, `RUNTIME_PROFILE=rust-only`, and `EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1`.
+- The fake release-contract tooling can now record rustup separately from cargo. Added `rustup_target_add_is_forced_to_rust_only_runtime_profile`, proving a parent `hybrid` shell does not leak into target installation before the first rs portable helper builds.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager`
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo test -p easydict_packager --test release_contract_behavior rustup_target_add_is_forced_to_rust_only_runtime_profile -- --exact --nocapture`
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo test -p easydict_packager --test release_contract_behavior rust_only_runtime_profile -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager --check`
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo check -p easydict_packager --all-targets`
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo check -p easydict_packager --all-targets --features hybrid-dotnet-runtime-packaging`
+
+## 2026-06-12: Validated managed CJK font cache entries before marking them available
+
+- Rechecked third-party options before changing the cache predicate. The app already depends on `ttf-parser`, which is the right lightweight parser for validating TrueType/OpenType bytes here; `fontdb` would help discover arbitrary system fonts, which this Rust-only portable boundary intentionally avoids. No new dependency was added.
+- `font_download::cached_font_path_for_directory(...)`, `has_any_cjk_font_for_directory(...)`, and `ensure_font_for_directory(...)` now require a known NotoSans CJK asset file to parse as a font and expose at least one CJK glyph before it counts as cached/available.
+- Settings status tests now install a real CJK font fixture for the Available case and cover the invalid known-name case as Not downloaded. Resource download tests also cover invalid downloaded font rejection, so empty or corrupt `Fonts/NotoSans*.ttf` files no longer make LongDoc PDF overlay or settings status look ready.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app`
+- `cd rs; $env:CARGO_PROFILE_TEST_DEBUG='0'; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo test -p easydict_app settings_status::tests::reports_available_when_known_cjk_font_asset_is_present --lib -- --exact --nocapture`
+- `cd rs; $env:CARGO_PROFILE_TEST_DEBUG='0'; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo test -p easydict_app settings_status::tests::reports_not_downloaded_when_managed_cjk_font_asset_is_invalid --lib -- --exact --nocapture`
+- `cd rs; $env:CARGO_PROFILE_TEST_DEBUG='0'; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo test -p easydict_app --test resource_download_behavior font_download -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo check -p easydict_app --all-targets`
+- `cd rs; $env:CARGO_INCREMENTAL='0'; $env:CARGO_BUILD_JOBS='2'; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Restricted explicit LongDoc PDF overlay fonts to managed cache assets
+
+- Rechecked reusable font crates before changing the policy. `ttf-parser` is a strong parser for validating TrueType/OpenType internals, and `fontdb` is useful for font discovery and CSS-like matching, but this slice is a source-boundary guard rather than arbitrary font selection. No new dependency was added.
+- `native_pdf_overlay_font_path(...)` now rejects explicit `SettingsSnapshot.cjk_font_path` values unless the path is a readable file, its file name matches the existing `font_download::font_assets()` NotoSans CJK allowlist, and its parent directory is the active Rust-managed `Fonts` cache (`SettingsSnapshot.cache_dir/Fonts`, or the default Easydict cache).
+- Existing PDF overlay success tests now install the test font fixture into `Fonts/NotoSansSC-Regular.ttf` first. Added explicit regressions for unmanaged explicit paths and managed explicit paths, so stale package fonts or system font paths cannot satisfy the first rs portable LongDoc PDF overlay route by accident.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app`
+- `cd rs; cargo test -p easydict_app native_pdf_overlay_font --lib -- --nocapture`
+- `cd rs; cargo test -p easydict_app long_document::tests::native_pdf_export_uses_overlay_font_embedding_for_cjk_translation --lib -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app long_document::tests::native_pdf_export_overlay_mode_uses_overlay_without_content_stream_match --lib -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app long_document::tests::native_pdf_content_stream_no_match_uses_overlay_before_text_fallback --lib -- --exact --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Rejected linked entries in Rust zip-directory packaging
+
+- A packaging subagent identified that the generic `easydict_packager zip-directory` helper still used `fs::metadata()`, which follows directory links. This helper is used for legacy/hybrid ZIP creation, so it should not be able to pull external `dotnet/`, `workers/`, or runtime files through symlink or Windows reparse-point entries.
+- `zip-directory` now checks `DirEntry::file_type()` plus Windows `symlink_metadata().file_attributes()` before recursion and returns `ZipDirectoryError::UnsupportedDirectoryEntry` for symlink/reparse entries instead of following them.
+- The link policy is shared with the existing rs portable directory validator flag helper, keeping portable ZIP validation and generic ZIP creation aligned.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_packager --check`
+- `cd rs; cargo test -p easydict_packager zip_directory -- --nocapture`
+- `cd rs; cargo test -p easydict_packager -- --nocapture`
+- `cd rs; cargo check -p easydict_packager --all-targets`
+- `cd rs; cargo check -p easydict_packager --all-targets --features hybrid-dotnet-runtime-packaging`
+
+## 2026-06-12: Normalized persisted LocalAI provider aliases at settings storage
+
+- Rechecked the LocalAI provider alias requirement. No new dependency was needed: the existing `protocol_core::normalize_local_ai_provider_mode(...)` table already owns the canonical mapping used by Quick Translate, LongDoc, CLI env overrides, and Foundry config checks.
+- Settings load/save now reuses that table for direct `LocalAIProvider` values. Legacy spellings such as `windows-ai`, `phi_silica`, `foundry-local`, `local-ai`, and `open_vino` load as canonical `WindowsAI`, `FoundryLocal`, or `OpenVINO`; unknown values normalize to `Auto`.
+- `load_settings_file` now persists the cleanup back to disk, so first-release rs portable settings do not keep old worker-era provider spelling that could later diverge from native route decisions.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior local_ai_provider -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test settings_storage_behavior -- --nocapture`
+- `cd rs; cargo check -p easydict_app --all-targets`
+
+## 2026-06-12: Rejected linked runtime roots during MSIX input preparation
+
+- Rechecked whether this needed a directory-walking or junction crate. The existing Rust packager already uses standard-library symlink detection plus Windows `symlink_metadata().file_attributes()` for reparse points, so `easydict_msix_validate` now reuses the same pattern without adding a dependency.
+- `prepare-package-inputs` now records unsupported linked/reparse entries by their own relative path before recursion. Under the Rust-only default profile, a `dotnet` or `workers` root that is a symlink or Windows reparse point is rejected before any prepared manifest is written.
+- Added a real linked-`dotnet` regression plus a pure policy test so stale retained runtime payloads cannot be smuggled into the MSIX input tree through filesystem indirection.
+
+Validation:
+
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_msix_validate --check`
+- `cd rs; cargo test -p easydict_msix_validate prepare_package_inputs -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate -- --nocapture`
+- `cd rs; cargo check -p easydict_msix_validate --all-targets`
+
+## 2026-06-12: Scanned Rust-only MSIX helper executables for .NET host markers
+
+- Rechecked whether this should use a PE parser. `object`/`goblin` are plausible OSS PE/COFF parsers, but neither is currently in the workspace and the first rs portable validator already uses a focused marker strategy for renamed apphost protection. Reused that strategy here to keep MSIX and portable Rust-only rules aligned without adding a parser dependency.
+- `easydict_msix_validate` now records required Rust helper executables whose contents contain retained .NET host/runtime markers (`hostfxr.dll`, `hostpolicy.dll`, `coreclr.dll`, `clrjit.dll`, `singlefilehost.exe`, CoreLib/runtimeconfig/deps, CompatHost/Workers) while indexing package payloads.
+- Rust-only MSIX validation and nested bundle validation now reject allowlisted helper names if their bytes look like a renamed .NET apphost, closing the gap where path/name allowlists alone were insufficient.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_msix_validate rust_only_package -- --nocapture`
+- `cd rs; cargo test -p easydict_msix_validate verify_bundle_minversion_rust_only -- --nocapture`
+
+## 2026-06-12: Routed app LongDoc Retry Failed through Rust sidecar backend
+
+- Parallel review confirmed the clean UI/state retry affordance still needs a later `LongDocumentState` field, but the backend can move now without touching `ui.rs`, `state.rs`, or WinFluent. No new library was needed: the existing Rust-native result JSON sidecar and retry backend already own the core behavior.
+- Native-route file requests built by the app now derive a stable `*.result.json` sidecar path next to the translated output. Inline text without a stable output folder still leaves `resultJsonPath` unset.
+- `Message::RetryLongDocument` now uses a separate start path and calls `retry_failed_native_text_long_document_from_result_json(...)` instead of reusing the full translate task. Missing sidecars fail locally before any provider or retained-worker lookup.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior app_update_retry_long_document_requires_sidecar_and_starts_retry_task -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_result_json_retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_pdf_result_json_retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test long_document_behavior long_document_translate_builds_file_request_and_marks_loading -- --exact --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --check`
+- `cd rs; cargo check -p easydict_app --all-targets`
+- `cd rs; cargo check -p easydict_app --all-targets --features retained-dotnet-workers`
+
+## 2026-06-12: Split hybrid release assets away from rs portable artifacts
+
+- A packaging subagent found a release-flavor boundary leak: `release_flavor=hybrid` still depended on the rs portable job and uploaded `rs-portable/*.zip` beside hybrid/MSIX assets. No new third-party library was needed; this is a GitHub Actions contract fix.
+- `publish-rs-portable` is now positively gated to `release_flavor == 'rs-portable'`, while `create-bundle` depends only on `prepare` and `publish-msix`. Hybrid releases no longer download `easydict-rs-portable-*` artifacts or upload rs portable ZIPs.
+- Tightened the default Foundry Local CLI override denylist so retained host/runtime commands such as `hostpolicy.dll`, `coreclr.dll`, `clrjit.dll`, and `singlefilehost.exe` are rejected before any process spawn.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior release_workflow -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior rs_portable_release_jobs_stay_isolated_from_dotnet_artifacts -- --exact --nocapture`
+- `cargo test --manifest-path lib/easydict-foundry-local/Cargo.toml cli_executable_override_rejects_retained_dotnet_runtime_commands -- --nocapture`
+- `cd rs; cargo test -p easydict_app --test default_api_boundary_behavior default_process_spawn_surface -- --nocapture`
+
+## 2026-06-12: Made LongDoc Retry Failed sidecar-only at CLI/shim boundary
+
+- Parallel audits found two small default-rs release gaps. No new third-party library was needed: both fixes are local CLI/shim/release-contract boundaries around existing Rust sidecar and packager code.
+- `easydict_long_doc --retry-failed --result-json <sidecar>` no longer requires `--input` or `--target-language` before reading the sidecar. The initial request uses a placeholder shell only; the retry backend restores input/output mode, service, languages, output path, page range, and PDF route metadata from the checkpoint before export.
+- `scripts/translate-long-doc.ps1 -RetryFailed -ResultJsonPath <file>` now follows the same sidecar-only contract and still forces child helper/Cargo invocations to `EASYDICT_RUNTIME_PROFILE=rust-only` and `RUNTIME_PROFILE=rust-only`.
+- Strengthened rs portable validation/release coverage: allowlisted executable content scanning now includes CoreCLR host/runtime markers (`hostpolicy.dll`, `coreclr.dll`, `clrjit.dll`, `singlefilehost.exe`), and the extracted ZIP smoke now runs the public `Easydict.Rust.exe` entrypoint, not only `easydict_cli.exe`, while guarding against `dotnet.exe` and PowerShell launches.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_cli_behavior retry_failed -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior translate_long_doc_script -- --nocapture`
+- `cd rs; cargo test -p easydict_packager --test release_contract_behavior pack_rs_portable_zip_extracts_to -- --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains_dotnet_host_markers -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --package easydict_packager --check`
+
+## 2026-06-12: Hardened LongDoc retry sidecars and rs portable executable contents
+
+- Rechecked the MDD request first. The Rust route is already covered through `lib/rs-mdict` MDD parsing/resource lookup, companion discovery, rich HTML data-URL inlining, Quick Translate `rawHtml` gating, and legacy settings MDD discovery; no new parser dependency was needed. The local MIT `rs-mdict` fork remains the best fit for this core path.
+- Parallel audits then pointed at two small Rust-only boundary gaps. LongDoc Retry Failed sidecars now reject semantically incomplete checkpoints where a source chunk has neither translated text nor a failed marker, before calling any provider or rewriting output/sidecar files.
+- `validate-rs-portable` now scans allowlisted executable payloads for obvious .NET host/runtime/assembly markers, so a renamed .NET apphost cannot slip through merely by using `Easydict.Rust.exe` or Rust helper executable names. This is intentionally marker-based for the first rs portable release; a deeper PE/CLR parser can be considered later if needed.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test long_document_behavior native_text_result_json_retry_failed_rejects_incomplete_checkpoint_without_export -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_packager validate_rs_portable_rejects_allowlisted_exe_that_contains_dotnet_host_markers -- --nocapture`
+- `cargo fmt --manifest-path rs/Cargo.toml --package easydict_app --package easydict_packager --check`
+
+## 2026-06-12: Guarded PDF overlay font fallback against unmanaged cache files
+
+- Rechecked the next PDF/LongDoc Rust-only boundary after the Foundry SDK audit. No new crate was needed: `font_download` already owns the managed NotoSans CJK asset list, and LongDoc PDF overlay consumes that same cache helper.
+- Added `font_download_cache_ignores_unmanaged_font_files`, proving random `Fonts/*.ttf` and temporary NotoSans-like files do not make the CJK font cache available.
+- Added `native_pdf_overlay_font_fallback_rejects_unmanaged_cache_fonts`, proving LongDoc PDF overlay fallback itself fails through the managed font-cache boundary instead of scanning arbitrary cached font files.
+
+Validation:
+
+- `cd rs; cargo test -p easydict_app --test resource_download_behavior font_download_cache_ignores_unmanaged_font_files -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app long_document::tests::native_pdf_overlay_font_fallback_rejects_unmanaged_cache_fonts --lib -- --exact --nocapture`
+- `cd rs; cargo test -p easydict_app long_document::tests::native_pdf_overlay_font_fallback_uses_settings_cache_dir --lib -- --exact --nocapture`
+
 ## 2026-06-12: Closed LocalAI CLI stream/grammar app-dir stale-payload gaps
 
 - A read-only CLI audit confirmed the remaining easy LocalAI no-runtime gap was `windows-local-ai` with `stream --app-dir` and `grammar --app-dir`; `translate --app-dir`, `batch --app-dir`, and `stream --host` were already covered.

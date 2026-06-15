@@ -1043,6 +1043,7 @@ fn is_retained_dotnet_runtime_or_worker_command(value: &str) -> bool {
             | "hostpolicy.dll"
             | "coreclr.dll"
             | "clrjit.dll"
+            | "singlefilehost.exe"
             | "system.private.corelib.dll"
     ) || lower.contains("easydict.compathost")
         || lower.contains("easydict.workers.")
@@ -1338,6 +1339,10 @@ mod tests {
             "C:/Easydict/workers/localai/Easydict.Workers.LocalAi.exe",
             "C:/Easydict/Easydict.Workers.LocalAi.runtimeconfig.json",
             "C:/Easydict/dotnet/host/fxr/8.0.11/hostfxr.dll",
+            "hostpolicy.dll",
+            "coreclr.dll",
+            "clrjit.dll",
+            "singlefilehost.exe",
             "C:/Easydict/scripts/launch-localai.ps1",
         ] {
             let mut resolver =

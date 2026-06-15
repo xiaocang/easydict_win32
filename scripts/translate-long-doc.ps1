@@ -56,16 +56,18 @@ function Assert-RequestArguments {
         return
     }
 
-    if (-not $InputFile) {
-        throw "InputFile is required unless -ListServices is used."
-    }
-
-    if (-not $TargetLanguage) {
-        throw "TargetLanguage is required unless -ListServices is used."
-    }
-
     if ($RetryFailed -and -not $ResultJsonPath) {
         throw "ResultJsonPath is required when -RetryFailed is used."
+    }
+
+    if (-not $RetryFailed) {
+        if (-not $InputFile) {
+            throw "InputFile is required unless -ListServices or -RetryFailed is used."
+        }
+
+        if (-not $TargetLanguage) {
+            throw "TargetLanguage is required unless -ListServices or -RetryFailed is used."
+        }
     }
 
     if ($scriptParameters.ContainsKey("Page") -and $PageRange) {
@@ -93,7 +95,8 @@ function New-RustLongDocArguments {
         return $longDocArguments
     }
 
-    $longDocArguments += @("--input", $InputFile, "--target-language", $TargetLanguage)
+    if ($InputFile) { $longDocArguments += @("--input", $InputFile) }
+    if ($TargetLanguage) { $longDocArguments += @("--target-language", $TargetLanguage) }
 
     if ($SourceLanguage) { $longDocArguments += @("--from", $SourceLanguage) }
     if ($EnvFile) { $longDocArguments += @("--env-file", $EnvFile) }

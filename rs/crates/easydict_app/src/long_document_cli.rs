@@ -31,7 +31,6 @@ pub struct LongDocumentCliOptions {
         short = 'i',
         long = "input",
         value_name = "FILE",
-        required_unless_present = "list_services",
         help = "Input .pdf, .txt, .md, or .markdown document"
     )]
     input: Option<PathBuf>,
@@ -40,7 +39,6 @@ pub struct LongDocumentCliOptions {
         short = 't',
         long = "target-language",
         value_name = "LANG",
-        required_unless_present = "list_services",
         help = "Target language code or name, for example zh-Hans, en, ja"
     )]
     target_language: Option<String>,
@@ -152,6 +150,16 @@ fn run(
             "--retry-failed requires --result-json".to_string(),
         ));
     }
+    if !options.retry_failed && options.input.is_none() {
+        return Err(LongDocumentCliError::InvalidArgument(
+            "--input is required".to_string(),
+        ));
+    }
+    if !options.retry_failed && options.target_language.is_none() {
+        return Err(LongDocumentCliError::InvalidArgument(
+            "--target-language is required".to_string(),
+        ));
+    }
 
     if let Some(env_file) = options.env_file.as_deref() {
         load_and_apply_env_file(env_file)?;
@@ -220,17 +228,17 @@ fn build_cli_state(
     state.settings = load_cli_settings()?;
     apply_environment_overrides(&mut state.settings);
 
-    let input = options
-        .input
-        .as_ref()
-        .ok_or_else(|| LongDocumentCliError::InvalidArgument("--input is required".to_string()))?;
-    let target_language = options.target_language.as_deref().ok_or_else(|| {
-        LongDocumentCliError::InvalidArgument("--target-language is required".to_string())
-    })?;
-
-    state.long_document.selected_file = path_string(input);
+    if let Some(input) = options.input.as_ref() {
+        state.long_document.selected_file = path_string(input);
+    } else {
+        state.long_document.source_text = "Retry Failed sidecar".to_string();
+    }
     state.long_document.source_language = options.source_language.clone();
-    state.long_document.target_language = target_language.to_string();
+    state.long_document.target_language = options.target_language.clone().unwrap_or_else(|| {
+        // Retry Failed restores the real route metadata from the sidecar before
+        // export. The placeholder only lets the initial request shell build.
+        "en".to_string()
+    });
     state.long_document.service = selected_service_id(options);
     state.long_document.output_mode = selected_output_mode(options)?;
     state.long_document.page_range = selected_page_range(options);

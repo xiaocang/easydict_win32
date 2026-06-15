@@ -8,8 +8,10 @@ use crate::resource_download::{
     ResourceDownloadClient, ResourceDownloadError, ResourceDownloadProgress,
 };
 use crate::translation_language::TranslationLanguage;
+use ttf_parser::Face;
 
 pub const FONTS_SUBDIR: &str = "Fonts";
+const CJK_FONT_PROBE_CHARS: &[char] = &['你', '漢', '日', '本', '한', '글'];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FontAsset {
@@ -56,6 +58,7 @@ const FONT_ASSETS: &[FontAsset] = &[
 #[derive(Debug)]
 pub enum FontDownloadError {
     UnsupportedLanguage(TranslationLanguage),
+    InvalidFont(PathBuf),
     Download(ResourceDownloadError),
 }
 
@@ -68,6 +71,11 @@ impl fmt::Display for FontDownloadError {
                     "No CJK font configured for language: {language:?}"
                 )
             }
+            Self::InvalidFont(path) => write!(
+                formatter,
+                "Downloaded CJK font '{}' is not a readable TrueType/OpenType CJK font",
+                path.display()
+            ),
             Self::Download(error) => write!(formatter, "{error}"),
         }
     }
@@ -122,7 +130,7 @@ pub fn cached_font_path_for_directory(
     let fonts_dir = font_cache_dir(base);
     if let Some(asset) = font_asset_for_language(language) {
         let exact = fonts_dir.join(asset.file_name);
-        if exact.is_file() {
+        if is_managed_cjk_font_file(&exact) {
             return Some(exact);
         }
     }
@@ -130,7 +138,7 @@ pub fn cached_font_path_for_directory(
     FONT_ASSETS
         .iter()
         .map(|asset| fonts_dir.join(asset.file_name))
-        .find(|path| path.is_file())
+        .find(|path| is_managed_cjk_font_file(path))
 }
 
 pub fn cached_font_path(language: TranslationLanguage) -> Option<PathBuf> {
@@ -141,7 +149,7 @@ pub fn has_any_cjk_font_for_directory(base: impl AsRef<Path>) -> bool {
     let fonts_dir = font_cache_dir(base);
     FONT_ASSETS
         .iter()
-        .any(|asset| fonts_dir.join(asset.file_name).is_file())
+        .any(|asset| is_managed_cjk_font_file(fonts_dir.join(asset.file_name)))
 }
 
 pub fn is_font_downloaded_for_directory(
@@ -180,7 +188,7 @@ pub fn ensure_font_for_directory<C: ResourceDownloadClient>(
     fs::create_dir_all(&fonts_dir).map_err(ResourceDownloadError::from)?;
 
     let font_path = fonts_dir.join(asset.file_name);
-    if font_path.is_file() {
+    if is_managed_cjk_font_file(&font_path) {
         return Ok(font_path);
     }
 
@@ -197,6 +205,9 @@ pub fn ensure_font_for_directory<C: ResourceDownloadClient>(
         &format!("font-{}", asset.key),
         progress,
     )?;
+    if !is_managed_cjk_font_file(&font_path) {
+        return Err(FontDownloadError::InvalidFont(font_path));
+    }
     Ok(font_path)
 }
 
@@ -233,4 +244,22 @@ fn default_data_directory() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Easydict")
+}
+
+fn is_managed_cjk_font_file(path: impl AsRef<Path>) -> bool {
+    let path = path.as_ref();
+    if !path.is_file() {
+        return false;
+    }
+
+    let Ok(bytes) = fs::read(path) else {
+        return false;
+    };
+    let Ok(face) = Face::parse(&bytes, 0) else {
+        return false;
+    };
+
+    CJK_FONT_PROBE_CHARS
+        .iter()
+        .any(|probe| face.glyph_index(*probe).is_some())
 }

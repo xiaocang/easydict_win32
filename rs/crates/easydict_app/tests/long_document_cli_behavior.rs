@@ -233,13 +233,11 @@ fn retry_failed_requires_result_json_path() {
 }
 
 #[test]
-fn retry_failed_without_failed_chunks_reexports_from_result_json_without_provider_lookup() {
+fn retry_failed_accepts_result_json_sidecar_without_input_or_target_language() {
     let work_dir = unique_temp_dir("easydict-long-doc-cli-retry-no-failures");
     fs::create_dir_all(&work_dir).expect("work directory should be created");
-    let input_path = work_dir.join("sample.txt");
     let output_path = work_dir.join("translated.txt");
     let result_json_path = work_dir.join("translated-result.json");
-    fs::write(&input_path, "Hello retry").expect("sample input should be written");
     fs::write(&output_path, "stale output").expect("stale output should be written");
     fs::write(
         &result_json_path,
@@ -251,6 +249,8 @@ fn retry_failed_without_failed_chunks_reexports_from_result_json_without_provide
   "succeededChunks": 1,
   "resultJsonPath": "{}",
   "checkpoint": {{
+    "routeMetadataVersion": 1,
+    "outputPath": "{}",
     "inputMode": "PlainText",
     "outputMode": "Monolingual",
     "serviceId": "google",
@@ -274,17 +274,13 @@ fn retry_failed_without_failed_chunks_reexports_from_result_json_without_provide
   }}
 }}"#,
             json_path(&output_path),
-            json_path(&result_json_path)
+            json_path(&result_json_path),
+            json_path(&output_path)
         ),
     )
     .expect("result sidecar should be written");
 
     let output = long_doc_cli()
-        .arg("--input")
-        .arg(&input_path)
-        .args(["--target-language", "zh-Hans", "--from", "en"])
-        .arg("--output")
-        .arg(&output_path)
         .arg("--result-json-path")
         .arg(&result_json_path)
         .arg("--retry-failed")
@@ -309,10 +305,19 @@ fn retry_failed_without_failed_chunks_reexports_from_result_json_without_provide
         "retry should rewrite checkpoint sidecar:\n{rewritten}"
     );
     let stderr = stderr(&output);
-    assert!(
-        !stderr.contains("Long Document worker") && !stderr.contains("CompatHost"),
-        "retry CLI should stay on Rust-native sidecar route:\n{stderr}"
-    );
+    for forbidden in [
+        "--input is required",
+        "--target-language is required",
+        "Long Document worker",
+        "CompatHost",
+        ".NET",
+        "hostfxr",
+    ] {
+        assert!(
+            !stderr.contains(forbidden),
+            "retry CLI should stay on Rust-native sidecar route without {forbidden}:\n{stderr}"
+        );
+    }
 
     let _ = fs::remove_dir_all(work_dir);
 }

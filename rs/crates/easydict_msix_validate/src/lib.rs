@@ -90,6 +90,22 @@ const RUST_ONLY_FORBIDDEN_DOTNET_ASSEMBLY_FILE_NAMES: &[&str] = &[
 ];
 const RUST_ONLY_FORBIDDEN_REASON: &str =
     "Rust-only packages must not ship retained .NET workers or bundled .NET runtime";
+const RUST_ONLY_FORBIDDEN_HELPER_CONTENT_REASON: &str =
+    "Rust-only packages must not ship Rust helper executables that contain .NET host/runtime markers";
+const RUST_ONLY_DOTNET_CONTENT_MARKERS: &[&[u8]] = &[
+    b"hostfxr.dll",
+    b"hostpolicy.dll",
+    b"coreclr.dll",
+    b"clrjit.dll",
+    b"singlefilehost.exe",
+    b"System.Private.CoreLib",
+    b"Microsoft.NETCore.App",
+    b".runtimeconfig.json",
+    b".deps.json",
+    b"This application requires .NET",
+    b"Easydict.CompatHost",
+    b"Easydict.Workers.",
+];
 const NO_RETAINED_WORKERS_FORBIDDEN_REASON: &str =
     "Packages without retained .NET workers must not ship retained workers or bundled .NET runtime";
 const HYBRID_STALE_RUNTIME_ROOT_REASON: &str =
@@ -914,11 +930,10 @@ fn validate_prepare_package_runtime_payload(
     let mut entries = Vec::new();
     collect_prepare_package_payload_entries(publish_dir, publish_dir, &mut entries)?;
     entries.sort();
-    if let Some(path) = entries.iter().find(|path| {
-        RUST_ONLY_FORBIDDEN_PREFIXES
-            .iter()
-            .any(|prefix| path.starts_with(prefix))
-    }) {
+    if let Some(path) = entries
+        .iter()
+        .find(|path| rust_only_forbidden_prepare_payload_root(path))
+    {
         return Err(PreparePackageInputsError::ForbiddenPayload {
             path: path.clone(),
             reason: RUST_ONLY_FORBIDDEN_REASON,
@@ -964,6 +979,14 @@ fn collect_prepare_package_payload_entries(
             .replace('\\', "/")
             .trim_start_matches("./")
             .to_ascii_lowercase();
+        if prepare_package_payload_entry_is_unsupported_by_flags(
+            file_type.is_symlink(),
+            prepare_package_payload_entry_is_reparse_point(&path)?,
+        ) {
+            entries.push(normalized);
+            continue;
+        }
+
         if file_type.is_dir() {
             entries.push(format!("{normalized}/"));
             collect_prepare_package_payload_entries(root, &path, entries)?;
@@ -973,6 +996,44 @@ fn collect_prepare_package_payload_entries(
     }
 
     Ok(())
+}
+
+fn prepare_package_payload_entry_is_unsupported_by_flags(
+    is_symlink: bool,
+    is_reparse_point: bool,
+) -> bool {
+    is_symlink || is_reparse_point
+}
+
+fn prepare_package_payload_entry_is_reparse_point(
+    path: &Path,
+) -> Result<bool, PreparePackageInputsError> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        let metadata =
+            fs::symlink_metadata(path).map_err(|error| PreparePackageInputsError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        Ok(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(false)
+    }
+}
+
+fn rust_only_forbidden_prepare_payload_root(path: &str) -> bool {
+    let normalized = normalize_archive_path(path);
+    RUST_ONLY_FORBIDDEN_PREFIXES.iter().any(|prefix| {
+        let prefix = normalize_archive_path(prefix);
+        normalized == prefix.trim_end_matches('/') || normalized.starts_with(&prefix)
+    })
 }
 
 fn rust_only_forbidden_prepare_payload_marker(path: &str) -> bool {
@@ -1613,6 +1674,7 @@ fn validate_signature<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<(),
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ArchivePayloadIndex {
     entries: Vec<ArchivePayloadEntry>,
+    dotnet_marker_helper_entries: Vec<ArchivePayloadEntry>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1681,21 +1743,35 @@ fn archive_payload_index<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
 ) -> Result<ArchivePayloadIndex, ValidationError> {
     let mut entries = Vec::with_capacity(archive.len());
+    let mut dotnet_marker_helper_entries = Vec::new();
     for index in 0..archive.len() {
-        let entry = archive
+        let mut entry = archive
             .by_index(index)
             .map_err(|error| ValidationError::Zip(error.to_string()))?;
         let original = entry.name().to_string();
         if entry.enclosed_name().is_none() || archive_entry_path_is_unsafe(&original) {
             return Err(ValidationError::UnsafeArchiveEntry { path: original });
         }
-        entries.push(ArchivePayloadEntry {
+        let payload_entry = ArchivePayloadEntry {
             normalized: normalize_archive_path(&original),
             original,
-        });
+        };
+        if !entry.is_dir() && rust_only_required_helper_entry(&payload_entry) {
+            let mut bytes = Vec::new();
+            entry
+                .read_to_end(&mut bytes)
+                .map_err(|error| ValidationError::Io(error.to_string()))?;
+            if bytes_contain_dotnet_content_marker(&bytes) {
+                dotnet_marker_helper_entries.push(payload_entry.clone());
+            }
+        }
+        entries.push(payload_entry);
     }
 
-    Ok(ArchivePayloadIndex { entries })
+    Ok(ArchivePayloadIndex {
+        entries,
+        dotnet_marker_helper_entries,
+    })
 }
 
 fn validate_payload_layout(
@@ -1898,7 +1974,16 @@ fn hybrid_forbidden_root_runtime_marker(entry: &ArchivePayloadEntry) -> bool {
 fn validate_rust_only_runtime_payload(
     payload: &ArchivePayloadIndex,
 ) -> Result<(), ValidationError> {
-    validate_retained_runtime_payload_absent(payload, RUST_ONLY_FORBIDDEN_REASON)
+    validate_retained_runtime_payload_absent(payload, RUST_ONLY_FORBIDDEN_REASON)?;
+
+    if let Some(entry) = payload.dotnet_marker_helper_entries.first() {
+        return Err(ValidationError::ForbiddenPayload {
+            path: entry.original.clone(),
+            reason: RUST_ONLY_FORBIDDEN_HELPER_CONTENT_REASON,
+        });
+    }
+
+    Ok(())
 }
 
 fn validate_retained_runtime_payload_absent(
@@ -1957,6 +2042,18 @@ fn is_forbidden_easydict_winui_runtime_file(file_name: &str) -> bool {
         return false;
     };
     matches!(suffix, "exe" | "dll" | "runtimeconfig.json" | "deps.json")
+}
+
+fn rust_only_required_helper_entry(entry: &ArchivePayloadEntry) -> bool {
+    REQUIRED_RUST_HELPERS
+        .iter()
+        .any(|required| entry.normalized == normalize_archive_path(required))
+}
+
+fn bytes_contain_dotnet_content_marker(bytes: &[u8]) -> bool {
+    RUST_ONLY_DOTNET_CONTENT_MARKERS
+        .iter()
+        .any(|marker| bytes.windows(marker.len()).any(|window| window == *marker))
 }
 
 fn retained_workers_required(manifest: &ManifestInfo) -> bool {
@@ -2448,6 +2545,47 @@ mod tests {
         let result = validate_msix(&path, &options);
 
         assert!(result.is_ok());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rust_only_package_rejects_allowlisted_helper_exe_that_contains_dotnet_host_markers() {
+        let path = temp_msix_path("rust-only-helper-dotnet-marker");
+        let mut entries = rust_helper_entries();
+        for entry in &mut entries {
+            if entry.0 == "easydict_cli.exe" {
+                entry.1 = b"renamed apphost marker: hostfxr.dll System.Private.CoreLib .runtimeconfig.json";
+            }
+        }
+        write_msix(
+            &path,
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                DEFAULT_MIN_VERSION,
+                "x64",
+            ),
+            Some(b"sig"),
+            &entries,
+        );
+        let options = MsixValidationOptions {
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+            ..MsixValidationOptions::default()
+        };
+
+        let failures = validate_msix(&path, &options).unwrap_err();
+
+        assert_eq!(
+            failures,
+            vec![(
+                PAYLOAD_LAYOUT_VALIDATOR,
+                ValidationError::ForbiddenPayload {
+                    path: "easydict_cli.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_HELPER_CONTENT_REASON,
+                }
+            )],
+            "Rust-only MSIX validation should reject allowlisted helper names when their contents look like a retained .NET apphost"
+        );
         let _ = fs::remove_file(path);
     }
 
@@ -3293,6 +3431,75 @@ mod tests {
     }
 
     #[test]
+    fn prepare_package_inputs_rejects_linked_retained_runtime_root_before_manifest_write() {
+        let temp = tempfile::Builder::new()
+            .prefix("easydict-msix-prepare-rust-only-runtime-link-")
+            .tempdir()
+            .expect("temp publish dir");
+        create_required_msix_assets(temp.path());
+        let retained_runtime = temp.path().join("retained-dotnet");
+        fs::create_dir_all(retained_runtime.join("host/fxr/8.0.11"))
+            .expect("create retained runtime target");
+        fs::write(
+            retained_runtime.join("host/fxr/8.0.11/hostfxr.dll"),
+            b"stale hostfxr",
+        )
+        .expect("write retained runtime target payload");
+        let linked_runtime_root = temp.path().join("dotnet");
+        if let Err(error) = create_directory_symlink(&retained_runtime, &linked_runtime_root) {
+            eprintln!(
+                "skipping linked retained runtime root integration path; symlink creation failed: {error}"
+            );
+            return;
+        }
+        let source_manifest = temp.path().join("Package.appxmanifest");
+        fs::write(&source_manifest, manifest_with_fields(DEFAULT_MIN_VERSION))
+            .expect("write source manifest");
+        let output_manifest = temp.path().join("out.appxmanifest");
+
+        let error = prepare_package_inputs(&PreparePackageInputsOptions {
+            platform: "x64".to_string(),
+            publish_dir: temp.path().to_path_buf(),
+            manifest_path: source_manifest,
+            output_manifest: output_manifest.clone(),
+            msix_version: None,
+            verify_targetsize_icons: false,
+            runtime_profile: PackageRuntimeProfile::RustOnly,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            PreparePackageInputsError::ForbiddenPayload {
+                path: "dotnet".to_string(),
+                reason: RUST_ONLY_FORBIDDEN_REASON
+            }
+        );
+        assert!(
+            !output_manifest.exists(),
+            "rust-only prepare-package-inputs must reject linked runtime roots before writing a prepared manifest"
+        );
+    }
+
+    #[test]
+    fn prepare_package_payload_entry_policy_rejects_links_and_reparse_points() {
+        assert!(!prepare_package_payload_entry_is_unsupported_by_flags(
+            false, false
+        ));
+        assert!(prepare_package_payload_entry_is_unsupported_by_flags(
+            true, false
+        ));
+        assert!(prepare_package_payload_entry_is_unsupported_by_flags(
+            false, true
+        ));
+        assert!(prepare_package_payload_entry_is_unsupported_by_flags(
+            true, true
+        ));
+        assert!(rust_only_forbidden_prepare_payload_root("dotnet"));
+        assert!(rust_only_forbidden_prepare_payload_root("workers"));
+    }
+
+    #[test]
     fn prepare_package_inputs_hybrid_profile_allows_legacy_publish_dir_to_continue_to_validation() {
         let temp = tempfile::Builder::new()
             .prefix("easydict-msix-prepare-hybrid-runtime-")
@@ -3466,6 +3673,48 @@ mod tests {
                 error: ValidationError::ForbiddenPayload {
                     path: "workers/longdoc/Easydict.Workers.LongDoc.exe".to_string(),
                     reason: RUST_ONLY_FORBIDDEN_REASON,
+                },
+            }
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_bundle_minversion_rust_only_rejects_nested_helper_exe_dotnet_markers() {
+        let path =
+            temp_msix_path("bundle-rust-only-helper-dotnet-marker").with_extension("msixbundle");
+        let mut package_entries = rust_helper_entries();
+        for entry in &mut package_entries {
+            if entry.0 == "easydict_long_doc.exe" {
+                entry.1 =
+                    b"renamed apphost marker: coreclr.dll singlefilehost.exe Easydict.Workers.";
+            }
+        }
+        let package = package_bytes_with_entries(
+            manifest(
+                DEFAULT_EXPECTED_NAME,
+                DEFAULT_EXPECTED_PUBLISHER,
+                "10.0.22621.0",
+                "x64",
+            ),
+            &package_entries,
+        );
+        write_bundle(&path, &[("Easydict-x64.appx", &package)]);
+
+        let options = BundleMinVersionOptions {
+            runtime_profile: Some(PackageRuntimeProfile::RustOnly),
+            ..BundleMinVersionOptions::default()
+        };
+        let error = verify_bundle_min_version(&path, &options)
+            .expect_err("rust-only bundle should reject helper exe .NET markers");
+
+        assert_eq!(
+            error,
+            BundleMinVersionError::PackageManifest {
+                package: "Easydict-x64.appx".to_string(),
+                error: ValidationError::ForbiddenPayload {
+                    path: "easydict_long_doc.exe".to_string(),
+                    reason: RUST_ONLY_FORBIDDEN_HELPER_CONTENT_REASON,
                 },
             }
         );
@@ -3776,6 +4025,16 @@ mod tests {
         for asset in REQUIRED_MSIX_ASSETS {
             write_test_file(root, asset, b"asset");
         }
+    }
+
+    #[cfg(windows)]
+    fn create_directory_symlink(target: &Path, link: &Path) -> io::Result<()> {
+        std::os::windows::fs::symlink_dir(target, link)
+    }
+
+    #[cfg(not(windows))]
+    fn create_directory_symlink(target: &Path, link: &Path) -> io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
     }
 
     fn write_msix_without_manifest(path: &Path) {

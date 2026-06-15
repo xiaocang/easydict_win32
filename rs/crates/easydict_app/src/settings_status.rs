@@ -264,6 +264,22 @@ mod tests {
         ))
     }
 
+    fn test_cjk_font_path() -> PathBuf {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(r"..\..\..\lib\PdfPig\src\UglyToad.PdfPig.Tests\Fonts\TrueType\PMingLiU.ttf");
+        assert!(
+            path.is_file(),
+            "test CJK font fixture should exist at {}",
+            path.display()
+        );
+        path
+    }
+
+    fn install_test_cjk_font(path: &Path) {
+        fs::create_dir_all(path.parent().expect("font parent")).expect("create font parent");
+        fs::copy(test_cjk_font_path(), path).expect("install CJK font fixture");
+    }
+
     fn install_complete_file_set(dir: &Path, files: &[&str]) {
         fs::create_dir_all(dir).expect("create complete file set dir");
         for file in files {
@@ -506,11 +522,25 @@ mod tests {
         let dir = temp_status_dir("known-cjk-font");
         let fonts = font_download::font_cache_dir(&dir);
         fs::create_dir_all(&fonts).expect("create fonts dir");
-        fs::write(fonts.join("NotoSansSC-Regular.ttf"), b"x").expect("write known CJK font");
+        install_test_cjk_font(&fonts.join("NotoSansSC-Regular.ttf"));
 
         let status = status_for_directory_with_open_vino_support(&dir, true);
 
         assert_eq!(status.cjk_font, "Available");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reports_not_downloaded_when_managed_cjk_font_asset_is_invalid() {
+        let dir = temp_status_dir("invalid-cjk-font");
+        let fonts = font_download::font_cache_dir(&dir);
+        fs::create_dir_all(&fonts).expect("create fonts dir");
+        fs::write(fonts.join("NotoSansSC-Regular.ttf"), b"x").expect("write invalid CJK font");
+
+        let status = status_for_directory_with_open_vino_support(&dir, true);
+
+        assert_eq!(status.cjk_font, "Not downloaded");
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -1,6 +1,6 @@
 use std::fmt;
 use std::fs::{self, File};
-use std::io::{self, BufReader, Seek, Write};
+use std::io::{self, BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -138,6 +138,7 @@ pub enum ZipDirectoryError {
         destination: PathBuf,
     },
     InvalidEntryPath(PathBuf),
+    UnsupportedDirectoryEntry(PathBuf),
     Io {
         path: PathBuf,
         message: String,
@@ -253,6 +254,11 @@ impl fmt::Display for ZipDirectoryError {
                     path.display()
                 )
             }
+            Self::UnsupportedDirectoryEntry(path) => write!(
+                formatter,
+                "zip-directory does not support symlink or reparse-point entries: {}",
+                path.display()
+            ),
             Self::Io { path, message } => write!(formatter, "{}: {message}", path.display()),
             Self::Zip(message) => write!(formatter, "{message}"),
         }
@@ -874,6 +880,13 @@ pub fn validate_rs_portable_payload(
         ));
     }
 
+    let dotnet_marker_entries = rust_portable_allowlisted_executable_dotnet_marker_entries(path)?;
+    if !dotnet_marker_entries.is_empty() {
+        return Err(ValidateRustPortableError::ForbiddenEntries(
+            dotnet_marker_entries,
+        ));
+    }
+
     Ok(ValidateRustPortableOutcome {
         checked_entries: entries.len(),
     })
@@ -1129,6 +1142,21 @@ const RUST_PORTABLE_REQUIRED_ENTRIES: &[&str] = &[
     "easydict_cli.exe",
     "easydict_long_doc.exe",
     "README-portable.txt",
+];
+
+const RUST_PORTABLE_DOTNET_CONTENT_MARKERS: &[&[u8]] = &[
+    b"hostfxr.dll",
+    b"hostpolicy.dll",
+    b"coreclr.dll",
+    b"clrjit.dll",
+    b"singlefilehost.exe",
+    b"System.Private.CoreLib",
+    b"Microsoft.NETCore.App",
+    b".runtimeconfig.json",
+    b".deps.json",
+    b"This application requires .NET",
+    b"Easydict.CompatHost",
+    b"Easydict.Workers.",
 ];
 
 pub const BROWSER_EXTENSION_COMMON_FILES: &[&str] = &[
@@ -1454,6 +1482,7 @@ fn run_rustup_target_add_if_available(cargo_target: &str) -> Result<(), BuildRus
         .arg("target")
         .arg("add")
         .arg(cargo_target)
+        .envs(rust_portable_cargo_environment())
         .status()
     {
         Ok(status) if status.success() => Ok(()),
@@ -1489,11 +1518,18 @@ fn zip_directory_entries<W: Write + Seek>(
 
     for entry in entries {
         let path = entry.path();
-        let metadata = fs::metadata(&path).map_err(|error| ZipDirectoryError::Io {
+        let file_type = entry.file_type().map_err(|error| ZipDirectoryError::Io {
             path: path.clone(),
             message: error.to_string(),
         })?;
-        if metadata.is_dir() {
+        if zip_directory_entry_is_unsupported_by_flags(
+            file_type.is_symlink(),
+            zip_directory_entry_is_reparse_point(&path)?,
+        ) {
+            return Err(ZipDirectoryError::UnsupportedDirectoryEntry(path));
+        }
+
+        if file_type.is_dir() {
             let entry_name = entry_name(root, &path)?;
             if fs::read_dir(&path)
                 .map_err(|error| ZipDirectoryError::Io {
@@ -1509,7 +1545,7 @@ fn zip_directory_entries<W: Write + Seek>(
                 outcome.directory_count += 1;
             }
             zip_directory_entries(root, &path, excludes, writer, outcome)?;
-        } else if metadata.is_file() {
+        } else if file_type.is_file() {
             if should_skip(&path, excludes) {
                 outcome.skipped_count += 1;
                 continue;
@@ -1531,6 +1567,30 @@ fn zip_directory_entries<W: Write + Seek>(
     }
 
     Ok(())
+}
+
+fn zip_directory_entry_is_unsupported_by_flags(is_symlink: bool, is_reparse_point: bool) -> bool {
+    directory_entry_is_unsupported_by_flags(is_symlink, is_reparse_point)
+}
+
+fn zip_directory_entry_is_reparse_point(path: &Path) -> Result<bool, ZipDirectoryError> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        let metadata = fs::symlink_metadata(path).map_err(|error| ZipDirectoryError::Io {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        })?;
+        Ok(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(false)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1720,6 +1780,10 @@ fn rust_portable_directory_entry_is_unsupported_by_flags(
     is_symlink: bool,
     is_reparse_point: bool,
 ) -> bool {
+    directory_entry_is_unsupported_by_flags(is_symlink, is_reparse_point)
+}
+
+fn directory_entry_is_unsupported_by_flags(is_symlink: bool, is_reparse_point: bool) -> bool {
     is_symlink || is_reparse_point
 }
 
@@ -1779,6 +1843,88 @@ fn rust_portable_zip_entries(
 
     entries.sort();
     Ok(entries)
+}
+
+fn rust_portable_allowlisted_executable_dotnet_marker_entries(
+    package_path: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    if package_path.is_dir() {
+        rust_portable_directory_dotnet_marker_entries(package_path)
+    } else {
+        rust_portable_zip_dotnet_marker_entries(package_path)
+    }
+}
+
+fn rust_portable_directory_dotnet_marker_entries(
+    package_dir: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    let mut entries = Vec::new();
+    for entry_name in rust_portable_allowlisted_executable_entries() {
+        let path = rust_portable_entry_path(package_dir, entry_name);
+        let bytes = fs::read(&path).map_err(|error| ValidateRustPortableError::Io {
+            path,
+            message: error.to_string(),
+        })?;
+        if rust_portable_bytes_contain_dotnet_marker(&bytes) {
+            entries.push((*entry_name).to_string());
+        }
+    }
+    Ok(entries)
+}
+
+fn rust_portable_zip_dotnet_marker_entries(
+    archive_path: &Path,
+) -> Result<Vec<String>, ValidateRustPortableError> {
+    let file = File::open(archive_path).map_err(|error| ValidateRustPortableError::Io {
+        path: archive_path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+    let mut entries = Vec::new();
+
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+        let original_name = entry.name().to_string();
+        let Some(enclosed_name) = entry.enclosed_name() else {
+            return Err(ValidateRustPortableError::InvalidArchiveEntry(
+                original_name,
+            ));
+        };
+        let name = rust_portable_path_entry_name(&enclosed_name)
+            .ok_or_else(|| ValidateRustPortableError::InvalidArchiveEntry(original_name.clone()))?;
+        if !rust_portable_entry_is_allowlisted_executable(&name) {
+            continue;
+        }
+
+        let mut bytes = Vec::new();
+        entry
+            .read_to_end(&mut bytes)
+            .map_err(|error| ValidateRustPortableError::Zip(error.to_string()))?;
+        if rust_portable_bytes_contain_dotnet_marker(&bytes) {
+            entries.push(name);
+        }
+    }
+
+    entries.sort();
+    Ok(entries)
+}
+
+fn rust_portable_allowlisted_executable_entries() -> impl Iterator<Item = &'static &'static str> {
+    RUST_PORTABLE_REQUIRED_ENTRIES
+        .iter()
+        .filter(|entry_name| rust_portable_entry_is_allowlisted_executable(entry_name))
+}
+
+fn rust_portable_entry_path(root: &Path, entry_name: &str) -> PathBuf {
+    entry_name
+        .split('/')
+        .fold(root.to_path_buf(), |mut path, part| {
+            path.push(part);
+            path
+        })
 }
 
 fn rust_portable_entry_name(root: &Path, path: &Path) -> Result<String, ValidateRustPortableError> {
@@ -1868,6 +2014,31 @@ fn rust_portable_entry_is_forbidden(entry_name: &str) -> bool {
 
 fn rust_portable_entry_is_allowed(entry_name: &str) -> bool {
     RUST_PORTABLE_REQUIRED_ENTRIES.contains(&entry_name)
+}
+
+fn rust_portable_entry_is_allowlisted_executable(entry_name: &str) -> bool {
+    entry_name == "Easydict.Rust.exe" || RUST_HELPER_EXECUTABLES.contains(&entry_name)
+}
+
+fn rust_portable_bytes_contain_dotnet_marker(bytes: &[u8]) -> bool {
+    RUST_PORTABLE_DOTNET_CONTENT_MARKERS
+        .iter()
+        .any(|marker| rust_portable_bytes_contain_ascii_case_insensitive(bytes, marker))
+}
+
+fn rust_portable_bytes_contain_ascii_case_insensitive(bytes: &[u8], marker: &[u8]) -> bool {
+    !marker.is_empty()
+        && bytes
+            .windows(marker.len())
+            .any(|window| rust_portable_ascii_bytes_eq_ignore_case(window, marker))
+}
+
+fn rust_portable_ascii_bytes_eq_ignore_case(left: &[u8], right: &[u8]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| left.to_ascii_lowercase() == right.to_ascii_lowercase())
 }
 
 fn rust_portable_entry_contains_dotnet_runtime_layout(components: &[&str]) -> bool {
@@ -2129,6 +2300,50 @@ mod tests {
     }
 
     #[test]
+    fn zip_directory_entry_policy_rejects_links_and_reparse_points() {
+        assert!(!zip_directory_entry_is_unsupported_by_flags(false, false));
+        assert!(zip_directory_entry_is_unsupported_by_flags(true, false));
+        assert!(zip_directory_entry_is_unsupported_by_flags(false, true));
+        assert!(zip_directory_entry_is_unsupported_by_flags(true, true));
+    }
+
+    #[test]
+    fn zip_directory_rejects_linked_runtime_roots() {
+        let source = tempfile_dir("zip-linked-runtime-source");
+        let target = tempfile_dir("zip-linked-runtime-target");
+        write_file(&source, "app.exe", b"rust helper");
+        write_file(&target, "host/fxr/8.0.11/hostfxr.dll", b"stale hostfxr");
+        let linked_runtime_root = source.join("dotnet");
+        if let Err(error) = create_directory_symlink(&target, &linked_runtime_root) {
+            eprintln!(
+                "skipping linked runtime root integration path; symlink creation failed: {error}"
+            );
+            let _ = fs::remove_dir_all(source);
+            let _ = fs::remove_dir_all(target);
+            return;
+        }
+        let zip_path = source.with_extension("zip");
+
+        let error = zip_directory(&ZipDirectoryOptions {
+            source_dir: source.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .unwrap_err();
+
+        let ZipDirectoryError::UnsupportedDirectoryEntry(path) = error else {
+            panic!("expected unsupported directory entry error");
+        };
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("dotnet")
+        );
+        let _ = fs::remove_file(zip_path);
+        let _ = fs::remove_dir_all(source);
+        let _ = fs::remove_dir_all(target);
+    }
+
+    #[test]
     fn validate_rs_portable_accepts_rust_only_directory_payload() {
         let package = tempfile_dir("rs-portable-ok");
         write_rust_portable_allowed_payload(&package);
@@ -2201,6 +2416,81 @@ mod tests {
         };
         assert_eq!(entries, vec!["BrowserHostRegistrar.exe", "SomePayload.dll"]);
         let _ = fs::remove_dir_all(package);
+    }
+
+    #[test]
+    fn validate_rs_portable_rejects_allowlisted_exe_that_contains_dotnet_host_markers() {
+        let package = tempfile_dir("rs-portable-allowlisted-exe-dotnet-marker");
+        write_rust_portable_allowed_payload(&package);
+        let marker_payload = b"native launcher bytes\n\
+hostfxr.dll\n\
+HostPolicy.DLL\n\
+CoreCLR.DLL\n\
+clrjit.dll\n\
+singlefilehost.exe\n\
+System.Private.CoreLib\n\
+Microsoft.NETCore.App\n\
+.runtimeconfig.json\n\
+.deps.json\n\
+This application requires .NET\n\
+Easydict.CompatHost\n\
+Easydict.Workers.LocalAi\n";
+        for entry in [
+            "Easydict.Rust.exe",
+            "easydict-native-bridge.exe",
+            "easydict_browser_registrar.exe",
+            "easydict_cli.exe",
+            "easydict_long_doc.exe",
+        ] {
+            write_file(&package, entry, marker_payload);
+        }
+
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: package.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden entries");
+        };
+        assert_eq!(
+            entries,
+            vec![
+                "Easydict.Rust.exe",
+                "easydict-native-bridge.exe",
+                "easydict_browser_registrar.exe",
+                "easydict_cli.exe",
+                "easydict_long_doc.exe",
+            ]
+        );
+
+        let zip_path = package.with_extension("zip");
+        zip_directory(&ZipDirectoryOptions {
+            source_dir: package.clone(),
+            destination_zip: zip_path.clone(),
+            exclude_extensions: Vec::new(),
+        })
+        .expect("create test zip");
+        let error = validate_rs_portable_payload(&ValidateRustPortableOptions {
+            package_path: zip_path.clone(),
+        })
+        .unwrap_err();
+
+        let ValidateRustPortableError::ForbiddenEntries(entries) = error else {
+            panic!("expected forbidden ZIP entries");
+        };
+        assert_eq!(
+            entries,
+            vec![
+                "Easydict.Rust.exe",
+                "easydict-native-bridge.exe",
+                "easydict_browser_registrar.exe",
+                "easydict_cli.exe",
+                "easydict_long_doc.exe",
+            ]
+        );
+        let _ = fs::remove_dir_all(package);
+        let _ = fs::remove_file(zip_path);
     }
 
     #[test]
@@ -2954,6 +3244,16 @@ mod tests {
             fs::create_dir_all(parent).expect("create parent");
         }
         fs::write(path, bytes).expect("write file");
+    }
+
+    #[cfg(windows)]
+    fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::windows::fs::symlink_dir(target, link)
+    }
+
+    #[cfg(not(windows))]
+    fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
     }
 
     fn write_rust_portable_allowed_payload(root: &Path) {

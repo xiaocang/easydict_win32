@@ -225,6 +225,59 @@ fn settings_storage_loads_migrated_legacy_json_and_decrypts_old_credentials() {
         .any(|warning| warning.contains("DeepLApiKey needs credential normalization")));
 }
 
+#[test]
+fn settings_storage_normalizes_local_ai_provider_aliases() {
+    for (stored, expected) in [
+        ("windows-ai", "WindowsAI"),
+        ("phi_silica", "WindowsAI"),
+        ("foundry-local", "FoundryLocal"),
+        ("local-ai", "FoundryLocal"),
+        ("open_vino", "OpenVINO"),
+        ("unknown-legacy-worker", "Auto"),
+    ] {
+        let result = load_settings_json_with_machine_id(
+            &format!(r#"{{ "LocalAIProvider": "{stored}" }}"#),
+            "stable-machine-id",
+        )
+        .expect("settings load");
+        assert_eq!(
+            result.settings.local_ai_provider, expected,
+            "stored LocalAIProvider alias {stored:?} should normalize"
+        );
+    }
+
+    let mut settings = SettingsState::default();
+    settings.local_ai_provider = "open_vino".to_string();
+    let json = save_settings_json(&settings).expect("settings save");
+    let root: Value = serde_json::from_str(&json).expect("saved settings json");
+    assert_eq!(root["LocalAIProvider"], "OpenVINO");
+}
+
+#[test]
+fn settings_storage_load_file_persists_local_ai_provider_alias_cleanup() {
+    let temp = TempDir::new("settings-storage-local-ai-provider-cleanup");
+    let path = temp.path().join("settings.json");
+    fs::write(
+        &path,
+        r#"{
+  "LocalAIProvider": "foundry-local",
+  "FoundryLocalEndpoint": "http://127.0.0.1:5273/v1"
+}"#,
+    )
+    .unwrap();
+
+    let loaded = load_settings_file(&path).expect("settings load").settings;
+    assert_eq!(loaded.local_ai_provider, "FoundryLocal");
+
+    let persisted = fs::read_to_string(&path).unwrap();
+    let root: Value = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(root["LocalAIProvider"], "FoundryLocal");
+    assert!(
+        !persisted.contains("foundry-local"),
+        "settings file should not keep stale LocalAIProvider alias after load"
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn settings_storage_load_file_normalizes_pending_sensitive_values_without_rewriting_stable_dpapi() {

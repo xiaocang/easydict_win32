@@ -3,6 +3,7 @@ use crate::credential_protection::{
     unprotect_or_return_plaintext_with_machine_id,
 };
 use crate::mdx_native::discover_mdd_file_paths;
+use crate::protocol::normalize_local_ai_provider_mode;
 use crate::settings_migration::{
     migrate_settings_json, resolve_source_path, SettingsMigrationError,
 };
@@ -97,8 +98,9 @@ pub fn load_settings_file(
         .cloned()
         .unwrap_or_default();
     let sensitive_changed = normalize_sensitive_settings(&mut root, &machine_id)?;
+    let local_ai_provider_changed = normalize_local_ai_provider_storage(&mut root);
 
-    let normalized_json = if changed || sensitive_changed {
+    let normalized_json = if changed || sensitive_changed || local_ai_provider_changed {
         let normalized_json = serde_json::to_string_pretty(&Value::Object(root))?;
         fs::write(path, &normalized_json)?;
         normalized_json
@@ -134,6 +136,19 @@ fn normalize_sensitive_settings(
     Ok(changed)
 }
 
+fn normalize_local_ai_provider_storage(root: &mut Map<String, Value>) -> bool {
+    let Some(stored) = string_value(root, "LocalAIProvider") else {
+        return false;
+    };
+    let normalized = normalize_local_ai_provider_mode(Some(&stored)).to_string();
+    if normalized == stored {
+        return false;
+    }
+
+    root.insert("LocalAIProvider".to_string(), Value::String(normalized));
+    true
+}
+
 pub fn save_settings_file(
     path: impl AsRef<Path>,
     settings: &SettingsState,
@@ -160,7 +175,8 @@ pub fn load_settings_json_with_machine_id(
 ) -> Result<SettingsLoadResult, SettingsStorageError> {
     let (json, _) = migrate_settings_json(json)?;
     let root = serde_json::from_str::<Value>(&json)?;
-    let root = root.as_object().cloned().unwrap_or_default();
+    let mut root = root.as_object().cloned().unwrap_or_default();
+    normalize_local_ai_provider_storage(&mut root);
     let mut settings = SettingsState::default();
     let mut warnings = Vec::new();
 
@@ -539,7 +555,11 @@ fn write_scalar_settings(root: &mut Map<String, Value>, settings: &SettingsState
     insert_string(root, "DeviceToken", &settings.device_token);
     insert_string(root, "OllamaEndpoint", &settings.ollama_endpoint);
     insert_string(root, "OllamaModel", &settings.ollama_model);
-    insert_string(root, "LocalAIProvider", &settings.local_ai_provider);
+    insert_string(
+        root,
+        "LocalAIProvider",
+        normalize_local_ai_provider_mode(Some(&settings.local_ai_provider)),
+    );
     insert_string(
         root,
         "FoundryLocalEndpoint",

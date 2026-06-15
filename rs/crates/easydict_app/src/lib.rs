@@ -196,9 +196,10 @@ pub use local_dictionary_index::{
 #[cfg(feature = "retained-dotnet-workers")]
 pub use long_document::run_long_document_request_with_packaged_app_dir_and_worker_policy;
 pub use long_document::{
-    apply_long_document_outcome, apply_long_document_start_error, begin_long_document_translate,
-    build_long_document_request, long_document_request_can_route_natively,
-    long_document_service_kind_is_supported, long_document_supported_service_descriptors,
+    apply_long_document_outcome, apply_long_document_start_error, begin_long_document_retry_failed,
+    begin_long_document_translate, build_long_document_request,
+    long_document_request_can_route_natively, long_document_service_kind_is_supported,
+    long_document_supported_service_descriptors,
     retry_failed_native_text_long_document_from_result_json,
     retry_failed_native_text_long_document_from_result_json_with_translator,
     run_long_document_request, run_long_document_request_with_app_dir,
@@ -789,12 +790,27 @@ impl Application for EasydictApp {
             );
         }
 
-        if matches!(message, Message::Translate | Message::RetryLongDocument)
+        if message == Message::Translate
             && self.state.mode == AppMode::LongDocument
             && !self.state.settings_open
         {
             return match long_document::begin_long_document_translate(&mut self.state) {
                 Ok(request) => long_document_task(request),
+                Err(error) => {
+                    long_document::apply_long_document_start_error(&mut self.state, error);
+                    Task::none()
+                }
+            };
+        }
+
+        if message == Message::RetryLongDocument
+            && self.state.mode == AppMode::LongDocument
+            && !self.state.settings_open
+        {
+            return match long_document::begin_long_document_retry_failed(&mut self.state) {
+                Ok((request, result_json_path)) => {
+                    long_document_retry_failed_task(request, result_json_path)
+                }
                 Err(error) => {
                     long_document::apply_long_document_start_error(&mut self.state, error);
                     Task::none()
@@ -1799,6 +1815,21 @@ fn quick_translate_backend_service_task(
 fn long_document_task(request: long_document::LongDocumentServiceRequest) -> Task<Message> {
     Task::perform(
         async move { long_document::run_long_document_request_with_current_app_dir(request) },
+        Message::LongDocumentFinished,
+    )
+}
+
+fn long_document_retry_failed_task(
+    request: long_document::LongDocumentServiceRequest,
+    result_json_path: String,
+) -> Task<Message> {
+    Task::perform(
+        async move {
+            long_document::retry_failed_native_text_long_document_from_result_json(
+                request,
+                result_json_path,
+            )
+        },
         Message::LongDocumentFinished,
     )
 }

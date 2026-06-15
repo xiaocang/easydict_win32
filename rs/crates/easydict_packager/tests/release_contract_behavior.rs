@@ -120,10 +120,10 @@ fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid
 
     let publish_rs_portable_header =
         text_between(publish_rs_portable_job, "    name:", "    steps:");
-    assert_not_contains(
+    assert_contains(
         publish_rs_portable_header,
-        "\n    if:",
-        "publish-rs-portable should be scheduled on the default/tag path",
+        "if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'rs-portable' }}",
+        "publish-rs-portable should be positively gated to the default/tag rs-portable flavor",
     );
     assert_contains(
         publish_rs_portable_job,
@@ -171,6 +171,89 @@ fn release_workflow_default_tag_path_runs_only_rs_portable_jobs_and_gates_hybrid
             );
         }
     }
+
+    let publish_rs_portable_gate_line = publish_rs_portable_header
+        .lines()
+        .find(|line| line.trim_start().starts_with("if:"))
+        .unwrap_or_else(|| {
+            panic!("publish-rs-portable should define a job-level release_flavor gate")
+        });
+    assert_contains(
+        publish_rs_portable_gate_line,
+        "(github.event.inputs.release_flavor || 'rs-portable') == 'rs-portable'",
+        "publish-rs-portable should be positively gated to release_flavor == 'rs-portable'",
+    );
+    for forbidden_condition in [
+        "!= 'hybrid'",
+        "!= \"hybrid\"",
+        "!= 'dotnet'",
+        "!= \"dotnet\"",
+        "!= 'dotnet-hybrid'",
+        "!= \"dotnet-hybrid\"",
+    ] {
+        assert_not_contains(
+            publish_rs_portable_gate_line,
+            forbidden_condition,
+            "publish-rs-portable should not use a negative hybrid/dotnet gate",
+        );
+    }
+}
+
+#[test]
+fn release_workflow_hybrid_flavor_does_not_build_or_upload_rs_portable_assets() {
+    let root = repo_root();
+    let workflow = read_text(&root.join(".github/workflows/release-publish.yml"));
+    let publish_rs_portable_job =
+        text_between(&workflow, "  publish-rs-portable:", "  create-bundle:");
+    let create_bundle_job = text_between(
+        &workflow,
+        "  create-bundle:",
+        "  create-rs-portable-release:",
+    );
+    let create_rs_portable_release_job = text_between(
+        &workflow,
+        "  create-rs-portable-release:",
+        "  publish-winget:",
+    );
+
+    assert_contains(
+        publish_rs_portable_job,
+        "if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'rs-portable' }}",
+        "rs portable packaging should only run for the rs-portable artifact set",
+    );
+    assert_contains(
+        create_bundle_job,
+        "if: ${{ (github.event.inputs.release_flavor || 'rs-portable') == 'hybrid' }}",
+        "hybrid bundle publishing should only run for the hybrid artifact set",
+    );
+    assert_contains(
+        create_bundle_job,
+        "needs: [prepare, publish-msix]",
+        "hybrid bundle publishing should not wait on rs portable packaging",
+    );
+    assert_not_contains(
+        create_bundle_job,
+        "publish-rs-portable",
+        "hybrid bundle publishing should not depend on the rs portable job",
+    );
+    for forbidden_marker in [
+        "pattern: easydict-rs-portable-*",
+        "path: rs-portable",
+        "rs-portable/*.zip",
+    ] {
+        assert_not_contains(
+            create_bundle_job,
+            forbidden_marker,
+            &format!(
+                "hybrid bundle publishing should not download or upload rs portable marker {forbidden_marker}"
+            ),
+        );
+    }
+    assert_contains(
+        create_rs_portable_release_job,
+        "needs: [prepare, publish-rs-portable]",
+        "the rs portable release upload job should keep owning rs portable assets",
+    );
 }
 
 #[test]
@@ -476,6 +559,80 @@ fn build_rust_helpers_child_cargo_is_forced_to_rust_only_runtime_profile() {
             "{exe_name} should be copied from fake cargo output"
         );
     }
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[test]
+fn rustup_target_add_is_forced_to_rust_only_runtime_profile() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
+        "EASYDICT_FAKE_CARGO_RECORD",
+        "EASYDICT_FAKE_RUSTUP_RECORD",
+    ]);
+    let test_root = tempfile_dir("packager-rustup-env");
+    let fake_bin = test_root.join("bin");
+    let workspace = test_root.join("workspace");
+    let output_dir = test_root.join("out");
+    fs::create_dir_all(&workspace).expect("create fake workspace");
+    fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
+    write_fake_windows_ai_manifest_for_workspace(&workspace);
+    fs::create_dir_all(&output_dir).expect("create output dir");
+    write_fake_tooling_scripts(&fake_bin);
+    let cargo_record_path = test_root.join("cargo-env.txt");
+    let rustup_record_path = test_root.join("rustup-env.txt");
+
+    let path_with_fake_tools = prepend_path(&fake_bin, environment.original_path());
+    std::env::set_var("PATH", path_with_fake_tools);
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "0");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+    std::env::set_var("EASYDICT_FAKE_RUSTUP_RECORD", &rustup_record_path);
+
+    build_rust_helpers(&BuildRustHelpersOptions {
+        rust_workspace: workspace,
+        platform: "x64".to_string(),
+        configuration: "Release".to_string(),
+        output_dir,
+    })
+    .expect("build helpers should run fake rustup and cargo");
+
+    let record = read_text(&rustup_record_path);
+    assert_contains(
+        &record,
+        "TOOL=rustup",
+        "fake rustup should record the target-add invocation",
+    );
+    assert_contains(
+        &record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "rustup target add should override inherited Easydict runtime profile",
+    );
+    assert_contains(
+        &record,
+        "RUNTIME_PROFILE=rust-only",
+        "rustup target add should override inherited generic runtime profile",
+    );
+    assert_contains(
+        &record,
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=1",
+        "rustup target add should share the strict rs portable child-tool environment",
+    );
+    assert_contains(
+        &record,
+        "ARGS=target add x86_64-pc-windows-msvc",
+        "rustup should still receive the expected target-add command line",
+    );
+    assert_not_contains(
+        &record,
+        "hybrid",
+        "rustup target add must not inherit hybrid runtime-profile values",
+    );
 
     let _ = fs::remove_dir_all(test_root);
 }
@@ -797,6 +954,105 @@ fn pack_rs_portable_zip_extracts_to_cli_smoke_without_dotnet_or_powershell() {
         &cli_record,
         "RUNTIME_PROFILE=rust-only",
         "extracted packaged CLI smoke should run under the generic rust-only profile",
+    );
+
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn pack_rs_portable_zip_extracts_to_gui_entrypoint_smoke_without_dotnet_or_powershell() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+        "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS",
+        "EASYDICT_FAKE_CARGO_RECORD",
+        "EASYDICT_PACKAGED_GUI_RECORD",
+        "EASYDICT_RELEASE_FORBIDDEN_TOOL_RECORD",
+    ]);
+    let test_root = tempfile_dir("packager-pack-rs-portable-gui-smoke");
+    let fake_bin = test_root.join("bin");
+    let workspace = test_root.join("workspace");
+    let output_root = test_root.join("out");
+    let extract_dir = test_root.join("extract");
+    fs::create_dir_all(&workspace).expect("create fake workspace");
+    fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
+    write_fake_windows_ai_manifest_for_workspace(&workspace);
+    fs::create_dir_all(&output_root).expect("create output root");
+    fs::create_dir_all(&extract_dir).expect("create extract root");
+    write_fake_tooling_scripts(&fake_bin);
+    write_fake_release_forbidden_tool_exes(&fake_bin);
+    let cargo_record_path = test_root.join("cargo-env.txt");
+    let gui_record_path = test_root.join("packaged-gui.txt");
+    let forbidden_tool_record = test_root.join("forbidden-tools.txt");
+
+    std::env::set_var("PATH", prepend_path(&fake_bin, environment.original_path()));
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS", "0");
+    std::env::set_var("EASYDICT_FAKE_CARGO_RECORD", &cargo_record_path);
+
+    let outcome = pack_rs_portable(&PackRustPortableOptions {
+        rust_workspace: workspace.clone(),
+        platform: "x64".to_string(),
+        configuration: "Release".to_string(),
+        output_root: output_root.clone(),
+        package_version: Some("v0.0.0-gui-smoke".to_string()),
+        create_zip: true,
+    })
+    .expect("pack-rs-portable should create a validated ZIP with executable Rust entrypoint");
+
+    let zip_path = outcome.zip_path.as_ref().expect("created ZIP path");
+    extract_zip(zip_path, &extract_dir);
+    let packaged_gui = extract_dir.join("Easydict.Rust.exe");
+    assert!(
+        packaged_gui.is_file(),
+        "extracted rs portable ZIP should contain Easydict.Rust.exe"
+    );
+    assert!(
+        !extract_dir.join("Easydict.WinUI.exe").exists(),
+        "first rs portable ZIP should not contain the legacy WinUI entrypoint"
+    );
+
+    let output = std::process::Command::new(&packaged_gui)
+        .env("PATH", prepend_path(&fake_bin, environment.original_path()))
+        .env("EASYDICT_RUNTIME_PROFILE", "rust-only")
+        .env("RUNTIME_PROFILE", "rust-only")
+        .env("EASYDICT_PACKAGED_GUI_RECORD", &gui_record_path)
+        .env(
+            "EASYDICT_RELEASE_FORBIDDEN_TOOL_RECORD",
+            &forbidden_tool_record,
+        )
+        .output()
+        .expect("run extracted packaged Easydict.Rust.exe");
+
+    assert!(
+        output.status.success(),
+        "extracted packaged GUI entrypoint smoke should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !forbidden_tool_record.exists(),
+        "extracted packaged GUI entrypoint smoke must not invoke dotnet.exe, powershell.exe, or pwsh.exe"
+    );
+    let gui_record = read_text(&gui_record_path);
+    assert_contains(
+        &gui_record,
+        "GUI=Easydict.Rust",
+        "extracted packaged GUI smoke should execute the public entrypoint from the ZIP",
+    );
+    assert_contains(
+        &gui_record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "extracted packaged GUI smoke should run under the first-release rust-only profile",
+    );
+    assert_contains(
+        &gui_record,
+        "RUNTIME_PROFILE=rust-only",
+        "extracted packaged GUI smoke should run under the generic rust-only profile",
     );
 
     let _ = fs::remove_dir_all(test_root);
@@ -1214,6 +1470,83 @@ fn translate_long_doc_script_invokes_rust_helper_with_retry_sidecar_arguments() 
         "translate-long-doc Rust helper path should force the generic runtime profile",
     );
 
+    let _ = fs::remove_dir_all(test_root);
+}
+
+#[cfg(windows)]
+#[test]
+fn translate_long_doc_script_retry_failed_only_requires_result_json_path() {
+    let _guard = ENVIRONMENT_LOCK.lock().expect("environment lock poisoned");
+    let _environment = EnvironmentSnapshot::capture([
+        "PATH",
+        "EASYDICT_LONG_DOC_HELPER_RECORD",
+        "EASYDICT_RUNTIME_PROFILE",
+        "RUNTIME_PROFILE",
+    ]);
+    let root = repo_root();
+    let test_root = tempfile_dir("translate-long-doc-retry-sidecar-only");
+    let helper_path = test_root.join("fake-easydict-long-doc.cmd");
+    let record_path = test_root.join("helper-args.txt");
+    let result_json_path = test_root.join("translated-result.json");
+
+    fs::create_dir_all(&test_root).expect("create test root");
+    write_fake_long_doc_helper(&helper_path);
+
+    std::env::set_var("EASYDICT_LONG_DOC_HELPER_RECORD", &record_path);
+    std::env::set_var("EASYDICT_RUNTIME_PROFILE", "hybrid");
+    std::env::set_var("RUNTIME_PROFILE", "hybrid");
+
+    let output = translate_long_doc_script_command(&root)
+        .arg("-ResultJsonPath")
+        .arg(&result_json_path)
+        .arg("-RetryFailed")
+        .arg("-RustHelperPath")
+        .arg(&helper_path)
+        .output()
+        .expect("run translate-long-doc shim");
+
+    assert!(
+        output.status.success(),
+        "retry-only translate-long-doc shim should invoke fake Rust helper successfully\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let record = read_text(&record_path);
+    assert_contains(
+        &record,
+        "--result-json",
+        "retry-only shim should pass the result sidecar path",
+    );
+    assert_contains(
+        &record,
+        &result_json_path.display().to_string(),
+        "retry-only shim should pass the selected result sidecar",
+    );
+    assert_contains(
+        &record,
+        "--retry-failed",
+        "retry-only shim should pass retry-failed to Rust",
+    );
+    assert_not_contains(
+        &record,
+        "--input",
+        "retry-only shim should not require or pass an input file",
+    );
+    assert_not_contains(
+        &record,
+        "--target-language",
+        "retry-only shim should not require or pass a target language",
+    );
+    assert_contains(
+        &record,
+        "EASYDICT_RUNTIME_PROFILE=rust-only",
+        "retry-only shim should force the Easydict runtime profile",
+    );
+    assert_contains(
+        &record,
+        "RUNTIME_PROFILE=rust-only",
+        "retry-only shim should force the generic runtime profile",
+    );
     let _ = fs::remove_dir_all(test_root);
 }
 
@@ -1828,7 +2161,13 @@ fn legacy_packaging_scripts_reject_non_hybrid_profiles_before_invoking_external_
         &record_path,
     );
 
-    for runtime_profile in [None, Some("rust-only")] {
+    for runtime_profile in [
+        None,
+        Some("rust-only"),
+        Some("dotnet"),
+        Some("dotnet-hybrid"),
+        Some("unexpected"),
+    ] {
         let mut publish = powershell_script_command(&root.join("dotnet/scripts/publish.ps1"));
         if let Some(profile) = runtime_profile {
             publish.args(["-RuntimeProfile", profile]);
@@ -2645,11 +2984,21 @@ fn assert_legacy_packaging_profile_rejected_before_tools(
         "RuntimeProfile",
         &format!("{script_name} should explain the rejected runtime profile"),
     );
-    if runtime_profile.is_some() {
-        assert!(
-            output_text.to_ascii_lowercase().contains("portable"),
-            "{script_name} should redirect rust-only callers to the rs portable path\n{output_text}",
-        );
+    if let Some(profile) = runtime_profile {
+        if legacy_runtime_profile_is_rust_only(profile) {
+            assert!(
+                output_text.to_ascii_lowercase().contains("portable"),
+                "{script_name} should redirect rust-only callers to the rs portable path\n{output_text}",
+            );
+        } else {
+            assert_contains(
+                &output_text,
+                "Hybrid",
+                &format!(
+                    "{script_name} should reject unknown legacy profiles as explicit Hybrid-only"
+                ),
+            );
+        }
     } else {
         assert_contains(
             &output_text,
@@ -2663,6 +3012,12 @@ fn assert_legacy_packaging_profile_rejected_before_tools(
         runtime_profile,
         read_text(record_path)
     );
+}
+
+#[cfg(windows)]
+fn legacy_runtime_profile_is_rust_only(profile: &str) -> bool {
+    let normalized = profile.trim().replace('_', "-").to_ascii_lowercase();
+    matches!(normalized.as_str(), "rust-only" | "rustonly")
 }
 
 #[cfg(windows)]
@@ -2888,6 +3243,22 @@ fn main() {
         .and_then(|path| path.file_stem().map(|name| name.to_string_lossy().to_string()))
         .unwrap_or_default();
     if exe_name.eq_ignore_ascii_case("rustup") {
+        if let Ok(record_path) = env::var("EASYDICT_FAKE_RUSTUP_RECORD") {
+            let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
+            use std::io::Write as _;
+            fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&record_path)
+                .and_then(|mut file| {
+                    writeln!(file, "TOOL=rustup")?;
+                    writeln!(file, "EASYDICT_RUNTIME_PROFILE={}", env::var("EASYDICT_RUNTIME_PROFILE").unwrap_or_default())?;
+                    writeln!(file, "RUNTIME_PROFILE={}", env::var("RUNTIME_PROFILE").unwrap_or_default())?;
+                    writeln!(file, "EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS={}", env::var("EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS").unwrap_or_default())?;
+                    writeln!(file, "ARGS={}", args)
+                })
+                .expect("append rustup record");
+        }
         return;
     }
     if matches!(
@@ -2922,6 +3293,24 @@ fn main() {
             })
             .expect("append packaged CLI record");
         println!("easydict_cli packaged smoke");
+        return;
+    }
+    if exe_name.eq_ignore_ascii_case("Easydict.Rust") {
+        let record_path = env::var("EASYDICT_PACKAGED_GUI_RECORD").expect("packaged GUI record path");
+        let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
+        use std::io::Write as _;
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&record_path)
+            .and_then(|mut file| {
+                writeln!(file, "GUI={}", exe_name)?;
+                writeln!(file, "ARGS={}", args)?;
+                writeln!(file, "EASYDICT_RUNTIME_PROFILE={}", env::var("EASYDICT_RUNTIME_PROFILE").unwrap_or_default())?;
+                writeln!(file, "RUNTIME_PROFILE={}", env::var("RUNTIME_PROFILE").unwrap_or_default())
+            })
+            .expect("append packaged GUI record");
+        println!("Easydict.Rust packaged smoke");
         return;
     }
 
@@ -2983,7 +3372,20 @@ fn write_fake_release_forbidden_tool_exes(fake_bin: &Path) {
 #[cfg(not(windows))]
 fn write_fake_tooling_scripts(fake_bin: &Path) {
     fs::create_dir_all(fake_bin).expect("create fake tool dir");
-    write_executable(fake_bin.join("rustup"), "#!/bin/sh\nexit 0\n");
+    write_executable(
+        fake_bin.join("rustup"),
+        "#!/bin/sh\n\
+if [ -n \"$EASYDICT_FAKE_RUSTUP_RECORD\" ]; then\n\
+{\n\
+printf 'TOOL=rustup\\n'\n\
+printf 'EASYDICT_RUNTIME_PROFILE=%s\\n' \"$EASYDICT_RUNTIME_PROFILE\"\n\
+printf 'RUNTIME_PROFILE=%s\\n' \"$RUNTIME_PROFILE\"\n\
+printf 'EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS=%s\\n' \"$EASYDICT_WINDOWS_AI_REQUIRE_WINRT_BINDINGS\"\n\
+printf 'ARGS=%s\\n' \"$*\"\n\
+} >> \"$EASYDICT_FAKE_RUSTUP_RECORD\"\n\
+fi\n\
+exit 0\n",
+    );
     write_executable(
         fake_bin.join("cargo"),
         "#!/bin/sh\n\

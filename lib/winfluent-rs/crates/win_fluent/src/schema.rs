@@ -101,6 +101,7 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 format!("{:?}", token.toggle_maximize_action.kind()),
             )
             .property("close", format!("{:?}", token.close_action.kind()))
+            .property("drag", format!("{:?}", token.drag_action.kind()))
             .children(token.commands.iter().map(schema_node)),
         ViewToken::Text(token) => {
             let mut node = SchemaNode::new("Text", token.id.clone())
@@ -160,6 +161,11 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::StatusBadge(token) => SchemaNode::new("StatusBadge", token.id.clone())
             .property("label", quoted(&token.label))
+            .property("severity", format!("{:?}", token.severity))
+            .property("icon", optional_icon(token.icon.as_ref())),
+        ViewToken::InfoBar(token) => SchemaNode::new("InfoBar", token.id.clone())
+            .property("title", quoted(&token.title))
+            .property("message", quoted(&token.message))
             .property("severity", format!("{:?}", token.severity))
             .property("icon", optional_icon(token.icon.as_ref())),
         ViewToken::ProgressRing(token) => SchemaNode::new("ProgressRing", token.id.clone())

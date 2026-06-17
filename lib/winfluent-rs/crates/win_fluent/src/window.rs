@@ -191,6 +191,9 @@ pub enum WindowCommand<Message> {
     CloseCurrent,
     MinimizeCurrent(bool),
     ToggleMaximizeCurrent,
+    /// Begin an OS-level move/drag of the current window (held while the left
+    /// mouse button is down). Used to make a custom title bar draggable.
+    DragCurrent,
     Minimize {
         id: WindowId,
         minimized: bool,

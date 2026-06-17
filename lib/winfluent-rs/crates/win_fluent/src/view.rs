@@ -135,6 +135,7 @@ pub enum ViewToken<Message> {
     Button(ButtonToken<Message>),
     FlyoutButton(FlyoutButtonToken<Message>),
     StatusBadge(StatusBadgeToken),
+    InfoBar(InfoBarToken),
     ProgressRing(ProgressRingToken),
     ProgressBar(ProgressBarToken),
     BusyOverlay(BusyOverlayToken<Message>),
@@ -373,6 +374,7 @@ pub struct TitleBarToken<Message> {
     pub minimize_action: Action<Message>,
     pub toggle_maximize_action: Action<Message>,
     pub close_action: Action<Message>,
+    pub drag_action: Action<Message>,
     pub a11y: A11yHint,
 }
 
@@ -483,6 +485,19 @@ pub struct FlyoutButtonToken<Message> {
 pub struct StatusBadgeToken {
     pub id: Option<String>,
     pub label: String,
+    pub severity: ValidationSeverity,
+    pub icon: Option<IconToken>,
+    pub a11y: A11yHint,
+}
+
+/// Fluent `InfoBar`-style status surface: a tinted box with a severity icon, a
+/// bold title, and a wrapping message. Mirrors the WinUI `InfoBar` control used
+/// for the local-AI provider panels (Phi Silica / Foundry Local / OpenVINO).
+#[derive(Clone, Debug)]
+pub struct InfoBarToken {
+    pub id: Option<String>,
+    pub title: String,
+    pub message: String,
     pub severity: ValidationSeverity,
     pub icon: Option<IconToken>,
     pub a11y: A11yHint,
@@ -1389,6 +1404,7 @@ pub fn title_bar<Message>(title: impl Into<String>) -> TitleBarBuilder<Message> 
         minimize_action: Action::None,
         toggle_maximize_action: Action::None,
         close_action: Action::None,
+        drag_action: Action::None,
         a11y: A11yHint::default(),
     }
 }
@@ -1400,6 +1416,21 @@ pub fn status_badge<Message>(
     StatusBadgeBuilder {
         id: None,
         label: label.into(),
+        severity,
+        icon: None,
+        a11y: A11yHint::default(),
+        _message: std::marker::PhantomData,
+    }
+}
+
+pub fn info_bar<Message>(
+    title: impl Into<String>,
+    severity: ValidationSeverity,
+) -> InfoBarBuilder<Message> {
+    InfoBarBuilder {
+        id: None,
+        title: title.into(),
+        message: String::new(),
         severity,
         icon: None,
         a11y: A11yHint::default(),
@@ -1609,10 +1640,12 @@ where
     LayoutBuilder::new(LayoutKind::Row, children.into_children())
 }
 
-/// A flow layout that wraps children into rows of at most `max_columns` items.
+/// A width-responsive flow layout (WinUI `ItemsWrapGrid`): children pack
+/// left-to-right and wrap to a new row when they run out of horizontal room or
+/// the row reaches the column cap, so the grid reflows as the window resizes.
 ///
-/// Use instead of hand-splitting children across fixed rows. Set the column cap
-/// with [`max_columns`](WrapBuilder::max_columns) (defaults to 1).
+/// Use instead of hand-splitting children across fixed rows. Set the per-row
+/// column cap with [`max_columns`](WrapBuilder::max_columns) (defaults to 1).
 pub fn wrap<Message, Children>(children: Children) -> WrapBuilder<Message>
 where
     Children: IntoChildren<Message>,
@@ -1856,6 +1889,7 @@ pub struct TitleBarBuilder<Message> {
     minimize_action: Action<Message>,
     toggle_maximize_action: Action<Message>,
     close_action: Action<Message>,
+    drag_action: Action<Message>,
     a11y: A11yHint,
 }
 
@@ -1900,6 +1934,13 @@ impl<Message> TitleBarBuilder<Message> {
         self
     }
 
+    /// Message emitted when the user presses the empty title-bar region,
+    /// used by the backend to begin an OS-level window move/drag.
+    pub fn on_drag(mut self, message: Message) -> Self {
+        self.drag_action = Action::Message(message);
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -1918,6 +1959,7 @@ impl<Message> IntoView<Message> for TitleBarBuilder<Message> {
             minimize_action: self.minimize_action,
             toggle_maximize_action: self.toggle_maximize_action,
             close_action: self.close_action,
+            drag_action: self.drag_action,
             a11y: self.a11y,
         }))
     }
@@ -2293,6 +2335,53 @@ impl<Message> IntoView<Message> for StatusBadgeBuilder<Message> {
         View::new(ViewToken::StatusBadge(StatusBadgeToken {
             id: self.id,
             label: self.label,
+            severity: self.severity,
+            icon: self.icon,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct InfoBarBuilder<Message> {
+    id: Option<String>,
+    title: String,
+    message: String,
+    severity: ValidationSeverity,
+    icon: Option<IconToken>,
+    a11y: A11yHint,
+    _message: std::marker::PhantomData<Message>,
+}
+
+impl<Message> InfoBarBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn message(mut self, message: impl Into<String>) -> Self {
+        self.message = message.into();
+        self
+    }
+
+    /// Override the default severity glyph (CheckMark / Warning / Error / Info).
+    pub fn icon(mut self, icon: IconToken) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for InfoBarBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::InfoBar(InfoBarToken {
+            id: self.id,
+            title: self.title,
+            message: self.message,
             severity: self.severity,
             icon: self.icon,
             a11y: self.a11y,
@@ -3578,7 +3667,9 @@ impl<Message> WrapBuilder<Message> {
         self
     }
 
-    /// Maximum number of items per row before wrapping (defaults to 1).
+    /// Maximum number of items per row. The grid still reflows to fewer columns
+    /// when the available width is too narrow (WinUI `ItemsWrapGrid`); this is
+    /// the upper bound per row. Defaults to 1.
     pub fn max_columns(mut self, value: u16) -> Self {
         self.max_columns = value.max(1);
         self

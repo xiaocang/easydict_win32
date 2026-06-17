@@ -697,6 +697,7 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Text(_)
         | ViewToken::Button(_)
         | ViewToken::StatusBadge(_)
+        | ViewToken::InfoBar(_)
         | ViewToken::TextEditor(_)
         | ViewToken::CheckBox(_)
         | ViewToken::ToggleSwitch(_)

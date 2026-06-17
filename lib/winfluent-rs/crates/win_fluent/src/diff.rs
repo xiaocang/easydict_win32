@@ -165,6 +165,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         | ViewToken::Button(_)
         | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
+        | ViewToken::InfoBar(_)
         | ViewToken::ProgressRing(_)
         | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
@@ -186,6 +187,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::Button(_) => "Button",
         ViewToken::FlyoutButton(_) => "FlyoutButton",
         ViewToken::StatusBadge(_) => "StatusBadge",
+        ViewToken::InfoBar(_) => "InfoBar",
         ViewToken::ProgressRing(_) => "ProgressRing",
         ViewToken::ProgressBar(_) => "ProgressBar",
         ViewToken::BusyOverlay(_) => "BusyOverlay",
@@ -227,6 +229,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::Button(token) => token.id.as_deref(),
         ViewToken::FlyoutButton(token) => token.id.as_deref(),
         ViewToken::StatusBadge(token) => token.id.as_deref(),
+        ViewToken::InfoBar(token) => token.id.as_deref(),
         ViewToken::ProgressRing(token) => token.id.as_deref(),
         ViewToken::ProgressBar(token) => token.id.as_deref(),
         ViewToken::BusyOverlay(token) => token.id.as_deref(),
@@ -261,7 +264,7 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
     match token {
         ViewToken::Page(token) => format!("{:?}|commands={}", token.title, token.commands.len()),
         ViewToken::TitleBar(token) => format!(
-            "{:?}|{:?}|{:?}|commands={}|caption={}|minimize={:?}|toggle_maximize={:?}|close={:?}",
+            "{:?}|{:?}|{:?}|commands={}|caption={}|minimize={:?}|toggle_maximize={:?}|close={:?}|drag={:?}",
             token.title,
             token.subtitle,
             token.icon.as_ref().map(|icon| icon.name),
@@ -269,7 +272,8 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.show_caption_controls,
             token.minimize_action.kind(),
             token.toggle_maximize_action.kind(),
-            token.close_action.kind()
+            token.close_action.kind(),
+            token.drag_action.kind()
         ),
         ViewToken::Text(token) => format!(
             "{:?}|{:?}|font_size={:?}|{:?}|{}|margin={:?}|align_x={:?}|align_y={:?}",
@@ -307,6 +311,13 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
         ViewToken::StatusBadge(token) => format!(
             "{:?}|{:?}|{:?}",
             token.label,
+            token.severity,
+            token.icon.as_ref().map(|icon| icon.name)
+        ),
+        ViewToken::InfoBar(token) => format!(
+            "{:?}|{:?}|{:?}|{:?}",
+            token.title,
+            token.message,
             token.severity,
             token.icon.as_ref().map(|icon| icon.name)
         ),

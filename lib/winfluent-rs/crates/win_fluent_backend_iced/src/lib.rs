@@ -17,8 +17,9 @@ use iced::advanced::{
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
     button as iced_button, checkbox as iced_checkbox, column as iced_column,
-    container as iced_container, image as iced_image, opaque as iced_opaque,
-    pick_list as iced_pick_list, progress_bar as iced_progress_bar, responsive as iced_responsive,
+    container as iced_container, image as iced_image, mouse_area as iced_mouse_area,
+    opaque as iced_opaque, pick_list as iced_pick_list, progress_bar as iced_progress_bar,
+    responsive as iced_responsive,
     row as iced_row, scrollable as iced_scrollable, slider as iced_slider, space as iced_space,
     stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
     text_input as iced_text_input, toggler as iced_toggler,
@@ -50,7 +51,8 @@ use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
     AdaptiveSwitchToken, Alignment, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind,
     CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem, Edges, ExpanderToken,
-    FlyoutButtonToken, LayoutDistribution, LayoutKind, LayoutToken, Length, OverlayToken,
+    FlyoutButtonToken, InfoBarToken, LayoutDistribution, LayoutKind, LayoutToken, Length,
+    OverlayToken,
     PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken,
     ProgressRingToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy,
     SettingsRowToken, SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey,
@@ -231,6 +233,11 @@ struct IcedSingleWindowRuntime<App: FluentApplication> {
     views: HashMap<WindowId, View<App::Message>>,
     text_editors: HashMap<WindowId, TextEditorCache>,
     desktop_integration: DesktopIntegrationPlan<App::Message>,
+    /// Native id of the window that most recently gained OS focus. Used to route
+    /// `*Current` window commands (close/minimize/drag) to the window the user is
+    /// actually interacting with, instead of defaulting to the boot window — which
+    /// otherwise made e.g. the mini/fixed close buttons act on the main window.
+    focused_native_window: Option<window::Id>,
 }
 
 impl<App> IcedSingleWindowRuntime<App>
@@ -276,6 +283,7 @@ where
             views: HashMap::new(),
             text_editors: HashMap::new(),
             desktop_integration,
+            focused_native_window: None,
         };
         let boot_window_id = runtime.boot_window_id.clone();
         runtime.sync_window_view(&boot_window_id, None);
@@ -353,13 +361,24 @@ where
                         logical_id.clone(),
                     )))
                     .unwrap_or_else(iced::Task::none);
+                // Give freshly opened activatable windows OS keyboard focus so
+                // their inputs are typeable immediately (mirrors the show path).
+                let focus_task = if runtime_window.options.no_activate {
+                    iced::Task::none()
+                } else {
+                    window::gain_focus(window_id)
+                };
                 iced::Task::batch([
                     apply_native_window_options_task(window_id, runtime_window.options, true),
                     state.delayed_focused_text_editor_task(),
+                    focus_task,
                     opened_task,
                 ])
             }
             IcedRuntimeMessage::WindowClosed(window_id) => {
+                if state.focused_native_window == Some(window_id) {
+                    state.focused_native_window = None;
+                }
                 let logical_id = state.logical_window_for_native(window_id);
                 if let Some(runtime_window) = state.native_windows.remove(&window_id) {
                     state.logical_windows.remove(&runtime_window.logical_id);
@@ -376,6 +395,9 @@ where
                     .unwrap_or_else(|| state.close_request_fallback_task(window_id, &logical_id))
             }
             IcedRuntimeMessage::WindowNativeEvent(window_id, event) => {
+                if matches!(event, window::Event::Focused) {
+                    state.focused_native_window = Some(window_id);
+                }
                 let logical_id = state.logical_window_for_native(window_id);
                 let event = match event {
                     window::Event::Focused => WindowEvent::Focused(logical_id),
@@ -577,6 +599,7 @@ where
             WindowCommand::ToggleMaximizeCurrent => {
                 self.with_current_window(window::toggle_maximize)
             }
+            WindowCommand::DragCurrent => self.with_current_window(window::drag),
             WindowCommand::Close(id) => self
                 .with_logical_window(&id, window::close)
                 .unwrap_or_else(iced::Task::none),
@@ -689,6 +712,16 @@ where
         &self,
         command: impl Fn(window::Id) -> iced::Task<IcedRuntimeMessage<App::Message>> + Send + 'static,
     ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        // Prefer the window the user is currently interacting with (the one that
+        // last gained OS focus) so close/minimize/drag buttons act on their own
+        // window rather than always falling through to the boot/main window.
+        if let Some(window_id) = self
+            .focused_native_window
+            .filter(|id| self.native_windows.contains_key(id))
+        {
+            return command(window_id);
+        }
+
         if let Some(window_id) = self.logical_windows.get(&self.boot_window_id).copied() {
             return command(window_id);
         }
@@ -798,6 +831,14 @@ where
                 window_id, window::Mode::Windowed
             )),
         }
+    }
+
+    // Bring activatable windows to the foreground and give them keyboard focus
+    // when shown. Without this, re-showing a hidden mini/fixed window leaves it
+    // unfocused, so its text editor never receives keystrokes. `no_activate`
+    // utility windows (e.g. the selection pop-button) must stay unfocused.
+    if !options.no_activate {
+        tasks.push(window::gain_focus::<IcedRuntimeMessage<Message>>(window_id));
     }
 
     iced::Task::batch(tasks)
@@ -1388,6 +1429,7 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         | ViewToken::Button(_)
         | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
+        | ViewToken::InfoBar(_)
         | ViewToken::ProgressRing(_)
         | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
@@ -1513,6 +1555,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         ViewToken::PointerRegion(token) => focused_text_editor_id(&token.content),
         ViewToken::Button(_)
         | ViewToken::StatusBadge(_)
+        | ViewToken::InfoBar(_)
         | ViewToken::ProgressRing(_)
         | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
@@ -1557,7 +1600,7 @@ where
         ViewToken::Button(token) => {
             let kind = token.kind;
             let state = token.state.clone();
-            let mut control = iced_button(button_content(
+            let mut content = button_content(
                 &token.label,
                 kind,
                 token.icon.as_ref(),
@@ -1565,8 +1608,20 @@ where
                 token.font_size,
                 visual,
                 state.selected,
-            ))
-            .style(move |_, status| {
+            );
+            // Buttons given an explicit fixed height (e.g. the 40px service
+            // action buttons) would otherwise top-align their icon+label. Fill
+            // the button interior and center so the content sits on the optical
+            // midline like a WinUI button. Width stays Shrink, so content-sized
+            // buttons keep hugging their label.
+            if matches!(token.height, Some(Length::Fixed(_))) {
+                content = iced_container(content)
+                    .height(IcedLength::Fill)
+                    .align_x(alignment::Horizontal::Center)
+                    .align_y(alignment::Vertical::Center)
+                    .into();
+            }
+            let mut control = iced_button(content).style(move |_, status| {
                 let status = button_status_with_state(&state, status);
                 button_style_with_state(visual, kind, state.focused, state.selected, status)
             });
@@ -1644,6 +1699,7 @@ where
         }
         ViewToken::FlyoutButton(token) => compile_flyout_button(token, visual),
         ViewToken::StatusBadge(token) => compile_status_badge(token, visual),
+        ViewToken::InfoBar(token) => compile_info_bar(token, visual),
         ViewToken::ProgressRing(token) => compile_progress_ring(token, visual),
         ViewToken::ProgressBar(token) => compile_progress_bar(token, visual),
         ViewToken::BusyOverlay(token) => compile_busy_overlay(token, provider, visual),
@@ -2540,6 +2596,22 @@ where
         .height(IcedLength::Fixed(visual.title_bar_height))
         .align_y(alignment::Vertical::Center);
 
+    // The title text plus the empty stretch beside it form the draggable
+    // region. Caption buttons and command controls stay outside so their
+    // clicks are not swallowed by the window-move gesture.
+    let drag_region = iced_row(vec![
+        left.into(),
+        iced_space().width(IcedLength::Fill).into(),
+    ])
+    .height(IcedLength::Fixed(visual.title_bar_height))
+    .width(IcedLength::Fill)
+    .align_y(alignment::Vertical::Center);
+
+    let drag_region: IcedElement<'a, Message> = match token.drag_action.press() {
+        Some(message) => iced_mouse_area(drag_region).on_press(message).into(),
+        None => drag_region.into(),
+    };
+
     let mut right_controls = iced_row(Vec::new())
         .align_y(alignment::Vertical::Center)
         .spacing(0);
@@ -2568,14 +2640,10 @@ where
             ));
     }
 
-    let row = iced_row(vec![
-        left.into(),
-        iced_space().width(IcedLength::Fill).into(),
-        right_controls.into(),
-    ])
-    .height(IcedLength::Fixed(visual.title_bar_height))
-    .width(IcedLength::Fill)
-    .align_y(alignment::Vertical::Center);
+    let row = iced_row(vec![drag_region, right_controls.into()])
+        .height(IcedLength::Fixed(visual.title_bar_height))
+        .width(IcedLength::Fill)
+        .align_y(alignment::Vertical::Center);
 
     iced_container(row)
         .height(IcedLength::Fixed(visual.title_bar_height))
@@ -2624,6 +2692,58 @@ where
     .padding([6, 12])
     .align_y(alignment::Vertical::Center)
     .style(move |_| status_badge_container_style(visual, severity))
+    .into()
+}
+
+fn compile_info_bar<'a, Message>(
+    token: &InfoBarToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let severity = token.severity;
+    let accent = info_bar_accent_color(visual, severity);
+
+    // Filled severity badge: a saturated circle with a white glyph (✓ / ! / i),
+    // matching the WinUI InfoBar icons. A caller-supplied icon overrides it.
+    let icon: IcedElement<'a, Message> = match &token.icon {
+        Some(custom) => icon_element(custom, 16.0, accent),
+        None => info_bar_badge(severity, accent, visual),
+    };
+
+    // Title (bold) over message (wrapping). Empty fields are skipped so a
+    // title-only or message-only bar still renders tightly.
+    let mut text_column: Vec<IcedElement<'a, Message>> = Vec::new();
+    if !token.title.is_empty() {
+        text_column.push(
+            iced_text(token.title.clone())
+                .font(text_font_for_value(TextStyle::BodyStrong, &token.title))
+                .size(text_size(TextStyle::BodyStrong, visual))
+                .color(visual.text_primary)
+                .into(),
+        );
+    }
+    if !token.message.is_empty() {
+        text_column.push(
+            iced_text(token.message.clone())
+                .font(text_font_for_value(TextStyle::Body, &token.message))
+                .size(text_size(TextStyle::Body, visual))
+                .color(visual.text_primary)
+                .into(),
+        );
+    }
+
+    let body = iced_column(text_column).spacing(2).width(IcedLength::Fill);
+
+    iced_container(
+        iced_row(vec![icon, body.into()])
+            .spacing(12)
+            .align_y(alignment::Vertical::Top),
+    )
+    .width(IcedLength::Fill)
+    .padding([12, 16])
+    .style(move |_| info_bar_style(visual, severity))
     .into()
 }
 
@@ -3389,42 +3509,24 @@ where
     Message: Clone + Send + 'static,
     Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
 {
-    // Chunk children into rows of at most `max_columns`, matching WinUI
-    // ItemsWrapGrid's column cap. (Width-responsive narrow reflow can later be
-    // layered in here via `iced_responsive` without changing the token API.)
+    // A true flow layout (WinUI `ItemsWrapGrid`): the widget measures each child
+    // at layout time and packs as many as fit the available width onto each row
+    // — capped at `max_columns` — wrapping to new rows as the window narrows.
+    // This is computed during the widget's own layout pass (not via
+    // `responsive`), so it is correct inside the settings scrollable where the
+    // available height is unbounded.
     let compiled = token
         .children
         .iter()
         .map(|child| compile_view_with_text_editors_and_visual(child, provider, visual))
         .collect::<Vec<_>>();
 
-    let rows = chunk_for_wrap(compiled, usize::from(token.max_columns.max(1)))
-        .into_iter()
-        .map(|row| iced_row(row).spacing(u32::from(token.spacing)).into())
-        .collect::<Vec<IcedElement<'a, Message>>>();
-
-    iced_column(rows)
-        .spacing(u32::from(token.run_spacing))
-        .width(IcedLength::Fill)
-        .into()
-}
-
-/// Splits `items` into consecutive chunks of at most `max_columns` (>= 1),
-/// the row-wrapping rule used by [`compile_wrap`].
-fn chunk_for_wrap<T>(items: Vec<T>, max_columns: usize) -> Vec<Vec<T>> {
-    let max = max_columns.max(1);
-    let mut rows: Vec<Vec<T>> = Vec::new();
-    let mut current: Vec<T> = Vec::with_capacity(max);
-    for item in items {
-        current.push(item);
-        if current.len() == max {
-            rows.push(std::mem::take(&mut current));
-        }
-    }
-    if !current.is_empty() {
-        rows.push(current);
-    }
-    rows
+    Element::new(WrapFlow::new(
+        compiled,
+        usize::from(token.max_columns.max(1)),
+        f32::from(token.spacing),
+        f32::from(token.run_spacing),
+    ))
 }
 
 fn apply_layout_style<'a, Message>(
@@ -4352,8 +4454,11 @@ where
     if !body_text.trim().is_empty() {
         let body: IcedElement<'a, Message> = iced_container(
             iced_text(body_text.to_string())
+                // Match the WinUI ServiceResultItem `ResultText` (FontSize=13);
+                // BodyLarge (15) renders the translation noticeably larger than
+                // the .NET result bar.
                 .font(text_font(TextStyle::BodyLarge))
-                .size(text_size(TextStyle::BodyLarge, visual))
+                .size(13.0)
                 .color(if item.status == ResultStatus::Error {
                     visual.error
                 } else {
@@ -4361,7 +4466,14 @@ where
                 })
                 .width(IcedLength::Fill),
         )
-        .padding([2, 8])
+        // Match the WinUI ServiceResultItem `ContentArea` (Padding="10,8,10,10");
+        // the tight [2, 8] left the translation crowded against the header divider.
+        .padding(IcedPadding {
+            top: 8.0,
+            right: 10.0,
+            bottom: 10.0,
+            left: 10.0,
+        })
         .width(IcedLength::Fill)
         .into();
 
@@ -4729,6 +4841,221 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for HoverRevealAction
             viewport,
             renderer,
         )
+    }
+}
+
+/// Pure flow-layout placement: given each child's measured `size`, packs them
+/// left-to-right and returns each child's top-left `Point` plus the overall
+/// content `Size`. Wraps to a new row when the next child would exceed
+/// `max_width` or the current row already holds `max_columns` items. Extracted
+/// from [`WrapFlow::layout`] so the wrapping rule can be unit-tested.
+fn flow_positions(
+    sizes: &[Size],
+    max_width: f32,
+    spacing: f32,
+    run_spacing: f32,
+    max_columns: usize,
+) -> (Vec<Point>, Size) {
+    let max_columns = max_columns.max(1);
+    let mut positions = Vec::with_capacity(sizes.len());
+    let mut x = 0.0f32;
+    let mut y = 0.0f32;
+    let mut row_height = 0.0f32;
+    let mut col_in_row = 0usize;
+    let mut content_width = 0.0f32;
+
+    for size in sizes {
+        let wrap =
+            col_in_row > 0 && (col_in_row >= max_columns || x + size.width > max_width + 0.5);
+        if wrap {
+            y += row_height + run_spacing;
+            x = 0.0;
+            row_height = 0.0;
+            col_in_row = 0;
+        }
+
+        positions.push(Point::new(x, y));
+        x += size.width + spacing;
+        row_height = row_height.max(size.height);
+        col_in_row += 1;
+        content_width = content_width.max(x - spacing);
+    }
+
+    (positions, Size::new(content_width, y + row_height))
+}
+
+/// A flow-layout container: packs children left-to-right, wrapping to a new row
+/// when the next child would exceed the available width or the row already holds
+/// `max_columns` items. Mirrors WinUI `ItemsWrapGrid` and — unlike `responsive`
+/// — computes its own finite height, so it is correct inside scrollables.
+struct WrapFlow<'a, Message> {
+    children: Vec<IcedElement<'a, Message>>,
+    max_columns: usize,
+    spacing: f32,
+    run_spacing: f32,
+}
+
+impl<'a, Message> WrapFlow<'a, Message> {
+    fn new(
+        children: Vec<IcedElement<'a, Message>>,
+        max_columns: usize,
+        spacing: f32,
+        run_spacing: f32,
+    ) -> Self {
+        Self {
+            children,
+            max_columns: max_columns.max(1),
+            spacing,
+            run_spacing,
+        }
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for WrapFlow<'_, Message> {
+    fn children(&self) -> Vec<Tree> {
+        self.children.iter().map(Tree::new).collect()
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(&self.children);
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        Size {
+            width: IcedLength::Fill,
+            height: IcedLength::Shrink,
+        }
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let max_width = limits.max().width;
+        let child_limits = layout::Limits::new(Size::ZERO, Size::new(max_width, f32::INFINITY));
+
+        let mut nodes = Vec::with_capacity(self.children.len());
+        let mut sizes = Vec::with_capacity(self.children.len());
+        for (index, child) in self.children.iter_mut().enumerate() {
+            let node =
+                child
+                    .as_widget_mut()
+                    .layout(&mut tree.children[index], renderer, &child_limits);
+            sizes.push(node.size());
+            nodes.push(node);
+        }
+
+        let (positions, content_size) = flow_positions(
+            &sizes,
+            max_width,
+            self.spacing,
+            self.run_spacing,
+            self.max_columns,
+        );
+        for (node, position) in nodes.iter_mut().zip(positions) {
+            node.move_to_mut(position);
+        }
+
+        let width = if max_width.is_finite() {
+            max_width
+        } else {
+            content_size.width
+        };
+        layout::Node::with_children(Size::new(width, content_size.height), nodes)
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        for (index, child) in self.children.iter_mut().enumerate() {
+            child.as_widget_mut().update(
+                &mut tree.children[index],
+                event,
+                layout.child(index),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+        }
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            for (index, child) in self.children.iter_mut().enumerate() {
+                child.as_widget_mut().operate(
+                    &mut tree.children[index],
+                    layout.child(index),
+                    renderer,
+                    operation,
+                );
+            }
+        });
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        for (index, child) in self.children.iter().enumerate() {
+            child.as_widget().draw(
+                &tree.children[index],
+                renderer,
+                theme,
+                style,
+                layout.child(index),
+                cursor,
+                viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        let mut interaction = mouse::Interaction::None;
+        for (index, child) in self.children.iter().enumerate() {
+            let child_interaction = child.as_widget().mouse_interaction(
+                &tree.children[index],
+                layout.child(index),
+                cursor,
+                viewport,
+                renderer,
+            );
+            if child_interaction != mouse::Interaction::None {
+                interaction = child_interaction;
+            }
+        }
+        interaction
     }
 }
 
@@ -5632,6 +5959,14 @@ fn icon_element<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
+    // Image-backed tokens (e.g. service icons like Google) must render as the
+    // bitmap; otherwise they fall back to `icon_symbol`'s default glyph. The
+    // expander and result-list paths already do this — buttons funnel through
+    // here, so handle it centrally.
+    if let Some(image) = icon.image {
+        return service_icon_image_sized(image, size);
+    }
+
     let symbol = icon_symbol(icon);
     iced_text(symbol.to_string())
         .font(icon_symbol_font(symbol))
@@ -5749,7 +6084,10 @@ fn button_text_size(kind: ButtonKind, visual: IcedVisualTheme) -> f32 {
 
 fn button_icon_size(kind: ButtonKind) -> f32 {
     match kind {
-        ButtonKind::Icon | ButtonKind::ResultAction => 18.0,
+        ButtonKind::Icon => 18.0,
+        // Match the WinUI ServiceResultItem action glyphs (FontIcon FontSize=12)
+        // inside their 24x24 buttons; 18 renders them oversized and crowded.
+        ButtonKind::ResultAction => 12.0,
         ButtonKind::FloatingAction => 16.0,
         ButtonKind::Primary => 20.0,
         ButtonKind::PrimaryRound => 16.0,
@@ -6134,6 +6472,88 @@ fn status_badge_container_style(
             // .NET status pill uses a 12 DIP corner radius (Colors.xaml).
             radius: 12.0.into(),
             ..Border::default()
+        })
+}
+
+/// Saturated accent (icon + border hue) for an InfoBar severity. Mirrors the
+/// WinUI `InfoBarSeverity` color mapping; `Info` uses the system accent (blue)
+/// rather than the muted "disconnected" gray the status pill uses.
+fn info_bar_accent_color(visual: IcedVisualTheme, severity: ValidationSeverity) -> Color {
+    match severity {
+        ValidationSeverity::Success => visual.success,
+        ValidationSeverity::Warning => visual.warning,
+        ValidationSeverity::Error => visual.error,
+        ValidationSeverity::Info => visual.accent,
+    }
+}
+
+/// White glyph centered in the filled severity badge. The check mark is a
+/// Segoe Fluent glyph; `!`/`i` are plain characters so they render in the UI
+/// font like the WinUI InfoBar caution/info badges.
+fn info_bar_badge_mark(severity: ValidationSeverity) -> char {
+    match severity {
+        ValidationSeverity::Success => '\u{E8FB}',
+        ValidationSeverity::Warning | ValidationSeverity::Error => '!',
+        ValidationSeverity::Info => 'i',
+    }
+}
+
+/// The filled circular severity badge (saturated fill + white glyph) that the
+/// WinUI InfoBar shows at its leading edge.
+fn info_bar_badge<'a, Message>(
+    severity: ValidationSeverity,
+    accent: Color,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let mark = info_bar_badge_mark(severity).to_string();
+    let glyph = iced_text(mark.clone())
+        .font(text_font_for_value(TextStyle::BodyStrong, &mark))
+        .size(11.0)
+        .line_height(1.0)
+        .color(visual.text_on_accent);
+
+    iced_container(glyph)
+        .width(IcedLength::Fixed(18.0))
+        .height(IcedLength::Fixed(18.0))
+        .align_x(alignment::Horizontal::Center)
+        .align_y(alignment::Vertical::Center)
+        .style(move |_| {
+            iced::widget::container::Style::default()
+                .background(accent)
+                .color(visual.text_on_accent)
+                .border(Border {
+                    radius: 9.0.into(),
+                    ..Border::default()
+                })
+        })
+        .into()
+}
+
+fn info_bar_style(
+    visual: IcedVisualTheme,
+    severity: ValidationSeverity,
+) -> iced::widget::container::Style {
+    let accent = info_bar_accent_color(visual, severity);
+    // WinUI InfoBar: Success/Warning/Error use a low-saturation tint of the
+    // severity hue; Informational stays a neutral card (only the badge is
+    // colored). Translucent fills composite over the host surface so the tint
+    // tracks light/dark themes automatically.
+    let (background, border_color) = match severity {
+        ValidationSeverity::Info => (visual.surface_alt, visual.border),
+        _ => (accent.scale_alpha(0.16), accent.scale_alpha(0.32)),
+    };
+    iced::widget::container::Style::default()
+        .background(background)
+        .color(visual.text_primary)
+        .border(Border {
+            color: border_color,
+            width: 1.0,
+            // Match the WinUI InfoBar, which inherits the app's 10 DIP
+            // ControlCornerRadius (Colors.xaml) like the text boxes beside it.
+            radius: visual.radius_control.into(),
         })
 }
 
@@ -6649,6 +7069,10 @@ fn result_header_button_style(
     visual: IcedVisualTheme,
     status: iced::widget::button::Status,
 ) -> iced::widget::button::Style {
+    // WinUI result headers keep their resting fill on hover/press: the
+    // ServiceResultHeaderHoverBackgroundColor delta is imperceptible in the
+    // rendered reference, so the header bar stays at result_header in every
+    // interaction state (see the result_header_button_style parity tests).
     let _ = status;
 
     iced::widget::button::Style {
@@ -10214,21 +10638,31 @@ mod tests {
     }
 
     #[test]
-    fn chunk_for_wrap_respects_column_cap() {
-        // 7 tabs, cap 7 → a single row (wide-screen behavior).
-        assert_eq!(
-            chunk_for_wrap((1..=7).collect(), 7),
-            vec![vec![1, 2, 3, 4, 5, 6, 7]]
-        );
-        // 7 tabs, cap 5 → two rows [5, 2].
-        assert_eq!(
-            chunk_for_wrap((1..=7).collect(), 5),
-            vec![vec![1, 2, 3, 4, 5], vec![6, 7]]
-        );
-        // Empty input → no rows.
-        assert_eq!(chunk_for_wrap(Vec::<i32>::new(), 3), Vec::<Vec<i32>>::new());
-        // Zero cap is clamped to 1 (one item per row).
-        assert_eq!(chunk_for_wrap(vec![1, 2], 0), vec![vec![1], vec![2]]);
+    fn flow_layout_wraps_on_width_and_column_cap() {
+        let row_count = |positions: &[Point]| {
+            let mut ys: Vec<f32> = positions.iter().map(|p| p.y).collect();
+            ys.dedup();
+            ys.len()
+        };
+        // 7 tabs, 86 DIP tile, 10 DIP gap, cap 7.
+        let tiles = vec![Size::new(86.0, 76.0); 7];
+        // Wide window → single row (matches .NET wide-screen tab bar).
+        let (wide, _) = flow_positions(&tiles, 1700.0, 10.0, 10.0, 7);
+        assert_eq!(row_count(&wide), 1);
+        // Exactly enough for 7 (7*86 + 6*10 = 662) → still one row.
+        let (exact, _) = flow_positions(&tiles, 662.0, 10.0, 10.0, 7);
+        assert_eq!(row_count(&exact), 1);
+        // Narrow window fits 4 per row (4*86 + 3*10 = 374 <= 400) → 2 rows (4 + 3).
+        let (narrow, _) = flow_positions(&tiles, 400.0, 10.0, 10.0, 7);
+        assert_eq!(row_count(&narrow), 2);
+        assert_eq!(narrow[4].y, narrow[0].y + 76.0 + 10.0);
+        // Very narrow → one tile per row (7 rows), never zero columns.
+        let (tiny, _) = flow_positions(&tiles, 50.0, 10.0, 10.0, 7);
+        assert_eq!(row_count(&tiny), 7);
+        // Column cap forces wrapping even when more would fit by width.
+        let chips = vec![Size::new(180.0, 32.0); 8];
+        let (capped, _) = flow_positions(&chips, 4000.0, 8.0, 4.0, 4);
+        assert_eq!(row_count(&capped), 2); // 8 items, cap 4 → 2 rows
     }
 
     fn assert_button_style_visual_eq(

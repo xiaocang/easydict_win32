@@ -21,6 +21,33 @@ The old `.NET Compat Host` path is retired. Remaining retained .NET LongDoc/Loca
 
 Default rs GUI/CLI/LongDoc helpers must not probe retained worker paths or bundled .NET runtimes. If a requested behavior is not Rust-native yet, default rs returns a local Rust-native-route-required error instead of falling back to a .NET runtime.
 
+## 2026-06-16: Retired the retained-dotnet-workers compatibility feature (branch refactor-remove-retained-workers)
+
+- Authorized scope decision: the plan's final target is Rust-only, and the `retained-dotnet-workers` coexistence was transitional, so the feature is being removed entirely rather than kept as an opt-in hybrid escape hatch.
+- Executed as one atomic mechanical refactor in an isolated git worktree (clean base = next/rs HEAD `7011d767`) to avoid racing the in-flight parallel UI work in the main worktree. Result is committed on branch `refactor-remove-retained-workers` (commit `c0d213c0`); NOT yet merged into `next/rs`.
+- Net change: 24 files, 117 insertions / 4828 deletions (almost pure deletion). The default build is behaviorally unchanged because all `#[cfg(feature = "retained-dotnet-workers")]` code was already excluded and all `#[cfg(not(...))]` paths were already active; removal = delete the gated code + un-gate the `not(...)` paths.
+  - Deleted: `compat_client.rs`, `compat_protocol.rs`, `src/bin/easydict_ipc_mock.rs`, `tests/compat_client.rs`.
+  - Manifests: removed the feature from `easydict_app` and `easydict-runtime-guards`; dropped the `easydict-ipc-mock` `[[bin]]`. Left `hybrid-dotnet-runtime-packaging` untouched (separate feature). Kept the runtime-guards .NET-target classifier/byte-scanner; removed only its retained-worker feature surface (`RetainedWorkerPolicy`, `RuntimeProfile` env machinery, worker-disabled message consts).
+  - Un-gated native routes in `quick_translate.rs`, `long_document.rs`, `cli_translate.rs`, `local_dictionary.rs`, `runtime_policy.rs`, `protocol.rs`; collapsed legacy `--host`/`--host-arg`/`--app-dir` handling to the rejection branch; removed the `LocalAiRouteDecision::RetainedWorkerCompat` variant.
+  - Tests/CI/wrapper: rewrote feature-existence assertions to assert ABSENCE; removed retained `--features` steps from `release-publish.yml`; removed the `retained-worker-ipc` profile and self-tests from `Invoke-RsCoreSliceValidation.ps1`/`Test-RsCoreSliceValidation.ps1`; folded in the acceptance-gate CRLF/stale-CLI-Foundry fix.
+- Validation (on the branch worktree): `cargo build -p easydict_app --all-targets` succeeds with zero warnings; `default_api_boundary_behavior` 27/27; `release_contract_behavior` 78/78; runtime-guards 19/19; integration behavior suites green; `cargo fmt --all --check` clean; the feature is gone (`error: the package 'easydict_app' does not contain this feature: retained-dotnet-workers`). The worktree's PdfPig submodule was uninitialized, so PdfPig-font tests and a Foundry-probe test fail there environmentally — unrelated to the refactor (it touched none of those files).
+- Merge guidance: merge `refactor-remove-retained-workers` into `next/rs` once the parallel UI work checkpoints (a dirty tree blocks the merge). Expect a small conflict on `lib.rs` (parallel UI vs. retained mod-decl removal); take the branch's version of `default_api_boundary_behavior.rs` (it is a strict superset of the main-tree gate fix).
+
+## 2026-06-16: Verified the default rs build is fully Rust-native and repaired the acceptance gate
+
+- Independent multi-agent audit (dependency-graph, process-spawn/FFI, packaging/runtime-resource lenses) plus the `rust-only-boundary` lane confirmed the default rs build is fully Rust-native: zero `dotnet.exe` / hostfxr / CoreCLR / PowerShell / worker spawning, zero `.NET` fallback, no `.NET`-interop crates in the dependency tree, and not-yet-native scenarios return a local "requires a Rust-native route" error.
+- Confirmed all remaining `.NET` is intentional coexistence the plan preserves, not a pending migration: the legacy `dotnet/` WinUI tree, the `retained-dotnet-workers` compat workers (gated behind both the Cargo feature and the `hybrid` runtime profile), and the vendored `lib/PdfPig` .NET source tree (legacy build + a 638KB CJK font test fixture referenced from rs tests). The rs-version goal — remove all `.NET` runtime from the default rs portable — is achieved for the default build.
+- While auditing, found and fixed the authoritative locking suite `default_api_boundary_behavior` (27 tests), which was red locally:
+  - Stale contract: `default_app_uses_lib_owned_foundry_runtime_controller_factory` still required `bin/easydict_cli.rs` to reference `default_foundry_local_runtime_controller`, but commit 87a3caac intentionally removed that dead CLI LocalAI auto-probe (the CLI now delegates LocalAI/Foundry route ownership to the shared app-dir helpers). Dropped the stale path from the expected list.
+  - CRLF brittleness: five tests `include_str!`/`read_to_string` source+manifest bytes and assert exact `\n`-anchored substrings, which fail on a Windows `core.autocrlf=true` (CRLF) checkout while passing in CI (LF). Added an `lf()` helper that normalizes `\r\n`→`\n` before matching, so the gate runs locally on the documented Windows dev platform.
+  - Root-cause note: the local `rust-only-boundary` close-out lane runs only 2 of this file's tests, so the stale contract slipped past local close-out and would only surface in CI's full-file run. Recorded in `experience.md`.
+
+Validation:
+
+- `cargo test -p easydict_app --test default_api_boundary_behavior` (27 passed; was 21 passed / 6 failed before the fix)
+- `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -Profile rust-only-boundary` (all 10 steps green; parallel UI/parity files isolated and restored)
+- Planned close-out: `powershell -NoProfile -ExecutionPolicy Bypass -File rs\scripts\Invoke-RsCoreSliceValidation.ps1 -CloseOut -ChangedPath rs\crates\easydict_app\tests\default_api_boundary_behavior.rs,refactor-progress.md,experience.md -GstepCommitMessage "Repair default-boundary acceptance gate (CRLF tolerance + stale CLI Foundry contract)"`
+
 ## 2026-06-15: Surfaced machine-id persistence diagnostics during settings load
 
 - Rechecked reuse before changing the settings/credential path. The existing Rust-owned `std::fs` persistence plus `lib/easydict-windows-credentials` DPAPI/registry helper remain the right boundary; no new dependency was needed for directory/write diagnostics.

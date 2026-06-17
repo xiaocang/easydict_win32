@@ -234,6 +234,36 @@ msgstr "模型"
 msgid "settings.services.local_ai.foundry.config_description"
 msgstr "留空端点可通过 foundry service status 自动发现；如果本地服务使用固定的 OpenAI 兼容端点，也可以手动设置。"
 
+msgid "settings.services.local_ai.prepare_model"
+msgstr "准备模型"
+
+msgid "settings.services.local_ai.windows_update_link"
+msgstr "在 Windows 更新中查看下载进度"
+
+msgid "settings.services.local_ai.foundry.start"
+msgstr "启动 Foundry Local"
+
+msgid "settings.services.local_ai.foundry.install"
+msgstr "安装 Foundry Local"
+
+msgid "settings.services.local_ai.foundry.docs"
+msgstr "安装/使用文档"
+
+msgid "settings.services.local_ai.openvino.title"
+msgstr "OpenVINO（本地 NLLB）"
+
+msgid "settings.services.local_ai.openvino.download"
+msgstr "下载模型"
+
+msgid "settings.services.local_ai.openvino.description"
+msgstr "使用 ONNX Runtime + OpenVINO 在本地运行 NLLB-200。硬件加速尽力而为，必要时会回退到 CPU。"
+
+msgid "settings.services.local_ai.status.ready"
+msgstr "已就绪"
+
+msgid "settings.services.local_ai.status.unavailable"
+msgstr "不可用"
+
 msgid "settings.services.ollama.endpoint_optional"
 msgstr "端点（可选）"
 

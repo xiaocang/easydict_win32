@@ -234,6 +234,36 @@ msgstr "Model"
 msgid "settings.services.local_ai.foundry.config_description"
 msgstr "Leave endpoint empty to auto-detect it from foundry service status; set it manually if the local service uses a fixed OpenAI-compatible endpoint."
 
+msgid "settings.services.local_ai.prepare_model"
+msgstr "Prepare model"
+
+msgid "settings.services.local_ai.windows_update_link"
+msgstr "Track download progress in Windows Update"
+
+msgid "settings.services.local_ai.foundry.start"
+msgstr "Start Foundry Local"
+
+msgid "settings.services.local_ai.foundry.install"
+msgstr "Install Foundry Local"
+
+msgid "settings.services.local_ai.foundry.docs"
+msgstr "Install/use docs"
+
+msgid "settings.services.local_ai.openvino.title"
+msgstr "OpenVINO (local NLLB)"
+
+msgid "settings.services.local_ai.openvino.download"
+msgstr "Download model"
+
+msgid "settings.services.local_ai.openvino.description"
+msgstr "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort and falls back to CPU when needed."
+
+msgid "settings.services.local_ai.status.ready"
+msgstr "Ready"
+
+msgid "settings.services.local_ai.status.unavailable"
+msgstr "Unavailable"
+
 msgid "settings.services.ollama.endpoint_optional"
 msgstr "Endpoint (Optional)"
 

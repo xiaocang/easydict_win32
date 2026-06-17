@@ -108,7 +108,27 @@
             "environment": [
                 {
                     "name": "RUST_BACKTRACE",
-                    "value": "1"
+                    "value": "full"
+                }
+            ]
+        },
+        // ============================================
+        // Rust WinFluent Preview - Release
+        // ============================================
+        {
+            "name": "Launch Easydict WinFluent RS Preview (Release)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "preLaunchTask": "build-easydict-winfluent-rs-preview-release",
+            "program": "${workspaceFolder}/rs/target/release/easydict_preview_iced.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/rs",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "environment": [
+                {
+                    "name": "RUST_BACKTRACE",
+                    "value": "full"
                 }
             ]
         },

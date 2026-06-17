@@ -1,0 +1,16 @@
+# Enlarge the main-thread stack reserve for the Windows GUI binaries.
+#
+# The win_fluent retained-mode UI is compiled into an iced `Element` tree by
+# `compile_view_with_text_editors_and_visual`, a deeply generic recursive walk
+# whose monomorphized stack frames are very large. winit pins its event loop to
+# the main thread on Windows, so this compile runs on the main thread — which
+# defaults to only a 1 MiB stack. A moderately deep (but finite) view tree —
+# e.g. an expanded service-configuration card with nested panels, combo-box
+# overlays, etc. — could exhaust that 1 MiB and abort with 0xC00000FD
+# (stack overflow) during `view()`. Reserving 32 MiB gives ample headroom for
+# any realistic view depth without changing runtime behavior.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:33554432"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:33554432"]

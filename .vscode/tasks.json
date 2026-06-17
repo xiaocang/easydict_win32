@@ -269,6 +269,26 @@
             }
         },
         {
+            "label": "build-easydict-winfluent-rs-preview-release",
+            "command": "cargo",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/rs"
+            },
+            "args": [
+                "build",
+                "--release",
+                "-p",
+                "easydict_preview_iced"
+            ],
+            "problemMatcher": "$rustc",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "clean",
             "command": "dotnet",
             "type": "shell",

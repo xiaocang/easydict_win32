@@ -213,8 +213,8 @@ fn default_rs_app_embeds_service_icons_from_crate_owned_resources() {
 
 #[test]
 fn default_cargo_features_do_not_enable_retained_dotnet_workers() {
-    let app_manifest = include_str!("../Cargo.toml");
-    let preview_manifest = include_str!("../../easydict_preview_iced/Cargo.toml");
+    let app_manifest = lf(include_str!("../Cargo.toml"));
+    let preview_manifest = lf(include_str!("../../easydict_preview_iced/Cargo.toml"));
 
     assert!(
         app_manifest.contains("\n[features]\ndefault = []\n"),
@@ -235,7 +235,7 @@ fn default_cargo_features_do_not_enable_retained_dotnet_workers() {
 #[test]
 fn default_app_manifest_disables_auto_discovered_binary_entrypoints() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let app_manifest = include_str!("../Cargo.toml");
+    let app_manifest = lf(include_str!("../Cargo.toml"));
     let expected_bins = [
         ("easydict_app", "src/main.rs", None),
         (
@@ -352,12 +352,14 @@ fn default_foundry_local_sdk_features_remain_lib_only_and_not_enabled_by_app_man
         .nth(3)
         .expect("app crate should live under rs/crates/easydict_app");
     let foundry_manifest_path = repo_root.join("lib/easydict-foundry-local/Cargo.toml");
-    let foundry_manifest = fs::read_to_string(&foundry_manifest_path).unwrap_or_else(|error| {
-        panic!(
-            "failed to read {}: {error}",
-            foundry_manifest_path.display()
-        )
-    });
+    let foundry_manifest = lf(&fs::read_to_string(&foundry_manifest_path).unwrap_or_else(
+        |error| {
+            panic!(
+                "failed to read {}: {error}",
+                foundry_manifest_path.display()
+            )
+        },
+    ));
     assert!(
         foundry_manifest.contains("\n[features]\ndefault = []\n"),
         "Foundry Local SDK adapter must remain opt-in in the lib manifest"
@@ -422,8 +424,12 @@ fn default_app_uses_lib_owned_foundry_runtime_controller_factory() {
         }
     }
 
+    // NOTE: `bin/easydict_cli.rs` deliberately does NOT construct the Foundry
+    // runtime controller itself. Commit 87a3caac removed the dead CLI LocalAI
+    // auto-probe so the default CLI delegates LocalAI/Foundry route ownership to
+    // the shared app-dir helpers (which use the lib-owned factory internally).
+    // Keeping it in this list was a stale expectation left behind by that removal.
     for expected_path in [
-        "bin/easydict_cli.rs",
         "lib.rs",
         "long_document.rs",
         "openai_compatible.rs",
@@ -476,11 +482,13 @@ fn default_app_manifests_do_not_link_hybrid_packaging_or_dotnet_runtime_tools() 
 
 #[test]
 fn default_winfluent_legacy_powershell_features_stay_explicit_and_disabled_for_preview() {
-    let preview_manifest = include_str!("../../easydict_preview_iced/Cargo.toml");
-    let backend_manifest =
-        include_str!("../../../../lib/winfluent-rs/crates/win_fluent_backend_iced/Cargo.toml");
-    let platform_manifest =
-        include_str!("../../../../lib/winfluent-rs/crates/win_fluent_platform_win/Cargo.toml");
+    let preview_manifest = lf(include_str!("../../easydict_preview_iced/Cargo.toml"));
+    let backend_manifest = lf(include_str!(
+        "../../../../lib/winfluent-rs/crates/win_fluent_backend_iced/Cargo.toml"
+    ));
+    let platform_manifest = lf(include_str!(
+        "../../../../lib/winfluent-rs/crates/win_fluent_platform_win/Cargo.toml"
+    ));
 
     assert!(
         preview_manifest.contains(
@@ -814,9 +822,10 @@ fn default_app_shell_actions_do_not_bypass_windows_shell_lib() {
 
 #[test]
 fn winfluent_backend_shell_commands_delegate_to_windows_shell_lib() {
-    let source =
-        include_str!("../../../../lib/winfluent-rs/crates/win_fluent_backend_iced/src/lib.rs");
-    let production = production_source(source);
+    let source = lf(include_str!(
+        "../../../../lib/winfluent-rs/crates/win_fluent_backend_iced/src/lib.rs"
+    ));
+    let production = production_source(&source);
 
     let open_url_dispatch = production
         .split("PlatformCommand::OpenUrl(url)")
@@ -1498,6 +1507,14 @@ fn relative_slash_path(base: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+/// Normalize CRLF to LF so the exact `\n`-anchored manifest/source contracts in
+/// this file match regardless of how git checked the working tree out. On Windows
+/// with `core.autocrlf=true` these files are CRLF on disk; the contracts are
+/// authored against LF (the form CI sees).
+fn lf(source: &str) -> String {
+    source.replace("\r\n", "\n")
 }
 
 fn production_source(source: &str) -> &str {

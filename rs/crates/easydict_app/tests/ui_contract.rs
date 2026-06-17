@@ -264,8 +264,13 @@ fn floating_windows_keep_compact_translate_shape() {
         assert_control_contains(snapshot, &format!("{prefix}.status"), "value=\"Ready\"");
         assert_control_contains(snapshot, &format!("{prefix}.status"), "style=Caption");
     }
-    assert_control_contains(&mini, "mini.input", "Text value=\"Oh, I am mini window\"");
-    assert_control_contains(&mini, "mini.input", "style=Body");
+    // Mini's input is now an editable frameless text editor (it previously
+    // rendered a read-only styled label, which made the box uneditable),
+    // matching the fixed window so both are typeable.
+    assert_control_contains(&mini, "mini.input", "chrome=Frameless");
+    assert_control_contains(&mini, "mini.input", "min_height=40");
+    assert_control_contains(&mini, "mini.input", "max_height=120");
+    assert_control_contains(&mini, "mini.input", "read_only=false");
     assert_control_contains(&fixed, "fixed.input", "chrome=Frameless");
     assert_control_contains(&fixed, "fixed.input", "min_height=40");
     assert_control_contains(&fixed, "fixed.input", "max_height=120");
@@ -663,7 +668,7 @@ fn settings_view_keeps_category_tiles_and_general_behavior_rows() {
     let dirty_snapshot = win_fluent_testkit::view_snapshot(&settings_view(&dirty_state.settings));
     assert!(dirty_snapshot.contains("id=\"SaveButton\""));
     assert_control_contains(&dirty_snapshot, "SaveButton", "label=\"Save Settings\"");
-    assert_control_contains(&dirty_snapshot, "SaveButton", "width=Fixed(105)");
+    assert_control_contains(&dirty_snapshot, "SaveButton", "width=Shrink");
     assert_control_contains(&dirty_snapshot, "SaveButton", "height=Fixed(44)");
     assert_control_contains(
         &dirty_snapshot,
@@ -1095,8 +1100,8 @@ fn services_settings_default_view_matches_winui_overview_structure() {
     }
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "⚠");
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "style=Warning");
-    assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "width=Fixed(20)");
-    assert_control_contains(&snapshot, "WindowsLocalAIStatusBadge", "height=Fixed(19)");
+    // The badge is sized naturally (not Length::Fixed): a fixed width/height on
+    // this header glyph triggered an iced layout stack overflow on expand.
     assert!(!snapshot.contains("description=\"Free API mode\""));
     assert!(!snapshot.contains("description=\"Local OpenAI-compatible endpoint\""));
     assert!(!snapshot.contains("API key required"));
@@ -1208,16 +1213,6 @@ fn services_settings_default_view_matches_winui_overview_structure() {
         &local_ai_ready_snapshot,
         "WindowsLocalAIStatusBadge",
         "style=Success",
-    );
-    assert_control_contains(
-        &local_ai_ready_snapshot,
-        "WindowsLocalAIStatusBadge",
-        "width=Fixed(14)",
-    );
-    assert_control_contains(
-        &local_ai_ready_snapshot,
-        "WindowsLocalAIStatusBadge",
-        "height=Fixed(19)",
     );
 }
 
@@ -1396,6 +1391,14 @@ fn services_settings_local_ai_exposes_provider_configuration() {
         "padding=Edges { top: 0, right: 14, bottom: 0, left: 14 }",
     );
     assert_control_contains(&snapshot, "OpenVinoConfigPanel", "spacing=10");
+    // The local-AI status surfaces are Fluent InfoBars (colored box + title +
+    // message), not status pills, mirroring the WinUI reference.
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "InfoBar");
+    assert_control_contains(&snapshot, "OpenVinoStatusBar", "InfoBar");
+    // "Model not downloaded" maps to Informational severity (blue), matching
+    // the WinUI InfoBarSeverity, never a green "success" pill.
+    assert_control_contains(&snapshot, "OpenVinoStatusBar", "severity=Info");
+    assert_control_contains(&snapshot, "OpenVinoStatusBar", "Model not downloaded");
     assert_control_contains(&snapshot, "OpenVinoStatusBadge", "margin=Edges");
     assert_control_contains(&snapshot, "OpenVinoStatusBadge", "right: 8");
     assert_control_contains(
@@ -1517,6 +1520,41 @@ fn services_settings_local_ai_exposes_provider_configuration() {
         "WindowsLocalAIWindowsUpdateLink",
         "padding=Edges { top: 0, right: 0, bottom: 0, left: 0 }",
     );
+}
+
+#[test]
+fn services_settings_local_ai_status_bar_severity_tracks_status_text() {
+    let mut state = EasydictUiState::default();
+    state.settings.selected_section = easydict_app::SettingsSection::Services;
+    state.apply(easydict_app::Message::ToggleServiceConfigurationExpanded(
+        "windows-local-ai".to_string(),
+        true,
+    ));
+
+    // "not supported" is an availability warning (yellow InfoBar), never the
+    // green "success" treatment the old status pill used.
+    state.settings.local_ai_status =
+        "Phi Silica is not supported on the current system.".to_string();
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "InfoBar");
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "severity=Warning");
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "title=\"Unavailable\"");
+    assert_control_contains(
+        &snapshot,
+        "WindowsLocalAIStatusBar",
+        "Phi Silica is not supported on the current system.",
+    );
+
+    // A ready model is Success (green) with a "Ready" title.
+    state.settings.local_ai_status = "Phi Silica model ready".to_string();
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "severity=Success");
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "title=\"Ready\"");
+
+    // Preparation failures surface as Error.
+    state.settings.local_ai_status = "Preparation failed: offline".to_string();
+    let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
+    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "severity=Error");
 }
 
 #[test]
@@ -3569,7 +3607,9 @@ fn settings_window_matches_winui_reference_size_contract() {
     assert_eq!(options.id.as_str(), "settings");
     assert_eq!(options.width, 846.0);
     assert_eq!(options.height, 913.0);
-    assert_eq!(options.min_width, Some(760.0));
+    // The tab grid reflows responsively, so the settings window may narrow well
+    // below the single-row tab width (was 760 when the tabs could not wrap).
+    assert_eq!(options.min_width, Some(480.0));
     assert_eq!(options.min_height, Some(620.0));
     assert_eq!(options.frame, WindowFrame::Borderless);
     assert_eq!(options.resize_mode, WindowResizeMode::CanResize);

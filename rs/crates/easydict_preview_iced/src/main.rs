@@ -7,7 +7,8 @@ use easydict_app::{
     settings_window_options, EasydictApp, EasydictUiState, Message, SettingsState,
     MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS, MAIN_WINDOW_MIN_HEIGHT_DIPS,
     MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
-    SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
+    SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS, SETTINGS_WINDOW_MIN_HEIGHT_DIPS,
+    SETTINGS_WINDOW_MIN_WIDTH_DIPS,
 };
 use win_fluent::prelude::*;
 
@@ -92,6 +93,10 @@ fn production_initial_state_with_settings(settings: Option<SettingsState>) -> Ea
     state.fixed.text.clear();
     state.fixed.services_completed = 0;
     state.fixed.results.clear();
+    // Rebuild the result rows from the loaded enabled-service settings; otherwise
+    // the lists stay empty and the app reports "No translation services are
+    // enabled" even though services are enabled in the persisted settings.
+    state.sync_window_service_results();
     state.settings.unsaved_changes = false;
     state.settings.show_unsaved_changes_dialog = false;
     state.saved_settings = state.settings.clone();
@@ -134,12 +139,12 @@ fn preview_window_options() -> WindowOptions {
     let width = preview_env_f32("EASYDICT_PREVIEW_WIDTH_DIPS").unwrap_or(default_width);
     let height = preview_env_f32("EASYDICT_PREVIEW_HEIGHT_DIPS").unwrap_or(default_height);
     let min_width = if settings_preview {
-        760.0
+        SETTINGS_WINDOW_MIN_WIDTH_DIPS
     } else {
         MAIN_WINDOW_MIN_WIDTH_DIPS
     };
     let min_height = if settings_preview {
-        620.0
+        SETTINGS_WINDOW_MIN_HEIGHT_DIPS
     } else {
         MAIN_WINDOW_MIN_HEIGHT_DIPS
     };
@@ -515,8 +520,8 @@ mod tests {
         assert_eq!(options.id.as_str(), "settings");
         assert_eq!(options.width, SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS);
         assert_eq!(options.height, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS);
-        assert_eq!(options.min_width, Some(760.0));
-        assert_eq!(options.min_height, Some(620.0));
+        assert_eq!(options.min_width, Some(SETTINGS_WINDOW_MIN_WIDTH_DIPS));
+        assert_eq!(options.min_height, Some(SETTINGS_WINDOW_MIN_HEIGHT_DIPS));
     }
 
     #[test]
@@ -603,12 +608,26 @@ mod tests {
         assert!(!state.settings.show_unsaved_changes_dialog);
         assert_eq!(state.saved_settings, state.settings);
         assert!(state.source_text.is_empty());
-        assert!(state.results.is_empty());
+        // Result rows are rebuilt from the enabled-service settings (pending,
+        // with no demo bodies) rather than left empty — otherwise the app reports
+        // "No translation services are enabled" even with services configured.
+        assert!(!state.results.is_empty());
+        assert!(state.results.iter().all(|result| result.body.is_empty()));
         assert!(state.long_document.history.is_empty());
         assert!(state.mini.text.is_empty());
-        assert!(state.mini.results.is_empty());
+        assert!(!state.mini.results.is_empty());
+        assert!(state
+            .mini
+            .results
+            .iter()
+            .all(|result| result.body.is_empty()));
         assert!(state.fixed.text.is_empty());
-        assert!(state.fixed.results.is_empty());
+        assert!(!state.fixed.results.is_empty());
+        assert!(state
+            .fixed
+            .results
+            .iter()
+            .all(|result| result.body.is_empty()));
     }
 
     #[test]

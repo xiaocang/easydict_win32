@@ -37,6 +37,7 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
                     .caption_controls(true)
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
+                    .on_drag(Message::DragWindow)
                     .on_close(Message::CloseMainWindow),
                 busy_overlay(surface)
                     .id("ModeSwitchOverlay")
@@ -160,6 +161,7 @@ fn settings_view_with_close_message(
                     .caption_controls(true)
                     .on_minimize(Message::MinimizeWindow)
                     .on_toggle_maximize(Message::ToggleMaximizeWindow)
+                    .on_drag(Message::DragWindow)
                     .on_close(close_message),
                 content,
             ))
@@ -232,7 +234,9 @@ fn settings_save_bar(locale: &str) -> View<Message> {
     row((
         primary_button(tr_locale(locale, "settings.save", "Save Settings"))
             .id("SaveButton")
-            .width(Length::Fixed(105))
+            // Shrink-wrap to the label + padding (like the .NET button, which
+            // sets only Padding="24,12"). A fixed width clips wider locales.
+            .width(Length::Shrink)
             .height(Length::Fixed(44))
             .padding(Edges {
                 top: 12,
@@ -1721,22 +1725,16 @@ fn floating_input_surface(
     locale: &str,
 ) -> View<Message> {
     let placeholder = floating_input_placeholder(locale);
-    let input = if id_prefix == "mini" {
-        let value = if state.text.trim().is_empty() {
-            placeholder.clone()
-        } else {
-            state.text.clone()
-        };
-        styled_text_id(format!("{id_prefix}.input"), value, TextStyle::Body)
-    } else {
-        text_editor(state.text.clone())
-            .id(format!("{id_prefix}.input"))
-            .placeholder(placeholder)
-            .min_height(40)
-            .max_height(120)
-            .frameless()
-            .on_input(move |value| Message::FloatingSurfaceTextChanged(surface, value))
-    };
+    // Both mini and fixed windows use an editable multiline text editor so the
+    // user can type/paste the text to translate. (Mini previously rendered a
+    // read-only styled label here, which made its input box uneditable.)
+    let input = text_editor(state.text.clone())
+        .id(format!("{id_prefix}.input"))
+        .placeholder(placeholder)
+        .min_height(40)
+        .max_height(120)
+        .frameless()
+        .on_input(move |value| Message::FloatingSurfaceTextChanged(surface, value));
 
     let content = if show_source_play {
         row((
@@ -1824,20 +1822,27 @@ fn floating_header(
             .on_press(Message::CloseWindow)
     };
 
-    row((
-        pin,
-        styled_text_id(
-            format!("{id_prefix}.title"),
-            state.title.clone(),
-            TextStyle::Caption,
-        ),
-        close_button,
+    // The title fills the space between the pin and close buttons and acts as the
+    // window's drag handle: pressing it starts an OS-level window move, so the
+    // frameless mini/fixed windows can be repositioned like the main window's
+    // title bar. The pin/close buttons stay outside this region so their clicks
+    // are not swallowed by the drag gesture.
+    let drag_handle = pointer_region(styled_text_id(
+        format!("{id_prefix}.title"),
+        state.title.clone(),
+        TextStyle::Caption,
     ))
-    .id(format!("{id_prefix}.header"))
-    .spacing(4)
-    .align(Alignment::Center)
-    .space_between()
-    .into_view()
+    .id(format!("{id_prefix}.title_drag"))
+    .width(Length::Fill)
+    .on_left_down(|_| Message::DragWindow)
+    .into_view();
+
+    row((pin, drag_handle, close_button))
+        .id(format!("{id_prefix}.header"))
+        .spacing(4)
+        .align(Alignment::Center)
+        .space_between()
+        .into_view()
 }
 
 fn main_translate_action_bar(state: &EasydictUiState) -> View<Message> {
@@ -2924,17 +2929,11 @@ fn service_expander(
             ("windows-local-ai", "⚠") => TextStyle::Warning,
             _ => TextStyle::BodyStrong,
         };
-        let status_view = if service_id == "windows-local-ai" {
-            sized_styled_text_id(
-                status_id,
-                status.clone(),
-                status_style,
-                Length::Fixed(local_ai_header_status_width(&status)),
-                Length::Fixed(19),
-            )
-        } else {
-            styled_text_id(status_id, status, status_style)
-        };
+        // Render the status indicator with natural sizing (like every other
+        // service). A `Length::Fixed` width/height here over-constrained the
+        // ✓/⚠ glyph and sent iced's header layout into unbounded recursion when
+        // the expander's content appeared on expand — a stack overflow.
+        let status_view = styled_text_id(status_id, status, status_style);
         builder = builder.trailing((status_view,));
     }
 
@@ -3083,14 +3082,6 @@ fn local_ai_header_status_is_ready(status: &str) -> bool {
         || normalized.contains(" is ready")
         || normalized.contains(" model ready")
         || normalized.contains("status_ready")
-}
-
-fn local_ai_header_status_width(status: &str) -> u16 {
-    if status.trim() == "✓" {
-        14
-    } else {
-        20
-    }
 }
 
 fn settings_field_stack(
@@ -3419,19 +3410,17 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
         .spacing(8)
         .align(Alignment::Center)
         .into_view(),
-        status_badge(
-            state.local_ai_status.clone(),
-            local_ai_status_severity(&state.local_ai_status),
-        )
-        .id("WindowsLocalAIStatusBar")
+        local_ai_info_bar("WindowsLocalAIStatusBar", &state.local_ai_status),
+        button(tr(
+            "settings.services.local_ai.prepare_model",
+            "Prepare model",
+        ))
+        .id("WindowsLocalAIPrepareButton")
+        .icon(icon::refresh())
+        .padding(service_button_padding(14, 0))
+        .height(Length::Fixed(40))
+        .on_press(Message::PrepareLocalAiModel)
         .into_view(),
-        button("Prepare model")
-            .id("WindowsLocalAIPrepareButton")
-            .icon(icon::refresh())
-            .padding(service_button_padding(14, 0))
-            .height(Length::Fixed(40))
-            .on_press(Message::PrepareLocalAiModel)
-            .into_view(),
     ];
 
     if state.local_ai_prepare_progress != "Idle" {
@@ -3448,7 +3437,10 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
                     .height(4)
                     .label(state.local_ai_prepare_progress.clone())
                     .into_view(),
-                button("Track download progress in Windows Update")
+                button(tr(
+                    "settings.services.local_ai.windows_update_link",
+                    "Track download progress in Windows Update",
+                ))
                     .id("WindowsLocalAIWindowsUpdateLink")
                     .icon(icon::settings())
                     .link()
@@ -3466,6 +3458,7 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
     column(content)
         .id("WindowsLocalAIConfigPanel")
         .spacing(10)
+        .width(Length::Fill)
         .into_view()
 }
 
@@ -3512,27 +3505,31 @@ fn foundry_local_config_panel(state: &SettingsState) -> View<Message> {
 
     if should_show_foundry_local_recovery(&state.foundry_local_status) {
         content.extend([
-            status_badge(
-                state.foundry_local_status.clone(),
-                ValidationSeverity::Info,
-            )
-            .id("FoundryLocalStatusBar")
-            .into_view(),
+            local_ai_info_bar("FoundryLocalStatusBar", &state.foundry_local_status),
             row((
-                button("Start Foundry Local")
+                button(tr(
+                    "settings.services.local_ai.foundry.start",
+                    "Start Foundry Local",
+                ))
                     .id("FoundryLocalStartButton")
                     .icon(icon::play())
                     .padding(service_button_padding(14, 0))
                     .height(Length::Fixed(40))
                     .on_press(Message::StartFoundryLocal),
-                button("Install Foundry Local")
+                button(tr(
+                    "settings.services.local_ai.foundry.install",
+                    "Install Foundry Local",
+                ))
                     .id("FoundryLocalInstallLink")
                     .icon(icon::add())
                     .link()
                     .padding(Edges::ZERO)
                     .height(Length::Fixed(40))
                     .on_press(Message::InstallFoundryLocal),
-                button("Install/use docs")
+                button(tr(
+                    "settings.services.local_ai.foundry.docs",
+                    "Install/use docs",
+                ))
                     .id("FoundryLocalDocsLink")
                     .icon(icon::help())
                     .on_press(Message::OpenFoundryLocalDocs),
@@ -3553,6 +3550,7 @@ fn foundry_local_config_panel(state: &SettingsState) -> View<Message> {
     column(content)
         .id("FoundryLocalConfigPanel")
         .spacing(10)
+        .width(Length::Fill)
         .into_view()
 }
 
@@ -3567,7 +3565,10 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
             row((
                 styled_text_id(
                     "OpenVinoTitleText",
-                    "OpenVINO (local NLLB)",
+                    tr(
+                        "settings.services.local_ai.openvino.title",
+                        "OpenVINO (local NLLB)",
+                    ),
                     TextStyle::BodyStrong,
                 ),
                 styled_text_id("OpenVinoRatingText", "★★", TextStyle::Caption),
@@ -3592,9 +3593,7 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
         .align(Alignment::Center)
         .width(Length::Fill)
         .into_view(),
-        status_badge(state.open_vino_status.clone(), ValidationSeverity::Info)
-            .id("OpenVinoStatusBar")
-            .into_view(),
+        local_ai_info_bar("OpenVinoStatusBar", &state.open_vino_status),
     ];
 
     if state.open_vino_download_progress != "Idle" {
@@ -3609,16 +3608,22 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
     }
 
     content.extend([
-        button("Download model")
-            .id("OpenVinoDownloadButton")
-            .icon(icon::refresh())
-            .padding(service_button_padding(14, 0))
-            .height(Length::Fixed(40))
-            .on_press(Message::DownloadOpenVinoModel)
-            .into_view(),
+        button(tr(
+            "settings.services.local_ai.openvino.download",
+            "Download model",
+        ))
+        .id("OpenVinoDownloadButton")
+        .icon(icon::refresh())
+        .padding(service_button_padding(14, 0))
+        .height(Length::Fixed(40))
+        .on_press(Message::DownloadOpenVinoModel)
+        .into_view(),
         styled_text_id(
             "OpenVinoDescriptionText",
-            "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort and falls back to CPU when needed.",
+            tr(
+                "settings.services.local_ai.openvino.description",
+                "Runs NLLB-200 locally with ONNX Runtime + OpenVINO. Hardware acceleration is best effort and falls back to CPU when needed.",
+            ),
             TextStyle::Caption,
         ),
     ]);
@@ -3626,14 +3631,50 @@ fn open_vino_config_panel(state: &SettingsState) -> View<Message> {
     column(content)
         .id("OpenVinoConfigPanel")
         .spacing(10)
+        .width(Length::Fill)
+        .into_view()
+}
+
+/// Builds a Fluent InfoBar for a local-AI provider status line. Severity (and
+/// therefore the box color) is inferred from the status text, mirroring the
+/// WinUI `InfoBarSeverity` mapping: ready → Success (green), failed → Error
+/// (red), not-supported/unavailable → Warning (yellow), everything else
+/// (selecting / preparing / not-downloaded) → Informational (blue).
+fn local_ai_info_bar(id: &str, status: &str) -> View<Message> {
+    let severity = local_ai_status_severity(status);
+    info_bar(local_ai_status_title(severity), severity)
+        .id(id.to_string())
+        .message(status.to_string())
         .into_view()
 }
 
 fn local_ai_status_severity(status: &str) -> ValidationSeverity {
-    if status.contains("requested") {
-        ValidationSeverity::Info
-    } else {
+    let normalized = status.to_ascii_lowercase();
+    if normalized.contains("fail") || normalized.contains("error") {
+        ValidationSeverity::Error
+    } else if normalized.contains("not supported")
+        || normalized.contains("not compatible")
+        || normalized.contains("unavailable")
+        || normalized.contains("not available")
+    {
+        ValidationSeverity::Warning
+    } else if normalized.contains("ready") || normalized.contains("configured") {
         ValidationSeverity::Success
+    } else {
+        // Selecting / preparing / requested / queued / downloading / not downloaded.
+        ValidationSeverity::Info
+    }
+}
+
+fn local_ai_status_title(severity: ValidationSeverity) -> String {
+    match severity {
+        ValidationSeverity::Success => {
+            tr("settings.services.local_ai.status.ready", "Ready")
+        }
+        _ => tr(
+            "settings.services.local_ai.status.unavailable",
+            "Unavailable",
+        ),
     }
 }
 

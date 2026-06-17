@@ -538,7 +538,8 @@ pub use window_options::{
     main_window_options_for_settings, mini_window_options, pop_button_window_options,
     settings_window_options, MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
     MAIN_WINDOW_MIN_HEIGHT_DIPS, MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
-    SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
+    SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS, SETTINGS_WINDOW_MIN_HEIGHT_DIPS,
+    SETTINGS_WINDOW_MIN_WIDTH_DIPS,
 };
 
 pub fn clear_persistent_translation_cache_for_settings(
@@ -1059,6 +1060,7 @@ impl Application for EasydictApp {
             }
             Message::MinimizeWindow => Task::window(WindowCommand::MinimizeCurrent(true)),
             Message::ToggleMaximizeWindow => Task::window(WindowCommand::ToggleMaximizeCurrent),
+            Message::DragWindow => Task::window(WindowCommand::DragCurrent),
             Message::CloseMainWindow => self.main_window_close_task(),
             Message::CloseWindow => Task::window(WindowCommand::CloseCurrent),
             Message::ToggleShellContextMenu(true) => {

@@ -1580,6 +1580,25 @@ impl EasydictUiState {
         state
     }
 
+    /// Rebuilds each window's result rows from its enabled service settings.
+    ///
+    /// Run after loading persisted settings (e.g. production startup) so the
+    /// main/mini/fixed result lists reflect the user's enabled services.
+    /// Without it, freshly-loaded settings leave the result lists empty and the
+    /// app reports "No translation services are enabled" even though services
+    /// are enabled in `settings.*_window_services`.
+    pub fn sync_window_service_results(&mut self) {
+        ensure_window_services_have_enabled(&mut self.settings);
+        apply_window_service_settings(&mut self.results, &self.settings.main_window_services);
+        apply_window_service_settings(&mut self.mini.results, &self.settings.mini_window_services);
+        apply_window_service_settings(
+            &mut self.fixed.results,
+            &self.settings.fixed_window_services,
+        );
+        let hide_empty = self.settings.hide_empty_service_results;
+        apply_hide_empty_to_all_results(self, hide_empty);
+    }
+
     pub fn preview_from_env() -> Self {
         let scenario = std::env::var("EASYDICT_PREVIEW_SCENARIO")
             .ok()
@@ -2989,6 +3008,7 @@ impl EasydictUiState {
             | Message::SpeakResult
             | Message::MinimizeWindow
             | Message::ToggleMaximizeWindow
+            | Message::DragWindow
             | Message::CloseMainWindow
             | Message::CloseWindow
             | Message::BrowseFile
@@ -4938,6 +4958,7 @@ pub enum Message {
     OpenSettingsLink(SettingsLink),
     MinimizeWindow,
     ToggleMaximizeWindow,
+    DragWindow,
     CloseMainWindow,
     CloseWindow,
     BrowseFile,

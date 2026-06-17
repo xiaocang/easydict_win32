@@ -72,7 +72,7 @@ fn easydict_light() -> ThemeTokens {
         result_header: Color::rgb(251, 252, 254),
         result_header_foreground: Color::rgb(31, 35, 40),
         result_header_hover: Color::rgb(241, 244, 248),
-        button_hover: Color::rgb(238, 243, 248),
+        button_hover: Color::rgb(241, 244, 248),
         button_pressed: Color::rgb(236, 236, 233),
         floating_input_surface: Color::rgb(241, 244, 248),
         floating_input_border: Color::rgb(225, 231, 239),

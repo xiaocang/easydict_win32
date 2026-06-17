@@ -7,6 +7,10 @@ pub const MAIN_WINDOW_MIN_WIDTH_DIPS: f32 = 400.0;
 pub const MAIN_WINDOW_MIN_HEIGHT_DIPS: f32 = 494.5;
 pub const SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS: f32 = 846.0;
 pub const SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS: f32 = 913.0;
+/// Minimum settings window width. The tab grid reflows responsively, so this
+/// can sit well below the single-row tab width without clipping the tabs.
+pub const SETTINGS_WINDOW_MIN_WIDTH_DIPS: f32 = 480.0;
+pub const SETTINGS_WINDOW_MIN_HEIGHT_DIPS: f32 = 620.0;
 
 pub fn main_window_options() -> WindowOptions {
     WindowOptions::new("main", "Easydict")
@@ -35,7 +39,13 @@ pub fn settings_window_options() -> WindowOptions {
             SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS,
             SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
         )
-        .min_size(760.0, 620.0)
+        // The tab grid reflows responsively (WinUI ItemsWrapGrid), so the
+        // window may narrow well below the single-row tab width; the content
+        // cards below are Fill-width and reflow with it.
+        .min_size(
+            SETTINGS_WINDOW_MIN_WIDTH_DIPS,
+            SETTINGS_WINDOW_MIN_HEIGHT_DIPS,
+        )
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Center)

@@ -1385,7 +1385,7 @@ fn squared_distance_to_rect(point: WindowsPoint, area: WindowsRect) -> i64 {
 
 #[cfg(windows)]
 mod native {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, VecDeque};
     use std::io::Write;
     #[cfg(feature = "legacy-powershell-tts")]
     use std::process::Command;
@@ -1455,18 +1455,19 @@ mod native {
     use windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu,
-        DestroyWindow, EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos,
+        DestroyWindow, DispatchMessageW, EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos,
         GetForegroundWindow, GetParent, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect,
         GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
         LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetForegroundWindow,
         SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenu, CS_HREDRAW,
-        CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE, HICON, HWND_MESSAGE, HWND_NOTOPMOST, HWND_TOPMOST,
+        CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE, HICON, HWND_NOTOPMOST, HWND_TOPMOST,
         IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_GRAYED, MF_POPUP,
         MF_SEPARATOR, MF_STRING, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
         SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
         SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNORMAL,
-        TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CONTEXTMENU, WM_HOTKEY, WM_LBUTTONDBLCLK,
-        WM_LBUTTONUP, WM_MENUSELECT, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_BORDER,
+        TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TranslateMessage, WM_CONTEXTMENU, WM_HOTKEY,
+        WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_MENUSELECT, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW,
+        WS_BORDER,
         WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW,
         WS_POPUP, WS_THICKFRAME,
     };
@@ -1475,6 +1476,22 @@ mod native {
     static TRAY_MENU_TOOLTIP_STATES: OnceLock<Mutex<BTreeMap<isize, TrayMenuTooltipState>>> =
         OnceLock::new();
     pub(super) const NIN_KEYSELECT: u32 = WM_USER + 1;
+
+    /// Per-window queue of resolved tray-callback events, keyed by HWND.
+    ///
+    /// The Windows shell delivers `Shell_NotifyIcon` callbacks via `SendMessage`,
+    /// so they reach the window procedure (not `PeekMessage`'s return value). The
+    /// procedure records the canonical activation/context event here, and the
+    /// poll loop drains it on its own (poll) thread. The window procedure and the
+    /// poll loop run on the same thread, so the lock is always uncontended and is
+    /// never held across a blocking call (e.g. `TrackPopupMenu`).
+    static TRAY_CALLBACK_QUEUES: OnceLock<Mutex<BTreeMap<isize, TrayCallbackQueue>>> =
+        OnceLock::new();
+
+    struct TrayCallbackQueue {
+        callback_message: u32,
+        events: VecDeque<u32>,
+    }
 
     #[derive(Debug)]
     pub struct NamedEventHandle {
@@ -1509,6 +1526,7 @@ mod native {
 
     impl Drop for TrayHandle {
         fn drop(&mut self) {
+            unregister_tray_callback_queue(self.hwnd);
             clear_tray_menu_tooltip_state(self.hwnd);
             let mut data = tray_icon_data(self.hwnd, self.icon_id, self.callback_message);
             // Safety: data identifies the icon added by create_tray_icon for this hidden HWND.
@@ -1666,8 +1684,16 @@ mod native {
             });
         }
 
+        tray_debug(&format!(
+            "create_tray_icon: items={} callback_message={} icon_path={:?}",
+            plan.items.len(),
+            plan.callback_message,
+            plan.icon_path,
+        ));
+
         let hwnd = create_tray_window()?;
         let icon_id = 1;
+        tray_debug(&format!("create_tray_icon: window created hwnd={hwnd:?}"));
         let mut data = tray_icon_data(hwnd, icon_id, plan.callback_message);
         data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         let (icon, owned_icon) = load_tray_icon(plan);
@@ -1676,15 +1702,18 @@ mod native {
 
         // Safety: data contains a valid hidden HWND owned by this thread.
         if unsafe { Shell_NotifyIconW(NIM_ADD, &mut data as _) } == 0 {
+            tray_debug("create_tray_icon: NIM_ADD FAILED");
             destroy_owned_icon(owned_icon);
             // Safety: hwnd was created above and has not escaped on this error path.
             let _ = unsafe { DestroyWindow(hwnd) };
             return Err(last_error("Shell_NotifyIconW(NIM_ADD)"));
         }
+        tray_debug("create_tray_icon: NIM_ADD ok");
 
         data.Anonymous.uVersion = NOTIFYICON_VERSION_4;
         // Safety: data identifies the newly-added icon and sets its shell notification version.
         if unsafe { Shell_NotifyIconW(NIM_SETVERSION, &mut data as _) } == 0 {
+            tray_debug("create_tray_icon: NIM_SETVERSION FAILED");
             let mut delete_data = tray_icon_data(hwnd, icon_id, plan.callback_message);
             // Safety: best-effort cleanup for the icon added above.
             let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &mut delete_data as _) };
@@ -1693,6 +1722,10 @@ mod native {
             let _ = unsafe { DestroyWindow(hwnd) };
             return Err(last_error("Shell_NotifyIconW(NIM_SETVERSION)"));
         }
+
+        // Ready to receive callbacks: register the queue the window procedure
+        // pushes resolved tray events into for the poll loop to drain.
+        register_tray_callback_queue(hwnd, plan.callback_message);
 
         Ok(WindowsTrayHandle {
             plan: plan.clone(),
@@ -1711,21 +1744,25 @@ mod native {
     pub fn poll_tray_message(
         handle: &WindowsTrayHandle,
     ) -> Result<Option<NativeTrayMessage>, WindowsPlatformError> {
+        // Pump the tray window's message queue so its window procedure runs.
+        // `Shell_NotifyIcon` delivers its callback via `SendMessage`, which is
+        // dispatched to the window procedure as a side effect of `PeekMessage`
+        // (it is never *returned* by it); any posted messages are dispatched
+        // explicitly. The procedure records the resolved activation/context event
+        // into this window's callback queue via `record_tray_callback`.
         let mut message = MSG::default();
-        // Safety: PeekMessageW writes to a valid MSG pointer and is scoped to the hidden tray HWND.
-        let has_message =
-            unsafe { PeekMessageW(&mut message, handle.native.hwnd, 0, 0, PM_REMOVE) };
-
-        if has_message == 0 {
-            return Ok(None);
+        // Safety: PeekMessageW writes to a valid MSG pointer scoped to the tray HWND;
+        // the dispatched messages target a window owned by this thread.
+        while unsafe { PeekMessageW(&mut message, handle.native.hwnd, 0, 0, PM_REMOVE) } != 0 {
+            unsafe { TranslateMessage(&message) };
+            unsafe { DispatchMessageW(&message) };
         }
 
-        if message.message != handle.native.callback_message {
+        let Some(event) = take_tray_callback_event(handle.native.hwnd) else {
             return Ok(None);
-        }
+        };
 
-        let tray_mouse_message = message.lParam as u32;
-        if is_tray_default_activation_message(tray_mouse_message) {
+        if is_tray_default_activation_message(event) {
             let item = handle
                 .native
                 .default_command_id
@@ -1739,11 +1776,24 @@ mod native {
             }));
         }
 
-        if is_tray_context_menu_message(tray_mouse_message) {
+        if is_tray_context_menu_message(event) {
             return show_tray_menu(&handle.native);
         }
 
         Ok(None)
+    }
+
+    /// Extracts the shell notification event from a tray callback's `lParam`.
+    ///
+    /// The icon is registered with `NOTIFYICON_VERSION_4`, which packs the
+    /// notification event (e.g. `WM_LBUTTONUP`, `NIN_SELECT`, `WM_CONTEXTMENU`)
+    /// into the **low word** of `lParam` and the icon id into the high word.
+    /// Comparing the raw `lParam` against the event constants therefore never
+    /// matches (the high word holds the icon id), so the event must be masked
+    /// out with `LOWORD` before dispatching — otherwise every tray click is
+    /// silently dropped.
+    pub(super) const fn tray_notification_event(lparam: isize) -> u32 {
+        (lparam as u32) & 0xFFFF
     }
 
     pub(super) const fn is_tray_default_activation_message(message: u32) -> bool {
@@ -1755,6 +1805,88 @@ mod native {
 
     pub(super) const fn is_tray_context_menu_message(message: u32) -> bool {
         matches!(message, WM_RBUTTONUP | WM_CONTEXTMENU)
+    }
+
+    fn tray_callback_queues() -> &'static Mutex<BTreeMap<isize, TrayCallbackQueue>> {
+        TRAY_CALLBACK_QUEUES.get_or_init(|| Mutex::new(BTreeMap::new()))
+    }
+
+    pub(super) fn register_tray_callback_queue(hwnd: HWND, callback_message: u32) {
+        let mut queues = tray_callback_queues()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        queues.insert(
+            hwnd as isize,
+            TrayCallbackQueue {
+                callback_message,
+                events: VecDeque::new(),
+            },
+        );
+    }
+
+    pub(super) fn unregister_tray_callback_queue(hwnd: HWND) {
+        let mut queues = tray_callback_queues()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        queues.remove(&(hwnd as isize));
+    }
+
+    /// Records a `Shell_NotifyIcon` callback delivered to the window procedure.
+    /// Returns `true` if `message` is this window's tray callback (so the window
+    /// procedure can stop processing it).
+    ///
+    /// `NOTIFYICON_VERSION_4` emits *both* the legacy mouse-up (`WM_LBUTTONUP` /
+    /// `WM_RBUTTONUP`) and the modern notification (`NIN_SELECT` /
+    /// `WM_CONTEXTMENU`) for a single gesture. Only the modern notification is
+    /// recorded, so the bound action fires exactly once per click.
+    pub(super) fn record_tray_callback(hwnd: HWND, message: u32, lparam: LPARAM) -> bool {
+        let mut queues = tray_callback_queues()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(queue) = queues.get_mut(&(hwnd as isize)) else {
+            return false;
+        };
+        if message != queue.callback_message {
+            return false;
+        }
+
+        let event = tray_notification_event(lparam);
+        if matches!(event, NIN_SELECT | NIN_KEYSELECT | WM_CONTEXTMENU) {
+            queue.events.push_back(event);
+            tray_debug(&format!("record_tray_callback: queued event=0x{event:04X}"));
+        }
+        true
+    }
+
+    pub(super) fn take_tray_callback_event(hwnd: HWND) -> Option<u32> {
+        let mut queues = tray_callback_queues()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        queues
+            .get_mut(&(hwnd as isize))
+            .and_then(|queue| queue.events.pop_front())
+    }
+
+    /// TEMPORARY tray click diagnostics. Appends to
+    /// `%TEMP%\easydict-tray-debug.log` because the GUI binary has no console
+    /// (stderr is invisible). Remove once tray click delivery is confirmed.
+    pub(super) fn tray_debug(message: &str) {
+        use std::io::Write;
+
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or_default();
+        // Safety: GetCurrentThreadId has no preconditions.
+        let thread_id = unsafe { GetCurrentThreadId() };
+
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("easydict-tray-debug.log"))
+        {
+            let _ = writeln!(file, "[{millis} t{thread_id}] {message}");
+        }
     }
 
     pub fn create_named_event(
@@ -3043,6 +3175,14 @@ try {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        // `Shell_NotifyIcon` delivers its callback to this procedure via
+        // `SendMessage`, so it must be handled here (it never surfaces through the
+        // poll loop's `PeekMessage` return). Record it for the poll thread to act
+        // on; the message id is otherwise meaningless to `DefWindowProc`.
+        if record_tray_callback(hwnd, message, lparam) {
+            return 0;
+        }
+
         if message == WM_MENUSELECT {
             handle_tray_menu_select(hwnd, wparam, lparam);
             return 0;
@@ -3082,7 +3222,19 @@ try {
             return Err(last_error("RegisterClassW"));
         }
 
-        // Safety: class_name is registered above; HWND_MESSAGE creates a message-only hidden window.
+        // A *normal* (top-level, never-shown) window — NOT a message-only
+        // (`HWND_MESSAGE`) window. The Windows notification area does not reliably
+        // deliver `Shell_NotifyIcon` mouse callbacks (`WM_LBUTTONUP`,
+        // `WM_CONTEXTMENU`, `NIN_SELECT`, …) to message-only windows: the icon
+        // appears but every click is dropped, so neither left-click activation nor
+        // the right-click menu fires. A hidden top-level window with
+        // `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` is invisible (we never call
+        // `ShowWindow`), stays out of the taskbar / Alt-Tab, and receives the shell
+        // callbacks correctly — the same pattern H.NotifyIcon (the .NET build) and
+        // every other production tray host use.
+        //
+        // Safety: class_name is registered above; a null parent makes this a
+        // top-level window owned by this thread.
         let hwnd = unsafe {
             CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -3093,7 +3245,7 @@ try {
                 0,
                 CW_USEDEFAULT,
                 0,
-                HWND_MESSAGE,
+                null_mut(),
                 null_mut(),
                 hinstance,
                 null_mut(),
@@ -4648,6 +4800,75 @@ mod tests {
         assert!(native::is_tray_context_menu_message(WM_RBUTTONUP));
         assert!(native::is_tray_context_menu_message(WM_CONTEXTMENU));
         assert!(!native::is_tray_context_menu_message(WM_LBUTTONUP));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_callback_queue_records_canonical_version4_events_once() {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::Shell::NIN_SELECT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            WM_CONTEXTMENU, WM_LBUTTONUP, WM_RBUTTONUP,
+        };
+
+        // The HWND is only used as a map key, never dereferenced.
+        let hwnd = 0x7777_usize as HWND;
+        let callback = native::wm_user() + 1;
+        native::register_tray_callback_queue(hwnd, callback);
+
+        // NOTIFYICON_VERSION_4 packs the icon id into the high word.
+        let pack = |event: u32| ((1_isize) << 16) | (event as isize);
+
+        // A different message id is not this window's tray callback.
+        assert!(!native::record_tray_callback(
+            hwnd,
+            callback + 7,
+            pack(NIN_SELECT)
+        ));
+        // A single left click also emits the legacy WM_LBUTTONUP; it must be
+        // dropped so the action does not fire twice. Same for right click's
+        // WM_RBUTTONUP vs WM_CONTEXTMENU.
+        assert!(native::record_tray_callback(hwnd, callback, pack(WM_LBUTTONUP)));
+        assert!(native::record_tray_callback(hwnd, callback, pack(WM_RBUTTONUP)));
+        // The canonical v4 notifications are the ones queued.
+        assert!(native::record_tray_callback(hwnd, callback, pack(NIN_SELECT)));
+        assert!(native::record_tray_callback(
+            hwnd,
+            callback,
+            pack(WM_CONTEXTMENU)
+        ));
+
+        assert_eq!(native::take_tray_callback_event(hwnd), Some(NIN_SELECT));
+        assert_eq!(native::take_tray_callback_event(hwnd), Some(WM_CONTEXTMENU));
+        assert_eq!(native::take_tray_callback_event(hwnd), None);
+
+        // After unregistering, the window has no queue at all.
+        native::unregister_tray_callback_queue(hwnd);
+        assert_eq!(native::take_tray_callback_event(hwnd), None);
+        assert!(!native::record_tray_callback(hwnd, callback, pack(NIN_SELECT)));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_notification_event_unpacks_version4_lparam() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{WM_LBUTTONUP, WM_RBUTTONUP};
+
+        // NOTIFYICON_VERSION_4 packs the icon id (1) into the high word and the
+        // event into the low word. The raw lParam must NOT be matched directly;
+        // only the low word is the event.
+        let icon_id: isize = 1;
+        let left = (icon_id << 16) | (WM_LBUTTONUP as isize);
+        let right = (icon_id << 16) | (WM_RBUTTONUP as isize);
+
+        assert_ne!(left as u32, WM_LBUTTONUP, "raw lParam carries the icon id");
+        assert_eq!(native::tray_notification_event(left), WM_LBUTTONUP);
+        assert_eq!(native::tray_notification_event(right), WM_RBUTTONUP);
+        assert!(native::is_tray_default_activation_message(
+            native::tray_notification_event(left)
+        ));
+        assert!(native::is_tray_context_menu_message(
+            native::tray_notification_event(right)
+        ));
     }
 
     #[cfg(windows)]

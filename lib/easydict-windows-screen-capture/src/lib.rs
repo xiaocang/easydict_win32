@@ -143,6 +143,13 @@ pub fn capture_screen_windows(
     platform::capture_screen_windows(request)
 }
 
+/// Logical→physical scale factor of the primary monitor (e.g. 1.5 at 150%
+/// scaling). Used to map overlay selection coordinates (DIPs) onto the frozen
+/// desktop snapshot (physical pixels). Returns 1.0 off Windows.
+pub fn primary_scale_factor() -> f32 {
+    platform::primary_scale_factor()
+}
+
 #[cfg(windows)]
 mod platform {
     use super::{
@@ -158,11 +165,22 @@ mod platform {
         GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
         HBITMAP, HDC, HGDIOBJ, SRCCOPY,
     };
+    use windows::Win32::UI::HiDpi::GetDpiForSystem;
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumChildWindows, EnumWindows, GetClassNameW, GetParent, GetSystemMetrics, GetWindowRect,
         GetWindowTextLengthW, GetWindowTextW, IsWindowVisible, SM_CXVIRTUALSCREEN,
         SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
+
+    pub fn primary_scale_factor() -> f32 {
+        // SAFETY: GetDpiForSystem has no preconditions and never fails.
+        let dpi = unsafe { GetDpiForSystem() };
+        if dpi == 0 {
+            1.0
+        } else {
+            dpi as f32 / 96.0
+        }
+    }
 
     struct ScreenDc(HDC);
 
@@ -583,6 +601,10 @@ mod platform {
         _request: ScreenWindowSnapshotRequest,
     ) -> Result<Vec<ScreenWindow>, WindowsScreenCaptureError> {
         Err(WindowsScreenCaptureError::UnsupportedPlatform)
+    }
+
+    pub fn primary_scale_factor() -> f32 {
+        1.0
     }
 }
 

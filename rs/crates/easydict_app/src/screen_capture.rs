@@ -187,9 +187,10 @@ pub fn detected_windows_from_screen_windows(
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CapturePhase {
+    /// Hover to auto-detect a window, scroll to change depth, drag to free-select.
     Detecting,
+    /// A rectangle is being drawn (drag) or tracked (double-click-on-blank).
     Selecting,
-    Adjusting,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -206,6 +207,9 @@ pub struct CaptureInteractionState {
     pub detected_region: Option<CaptureRect>,
     pub selection: Option<CaptureRect>,
     pub detection_depth: usize,
+    /// Latest pointer position, kept so the overlay magnifier can follow the
+    /// cursor exactly like the WinUI ScreenCaptureWindow.
+    last_cursor: CapturePoint,
     is_mouse_down: bool,
     is_drag_selecting: bool,
     ignore_next_mouse_up: bool,
@@ -219,6 +223,7 @@ impl Default for CaptureInteractionState {
             detected_region: None,
             selection: None,
             detection_depth: 0,
+            last_cursor: CapturePoint::default(),
             is_mouse_down: false,
             is_drag_selecting: false,
             ignore_next_mouse_up: false,
@@ -236,11 +241,17 @@ impl CaptureInteractionState {
         self.is_drag_selecting
     }
 
+    /// Latest pointer position, used to place the overlay magnifier.
+    pub fn last_cursor(&self) -> CapturePoint {
+        self.last_cursor
+    }
+
     pub fn on_mouse_move(
         &mut self,
         point: CapturePoint,
         detector: &WindowDetector,
     ) -> CaptureInteraction {
+        self.last_cursor = point;
         match self.phase {
             CapturePhase::Detecting => {
                 if self.is_mouse_down && drag_exceeds_threshold(self.mouse_down_point, point) {
@@ -274,17 +285,19 @@ impl CaptureInteractionState {
                 }
                 CaptureInteraction::Redraw
             }
-            CapturePhase::Adjusting => CaptureInteraction::None,
         }
     }
 
     pub fn on_left_button_down(&mut self, point: CapturePoint) -> CaptureInteraction {
+        self.last_cursor = point;
         match self.phase {
             CapturePhase::Detecting => {
                 self.is_mouse_down = true;
                 self.mouse_down_point = point;
                 CaptureInteraction::None
             }
+            // Track-mouse selection (entered via double-click on blank space):
+            // a single click finalizes the rectangle, matching the WinUI overlay.
             CapturePhase::Selecting if !self.is_drag_selecting => {
                 let mut selection = self.selection.unwrap_or(CaptureRect::from_point(point));
                 selection.right = point.x;
@@ -293,7 +306,6 @@ impl CaptureInteractionState {
                 self.confirm_or_reset()
             }
             CapturePhase::Selecting => CaptureInteraction::None,
-            CapturePhase::Adjusting => CaptureInteraction::None,
         }
     }
 
@@ -322,6 +334,7 @@ impl CaptureInteractionState {
     }
 
     pub fn on_double_click(&mut self, point: CapturePoint) -> CaptureInteraction {
+        self.last_cursor = point;
         if self.phase != CapturePhase::Detecting {
             return CaptureInteraction::None;
         }
@@ -342,10 +355,7 @@ impl CaptureInteractionState {
     }
 
     pub fn on_right_button_down(&mut self) -> CaptureInteraction {
-        if matches!(
-            self.phase,
-            CapturePhase::Selecting | CapturePhase::Adjusting
-        ) {
+        if self.phase == CapturePhase::Selecting {
             self.reset_to_detecting(false);
             CaptureInteraction::Redraw
         } else {
@@ -354,10 +364,7 @@ impl CaptureInteractionState {
     }
 
     pub fn on_escape(&mut self) -> CaptureInteraction {
-        if matches!(
-            self.phase,
-            CapturePhase::Selecting | CapturePhase::Adjusting
-        ) {
+        if self.phase == CapturePhase::Selecting {
             self.reset_to_detecting(true);
             CaptureInteraction::Redraw
         } else {
@@ -386,41 +393,9 @@ impl CaptureInteractionState {
         self.on_mouse_move(point, detector)
     }
 
-    pub fn set_adjusting_selection(&mut self, selection: CaptureRect) -> CaptureInteraction {
-        let selection = selection.normalized();
-        if selection.is_confirmable() {
-            self.phase = CapturePhase::Adjusting;
-            self.detected_region = None;
-            self.selection = Some(selection);
-            self.is_mouse_down = false;
-            self.is_drag_selecting = false;
-            self.ignore_next_mouse_up = false;
-            CaptureInteraction::Redraw
-        } else {
-            self.reset_to_detecting(false);
-            CaptureInteraction::Redraw
-        }
-    }
-
-    pub fn nudge_selection(&mut self, delta_x: i32, delta_y: i32) -> CaptureInteraction {
-        if self.phase != CapturePhase::Adjusting {
-            return CaptureInteraction::None;
-        }
-
-        let Some(selection) = self.selection.map(CaptureRect::normalized) else {
-            self.reset_to_detecting(false);
-            return CaptureInteraction::Redraw;
-        };
-
-        self.selection = Some(CaptureRect::new(
-            selection.left.saturating_add(delta_x),
-            selection.top.saturating_add(delta_y),
-            selection.right.saturating_add(delta_x),
-            selection.bottom.saturating_add(delta_y),
-        ));
-        CaptureInteraction::Redraw
-    }
-
+    /// Finalizes the in-progress selection. Like the WinUI overlay, a confirmable
+    /// rectangle is captured immediately (no separate adjust step); a too-small
+    /// rectangle drops back to the detecting phase.
     fn confirm_or_reset(&mut self) -> CaptureInteraction {
         let Some(selection) = self.selection.map(CaptureRect::normalized) else {
             self.reset_to_detecting(false);
@@ -428,7 +403,8 @@ impl CaptureInteractionState {
         };
 
         if selection.is_confirmable() {
-            self.set_adjusting_selection(selection)
+            self.selection = Some(selection);
+            CaptureInteraction::Confirm(selection)
         } else {
             self.reset_to_detecting(false);
             CaptureInteraction::Redraw

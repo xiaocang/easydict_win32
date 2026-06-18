@@ -9,14 +9,24 @@ pub enum A11yRole {
     Dialog,
     Document,
     Group,
+    Hyperlink,
+    Image,
     List,
     ListItem,
+    MenuItem,
     Navigation,
     Pane,
+    ProgressBar,
+    RadioButton,
     ScrollView,
     Slider,
     StaticText,
+    Tab,
+    TabItem,
     TextInput,
+    Tooltip,
+    Tree,
+    TreeItem,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -111,6 +121,21 @@ impl A11yNode {
     }
 }
 
+fn tree_node_a11y(node: &crate::view::TreeNode, selected: Option<&str>) -> A11yNode {
+    A11yNode {
+        role: A11yRole::TreeItem,
+        name: Some(node.label.clone()),
+        description: None,
+        focusable: true,
+        help_text: (selected == Some(node.id.as_str())).then(|| "selected".to_string()),
+        children: node
+            .children
+            .iter()
+            .map(|child| tree_node_a11y(child, selected))
+            .collect(),
+    }
+}
+
 pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
     match view.token() {
         ViewToken::Page(token) => {
@@ -134,6 +159,29 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .or_else(|| Some(token.value.clone()));
             node
         }
+        ViewToken::RichText(token) => {
+            let mut node = A11yNode::new(A11yRole::StaticText).with_hint(&token.a11y);
+            let combined = token
+                .runs
+                .iter()
+                .map(|run| run.text.as_str())
+                .collect::<String>();
+            node.name = token.a11y.name.clone().or(Some(combined));
+            node.children = token
+                .runs
+                .iter()
+                .filter(|run| matches!(run.kind, crate::view::TextRunKind::Link))
+                .map(|run| A11yNode {
+                    role: A11yRole::Hyperlink,
+                    name: Some(run.text.clone()),
+                    description: run.href.clone(),
+                    focusable: true,
+                    help_text: None,
+                    children: Vec::new(),
+                })
+                .collect();
+            node
+        }
         ViewToken::TitleBar(token) => {
             let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
             node.name = token
@@ -149,6 +197,21 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node
         }
         ViewToken::Button(token) => {
+            let default_role = if matches!(token.kind, crate::view::ButtonKind::Link) {
+                A11yRole::Hyperlink
+            } else {
+                A11yRole::Button
+            };
+            let mut node = A11yNode::new(default_role).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some(token.label.clone()));
+            node.focusable = token.state.is_focusable();
+            node
+        }
+        ViewToken::ToggleButton(token) => {
             let mut node = A11yNode::new(A11yRole::Button).with_hint(&token.a11y);
             node.name = token
                 .a11y
@@ -156,6 +219,27 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .clone()
                 .or_else(|| Some(token.label.clone()));
             node.focusable = token.state.is_focusable();
+            if token.pressed {
+                node.help_text = node.help_text.or_else(|| Some("pressed".to_string()));
+            }
+            node
+        }
+        ViewToken::SplitButton(token) => {
+            let mut node = A11yNode::new(A11yRole::Button).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| Some(token.label.clone()));
+            node.focusable = token.state.is_focusable();
+            node.children.extend(token.items.iter().map(|item| A11yNode {
+                role: A11yRole::MenuItem,
+                name: Some(item.label.clone()),
+                description: None,
+                focusable: item.enabled,
+                help_text: None,
+                children: Vec::new(),
+            }));
             node
         }
         ViewToken::FlyoutButton(token) => {
@@ -199,7 +283,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node
         }
         ViewToken::ProgressRing(token) => {
-            let mut node = A11yNode::new(A11yRole::StaticText).with_hint(&token.a11y);
+            let mut node = A11yNode::new(A11yRole::ProgressBar).with_hint(&token.a11y);
             node.name = token
                 .a11y
                 .name
@@ -209,7 +293,7 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node
         }
         ViewToken::ProgressBar(token) => {
-            let mut node = A11yNode::new(A11yRole::StaticText).with_hint(&token.a11y);
+            let mut node = A11yNode::new(A11yRole::ProgressBar).with_hint(&token.a11y);
             node.name = token
                 .a11y
                 .name
@@ -281,10 +365,64 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node.focusable = token.state.is_focusable();
             node
         }
+        ViewToken::RadioGroup(token) => {
+            let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
+            node.name = token.a11y.name.clone().or_else(|| token.header.clone());
+            node.children = token
+                .options
+                .iter()
+                .map(|option| A11yNode {
+                    role: A11yRole::RadioButton,
+                    name: Some(option.label.clone()),
+                    description: None,
+                    focusable: option.enabled && token.state.is_focusable(),
+                    help_text: (token.selected.as_deref() == Some(option.id.as_str()))
+                        .then(|| "selected".to_string()),
+                    children: Vec::new(),
+                })
+                .collect();
+            node
+        }
         ViewToken::Slider(token) => {
             let mut node = A11yNode::new(A11yRole::Slider).with_hint(&token.a11y);
             node.name = token.a11y.name.clone().or_else(|| token.id.clone());
             node.focusable = token.state.is_focusable();
+            node
+        }
+        ViewToken::NumberBox(token) => {
+            let mut node = A11yNode::new(A11yRole::TextInput).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| token.header.clone())
+                .or_else(|| token.placeholder.clone())
+                .or_else(|| token.id.clone());
+            node.focusable = token.state.is_focusable();
+            node
+        }
+        ViewToken::AutoSuggestBox(token) => {
+            let mut node = A11yNode::new(A11yRole::ComboBox).with_hint(&token.a11y);
+            node.name = token
+                .a11y
+                .name
+                .clone()
+                .or_else(|| token.header.clone())
+                .or_else(|| token.placeholder.clone())
+                .or_else(|| token.id.clone());
+            node.focusable = token.state.is_focusable();
+            node.children = token
+                .suggestions
+                .iter()
+                .map(|suggestion| A11yNode {
+                    role: A11yRole::ListItem,
+                    name: Some(suggestion.clone()),
+                    description: None,
+                    focusable: true,
+                    help_text: None,
+                    children: Vec::new(),
+                })
+                .collect();
             node
         }
         ViewToken::ComboBox(token) => {
@@ -305,15 +443,26 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
         }
         ViewToken::NavigationView(token) => {
             let mut node = A11yNode::new(A11yRole::Navigation).with_hint(&token.a11y);
-            node.children
-                .extend(token.items.iter().map(|item| A11yNode {
+            let nav_item = |item: &crate::view::NavigationItem| A11yNode {
+                role: A11yRole::ListItem,
+                name: Some(item.label.clone()),
+                description: None,
+                focusable: true,
+                help_text: None,
+                children: Vec::new(),
+            };
+            node.children.extend(token.items.iter().map(nav_item));
+            node.children.extend(token.footer_items.iter().map(nav_item));
+            if token.settings_visible {
+                node.children.push(A11yNode {
                     role: A11yRole::ListItem,
-                    name: Some(item.label.clone()),
+                    name: Some("Settings".to_string()),
                     description: None,
                     focusable: true,
                     help_text: None,
                     children: Vec::new(),
-                }));
+                });
+            }
             if let Some(content) = &token.content {
                 node.children.push(resolve_accessibility_tree(content));
             }
@@ -343,6 +492,15 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .collect();
             node
         }
+        ViewToken::Grid(token) => {
+            let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
+            node.children = token
+                .children
+                .iter()
+                .map(|child| resolve_accessibility_tree(&child.view))
+                .collect();
+            node
+        }
         ViewToken::Wrap(token) => {
             let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
             node.children = token
@@ -350,6 +508,55 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 .iter()
                 .map(resolve_accessibility_tree)
                 .collect();
+            node
+        }
+        ViewToken::Border(token) => {
+            let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
+            node.children.push(resolve_accessibility_tree(&token.content));
+            node
+        }
+        ViewToken::Viewbox(token) => {
+            let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
+            node.children.push(resolve_accessibility_tree(&token.content));
+            node
+        }
+        ViewToken::TabView(token) => {
+            let mut node = A11yNode::new(A11yRole::Tab).with_hint(&token.a11y);
+            for tab in &token.tabs {
+                node.children.push(A11yNode {
+                    role: A11yRole::TabItem,
+                    name: Some(tab.header.clone()),
+                    description: None,
+                    focusable: true,
+                    help_text: (token.selected.as_deref() == Some(tab.id.as_str()))
+                        .then(|| "selected".to_string()),
+                    children: Vec::new(),
+                });
+            }
+            if let Some(selected) = &token.selected {
+                if let Some(tab) = token.tabs.iter().find(|tab| &tab.id == selected) {
+                    node.children.push(resolve_accessibility_tree(&tab.content));
+                }
+            } else if let Some(tab) = token.tabs.first() {
+                node.children.push(resolve_accessibility_tree(&tab.content));
+            }
+            node
+        }
+        ViewToken::TreeView(token) => {
+            let mut node = A11yNode::new(A11yRole::Tree).with_hint(&token.a11y);
+            node.children = token
+                .roots
+                .iter()
+                .map(|root| tree_node_a11y(root, token.selected.as_deref()))
+                .collect();
+            node
+        }
+        ViewToken::Flyout(token) => {
+            let mut node = A11yNode::new(A11yRole::Group).with_hint(&token.a11y);
+            node.children.push(resolve_accessibility_tree(&token.anchor));
+            if token.open {
+                node.children.push(resolve_accessibility_tree(&token.content));
+            }
             node
         }
         ViewToken::Overlay(token) => {
@@ -445,6 +652,21 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
                 }));
             node
         }
+        ViewToken::ListView(token) => {
+            let mut node = A11yNode::new(A11yRole::List).with_hint(&token.a11y);
+            node.children = token
+                .items
+                .iter()
+                .map(|item| {
+                    let mut child = resolve_accessibility_tree(&item.view);
+                    if child.role == A11yRole::StaticText || child.role == A11yRole::Group {
+                        child.role = A11yRole::ListItem;
+                    }
+                    child
+                })
+                .collect();
+            node
+        }
         ViewToken::PointerRegion(token) => {
             let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
             node.name = token.a11y.name.clone().or_else(|| token.id.clone());
@@ -466,12 +688,17 @@ pub fn resolve_accessibility_tree<Message>(view: &View<Message>) -> A11yNode {
             node
         }
         ViewToken::Image(token) => {
-            let mut node = A11yNode::new(A11yRole::Pane).with_hint(&token.a11y);
+            let mut node = A11yNode::new(A11yRole::Image).with_hint(&token.a11y);
             node.name = token
                 .a11y
                 .name
                 .clone()
                 .or_else(|| Some("Image".to_string()));
+            node
+        }
+        ViewToken::WebView(token) => {
+            let mut node = A11yNode::new(A11yRole::Document).with_hint(&token.a11y);
+            node.name = token.a11y.name.clone().or_else(|| Some("Web content".to_string()));
             node
         }
         ViewToken::Custom(token) => {
@@ -512,5 +739,26 @@ mod tests {
         assert_eq!(tree.role, A11yRole::Application);
         assert_eq!(tree.children[0].role, A11yRole::Group);
         assert_eq!(tree.children[0].children[1].role, A11yRole::Button);
+    }
+
+    #[test]
+    fn link_buttons_map_to_hyperlink_role() {
+        let view = button::<Msg>("Open docs")
+            .link()
+            .on_press(Msg::Pressed)
+            .into_view();
+
+        let tree = resolve_accessibility_tree(&view);
+
+        assert_eq!(tree.role, A11yRole::Hyperlink);
+    }
+
+    #[test]
+    fn progress_ring_maps_to_progress_bar_role() {
+        let view = crate::view::progress_ring::<Msg>().active(true).into_view();
+
+        let tree = resolve_accessibility_tree(&view);
+
+        assert_eq!(tree.role, A11yRole::ProgressBar);
     }
 }

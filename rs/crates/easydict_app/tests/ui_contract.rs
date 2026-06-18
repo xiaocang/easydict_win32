@@ -3400,9 +3400,8 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     ));
     assert!(detecting.contains("CaptureOverlay phase=\"Detecting\""));
     assert!(detecting.contains("detected_rect=(96,118 624x340)"));
-    assert!(detecting.contains("handles_visible=false"));
-    assert!(detecting.contains("magnifier_visible=false"));
-    assert!(detecting.contains("id=\"capture.detected_region\""));
+    assert!(detecting.contains("magnifier_visible=true"));
+    assert!(detecting.contains("id=\"capture.overlay.canvas\""));
 
     let mut selected_state = CaptureInteractionState::new();
     selected_state.phase = CapturePhase::Selecting;
@@ -3414,31 +3413,14 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     ));
     assert!(selected.contains("CaptureOverlay phase=\"Selecting\""));
     assert!(selected.contains("selection_rect=(180,164 424x222)"));
-    assert!(selected.contains("handles_visible=true"));
     assert!(selected.contains("magnifier_visible=true"));
-    assert!(selected.contains("id=\"capture.selection_rect\""));
-    assert!(selected.contains("id=\"capture.magnifier\""));
-    // Selecting still shows the tip pill (with the terse cancel hint), not the
-    // command panel.
+    assert!(selected.contains("id=\"capture.overlay.canvas\""));
+    // Selecting shows the tip pill (with the terse cancel hint); confirmation is
+    // immediate on release/click, so there is never a command panel.
     assert!(selected.contains("id=\"capture.tip\""));
     assert!(selected.contains("Right-click or Esc to cancel"));
     assert!(!selected.contains("id=\"capture.status_panel\""));
-
-    let mut adjusting_state = CaptureInteractionState::new();
-    adjusting_state.set_adjusting_selection(CaptureRect::new(180, 164, 604, 386));
-    let adjusting = win_fluent_testkit::view_snapshot(&capture_overlay_view_with_state(
-        &adjusting_state,
-        adjusting_state.selection,
-        None,
-    ));
-    assert!(adjusting.contains("CaptureOverlay phase=\"Adjusting\""));
-    assert!(adjusting.contains("selection_rect=(180,164 424x222)"));
-    assert!(adjusting.contains("handles_visible=true"));
-    assert!(adjusting.contains("magnifier_visible=true"));
-    assert_control_contains(&adjusting, "capture.confirm", "enabled=true");
-    assert_control_contains(&adjusting, "capture.copy", "enabled=true");
-    assert_control_contains(&adjusting, "capture.nudge.left", "enabled=true");
-    assert_control_contains(&adjusting, "capture.nudge.up", "action=message");
+    assert!(!selected.contains("phase=\"Adjusting\""));
 
     let pop = win_fluent_testkit::view_snapshot(&pop_button_view());
     assert!(pop.contains("Page title=\"Selection Translate\""));

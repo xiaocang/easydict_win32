@@ -147,6 +147,18 @@ pub struct WindowsProcessMemory {
     pub working_set_bytes: usize,
 }
 
+/// Per-process GPU (video) memory usage for the local memory segment, as tracked
+/// by the OS video memory manager (DXGI `QueryVideoMemoryInfo`). This is the
+/// "rendering" share of the in-process iced/wgpu renderer — the counterpart to
+/// the CPU-side [`WindowsProcessMemory`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowsGpuMemory {
+    /// Current video memory used by this process, in bytes.
+    pub current_usage_bytes: u64,
+    /// OS-provided video memory budget for this process, in bytes.
+    pub budget_bytes: u64,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WindowsDataProtectionScope {
     CurrentUser,
@@ -273,11 +285,21 @@ pub enum WindowsUiaControlType {
     Document,
     Edit,
     Group,
+    Hyperlink,
+    Image,
     List,
     ListItem,
+    MenuItem,
     Pane,
+    ProgressBar,
+    RadioButton,
     Slider,
+    Tab,
+    TabItem,
     Text,
+    ToolTip,
+    Tree,
+    TreeItem,
     Window,
 }
 
@@ -726,6 +748,19 @@ impl WindowsPlatformAdapter {
         native::current_process_memory()
     }
 
+    /// Queries this process's current GPU/video memory usage (debug builds only).
+    /// Returns `None` on non-debug builds, non-Windows, or if DXGI is unavailable.
+    pub fn current_gpu_memory() -> Option<WindowsGpuMemory> {
+        #[cfg(all(windows, debug_assertions))]
+        {
+            native::current_gpu_memory().ok()
+        }
+        #[cfg(not(all(windows, debug_assertions)))]
+        {
+            None
+        }
+    }
+
     pub fn protect_data(
         plaintext: &[u8],
         optional_entropy: &[u8],
@@ -1104,12 +1139,22 @@ fn uia_control_type(role: &A11yRole) -> WindowsUiaControlType {
         A11yRole::ComboBox => WindowsUiaControlType::ComboBox,
         A11yRole::Document => WindowsUiaControlType::Document,
         A11yRole::Group | A11yRole::Navigation => WindowsUiaControlType::Group,
+        A11yRole::Hyperlink => WindowsUiaControlType::Hyperlink,
+        A11yRole::Image => WindowsUiaControlType::Image,
         A11yRole::List => WindowsUiaControlType::List,
         A11yRole::ListItem => WindowsUiaControlType::ListItem,
+        A11yRole::MenuItem => WindowsUiaControlType::MenuItem,
         A11yRole::Pane | A11yRole::ScrollView => WindowsUiaControlType::Pane,
+        A11yRole::ProgressBar => WindowsUiaControlType::ProgressBar,
+        A11yRole::RadioButton => WindowsUiaControlType::RadioButton,
         A11yRole::Slider => WindowsUiaControlType::Slider,
         A11yRole::StaticText => WindowsUiaControlType::Text,
+        A11yRole::Tab => WindowsUiaControlType::Tab,
+        A11yRole::TabItem => WindowsUiaControlType::TabItem,
         A11yRole::TextInput => WindowsUiaControlType::Edit,
+        A11yRole::Tooltip => WindowsUiaControlType::ToolTip,
+        A11yRole::Tree => WindowsUiaControlType::Tree,
+        A11yRole::TreeItem => WindowsUiaControlType::TreeItem,
     }
 }
 
@@ -1414,6 +1459,12 @@ mod native {
         BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, MONITORINFO,
         MONITOR_DEFAULTTONEAREST, SRCCOPY,
     };
+    // Owner-drawn tray menu (fluent WinUI-style item rendering).
+    use windows_sys::Win32::Graphics::Gdi::{
+        CreateFontIndirectW, CreateRoundRectRgn, CreateSolidBrush, DrawTextW, FillRect, FillRgn,
+        GetSysColor, GetTextExtentPoint32W, SetBkMode, SetTextColor, COLOR_GRAYTEXT, COLOR_MENU,
+        COLOR_MENUTEXT, DT_LEFT, DT_RIGHT, DT_SINGLELINE, DT_VCENTER, HFONT, LOGFONTW, TRANSPARENT,
+    };
     use windows_sys::Win32::Security::Cryptography::{
         CryptProtectData, CryptUnprotectData, CRYPTPROTECT_LOCAL_MACHINE,
         CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
@@ -1461,8 +1512,8 @@ mod native {
         LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetForegroundWindow,
         SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenu, CS_HREDRAW,
         CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE, HICON, HWND_NOTOPMOST, HWND_TOPMOST,
-        IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_GRAYED, MF_POPUP,
-        MF_SEPARATOR, MF_STRING, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
+        IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_POPUP,
+        MF_SEPARATOR, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
         SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
         SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNORMAL,
         TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TranslateMessage, WM_CONTEXTMENU, WM_HOTKEY,
@@ -1470,6 +1521,16 @@ mod native {
         WS_BORDER,
         WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW,
         WS_POPUP, WS_THICKFRAME,
+    };
+    // Owner-drawn tray menu support.
+    use windows_sys::Win32::Foundation::SIZE;
+    use windows_sys::Win32::UI::Controls::{
+        DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_DISABLED, ODS_GRAYED, ODS_SELECTED,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        InsertMenuItemW, SystemParametersInfoW, MENUITEMINFOW, MFS_ENABLED, MFS_GRAYED,
+        MFT_OWNERDRAW, MIIM_DATA, MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_SUBMENU, NONCLIENTMETRICSW,
+        SPI_GETNONCLIENTMETRICS, WM_DRAWITEM, WM_MEASUREITEM,
     };
 
     static TEXT_INSERTION_TARGET: Mutex<isize> = Mutex::new(0);
@@ -1684,16 +1745,8 @@ mod native {
             });
         }
 
-        tray_debug(&format!(
-            "create_tray_icon: items={} callback_message={} icon_path={:?}",
-            plan.items.len(),
-            plan.callback_message,
-            plan.icon_path,
-        ));
-
         let hwnd = create_tray_window()?;
         let icon_id = 1;
-        tray_debug(&format!("create_tray_icon: window created hwnd={hwnd:?}"));
         let mut data = tray_icon_data(hwnd, icon_id, plan.callback_message);
         data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         let (icon, owned_icon) = load_tray_icon(plan);
@@ -1702,18 +1755,15 @@ mod native {
 
         // Safety: data contains a valid hidden HWND owned by this thread.
         if unsafe { Shell_NotifyIconW(NIM_ADD, &mut data as _) } == 0 {
-            tray_debug("create_tray_icon: NIM_ADD FAILED");
             destroy_owned_icon(owned_icon);
             // Safety: hwnd was created above and has not escaped on this error path.
             let _ = unsafe { DestroyWindow(hwnd) };
             return Err(last_error("Shell_NotifyIconW(NIM_ADD)"));
         }
-        tray_debug("create_tray_icon: NIM_ADD ok");
 
         data.Anonymous.uVersion = NOTIFYICON_VERSION_4;
         // Safety: data identifies the newly-added icon and sets its shell notification version.
         if unsafe { Shell_NotifyIconW(NIM_SETVERSION, &mut data as _) } == 0 {
-            tray_debug("create_tray_icon: NIM_SETVERSION FAILED");
             let mut delete_data = tray_icon_data(hwnd, icon_id, plan.callback_message);
             // Safety: best-effort cleanup for the icon added above.
             let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &mut delete_data as _) };
@@ -1853,7 +1903,6 @@ mod native {
         let event = tray_notification_event(lparam);
         if matches!(event, NIN_SELECT | NIN_KEYSELECT | WM_CONTEXTMENU) {
             queue.events.push_back(event);
-            tray_debug(&format!("record_tray_callback: queued event=0x{event:04X}"));
         }
         true
     }
@@ -1865,28 +1914,6 @@ mod native {
         queues
             .get_mut(&(hwnd as isize))
             .and_then(|queue| queue.events.pop_front())
-    }
-
-    /// TEMPORARY tray click diagnostics. Appends to
-    /// `%TEMP%\easydict-tray-debug.log` because the GUI binary has no console
-    /// (stderr is invisible). Remove once tray click delivery is confirmed.
-    pub(super) fn tray_debug(message: &str) {
-        use std::io::Write;
-
-        let millis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or_default();
-        // Safety: GetCurrentThreadId has no preconditions.
-        let thread_id = unsafe { GetCurrentThreadId() };
-
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(std::env::temp_dir().join("easydict-tray-debug.log"))
-        {
-            let _ = writeln!(file, "[{millis} t{thread_id}] {message}");
-        }
     }
 
     pub fn create_named_event(
@@ -2745,6 +2772,45 @@ try {
         })
     }
 
+    #[cfg(debug_assertions)]
+    pub fn current_gpu_memory() -> Result<super::WindowsGpuMemory, WindowsPlatformError> {
+        use super::WindowsGpuMemory;
+        use windows::core::Interface;
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory4, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+            DXGI_QUERY_VIDEO_MEMORY_INFO,
+        };
+
+        fn dxgi_err(operation: &'static str, error: windows::core::Error) -> WindowsPlatformError {
+            WindowsPlatformError::NativeCallFailed {
+                operation,
+                code: error.code().0 as u32,
+            }
+        }
+
+        // Safety: DXGI factory/adapter creation and QueryVideoMemoryInfo only read
+        // adapter state for the current process; no handles outlive this scope.
+        unsafe {
+            let factory: IDXGIFactory4 =
+                CreateDXGIFactory1().map_err(|error| dxgi_err("CreateDXGIFactory1", error))?;
+            // Adapter 0 is the primary adapter the swapchain renders on.
+            let adapter = factory
+                .EnumAdapters(0)
+                .map_err(|error| dxgi_err("IDXGIFactory::EnumAdapters", error))?;
+            let adapter3: IDXGIAdapter3 = adapter
+                .cast()
+                .map_err(|error| dxgi_err("IDXGIAdapter3::cast", error))?;
+            let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+            adapter3
+                .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
+                .map_err(|error| dxgi_err("IDXGIAdapter3::QueryVideoMemoryInfo", error))?;
+            Ok(WindowsGpuMemory {
+                current_usage_bytes: info.CurrentUsage,
+                budget_bytes: info.Budget,
+            })
+        }
+    }
+
     pub fn protect_data(
         plaintext: &[u8],
         optional_entropy: &[u8],
@@ -3183,6 +3249,31 @@ try {
             return 0;
         }
 
+        // Owner-drawn tray menu: size and paint each item for a fluent WinUI look.
+        if message == WM_MEASUREITEM {
+            // Safety: for an owner-drawn menu, lParam is a valid MEASUREITEMSTRUCT and
+            // itemData is the TrayOwnerDrawItem pointer set in insert_owner_draw_item.
+            let measure = unsafe { &mut *(lparam as *mut MEASUREITEMSTRUCT) };
+            if measure.itemData != 0 {
+                let item = unsafe { &*(measure.itemData as *const TrayOwnerDrawItem) };
+                let (width, height) = measure_tray_owner_draw_item(item);
+                measure.itemWidth = width;
+                measure.itemHeight = height;
+                return 1;
+            }
+        }
+
+        if message == WM_DRAWITEM {
+            // Safety: for an owner-drawn menu, lParam is a valid DRAWITEMSTRUCT and
+            // itemData is the TrayOwnerDrawItem pointer set in insert_owner_draw_item.
+            let draw = unsafe { &*(lparam as *const DRAWITEMSTRUCT) };
+            if draw.itemData != 0 {
+                let item = unsafe { &*(draw.itemData as *const TrayOwnerDrawItem) };
+                draw_tray_owner_draw_item(draw, item);
+                return 1;
+            }
+        }
+
         if message == WM_MENUSELECT {
             handle_tray_menu_select(hwnd, wparam, lparam);
             return 0;
@@ -3518,11 +3609,17 @@ try {
         }
 
         let mut tooltip_state = TrayMenuTooltipState::default();
+        // Backing store for owner-drawn item state. Each menu item's `dwItemData`
+        // points into this arena; it must outlive `TrackPopupMenu` (the window
+        // procedure reads it during WM_MEASUREITEM/WM_DRAWITEM), so it is dropped
+        // only after the menu is torn down at the end of this function.
+        let mut owner_draw_items: Vec<Box<TrayOwnerDrawItem>> = Vec::new();
         if let Err(error) = append_tray_menu_items(
             menu,
             &handle.menu_items,
             handle.presenter_min_width,
             &mut tooltip_state,
+            &mut owner_draw_items,
         ) {
             // Safety: menu is owned by this function.
             let _ = unsafe { DestroyMenu(menu) };
@@ -3568,15 +3665,34 @@ try {
         }
     }
 
+    /// Backing state for an owner-drawn tray menu item. A boxed instance is
+    /// referenced by the item's `dwItemData` and read back during
+    /// WM_MEASUREITEM / WM_DRAWITEM. Owned by the arena in `show_tray_menu`,
+    /// which outlives `TrackPopupMenu`.
+    struct TrayOwnerDrawItem {
+        /// NUL-terminated UTF-16 label.
+        text: Vec<u16>,
+        /// Label length in UTF-16 code units, excluding the trailing NUL.
+        text_len: i32,
+        /// Draw a trailing chevron for submenu items.
+        is_submenu: bool,
+        /// Minimum item width in DIP/pixels (the menu's `presenter_min_width`),
+        /// applied as a floor so the whole menu reaches the requested width.
+        min_width: i32,
+    }
+
     fn append_tray_menu_items(
         menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
         items: &[super::WindowsTrayItemPlan],
         presenter_min_width: Option<u16>,
         tooltip_state: &mut TrayMenuTooltipState,
+        arena: &mut Vec<Box<TrayOwnerDrawItem>>,
     ) -> Result<(), WindowsPlatformError> {
         for (position, item) in items.iter().enumerate() {
             match item.kind {
                 super::WindowsTrayItemKind::Separator => {
+                    // Separators stay system-drawn (non-selectable); WinUI's inset
+                    // divider is approximated by the Win11 native separator.
                     // Safety: menu is owned by caller; separator ignores id and label.
                     if unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, null()) } == 0 {
                         return Err(last_error("AppendMenuW"));
@@ -3593,24 +3709,23 @@ try {
                         &item.children,
                         presenter_min_width,
                         tooltip_state,
+                        arena,
                     ) {
-                        // Safety: submenu is owned by this branch until AppendMenuW succeeds.
+                        // Safety: submenu is owned by this branch until InsertMenuItemW succeeds.
                         let _ = unsafe { DestroyMenu(submenu) };
                         return Err(error);
                     }
-
-                    let label = wide_null(&tray_menu_label_text(&item.label, presenter_min_width));
-                    let flags = if item.enabled {
-                        MF_POPUP
-                    } else {
-                        MF_POPUP | MF_GRAYED
-                    };
-                    // Safety: menu and submenu are valid. On success, submenu ownership is
-                    // transferred to parent menu and will be destroyed with it.
-                    if unsafe { AppendMenuW(menu, flags, submenu as usize, label.as_ptr()) } == 0 {
+                    if let Err(error) = insert_owner_draw_item(
+                        menu,
+                        position as u32,
+                        item,
+                        presenter_min_width,
+                        Some(submenu),
+                        arena,
+                    ) {
                         // Safety: submenu has not been transferred on failure.
                         let _ = unsafe { DestroyMenu(submenu) };
-                        return Err(last_error("AppendMenuW"));
+                        return Err(error);
                     }
                     if let Some(tooltip) = tray_item_tooltip_text(item) {
                         tooltip_state
@@ -3619,19 +3734,14 @@ try {
                     }
                 }
                 super::WindowsTrayItemKind::Command => {
-                    let label = wide_null(&tray_menu_label_text(&item.label, presenter_min_width));
-                    let flags = if item.enabled {
-                        MF_STRING
-                    } else {
-                        MF_STRING | MF_GRAYED
-                    };
-                    // Safety: menu is owned by caller, label is null-terminated for the duration
-                    // of the call, and command ids are stable in WindowsTrayPlan.
-                    if unsafe { AppendMenuW(menu, flags, item.command_id as usize, label.as_ptr()) }
-                        == 0
-                    {
-                        return Err(last_error("AppendMenuW"));
-                    }
+                    insert_owner_draw_item(
+                        menu,
+                        position as u32,
+                        item,
+                        presenter_min_width,
+                        None,
+                        arena,
+                    )?;
                     if let Some(tooltip) = tray_item_tooltip_text(item) {
                         tooltip_state
                             .command_tooltips
@@ -3644,23 +3754,200 @@ try {
         Ok(())
     }
 
-    pub(super) fn tray_menu_label_text(label: &str, presenter_min_width: Option<u16>) -> String {
-        let Some(min_width) = presenter_min_width.filter(|value| *value > 0) else {
-            return label.to_string();
+    /// Inserts a single owner-drawn command or submenu item, allocating its
+    /// [`TrayOwnerDrawItem`] backing state in `arena`.
+    fn insert_owner_draw_item(
+        menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
+        position: u32,
+        item: &super::WindowsTrayItemPlan,
+        presenter_min_width: Option<u16>,
+        submenu: Option<windows_sys::Win32::UI::WindowsAndMessaging::HMENU>,
+        arena: &mut Vec<Box<TrayOwnerDrawItem>>,
+    ) -> Result<(), WindowsPlatformError> {
+        let text = wide_null(&item.label);
+        let text_len = text.len().saturating_sub(1) as i32;
+        let draw = Box::new(TrayOwnerDrawItem {
+            text,
+            text_len,
+            is_submenu: submenu.is_some(),
+            min_width: presenter_min_width.map(i32::from).unwrap_or(0),
+        });
+        // The boxed state lives on the heap; moving the Box into the arena does
+        // not move it, so this pointer stays valid for the menu's lifetime.
+        let data_ptr = draw.as_ref() as *const TrayOwnerDrawItem as usize;
+        arena.push(draw);
+
+        // Safety: a zeroed MENUITEMINFOW with cbSize set is the documented way to
+        // populate the struct; only the masked fields are read.
+        let mut info: MENUITEMINFOW = unsafe { std::mem::zeroed() };
+        info.cbSize = std::mem::size_of::<MENUITEMINFOW>() as u32;
+        info.fMask = MIIM_FTYPE
+            | MIIM_STATE
+            | MIIM_DATA
+            | if submenu.is_some() {
+                MIIM_SUBMENU
+            } else {
+                MIIM_ID
+            };
+        info.fType = MFT_OWNERDRAW;
+        info.fState = if item.enabled { MFS_ENABLED } else { MFS_GRAYED };
+        if let Some(submenu) = submenu {
+            info.hSubMenu = submenu;
+        } else {
+            info.wID = item.command_id;
+        }
+        info.dwItemData = data_ptr;
+
+        // Safety: info is fully initialized; the boxed state outlives the menu.
+        if unsafe { InsertMenuItemW(menu, position, 1, &info) } == 0 {
+            return Err(last_error("InsertMenuItemW"));
+        }
+        Ok(())
+    }
+
+    /// Creates an `HFONT` for the current system menu font, or null on failure
+    /// (callers skip font selection when null). The caller owns and deletes it.
+    fn tray_menu_font() -> HFONT {
+        let mut metrics: NONCLIENTMETRICSW = unsafe { std::mem::zeroed() };
+        metrics.cbSize = std::mem::size_of::<NONCLIENTMETRICSW>() as u32;
+        // Safety: pvParam points to a NONCLIENTMETRICSW whose cbSize is set.
+        let ok = unsafe {
+            SystemParametersInfoW(
+                SPI_GETNONCLIENTMETRICS,
+                metrics.cbSize,
+                (&mut metrics as *mut NONCLIENTMETRICSW).cast(),
+                0,
+            )
         };
-        if label.contains('\t') {
-            return label.to_string();
+        if ok == 0 {
+            return null_mut();
+        }
+        // Safety: lfMenuFont is a valid LOGFONTW populated by the call above.
+        unsafe { CreateFontIndirectW(&metrics.lfMenuFont as *const LOGFONTW) }
+    }
+
+    /// Blends two `COLORREF`s (`0x00BBGGRR`) by `t` in `0.0..=1.0`.
+    pub(super) fn blend_color(from: u32, to: u32, t: f32) -> u32 {
+        let channel = |shift: u32| {
+            let a = ((from >> shift) & 0xFF) as f32;
+            let b = ((to >> shift) & 0xFF) as f32;
+            (a + (b - a) * t).round().clamp(0.0, 255.0) as u32
+        };
+        channel(0) | (channel(8) << 8) | (channel(16) << 16)
+    }
+
+    fn measure_tray_owner_draw_item(item: &TrayOwnerDrawItem) -> (u32, u32) {
+        // Safety: GetDC(null) returns a screen DC; released below.
+        let hdc = unsafe { GetDC(null_mut()) };
+        let font = tray_menu_font();
+        let old_font = if font.is_null() {
+            null_mut()
+        } else {
+            // Safety: hdc and font are valid; previous object restored below.
+            unsafe { SelectObject(hdc, font as HGDIOBJ) }
+        };
+        let mut size = SIZE { cx: 0, cy: 0 };
+        // Safety: text is a valid UTF-16 buffer of text_len units.
+        unsafe { GetTextExtentPoint32W(hdc, item.text.as_ptr(), item.text_len, &mut size) };
+        if !font.is_null() {
+            // Safety: restore and delete the font we created.
+            unsafe { SelectObject(hdc, old_font) };
+            unsafe { DeleteObject(font as HGDIOBJ) };
+        }
+        // Safety: release the screen DC obtained above.
+        unsafe { ReleaseDC(null_mut(), hdc) };
+
+        // Horizontal: left text gutter + text + right padding (+ chevron column).
+        let horizontal_padding = 28;
+        let chevron = if item.is_submenu { 18 } else { 0 };
+        let width = (size.cx + horizontal_padding + chevron)
+            .max(item.min_width)
+            .max(1) as u32;
+        // Vertical: roomy WinUI-style item height.
+        let height = (size.cy + 12).max(28) as u32;
+        (width, height)
+    }
+
+    fn draw_tray_owner_draw_item(draw: &DRAWITEMSTRUCT, item: &TrayOwnerDrawItem) {
+        let hdc = draw.hDC;
+        let rect = draw.rcItem;
+        let selected = (draw.itemState & ODS_SELECTED) != 0;
+        let disabled = (draw.itemState & (ODS_GRAYED | ODS_DISABLED)) != 0;
+
+        // Safety: COLOR_* are valid system color indices.
+        let menu_bg = unsafe { GetSysColor(COLOR_MENU) };
+        let text_color = if disabled {
+            unsafe { GetSysColor(COLOR_GRAYTEXT) }
+        } else {
+            unsafe { GetSysColor(COLOR_MENUTEXT) }
+        };
+
+        // Base background.
+        // Safety: brush and rect are valid; brush deleted right after.
+        let bg_brush = unsafe { CreateSolidBrush(menu_bg) };
+        unsafe { FillRect(hdc, &rect, bg_brush) };
+        unsafe { DeleteObject(bg_brush as HGDIOBJ) };
+
+        // Fluent hover: subtle, inset, rounded highlight (theme-aware tint).
+        if selected && !disabled {
+            let hover = blend_color(menu_bg, text_color, 0.10);
+            // Safety: brush/region are valid and freed below.
+            let brush = unsafe { CreateSolidBrush(hover) };
+            let region = unsafe {
+                CreateRoundRectRgn(rect.left + 3, rect.top + 1, rect.right - 3, rect.bottom - 1, 8, 8)
+            };
+            if !region.is_null() {
+                unsafe { FillRgn(hdc, region, brush) };
+                unsafe { DeleteObject(region as HGDIOBJ) };
+            }
+            unsafe { DeleteObject(brush as HGDIOBJ) };
         }
 
-        let label_columns = label.chars().count();
-        let target_columns = ((usize::from(min_width).saturating_sub(24)) / 7)
-            .max(label_columns)
-            .max(1);
-        let padding_columns = target_columns.saturating_sub(label_columns);
-        if padding_columns == 0 {
-            label.to_string()
+        let font = tray_menu_font();
+        let old_font = if font.is_null() {
+            null_mut()
         } else {
-            format!("{label}\t{}", "\u{00A0}".repeat(padding_columns))
+            // Safety: hdc and font are valid; restored below.
+            unsafe { SelectObject(hdc, font as HGDIOBJ) }
+        };
+        // Safety: standard text-rendering setup on a valid DC.
+        unsafe { SetBkMode(hdc, TRANSPARENT as i32) };
+        unsafe { SetTextColor(hdc, text_color) };
+
+        let mut text_rect = rect;
+        text_rect.left += 16;
+        text_rect.right -= 12;
+        // Safety: text buffer and rect are valid for the duration of the call.
+        unsafe {
+            DrawTextW(
+                hdc,
+                item.text.as_ptr(),
+                item.text_len,
+                &mut text_rect,
+                DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+            )
+        };
+
+        if item.is_submenu {
+            let chevron: Vec<u16> = "\u{203A}".encode_utf16().collect();
+            let mut chevron_rect = rect;
+            chevron_rect.right -= 12;
+            // Safety: chevron buffer and rect are valid for the call.
+            unsafe {
+                DrawTextW(
+                    hdc,
+                    chevron.as_ptr(),
+                    chevron.len() as i32,
+                    &mut chevron_rect,
+                    DT_RIGHT | DT_VCENTER | DT_SINGLELINE,
+                )
+            };
+        }
+
+        if !font.is_null() {
+            // Safety: restore and delete the font created above.
+            unsafe { SelectObject(hdc, old_font) };
+            unsafe { DeleteObject(font as HGDIOBJ) };
         }
     }
 
@@ -4873,19 +5160,21 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn tray_presenter_min_width_applies_native_popup_width_hint() {
-        assert_eq!(native::tray_menu_label_text("Open", None), "Open");
-        assert_eq!(native::tray_menu_label_text("Open", Some(0)), "Open");
-        assert_eq!(
-            native::tray_menu_label_text("Open\tCtrl+O", Some(300)),
-            "Open\tCtrl+O"
-        );
+    fn tray_owner_draw_blend_color_interpolates_channels() {
+        // COLORREF is 0x00BBGGRR.
+        let white = 0x00FF_FFFF;
+        let black = 0x0000_0000;
+        assert_eq!(native::blend_color(white, black, 0.0), white);
+        assert_eq!(native::blend_color(white, black, 1.0), black);
+        // Halfway between white and black is mid-gray on every channel
+        // (255 * 0.5 = 127.5, rounded to 128 = 0x80).
+        assert_eq!(native::blend_color(white, black, 0.5), 0x0080_8080);
 
-        let padded = native::tray_menu_label_text("Open", Some(300));
-
-        assert!(padded.starts_with("Open\t"));
-        assert!(padded.contains('\u{00A0}'));
-        assert!(padded.chars().count() > "Open".chars().count());
+        // Per-channel: red toward blue blends the R and B bytes independently.
+        let mid = native::blend_color(0x0000_00FF, 0x00FF_0000, 0.5);
+        assert_eq!(mid & 0xFF, 0x80); // red halved
+        assert_eq!((mid >> 16) & 0xFF, 0x80); // blue half-raised
+        assert_eq!((mid >> 8) & 0xFF, 0x00); // green untouched
     }
 
     #[cfg(windows)]

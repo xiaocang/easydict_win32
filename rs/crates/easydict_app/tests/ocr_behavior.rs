@@ -5,7 +5,7 @@ use easydict_app::{
     bgra_to_base64_jpeg_data_url, build_custom_api_ocr_request, build_ollama_ocr_request,
     group_and_sort_ocr_lines, merge_ocr_lines, merge_ocr_words, merged_ocr_text,
     parse_ocr_http_response, run_ocr_recognize, run_ocr_recognize_with_app_dir,
-    run_ocr_recognize_with_current_app_dir, screen_capture_request_from_selection,
+    run_ocr_recognize_with_current_app_dir,
     windows_native_ocr_availability_with_recognizer, CaptureBackground, CapturePhase, CapturePoint,
     CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend,
     OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig,
@@ -13,7 +13,6 @@ use easydict_app::{
     OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto,
     ScreenWindowRect, ScreenWindowSnapshot, WindowsNativeOcrRecognizer,
 };
-use easydict_windows_screen_capture::{ScreenCaptureRequest, ScreenRect};
 use serde_json::json;
 use std::{
     collections::VecDeque,
@@ -1185,11 +1184,12 @@ fn capture_window_snapshot_failure_preserves_manual_region_capture() {
         None
     );
 
+    // Drag without releasing: releasing now confirms immediately, so an active
+    // (in-progress) drag stays in the selecting phase.
     app.update(Message::CaptureLeftButtonDown(CapturePoint::new(10, 10)));
     app.update(Message::CaptureMouseMoved(CapturePoint::new(40, 40)));
-    app.update(Message::CaptureLeftButtonUp(CapturePoint::new(40, 40)));
 
-    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Adjusting);
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Selecting);
     assert_eq!(
         app.state.capture_selection,
         Some(CaptureRect::new(10, 10, 40, 40))
@@ -1224,6 +1224,7 @@ fn capture_background_failure_preserves_overlay_and_success_clears_only_backgrou
         bgra_path: r"C:\Temp\easydict-capture.bgra".to_string(),
         pixel_width: 1920,
         pixel_height: 1080,
+        scale_factor: 1.0,
     };
     apply_capture_background_result(&mut state, Ok(background.clone()));
 
@@ -1237,6 +1238,7 @@ fn capture_background_failure_preserves_overlay_and_success_clears_only_backgrou
             bgra_path: r"C:\Temp\easydict-capture-2.bgra".to_string(),
             pixel_width: 100,
             pixel_height: 80,
+            scale_factor: 1.0,
         }),
     );
 
@@ -1280,38 +1282,37 @@ fn capture_window_snapshot_does_not_reset_active_drag_selection() {
 }
 
 #[test]
-fn capture_overlay_confirm_uses_selected_screen_region() {
+fn capture_overlay_confirm_crops_selected_region_from_frozen_background() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
     app.update(Message::HotkeyTriggered(
         easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
     ));
+    inject_capture_background(&mut app, "ocr-confirm", 400, 300);
     app.update(Message::CaptureSelectionChanged(Some(CaptureRect::new(
-        310, 220, -10, 20,
+        310, 220, 10, 20,
     ))));
 
-    assert_eq!(
-        screen_capture_request_from_selection(Some(CaptureRect::new(310, 220, -10, 20))),
-        Some(ScreenCaptureRequest::region(ScreenRect::new(
-            -10, 20, 320, 200
-        )))
-    );
+    // Confirming crops the frozen snapshot and starts OCR (a future task),
+    // never a fresh live screen grab.
     let task = app.update(Message::ConfirmCapture);
 
     assert!(contains_future_task(&task));
     assert!(!contains_capture_screen_region_task(&task));
+    assert_eq!(app.state.active_ocr_mode, Some(OcrMode::Translate));
     assert_eq!(app.state.capture_selection, None);
 }
 
 #[test]
-fn capture_overlay_drag_interaction_enters_adjusting_then_confirms_selected_screen_region() {
+fn capture_overlay_drag_release_confirms_and_crops_selected_region() {
     let mut app = EasydictApp {
         state: EasydictUiState::default(),
     };
     app.update(Message::HotkeyTriggered(
         easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
     ));
+    inject_capture_background(&mut app, "ocr-drag", 400, 300);
 
     assert!(matches!(
         app.update(Message::CaptureLeftButtonDown(CapturePoint::new(120, 90))),
@@ -1321,27 +1322,14 @@ fn capture_overlay_drag_interaction_enters_adjusting_then_confirms_selected_scre
         app.update(Message::CaptureMouseMoved(CapturePoint::new(200, 160))),
         Task::None
     ));
+    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Selecting);
 
+    // Releasing the drag confirms immediately — no separate adjust/confirm step.
     let task = app.update(Message::CaptureLeftButtonUp(CapturePoint::new(200, 160)));
-
-    assert!(!contains_capture_screen_region_task(&task));
-    assert_eq!(app.state.capture_interaction.phase, CapturePhase::Adjusting);
-    assert_eq!(
-        app.state.capture_selection,
-        Some(CaptureRect::new(120, 90, 200, 160))
-    );
-
-    assert_eq!(
-        screen_capture_request_from_selection(app.state.capture_selection),
-        Some(ScreenCaptureRequest::region(ScreenRect::new(
-            120, 90, 80, 70
-        )))
-    );
-    let task = app.update(Message::ConfirmCapture);
 
     assert!(contains_future_task(&task));
     assert!(!contains_capture_screen_region_task(&task));
-    assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::Translate));
+    assert_eq!(app.state.active_ocr_mode, Some(OcrMode::Translate));
     assert_eq!(app.state.capture_selection, None);
 }
 
@@ -1353,6 +1341,7 @@ fn capture_overlay_double_click_detected_window_confirms_window_region() {
     app.update(Message::HotkeyTriggered(
         easydict_app::HOTKEY_SILENT_OCR.to_string(),
     ));
+    inject_capture_background(&mut app, "ocr-dblclick", 400, 300);
     app.update(Message::CaptureWindowsChanged(vec![DetectedWindow::new(
         1,
         CaptureRect::new(0, 0, 400, 300),
@@ -1363,18 +1352,13 @@ fn capture_overlay_double_click_detected_window_confirms_window_region() {
     )])]));
     app.update(Message::CaptureMouseMoved(CapturePoint::new(80, 70)));
 
-    assert_eq!(
-        screen_capture_request_from_selection(Some(CaptureRect::new(50, 40, 220, 180))),
-        Some(ScreenCaptureRequest::region(ScreenRect::new(
-            50, 40, 170, 140
-        )))
-    );
+    // Double-clicking the detected window confirms its region immediately.
     let task = app.update(Message::CaptureDoubleClick(CapturePoint::new(80, 70)));
 
     assert!(contains_future_task(&task));
     assert!(!contains_capture_screen_region_task(&task));
-    assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::SilentClipboard));
-    assert_eq!(app.state.ocr_status_text, "Silent OCR capture requested");
+    assert_eq!(app.state.active_ocr_mode, Some(OcrMode::SilentClipboard));
+    assert_eq!(app.state.capture_selection, None);
 }
 
 #[test]
@@ -1385,18 +1369,15 @@ fn capture_overlay_copy_requests_silent_platform_screen_capture() {
     app.update(Message::HotkeyTriggered(
         easydict_app::HOTKEY_OCR_TRANSLATE.to_string(),
     ));
+    inject_capture_background(&mut app, "ocr-copy", 400, 300);
     app.update(Message::CaptureSelectionChanged(Some(CaptureRect::new(
-        -10, 20, -7, 23,
+        40, 20, 200, 160,
     ))));
 
-    assert_eq!(
-        screen_capture_request_from_selection(app.state.capture_selection),
-        Some(ScreenCaptureRequest::region(ScreenRect::new(-10, 20, 3, 3)))
-    );
+    // "Copy text" forces silent-clipboard mode and crops the frozen region.
     let task = app.update(Message::CopyResult);
 
-    assert_eq!(app.state.pending_ocr_mode, Some(OcrMode::SilentClipboard));
-    assert_eq!(app.state.ocr_status_text, "Silent OCR capture requested");
+    assert_eq!(app.state.active_ocr_mode, Some(OcrMode::SilentClipboard));
     assert!(contains_future_task(&task));
     assert!(!contains_capture_screen_region_task(&task));
 }
@@ -1426,7 +1407,12 @@ fn app_ocr_screen_capture_uses_native_helper_instead_of_winfluent_task_surface()
     let state_source = include_str!("../src/state.rs");
     let app_manifest = include_str!("../Cargo.toml");
 
-    assert!(app_source.contains("screen_capture_native::capture_screen_region_result_task"));
+    // Region capture now happens once when the overlay freezes the desktop
+    // (via the lib-owned native helper); confirmation crops that frozen snapshot
+    // rather than issuing a second live grab.
+    assert!(state_source.contains("screen_capture_native::capture_screen_region_result"));
+    assert!(state_source.contains("pub fn crop_capture_background"));
+    assert!(app_source.contains("crate::state::crop_capture_background"));
     assert!(app_source.contains("screen_capture_native::capture_screen_windows_result_task"));
     assert!(
         app_manifest.contains("easydict_windows_screen_capture"),
@@ -1769,6 +1755,18 @@ fn write_temp_bgra(name: &str, bytes: &[u8]) -> PathBuf {
     ));
     fs::write(&path, bytes).expect("test BGRA file should be written");
     path
+}
+
+/// Installs a deterministic frozen-desktop snapshot so capture confirmation can
+/// crop a reproducible region without depending on a live screen grab.
+fn inject_capture_background(app: &mut EasydictApp, name: &str, width: u32, height: u32) {
+    let path = write_temp_bgra(name, &vec![0u8; (width as usize) * (height as usize) * 4]);
+    app.state.capture_background = Some(CaptureBackground {
+        bgra_path: path.to_string_lossy().into_owned(),
+        pixel_width: width,
+        pixel_height: height,
+        scale_factor: 1.0,
+    });
 }
 
 fn write_temp_legacy_ocr_app_dir(name: &str) -> PathBuf {

@@ -1416,10 +1416,18 @@ impl EasydictApp {
             .state
             .capture_selection
             .or(self.state.capture_interaction.selection)
-            .map(CaptureRect::normalized);
-        let Some(request) = screen_capture_request_from_selection(selection) else {
-            self.state.capture_selection = selection.filter(|selection| selection.is_confirmable());
+            .map(CaptureRect::normalized)
+            .filter(|selection| selection.is_confirmable());
+        let Some(selection) = selection else {
             self.state.ocr_status_text = "Select a region before OCR".to_string();
+            return Task::none();
+        };
+        // OCR runs on the frozen desktop snapshot captured before the overlay
+        // opened (like the WinUI ScreenCaptureWindow's ExtractRegion BitBlt),
+        // never a fresh grab — which would otherwise capture the visible dimmed
+        // overlay itself.
+        let Some(background) = self.state.capture_background.clone() else {
+            self.state.ocr_status_text = "Capture background unavailable".to_string();
             return Task::none();
         };
 
@@ -1428,18 +1436,16 @@ impl EasydictApp {
         self.state.pending_ocr_mode = Some(mode);
         self.state.ocr_status_text = format!("{} capture requested", mode.label());
         self.state.capture_selection = None;
-        screen_capture_native::capture_screen_region_result_task(request, move |capture| {
-            match capture {
-                Ok(capture) => {
-                    let capture = ocr::OcrCaptureResult::from(capture);
-                    match mode {
-                        ocr::OcrMode::Translate => Message::OcrCaptureFinished(capture),
-                        ocr::OcrMode::SilentClipboard => Message::SilentOcrCaptureFinished(capture),
-                    }
-                }
-                Err(error) => Message::OcrCaptureFailed { mode, error },
+
+        match crate::state::crop_capture_background(&background, selection) {
+            Ok(capture) => self.start_ocr_recognize(mode, capture),
+            Err(error) => {
+                ocr::apply_ocr_capture_error(&mut self.state, mode, error);
+                self.state.capture_interaction = CaptureInteractionState::new();
+                self.state.capture_selection = None;
+                Task::window(WindowCommand::Hide(WindowId::new("capture-overlay")))
             }
-        })
+        }
     }
 
     fn capture_overlay_interaction_task(&mut self, message: &Message) -> Option<Task<Message>> {
@@ -1465,10 +1471,6 @@ impl EasydictApp {
                 .state
                 .capture_interaction
                 .on_mouse_wheel(*delta, *point, &detector),
-            Message::CaptureNudgeSelection { delta_x, delta_y } => self
-                .state
-                .capture_interaction
-                .nudge_selection(*delta_x, *delta_y),
             Message::CaptureEscape => self.state.capture_interaction.on_escape(),
             _ => return None,
         };
@@ -2052,13 +2054,13 @@ pub fn tray_menu_for_browser_support_locale(
 }
 
 fn tray_command_item(id: &str, label: impl Into<String>) -> TrayMenuItem<Message> {
-    let label = label.into();
-    TrayMenuItem::new(id, label.clone()).tooltip(label)
+    // No tooltip: the owner-drawn menu shows each item's full label, so a
+    // tooltip duplicating it would just be a redundant floating box.
+    TrayMenuItem::new(id, label)
 }
 
 fn tray_submenu_item(id: &str, label: impl Into<String>) -> TrayMenuItem<Message> {
-    let label = label.into();
-    TrayMenuItem::submenu(id, label.clone()).tooltip(label)
+    TrayMenuItem::submenu(id, label)
 }
 
 pub fn default_tray_icon_path() -> Option<String> {

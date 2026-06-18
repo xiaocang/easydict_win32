@@ -12,11 +12,18 @@ use crate::style::{utility_scale, FluentStyle};
 #[derive(Clone, Debug)]
 pub struct View<Message> {
     token: ViewToken<Message>,
+    /// Optional hover tooltip for *any* element (WinUI `ToolTipService.ToolTip`).
+    /// Lives on the wrapper rather than per-token so it applies uniformly to
+    /// every control, not just `button`.
+    tooltip: Option<String>,
 }
 
 impl<Message> View<Message> {
     pub fn new(token: ViewToken<Message>) -> Self {
-        Self { token }
+        Self {
+            token,
+            tooltip: None,
+        }
     }
 
     pub fn token(&self) -> &ViewToken<Message> {
@@ -25,6 +32,18 @@ impl<Message> View<Message> {
 
     pub fn into_token(self) -> ViewToken<Message> {
         self.token
+    }
+
+    /// Attach a hover tooltip to this view. Works on any element, mirroring
+    /// WinUI's attached `ToolTipService.ToolTip` property.
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    /// The tooltip text attached via [`View::tooltip`], if any.
+    pub fn tooltip_text(&self) -> Option<&str> {
+        self.tooltip.as_deref()
     }
 
     pub fn text_margin(mut self, margin: Edges) -> Self {
@@ -132,7 +151,10 @@ pub enum ViewToken<Message> {
     Page(PageToken<Message>),
     TitleBar(TitleBarToken<Message>),
     Text(TextToken),
+    RichText(RichTextToken<Message>),
     Button(ButtonToken<Message>),
+    ToggleButton(ToggleButtonToken<Message>),
+    SplitButton(SplitButtonToken<Message>),
     FlyoutButton(FlyoutButtonToken<Message>),
     StatusBadge(StatusBadgeToken),
     InfoBar(InfoBarToken),
@@ -143,14 +165,23 @@ pub enum ViewToken<Message> {
     Spacer(SpacerToken),
     TextEditor(TextEditorToken<Message>),
     CheckBox(CheckBoxToken<Message>),
+    RadioGroup(RadioGroupToken<Message>),
     ToggleSwitch(ToggleSwitchToken<Message>),
     Slider(SliderToken<Message>),
+    NumberBox(NumberBoxToken<Message>),
+    AutoSuggestBox(AutoSuggestBoxToken<Message>),
     ComboBox(ComboBoxToken<Message>),
     CommandBar(CommandBarToken<Message>),
     NavigationView(NavigationViewToken<Message>),
     Dialog(DialogToken<Message>),
     Layout(LayoutToken<Message>),
+    Grid(GridToken<Message>),
+    Border(BorderToken<Message>),
+    Viewbox(ViewboxToken<Message>),
+    TabView(TabViewToken<Message>),
+    TreeView(TreeViewToken<Message>),
     Wrap(WrapToken<Message>),
+    Flyout(FlyoutToken<Message>),
     Overlay(OverlayToken<Message>),
     AdaptiveSwitch(AdaptiveSwitchToken<Message>),
     Lazy(LazyToken<Message>),
@@ -159,9 +190,11 @@ pub enum ViewToken<Message> {
     SettingsRow(SettingsRowToken<Message>),
     ResultCard(ResultCardToken<Message>),
     ResultList(ResultListToken<Message>),
+    ListView(ListViewToken<Message>),
     PointerRegion(PointerRegionToken<Message>),
     CaptureOverlay(CaptureOverlayToken),
     Image(ImageToken),
+    WebView(WebViewToken),
     Custom(CustomToken<Message>),
 }
 
@@ -394,6 +427,74 @@ pub struct TextToken {
     pub a11y: A11yHint,
 }
 
+/// Styling of a single inline run within a [`RichTextToken`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+pub enum TextRunKind {
+    #[default]
+    Plain,
+    Bold,
+    Italic,
+    /// A hyperlink; carries an `href` and fires the rich text's link action.
+    Link,
+}
+
+/// A single inline run of text (WinUI `RichTextBlock` `Run`/`Hyperlink`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TextRun {
+    pub text: String,
+    pub kind: TextRunKind,
+    pub href: Option<String>,
+}
+
+impl TextRun {
+    pub fn plain(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            kind: TextRunKind::Plain,
+            href: None,
+        }
+    }
+
+    pub fn bold(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            kind: TextRunKind::Bold,
+            href: None,
+        }
+    }
+
+    pub fn italic(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            kind: TextRunKind::Italic,
+            href: None,
+        }
+    }
+
+    /// A hyperlink run. The `href` is the value passed to the rich text's
+    /// `on_link` handler when clicked.
+    pub fn link(text: impl Into<String>, href: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            kind: TextRunKind::Link,
+            href: Some(href.into()),
+        }
+    }
+}
+
+/// Inline rich text composed of styled [`TextRun`]s (WinUI `RichTextBlock`):
+/// the base for dictionary entries and MDX rich documents.
+#[derive(Clone, Debug)]
+pub struct RichTextToken<Message> {
+    pub id: Option<String>,
+    pub runs: Vec<TextRun>,
+    pub style: TextStyle,
+    pub wrapping: TextWrapping,
+    /// Fired when a link run is clicked, with the run's `href` (`SelectionInput`).
+    pub link_action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
 #[derive(Clone, Debug)]
 pub struct ButtonToken<Message> {
     pub id: Option<String>,
@@ -409,6 +510,34 @@ pub struct ButtonToken<Message> {
     pub margin: Edges,
     pub state: ControlState,
     pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+/// A button that holds an on/off pressed state (WinUI `ToggleButton`).
+#[derive(Clone, Debug)]
+pub struct ToggleButtonToken<Message> {
+    pub id: Option<String>,
+    pub label: String,
+    pub icon: Option<IconToken>,
+    pub pressed: bool,
+    pub state: ControlState,
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+/// A two-part button: a primary action plus a dropdown menu (WinUI `SplitButton`).
+#[derive(Clone, Debug)]
+pub struct SplitButtonToken<Message> {
+    pub id: Option<String>,
+    pub label: String,
+    pub icon: Option<IconToken>,
+    pub items: Vec<FlyoutMenuItem>,
+    pub open: bool,
+    pub state: ControlState,
+    /// Fired when the primary segment is pressed (`Message`).
+    pub primary_action: Action<Message>,
+    /// Fired when a menu item is chosen (`SelectionInput` with the item id).
+    pub select_action: Action<Message>,
     pub a11y: A11yHint,
 }
 
@@ -607,7 +736,57 @@ pub struct CheckBoxToken<Message> {
     pub id: Option<String>,
     pub label: String,
     pub checked: bool,
+    /// Third (mixed) state, mirroring WinUI `CheckBox.IsThreeState`/`IsChecked == null`.
+    /// When `true`, the box renders a dash glyph and `checked` is ignored visually.
+    pub indeterminate: bool,
     pub label_italic: bool,
+    pub state: ControlState,
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+/// Layout orientation for controls that can stack vertically or horizontally
+/// (WinUI `Orientation`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Orientation {
+    Vertical,
+    Horizontal,
+}
+
+/// A single option within a [`RadioGroupToken`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RadioOption {
+    pub id: String,
+    pub label: String,
+    pub enabled: bool,
+}
+
+impl RadioOption {
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            enabled: true,
+        }
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+}
+
+/// A single-selection radio group (WinUI `RadioButtons`). One option is selected
+/// at a time; selecting another fires the group's `SelectionInput` with the new
+/// option's id.
+#[derive(Clone, Debug)]
+pub struct RadioGroupToken<Message> {
+    pub id: Option<String>,
+    pub header: Option<String>,
+    pub options: Vec<RadioOption>,
+    pub selected: Option<String>,
+    pub orientation: Orientation,
+    pub spacing: u16,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -623,6 +802,57 @@ pub struct SliderToken<Message> {
     pub width: Length,
     pub state: ControlState,
     pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+/// A numeric input with optional spin buttons and range/step (WinUI `NumberBox`).
+#[derive(Clone, Debug)]
+pub struct NumberBoxToken<Message> {
+    pub id: Option<String>,
+    pub value: f32,
+    pub min: Option<f32>,
+    pub max: Option<f32>,
+    pub step: f32,
+    pub header: Option<String>,
+    pub placeholder: Option<String>,
+    pub spin_buttons: bool,
+    pub state: ControlState,
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+impl<Message> NumberBoxToken<Message> {
+    /// Clamp a candidate value to the configured `[min, max]` range.
+    pub fn clamp(&self, value: f32) -> f32 {
+        let mut v = value;
+        if let Some(min) = self.min {
+            v = v.max(min);
+        }
+        if let Some(max) = self.max {
+            v = v.min(max);
+        }
+        v
+    }
+}
+
+/// A text box with as-you-type suggestions (WinUI `AutoSuggestBox`): used for
+/// search and language pickers.
+#[derive(Clone, Debug)]
+pub struct AutoSuggestBoxToken<Message> {
+    pub id: Option<String>,
+    pub text: String,
+    pub placeholder: Option<String>,
+    pub header: Option<String>,
+    /// Suggestion list shown beneath the box (already filtered by the app).
+    pub suggestions: Vec<String>,
+    /// Whether the suggestion list is open.
+    pub open: bool,
+    pub width: Length,
+    pub state: ControlState,
+    /// Fired as the user types (`TextInput`).
+    pub change_action: Action<Message>,
+    /// Fired when a suggestion is chosen (`SelectionInput` with the suggestion text).
+    pub submit_action: Action<Message>,
     pub a11y: A11yHint,
 }
 
@@ -688,14 +918,47 @@ impl NavigationItem {
     }
 }
 
+/// How the NavigationView pane is laid out (WinUI `NavigationViewPaneDisplayMode`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PaneDisplayMode {
+    /// Adapt between expanded/compact/minimal based on width.
+    #[default]
+    Auto,
+    /// Always-expanded left pane.
+    Left,
+    /// Top horizontal menu bar.
+    Top,
+    /// Icon-only left rail.
+    LeftCompact,
+    /// Collapsed to a hamburger button.
+    LeftMinimal,
+}
+
 #[derive(Clone, Debug)]
 pub struct NavigationViewToken<Message> {
     pub id: Option<String>,
     pub selected: Option<String>,
     pub items: Vec<NavigationItem>,
+    /// Items pinned to the bottom of the pane (WinUI `FooterMenuItems`).
+    pub footer_items: Vec<NavigationItem>,
     pub content: Option<Box<View<Message>>>,
+    pub pane_display_mode: PaneDisplayMode,
+    /// Pane header text (WinUI `PaneHeader`).
+    pub header: Option<String>,
+    /// Whether the built-in settings entry is shown (WinUI `IsSettingsVisible`).
+    pub settings_visible: bool,
+    /// Whether the back button is shown (WinUI `IsBackButtonVisible`).
+    pub back_button_visible: bool,
+    /// Selection callback: receives the chosen item id (or the settings id).
     pub action: Action<Message>,
+    /// Back-button callback (WinUI `BackRequested`).
+    pub back_action: Action<Message>,
     pub a11y: A11yHint,
+}
+
+impl<Message> NavigationViewToken<Message> {
+    /// The id reported through `action` when the built-in settings item is chosen.
+    pub const SETTINGS_ID: &'static str = "settings";
 }
 
 #[derive(Clone, Debug)]
@@ -735,6 +998,179 @@ pub struct LayoutToken<Message> {
     pub a11y: A11yHint,
 }
 
+/// A 2D grid layout, mirroring WinUI `Grid`. Tracks are declared with the
+/// existing [`Length`] enum, which maps cleanly onto WinUI's sizing semantics:
+/// `Length::Fixed` = absolute, `Length::FillPortion`/`Length::Fill` = star (`*`),
+/// `Length::Shrink` = `Auto`. Children are placed by `(row, column)` with an
+/// optional `(row_span, column_span)`.
+#[derive(Clone, Debug)]
+pub struct GridToken<Message> {
+    pub id: Option<String>,
+    pub rows: Vec<Length>,
+    pub columns: Vec<Length>,
+    pub row_spacing: u16,
+    pub column_spacing: u16,
+    pub padding: u16,
+    pub padding_edges: Option<Edges>,
+    pub width: Length,
+    pub height: Length,
+    pub align: Alignment,
+    pub children: Vec<GridChild<Message>>,
+    pub a11y: A11yHint,
+}
+
+/// A single placed child within a [`GridToken`].
+#[derive(Clone, Debug)]
+pub struct GridChild<Message> {
+    pub row: u16,
+    pub column: u16,
+    pub row_span: u16,
+    pub column_span: u16,
+    pub view: View<Message>,
+}
+
+impl<Message> GridChild<Message> {
+    pub fn new(row: u16, column: u16, view: impl IntoView<Message>) -> Self {
+        Self {
+            row,
+            column,
+            row_span: 1,
+            column_span: 1,
+            view: view.into_view(),
+        }
+    }
+
+    /// Set the row and column span (WinUI `Grid.RowSpan`/`Grid.ColumnSpan`).
+    pub fn span(mut self, row_span: u16, column_span: u16) -> Self {
+        self.row_span = row_span.max(1);
+        self.column_span = column_span.max(1);
+        self
+    }
+}
+
+/// A single-child container with rounded corners, an optional stroke, and an
+/// optional surface fill (WinUI `Border`). Styling is theme-driven.
+#[derive(Clone, Debug)]
+pub struct BorderToken<Message> {
+    pub id: Option<String>,
+    pub content: Box<View<Message>>,
+    pub corner_radius: u16,
+    pub stroke_width: u16,
+    /// Fill the interior with the theme surface color.
+    pub filled: bool,
+    pub padding: Edges,
+    pub width: Length,
+    pub height: Length,
+    pub a11y: A11yHint,
+}
+
+/// A single-child container that uniformly scales its content to fit (WinUI
+/// `Viewbox`).
+#[derive(Clone, Debug)]
+pub struct ViewboxToken<Message> {
+    pub id: Option<String>,
+    pub content: Box<View<Message>>,
+    pub stretch: ImageStretch,
+    pub width: Length,
+    pub height: Length,
+    pub a11y: A11yHint,
+}
+
+/// A single tab within a [`TabViewToken`].
+#[derive(Clone, Debug)]
+pub struct TabItem<Message> {
+    pub id: String,
+    pub header: String,
+    pub closable: bool,
+    pub content: View<Message>,
+}
+
+impl<Message> TabItem<Message> {
+    pub fn new(
+        id: impl Into<String>,
+        header: impl Into<String>,
+        content: impl IntoView<Message>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            header: header.into(),
+            closable: false,
+            content: content.into_view(),
+        }
+    }
+
+    pub fn closable(mut self, closable: bool) -> Self {
+        self.closable = closable;
+        self
+    }
+}
+
+/// A tabbed document/page container (WinUI `TabView`). The selected tab's
+/// content is shown.
+#[derive(Clone, Debug)]
+pub struct TabViewToken<Message> {
+    pub id: Option<String>,
+    pub tabs: Vec<TabItem<Message>>,
+    pub selected: Option<String>,
+    /// Tab-selected callback (`SelectionInput` with the tab id).
+    pub action: Action<Message>,
+    /// Tab-close callback (`SelectionInput` with the tab id).
+    pub close_action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+/// A node in a [`TreeViewToken`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TreeNode {
+    pub id: String,
+    pub label: String,
+    pub expanded: bool,
+    pub children: Vec<TreeNode>,
+}
+
+impl TreeNode {
+    pub fn leaf(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            expanded: false,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn branch(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        children: impl IntoIterator<Item = TreeNode>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            expanded: true,
+            children: children.into_iter().collect(),
+        }
+    }
+
+    pub fn expanded(mut self, expanded: bool) -> Self {
+        self.expanded = expanded;
+        self
+    }
+}
+
+/// A hierarchical list (WinUI `TreeView`): dictionary/settings hierarchies and
+/// long-document outlines.
+#[derive(Clone, Debug)]
+pub struct TreeViewToken<Message> {
+    pub id: Option<String>,
+    pub roots: Vec<TreeNode>,
+    pub selected: Option<String>,
+    /// Node-selected callback (`SelectionInput` with the node id).
+    pub action: Action<Message>,
+    /// Node expand/collapse-toggle callback (`SelectionInput` with the node id).
+    pub toggle_action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
 /// A flow layout that arranges children into rows, wrapping to a new row after
 /// `max_columns` items.
 ///
@@ -749,6 +1185,29 @@ pub struct WrapToken<Message> {
     pub max_columns: u16,
     pub spacing: u16,
     pub run_spacing: u16,
+    pub a11y: A11yHint,
+}
+
+/// Placement of a [`FlyoutToken`] relative to its anchor (WinUI `FlyoutPlacementMode`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FlyoutPlacement {
+    Top,
+    #[default]
+    Bottom,
+    Left,
+    Right,
+}
+
+/// A generic flyout (WinUI `Flyout`): arbitrary `content` anchored to an
+/// `anchor` element, shown when `open`. Unlike `flyout_button`, the content is
+/// not limited to a menu and the anchor can be any view.
+#[derive(Clone, Debug)]
+pub struct FlyoutToken<Message> {
+    pub id: Option<String>,
+    pub anchor: Box<View<Message>>,
+    pub content: Box<View<Message>>,
+    pub open: bool,
+    pub placement: FlyoutPlacement,
     pub a11y: A11yHint,
 }
 
@@ -1150,6 +1609,42 @@ pub struct ResultListToken<Message> {
     pub a11y: A11yHint,
 }
 
+/// A generic, data-driven list (WinUI `ListView`/`ItemsRepeater`). Where
+/// `result_list` hardcodes the translation-result row shape, `ListView` renders
+/// arbitrary per-item views — the base primitive for history, dictionary entries,
+/// language pickers, and long-document outlines.
+#[derive(Clone, Debug)]
+pub struct ListViewToken<Message> {
+    pub id: Option<String>,
+    pub items: Vec<ListViewItem<Message>>,
+    /// Id of the currently selected item, if any (WinUI `SelectedItem`).
+    pub selected: Option<String>,
+    pub spacing: u16,
+    pub max_height: Option<u16>,
+    /// Hint that the backend may recycle off-screen item views (WinUI virtualizing
+    /// panel). Recorded for parity/telemetry; the token tree is unaffected.
+    pub virtualized: bool,
+    /// Selection callback: receives the clicked item's id (`SelectionInput`).
+    pub action: Action<Message>,
+    pub a11y: A11yHint,
+}
+
+/// A single row in a [`ListViewToken`], pairing a stable id with its view.
+#[derive(Clone, Debug)]
+pub struct ListViewItem<Message> {
+    pub id: String,
+    pub view: View<Message>,
+}
+
+impl<Message> ListViewItem<Message> {
+    pub fn new(id: impl Into<String>, view: impl IntoView<Message>) -> Self {
+        Self {
+            id: id.into(),
+            view: view.into_view(),
+        }
+    }
+}
+
 #[deprecated(note = "use ResultCardToken")]
 pub type ServiceResultCardToken<Message> = ResultCardToken<Message>;
 
@@ -1179,7 +1674,6 @@ impl CaptureOverlayRect {
 pub enum CaptureOverlayPhase {
     Detecting,
     Selecting,
-    Adjusting,
 }
 
 impl CaptureOverlayPhase {
@@ -1187,7 +1681,40 @@ impl CaptureOverlayPhase {
         match self {
             Self::Detecting => "Detecting",
             Self::Selecting => "Selecting",
-            Self::Adjusting => "Adjusting",
+        }
+    }
+}
+
+/// Pointer position in overlay-local (logical) coordinates, used to place the
+/// magnifier and read the pixel under the cursor.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CaptureOverlayPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl CaptureOverlayPoint {
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+}
+
+/// Frozen desktop screenshot backing the capture overlay (raw BGRA pixel dump
+/// written by the platform screen-capture helper), shown under the dim mask
+/// like the WinUI ScreenCaptureWindow's BitBlt-on-open.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CaptureOverlayBackground {
+    pub bgra_path: String,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+}
+
+impl CaptureOverlayBackground {
+    pub fn new(bgra_path: impl Into<String>, pixel_width: u32, pixel_height: u32) -> Self {
+        Self {
+            bgra_path: bgra_path.into(),
+            pixel_width,
+            pixel_height,
         }
     }
 }
@@ -1208,6 +1735,10 @@ pub struct CaptureOverlayToken {
     pub selection_rect: Option<CaptureOverlayRect>,
     pub handles_visible: bool,
     pub magnifier_visible: bool,
+    /// Frozen desktop drawn full-bleed under the dim mask.
+    pub background: Option<CaptureOverlayBackground>,
+    /// Pointer position (overlay-local logical coords) for the magnifier.
+    pub cursor: Option<CaptureOverlayPoint>,
     pub a11y: A11yHint,
 }
 
@@ -1217,10 +1748,56 @@ pub struct CaptureOverlayToken {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImageToken {
     pub id: Option<String>,
-    /// Path to a raw BGRA8 pixel dump (no header).
+    /// Path to a raw BGRA8 pixel dump (no header). Used by the OCR magnifier;
+    /// empty when the image is sourced from an encoded file via `raster_path`.
     pub bgra_path: String,
     pub pixel_width: u32,
     pub pixel_height: u32,
+    /// Path or URI to an encoded image file (PNG/JPG/…) for generic images —
+    /// service icons, language flags, etc. (WinUI `Image.Source`). Takes
+    /// precedence over `bgra_path` when set.
+    pub raster_path: Option<String>,
+    /// How the image scales to fill its bounds (WinUI `Image.Stretch`).
+    pub stretch: ImageStretch,
+    pub width: Length,
+    pub height: Length,
+    pub a11y: A11yHint,
+}
+
+/// How an image is scaled to fit its layout bounds (WinUI `Stretch`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ImageStretch {
+    /// Render at native size, no scaling.
+    None,
+    /// Stretch to fill bounds, ignoring aspect ratio.
+    Fill,
+    /// Scale to fit within bounds, preserving aspect ratio (letterboxed).
+    #[default]
+    Uniform,
+    /// Scale to fill bounds, preserving aspect ratio (cropped).
+    UniformToFill,
+}
+
+/// Source content for a [`WebViewToken`] (WinUI `WebView2`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WebViewSource {
+    /// Inline HTML markup (`NavigateToString`).
+    Html(String),
+    /// A URL to navigate to (`Source`).
+    Url(String),
+}
+
+/// An embedded web content host (WinUI `WebView2`) for HTML/MDX dictionary
+/// content.
+///
+/// Interface-level only: the token + schema describe the web content surface so
+/// app code and snapshot tests can target it, but the iced backend has no
+/// embedded browser engine and renders a labeled placeholder panel. A real host
+/// (WebView2 control hosted in the native window) is a separate platform effort.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WebViewToken {
+    pub id: Option<String>,
+    pub source: WebViewSource,
     pub width: Length,
     pub height: Length,
     pub a11y: A11yHint,
@@ -1365,12 +1942,124 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
     }))
 }
 
+/// Inline rich text (WinUI `RichTextBlock`): a run of styled spans with optional
+/// hyperlinks, for dictionary entries and MDX content.
+///
+/// ```ignore
+/// text_runs([
+///     TextRun::plain("see also "),
+///     TextRun::link("hello", "word:hello"),
+///     TextRun::plain(" ("),
+///     TextRun::italic("interj."),
+///     TextRun::plain(")"),
+/// ])
+/// .on_link(Msg::OpenWord);
+/// ```
+pub fn text_runs<Message>(
+    runs: impl IntoIterator<Item = TextRun>,
+) -> RichTextBuilder<Message> {
+    RichTextBuilder {
+        id: None,
+        runs: runs.into_iter().collect(),
+        style: TextStyle::Body,
+        wrapping: TextWrapping::Word,
+        link_action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
 pub fn button<Message>(label: impl Into<String>) -> ButtonBuilder<Message> {
     ButtonBuilder::new(label, ButtonKind::Standard)
 }
 
 pub fn primary_button<Message>(label: impl Into<String>) -> ButtonBuilder<Message> {
     ButtonBuilder::new(label, ButtonKind::Primary)
+}
+
+/// A button with a sticky on/off pressed state (WinUI `ToggleButton`).
+pub fn toggle_button<Message>(
+    label: impl Into<String>,
+    pressed: bool,
+) -> ToggleButtonBuilder<Message> {
+    ToggleButtonBuilder {
+        id: None,
+        label: label.into(),
+        icon: None,
+        pressed,
+        state: ControlState::default(),
+        action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A primary action segment plus a dropdown menu (WinUI `SplitButton`).
+pub fn split_button<Message>(label: impl Into<String>) -> SplitButtonBuilder<Message> {
+    SplitButtonBuilder {
+        id: None,
+        label: label.into(),
+        icon: None,
+        items: Vec::new(),
+        open: false,
+        state: ControlState::default(),
+        primary_action: Action::None,
+        select_action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A single-child rounded/stroked container (WinUI `Border`).
+pub fn border<Message>(content: impl IntoView<Message>) -> BorderBuilder<Message> {
+    BorderBuilder {
+        id: None,
+        content: Box::new(content.into_view()),
+        corner_radius: 4,
+        stroke_width: 1,
+        filled: false,
+        padding: Edges::ZERO,
+        width: Length::Shrink,
+        height: Length::Shrink,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A single-child uniformly scaling container (WinUI `Viewbox`).
+pub fn viewbox<Message>(content: impl IntoView<Message>) -> ViewboxBuilder<Message> {
+    ViewboxBuilder {
+        id: None,
+        content: Box::new(content.into_view()),
+        stretch: ImageStretch::Uniform,
+        width: Length::Shrink,
+        height: Length::Shrink,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A tabbed container (WinUI `TabView`).
+pub fn tab_view<Message>(
+    tabs: impl IntoIterator<Item = TabItem<Message>>,
+) -> TabViewBuilder<Message> {
+    TabViewBuilder {
+        id: None,
+        tabs: tabs.into_iter().collect(),
+        selected: None,
+        action: Action::None,
+        close_action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A hierarchical list (WinUI `TreeView`).
+pub fn tree_view<Message>(
+    roots: impl IntoIterator<Item = TreeNode>,
+) -> TreeViewBuilder<Message> {
+    TreeViewBuilder {
+        id: None,
+        roots: roots.into_iter().collect(),
+        selected: None,
+        action: Action::None,
+        toggle_action: Action::None,
+        a11y: A11yHint::default(),
+    }
 }
 
 pub fn flyout_button<Message>(label: impl Into<String>) -> FlyoutButtonBuilder<Message> {
@@ -1548,9 +2237,81 @@ pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBui
         id: None,
         label: label.into(),
         checked,
+        indeterminate: false,
         label_italic: false,
         state: ControlState::default(),
         action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A single-selection radio group (WinUI `RadioButtons`).
+///
+/// ```ignore
+/// radio_group()
+///     .header("Theme")
+///     .option("system", "Use system setting")
+///     .option("light", "Light")
+///     .option("dark", "Dark")
+///     .selected("system")
+///     .on_select(Msg::ThemeChanged);
+/// ```
+pub fn radio_group<Message>() -> RadioGroupBuilder<Message> {
+    RadioGroupBuilder {
+        id: None,
+        header: None,
+        options: Vec::new(),
+        selected: None,
+        orientation: Orientation::Vertical,
+        spacing: 6,
+        state: ControlState::default(),
+        action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A numeric input (WinUI `NumberBox`) with optional spin buttons and range.
+///
+/// ```ignore
+/// number_box(1.0).range(0.5, 3.0).step(0.1).spin_buttons(true).on_change(Msg::Speed);
+/// ```
+pub fn number_box<Message>(value: f32) -> NumberBoxBuilder<Message> {
+    NumberBoxBuilder {
+        id: None,
+        value,
+        min: None,
+        max: None,
+        step: 1.0,
+        header: None,
+        placeholder: None,
+        spin_buttons: true,
+        state: ControlState::default(),
+        action: Action::None,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A text box with as-you-type suggestions (WinUI `AutoSuggestBox`).
+///
+/// ```ignore
+/// auto_suggest_box(query)
+///     .placeholder("Search languages")
+///     .suggestions(matches)
+///     .on_change(Msg::QueryChanged)
+///     .on_submit(Msg::LanguagePicked);
+/// ```
+pub fn auto_suggest_box<Message>(text: impl Into<String>) -> AutoSuggestBoxBuilder<Message> {
+    AutoSuggestBoxBuilder {
+        id: None,
+        text: text.into(),
+        placeholder: None,
+        header: None,
+        suggestions: Vec::new(),
+        open: false,
+        width: Length::Fill,
+        state: ControlState::default(),
+        change_action: Action::None,
+        submit_action: Action::None,
         a11y: A11yHint::default(),
     }
 }
@@ -1608,8 +2369,14 @@ pub fn navigation_view<Message>(
         id: None,
         selected: None,
         items: items.into_iter().collect(),
+        footer_items: Vec::new(),
         content: None,
+        pane_display_mode: PaneDisplayMode::default(),
+        header: None,
+        settings_visible: false,
+        back_button_visible: false,
         action: Action::None,
+        back_action: Action::None,
         a11y: A11yHint::default(),
     }
 }
@@ -1638,6 +2405,35 @@ where
     Children: IntoChildren<Message>,
 {
     LayoutBuilder::new(LayoutKind::Row, children.into_children())
+}
+
+/// A 2D grid layout (WinUI `Grid`). Declare tracks with [`rows`](GridBuilder::rows)
+/// and [`columns`](GridBuilder::columns), then place children with
+/// [`cell`](GridBuilder::cell) / [`cell_span`](GridBuilder::cell_span).
+///
+/// ```ignore
+/// grid()
+///     .columns([Length::Shrink, Length::Fill])     // Auto | *
+///     .rows([Length::Shrink, Length::Shrink])
+///     .cell(0, 0, text("Name"))
+///     .cell(0, 1, text_editor("").on_input(Msg::Name))
+///     .cell_span(1, 0, 1, 2, button("Save").on_press(Msg::Save));
+/// ```
+pub fn grid<Message>() -> GridBuilder<Message> {
+    GridBuilder {
+        id: None,
+        rows: Vec::new(),
+        columns: Vec::new(),
+        row_spacing: 0,
+        column_spacing: 0,
+        padding: 0,
+        padding_edges: None,
+        width: Length::Shrink,
+        height: Length::Shrink,
+        align: Alignment::Start,
+        children: Vec::new(),
+        a11y: A11yHint::default(),
+    }
 }
 
 /// A width-responsive flow layout (WinUI `ItemsWrapGrid`): children pack
@@ -1672,6 +2468,29 @@ where
         id: None,
         base: Box::new(base.into_view()),
         layers: Vec::new(),
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A generic flyout (WinUI `Flyout`): `content` anchored to `anchor`, shown when
+/// open. Use for any popover content (not just menus).
+///
+/// ```ignore
+/// flyout(button("Options").on_press(Msg::Toggle), settings_panel)
+///     .open(menu_open)
+///     .placement(FlyoutPlacement::Bottom);
+/// ```
+pub fn flyout<Message, Anchor, Content>(anchor: Anchor, content: Content) -> FlyoutBuilder<Message>
+where
+    Anchor: IntoView<Message>,
+    Content: IntoView<Message>,
+{
+    FlyoutBuilder {
+        id: None,
+        anchor: Box::new(anchor.into_view()),
+        content: Box::new(content.into_view()),
+        open: false,
+        placement: FlyoutPlacement::default(),
         a11y: A11yHint::default(),
     }
 }
@@ -1751,6 +2570,8 @@ pub fn capture_overlay(phase: CaptureOverlayPhase) -> CaptureOverlayBuilder {
         selection_rect: None,
         handles_visible: false,
         magnifier_visible: false,
+        background: None,
+        cursor: None,
         a11y: A11yHint::default(),
     }
 }
@@ -1821,6 +2642,33 @@ pub fn result_list<Message>(
         padding: None,
         border_width: None,
         collapse_transition: CollapseTransition::default(),
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A generic data-driven list (WinUI `ListView`/`ItemsRepeater`). Pass
+/// pre-built [`ListViewItem`]s (id + view); `result_list` is a specialization of
+/// this for translation results.
+///
+/// ```ignore
+/// list_view([
+///     ListViewItem::new("en", text("English")),
+///     ListViewItem::new("zh", text("中文")),
+/// ])
+/// .selected("en")
+/// .on_select(Msg::LanguagePicked);
+/// ```
+pub fn list_view<Message>(
+    items: impl IntoIterator<Item = ListViewItem<Message>>,
+) -> ListViewBuilder<Message> {
+    ListViewBuilder {
+        id: None,
+        items: items.into_iter().collect(),
+        selected: None,
+        spacing: 4,
+        max_height: None,
+        virtualized: true,
+        action: Action::None,
         a11y: A11yHint::default(),
     }
 }
@@ -1960,6 +2808,460 @@ impl<Message> IntoView<Message> for TitleBarBuilder<Message> {
             toggle_maximize_action: self.toggle_maximize_action,
             close_action: self.close_action,
             drag_action: self.drag_action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RichTextBuilder<Message> {
+    id: Option<String>,
+    runs: Vec<TextRun>,
+    style: TextStyle,
+    wrapping: TextWrapping,
+    link_action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> RichTextBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn style(mut self, style: TextStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    pub fn wrapping(mut self, wrapping: TextWrapping) -> Self {
+        self.wrapping = wrapping;
+        self
+    }
+
+    /// Append a run.
+    pub fn run(mut self, run: TextRun) -> Self {
+        self.runs.push(run);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Link-clicked callback: receives the clicked run's `href`.
+    pub fn on_link(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.link_action = Action::selection_input(map);
+        self.into_view()
+    }
+
+    /// Finish without a link handler.
+    pub fn build(self) -> View<Message> {
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for RichTextBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::RichText(RichTextToken {
+            id: self.id,
+            runs: self.runs,
+            style: self.style,
+            wrapping: self.wrapping,
+            link_action: self.link_action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ToggleButtonBuilder<Message> {
+    id: Option<String>,
+    label: String,
+    icon: Option<IconToken>,
+    pressed: bool,
+    state: ControlState,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> ToggleButtonBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn icon(mut self, icon: IconToken) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    pub fn on_toggle(
+        mut self,
+        map: impl Fn(bool) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::bool_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for ToggleButtonBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::ToggleButton(ToggleButtonToken {
+            id: self.id,
+            label: self.label,
+            icon: self.icon,
+            pressed: self.pressed,
+            state: self.state,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SplitButtonBuilder<Message> {
+    id: Option<String>,
+    label: String,
+    icon: Option<IconToken>,
+    items: Vec<FlyoutMenuItem>,
+    open: bool,
+    state: ControlState,
+    primary_action: Action<Message>,
+    select_action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> SplitButtonBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn icon(mut self, icon: IconToken) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    pub fn items(mut self, items: impl IntoIterator<Item = FlyoutMenuItem>) -> Self {
+        self.items = items.into_iter().collect();
+        self
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Primary-segment press callback.
+    pub fn on_press(mut self, message: Message) -> Self {
+        self.primary_action = Action::message(message);
+        self
+    }
+
+    /// Menu-item-chosen callback (receives the item id).
+    pub fn on_select(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.select_action = Action::selection_input(map);
+        self.into_view()
+    }
+
+    /// Finish without a menu-select handler.
+    pub fn build(self) -> View<Message> {
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for SplitButtonBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::SplitButton(SplitButtonToken {
+            id: self.id,
+            label: self.label,
+            icon: self.icon,
+            items: self.items,
+            open: self.open,
+            state: self.state,
+            primary_action: self.primary_action,
+            select_action: self.select_action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct BorderBuilder<Message> {
+    id: Option<String>,
+    content: Box<View<Message>>,
+    corner_radius: u16,
+    stroke_width: u16,
+    filled: bool,
+    padding: Edges,
+    width: Length,
+    height: Length,
+    a11y: A11yHint,
+}
+
+impl<Message> BorderBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn corner_radius(mut self, radius: u16) -> Self {
+        self.corner_radius = radius;
+        self
+    }
+
+    pub fn stroke_width(mut self, width: u16) -> Self {
+        self.stroke_width = width;
+        self
+    }
+
+    /// Fill the interior with the theme surface color.
+    pub fn filled(mut self, filled: bool) -> Self {
+        self.filled = filled;
+        self
+    }
+
+    pub fn padding(mut self, padding: Edges) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for BorderBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Border(BorderToken {
+            id: self.id,
+            content: self.content,
+            corner_radius: self.corner_radius,
+            stroke_width: self.stroke_width,
+            filled: self.filled,
+            padding: self.padding,
+            width: self.width,
+            height: self.height,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ViewboxBuilder<Message> {
+    id: Option<String>,
+    content: Box<View<Message>>,
+    stretch: ImageStretch,
+    width: Length,
+    height: Length,
+    a11y: A11yHint,
+}
+
+impl<Message> ViewboxBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn stretch(mut self, stretch: ImageStretch) -> Self {
+        self.stretch = stretch;
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for ViewboxBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Viewbox(ViewboxToken {
+            id: self.id,
+            content: self.content,
+            stretch: self.stretch,
+            width: self.width,
+            height: self.height,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TabViewBuilder<Message> {
+    id: Option<String>,
+    tabs: Vec<TabItem<Message>>,
+    selected: Option<String>,
+    action: Action<Message>,
+    close_action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> TabViewBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn selected(mut self, id: impl Into<String>) -> Self {
+        self.selected = Some(id.into());
+        self
+    }
+
+    /// Tab-close callback (receives the closed tab id).
+    pub fn on_close(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.close_action = Action::selection_input(map);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Tab-selected callback (receives the selected tab id).
+    pub fn on_select(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::selection_input(map);
+        self.into_view()
+    }
+
+    /// Finish without a select handler.
+    pub fn build(self) -> View<Message> {
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for TabViewBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::TabView(TabViewToken {
+            id: self.id,
+            tabs: self.tabs,
+            selected: self.selected,
+            action: self.action,
+            close_action: self.close_action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TreeViewBuilder<Message> {
+    id: Option<String>,
+    roots: Vec<TreeNode>,
+    selected: Option<String>,
+    action: Action<Message>,
+    toggle_action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> TreeViewBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn selected(mut self, id: impl Into<String>) -> Self {
+        self.selected = Some(id.into());
+        self
+    }
+
+    /// Node expand/collapse-toggle callback (receives the node id).
+    pub fn on_toggle(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.toggle_action = Action::selection_input(map);
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Node-selected callback (receives the node id).
+    pub fn on_select(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::selection_input(map);
+        self.into_view()
+    }
+
+    /// Finish without a select handler.
+    pub fn build(self) -> View<Message> {
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for TreeViewBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::TreeView(TreeViewToken {
+            id: self.id,
+            roots: self.roots,
+            selected: self.selected,
+            action: self.action,
+            toggle_action: self.toggle_action,
             a11y: self.a11y,
         }))
     }
@@ -2984,10 +4286,113 @@ impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct RadioGroupBuilder<Message> {
+    id: Option<String>,
+    header: Option<String>,
+    options: Vec<RadioOption>,
+    selected: Option<String>,
+    orientation: Orientation,
+    spacing: u16,
+    state: ControlState,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> RadioGroupBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn header(mut self, header: impl Into<String>) -> Self {
+        self.header = Some(header.into());
+        self
+    }
+
+    /// Append an option.
+    pub fn option(mut self, id: impl Into<String>, label: impl Into<String>) -> Self {
+        self.options.push(RadioOption::new(id, label));
+        self
+    }
+
+    /// Append a pre-built option (lets callers disable it).
+    pub fn option_item(mut self, option: RadioOption) -> Self {
+        self.options.push(option);
+        self
+    }
+
+    pub fn options(mut self, options: impl IntoIterator<Item = RadioOption>) -> Self {
+        self.options.extend(options);
+        self
+    }
+
+    pub fn selected(mut self, id: impl Into<String>) -> Self {
+        self.selected = Some(id.into());
+        self
+    }
+
+    pub fn horizontal(mut self) -> Self {
+        self.orientation = Orientation::Horizontal;
+        self
+    }
+
+    pub fn vertical(mut self) -> Self {
+        self.orientation = Orientation::Vertical;
+        self
+    }
+
+    pub fn spacing(mut self, spacing: u16) -> Self {
+        self.spacing = spacing;
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Selection callback: receives the newly selected option's id.
+    pub fn on_select(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::selection_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for RadioGroupBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::RadioGroup(RadioGroupToken {
+            id: self.id,
+            header: self.header,
+            options: self.options,
+            selected: self.selected,
+            orientation: self.orientation,
+            spacing: self.spacing,
+            state: self.state,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct CheckBoxBuilder<Message> {
     id: Option<String>,
     label: String,
     checked: bool,
+    indeterminate: bool,
     label_italic: bool,
     state: ControlState,
     action: Action<Message>,
@@ -3035,6 +4440,12 @@ impl<Message> CheckBoxBuilder<Message> {
         self
     }
 
+    /// Put the checkbox in the mixed/indeterminate state (WinUI three-state).
+    pub fn indeterminate(mut self, indeterminate: bool) -> Self {
+        self.indeterminate = indeterminate;
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -3055,9 +4466,215 @@ impl<Message> IntoView<Message> for CheckBoxBuilder<Message> {
             id: self.id,
             label: self.label,
             checked: self.checked,
+            indeterminate: self.indeterminate,
             label_italic: self.label_italic,
             state: self.state,
             action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct NumberBoxBuilder<Message> {
+    id: Option<String>,
+    value: f32,
+    min: Option<f32>,
+    max: Option<f32>,
+    step: f32,
+    header: Option<String>,
+    placeholder: Option<String>,
+    spin_buttons: bool,
+    state: ControlState,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> NumberBoxBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn range(mut self, min: f32, max: f32) -> Self {
+        self.min = Some(min);
+        self.max = Some(max);
+        self
+    }
+
+    pub fn min(mut self, min: f32) -> Self {
+        self.min = Some(min);
+        self
+    }
+
+    pub fn max(mut self, max: f32) -> Self {
+        self.max = Some(max);
+        self
+    }
+
+    pub fn step(mut self, step: f32) -> Self {
+        self.step = step;
+        self
+    }
+
+    pub fn header(mut self, header: impl Into<String>) -> Self {
+        self.header = Some(header.into());
+        self
+    }
+
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
+        self.placeholder = Some(placeholder.into());
+        self
+    }
+
+    pub fn spin_buttons(mut self, spin_buttons: bool) -> Self {
+        self.spin_buttons = spin_buttons;
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    pub fn on_change(
+        mut self,
+        map: impl Fn(f32) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::number_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for NumberBoxBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::NumberBox(NumberBoxToken {
+            id: self.id,
+            value: self.value,
+            min: self.min,
+            max: self.max,
+            step: self.step,
+            header: self.header,
+            placeholder: self.placeholder,
+            spin_buttons: self.spin_buttons,
+            state: self.state,
+            action: self.action,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AutoSuggestBoxBuilder<Message> {
+    id: Option<String>,
+    text: String,
+    placeholder: Option<String>,
+    header: Option<String>,
+    suggestions: Vec<String>,
+    open: bool,
+    width: Length,
+    state: ControlState,
+    change_action: Action<Message>,
+    submit_action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> AutoSuggestBoxBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
+        self.placeholder = Some(placeholder.into());
+        self
+    }
+
+    pub fn header(mut self, header: impl Into<String>) -> Self {
+        self.header = Some(header.into());
+        self
+    }
+
+    /// Set the suggestion list (the app filters these as the user types). Opens
+    /// the dropdown automatically when non-empty unless overridden by [`open`].
+    pub fn suggestions(mut self, suggestions: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.suggestions = suggestions.into_iter().map(Into::into).collect();
+        self.open = !self.suggestions.is_empty();
+        self
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.state.enabled = enabled;
+        self
+    }
+
+    pub fn state(mut self, state: ControlState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// As-you-type callback (fires on each edit).
+    pub fn on_change(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> Self {
+        self.change_action = Action::text_input(map);
+        self
+    }
+
+    /// Suggestion-chosen callback (receives the picked suggestion text).
+    pub fn on_submit(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.submit_action = Action::selection_input(map);
+        self.into_view()
+    }
+
+    /// Finish without a submit handler.
+    pub fn build(self) -> View<Message> {
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for AutoSuggestBoxBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::AutoSuggestBox(AutoSuggestBoxToken {
+            id: self.id,
+            text: self.text,
+            placeholder: self.placeholder,
+            header: self.header,
+            suggestions: self.suggestions,
+            open: self.open,
+            width: self.width,
+            state: self.state,
+            change_action: self.change_action,
+            submit_action: self.submit_action,
             a11y: self.a11y,
         }))
     }
@@ -3339,8 +4956,14 @@ pub struct NavigationViewBuilder<Message> {
     id: Option<String>,
     selected: Option<String>,
     items: Vec<NavigationItem>,
+    footer_items: Vec<NavigationItem>,
     content: Option<Box<View<Message>>>,
+    pane_display_mode: PaneDisplayMode,
+    header: Option<String>,
+    settings_visible: bool,
+    back_button_visible: bool,
     action: Action<Message>,
+    back_action: Action<Message>,
     a11y: A11yHint,
 }
 
@@ -3360,6 +4983,48 @@ impl<Message> NavigationViewBuilder<Message> {
         self
     }
 
+    /// Set the pane layout mode (WinUI `PaneDisplayMode`).
+    pub fn pane_display_mode(mut self, mode: PaneDisplayMode) -> Self {
+        self.pane_display_mode = mode;
+        self
+    }
+
+    /// Pane header text (WinUI `PaneHeader`).
+    pub fn header(mut self, header: impl Into<String>) -> Self {
+        self.header = Some(header.into());
+        self
+    }
+
+    /// Items pinned to the bottom of the pane (WinUI `FooterMenuItems`).
+    pub fn footer_items(mut self, items: impl IntoIterator<Item = NavigationItem>) -> Self {
+        self.footer_items = items.into_iter().collect();
+        self
+    }
+
+    pub fn footer_item(mut self, item: NavigationItem) -> Self {
+        self.footer_items.push(item);
+        self
+    }
+
+    /// Show the built-in settings entry (WinUI `IsSettingsVisible`). Selecting it
+    /// fires `on_select` with [`NavigationViewToken::SETTINGS_ID`].
+    pub fn settings_visible(mut self, visible: bool) -> Self {
+        self.settings_visible = visible;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Show a back button that fires `message` when pressed (WinUI `BackRequested`).
+    pub fn back_button(mut self, message: Message) -> Self {
+        self.back_button_visible = true;
+        self.back_action = Action::message(message);
+        self
+    }
+
     pub fn on_select(
         mut self,
         map: impl Fn(String) -> Message + Send + Sync + 'static,
@@ -3375,8 +5040,14 @@ impl<Message> IntoView<Message> for NavigationViewBuilder<Message> {
             id: self.id,
             selected: self.selected,
             items: self.items,
+            footer_items: self.footer_items,
             content: self.content,
+            pane_display_mode: self.pane_display_mode,
+            header: self.header,
+            settings_visible: self.settings_visible,
+            back_button_visible: self.back_button_visible,
             action: self.action,
+            back_action: self.back_action,
             a11y: self.a11y,
         }))
     }
@@ -3652,6 +5323,135 @@ impl<Message> IntoView<Message> for LayoutBuilder<Message> {
 }
 
 #[derive(Clone, Debug)]
+pub struct GridBuilder<Message> {
+    id: Option<String>,
+    rows: Vec<Length>,
+    columns: Vec<Length>,
+    row_spacing: u16,
+    column_spacing: u16,
+    padding: u16,
+    padding_edges: Option<Edges>,
+    width: Length,
+    height: Length,
+    align: Alignment,
+    children: Vec<GridChild<Message>>,
+    a11y: A11yHint,
+}
+
+impl<Message> GridBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Declare the row tracks (WinUI `Grid.RowDefinitions`).
+    pub fn rows(mut self, rows: impl IntoIterator<Item = Length>) -> Self {
+        self.rows = rows.into_iter().collect();
+        self
+    }
+
+    /// Declare the column tracks (WinUI `Grid.ColumnDefinitions`).
+    pub fn columns(mut self, columns: impl IntoIterator<Item = Length>) -> Self {
+        self.columns = columns.into_iter().collect();
+        self
+    }
+
+    /// Gap between rows.
+    pub fn row_spacing(mut self, value: u16) -> Self {
+        self.row_spacing = value;
+        self
+    }
+
+    /// Gap between columns.
+    pub fn column_spacing(mut self, value: u16) -> Self {
+        self.column_spacing = value;
+        self
+    }
+
+    /// Set both row and column gaps at once.
+    pub fn spacing(mut self, value: u16) -> Self {
+        self.row_spacing = value;
+        self.column_spacing = value;
+        self
+    }
+
+    pub fn padding(mut self, value: u16) -> Self {
+        self.padding = value;
+        self
+    }
+
+    pub fn padding_edges(mut self, edges: Edges) -> Self {
+        self.padding_edges = Some(edges);
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub fn align(mut self, align: Alignment) -> Self {
+        self.align = align;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Place a child at `(row, column)` spanning a single cell.
+    pub fn cell(mut self, row: u16, column: u16, view: impl IntoView<Message>) -> Self {
+        self.children.push(GridChild::new(row, column, view));
+        self
+    }
+
+    /// Place a child at `(row, column)` spanning `(row_span, column_span)` cells.
+    pub fn cell_span(
+        mut self,
+        row: u16,
+        column: u16,
+        row_span: u16,
+        column_span: u16,
+        view: impl IntoView<Message>,
+    ) -> Self {
+        self.children
+            .push(GridChild::new(row, column, view).span(row_span, column_span));
+        self
+    }
+
+    /// Add a pre-built [`GridChild`].
+    pub fn child(mut self, child: GridChild<Message>) -> Self {
+        self.children.push(child);
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for GridBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Grid(GridToken {
+            id: self.id,
+            rows: self.rows,
+            columns: self.columns,
+            row_spacing: self.row_spacing,
+            column_spacing: self.column_spacing,
+            padding: self.padding,
+            padding_edges: self.padding_edges,
+            width: self.width,
+            height: self.height,
+            align: self.align,
+            children: self.children,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct WrapBuilder<Message> {
     id: Option<String>,
     children: Vec<View<Message>>,
@@ -3706,6 +5506,51 @@ impl<Message> IntoView<Message> for WrapBuilder<Message> {
             max_columns: self.max_columns.max(1),
             spacing: self.spacing,
             run_spacing,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FlyoutBuilder<Message> {
+    id: Option<String>,
+    anchor: Box<View<Message>>,
+    content: Box<View<Message>>,
+    open: bool,
+    placement: FlyoutPlacement,
+    a11y: A11yHint,
+}
+
+impl<Message> FlyoutBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
+    pub fn placement(mut self, placement: FlyoutPlacement) -> Self {
+        self.placement = placement;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
+impl<Message> IntoView<Message> for FlyoutBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::Flyout(FlyoutToken {
+            id: self.id,
+            anchor: self.anchor,
+            content: self.content,
+            open: self.open,
+            placement: self.placement,
             a11y: self.a11y,
         }))
     }
@@ -3999,6 +5844,8 @@ pub struct CaptureOverlayBuilder {
     selection_rect: Option<CaptureOverlayRect>,
     handles_visible: bool,
     magnifier_visible: bool,
+    background: Option<CaptureOverlayBackground>,
+    cursor: Option<CaptureOverlayPoint>,
     a11y: A11yHint,
 }
 
@@ -4038,6 +5885,16 @@ impl CaptureOverlayBuilder {
         self
     }
 
+    pub fn background(mut self, background: CaptureOverlayBackground) -> Self {
+        self.background = Some(background);
+        self
+    }
+
+    pub fn cursor(mut self, cursor: CaptureOverlayPoint) -> Self {
+        self.cursor = Some(cursor);
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -4055,6 +5912,8 @@ impl<Message> IntoView<Message> for CaptureOverlayBuilder {
             selection_rect: self.selection_rect,
             handles_visible: self.handles_visible,
             magnifier_visible: self.magnifier_visible,
+            background: self.background,
+            cursor: self.cursor,
             a11y: self.a11y,
         }))
     }
@@ -4072,6 +5931,53 @@ pub fn image_bgra_file(
         bgra_path: path.into(),
         pixel_width,
         pixel_height,
+        raster_path: None,
+        // Screenshot/magnifier dumps fill their bounds exactly (the historical
+        // behavior before generic stretch existed).
+        stretch: ImageStretch::Fill,
+        width: Length::Fill,
+        height: Length::Fill,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// A generic image element from an encoded file or URI (WinUI `Image`):
+/// service icons, language flags, dictionary artwork, etc. Use
+/// [`stretch`](ImageBuilder::stretch) to control scaling.
+///
+/// ```ignore
+/// image("assets/flags/zh.png").stretch(ImageStretch::Uniform).width(Length::Fixed(24));
+/// ```
+pub fn image(path: impl Into<String>) -> ImageBuilder {
+    ImageBuilder {
+        id: None,
+        bgra_path: String::new(),
+        pixel_width: 0,
+        pixel_height: 0,
+        raster_path: Some(path.into()),
+        stretch: ImageStretch::default(),
+        width: Length::Shrink,
+        height: Length::Shrink,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// An embedded web view (WinUI `WebView2`) navigating to `url`.
+pub fn web_view_url(url: impl Into<String>) -> WebViewBuilder {
+    WebViewBuilder {
+        id: None,
+        source: WebViewSource::Url(url.into()),
+        width: Length::Fill,
+        height: Length::Fill,
+        a11y: A11yHint::default(),
+    }
+}
+
+/// An embedded web view (WinUI `WebView2`) rendering inline `html`.
+pub fn web_view_html(html: impl Into<String>) -> WebViewBuilder {
+    WebViewBuilder {
+        id: None,
+        source: WebViewSource::Html(html.into()),
         width: Length::Fill,
         height: Length::Fill,
         a11y: A11yHint::default(),
@@ -4079,17 +5985,15 @@ pub fn image_bgra_file(
 }
 
 #[derive(Clone, Debug)]
-pub struct ImageBuilder {
+pub struct WebViewBuilder {
     id: Option<String>,
-    bgra_path: String,
-    pixel_width: u32,
-    pixel_height: u32,
+    source: WebViewSource,
     width: Length,
     height: Length,
     a11y: A11yHint,
 }
 
-impl ImageBuilder {
+impl WebViewBuilder {
     pub fn id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(id.into());
         self
@@ -4111,6 +6015,59 @@ impl ImageBuilder {
     }
 }
 
+impl<Message> IntoView<Message> for WebViewBuilder {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::WebView(WebViewToken {
+            id: self.id,
+            source: self.source,
+            width: self.width,
+            height: self.height,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ImageBuilder {
+    id: Option<String>,
+    bgra_path: String,
+    pixel_width: u32,
+    pixel_height: u32,
+    raster_path: Option<String>,
+    stretch: ImageStretch,
+    width: Length,
+    height: Length,
+    a11y: A11yHint,
+}
+
+impl ImageBuilder {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn width(mut self, width: Length) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Length) -> Self {
+        self.height = height;
+        self
+    }
+
+    /// Set the scaling mode (WinUI `Image.Stretch`).
+    pub fn stretch(mut self, stretch: ImageStretch) -> Self {
+        self.stretch = stretch;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+}
+
 impl<Message> IntoView<Message> for ImageBuilder {
     fn into_view(self) -> View<Message> {
         View::new(ViewToken::Image(ImageToken {
@@ -4118,6 +6075,8 @@ impl<Message> IntoView<Message> for ImageBuilder {
             bgra_path: self.bgra_path,
             pixel_width: self.pixel_width,
             pixel_height: self.pixel_height,
+            raster_path: self.raster_path,
+            stretch: self.stretch,
             width: self.width,
             height: self.height,
             a11y: self.a11y,
@@ -4423,6 +6382,82 @@ impl<Message> IntoView<Message> for ResultCardBuilder<Message> {
             retry_action: self.retry_action,
             toggle_action: self.toggle_action,
             collapse_transition: self.collapse_transition,
+            a11y: self.a11y,
+        }))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ListViewBuilder<Message> {
+    id: Option<String>,
+    items: Vec<ListViewItem<Message>>,
+    selected: Option<String>,
+    spacing: u16,
+    max_height: Option<u16>,
+    virtualized: bool,
+    action: Action<Message>,
+    a11y: A11yHint,
+}
+
+impl<Message> ListViewBuilder<Message> {
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Append a single item.
+    pub fn item(mut self, id: impl Into<String>, view: impl IntoView<Message>) -> Self {
+        self.items.push(ListViewItem::new(id, view));
+        self
+    }
+
+    /// Mark the selected item by id (WinUI `SelectedItem`).
+    pub fn selected(mut self, id: impl Into<String>) -> Self {
+        self.selected = Some(id.into());
+        self
+    }
+
+    pub fn spacing(mut self, spacing: u16) -> Self {
+        self.spacing = spacing;
+        self
+    }
+
+    pub fn max_height(mut self, max_height: u16) -> Self {
+        self.max_height = Some(max_height);
+        self
+    }
+
+    /// Toggle the virtualization hint (defaults to `true`).
+    pub fn virtualized(mut self, virtualized: bool) -> Self {
+        self.virtualized = virtualized;
+        self
+    }
+
+    pub fn a11y(mut self, a11y: A11yHint) -> Self {
+        self.a11y = a11y;
+        self
+    }
+
+    /// Selection callback: receives the clicked item's id.
+    pub fn on_select(
+        mut self,
+        map: impl Fn(String) -> Message + Send + Sync + 'static,
+    ) -> View<Message> {
+        self.action = Action::selection_input(map);
+        self.into_view()
+    }
+}
+
+impl<Message> IntoView<Message> for ListViewBuilder<Message> {
+    fn into_view(self) -> View<Message> {
+        View::new(ViewToken::ListView(ListViewToken {
+            id: self.id,
+            items: self.items,
+            selected: self.selected,
+            spacing: self.spacing,
+            max_height: self.max_height,
+            virtualized: self.virtualized,
+            action: self.action,
             a11y: self.a11y,
         }))
     }

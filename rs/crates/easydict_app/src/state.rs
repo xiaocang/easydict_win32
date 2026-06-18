@@ -2999,7 +2999,6 @@ impl EasydictUiState {
             | Message::CaptureDoubleClick(_)
             | Message::CaptureRightButtonDown
             | Message::CaptureMouseWheel { .. }
-            | Message::CaptureNudgeSelection { .. }
             | Message::CaptureEscape
             | Message::CopyResult
             | Message::ReplaceResult
@@ -4489,12 +4488,9 @@ fn apply_capture_overlay_preview(state: &mut EasydictUiState, value: &str) {
             interaction.on_left_button_down(CapturePoint::new(180, 164));
             interaction.on_mouse_move(CapturePoint::new(604, 386), &detector);
         }
-        "selected" | "handles" | "magnifier" => {
+        "selected" | "handles" | "magnifier" | "adjust" | "adjusting" => {
             interaction.phase = CapturePhase::Selecting;
             interaction.selection = Some(CaptureRect::new(180, 164, 604, 386));
-        }
-        "adjust" | "adjusting" => {
-            interaction.set_adjusting_selection(CaptureRect::new(180, 164, 604, 386));
         }
         _ => {}
     }
@@ -4623,11 +4619,14 @@ fn result_action_language(state: &EasydictUiState, surface: QuickTranslateSurfac
 
 /// Frozen desktop screenshot backing the capture overlay (raw BGRA pixel file
 /// written by the native screen-capture helper).
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CaptureBackground {
     pub bgra_path: String,
     pub pixel_width: u32,
     pub pixel_height: u32,
+    /// Logical→physical scale of the captured monitor, used to map overlay
+    /// selection coordinates (DIPs) onto this snapshot (physical pixels).
+    pub scale_factor: f32,
 }
 
 /// Freezes the desktop for the capture overlay, mirroring the WinUI
@@ -4641,6 +4640,7 @@ pub fn capture_screen_background_result() -> Result<CaptureBackground, String> {
         bgra_path: capture.pixel_data_path,
         pixel_width: capture.pixel_width,
         pixel_height: capture.pixel_height,
+        scale_factor: easydict_windows_screen_capture::primary_scale_factor(),
     })
 }
 
@@ -4669,6 +4669,84 @@ pub fn apply_capture_background_result(
             state.last_ocr_error = Some(format!("{CAPTURE_BACKGROUND_ERROR_PREFIX}{error}"));
         }
     }
+}
+
+/// Crops the selected region out of the frozen desktop snapshot into a fresh
+/// BGRA dump for OCR, mirroring the WinUI ScreenCaptureWindow's `ExtractRegion`
+/// BitBlt from the frozen `DesktopDc`. Selection coordinates are interpreted in
+/// the snapshot's pixel space (origin at the virtual-desktop top-left).
+pub fn crop_capture_background(
+    background: &CaptureBackground,
+    selection: crate::screen_capture::CaptureRect,
+) -> Result<crate::ocr::OcrCaptureResult, String> {
+    let selection = selection.normalized();
+    let pixel_width = background.pixel_width as i64;
+    let pixel_height = background.pixel_height as i64;
+
+    // Selection is in overlay-local DIPs; the snapshot is physical pixels.
+    let scale = if background.scale_factor > f32::EPSILON {
+        background.scale_factor
+    } else {
+        1.0
+    };
+    let to_physical = |value: i32| (value as f32 * scale).round() as i64;
+    let left = to_physical(selection.left).max(0);
+    let top = to_physical(selection.top).max(0);
+    let right = to_physical(selection.right).min(pixel_width);
+    let bottom = to_physical(selection.bottom).min(pixel_height);
+    let crop_width = (right - left).max(0);
+    let crop_height = (bottom - top).max(0);
+    if crop_width <= 0 || crop_height <= 0 {
+        return Err("Selection is outside the captured area".to_string());
+    }
+
+    let bytes = std::fs::read(&background.bgra_path)
+        .map_err(|error| format!("Failed to read frozen capture: {error}"))?;
+    let stride = (pixel_width as usize)
+        .checked_mul(4)
+        .ok_or_else(|| "Capture stride overflow".to_string())?;
+    let required = stride
+        .checked_mul(pixel_height as usize)
+        .ok_or_else(|| "Capture size overflow".to_string())?;
+    if bytes.len() < required {
+        return Err("Frozen capture is truncated".to_string());
+    }
+
+    let row_bytes = (crop_width as usize) * 4;
+    let mut cropped = Vec::with_capacity(row_bytes * crop_height as usize);
+    for row in 0..crop_height {
+        let src_y = (top + row) as usize;
+        let src_start = src_y * stride + (left as usize) * 4;
+        cropped.extend_from_slice(&bytes[src_start..src_start + row_bytes]);
+    }
+
+    let path = unique_capture_crop_path()?;
+    std::fs::write(&path, &cropped)
+        .map_err(|error| format!("Failed to write cropped capture: {error}"))?;
+
+    Ok(crate::ocr::OcrCaptureResult::new(
+        path.to_string_lossy().into_owned(),
+        crop_width as u32,
+        crop_height as u32,
+    ))
+}
+
+/// Builds a unique temp-file path for a cropped OCR capture (raw BGRA dump).
+fn unique_capture_crop_path() -> Result<std::path::PathBuf, String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "easydict-ocr-crop-{}-{nanos}-{sequence}.bgra",
+        std::process::id()
+    ));
+    Ok(path)
 }
 
 fn preview_waiting_results() -> Vec<TranslationResultPreview> {
@@ -4916,10 +4994,6 @@ pub enum Message {
     CaptureMouseWheel {
         delta: i32,
         point: crate::screen_capture::CapturePoint,
-    },
-    CaptureNudgeSelection {
-        delta_x: i32,
-        delta_y: i32,
     },
     CaptureEscape,
     HotkeyTriggered(String),

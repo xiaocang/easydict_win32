@@ -73,6 +73,14 @@ pub fn view_schema<Message>(view: &View<Message>) -> ViewSchema {
 }
 
 fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
+    let mut node = schema_node_inner(view);
+    if let Some(tooltip) = view.tooltip_text() {
+        node = node.property("tooltip", quoted(tooltip));
+    }
+    node
+}
+
+fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
     match view.token() {
         ViewToken::Page(token) => {
             let mut node = SchemaNode::new("Page", token.id.clone())
@@ -127,6 +135,28 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             }
             node
         }
+        ViewToken::RichText(token) => {
+            let runs = token
+                .runs
+                .iter()
+                .map(|run| match run.kind {
+                    crate::view::TextRunKind::Link => format!(
+                        "link({}->{})",
+                        run.text,
+                        run.href.as_deref().unwrap_or("")
+                    ),
+                    crate::view::TextRunKind::Bold => format!("bold({})", run.text),
+                    crate::view::TextRunKind::Italic => format!("italic({})", run.text),
+                    crate::view::TextRunKind::Plain => run.text.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join("|");
+            SchemaNode::new("RichText", token.id.clone())
+                .property("style", format!("{:?}", token.style))
+                .property("wrapping", format!("{:?}", token.wrapping))
+                .property("runs", quoted(&runs))
+                .property("on_link", format!("{:?}", token.link_action.kind()))
+        }
         ViewToken::Button(token) => {
             let mut node = SchemaNode::new("Button", token.id.clone())
                 .property("label", quoted(&token.label))
@@ -145,6 +175,20 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             }
             node
         }
+        ViewToken::ToggleButton(token) => SchemaNode::new("ToggleButton", token.id.clone())
+            .property("label", quoted(&token.label))
+            .property("icon", optional_icon(token.icon.as_ref()))
+            .property("pressed", token.pressed.to_string())
+            .property("state", token.state.to_string())
+            .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::SplitButton(token) => SchemaNode::new("SplitButton", token.id.clone())
+            .property("label", quoted(&token.label))
+            .property("icon", optional_icon(token.icon.as_ref()))
+            .property("items", flyout_items(&token.items))
+            .property("open", token.open.to_string())
+            .property("state", token.state.to_string())
+            .property("primary", format!("{:?}", token.primary_action.kind()))
+            .property("select", format!("{:?}", token.select_action.kind())),
         ViewToken::FlyoutButton(token) => SchemaNode::new("FlyoutButton", token.id.clone())
             .property("label", quoted(&token.label))
             .property("icon", optional_icon(token.icon.as_ref()))
@@ -289,9 +333,33 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::CheckBox(token) => SchemaNode::new("CheckBox", token.id.clone())
             .property("label", quoted(&token.label))
             .property("checked", token.checked.to_string())
+            .property("indeterminate", token.indeterminate.to_string())
             .property("label_italic", token.label_italic.to_string())
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::RadioGroup(token) => {
+            let options = token
+                .options
+                .iter()
+                .map(|option| {
+                    let mark = if token.selected.as_deref() == Some(option.id.as_str()) {
+                        "*"
+                    } else {
+                        ""
+                    };
+                    format!("{}{}:{}", mark, option.id, option.label)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            SchemaNode::new("RadioGroup", token.id.clone())
+                .property("header", optional_string(token.header.as_deref()))
+                .property("selected", optional_string(token.selected.as_deref()))
+                .property("orientation", format!("{:?}", token.orientation))
+                .property("spacing", token.spacing.to_string())
+                .property("options", quoted(&options))
+                .property("state", token.state.to_string())
+                .property("action", format!("{:?}", token.action.kind()))
+        }
         ViewToken::Slider(token) => SchemaNode::new("Slider", token.id.clone())
             .property("value", format!("{:.2}", token.value))
             .property("min", format!("{:.2}", token.min))
@@ -301,6 +369,26 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
             .property("height", "Fixed(32)")
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::NumberBox(token) => SchemaNode::new("NumberBox", token.id.clone())
+            .property("value", format!("{:.2}", token.value))
+            .property("min", token.min.map(|v| format!("{v:.2}")).unwrap_or_else(|| "none".to_string()))
+            .property("max", token.max.map(|v| format!("{v:.2}")).unwrap_or_else(|| "none".to_string()))
+            .property("step", format!("{:.2}", token.step))
+            .property("header", optional_string(token.header.as_deref()))
+            .property("placeholder", optional_string(token.placeholder.as_deref()))
+            .property("spin_buttons", token.spin_buttons.to_string())
+            .property("state", token.state.to_string())
+            .property("action", format!("{:?}", token.action.kind())),
+        ViewToken::AutoSuggestBox(token) => SchemaNode::new("AutoSuggestBox", token.id.clone())
+            .property("text", quoted(&token.text))
+            .property("placeholder", optional_string(token.placeholder.as_deref()))
+            .property("header", optional_string(token.header.as_deref()))
+            .property("open", token.open.to_string())
+            .property("suggestions", quoted(&token.suggestions.join(",")))
+            .property("width", format!("{:?}", token.width))
+            .property("state", token.state.to_string())
+            .property("on_change", format!("{:?}", token.change_action.kind()))
+            .property("on_submit", format!("{:?}", token.submit_action.kind())),
         ViewToken::ComboBox(token) => SchemaNode::new("ComboBox", token.id.clone())
             .property("label", optional_string(token.label.as_deref()))
             .property("placeholder", optional_string(token.placeholder.as_deref()))
@@ -327,7 +415,13 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::NavigationView(token) => SchemaNode::new("NavigationView", token.id.clone())
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", navigation_items(&token.items))
+            .property("footer_items", navigation_items(&token.footer_items))
+            .property("pane_display_mode", format!("{:?}", token.pane_display_mode))
+            .property("header", optional_string(token.header.as_deref()))
+            .property("settings_visible", token.settings_visible.to_string())
+            .property("back_button", token.back_button_visible.to_string())
             .property("action", format!("{:?}", token.action.kind()))
+            .property("back_action", format!("{:?}", token.back_action.kind()))
             .children(token.content.iter().map(|content| schema_node(content))),
         ViewToken::Dialog(token) => SchemaNode::new("Dialog", token.id.clone())
             .property("title", quoted(&token.title))
@@ -358,12 +452,87 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 .property("style", quoted(&token.style.summary()))
                 .children(token.children.iter().map(schema_node))
         }
+        ViewToken::Grid(token) => {
+            let mut node = SchemaNode::new("Grid", token.id.clone())
+                .property("rows", lengths(&token.rows))
+                .property("columns", lengths(&token.columns))
+                .property("row_spacing", token.row_spacing.to_string())
+                .property("column_spacing", token.column_spacing.to_string())
+                .property(
+                    "padding",
+                    layout_padding(token.padding, token.padding_edges),
+                )
+                .property("width", format!("{:?}", token.width))
+                .property("height", format!("{:?}", token.height))
+                .property("align", format!("{:?}", token.align))
+                .property("children", token.children.len().to_string());
+            for child in &token.children {
+                let cell = SchemaNode::new("GridCell", None)
+                    .property("row", child.row.to_string())
+                    .property("column", child.column.to_string())
+                    .property("row_span", child.row_span.to_string())
+                    .property("column_span", child.column_span.to_string())
+                    .child(schema_node(&child.view));
+                node = node.child(cell);
+            }
+            node
+        }
+        ViewToken::Border(token) => SchemaNode::new("Border", token.id.clone())
+            .property("corner_radius", token.corner_radius.to_string())
+            .property("stroke_width", token.stroke_width.to_string())
+            .property("filled", token.filled.to_string())
+            .property("padding", format!("{:?}", token.padding))
+            .property("width", format!("{:?}", token.width))
+            .property("height", format!("{:?}", token.height))
+            .child(schema_node(&token.content)),
+        ViewToken::Viewbox(token) => SchemaNode::new("Viewbox", token.id.clone())
+            .property("stretch", format!("{:?}", token.stretch))
+            .property("width", format!("{:?}", token.width))
+            .property("height", format!("{:?}", token.height))
+            .child(schema_node(&token.content)),
+        ViewToken::TabView(token) => {
+            let mut node = SchemaNode::new("TabView", token.id.clone())
+                .property("tabs", token.tabs.len().to_string())
+                .property("selected", optional_string(token.selected.as_deref()))
+                .property("action", format!("{:?}", token.action.kind()))
+                .property("close_action", format!("{:?}", token.close_action.kind()));
+            for tab in &token.tabs {
+                let mut tab_node = SchemaNode::new("Tab", Some(tab.id.clone()))
+                    .property("header", quoted(&tab.header))
+                    .property("closable", tab.closable.to_string())
+                    .property(
+                        "selected",
+                        (token.selected.as_deref() == Some(tab.id.as_str())).to_string(),
+                    );
+                // Only the selected tab's content is rendered in the backend, but
+                // the schema records every tab's subtree for snapshot coverage.
+                tab_node = tab_node.child(schema_node(&tab.content));
+                node = node.child(tab_node);
+            }
+            node
+        }
+        ViewToken::TreeView(token) => {
+            let mut node = SchemaNode::new("TreeView", token.id.clone())
+                .property("roots", token.roots.len().to_string())
+                .property("selected", optional_string(token.selected.as_deref()))
+                .property("action", format!("{:?}", token.action.kind()))
+                .property("toggle_action", format!("{:?}", token.toggle_action.kind()));
+            for root in &token.roots {
+                node = node.child(tree_node_schema(root, token.selected.as_deref()));
+            }
+            node
+        }
         ViewToken::Wrap(token) => SchemaNode::new("Wrap", token.id.clone())
             .property("children", token.children.len().to_string())
             .property("max_columns", token.max_columns.to_string())
             .property("spacing", token.spacing.to_string())
             .property("run_spacing", token.run_spacing.to_string())
             .children(token.children.iter().map(schema_node)),
+        ViewToken::Flyout(token) => SchemaNode::new("Flyout", token.id.clone())
+            .property("open", token.open.to_string())
+            .property("placement", format!("{:?}", token.placement))
+            .child(schema_node(&token.anchor))
+            .child(schema_node(&token.content)),
         ViewToken::Overlay(token) => {
             let layers = token
                 .layers
@@ -454,6 +623,25 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
         }
         ViewToken::ResultCard(token) => result_card_schema(token),
         ViewToken::ResultList(token) => result_list_schema(token),
+        ViewToken::ListView(token) => {
+            let mut node = SchemaNode::new("ListView", token.id.clone())
+                .property("items", token.items.len().to_string())
+                .property("selected", optional_string(token.selected.as_deref()))
+                .property("spacing", token.spacing.to_string())
+                .property("max_height", optional_u16(token.max_height))
+                .property("virtualized", token.virtualized.to_string())
+                .property("action", format!("{:?}", token.action.kind()));
+            for item in &token.items {
+                let row = SchemaNode::new("ListViewItem", Some(item.id.clone()))
+                    .property(
+                        "selected",
+                        (token.selected.as_deref() == Some(item.id.as_str())).to_string(),
+                    )
+                    .child(schema_node(&item.view));
+                node = node.child(row);
+            }
+            node
+        }
         ViewToken::PointerRegion(token) => SchemaNode::new("PointerRegion", token.id.clone())
             .property("width", format!("{:?}", token.width))
             .property("height", format!("{:?}", token.height))
@@ -481,13 +669,28 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
                 optional_capture_rect(token.selection_rect),
             )
             .property("handles_visible", token.handles_visible.to_string())
-            .property("magnifier_visible", token.magnifier_visible.to_string()),
+            .property("magnifier_visible", token.magnifier_visible.to_string())
+            .property("has_background", token.background.is_some().to_string())
+            .property("cursor", optional_capture_point(token.cursor)),
         ViewToken::Image(token) => SchemaNode::new("Image", token.id.clone())
             .property("bgra_path", quoted(&token.bgra_path))
             .property("pixel_width", token.pixel_width.to_string())
             .property("pixel_height", token.pixel_height.to_string())
+            .property("raster_path", optional_string(token.raster_path.as_deref()))
+            .property("stretch", format!("{:?}", token.stretch))
             .property("width", format!("{:?}", token.width))
             .property("height", format!("{:?}", token.height)),
+        ViewToken::WebView(token) => {
+            let (source_kind, source_value) = match &token.source {
+                crate::view::WebViewSource::Html(html) => ("html", html.clone()),
+                crate::view::WebViewSource::Url(url) => ("url", url.clone()),
+            };
+            SchemaNode::new("WebView", token.id.clone())
+                .property("source_kind", source_kind)
+                .property("source", quoted(&source_value))
+                .property("width", format!("{:?}", token.width))
+                .property("height", format!("{:?}", token.height))
+        }
         ViewToken::Custom(token) => SchemaNode::new("Custom", token.id.clone())
             .property("control", quoted(&token.control))
             .property("children", token.children.len().to_string())
@@ -699,6 +902,30 @@ fn optional_length(value: Option<crate::view::Length>) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn tree_node_schema(node: &crate::view::TreeNode, selected: Option<&str>) -> SchemaNode {
+    let mut schema = SchemaNode::new("TreeNode", Some(node.id.clone()))
+        .property("label", quoted(&node.label))
+        .property("expanded", node.expanded.to_string())
+        .property("selected", (selected == Some(node.id.as_str())).to_string())
+        .property("children", node.children.len().to_string());
+    for child in &node.children {
+        schema = schema.child(tree_node_schema(child, selected));
+    }
+    schema
+}
+
+fn lengths(values: &[crate::view::Length]) -> String {
+    if values.is_empty() {
+        return "[]".to_string();
+    }
+    let joined = values
+        .iter()
+        .map(|value| format!("{value:?}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{joined}]")
+}
+
 fn optional_text_style(value: Option<crate::view::TextStyle>) -> String {
     value
         .map(|value| format!("{value:?}"))
@@ -805,6 +1032,12 @@ fn optional_capture_rect(value: Option<crate::view::CaptureOverlayRect>) -> Stri
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn optional_capture_point(value: Option<crate::view::CaptureOverlayPoint>) -> String {
+    value
+        .map(|point| format!("({},{})", point.x, point.y))
+        .unwrap_or_else(|| "none".to_string())
+}
+
 fn optional_string(value: Option<&str>) -> String {
     value.map(quoted).unwrap_or_else(|| "none".to_string())
 }
@@ -823,13 +1056,300 @@ fn quoted(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::view::{button, column, page, settings_row, text_editor, IntoView};
+    use crate::view::{button, checkbox, column, page, settings_row, text, text_editor, IntoView};
 
     #[allow(dead_code)]
     #[derive(Clone)]
     enum Msg {
         Input(String),
         Run,
+        Toggle(bool),
+    }
+
+    #[test]
+    fn checkbox_emits_indeterminate_state() {
+        let view = page::<Msg>("Demo")
+            .content(column((checkbox("Mixed", false)
+                .indeterminate(true)
+                .on_toggle(Msg::Toggle),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("CheckBox label=\"Mixed\""));
+        assert!(snapshot.contains("indeterminate=true"));
+    }
+
+    #[test]
+    fn grid_emits_tracks_and_placed_cells() {
+        use crate::view::{grid, Length};
+        let view = page::<Msg>("Demo")
+            .content(column((grid()
+                .columns([Length::Shrink, Length::Fill])
+                .rows([Length::Shrink, Length::Shrink])
+                .cell(0, 0, text("Name"))
+                .cell(0, 1, text_editor("").on_input(Msg::Input))
+                .cell_span(1, 0, 1, 2, button("Save").on_press(Msg::Run)),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("Grid"));
+        assert!(snapshot.contains("columns=[Shrink,Fill]"));
+        assert!(snapshot.contains("rows=[Shrink,Shrink]"));
+        assert!(snapshot.contains("GridCell"));
+        assert!(snapshot.contains("column_span=2"));
+    }
+
+    #[test]
+    fn list_view_emits_items_and_selection() {
+        use crate::view::{list_view, ListViewItem};
+        let view = page::<Msg>("Demo")
+            .content(column((list_view([
+                ListViewItem::new("en", text("English")),
+                ListViewItem::new("zh", text("中文")),
+            ])
+            .selected("zh")
+            .on_select(Msg::Input),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("ListView"));
+        assert!(snapshot.contains("selected=\"zh\""));
+        assert!(snapshot.contains("action=selection_input"));
+        assert!(snapshot.contains("ListViewItem"));
+        assert!(snapshot.contains("id=\"en\""));
+    }
+
+    #[test]
+    fn radio_group_emits_options_and_selection() {
+        use crate::view::radio_group;
+        let view = page::<Msg>("Demo")
+            .content(column((radio_group()
+                .header("Theme")
+                .option("system", "System")
+                .option("light", "Light")
+                .option("dark", "Dark")
+                .selected("light")
+                .on_select(Msg::Input),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("RadioGroup"));
+        assert!(snapshot.contains("header=\"Theme\""));
+        assert!(snapshot.contains("selected=\"light\""));
+        assert!(snapshot.contains("*light:Light"));
+        assert!(snapshot.contains("action=selection_input"));
+    }
+
+    #[test]
+    fn generic_image_emits_raster_source_and_stretch() {
+        use crate::view::{image, ImageStretch, Length};
+        let view = page::<Msg>("Demo")
+            .content(column((image("assets/flags/zh.png")
+                .stretch(ImageStretch::Uniform)
+                .width(Length::Fixed(24)),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("raster_path=\"assets/flags/zh.png\""));
+        assert!(snapshot.contains("stretch=Uniform"));
+    }
+
+    #[test]
+    fn number_box_emits_range_and_spin() {
+        use crate::view::number_box;
+        let view = page::<Msg>("Demo")
+            .content(column((number_box(1.0)
+                .range(0.5, 3.0)
+                .step(0.1)
+                .header("Speed")
+                .on_change(|_| Msg::Run),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("NumberBox"));
+        assert!(snapshot.contains("min=0.50"));
+        assert!(snapshot.contains("max=3.00"));
+        assert!(snapshot.contains("spin_buttons=true"));
+        assert!(snapshot.contains("action=number_input"));
+    }
+
+    #[test]
+    fn auto_suggest_box_emits_suggestions() {
+        use crate::view::auto_suggest_box;
+        let view = page::<Msg>("Demo")
+            .content(column((auto_suggest_box("en")
+                .placeholder("Search")
+                .suggestions(["English", "Spanish"])
+                .on_change(Msg::Input)
+                .on_submit(Msg::Input),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("AutoSuggestBox"));
+        assert!(snapshot.contains("open=true"));
+        assert!(snapshot.contains("suggestions=\"English,Spanish\""));
+        assert!(snapshot.contains("on_change=text_input"));
+        assert!(snapshot.contains("on_submit=selection_input"));
+    }
+
+    #[test]
+    fn navigation_view_emits_pane_mode_header_footer_settings() {
+        use crate::view::{navigation_view, NavigationItem, PaneDisplayMode};
+        let view = navigation_view::<Msg>([NavigationItem::new("home", "Home")])
+            .header("Easydict")
+            .pane_display_mode(PaneDisplayMode::LeftCompact)
+            .footer_items([NavigationItem::new("about", "About")])
+            .settings_visible(true)
+            .back_button(Msg::Run)
+            .on_select(Msg::Input)
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("pane_display_mode=LeftCompact"));
+        assert!(snapshot.contains("header=\"Easydict\""));
+        assert!(snapshot.contains("settings_visible=true"));
+        assert!(snapshot.contains("back_button=true"));
+        assert!(snapshot.contains("back_action=message"));
+    }
+
+    #[test]
+    fn generic_flyout_emits_anchor_and_content() {
+        use crate::view::{flyout, FlyoutPlacement};
+        let view = page::<Msg>("Demo")
+            .content(column((flyout(button("Open").on_press(Msg::Run), text("Panel"))
+                .open(true)
+                .placement(FlyoutPlacement::Right),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("Flyout open=true placement=Right"));
+        assert!(snapshot.contains("value=\"Panel\""));
+    }
+
+    #[test]
+    fn rich_text_emits_styled_runs_and_links() {
+        use crate::view::{text_runs, TextRun};
+        let view = page::<Msg>("Demo")
+            .content(column((text_runs([
+                TextRun::plain("see "),
+                TextRun::link("hello", "word:hello"),
+                TextRun::italic(" (interj.)"),
+            ])
+            .on_link(Msg::Input),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("RichText"));
+        assert!(snapshot.contains("link(hello->word:hello)"));
+        assert!(snapshot.contains("italic( (interj.))"));
+        assert!(snapshot.contains("on_link=selection_input"));
+    }
+
+    #[test]
+    fn web_view_emits_source() {
+        use crate::view::web_view_url;
+        let view = page::<Msg>("Demo")
+            .content(column((web_view_url("https://example.com/entry"),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("WebView"));
+        assert!(snapshot.contains("source_kind=url"));
+        assert!(snapshot.contains("source=\"https://example.com/entry\""));
+    }
+
+    #[test]
+    fn toggle_and_split_buttons_emit_state() {
+        use crate::view::{split_button, toggle_button, FlyoutMenuItem};
+        let view = page::<Msg>("Demo")
+            .content(column((
+                toggle_button("Bold", true).on_toggle(Msg::Toggle),
+                split_button("Save")
+                    .items([FlyoutMenuItem::command("save_as", "Save As…")])
+                    .on_press(Msg::Run)
+                    .on_select(Msg::Input),
+            )))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("ToggleButton"));
+        assert!(snapshot.contains("pressed=true"));
+        assert!(snapshot.contains("SplitButton"));
+        assert!(snapshot.contains("primary=message"));
+        assert!(snapshot.contains("select=selection_input"));
+    }
+
+    #[test]
+    fn tab_view_and_tree_view_emit_structure() {
+        use crate::view::{tab_view, tree_view, TabItem, TreeNode};
+        let view = page::<Msg>("Demo")
+            .content(column((
+                tab_view([
+                    TabItem::new("a", "Tab A", text("A body")),
+                    TabItem::new("b", "Tab B", text("B body")).closable(true),
+                ])
+                .selected("b")
+                .on_select(Msg::Input),
+                tree_view([TreeNode::branch(
+                    "root",
+                    "Root",
+                    [TreeNode::leaf("child", "Child")],
+                )])
+                .selected("child")
+                .on_select(Msg::Input),
+            )))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("TabView"));
+        assert!(snapshot.contains("Tab header=\"Tab B\""));
+        assert!(snapshot.contains("closable=true"));
+        assert!(snapshot.contains("TreeView"));
+        assert!(snapshot.contains("TreeNode"));
+        assert!(snapshot.contains("label=\"Child\""));
+    }
+
+    #[test]
+    fn border_and_viewbox_wrap_content() {
+        use crate::view::{border, viewbox, ImageStretch};
+        let view = page::<Msg>("Demo")
+            .content(column((
+                border(text("Boxed")).corner_radius(8).filled(true),
+                viewbox(text("Scaled")).stretch(ImageStretch::Uniform),
+            )))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("Border"));
+        assert!(snapshot.contains("corner_radius=8"));
+        assert!(snapshot.contains("filled=true"));
+        assert!(snapshot.contains("Viewbox"));
+        assert!(snapshot.contains("value=\"Boxed\""));
+    }
+
+    #[test]
+    fn generic_tooltip_is_emitted_for_any_element() {
+        let view = page::<Msg>("Demo")
+            .content(column((text("Hover me").tooltip("Helpful hint"),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("tooltip=\"Helpful hint\""));
     }
 
     #[test]

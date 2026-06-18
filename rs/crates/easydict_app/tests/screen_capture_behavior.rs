@@ -112,7 +112,7 @@ fn detected_windows_from_screen_windows_restores_parent_child_snapshot_tree() {
 }
 
 #[test]
-fn capture_interaction_drag_selects_and_enters_adjusting_with_normalized_region() {
+fn capture_interaction_drag_release_confirms_normalized_region() {
     let detector = WindowDetector::new();
     let mut state = CaptureInteractionState::new();
 
@@ -133,11 +133,11 @@ fn capture_interaction_drag_selects_and_enters_adjusting_with_normalized_region(
     assert_eq!(state.phase, CapturePhase::Selecting);
     assert!(state.is_drag_selecting());
 
+    // Releasing the drag confirms immediately, exactly like the WinUI overlay.
     assert_eq!(
         state.on_left_button_up(CapturePoint::new(80, 70)),
-        CaptureInteraction::Redraw
+        CaptureInteraction::Confirm(CaptureRect::new(80, 70, 100, 100))
     );
-    assert_eq!(state.phase, CapturePhase::Adjusting);
     assert_eq!(state.selection, Some(CaptureRect::new(80, 70, 100, 100)));
 }
 
@@ -185,11 +185,11 @@ fn capture_interaction_double_click_blank_enters_track_mouse_selection() {
         state.on_mouse_move(CapturePoint::new(80, 60), &WindowDetector::new()),
         CaptureInteraction::Redraw
     );
+    // A click finalizes the tracked rectangle and confirms immediately.
     assert_eq!(
         state.on_left_button_down(CapturePoint::new(80, 60)),
-        CaptureInteraction::Redraw
+        CaptureInteraction::Confirm(CaptureRect::new(20, 20, 80, 60))
     );
-    assert_eq!(state.phase, CapturePhase::Adjusting);
     assert_eq!(state.selection, Some(CaptureRect::new(20, 20, 80, 60)));
 }
 
@@ -216,35 +216,15 @@ fn capture_interaction_right_click_and_escape_match_legacy_phase_rules() {
 }
 
 #[test]
-fn capture_interaction_adjusting_nudges_selection_by_pixel() {
+fn capture_interaction_tracks_last_cursor_for_magnifier() {
+    let detector = WindowDetector::new();
     let mut state = CaptureInteractionState::new();
 
-    assert_eq!(
-        state.set_adjusting_selection(CaptureRect::new(100, 80, 220, 160)),
-        CaptureInteraction::Redraw
-    );
-    assert_eq!(state.phase, CapturePhase::Adjusting);
+    state.on_mouse_move(CapturePoint::new(42, 24), &detector);
+    assert_eq!(state.last_cursor(), CapturePoint::new(42, 24));
 
-    assert_eq!(state.nudge_selection(1, 0), CaptureInteraction::Redraw);
-    assert_eq!(state.selection, Some(CaptureRect::new(101, 80, 221, 160)));
-
-    assert_eq!(state.nudge_selection(0, -1), CaptureInteraction::Redraw);
-    assert_eq!(state.selection, Some(CaptureRect::new(101, 79, 221, 159)));
-}
-
-#[test]
-fn capture_interaction_adjusting_cancel_returns_to_detecting() {
-    let mut state = CaptureInteractionState::new();
-    state.set_adjusting_selection(CaptureRect::new(100, 80, 220, 160));
-
-    assert_eq!(state.on_escape(), CaptureInteraction::Redraw);
-    assert_eq!(state.phase, CapturePhase::Detecting);
-    assert_eq!(state.selection, None);
-
-    state.set_adjusting_selection(CaptureRect::new(100, 80, 220, 160));
-    assert_eq!(state.on_right_button_down(), CaptureInteraction::Redraw);
-    assert_eq!(state.phase, CapturePhase::Detecting);
-    assert_eq!(state.selection, None);
+    state.on_left_button_down(CapturePoint::new(50, 30));
+    assert_eq!(state.last_cursor(), CapturePoint::new(50, 30));
 }
 
 #[test]

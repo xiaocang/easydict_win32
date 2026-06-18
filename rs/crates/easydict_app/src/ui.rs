@@ -386,21 +386,33 @@ pub fn capture_overlay_view_with_state(
         .or(state.selection)
         .map(CaptureRect::normalized);
     let detected = state.detected_region.map(CaptureRect::normalized);
-    // The base shows the frozen desktop under the dim mask like the WinUI
-    // overlay; without a screenshot it stays a bare input-capture surface.
-    let base_content = match background {
-        Some(bg) => image_bgra_file(&bg.bgra_path, bg.pixel_width, bg.pixel_height)
-            .id("capture.background")
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into_view(),
-        None => column((spacer().width(Length::Fill).height(Length::Fill),))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into_view(),
-    };
+    let cursor = state.last_cursor();
+
+    // A single full-window canvas draws the whole overlay (frozen desktop, dim
+    // mask with the selection punched out as a bright hole, border, size label,
+    // and the live magnifier) at true screen coordinates, exactly like the
+    // WinUI ScreenCaptureWindow. Pointer input is handled by the wrapping
+    // region; the canvas itself is non-interactive.
+    let mut overlay_canvas = capture_overlay(capture_overlay_phase(state))
+        .id("capture.overlay.canvas")
+        .magnifier_visible(true)
+        .cursor(CaptureOverlayPoint::new(cursor.x, cursor.y));
+    if let Some(bg) = background {
+        overlay_canvas = overlay_canvas.background(CaptureOverlayBackground::new(
+            bg.bgra_path.clone(),
+            bg.pixel_width,
+            bg.pixel_height,
+        ));
+    }
+    if let Some(rect) = detected {
+        overlay_canvas = overlay_canvas.detected_rect(capture_overlay_rect(rect));
+    }
+    if let Some(rect) = selection {
+        overlay_canvas = overlay_canvas.selection_rect(capture_overlay_rect(rect));
+    }
+
     let base = pointer_region(
-        column((base_content,))
+        column((overlay_canvas.into_view(),))
             .id("capture.pointer.content")
             .width(Length::Fill)
             .height(Length::Fill),
@@ -418,38 +430,12 @@ pub fn capture_overlay_view_with_state(
     })
     .on_escape(Message::CaptureEscape);
 
-    // Match the WinUI overlay: while detecting/selecting only a centered tip
-    // pill floats over the dim mask (~40% black, MaskAlpha 100); the command
-    // panel with confirm/copy/nudge actions appears once a selection is being
-    // adjusted.
-    let top_layer = if state.phase == CapturePhase::Adjusting {
-        OverlayLayer::new(capture_status_panel(state, selection))
-            .align(Alignment::Start, Alignment::Start)
-    } else {
-        OverlayLayer::new(capture_tip_pill(state)).align(Alignment::Center, Alignment::Start)
-    };
-    let mut layers = overlay(base)
-        .id("capture.overlay.layers")
-        .layer(top_layer.scrim(0.40));
-
-    if let Some(rect) = detected {
-        layers = layers.layer(
-            OverlayLayer::new(capture_region_token("capture.detected_region", state, rect))
-                .align(Alignment::Center, Alignment::Center),
-        );
-    }
-
-    if let Some(rect) = selection {
-        layers = layers
-            .layer(
-                OverlayLayer::new(capture_selection_layer(rect, state))
-                    .align(Alignment::Center, Alignment::Center),
-            )
-            .layer(
-                OverlayLayer::new(capture_magnifier_layer(rect))
-                    .align(Alignment::End, Alignment::Start),
-            );
-    }
+    // The only floating chrome is the centered tip pill; the dim mask is drawn
+    // by the canvas, so no scrim layer is needed. Confirmation is immediate on
+    // release/click/double-click (matching .NET), so there is no command panel.
+    let layers = overlay(base).id("capture.overlay.layers").layer(
+        OverlayLayer::new(capture_tip_pill(state)).align(Alignment::Center, Alignment::Start),
+    );
 
     page("Capture Overlay")
         .id("capture.overlay")
@@ -485,178 +471,10 @@ fn capture_tip_pill(state: &CaptureInteractionState) -> View<Message> {
         .into_view()
 }
 
-fn capture_status_panel(
-    state: &CaptureInteractionState,
-    selection: Option<CaptureRect>,
-) -> View<Message> {
-    let can_confirm = state.phase == CapturePhase::Adjusting
-        && selection.is_some_and(CaptureRect::is_confirmable);
-
-    column((
-        text(tr("ocr.capture.title", "OCR Capture")),
-        command_bar((
-            primary_button("Confirm")
-                .id("capture.confirm")
-                .icon(icon::translate())
-                .enabled(can_confirm)
-                .on_press(Message::ConfirmCapture),
-            button("Copy text")
-                .id("capture.copy")
-                .icon(icon::copy())
-                .enabled(can_confirm)
-                .on_press(Message::CopyResult),
-            button("Cancel")
-                .id("capture.cancel")
-                .icon(icon::clear())
-                .on_press(Message::CancelCapture),
-        ))
-        .id("capture.commands")
-        .compact(true),
-        command_bar((
-            capture_nudge_button(
-                "capture.nudge.left",
-                "Nudge left",
-                "chevron-left",
-                '\u{E76B}',
-                -1,
-                0,
-                state.phase == CapturePhase::Adjusting,
-            ),
-            capture_nudge_button(
-                "capture.nudge.up",
-                "Nudge up",
-                "chevron-up",
-                '\u{E70E}',
-                0,
-                -1,
-                state.phase == CapturePhase::Adjusting,
-            ),
-            capture_nudge_button(
-                "capture.nudge.down",
-                "Nudge down",
-                "chevron-down",
-                '\u{E70D}',
-                0,
-                1,
-                state.phase == CapturePhase::Adjusting,
-            ),
-            capture_nudge_button(
-                "capture.nudge.right",
-                "Nudge right",
-                "chevron-right",
-                '\u{E76C}',
-                1,
-                0,
-                state.phase == CapturePhase::Adjusting,
-            ),
-        ))
-        .id("capture.nudge_commands")
-        .compact(true),
-    ))
-    .id("capture.status_panel")
-    .padding(10)
-    .spacing(6)
-    .width(Length::Fixed(460))
-    .margin(Edges {
-        top: 12,
-        right: 0,
-        bottom: 0,
-        left: 12,
-    })
-    .tw("surface-card border rounded-lg")
-    .into_view()
-}
-
-fn capture_nudge_button(
-    id: &'static str,
-    tooltip: &'static str,
-    icon_name: &'static str,
-    glyph: char,
-    delta_x: i32,
-    delta_y: i32,
-    enabled: bool,
-) -> View<Message> {
-    button("")
-        .id(id)
-        .icon(win_fluent::IconToken::with_glyph(icon_name, glyph))
-        .icon_only()
-        .tooltip(tooltip)
-        .a11y(A11yHint::named(tooltip))
-        .enabled(enabled)
-        .on_press(Message::CaptureNudgeSelection { delta_x, delta_y })
-        .into_view()
-}
-
-fn capture_selection_layer(rect: CaptureRect, state: &CaptureInteractionState) -> View<Message> {
-    column((capture_overlay_token(
-        "capture.selection_rect",
-        state,
-        None,
-        Some(rect),
-        true,
-        true,
-    ),))
-    .id("capture.selection_layer")
-    .into_view()
-}
-
-fn capture_magnifier_layer(rect: CaptureRect) -> View<Message> {
-    column((
-        text("Magnifier"),
-        text(format!(
-            "{} x {}",
-            rect.width().max(0),
-            rect.height().max(0)
-        )),
-    ))
-    .id("capture.magnifier")
-    .padding(10)
-    .spacing(4)
-    .width(Length::Fixed(160))
-    .height(Length::Fixed(96))
-    .tw("surface-card border rounded-lg")
-    .into_view()
-}
-
-fn capture_region_token(
-    id: impl Into<String>,
-    state: &CaptureInteractionState,
-    rect: CaptureRect,
-) -> View<Message> {
-    capture_overlay_token(id, state, Some(rect), None, false, false)
-}
-
-fn capture_overlay_token(
-    id: impl Into<String>,
-    state: &CaptureInteractionState,
-    detected_rect: Option<CaptureRect>,
-    selection_rect: Option<CaptureRect>,
-    handles_visible: bool,
-    magnifier_visible: bool,
-) -> View<Message> {
-    let mut builder = capture_overlay(capture_overlay_phase(state))
-        .id(id)
-        .detection_depth(state.detection_depth)
-        .dragging(state.is_drag_selecting())
-        .handles_visible(handles_visible)
-        .magnifier_visible(magnifier_visible);
-
-    if let Some(rect) = detected_rect {
-        builder = builder.detected_rect(capture_overlay_rect(rect));
-    }
-
-    if let Some(rect) = selection_rect {
-        builder = builder.selection_rect(capture_overlay_rect(rect));
-    }
-
-    builder.into_view()
-}
-
 fn capture_overlay_phase(state: &CaptureInteractionState) -> CaptureOverlayPhase {
     match state.phase {
         CapturePhase::Detecting => CaptureOverlayPhase::Detecting,
         CapturePhase::Selecting => CaptureOverlayPhase::Selecting,
-        CapturePhase::Adjusting => CaptureOverlayPhase::Adjusting,
     }
 }
 

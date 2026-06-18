@@ -453,6 +453,35 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 write_layout(output, child, indent + 2);
             }
         }
+        ViewToken::Grid(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Grid id={:?} rows={:?} columns={:?} row_spacing={} column_spacing={} cells={}",
+                token.id,
+                token.rows,
+                token.columns,
+                token.row_spacing,
+                token.column_spacing,
+                token.children.len()
+            );
+            for child in &token.children {
+                write_layout(output, &child.view, indent + 2);
+            }
+        }
+        ViewToken::ListView(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}ListView id={:?} items={} selected={:?} spacing={} virtualized={}",
+                token.id,
+                token.items.len(),
+                token.selected,
+                token.spacing,
+                token.virtualized
+            );
+            for item in &token.items {
+                write_layout(output, &item.view, indent + 2);
+            }
+        }
         ViewToken::Wrap(token) => {
             let _ = writeln!(
                 output,
@@ -465,6 +494,45 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             );
             for child in &token.children {
                 write_layout(output, child, indent + 2);
+            }
+        }
+        ViewToken::Border(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Border id={:?} radius={} stroke={} filled={}",
+                token.id, token.corner_radius, token.stroke_width, token.filled
+            );
+            write_layout(output, &token.content, indent + 2);
+        }
+        ViewToken::Viewbox(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Viewbox id={:?} stretch={:?}",
+                token.id, token.stretch
+            );
+            write_layout(output, &token.content, indent + 2);
+        }
+        ViewToken::TabView(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}TabView id={:?} tabs={} selected={:?}",
+                token.id,
+                token.tabs.len(),
+                token.selected
+            );
+            for tab in &token.tabs {
+                write_layout(output, &tab.content, indent + 2);
+            }
+        }
+        ViewToken::Flyout(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Flyout id={:?} open={} placement={:?}",
+                token.id, token.open, token.placement
+            );
+            write_layout(output, &token.anchor, indent + 2);
+            if token.open {
+                write_layout(output, &token.content, indent + 2);
             }
         }
         ViewToken::Overlay(token) => {
@@ -673,13 +741,22 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Image(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Image id={:?} bgra_path={:?} pixels={}x{} width={:?} height={:?}",
+                "{pad}Image id={:?} bgra_path={:?} pixels={}x{} raster={:?} stretch={:?} width={:?} height={:?}",
                 token.id,
                 token.bgra_path,
                 token.pixel_width,
                 token.pixel_height,
+                token.raster_path,
+                token.stretch,
                 token.width,
                 token.height
+            );
+        }
+        ViewToken::WebView(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}WebView id={:?} source={:?} width={:?} height={:?}",
+                token.id, token.source, token.width, token.height
             );
         }
         ViewToken::Custom(token) => {
@@ -695,11 +772,18 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             }
         }
         ViewToken::Text(_)
+        | ViewToken::RichText(_)
         | ViewToken::Button(_)
+        | ViewToken::ToggleButton(_)
+        | ViewToken::SplitButton(_)
+        | ViewToken::TreeView(_)
         | ViewToken::StatusBadge(_)
         | ViewToken::InfoBar(_)
         | ViewToken::TextEditor(_)
         | ViewToken::CheckBox(_)
+        | ViewToken::RadioGroup(_)
+        | ViewToken::NumberBox(_)
+        | ViewToken::AutoSuggestBox(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)

@@ -49,10 +49,14 @@ use win_fluent::subscription::{
 use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
-    AdaptiveSwitchToken, Alignment, BusyOverlayToken, ButtonKind, CaptureOverlayToken, CardKind,
+    AdaptiveSwitchToken, Alignment, AutoSuggestBoxToken, BusyOverlayToken, ButtonKind,
+    CaptureOverlayToken, CardKind,
     CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem, Edges, ExpanderToken,
-    FlyoutButtonToken, InfoBarToken, LayoutDistribution, LayoutKind, LayoutToken, Length,
-    OverlayToken,
+    FlyoutButtonToken, FlyoutPlacement, FlyoutToken, GridChild, GridToken, InfoBarToken,
+    LayoutDistribution, LayoutKind, RichTextToken, TextRunKind,
+    LayoutToken, Length, ListViewToken, NavigationViewToken, NumberBoxToken, Orientation,
+    OverlayToken, PaneDisplayMode, RadioGroupToken, SplitButtonToken, TabViewToken, TreeNode,
+    TreeViewToken,
     PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken,
     ProgressRingToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy,
     SettingsRowToken, SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey,
@@ -183,6 +187,61 @@ impl IcedAdapter {
     }
 }
 
+/// Debug-only in-process memory self-report. Splits the app's footprint into its
+/// CPU side (process private commit / working set) and its GPU/rendering side
+/// (per-process video memory via DXGI), since the iced/wgpu renderer is in-process
+/// and otherwise can't be told apart from app logic in Task Manager. Logs once at
+/// startup and then every few seconds. Compiled out entirely in release builds.
+#[cfg(debug_assertions)]
+fn spawn_debug_memory_reporter() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let _ = std::thread::Builder::new()
+        .name("win-fluent-mem-report".into())
+        .spawn(|| {
+            // Give the swapchain and glyph atlas a moment to allocate so the first
+            // GPU figure reflects steady state rather than a cold start.
+            std::thread::sleep(Duration::from_secs(2));
+            loop {
+                log_debug_memory_snapshot();
+                std::thread::sleep(Duration::from_secs(5));
+            }
+        });
+}
+
+#[cfg(debug_assertions)]
+fn log_debug_memory_snapshot() {
+    let to_mb = |bytes: u64| bytes as f64 / (1024.0 * 1024.0);
+    let process = win_fluent_platform_win::WindowsPlatformAdapter::current_process_memory().ok();
+    let gpu = win_fluent_platform_win::WindowsPlatformAdapter::current_gpu_memory();
+
+    let (private_mb, working_set_mb) = process
+        .map(|memory| {
+            (
+                to_mb(memory.private_bytes as u64),
+                to_mb(memory.working_set_bytes as u64),
+            )
+        })
+        .unwrap_or((0.0, 0.0));
+
+    match gpu {
+        Some(gpu) => eprintln!(
+            "[mem] app private={private_mb:.1} MB | working_set={working_set_mb:.1} MB || \
+             gpu current={:.1} MB | budget={:.1} MB",
+            to_mb(gpu.current_usage_bytes),
+            to_mb(gpu.budget_bytes),
+        ),
+        None => eprintln!(
+            "[mem] app private={private_mb:.1} MB | working_set={working_set_mb:.1} MB || gpu=n/a"
+        ),
+    }
+}
+
 pub fn run_single_window_application<App>(
     flags: App::Flags,
     options: WindowOptions,
@@ -192,6 +251,9 @@ where
     App::Flags: Clone + Send + 'static,
     App::Message: fmt::Debug,
 {
+    #[cfg(debug_assertions)]
+    spawn_debug_memory_reporter();
+
     let boot_options = options.clone();
 
     iced::daemon(
@@ -1378,10 +1440,31 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
                 collect_text_editor_values(child, values);
             }
         }
+        ViewToken::Grid(token) => {
+            for child in &token.children {
+                collect_text_editor_values(&child.view, values);
+            }
+        }
+        ViewToken::Border(token) => collect_text_editor_values(&token.content, values),
+        ViewToken::Viewbox(token) => collect_text_editor_values(&token.content, values),
+        ViewToken::TabView(token) => {
+            for tab in &token.tabs {
+                collect_text_editor_values(&tab.content, values);
+            }
+        }
+        ViewToken::ListView(token) => {
+            for item in &token.items {
+                collect_text_editor_values(&item.view, values);
+            }
+        }
         ViewToken::Wrap(token) => {
             for child in &token.children {
                 collect_text_editor_values(child, values);
             }
+        }
+        ViewToken::Flyout(token) => {
+            collect_text_editor_values(&token.anchor, values);
+            collect_text_editor_values(&token.content, values);
         }
         ViewToken::Overlay(token) => {
             collect_text_editor_values(&token.base, values);
@@ -1420,13 +1503,18 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         ViewToken::PointerRegion(token) => collect_text_editor_values(&token.content, values),
         ViewToken::CaptureOverlay(_) => {}
         ViewToken::Image(_) => {}
+        ViewToken::WebView(_) => {}
         ViewToken::Custom(token) => {
             for child in &token.children {
                 collect_text_editor_values(child, values);
             }
         }
         ViewToken::Text(_)
+        | ViewToken::RichText(_)
         | ViewToken::Button(_)
+        | ViewToken::ToggleButton(_)
+        | ViewToken::SplitButton(_)
+        | ViewToken::TreeView(_)
         | ViewToken::FlyoutButton(_)
         | ViewToken::StatusBadge(_)
         | ViewToken::InfoBar(_)
@@ -1434,6 +1522,9 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
         | ViewToken::CheckBox(_)
+        | ViewToken::RadioGroup(_)
+        | ViewToken::NumberBox(_)
+        | ViewToken::AutoSuggestBox(_)
         | ViewToken::ToggleSwitch(_)
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
@@ -1527,7 +1618,23 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         }
         ViewToken::Dialog(token) => token.content.as_deref().and_then(focused_text_editor_id),
         ViewToken::Layout(token) => token.children.iter().find_map(focused_text_editor_id),
+        ViewToken::Grid(token) => token
+            .children
+            .iter()
+            .find_map(|child| focused_text_editor_id(&child.view)),
+        ViewToken::Border(token) => focused_text_editor_id(&token.content),
+        ViewToken::Viewbox(token) => focused_text_editor_id(&token.content),
+        ViewToken::TabView(token) => {
+            token.tabs.iter().find_map(|tab| focused_text_editor_id(&tab.content))
+        }
+        ViewToken::ListView(token) => token
+            .items
+            .iter()
+            .find_map(|item| focused_text_editor_id(&item.view)),
         ViewToken::Wrap(token) => token.children.iter().find_map(focused_text_editor_id),
+        ViewToken::Flyout(token) => {
+            focused_text_editor_id(&token.anchor).or_else(|| focused_text_editor_id(&token.content))
+        }
         ViewToken::Overlay(token) => focused_text_editor_id(&token.base).or_else(|| {
             token
                 .layers
@@ -1560,19 +1667,53 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         | ViewToken::ProgressBar(_)
         | ViewToken::Spacer(_)
         | ViewToken::Text(_)
+        | ViewToken::RichText(_)
         | ViewToken::CheckBox(_)
+        | ViewToken::RadioGroup(_)
+        | ViewToken::NumberBox(_)
+        | ViewToken::AutoSuggestBox(_)
         | ViewToken::ToggleSwitch(_)
+        | ViewToken::ToggleButton(_)
+        | ViewToken::SplitButton(_)
+        | ViewToken::TreeView(_)
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_)
         | ViewToken::CaptureOverlay(_)
         | ViewToken::Image(_)
+        | ViewToken::WebView(_)
         | ViewToken::Custom(_) => None,
     }
 }
 
 fn compile_view_with_text_editors_and_visual<'a, Message, Provider>(
+    view: &'a View<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let element = compile_view_body(view, provider, visual);
+    // Generic `View::tooltip()` (WinUI ToolTipService.ToolTip) — wrap any element
+    // in an iced tooltip when one is attached at the wrapper level.
+    match view.tooltip_text() {
+        Some(text) => iced::widget::tooltip(
+            element,
+            iced::widget::container(iced_text(text.to_string()).size(visual.caption_size))
+                .padding([4, 8])
+                .style(move |_| tooltip_container_style(visual)),
+            iced::widget::tooltip::Position::Top,
+        )
+        .gap(4)
+        .into(),
+        None => element,
+    }
+}
+
+fn compile_view_body<'a, Message, Provider>(
     view: &'a View<Message>,
     provider: Provider,
     visual: IcedVisualTheme,
@@ -1597,6 +1738,7 @@ where
         }
         ViewToken::TitleBar(token) => compile_title_bar(token, provider, visual),
         ViewToken::Text(token) => compile_text_token(token, visual),
+        ViewToken::RichText(token) => compile_rich_text(token, visual),
         ViewToken::Button(token) => {
             let kind = token.kind;
             let state = token.state.clone();
@@ -1710,6 +1852,27 @@ where
             .into(),
         ViewToken::TextEditor(token) => compile_text_editor(token, provider, visual),
         ViewToken::CheckBox(token) => compile_check_box(token, visual),
+        ViewToken::ToggleButton(token) => {
+            let state = token.state.clone();
+            let pressed = token.pressed;
+            let label: IcedElement<Message> = iced_text(token.label.clone())
+                .size(visual.body_size)
+                .into();
+            let mut control = iced_button(label).style(move |_, status| {
+                let status = button_status_with_state(&state, status);
+                button_style_with_state(visual, ButtonKind::Subtle, state.focused, pressed, status)
+            });
+            if token.state.enabled && token.action.kind() == ActionKind::BoolInput {
+                if let Some(message) = token.action.input_bool(!token.pressed) {
+                    control = control.on_press(message);
+                }
+            }
+            control.into()
+        }
+        ViewToken::SplitButton(token) => compile_split_button(token, visual),
+        ViewToken::RadioGroup(token) => compile_radio_group(token, visual),
+        ViewToken::NumberBox(token) => compile_number_box(token, visual),
+        ViewToken::AutoSuggestBox(token) => compile_auto_suggest_box(token, visual),
         ViewToken::ToggleSwitch(token) => {
             let mut control = iced_toggler(token.checked)
                 .label(toggle_switch_label(&token.label, token.checked))
@@ -1806,40 +1969,99 @@ where
         }
         ViewToken::NavigationView(token) => {
             let action = token.action.clone();
-            let mut nav_items = iced_column(Vec::new()).spacing(4);
+            let is_top = matches!(token.pane_display_mode, PaneDisplayMode::Top);
 
-            for item in &token.items {
-                let selected = token.selected.as_deref() == Some(item.id.as_str());
-                let label = if selected {
-                    format!("> {}", item.label)
+            let nav_button = |id: String, label: String, selected: bool| -> IcedElement<Message> {
+                let display = if selected {
+                    format!("> {}", label)
                 } else {
-                    item.label.clone()
+                    label
                 };
-                let mut item_button = iced_button(iced_text(label))
+                let mut item_button = iced_button(iced_text(display))
                     .style(move |_, status| button_style(visual, ButtonKind::Subtle, status));
-
                 if matches!(action.kind(), ActionKind::SelectionInput) {
-                    let action = action.clone();
-                    let id = item.id.clone();
-                    item_button = item_button.on_press(
-                        action
-                            .input_text(id)
-                            .expect("navigation action must produce a message"),
-                    );
+                    if let Some(message) = action.input_text(id) {
+                        item_button = item_button.on_press(message);
+                    }
                 }
+                item_button.into()
+            };
 
-                nav_items = nav_items.push(item_button);
+            let primary: Vec<IcedElement<Message>> = token
+                .items
+                .iter()
+                .map(|item| {
+                    let selected = token.selected.as_deref() == Some(item.id.as_str());
+                    nav_button(item.id.clone(), item.label.clone(), selected)
+                })
+                .collect();
+
+            let mut footer: Vec<IcedElement<Message>> = token
+                .footer_items
+                .iter()
+                .map(|item| {
+                    let selected = token.selected.as_deref() == Some(item.id.as_str());
+                    nav_button(item.id.clone(), item.label.clone(), selected)
+                })
+                .collect();
+            if token.settings_visible {
+                let selected =
+                    token.selected.as_deref() == Some(NavigationViewToken::<Message>::SETTINGS_ID);
+                footer.push(nav_button(
+                    NavigationViewToken::<Message>::SETTINGS_ID.to_string(),
+                    "Settings".to_string(),
+                    selected,
+                ));
             }
 
-            if let Some(content) = &token.content {
-                iced_row(vec![
-                    iced_container(nav_items).width(180).into(),
-                    compile_view_with_text_editors_and_visual(content, provider, visual),
-                ])
-                .spacing(16)
-                .into()
+            // Pane: header + back button + primary items; footer items pinned below.
+            let mut pane_top: Vec<IcedElement<Message>> = Vec::new();
+            if token.back_button_visible {
+                let mut back = iced_button(iced_text("\u{2190}".to_string()))
+                    .style(move |_, status| button_style(visual, ButtonKind::Subtle, status));
+                if let Some(message) = token.back_action.press() {
+                    back = back.on_press(message);
+                }
+                pane_top.push(back.into());
+            }
+            if let Some(header) = &token.header {
+                pane_top.push(
+                    iced_text(header.clone())
+                        .size(visual.caption_size)
+                        .color(visual.text_secondary)
+                        .into(),
+                );
+            }
+
+            let pane: IcedElement<Message> = if is_top {
+                let mut row = pane_top;
+                row.extend(primary);
+                row.extend(footer);
+                iced_row(row).spacing(4).into()
             } else {
-                nav_items.into()
+                let mut col = iced_column(pane_top).spacing(4);
+                for item in primary {
+                    col = col.push(item);
+                }
+                col = col.push(iced_space().height(IcedLength::Fill));
+                for item in footer {
+                    col = col.push(item);
+                }
+                col.into()
+            };
+
+            match &token.content {
+                Some(content) => {
+                    let body = compile_view_with_text_editors_and_visual(content, provider, visual);
+                    if is_top {
+                        iced_column(vec![pane, body]).spacing(12).into()
+                    } else {
+                        iced_row(vec![iced_container(pane).width(180).into(), body])
+                            .spacing(16)
+                            .into()
+                    }
+                }
+                None => pane,
             }
         }
         ViewToken::Dialog(token) => {
@@ -1916,7 +2138,37 @@ where
                 apply_layout_style(content, &token.style, token.width, token.height, visual);
             apply_layout_box(styled, token)
         }
+        ViewToken::Grid(token) => compile_grid(token, provider, visual),
+        ViewToken::Border(token) => {
+            let content =
+                compile_view_with_text_editors_and_visual(&token.content, provider, visual);
+            let radius = f32::from(token.corner_radius);
+            let stroke = f32::from(token.stroke_width);
+            let filled = token.filled;
+            iced_container(content)
+                .padding(layout_padding(0, Some(token.padding)))
+                .width(iced_length(token.width))
+                .height(iced_length(token.height))
+                .style(move |_| border_container_style(visual, radius, stroke, filled))
+                .into()
+        }
+        ViewToken::Viewbox(token) => {
+            // iced has no measure-and-scale viewbox; render the content directly,
+            // honoring the requested layout bounds. (Uniform scaling of the
+            // rasterized subtree is a future backend enhancement.)
+            iced_container(compile_view_with_text_editors_and_visual(
+                &token.content,
+                provider,
+                visual,
+            ))
+            .width(iced_length(token.width))
+            .height(iced_length(token.height))
+            .into()
+        }
+        ViewToken::TabView(token) => compile_tab_view(token, provider, visual),
+        ViewToken::TreeView(token) => compile_tree_view(token, visual),
         ViewToken::Wrap(token) => compile_wrap(token, provider, visual),
+        ViewToken::Flyout(token) => compile_flyout(token, provider, visual),
         ViewToken::Overlay(token) => compile_overlay(token, provider, visual),
         ViewToken::AdaptiveSwitch(token) => compile_adaptive_switch(token, provider, visual),
         ViewToken::Lazy(token) => {
@@ -1946,9 +2198,11 @@ where
         ViewToken::SettingsRow(token) => compile_settings_row(token, provider, visual),
         ViewToken::ResultCard(token) => compile_result_card(token, visual),
         ViewToken::ResultList(token) => compile_result_list(token, visual),
+        ViewToken::ListView(token) => compile_list_view(token, provider, visual),
         ViewToken::PointerRegion(token) => compile_pointer_region(token, provider, visual),
         ViewToken::CaptureOverlay(token) => compile_capture_overlay(token, visual),
         ViewToken::Image(token) => compile_image(token, visual),
+        ViewToken::WebView(token) => compile_web_view(token, visual),
         ViewToken::Custom(token) => {
             let mut content = iced_column(vec![compile_text(
                 &token.control,
@@ -1979,6 +2233,22 @@ where
     PointerRegionWidget::new(token, content).into()
 }
 
+// Dim mask opacity over the frozen desktop (WinUI MaskAlpha 100/255 ≈ 39%).
+const CAPTURE_MASK_ALPHA: f32 = 100.0 / 255.0;
+const CAPTURE_BORDER_WIDTH: f32 = 2.0;
+// Magnifier geometry, mirroring the WinUI ScreenCaptureWindow (11px source,
+// 8× zoom → 88px display box) plus a footer for the coordinate/colour readout.
+const CAPTURE_MAG_SOURCE: f32 = 11.0;
+const CAPTURE_MAG_ZOOM: f32 = 8.0;
+const CAPTURE_MAG_BOX: f32 = CAPTURE_MAG_SOURCE * CAPTURE_MAG_ZOOM;
+const CAPTURE_MAG_OFFSET: f32 = 20.0;
+const CAPTURE_MAG_FOOTER: f32 = 36.0;
+const CAPTURE_MAG_CROSS: f32 = 8.0;
+
+/// The OCR capture overlay is drawn as a single full-window canvas (like the
+/// WinUI GDI overlay): the frozen desktop, a dim mask with the selection punched
+/// out as a bright hole, the selection/detection border at true screen
+/// coordinates, a size label, and a live magnifier that follows the cursor.
 fn compile_capture_overlay<'a, Message>(
     token: &'a CaptureOverlayToken,
     visual: IcedVisualTheme,
@@ -1986,118 +2256,342 @@ fn compile_capture_overlay<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let rect = token.selection_rect.or(token.detected_rect);
-    let Some(rect) = rect else {
-        return iced_container(iced_space())
-            .width(IcedLength::Fixed(1.0))
-            .height(IcedLength::Fixed(1.0))
-            .into();
-    };
+    iced::widget::canvas(CaptureOverlayProgram::new(token, visual))
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fill)
+        .into()
+}
 
-    let width = (rect.width.max(24) as f32).min(900.0);
-    let height = (rect.height.max(24) as f32).min(500.0);
-    let selected = token.selection_rect.is_some();
-    let border_color = if selected {
-        visual.accent
-    } else {
-        visual.warning
-    };
-    let fill_color = if selected {
-        visual.accent.scale_alpha(0.10)
-    } else {
-        visual.warning.scale_alpha(0.12)
-    };
+struct CaptureOverlayProgram {
+    handle: Option<iced::widget::image::Handle>,
+    pixels: Option<std::sync::Arc<Vec<u8>>>,
+    pixel_width: u32,
+    pixel_height: u32,
+    selection: Option<Rectangle>,
+    detected: Option<Rectangle>,
+    cursor: Option<Point>,
+    show_magnifier: bool,
+    accent: Color,
+    warning: Color,
+    caption_size: f32,
+}
 
-    let frame: IcedElement<'a, Message> = iced_container(iced_space())
-        .width(IcedLength::Fixed(width))
-        .height(IcedLength::Fixed(height))
-        .style(move |_| capture_overlay_frame_style(visual, border_color, fill_color, selected))
-        .into();
-
-    let framed: IcedElement<'a, Message> = if token.handles_visible {
-        capture_overlay_with_handles(frame, visual)
-    } else {
-        frame
-    };
-
-    let chip = iced_container(
-        iced_text(format!("{} x {}", rect.width.max(0), rect.height.max(0)))
-            .font(text_font(TextStyle::Caption))
-            .size(visual.caption_size)
-            .color(visual.text_on_accent),
-    )
-    .padding([2, 8])
-    .style(move |_| capture_overlay_size_chip_style(visual, selected));
-
-    let mut content = iced_column(vec![framed, chip.into()])
-        .spacing(6)
-        .align_x(alignment::Horizontal::Center);
-
-    if token.magnifier_visible {
-        content = content.push(capture_overlay_magnifier(width, height, visual));
+impl CaptureOverlayProgram {
+    fn new(token: &CaptureOverlayToken, visual: IcedVisualTheme) -> Self {
+        let loaded = token
+            .background
+            .as_ref()
+            .and_then(capture_overlay_background_image);
+        let (handle, pixels, pixel_width, pixel_height) = match (loaded, token.background.as_ref())
+        {
+            (Some((handle, pixels)), Some(background)) => (
+                Some(handle),
+                Some(pixels),
+                background.pixel_width,
+                background.pixel_height,
+            ),
+            _ => (None, None, 0, 0),
+        };
+        let cursor = token
+            .cursor
+            .map(|point| Point::new(point.x as f32, point.y as f32));
+        Self {
+            handle,
+            pixels,
+            pixel_width,
+            pixel_height,
+            selection: token.selection_rect.map(capture_rect_to_rectangle),
+            detected: token.detected_rect.map(capture_rect_to_rectangle),
+            cursor,
+            show_magnifier: token.magnifier_visible && cursor.is_some(),
+            accent: visual.accent,
+            warning: visual.warning,
+            caption_size: visual.caption_size,
+        }
     }
 
-    content.into()
+    /// Samples the frozen desktop pixel under the cursor (logical→physical) for
+    /// the magnifier colour readout.
+    fn sample_color(&self, bounds: Rectangle, cursor: Point) -> Option<Color> {
+        let pixels = self.pixels.as_ref()?;
+        if self.pixel_width == 0 || bounds.width <= 0.0 {
+            return None;
+        }
+        let scale = self.pixel_width as f32 / bounds.width;
+        let px = (cursor.x * scale).round() as i64;
+        let py = (cursor.y * scale).round() as i64;
+        if px < 0 || py < 0 || px >= self.pixel_width as i64 || py >= self.pixel_height as i64 {
+            return None;
+        }
+        let idx = ((py as usize) * self.pixel_width as usize + px as usize) * 4;
+        let slice = pixels.get(idx..idx + 3)?;
+        Some(Color::from_rgb8(slice[0], slice[1], slice[2]))
+    }
 }
 
-fn capture_overlay_with_handles<'a, Message>(
-    frame: IcedElement<'a, Message>,
-    visual: IcedVisualTheme,
-) -> IcedElement<'a, Message>
-where
-    Message: Clone + Send + 'static,
-{
-    let handles = iced_row(vec![
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-        capture_overlay_handle(visual),
-    ])
-    .spacing(6)
-    .align_y(alignment::Vertical::Center);
+impl<Message> iced::widget::canvas::Program<Message> for CaptureOverlayProgram {
+    type State = ();
 
-    iced_column(vec![frame, handles.into()])
-        .spacing(8)
-        .align_x(alignment::Horizontal::Center)
-        .into()
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &iced::Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<iced::widget::canvas::Geometry> {
+        use iced::widget::canvas::{Frame, Stroke, Text};
+
+        let mut frame = Frame::new(renderer, bounds.size());
+        let size = bounds.size();
+
+        // 1. Frozen desktop (falls back to near-black when unavailable).
+        if let Some(handle) = &self.handle {
+            frame.draw_image(
+                Rectangle::new(Point::ORIGIN, size),
+                iced::advanced::image::Image::new(handle.clone()),
+            );
+        } else {
+            frame.fill_rectangle(Point::ORIGIN, size, Color::from_rgb8(0x10, 0x10, 0x10));
+        }
+
+        // 2. Dim mask. With an active region the mask is drawn as four strips so
+        // the selection stays an un-dimmed bright "hole" (WinUI BitBlt clear).
+        let active = self.selection.or(self.detected);
+        let dim = Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: CAPTURE_MASK_ALPHA,
+        };
+        match active {
+            Some(rect) => {
+                let left = rect.x.clamp(0.0, size.width);
+                let top = rect.y.clamp(0.0, size.height);
+                let right = (rect.x + rect.width).clamp(0.0, size.width);
+                let bottom = (rect.y + rect.height).clamp(0.0, size.height);
+                // top, bottom, left, right strips around the hole.
+                frame.fill_rectangle(Point::ORIGIN, Size::new(size.width, top), dim);
+                frame.fill_rectangle(
+                    Point::new(0.0, bottom),
+                    Size::new(size.width, (size.height - bottom).max(0.0)),
+                    dim,
+                );
+                frame.fill_rectangle(
+                    Point::new(0.0, top),
+                    Size::new(left, (bottom - top).max(0.0)),
+                    dim,
+                );
+                frame.fill_rectangle(
+                    Point::new(right, top),
+                    Size::new((size.width - right).max(0.0), (bottom - top).max(0.0)),
+                    dim,
+                );
+            }
+            None => frame.fill_rectangle(Point::ORIGIN, size, dim),
+        }
+
+        // 3. Selection / detection border + size label.
+        if let Some(rect) = active {
+            let border_color = if self.selection.is_some() {
+                self.accent
+            } else {
+                self.warning
+            };
+            frame.stroke_rectangle(
+                Point::new(rect.x, rect.y),
+                Size::new(rect.width, rect.height),
+                Stroke::default()
+                    .with_color(border_color)
+                    .with_width(CAPTURE_BORDER_WIDTH),
+            );
+
+            let label = format!("{} × {}", rect.width.round() as i32, rect.height.round() as i32);
+            let label_y = if rect.y > 20.0 {
+                rect.y - 18.0
+            } else {
+                rect.y + rect.height + 4.0
+            };
+            frame.fill_text(Text {
+                content: label,
+                position: Point::new(rect.x, label_y),
+                color: Color::WHITE,
+                size: Pixels(self.caption_size),
+                font: Font::default(),
+                ..Default::default()
+            });
+        }
+
+        // 4. Magnifier following the cursor.
+        if self.show_magnifier {
+            if let Some(cursor) = self.cursor {
+                self.draw_magnifier(&mut frame, bounds, cursor);
+            }
+        }
+
+        vec![frame.into_geometry()]
+    }
 }
 
-fn capture_overlay_handle<'a, Message>(visual: IcedVisualTheme) -> IcedElement<'a, Message>
-where
-    Message: Clone + Send + 'static,
-{
-    iced_container(iced_space())
-        .width(IcedLength::Fixed(9.0))
-        .height(IcedLength::Fixed(9.0))
-        .style(move |_| capture_overlay_handle_style(visual))
-        .into()
+impl CaptureOverlayProgram {
+    fn draw_magnifier(
+        &self,
+        frame: &mut iced::widget::canvas::Frame,
+        bounds: Rectangle,
+        cursor: Point,
+    ) {
+        use iced::widget::canvas::{Path, Stroke, Text};
+
+        let panel_w = CAPTURE_MAG_BOX + 4.0;
+        let panel_h = CAPTURE_MAG_BOX + CAPTURE_MAG_FOOTER;
+        let mut mx = cursor.x + CAPTURE_MAG_OFFSET;
+        let mut my = cursor.y + CAPTURE_MAG_OFFSET;
+        if mx + panel_w > bounds.width {
+            mx = cursor.x - panel_w - CAPTURE_MAG_OFFSET;
+        }
+        if my + panel_h > bounds.height {
+            my = cursor.y - panel_h - CAPTURE_MAG_OFFSET;
+        }
+        mx = mx.clamp(0.0, (bounds.width - panel_w).max(0.0));
+        my = my.clamp(0.0, (bounds.height - panel_h).max(0.0));
+
+        // Panel background (#303030).
+        frame.fill_rectangle(
+            Point::new(mx, my),
+            Size::new(panel_w, panel_h),
+            Color::from_rgb8(0x30, 0x30, 0x30),
+        );
+
+        let bx = mx + 2.0;
+        let by = my + 2.0;
+        let box_rect = Rectangle::new(Point::new(bx, by), Size::new(CAPTURE_MAG_BOX, CAPTURE_MAG_BOX));
+
+        // Zoomed frozen desktop (nearest-neighbour), clipped to the box.
+        if let Some(handle) = &self.handle {
+            let box_cx = bx + CAPTURE_MAG_BOX / 2.0;
+            let box_cy = by + CAPTURE_MAG_BOX / 2.0;
+            frame.with_clip(box_rect, |clipped| {
+                clipped.draw_image(
+                    Rectangle::new(
+                        Point::new(
+                            box_cx - cursor.x * CAPTURE_MAG_ZOOM,
+                            box_cy - cursor.y * CAPTURE_MAG_ZOOM,
+                        ),
+                        Size::new(bounds.width * CAPTURE_MAG_ZOOM, bounds.height * CAPTURE_MAG_ZOOM),
+                    ),
+                    iced::advanced::image::Image::new(handle.clone())
+                        .filter_method(iced::advanced::image::FilterMethod::Nearest),
+                );
+            });
+        }
+
+        // Green crosshair at the box centre.
+        let cx = bx + CAPTURE_MAG_BOX / 2.0;
+        let cy = by + CAPTURE_MAG_BOX / 2.0;
+        let green = Color::from_rgb(0.0, 1.0, 0.0);
+        frame.stroke(
+            &Path::line(
+                Point::new(cx - CAPTURE_MAG_CROSS, cy),
+                Point::new(cx + CAPTURE_MAG_CROSS, cy),
+            ),
+            Stroke::default().with_color(green).with_width(1.0),
+        );
+        frame.stroke(
+            &Path::line(
+                Point::new(cx, cy - CAPTURE_MAG_CROSS),
+                Point::new(cx, cy + CAPTURE_MAG_CROSS),
+            ),
+            Stroke::default().with_color(green).with_width(1.0),
+        );
+
+        // Box border (#808080).
+        frame.stroke_rectangle(
+            Point::new(bx, by),
+            Size::new(CAPTURE_MAG_BOX, CAPTURE_MAG_BOX),
+            Stroke::default()
+                .with_color(Color::from_rgb8(0x80, 0x80, 0x80))
+                .with_width(1.0),
+        );
+
+        // Coordinate readout.
+        let footer_y = by + CAPTURE_MAG_BOX + 2.0;
+        frame.fill_text(Text {
+            content: format!("({}, {})", cursor.x as i32, cursor.y as i32),
+            position: Point::new(bx, footer_y),
+            color: Color::WHITE,
+            size: Pixels(self.caption_size),
+            font: Font::default(),
+            ..Default::default()
+        });
+
+        // Pixel colour readout + swatch.
+        if let Some(color) = self.sample_color(bounds, cursor) {
+            let (r, g, b) = (
+                (color.r * 255.0).round() as u8,
+                (color.g * 255.0).round() as u8,
+                (color.b * 255.0).round() as u8,
+            );
+            frame.fill_text(Text {
+                content: format!("#{r:02X}{g:02X}{b:02X}"),
+                position: Point::new(bx, footer_y + 14.0),
+                color: Color::WHITE,
+                size: Pixels(self.caption_size),
+                font: Font::default(),
+                ..Default::default()
+            });
+            frame.fill_rectangle(
+                Point::new(bx + 70.0, footer_y + 14.0),
+                Size::new(16.0, 12.0),
+                color,
+            );
+        }
+    }
 }
 
-fn capture_overlay_magnifier<'a, Message>(
-    width: f32,
-    height: f32,
-    visual: IcedVisualTheme,
-) -> IcedElement<'a, Message>
-where
-    Message: Clone + Send + 'static,
-{
-    let inner = iced_container(
-        iced_text(format!("{width:.0} x {height:.0}"))
-            .font(text_font(TextStyle::Caption))
-            .size(visual.caption_size)
-            .color(visual.text_primary),
+fn capture_rect_to_rectangle(rect: win_fluent::view::CaptureOverlayRect) -> Rectangle {
+    Rectangle::new(
+        Point::new(rect.left as f32, rect.top as f32),
+        Size::new(rect.width.max(0) as f32, rect.height.max(0) as f32),
     )
-    .width(IcedLength::Fixed(128.0))
-    .height(IcedLength::Fixed(76.0))
-    .align_x(alignment::Horizontal::Center)
-    .align_y(alignment::Vertical::Center)
-    .style(move |_| capture_overlay_magnifier_style(visual));
+}
 
-    inner.into()
+/// Loads (and caches) the frozen-desktop BGRA dump as an iced RGBA image handle
+/// plus the raw RGBA bytes (for the magnifier colour readout).
+fn capture_overlay_background_image(
+    background: &win_fluent::view::CaptureOverlayBackground,
+) -> Option<(iced::widget::image::Handle, std::sync::Arc<Vec<u8>>)> {
+    type Cache = HashMap<String, (iced::widget::image::Handle, std::sync::Arc<Vec<u8>>)>;
+    static HANDLES: OnceLock<Mutex<Cache>> = OnceLock::new();
+
+    let mut cache = HANDLES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("capture overlay image cache poisoned");
+    if let Some(entry) = cache.get(&background.bgra_path) {
+        return Some(entry.clone());
+    }
+
+    let expected = (background.pixel_width as usize)
+        .checked_mul(background.pixel_height as usize)?
+        .checked_mul(4)?;
+    let mut bytes = std::fs::read(&background.bgra_path).ok()?;
+    if bytes.len() < expected {
+        return None;
+    }
+    bytes.truncate(expected);
+    for pixel in bytes.chunks_exact_mut(4) {
+        pixel.swap(0, 2); // BGRA -> RGBA
+        pixel[3] = 0xFF; // GDI leaves alpha undefined
+    }
+    let pixels = std::sync::Arc::new(bytes.clone());
+    let handle = iced::widget::image::Handle::from_rgba(
+        background.pixel_width,
+        background.pixel_height,
+        bytes,
+    );
+    let entry = (handle, pixels);
+    cache.insert(background.bgra_path.clone(), entry.clone());
+    Some(entry)
 }
 
 fn compile_text<'a, Message>(
@@ -2113,6 +2607,58 @@ where
         .size(text_size(style, visual))
         .color(text_color(style, visual))
         .into()
+}
+
+fn compile_rich_text<'a, Message>(
+    token: &'a RichTextToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let size = text_size(token.style, visual);
+    let linkable = token.link_action.kind() == ActionKind::SelectionInput;
+
+    let spans: Vec<IcedElement<Message>> = token
+        .runs
+        .iter()
+        .map(|run| {
+            let mut font = text_font_for_value(token.style, &run.text);
+            match run.kind {
+                TextRunKind::Bold => font.weight = font::Weight::Bold,
+                TextRunKind::Italic => font.style = font::Style::Italic,
+                TextRunKind::Plain | TextRunKind::Link => {}
+            }
+
+            if matches!(run.kind, TextRunKind::Link) {
+                let label = iced_text(run.text.clone())
+                    .font(font)
+                    .size(size)
+                    .color(visual.accent);
+                let mut btn = iced_button(label)
+                    .padding(0)
+                    .style(move |_, status| button_style(visual, ButtonKind::Link, status));
+                if linkable {
+                    if let Some(href) = &run.href {
+                        if let Some(message) = token.link_action.input_text(href.clone()) {
+                            btn = btn.on_press(message);
+                        }
+                    }
+                }
+                btn.into()
+            } else {
+                iced_text(run.text.clone())
+                    .font(font)
+                    .size(size)
+                    .color(visual.text_primary)
+                    .into()
+            }
+        })
+        .collect();
+
+    // Inline flow that wraps run-by-run as width runs out (WinUI RichTextBlock
+    // wraps per word; run-granularity is a first-cut approximation).
+    Element::new(WrapFlow::new(spans, usize::MAX, 0.0, 2.0))
 }
 
 fn compile_text_token<'a, Message>(
@@ -3500,6 +4046,39 @@ where
     .into()
 }
 
+fn compile_flyout<'a, Message, Provider>(
+    token: &'a FlyoutToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let anchor = compile_view_with_text_editors_and_visual(&token.anchor, provider, visual);
+    if !token.open {
+        return anchor;
+    }
+
+    // Anchored popover content rendered as a Fluent surface card. iced has no
+    // true free-floating overlay anchored to an arbitrary element, so the
+    // content is placed adjacent to the anchor per the requested placement.
+    let content = iced_container(compile_view_with_text_editors_and_visual(
+        &token.content,
+        provider,
+        visual,
+    ))
+    .padding(8)
+    .style(move |_| dialog_container_style(visual));
+
+    match token.placement {
+        FlyoutPlacement::Top => iced_column(vec![content.into(), anchor]).spacing(4).into(),
+        FlyoutPlacement::Bottom => iced_column(vec![anchor, content.into()]).spacing(4).into(),
+        FlyoutPlacement::Left => iced_row(vec![content.into(), anchor]).spacing(4).into(),
+        FlyoutPlacement::Right => iced_row(vec![anchor, content.into()]).spacing(4).into(),
+    }
+}
+
 fn compile_wrap<'a, Message, Provider>(
     token: &'a WrapToken<Message>,
     provider: Provider,
@@ -3527,6 +4106,80 @@ where
         f32::from(token.spacing),
         f32::from(token.run_spacing),
     ))
+}
+
+fn compile_grid<'a, Message, Provider>(
+    token: &'a GridToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    use std::collections::HashMap;
+
+    // Grid extent is the larger of the declared track count and the furthest
+    // cell any child reaches (so children can over-run an under-declared grid,
+    // matching WinUI's implicit-track behavior).
+    let n_cols = token
+        .columns
+        .len()
+        .max(
+            token
+                .children
+                .iter()
+                .map(|c| usize::from(c.column) + usize::from(c.column_span.max(1)))
+                .max()
+                .unwrap_or(0),
+        )
+        .max(1);
+    let n_rows = token
+        .rows
+        .len()
+        .max(
+            token
+                .children
+                .iter()
+                .map(|c| usize::from(c.row) + usize::from(c.row_span.max(1)))
+                .max()
+                .unwrap_or(0),
+        )
+        .max(1);
+
+    // Map each origin cell to its child. Spanned cells are visually approximated
+    // (iced has no cell-merging flex), but the schema records the true span.
+    let mut origin: HashMap<(usize, usize), &GridChild<Message>> = HashMap::new();
+    for child in &token.children {
+        origin.insert((usize::from(child.row), usize::from(child.column)), child);
+    }
+
+    let col_len = |c: usize| token.columns.get(c).copied().unwrap_or(Length::Fill);
+    let row_len = |r: usize| token.rows.get(r).copied().unwrap_or(Length::Shrink);
+
+    let mut rows_col = iced_column(Vec::new()).spacing(f32::from(token.row_spacing));
+    for r in 0..n_rows {
+        let mut cells: Vec<IcedElement<Message>> = Vec::with_capacity(n_cols);
+        for c in 0..n_cols {
+            let cell: IcedElement<Message> = if let Some(child) = origin.get(&(r, c)) {
+                let el =
+                    compile_view_with_text_editors_and_visual(&child.view, provider, visual);
+                iced_container(el).width(iced_length(col_len(c))).into()
+            } else {
+                iced_space().width(iced_length(col_len(c))).into()
+            };
+            cells.push(cell);
+        }
+        let row_el = iced_row(cells).spacing(f32::from(token.column_spacing));
+        rows_col = rows_col.push(iced_container(row_el).height(iced_length(row_len(r))));
+    }
+
+    iced_container(rows_col)
+        .padding(layout_padding(token.padding, token.padding_edges))
+        .width(iced_length(token.width))
+        .height(iced_length(token.height))
+        .align_x(horizontal_alignment(token.align))
+        .into()
 }
 
 fn apply_layout_style<'a, Message>(
@@ -4239,6 +4892,58 @@ where
     iced_container(content)
         .style(move |_| result_card_container_style(visual))
         .into()
+}
+
+fn compile_list_view<'a, Message, Provider>(
+    token: &'a ListViewToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let mut list = iced_column(Vec::new())
+        .spacing(f32::from(token.spacing))
+        .width(IcedLength::Fill);
+
+    let selectable = token.action.kind() == ActionKind::SelectionInput;
+    for item in &token.items {
+        let selected = token.selected.as_deref() == Some(item.id.as_str());
+        let content = compile_view_with_text_editors_and_visual(&item.view, provider, visual);
+        let row = iced_container(content)
+            .width(IcedLength::Fill)
+            .padding(IcedPadding::from([6.0, 10.0]))
+            .style(move |_| list_view_row_style(visual, selected));
+
+        let row_el: IcedElement<Message> = if selectable {
+            if let Some(message) = token.action.input_text(item.id.clone()) {
+                iced_mouse_area(row).on_press(message).into()
+            } else {
+                row.into()
+            }
+        } else {
+            row.into()
+        };
+        list = list.push(row_el);
+    }
+
+    let scroll = iced_scrollable(list).width(IcedLength::Fill);
+    let mut container = iced_container(scroll).width(IcedLength::Fill);
+    if let Some(max_height) = token.max_height {
+        container = container.max_height(f32::from(max_height));
+    }
+    container.into()
+}
+
+fn list_view_row_style(visual: IcedVisualTheme, selected: bool) -> iced::widget::container::Style {
+    let mut style = iced::widget::container::Style::default().color(visual.text_primary);
+    if selected {
+        style = style
+            .background(visual.accent.scale_alpha(0.18))
+            .border(control_border(visual, visual.accent, visual.stroke_control));
+    }
+    style
 }
 
 fn compile_result_list<'a, Message>(
@@ -5709,6 +6414,33 @@ where
     icon_element(icon, 20.0, visual.text_secondary)
 }
 
+fn compile_web_view<'a, Message>(
+    token: &win_fluent::view::WebViewToken,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    // No embedded browser engine in the iced backend: render a labeled
+    // placeholder surface describing the web content (interface-level only).
+    let label = match &token.source {
+        win_fluent::view::WebViewSource::Url(url) => format!("Web view: {url}"),
+        win_fluent::view::WebViewSource::Html(_) => "Web view (HTML content)".to_string(),
+    };
+    iced_container(
+        iced_text(label)
+            .size(visual.caption_size)
+            .color(visual.text_secondary),
+    )
+    .width(iced_length(token.width))
+    .height(iced_length(token.height))
+    .padding(12)
+    .align_x(alignment::Horizontal::Center)
+    .align_y(alignment::Vertical::Center)
+    .style(move |_| dialog_container_style(visual))
+    .into()
+}
+
 fn compile_image<'a, Message>(
     token: &win_fluent::ImageToken,
     _visual: IcedVisualTheme,
@@ -5718,6 +6450,20 @@ where
 {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
+
+    let content_fit = image_content_fit(token.stretch);
+
+    // Generic encoded-file/URI source (PNG/JPG/…): iced decodes lazily from the
+    // path. Takes precedence over the raw BGRA dump path.
+    if let Some(raster_path) = &token.raster_path {
+        if !raster_path.is_empty() {
+            return iced_image(iced::widget::image::Handle::from_path(raster_path))
+                .content_fit(content_fit)
+                .width(iced_length(token.width))
+                .height(iced_length(token.height))
+                .into();
+        }
+    }
 
     // Raw BGRA dumps are large (a full screen is tens of MB); cache the decoded
     // handle per path so view rebuilds reuse the uploaded texture instead of
@@ -5756,7 +6502,7 @@ where
 
     match handle {
         Some(handle) => iced_image(handle)
-            .content_fit(iced::ContentFit::Fill)
+            .content_fit(content_fit)
             .width(iced_length(token.width))
             .height(iced_length(token.height))
             .into(),
@@ -5765,6 +6511,16 @@ where
             .width(iced_length(token.width))
             .height(iced_length(token.height))
             .into(),
+    }
+}
+
+fn image_content_fit(stretch: win_fluent::view::ImageStretch) -> iced::ContentFit {
+    use win_fluent::view::ImageStretch;
+    match stretch {
+        ImageStretch::None => iced::ContentFit::None,
+        ImageStretch::Fill => iced::ContentFit::Fill,
+        ImageStretch::Uniform => iced::ContentFit::Contain,
+        ImageStretch::UniformToFill => iced::ContentFit::Cover,
     }
 }
 
@@ -6564,67 +7320,6 @@ fn busy_overlay_style(visual: IcedVisualTheme, opacity: f32) -> iced::widget::co
         .color(Color::WHITE)
 }
 
-fn capture_overlay_frame_style(
-    visual: IcedVisualTheme,
-    border_color: Color,
-    fill_color: Color,
-    selected: bool,
-) -> iced::widget::container::Style {
-    let border_width = if selected {
-        2.0
-    } else {
-        visual.stroke_focus.max(1.5)
-    };
-    iced::widget::container::Style::default()
-        .background(fill_color)
-        .border(Border {
-            color: border_color,
-            width: border_width,
-            radius: 2.0.into(),
-        })
-}
-
-fn capture_overlay_handle_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
-    iced::widget::container::Style::default()
-        .background(visual.surface)
-        .border(Border {
-            color: visual.accent,
-            width: 2.0,
-            radius: 2.0.into(),
-        })
-        .shadow(elevation_shadow(visual, 2.0))
-}
-
-fn capture_overlay_size_chip_style(
-    visual: IcedVisualTheme,
-    selected: bool,
-) -> iced::widget::container::Style {
-    iced::widget::container::Style::default()
-        .background(if selected {
-            visual.accent
-        } else {
-            visual.warning
-        })
-        .color(visual.text_on_accent)
-        .border(Border {
-            radius: 6.0.into(),
-            ..Border::default()
-        })
-        .shadow(elevation_shadow(visual, 2.0))
-}
-
-fn capture_overlay_magnifier_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
-    iced::widget::container::Style::default()
-        .background(visual.surface.scale_alpha(0.96))
-        .color(visual.text_primary)
-        .border(Border {
-            color: visual.accent,
-            width: 2.0,
-            radius: 8.0.into(),
-        })
-        .shadow(elevation_shadow(visual, visual.elevation_raised))
-}
-
 fn utility_container_style(
     style: &FluentStyle,
     visual: IcedVisualTheme,
@@ -7189,7 +7884,10 @@ fn compile_check_box<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let mut control = iced_checkbox(token.checked)
+    // WinUI three-state: an indeterminate box reads as "filled" with a dash
+    // glyph instead of the check mark.
+    let displayed_checked = token.checked || token.indeterminate;
+    let mut control = iced_checkbox(displayed_checked)
         .label(token.label.clone())
         .size(20)
         .spacing(8)
@@ -7199,6 +7897,16 @@ where
             let state = token.state.clone();
             move |_, status| checkbox_style_with_state(visual, status, &state)
         });
+
+    if token.indeterminate {
+        control = control.icon(iced::widget::checkbox::Icon {
+            font: Font::DEFAULT,
+            code_point: '\u{2212}',
+            size: None,
+            line_height: iced::widget::text::LineHeight::default(),
+            shaping: iced::widget::text::Shaping::Basic,
+        });
+    }
 
     if token.state.enabled && token.action.kind() == ActionKind::BoolInput {
         let action = token.action.clone();
@@ -7210,6 +7918,366 @@ where
     }
 
     control.into()
+}
+
+fn compile_number_box<'a, Message>(
+    token: &'a NumberBoxToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let enabled = token.state.enabled && token.action.kind() == ActionKind::NumberInput;
+
+    let value_text = if (token.value.fract()).abs() < f32::EPSILON {
+        format!("{}", token.value as i64)
+    } else {
+        format!("{:.2}", token.value)
+    };
+
+    let value_label = iced_container(
+        iced_text(value_text)
+            .size(visual.body_size)
+            .color(visual.text_primary),
+    )
+    .padding(IcedPadding::from([4.0, 10.0]))
+    .align_y(alignment::Vertical::Center);
+
+    let mut content: Vec<IcedElement<Message>> = vec![value_label.into()];
+
+    if token.spin_buttons {
+        let step_button = |glyph: &str, target: f32| -> IcedElement<Message> {
+            let label = iced_text(glyph.to_string()).size(visual.body_size);
+            let mut btn = iced_button(label);
+            if enabled {
+                if let Some(message) = token.action.input_number(token.clamp(target)) {
+                    btn = btn.on_press(message);
+                }
+            }
+            btn.into()
+        };
+        content.push(step_button("\u{2212}", token.value - token.step)); // − decrement
+        content.push(step_button("+", token.value + token.step));
+    }
+
+    let body = iced_row(content)
+        .spacing(4)
+        .align_y(alignment::Vertical::Center);
+
+    match &token.header {
+        Some(header) => iced_column(vec![
+            iced_text(header.clone())
+                .size(visual.caption_size)
+                .color(visual.text_secondary)
+                .into(),
+            body.into(),
+        ])
+        .spacing(6)
+        .into(),
+        None => body.into(),
+    }
+}
+
+fn compile_auto_suggest_box<'a, Message>(
+    token: &'a AutoSuggestBoxToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let placeholder = token.placeholder.clone().unwrap_or_default();
+    let mut input = iced_text_input(&placeholder, &token.text).width(iced_length(token.width));
+    if token.state.enabled && token.change_action.kind() == ActionKind::TextInput {
+        let action = token.change_action.clone();
+        input = input.on_input(move |value| {
+            action
+                .input_text(value)
+                .expect("auto-suggest change action must produce a message")
+        });
+    }
+
+    let mut column = iced_column(vec![input.into()]).spacing(4);
+
+    if token.open && !token.suggestions.is_empty() {
+        let submittable = token.submit_action.kind() == ActionKind::SelectionInput;
+        let mut list = iced_column(Vec::new()).spacing(2).width(IcedLength::Fill);
+        for suggestion in &token.suggestions {
+            let row = iced_container(
+                iced_text(suggestion.clone())
+                    .size(visual.body_size)
+                    .color(visual.text_primary),
+            )
+            .width(IcedLength::Fill)
+            .padding(IcedPadding::from([4.0, 8.0]));
+            let row_el: IcedElement<Message> = if submittable {
+                if let Some(message) = token.submit_action.input_text(suggestion.clone()) {
+                    iced_mouse_area(row).on_press(message).into()
+                } else {
+                    row.into()
+                }
+            } else {
+                row.into()
+            };
+            list = list.push(row_el);
+        }
+        column = column.push(
+            iced_container(list)
+                .width(IcedLength::Fill)
+                .style(move |_| dialog_container_style(visual)),
+        );
+    }
+
+    let body: IcedElement<Message> = column.into();
+    match &token.header {
+        Some(header) => iced_column(vec![
+            iced_text(header.clone())
+                .size(visual.caption_size)
+                .color(visual.text_secondary)
+                .into(),
+            body,
+        ])
+        .spacing(6)
+        .into(),
+        None => body,
+    }
+}
+
+fn border_container_style(
+    visual: IcedVisualTheme,
+    radius: f32,
+    stroke: f32,
+    filled: bool,
+) -> iced::widget::container::Style {
+    let mut style = iced::widget::container::Style::default().color(visual.text_primary);
+    if filled {
+        style = style.background(visual.surface);
+    }
+    style.border(
+        Border::default()
+            .rounded(radius)
+            .width(stroke)
+            .color(visual.border),
+    )
+}
+
+fn compile_split_button<'a, Message>(
+    token: &'a SplitButtonToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    // Primary action segment.
+    let mut primary = iced_button(iced_text(token.label.clone()).size(visual.body_size))
+        .style(move |_, status| button_style(visual, ButtonKind::Standard, status));
+    if token.state.enabled {
+        if let Some(message) = token.primary_action.press() {
+            primary = primary.on_press(message);
+        }
+    }
+
+    // Dropdown chevron segment.
+    let mut chevron = iced_button(iced_text("\u{25BE}".to_string()).size(visual.body_size))
+        .style(move |_, status| button_style(visual, ButtonKind::Subtle, status));
+    // Without retained open/close state in the backend, the chevron selects the
+    // first menu item as a pragmatic default; the token records the full menu and
+    // its open state for the schema/app layer.
+    if token.state.enabled && token.select_action.kind() == ActionKind::SelectionInput {
+        if let Some(first) = token.items.first() {
+            if let Some(message) = token.select_action.input_text(first.id.clone()) {
+                chevron = chevron.on_press(message);
+            }
+        }
+    }
+
+    iced_row(vec![primary.into(), chevron.into()])
+        .spacing(1)
+        .align_y(alignment::Vertical::Center)
+        .into()
+}
+
+fn compile_tab_view<'a, Message, Provider>(
+    token: &'a TabViewToken<Message>,
+    provider: Provider,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+    Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
+{
+    let selected_id = token
+        .selected
+        .clone()
+        .or_else(|| token.tabs.first().map(|tab| tab.id.clone()));
+
+    // Tab headers.
+    let mut headers = iced_row(Vec::new()).spacing(4);
+    for tab in &token.tabs {
+        let is_selected = selected_id.as_deref() == Some(tab.id.as_str());
+        let kind = if is_selected {
+            ButtonKind::Standard
+        } else {
+            ButtonKind::Subtle
+        };
+        let mut header = iced_button(iced_text(tab.header.clone()).size(visual.body_size))
+            .style(move |_, status| button_style(visual, kind, status));
+        if token.action.kind() == ActionKind::SelectionInput {
+            if let Some(message) = token.action.input_text(tab.id.clone()) {
+                header = header.on_press(message);
+            }
+        }
+        headers = headers.push(header);
+    }
+
+    // Selected tab content.
+    let content: IcedElement<Message> = token
+        .tabs
+        .iter()
+        .find(|tab| selected_id.as_deref() == Some(tab.id.as_str()))
+        .map(|tab| compile_view_with_text_editors_and_visual(&tab.content, provider, visual))
+        .unwrap_or_else(empty);
+
+    iced_column(vec![headers.into(), content]).spacing(8).into()
+}
+
+fn compile_tree_view<'a, Message>(
+    token: &'a TreeViewToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let mut column = iced_column(Vec::new()).spacing(2);
+    for root in &token.roots {
+        append_tree_nodes(&mut column, root, 0, token, visual);
+    }
+    column.into()
+}
+
+fn append_tree_nodes<'a, Message>(
+    column: &mut iced::widget::Column<'a, Message>,
+    node: &'a TreeNode,
+    depth: u16,
+    token: &'a TreeViewToken<Message>,
+    visual: IcedVisualTheme,
+) where
+    Message: Clone + Send + 'static,
+{
+    let selected = token.selected.as_deref() == Some(node.id.as_str());
+    let has_children = !node.children.is_empty();
+    let glyph = if has_children {
+        if node.expanded {
+            "\u{25BE} " // ▾
+        } else {
+            "\u{25B8} " // ▸
+        }
+    } else {
+        "   "
+    };
+    let label = format!("{}{}", glyph, node.label);
+    let indent = f32::from(depth) * 16.0;
+
+    let mut row_button = iced_button(iced_text(label).size(visual.body_size))
+        .style(move |_, status| button_style(visual, ButtonKind::Subtle, status));
+    if token.action.kind() == ActionKind::SelectionInput {
+        if let Some(message) = token.action.input_text(node.id.clone()) {
+            row_button = row_button.on_press(message);
+        }
+    }
+
+    let row = iced_row(vec![
+        iced_space().width(IcedLength::Fixed(indent)).into(),
+        row_button.into(),
+    ]);
+    let styled: IcedElement<Message> = if selected {
+        iced_container(row)
+            .style(move |_| list_view_row_style(visual, true))
+            .into()
+    } else {
+        row.into()
+    };
+    // Replace the column with the pushed version (Column::push consumes self).
+    let taken = std::mem::replace(column, iced_column(Vec::new()));
+    *column = taken.push(styled);
+
+    if node.expanded {
+        for child in &node.children {
+            append_tree_nodes(column, child, depth + 1, token, visual);
+        }
+    }
+}
+
+fn compile_radio_group<'a, Message>(
+    token: &'a RadioGroupToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let group_enabled = token.state.enabled;
+    let selectable = token.action.kind() == ActionKind::SelectionInput;
+
+    let build_option = |option: &'a win_fluent::view::RadioOption| -> IcedElement<'a, Message> {
+        let selected = token.selected.as_deref() == Some(option.id.as_str());
+        let enabled = group_enabled && option.enabled;
+        let glyph = if selected { '\u{25C9}' } else { '\u{25CB}' }; // ◉ / ○
+        let indicator_color = if !enabled {
+            visual.text_secondary.scale_alpha(0.45)
+        } else if selected {
+            visual.accent
+        } else {
+            visual.text_secondary
+        };
+        let label_color = if enabled {
+            visual.text_primary
+        } else {
+            visual.text_secondary.scale_alpha(0.6)
+        };
+
+        let row = iced_row(vec![
+            iced_text(glyph.to_string())
+                .size(visual.body_size)
+                .color(indicator_color)
+                .into(),
+            iced_text(option.label.clone())
+                .size(visual.body_size)
+                .color(label_color)
+                .into(),
+        ])
+        .spacing(8)
+        .align_y(alignment::Vertical::Center);
+
+        if selectable && enabled && !selected {
+            if let Some(message) = token.action.input_text(option.id.clone()) {
+                return iced_mouse_area(row).on_press(message).into();
+            }
+        }
+        row.into()
+    };
+
+    let options: Vec<IcedElement<Message>> = token.options.iter().map(build_option).collect();
+
+    let body: IcedElement<Message> = match token.orientation {
+        Orientation::Vertical => iced_column(options)
+            .spacing(f32::from(token.spacing))
+            .into(),
+        Orientation::Horizontal => iced_row(options)
+            .spacing(f32::from(token.spacing))
+            .into(),
+    };
+
+    match &token.header {
+        Some(header) => iced_column(vec![
+            iced_text(header.clone())
+                .size(visual.caption_size)
+                .color(visual.text_secondary)
+                .into(),
+            body,
+        ])
+        .spacing(6)
+        .into(),
+        None => body,
+    }
 }
 
 fn checkbox_label_font(label: &str, label_italic: bool) -> Font {
@@ -7786,6 +8854,14 @@ fn dialog_container_style(visual: IcedVisualTheme) -> iced::widget::container::S
         .color(visual.text_primary)
         .border(control_border(visual, visual.border, visual.stroke_control))
         .shadow(elevation_shadow(visual, 16.0))
+}
+
+fn tooltip_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(visual.surface)
+        .color(visual.text_primary)
+        .border(control_border(visual, visual.border, visual.stroke_control))
+        .shadow(elevation_shadow(visual, 8.0))
 }
 
 fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {

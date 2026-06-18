@@ -13,6 +13,7 @@ legacy-powershell-tts = ["win_fluent_platform_win/legacy-powershell-tts"]
 easydict_windows_shell = { path = "../../../easydict-windows-shell" }
 iced = { version = "0.14.0", default-features = false, features = [
     "advanced",
+    "canvas",
     "crisp",
     "image",
     "svg",

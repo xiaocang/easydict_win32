@@ -1,12 +1,13 @@
 use easydict_app::{
     capture_overlay_view, capture_overlay_view_with_state, capture_overlay_window_options,
-    easydict_theme_tokens, fixed_window_options, fixed_window_view,
-    fixed_window_view_with_settings, main_window_options, main_window_options_for_settings,
-    main_window_view, mini_window_options, mini_window_view, mini_window_view_with_settings,
-    pop_button_view, pop_button_view_with_state, pop_button_window_options, settings_view,
-    settings_window_options, CaptureInteractionState, CapturePhase, CaptureRect, EasydictUiState,
-    GrammarCorrectionPreview, ImportedMdxDictionary, PreviewScenario, QuickTranslateSurface,
-    SettingsLink, TranslationResultPreview, HOTKEY_SHOW_MAIN,
+    capture_overlay_window_options_for_background, easydict_theme_tokens, fixed_window_options,
+    fixed_window_view, fixed_window_view_with_settings, main_window_options,
+    main_window_options_for_settings, main_window_view, mini_window_options, mini_window_view,
+    mini_window_view_with_settings, pop_button_view, pop_button_view_with_state,
+    pop_button_window_options, settings_view, settings_window_options, CaptureBackground,
+    CaptureInteractionState, CapturePhase, CaptureRect, EasydictUiState, GrammarCorrectionPreview,
+    ImportedMdxDictionary, PreviewScenario, QuickTranslateSurface, SettingsLink,
+    TranslationResultPreview, HOTKEY_SHOW_MAIN,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -3456,6 +3457,25 @@ fn capture_and_pop_button_match_utility_window_contracts() {
     assert_eq!(capture_options.min_width, Some(1.0));
     assert_eq!(capture_options.min_height, Some(1.0));
     assert!(capture_options.skip_taskbar);
+
+    let monitor_background = CaptureBackground {
+        bgra_path: r"C:\Temp\easydict-monitor.bgra".to_string(),
+        pixel_width: 2880,
+        pixel_height: 1800,
+        screen_rect: easydict_windows_screen_capture::ScreenRect::new(-3840, 0, 2880, 1800),
+        scale_factor: 2.0,
+    };
+    let monitor_options = capture_overlay_window_options_for_background(Some(&monitor_background));
+    assert_eq!(
+        monitor_options.placement,
+        WindowPlacement::Explicit { x: -1920.0, y: 0.0 }
+    );
+    assert_eq!(monitor_options.width, 1440.0);
+    assert_eq!(monitor_options.height, 901.0);
+    assert_eq!(
+        monitor_options.screen_constraint,
+        WindowScreenConstraint::None
+    );
 
     let pop_options = pop_button_window_options();
     assert_eq!(pop_options.level, WindowLevel::ToolWindow);

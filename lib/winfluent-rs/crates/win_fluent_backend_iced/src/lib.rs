@@ -2263,10 +2263,7 @@ where
 }
 
 struct CaptureOverlayProgram {
-    handle: Option<iced::widget::image::Handle>,
-    pixels: Option<std::sync::Arc<Vec<u8>>>,
-    pixel_width: u32,
-    pixel_height: u32,
+    background: Option<std::sync::Arc<CaptureOverlayBackgroundImage>>,
     selection: Option<Rectangle>,
     detected: Option<Rectangle>,
     cursor: Option<Point>,
@@ -2278,28 +2275,15 @@ struct CaptureOverlayProgram {
 
 impl CaptureOverlayProgram {
     fn new(token: &CaptureOverlayToken, visual: IcedVisualTheme) -> Self {
-        let loaded = token
+        let background = token
             .background
             .as_ref()
             .and_then(capture_overlay_background_image);
-        let (handle, pixels, pixel_width, pixel_height) = match (loaded, token.background.as_ref())
-        {
-            (Some((handle, pixels)), Some(background)) => (
-                Some(handle),
-                Some(pixels),
-                background.pixel_width,
-                background.pixel_height,
-            ),
-            _ => (None, None, 0, 0),
-        };
         let cursor = token
             .cursor
             .map(|point| Point::new(point.x as f32, point.y as f32));
         Self {
-            handle,
-            pixels,
-            pixel_width,
-            pixel_height,
+            background,
             selection: token.selection_rect.map(capture_rect_to_rectangle),
             detected: token.detected_rect.map(capture_rect_to_rectangle),
             cursor,
@@ -2313,18 +2297,22 @@ impl CaptureOverlayProgram {
     /// Samples the frozen desktop pixel under the cursor (logical→physical) for
     /// the magnifier colour readout.
     fn sample_color(&self, bounds: Rectangle, cursor: Point) -> Option<Color> {
-        let pixels = self.pixels.as_ref()?;
-        if self.pixel_width == 0 || bounds.width <= 0.0 {
+        let background = self.background.as_ref()?;
+        if background.pixel_width == 0 || bounds.width <= 0.0 {
             return None;
         }
-        let scale = self.pixel_width as f32 / bounds.width;
+        let scale = background.pixel_width as f32 / bounds.width;
         let px = (cursor.x * scale).round() as i64;
         let py = (cursor.y * scale).round() as i64;
-        if px < 0 || py < 0 || px >= self.pixel_width as i64 || py >= self.pixel_height as i64 {
+        if px < 0
+            || py < 0
+            || px >= background.pixel_width as i64
+            || py >= background.pixel_height as i64
+        {
             return None;
         }
-        let idx = ((py as usize) * self.pixel_width as usize + px as usize) * 4;
-        let slice = pixels.get(idx..idx + 3)?;
+        let idx = ((py as usize) * background.pixel_width as usize + px as usize) * 4;
+        let slice = background.pixels.get(idx..idx + 3)?;
         Some(Color::from_rgb8(slice[0], slice[1], slice[2]))
     }
 }
@@ -2346,10 +2334,10 @@ impl<Message> iced::widget::canvas::Program<Message> for CaptureOverlayProgram {
         let size = bounds.size();
 
         // 1. Frozen desktop (falls back to near-black when unavailable).
-        if let Some(handle) = &self.handle {
+        if let Some(background) = &self.background {
             frame.draw_image(
                 Rectangle::new(Point::ORIGIN, size),
-                iced::advanced::image::Image::new(handle.clone()),
+                iced::advanced::image::Image::new(background.handle.clone()),
             );
         } else {
             frame.fill_rectangle(Point::ORIGIN, size, Color::from_rgb8(0x10, 0x10, 0x10));
@@ -2467,7 +2455,7 @@ impl CaptureOverlayProgram {
         let box_rect = Rectangle::new(Point::new(bx, by), Size::new(CAPTURE_MAG_BOX, CAPTURE_MAG_BOX));
 
         // Zoomed frozen desktop (nearest-neighbour), clipped to the box.
-        if let Some(handle) = &self.handle {
+        if let Some(background) = &self.background {
             let box_cx = bx + CAPTURE_MAG_BOX / 2.0;
             let box_cy = by + CAPTURE_MAG_BOX / 2.0;
             frame.with_clip(box_rect, |clipped| {
@@ -2479,7 +2467,7 @@ impl CaptureOverlayProgram {
                         ),
                         Size::new(bounds.width * CAPTURE_MAG_ZOOM, bounds.height * CAPTURE_MAG_ZOOM),
                     ),
-                    iced::advanced::image::Image::new(handle.clone())
+                    iced::advanced::image::Image::new(background.handle.clone())
                         .filter_method(iced::advanced::image::FilterMethod::Nearest),
                 );
             });
@@ -2555,20 +2543,33 @@ fn capture_rect_to_rectangle(rect: win_fluent::view::CaptureOverlayRect) -> Rect
     )
 }
 
-/// Loads (and caches) the frozen-desktop BGRA dump as an iced RGBA image handle
-/// plus the raw RGBA bytes (for the magnifier colour readout).
+struct CaptureOverlayBackgroundImage {
+    handle: iced::widget::image::Handle,
+    pixels: std::sync::Arc<Vec<u8>>,
+    pixel_width: u32,
+    pixel_height: u32,
+}
+
+/// Loads the frozen-desktop BGRA dump as an iced RGBA image handle plus the raw
+/// RGBA bytes (for the magnifier colour readout).
 fn capture_overlay_background_image(
     background: &win_fluent::view::CaptureOverlayBackground,
-) -> Option<(iced::widget::image::Handle, std::sync::Arc<Vec<u8>>)> {
-    type Cache = HashMap<String, (iced::widget::image::Handle, std::sync::Arc<Vec<u8>>)>;
-    static HANDLES: OnceLock<Mutex<Cache>> = OnceLock::new();
+) -> Option<std::sync::Arc<CaptureOverlayBackgroundImage>> {
+    type CacheSlot = Option<(String, std::sync::Weak<CaptureOverlayBackgroundImage>)>;
+    static LATEST_BACKGROUND: OnceLock<Mutex<CacheSlot>> = OnceLock::new();
 
-    let mut cache = HANDLES
-        .get_or_init(|| Mutex::new(HashMap::new()))
+    let cache = LATEST_BACKGROUND.get_or_init(|| Mutex::new(None));
+    if let Some(image) = cache
         .lock()
-        .expect("capture overlay image cache poisoned");
-    if let Some(entry) = cache.get(&background.bgra_path) {
-        return Some(entry.clone());
+        .expect("capture overlay image cache poisoned")
+        .as_ref()
+        .and_then(|(path, image)| {
+            (path == &background.bgra_path)
+                .then(|| image.upgrade())
+                .flatten()
+        })
+    {
+        return Some(image);
     }
 
     let expected = (background.pixel_width as usize)
@@ -2589,9 +2590,26 @@ fn capture_overlay_background_image(
         background.pixel_height,
         bytes,
     );
-    let entry = (handle, pixels);
-    cache.insert(background.bgra_path.clone(), entry.clone());
-    Some(entry)
+    let image = std::sync::Arc::new(CaptureOverlayBackgroundImage {
+        handle,
+        pixels,
+        pixel_width: background.pixel_width,
+        pixel_height: background.pixel_height,
+    });
+
+    let mut cache = cache.lock().expect("capture overlay image cache poisoned");
+    if let Some(existing) = cache.as_ref().and_then(|(path, image)| {
+        (path == &background.bgra_path)
+            .then(|| image.upgrade())
+            .flatten()
+    }) {
+        return Some(existing);
+    }
+    *cache = Some((
+        background.bgra_path.clone(),
+        std::sync::Arc::downgrade(&image),
+    ));
+    Some(image)
 }
 
 fn compile_text<'a, Message>(
@@ -9513,6 +9531,63 @@ mod tests {
             shell_verbs: Vec::new(),
             protocol_registrations: Vec::new(),
         }
+    }
+
+    fn capture_overlay_test_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "winfluent-capture-overlay-{name}-{}-{}.bgra",
+            std::process::id(),
+            trace_wall_ms()
+        ))
+    }
+
+    #[test]
+    fn capture_overlay_background_image_converts_bgra_and_does_not_retain_pixels() {
+        let path = capture_overlay_test_path("fresh-read");
+        std::fs::write(
+            &path,
+            [
+                0x01, 0x02, 0x03, 0x04, // B, G, R, A
+                0x10, 0x20, 0x30, 0x40,
+            ],
+        )
+        .expect("write bgra fixture");
+        let background = CaptureOverlayBackground::new(path.to_string_lossy().into_owned(), 2, 1);
+
+        let image =
+            capture_overlay_background_image(&background).expect("load capture overlay image");
+
+        assert_eq!(
+            image.pixels.as_slice(),
+            &[0x03, 0x02, 0x01, 0xFF, 0x30, 0x20, 0x10, 0xFF]
+        );
+
+        let weak_image = std::sync::Arc::downgrade(&image);
+        drop(image);
+        assert!(
+            weak_image.upgrade().is_none(),
+            "capture overlay cache must not retain full screenshot buffers"
+        );
+
+        std::fs::write(&path, [0xAA, 0xBB, 0xCC, 0xDD]).expect("rewrite bgra fixture");
+        let background = CaptureOverlayBackground::new(path.to_string_lossy().into_owned(), 1, 1);
+        let image =
+            capture_overlay_background_image(&background).expect("reload capture overlay image");
+
+        assert_eq!(image.pixels.as_slice(), &[0xCC, 0xBB, 0xAA, 0xFF]);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn capture_overlay_background_image_rejects_incomplete_bgra_files() {
+        let path = capture_overlay_test_path("incomplete");
+        std::fs::write(&path, [0x01, 0x02, 0x03]).expect("write incomplete bgra fixture");
+        let background = CaptureOverlayBackground::new(path.to_string_lossy().into_owned(), 1, 1);
+
+        assert!(capture_overlay_background_image(&background).is_none());
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

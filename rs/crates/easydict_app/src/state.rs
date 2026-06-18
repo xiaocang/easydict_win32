@@ -4624,23 +4624,28 @@ pub struct CaptureBackground {
     pub bgra_path: String,
     pub pixel_width: u32,
     pub pixel_height: u32,
+    /// Physical screen rectangle captured into this monitor-local snapshot.
+    pub screen_rect: easydict_windows_screen_capture::ScreenRect,
     /// Logical→physical scale of the captured monitor, used to map overlay
     /// selection coordinates (DIPs) onto this snapshot (physical pixels).
     pub scale_factor: f32,
 }
 
-/// Freezes the desktop for the capture overlay, mirroring the WinUI
+/// Freezes the cursor monitor for the capture overlay, mirroring the WinUI
 /// ScreenCaptureWindow's BitBlt-on-open. Returns the native backend error so
 /// callers can keep the overlay usable while preserving diagnostics.
 pub fn capture_screen_background_result() -> Result<CaptureBackground, String> {
+    let monitor =
+        easydict_windows_screen_capture::cursor_monitor().map_err(|error| error.to_string())?;
     crate::screen_capture_native::capture_screen_region_result(
-        easydict_windows_screen_capture::ScreenCaptureRequest::virtual_desktop(),
+        easydict_windows_screen_capture::ScreenCaptureRequest::region(monitor.screen_rect),
     )
     .map(|capture| CaptureBackground {
         bgra_path: capture.pixel_data_path,
         pixel_width: capture.pixel_width,
         pixel_height: capture.pixel_height,
-        scale_factor: easydict_windows_screen_capture::primary_scale_factor(),
+        screen_rect: capture.screen_rect,
+        scale_factor: monitor.scale_factor,
     })
 }
 
@@ -4674,7 +4679,7 @@ pub fn apply_capture_background_result(
 /// Crops the selected region out of the frozen desktop snapshot into a fresh
 /// BGRA dump for OCR, mirroring the WinUI ScreenCaptureWindow's `ExtractRegion`
 /// BitBlt from the frozen `DesktopDc`. Selection coordinates are interpreted in
-/// the snapshot's pixel space (origin at the virtual-desktop top-left).
+/// the monitor-local snapshot's pixel space.
 pub fn crop_capture_background(
     background: &CaptureBackground,
     selection: crate::screen_capture::CaptureRect,

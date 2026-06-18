@@ -56,6 +56,12 @@ pub struct ScreenCaptureResult {
     pub screen_rect: ScreenRect,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScreenMonitor {
+    pub screen_rect: ScreenRect,
+    pub scale_factor: f32,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScreenWindow {
     pub id: isize,
@@ -143,6 +149,10 @@ pub fn capture_screen_windows(
     platform::capture_screen_windows(request)
 }
 
+pub fn cursor_monitor() -> Result<ScreenMonitor, WindowsScreenCaptureError> {
+    platform::cursor_monitor()
+}
+
 /// Logical→physical scale factor of the primary monitor (e.g. 1.5 at 150%
 /// scaling). Used to map overlay selection coordinates (DIPs) onto the frozen
 /// desktop snapshot (physical pixels). Returns 1.0 off Windows.
@@ -153,22 +163,23 @@ pub fn primary_scale_factor() -> f32 {
 #[cfg(windows)]
 mod platform {
     use super::{
-        ScreenCaptureRequest, ScreenCaptureResult, ScreenRect, ScreenWindow,
+        ScreenCaptureRequest, ScreenCaptureResult, ScreenMonitor, ScreenRect, ScreenWindow,
         ScreenWindowSnapshotRequest, WindowsScreenCaptureError,
     };
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
     use windows::core::BOOL;
-    use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, RECT};
+    use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, POINT, RECT};
     use windows::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
         GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
         HBITMAP, HDC, HGDIOBJ, SRCCOPY,
     };
-    use windows::Win32::UI::HiDpi::GetDpiForSystem;
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumChildWindows, EnumWindows, GetClassNameW, GetParent, GetSystemMetrics, GetWindowRect,
-        GetWindowTextLengthW, GetWindowTextW, IsWindowVisible, SM_CXVIRTUALSCREEN,
+        EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetMonitorInfoW, GetParent,
+        GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
+        MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST, SM_CXVIRTUALSCREEN,
         SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
 
@@ -180,6 +191,50 @@ mod platform {
         } else {
             dpi as f32 / 96.0
         }
+    }
+
+    pub fn cursor_monitor() -> Result<ScreenMonitor, WindowsScreenCaptureError> {
+        let mut point = POINT::default();
+        if unsafe { GetCursorPos(&mut point) } == 0 {
+            return Err(last_error("GetCursorPos"));
+        }
+
+        let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
+        if monitor.is_null() {
+            return Err(last_error("MonitorFromPoint"));
+        }
+
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..MONITORINFO::default()
+        };
+        if unsafe { GetMonitorInfoW(monitor, &mut info) } == 0 {
+            return Err(last_error("GetMonitorInfoW"));
+        }
+
+        let width = info.rcMonitor.right - info.rcMonitor.left;
+        let height = info.rcMonitor.bottom - info.rcMonitor.top;
+        if width <= 0 || height <= 0 {
+            return Err(WindowsScreenCaptureError::NativeCallFailed {
+                operation: "GetMonitorInfoW",
+                code: 0,
+            });
+        }
+
+        let mut dpi_x = 96u32;
+        let mut dpi_y = 96u32;
+        let hr = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
+        let dpi = if hr >= 0 && dpi_x > 0 { dpi_x } else { 96 };
+
+        Ok(ScreenMonitor {
+            screen_rect: ScreenRect::new(
+                info.rcMonitor.left,
+                info.rcMonitor.top,
+                width as u32,
+                height as u32,
+            ),
+            scale_factor: dpi.max(1) as f32 / 96.0,
+        })
     }
 
     struct ScreenDc(HDC);
@@ -587,8 +642,8 @@ mod platform {
 #[cfg(not(windows))]
 mod platform {
     use super::{
-        ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow, ScreenWindowSnapshotRequest,
-        WindowsScreenCaptureError,
+        ScreenCaptureRequest, ScreenCaptureResult, ScreenMonitor, ScreenWindow,
+        ScreenWindowSnapshotRequest, WindowsScreenCaptureError,
     };
 
     pub fn capture_screen_region(
@@ -600,6 +655,10 @@ mod platform {
     pub fn capture_screen_windows(
         _request: ScreenWindowSnapshotRequest,
     ) -> Result<Vec<ScreenWindow>, WindowsScreenCaptureError> {
+        Err(WindowsScreenCaptureError::UnsupportedPlatform)
+    }
+
+    pub fn cursor_monitor() -> Result<ScreenMonitor, WindowsScreenCaptureError> {
         Err(WindowsScreenCaptureError::UnsupportedPlatform)
     }
 

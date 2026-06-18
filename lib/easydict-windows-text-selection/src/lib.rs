@@ -1028,8 +1028,7 @@ mod platform {
     }
 
     pub fn start_low_level_input_hook() -> Result<LowLevelInputHook, WindowsTextSelectionError> {
-        let (_tx, events) = mpsc::channel();
-        let _ = events;
+        let (_tx, _events) = mpsc::channel::<LowLevelInputHookEvent>();
         Err(WindowsTextSelectionError::UnsupportedPlatform)
     }
 

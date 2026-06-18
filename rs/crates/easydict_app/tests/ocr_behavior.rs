@@ -5,13 +5,13 @@ use easydict_app::{
     bgra_to_base64_jpeg_data_url, build_custom_api_ocr_request, build_ollama_ocr_request,
     group_and_sort_ocr_lines, merge_ocr_lines, merge_ocr_words, merged_ocr_text,
     parse_ocr_http_response, run_ocr_recognize, run_ocr_recognize_with_app_dir,
-    run_ocr_recognize_with_current_app_dir,
-    windows_native_ocr_availability_with_recognizer, CaptureBackground, CapturePhase, CapturePoint,
-    CaptureRect, DetectedWindow, EasydictApp, EasydictUiState, Message, NativeOcrBackend,
-    OcrAvailabilityDto, OcrBackend, OcrBackendError, OcrCaptureResult, OcrEngineConfig,
-    OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan, OcrHttpResponseParser, OcrImageEncodeError,
-    OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome, OcrRecognizeParams, OcrRectDto, OcrResultDto,
-    ScreenWindowRect, ScreenWindowSnapshot, WindowsNativeOcrRecognizer,
+    run_ocr_recognize_with_current_app_dir, windows_native_ocr_availability_with_recognizer,
+    CaptureBackground, CapturePhase, CapturePoint, CaptureRect, DetectedWindow, EasydictApp,
+    EasydictUiState, Message, NativeOcrBackend, OcrAvailabilityDto, OcrBackend, OcrBackendError,
+    OcrCaptureResult, OcrEngineConfig, OcrEngineKind, OcrHttpClient, OcrHttpRequestPlan,
+    OcrHttpResponseParser, OcrImageEncodeError, OcrLanguageDto, OcrLineDto, OcrMode, OcrOutcome,
+    OcrRecognizeParams, OcrRectDto, OcrResultDto, ScreenWindowRect, ScreenWindowSnapshot,
+    WindowsNativeOcrRecognizer,
 };
 use serde_json::json;
 use std::{
@@ -1224,6 +1224,7 @@ fn capture_background_failure_preserves_overlay_and_success_clears_only_backgrou
         bgra_path: r"C:\Temp\easydict-capture.bgra".to_string(),
         pixel_width: 1920,
         pixel_height: 1080,
+        screen_rect: easydict_windows_screen_capture::ScreenRect::new(0, 0, 1920, 1080),
         scale_factor: 1.0,
     };
     apply_capture_background_result(&mut state, Ok(background.clone()));
@@ -1238,6 +1239,7 @@ fn capture_background_failure_preserves_overlay_and_success_clears_only_backgrou
             bgra_path: r"C:\Temp\easydict-capture-2.bgra".to_string(),
             pixel_width: 100,
             pixel_height: 80,
+            screen_rect: easydict_windows_screen_capture::ScreenRect::new(0, 0, 100, 80),
             scale_factor: 1.0,
         }),
     );
@@ -1278,6 +1280,65 @@ fn capture_window_snapshot_does_not_reset_active_drag_selection() {
     assert_eq!(
         app.state.capture_selection,
         Some(CaptureRect::new(10, 10, 40, 40))
+    );
+}
+
+#[test]
+fn capture_background_crop_uses_monitor_local_dips_and_scale() {
+    let width = 20u32;
+    let height = 10u32;
+    let mut bytes = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            bytes.extend_from_slice(&[x as u8, y as u8, 0x7F, 0xFF]);
+        }
+    }
+    let path = write_temp_bgra("ocr-scaled-monitor", &bytes);
+    let background = CaptureBackground {
+        bgra_path: path.to_string_lossy().into_owned(),
+        pixel_width: width,
+        pixel_height: height,
+        screen_rect: easydict_windows_screen_capture::ScreenRect::new(-3840, 200, width, height),
+        scale_factor: 2.0,
+    };
+
+    let capture =
+        easydict_app::state::crop_capture_background(&background, CaptureRect::new(2, 1, 5, 3))
+            .expect("scaled monitor-local selection should crop");
+
+    assert_eq!(capture.pixel_width, 6);
+    assert_eq!(capture.pixel_height, 4);
+    let cropped = fs::read(&capture.pixel_data_path).expect("cropped BGRA should be readable");
+    assert_eq!(cropped.len(), 6 * 4 * 4);
+    assert_eq!(&cropped[..4], &[4, 2, 0x7F, 0xFF]);
+}
+
+#[test]
+fn capture_window_projection_converts_virtual_desktop_pixels_to_overlay_dips() {
+    let windows = easydict_app::detected_windows_from_screen_windows_for_capture(
+        [
+            ScreenWindowSnapshot::new(1, None, ScreenWindowRect::new(-1900, 200, 600, 400))
+                .class_name("Top"),
+            ScreenWindowSnapshot::new(2, Some(1), ScreenWindowRect::new(-1800, 260, 100, 80))
+                .class_name("Child"),
+            ScreenWindowSnapshot::new(3, None, ScreenWindowRect::new(200, 200, 100, 100)),
+        ],
+        ScreenWindowRect::new(-2000, 100, 1000, 800),
+        2.0,
+    );
+    let detector = easydict_app::WindowDetector::from_windows(windows);
+
+    assert_eq!(
+        detector.find_region_at_point(CapturePoint::new(120, 90), 0),
+        Some(CaptureRect::new(100, 80, 150, 120))
+    );
+    assert_eq!(
+        detector.find_region_at_point(CapturePoint::new(120, 90), 1),
+        Some(CaptureRect::new(50, 50, 350, 250))
+    );
+    assert_eq!(
+        detector.find_region_at_point(CapturePoint::new(900, 100), 0),
+        None
     );
 }
 
@@ -1765,6 +1826,7 @@ fn inject_capture_background(app: &mut EasydictApp, name: &str, width: u32, heig
         bgra_path: path.to_string_lossy().into_owned(),
         pixel_width: width,
         pixel_height: height,
+        screen_rect: easydict_windows_screen_capture::ScreenRect::new(0, 0, width, height),
         scale_factor: 1.0,
     });
 }

@@ -185,6 +185,23 @@ pub fn detected_windows_from_screen_windows(
     build_detected_window_tree(None, &windows)
 }
 
+pub fn detected_windows_from_screen_windows_for_capture(
+    windows: impl IntoIterator<Item = ScreenWindowSnapshot>,
+    capture_rect: ScreenWindowRect,
+    scale_factor: f32,
+) -> Vec<DetectedWindow> {
+    let scale = if scale_factor > f32::EPSILON {
+        scale_factor
+    } else {
+        1.0
+    };
+    let windows: Vec<ScreenWindowSnapshot> = windows
+        .into_iter()
+        .filter_map(|window| project_window_to_capture(window, capture_rect, scale))
+        .collect();
+    build_detected_window_tree(None, &windows)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CapturePhase {
     /// Hover to auto-detect a window, scroll to change depth, drag to free-select.
@@ -458,6 +475,43 @@ fn capture_rect_from_screen_rect(rect: ScreenWindowRect) -> CaptureRect {
         rect.x.saturating_add(width),
         rect.y.saturating_add(height),
     )
+}
+
+fn project_window_to_capture(
+    window: ScreenWindowSnapshot,
+    capture_rect: ScreenWindowRect,
+    scale_factor: f32,
+) -> Option<ScreenWindowSnapshot> {
+    let window_right = i64::from(window.rect.x).checked_add(i64::from(window.rect.width))?;
+    let window_bottom = i64::from(window.rect.y).checked_add(i64::from(window.rect.height))?;
+    let capture_right = i64::from(capture_rect.x).checked_add(i64::from(capture_rect.width))?;
+    let capture_bottom = i64::from(capture_rect.y).checked_add(i64::from(capture_rect.height))?;
+
+    let left = i64::from(window.rect.x).max(i64::from(capture_rect.x));
+    let top = i64::from(window.rect.y).max(i64::from(capture_rect.y));
+    let right = window_right.min(capture_right);
+    let bottom = window_bottom.min(capture_bottom);
+    if left >= right || top >= bottom {
+        return None;
+    }
+
+    let to_local_dip = |value: i64, origin: i32| {
+        ((value - i64::from(origin)) as f32 / scale_factor).round() as i32
+    };
+    let local_left = to_local_dip(left, capture_rect.x);
+    let local_top = to_local_dip(top, capture_rect.y);
+    let local_right = to_local_dip(right, capture_rect.x);
+    let local_bottom = to_local_dip(bottom, capture_rect.y);
+    let width = u32::try_from((local_right - local_left).max(0)).ok()?;
+    let height = u32::try_from((local_bottom - local_top).max(0)).ok()?;
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    Some(ScreenWindowSnapshot {
+        rect: ScreenWindowRect::new(local_left, local_top, width, height),
+        ..window
+    })
 }
 
 const fn min_i32(left: i32, right: i32) -> i32 {

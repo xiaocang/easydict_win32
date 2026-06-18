@@ -399,9 +399,9 @@ pub use runtime_policy::{
     RUNTIME_PROFILE_ENVIRONMENT_VARIABLE,
 };
 pub use screen_capture::{
-    detected_windows_from_screen_windows, CaptureInteraction, CaptureInteractionState,
-    CapturePhase, CapturePoint, CaptureRect, DetectedWindow, ScreenWindowRect,
-    ScreenWindowSnapshot, WindowDetector,
+    detected_windows_from_screen_windows, detected_windows_from_screen_windows_for_capture,
+    CaptureInteraction, CaptureInteractionState, CapturePhase, CapturePoint, CaptureRect,
+    DetectedWindow, ScreenWindowRect, ScreenWindowSnapshot, WindowDetector,
 };
 pub use settings_migration::{
     migrate_settings_file, migrate_settings_json, migrate_settings_object, resolve_source_path,
@@ -534,10 +534,11 @@ pub use vision_layout::{
     VISION_LAYOUT_DETECTION_PROMPT,
 };
 pub use window_options::{
-    capture_overlay_window_options, fixed_window_options, main_window_options,
-    main_window_options_for_settings, mini_window_options, pop_button_window_options,
-    settings_window_options, MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
-    MAIN_WINDOW_MIN_HEIGHT_DIPS, MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
+    capture_overlay_window_options, capture_overlay_window_options_for_background,
+    fixed_window_options, main_window_options, main_window_options_for_settings,
+    mini_window_options, pop_button_window_options, settings_window_options,
+    MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS, MAIN_WINDOW_MIN_HEIGHT_DIPS,
+    MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
     SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS, SETTINGS_WINDOW_MIN_HEIGHT_DIPS,
     SETTINGS_WINDOW_MIN_WIDTH_DIPS,
 };
@@ -650,7 +651,9 @@ impl Application for EasydictApp {
             "settings" => Some(settings_window_options()),
             "mini" => Some(mini_window_options()),
             "fixed" => Some(fixed_window_options()),
-            "capture-overlay" => Some(capture_overlay_window_options()),
+            "capture-overlay" => Some(capture_overlay_window_options_for_background(
+                self.state.capture_background.as_ref(),
+            )),
             "pop-button" => Some(pop_button_window_options()),
             _ => None,
         }
@@ -1324,9 +1327,10 @@ impl EasydictApp {
                     &mut self.state,
                     crate::state::capture_screen_background_result(),
                 );
+                let capture_background = self.state.capture_background.clone();
                 self.state.ocr_status_text = "Select a region for OCR Translate".to_string();
                 Task::batch([
-                    capture_screen_window_snapshot_task(),
+                    capture_screen_window_snapshot_task(capture_background),
                     Task::window(WindowCommand::Show(WindowId::new("capture-overlay"))),
                 ])
             }
@@ -1338,9 +1342,10 @@ impl EasydictApp {
                     &mut self.state,
                     crate::state::capture_screen_background_result(),
                 );
+                let capture_background = self.state.capture_background.clone();
                 self.state.ocr_status_text = "Select a region for Silent OCR".to_string();
                 Task::batch([
-                    capture_screen_window_snapshot_task(),
+                    capture_screen_window_snapshot_task(capture_background),
                     Task::window(WindowCommand::Show(WindowId::new("capture-overlay"))),
                 ])
             }
@@ -1726,14 +1731,28 @@ pub fn screen_capture_request_from_selection(
     )
 }
 
-fn capture_screen_window_snapshot_task() -> Task<Message> {
+fn capture_screen_window_snapshot_task(
+    background: Option<state::CaptureBackground>,
+) -> Task<Message> {
     screen_capture_native::capture_screen_windows_result_task(
         easydict_windows_screen_capture::ScreenWindowSnapshotRequest::new()
             .exclude_title("Easydict Capture"),
-        |result| {
-            Message::CaptureWindowsSnapshotFinished(
-                result.map(detected_windows_from_screen_windows),
-            )
+        move |result| {
+            Message::CaptureWindowsSnapshotFinished(result.map(
+                |windows| match background.as_ref() {
+                    Some(background) => detected_windows_from_screen_windows_for_capture(
+                        windows,
+                        crate::screen_capture::ScreenWindowRect::new(
+                            background.screen_rect.x,
+                            background.screen_rect.y,
+                            background.screen_rect.width,
+                            background.screen_rect.height,
+                        ),
+                        background.scale_factor,
+                    ),
+                    None => detected_windows_from_screen_windows(windows),
+                },
+            ))
         },
     )
 }

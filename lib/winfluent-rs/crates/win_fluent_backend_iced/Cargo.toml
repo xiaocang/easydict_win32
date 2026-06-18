@@ -22,8 +22,6 @@ iced = { version = "0.14.0", default-features = false, features = [
     "wgpu",
 ] }
 win_fluent = { path = "../win_fluent" }
-
-[target.'cfg(windows)'.dependencies]
 win_fluent_platform_win = { path = "../win_fluent_platform_win", default-features = false }
 
 [dev-dependencies]

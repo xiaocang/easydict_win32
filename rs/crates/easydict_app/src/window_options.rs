@@ -1,4 +1,4 @@
-use crate::state::SettingsState;
+use crate::state::{CaptureBackground, SettingsState};
 use win_fluent::prelude::*;
 
 pub const MAIN_WINDOW_DEFAULT_WIDTH_DIPS: f32 = 419.0;
@@ -82,6 +82,30 @@ pub fn capture_overlay_window_options() -> WindowOptions {
         .resize_mode(WindowResizeMode::Fixed)
         .placement(WindowPlacement::Monitor)
         .skip_taskbar(true)
+}
+
+pub fn capture_overlay_window_options_for_background(
+    background: Option<&CaptureBackground>,
+) -> WindowOptions {
+    let options = capture_overlay_window_options();
+    let Some(background) = background else {
+        return options;
+    };
+    if background.scale_factor <= f32::EPSILON {
+        return options;
+    }
+
+    let x = background.screen_rect.x as f32 / background.scale_factor;
+    let y = background.screen_rect.y as f32 / background.scale_factor;
+    let width = (background.pixel_width as f32 / background.scale_factor).max(1.0);
+    // Match monitor placement's one-DIP oversize for borderless overlays so
+    // Windows does not promote the window into an exclusive fullscreen path.
+    let height = (background.pixel_height as f32 / background.scale_factor).max(1.0) + 1.0;
+
+    options
+        .size(width, height)
+        .placement(WindowPlacement::Explicit { x, y })
+        .allow_offscreen()
 }
 
 pub fn pop_button_window_options() -> WindowOptions {

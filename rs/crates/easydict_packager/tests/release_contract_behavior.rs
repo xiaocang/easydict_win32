@@ -2845,6 +2845,7 @@ fn pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload() 
     let fake_bin = test_root.join("bin");
     let workspace = test_root.join("workspace");
     let output_root = test_root.join("out");
+    #[cfg(windows)]
     let target_release = workspace
         .join("target")
         .join("x86_64-pc-windows-msvc")
@@ -2852,6 +2853,7 @@ fn pack_rs_portable_creates_and_validates_zip_without_retained_dotnet_payload() 
     fs::create_dir_all(&workspace).expect("create fake workspace");
     fs::write(workspace.join("Cargo.toml"), "[workspace]\n").expect("write fake Cargo.toml");
     write_fake_windows_ai_manifest_for_workspace(&workspace);
+    #[cfg(windows)]
     write_stale_dotnet_payload_markers(&target_release);
     fs::create_dir_all(&output_root).expect("create output root");
     write_fake_tooling_scripts(&fake_bin);

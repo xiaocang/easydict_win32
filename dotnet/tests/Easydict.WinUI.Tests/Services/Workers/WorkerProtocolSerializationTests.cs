@@ -192,6 +192,7 @@ public sealed class WorkerProtocolSerializationTests
                 new OcrLineDto
                 {
                     Text = "hello",
+                    Words = ["hel", "lo"],
                     BoundingRect = new OcrRectDto(1, 2, 3, 4),
                 },
             ],
@@ -206,6 +207,7 @@ public sealed class WorkerProtocolSerializationTests
         back.DetectedLanguage!.Tag.Should().Be("en-US");
         back.Lines.Should().ContainSingle();
         back.Lines[0].BoundingRect.Width.Should().Be(3);
+        back.Lines[0].Words.Should().Equal("hel", "lo");
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppLifecycle;
 using Easydict.WinUI.Services;
@@ -97,6 +98,20 @@ public static class Program
             }
         }
 
+        // Enforce a single primary instance for normal window launches so the global hotkeys
+        // and all UI share one process — and therefore one SettingsService state. Without this,
+        // launching the app again (while an instance lingers in the tray / was started earlier)
+        // spawns an independent process whose stale settings can drive the global hotkey, while
+        // the newer window uses the current config. That desync is the root cause of issue #176
+        // (Alt+S OCR uses Windows OCR while the in-app camera button uses the configured engine).
+        //
+        // The transient --ocr-translate signaler handled above never reaches here (it exits after
+        // signaling the running instance via the named event), so OCR IPC is unaffected.
+        if (!TryClaimPrimaryInstance())
+        {
+            return; // This activation was redirected to the already-running instance.
+        }
+
         // Replicates the auto-generated Main suppressed by DISABLE_XAML_GENERATED_MAIN.
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
@@ -107,6 +122,91 @@ public static class Program
             new App();
         });
     }
+
+    /// <summary>
+    /// Key used to register the single primary application instance.
+    /// </summary>
+    private const string SingleInstanceKey = "Easydict-Main";
+
+    /// <summary>
+    /// Registers this process as the single primary instance, or, if one is already running,
+    /// redirects this activation to it and reports that startup should abort.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> when this process is the primary instance and should continue starting up;
+    /// <c>false</c> when the activation was redirected to an existing instance and this process
+    /// should exit.
+    /// </returns>
+    private static bool TryClaimPrimaryInstance()
+    {
+        try
+        {
+            var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+            var primary = AppInstance.FindOrRegisterForKey(SingleInstanceKey);
+
+            if (primary.IsCurrent)
+            {
+                // We own the primary instance; surface the window when future launches redirect here.
+                primary.Activated += OnPrimaryActivated;
+                return true;
+            }
+
+            RedirectActivationTo(activationArgs, primary);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // If the AppLifecycle infrastructure is unavailable, fall back to the previous
+            // (multi-instance) behavior rather than blocking launch entirely.
+            Console.Error.WriteLine($"[Easydict] Single-instance registration failed: {ex.Message}");
+            return true;
+        }
+    }
+
+    private static void OnPrimaryActivated(object? sender, AppActivationArguments args)
+    {
+        // A second launch was redirected to us — bring the existing window to the foreground.
+        // (OCR intents from a running instance arrive via the named event, not here.)
+        App.HandleRedirectedActivation();
+    }
+
+    /// <summary>
+    /// Redirects an activation to the primary instance without deadlocking the launching STA
+    /// thread. <see cref="AppInstance.RedirectActivationToAsync"/> must not be awaited directly on
+    /// the UI/STA thread, so it runs on a worker thread while this thread pumps COM messages via
+    /// <c>CoWaitForMultipleObjects</c> until it completes. This is the pattern documented for
+    /// single-instancing apps with a custom entry point.
+    /// </summary>
+    private static void RedirectActivationTo(AppActivationArguments args, AppInstance primary)
+    {
+        var redirectCompleted = CreateEvent(IntPtr.Zero, true, false, null);
+        Task.Run(() =>
+        {
+            primary.RedirectActivationToAsync(args).AsTask().Wait();
+            SetEvent(redirectCompleted);
+        });
+
+        _ = CoWaitForMultipleObjects(
+            CWMO_DEFAULT,
+            INFINITE,
+            1,
+            new[] { redirectCompleted },
+            out _);
+    }
+
+    private const uint CWMO_DEFAULT = 0;
+    private const uint INFINITE = 0xFFFFFFFF;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateEvent(
+        IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string? lpName);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool SetEvent(IntPtr hEvent);
+
+    [DllImport("ole32.dll")]
+    private static extern uint CoWaitForMultipleObjects(
+        uint dwFlags, uint dwMilliseconds, ulong nHandles, IntPtr[] pHandles, out uint dwIndex);
 
     /// <summary>
     /// Checks whether this process was launched via easydict://ocr-translate protocol activation.

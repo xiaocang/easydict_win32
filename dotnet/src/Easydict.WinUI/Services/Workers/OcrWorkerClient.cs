@@ -138,25 +138,42 @@ internal sealed class OcrWorkerClient : IOcrService, IDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
-    private static OcrResult MapResult(OcrResultDto? dto)
+    internal static OcrResult MapResult(OcrResultDto? dto)
     {
         if (dto is null)
         {
             return new OcrResult();
         }
 
+        // Rebuild the recognized text with the same CJK-aware merging used by the in-process
+        // WindowsOcrService (WindowsOcrService.RecognizeBitmapAsync), so worker output is identical
+        // — in particular, no space is inserted between adjacent CJK characters. When the worker
+        // did not supply per-word data (older worker), fall back to its pre-joined text.
+        var hasWords = dto.Lines.Any(line => line.Words is { Count: > 0 });
+
+        var lines = dto.Lines.Select(line => new OcrLine
+        {
+            Text = line.Words is { Count: > 0 }
+                ? OcrTextMerger.MergeWords(line.Words)
+                : line.Text,
+            BoundingRect = new OcrRect(
+                line.BoundingRect.X,
+                line.BoundingRect.Y,
+                line.BoundingRect.Width,
+                line.BoundingRect.Height),
+        }).ToList();
+
+        IReadOnlyList<OcrLine> sortedLines = hasWords
+            ? OcrTextMerger.GroupAndSortLines(lines)
+            : lines;
+        var text = hasWords
+            ? OcrTextMerger.MergeLines(sortedLines)
+            : dto.Text;
+
         return new OcrResult
         {
-            Text = dto.Text,
-            Lines = dto.Lines.Select(line => new OcrLine
-            {
-                Text = line.Text,
-                BoundingRect = new OcrRect(
-                    line.BoundingRect.X,
-                    line.BoundingRect.Y,
-                    line.BoundingRect.Width,
-                    line.BoundingRect.Height),
-            }).ToArray(),
+            Text = text,
+            Lines = sortedLines,
             TextAngle = dto.TextAngle,
             DetectedLanguage = dto.DetectedLanguage is null
                 ? null

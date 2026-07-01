@@ -18,6 +18,9 @@ namespace Easydict.WinUI
 
         private const uint WM_SETTINGCHANGE = 0x001A;
         private const uint WM_THEMECHANGED = 0x031A;
+#if DEBUG
+        private const uint UiaShowTrayContextMenuMessage = 0xAEAD;
+#endif
         private const nuint ThemeSubclassId = 2;
 
         private delegate nint SubclassProc(
@@ -1313,6 +1316,13 @@ namespace Easydict.WinUI
             nuint uIdSubclass,
             nuint dwRefData)
         {
+#if DEBUG
+            if (uMsg == UiaShowTrayContextMenuMessage)
+            {
+                ShowTrayContextMenuForUiAutomation(lParam);
+                return 1;
+            }
+#endif
             if (uMsg is WM_SETTINGCHANGE or WM_THEMECHANGED)
             {
                 QueueSystemThemeRefresh();
@@ -1320,6 +1330,23 @@ namespace Easydict.WinUI
 
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
+
+#if DEBUG
+        private void ShowTrayContextMenuForUiAutomation(nint lParam)
+        {
+            var value = unchecked((int)lParam);
+            var x = unchecked((short)(value & 0xFFFF));
+            var y = unchecked((short)((value >> 16) & 0xFFFF));
+            try
+            {
+                _trayIconService?.ShowContextMenuForUiAutomation(new System.Drawing.Point(x, y));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] UIA tray context menu message failed: {ex.Message}");
+            }
+        }
+#endif
 
         private void QueueSystemThemeRefresh()
         {

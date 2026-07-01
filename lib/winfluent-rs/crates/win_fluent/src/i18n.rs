@@ -4,6 +4,13 @@ use std::fmt;
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct LocaleId(String);
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TextDirection {
+    #[default]
+    LeftToRight,
+    RightToLeft,
+}
+
 impl LocaleId {
     pub fn new(value: impl Into<String>) -> Self {
         let value = value.into();
@@ -13,6 +20,21 @@ impl LocaleId {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    pub fn text_direction(&self) -> TextDirection {
+        let language = self
+            .0
+            .split(['-', '_'])
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        match language.as_str() {
+            "ar" | "dv" | "fa" | "he" | "ku" | "ps" | "sd" | "ug" | "ur" | "yi" => {
+                TextDirection::RightToLeft
+            }
+            _ => TextDirection::LeftToRight,
+        }
     }
 }
 
@@ -213,5 +235,21 @@ mod tests {
         let text = t("missing", "Hello {name}").arg("name", "World");
 
         assert_eq!(String::from(text), "Hello World");
+    }
+
+    #[test]
+    fn locale_direction_uses_primary_language_subtag() {
+        assert_eq!(
+            LocaleId::new("en-US").text_direction(),
+            TextDirection::LeftToRight
+        );
+        assert_eq!(
+            LocaleId::new("ar-SA").text_direction(),
+            TextDirection::RightToLeft
+        );
+        assert_eq!(
+            LocaleId::new("he_IL").text_direction(),
+            TextDirection::RightToLeft
+        );
     }
 }

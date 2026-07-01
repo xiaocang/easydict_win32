@@ -411,7 +411,14 @@ fn requires_accessible_name(role: &A11yRole) -> bool {
             | A11yRole::CheckBox
             | A11yRole::ComboBox
             | A11yRole::Dialog
+            | A11yRole::Hyperlink
+            | A11yRole::MenuItem
+            | A11yRole::ProgressBar
+            | A11yRole::RadioButton
+            | A11yRole::Slider
+            | A11yRole::TabItem
             | A11yRole::TextInput
+            | A11yRole::TreeItem
     )
 }
 
@@ -465,17 +472,23 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.children.len()
             );
             for child in &token.children {
+                let _ = writeln!(
+                    output,
+                    "{pad}  GridCell row={} column={} row_span={} column_span={}",
+                    child.row, child.column, child.row_span, child.column_span
+                );
                 write_layout(output, &child.view, indent + 2);
             }
         }
         ViewToken::ListView(token) => {
             let _ = writeln!(
                 output,
-                "{pad}ListView id={:?} items={} selected={:?} spacing={} virtualized={}",
+                "{pad}ListView id={:?} items={} selected={:?} spacing={} max_height={:?} virtualized={}",
                 token.id,
                 token.items.len(),
                 token.selected,
                 token.spacing,
+                token.max_height,
                 token.virtualized
             );
             for item in &token.items {
@@ -499,16 +512,22 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Border(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Border id={:?} radius={} stroke={} filled={}",
-                token.id, token.corner_radius, token.stroke_width, token.filled
+                "{pad}Border id={:?} radius={} stroke={} filled={} padding={:?} width={:?} height={:?}",
+                token.id,
+                token.corner_radius,
+                token.stroke_width,
+                token.filled,
+                token.padding,
+                token.width,
+                token.height
             );
             write_layout(output, &token.content, indent + 2);
         }
         ViewToken::Viewbox(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Viewbox id={:?} stretch={:?}",
-                token.id, token.stretch
+                "{pad}Viewbox id={:?} stretch={:?} width={:?} height={:?}",
+                token.id, token.stretch, token.width, token.height
             );
             write_layout(output, &token.content, indent + 2);
         }
@@ -527,8 +546,8 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Flyout(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Flyout id={:?} open={} placement={:?}",
-                token.id, token.open, token.placement
+                "{pad}Flyout id={:?} open={} placement={:?} light_dismiss={:?} focus_behavior={:?}",
+                token.id, token.open, token.placement, token.light_dismiss, token.focus_behavior
             );
             write_layout(output, &token.anchor, indent + 2);
             if token.open {
@@ -538,12 +557,19 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Overlay(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Overlay id={:?} layers={}",
+                "{pad}Overlay id={:?} layers={} blocking_layers={} scrim_layers={}",
                 token.id,
-                token.layers.len()
+                token.layers.len(),
+                token.blocking_layer_count(),
+                token.scrim_layer_count()
             );
             write_layout(output, &token.base, indent + 2);
-            for layer in &token.layers {
+            for (index, layer) in token.layers.iter().enumerate() {
+                let _ = writeln!(
+                    output,
+                    "{pad}  OverlayLayer index={} align={:?}/{:?} scrim={:?} blocks_input={}",
+                    index, layer.align_x, layer.align_y, layer.scrim, layer.blocks_input
+                );
                 write_layout(output, &layer.content, indent + 2);
             }
         }
@@ -593,14 +619,18 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             let _ = writeln!(
                 output,
                 "{pad}ProgressBar id={:?} active={} value={:?} width={:?} height=Fixed({})",
-                token.id, token.active, token.value, token.width, token.height
+                token.id,
+                token.active,
+                token.normalized_value(),
+                token.width,
+                token.height
             );
         }
         ViewToken::BusyOverlay(token) => {
             let _ = writeln!(
                 output,
-                "{pad}BusyOverlay id={:?} active={} opacity={:.2} blocks_input={}",
-                token.id, token.active, token.opacity, token.blocks_input
+                "{pad}BusyOverlay id={:?} active={} opacity={:.2} fade_transition_ms={} blocks_input={}",
+                token.id, token.active, token.opacity, token.fade_transition_ms, token.blocks_input
             );
             write_layout(output, &token.content, indent + 2);
         }
@@ -620,8 +650,19 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             }
         }
         ViewToken::NavigationView(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}NavigationView id={:?} items={} footer_items={} selected={:?} pane_display_mode={:?} settings_visible={} back_button_visible={}",
+                token.id,
+                token.items.len(),
+                token.footer_items.len(),
+                token.selected,
+                token.pane_display_mode,
+                token.settings_visible,
+                token.back_button_visible
+            );
             if let Some(content) = &token.content {
-                write_layout(output, content, indent);
+                write_layout(output, content, indent + 2);
             }
         }
         ViewToken::Dialog(token) => {
@@ -629,12 +670,18 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 write_layout(output, content, indent);
             }
         }
-        ViewToken::Lazy(token) => write_layout(output, &token.content, indent),
+        ViewToken::Lazy(token) => {
+            let _ = writeln!(output, "{pad}Lazy id={:?} key={:?}", token.id, token.key);
+            write_layout(output, &token.content, indent + 2);
+        }
         ViewToken::AdaptiveSwitch(token) => {
             let _ = writeln!(
                 output,
-                "{pad}AdaptiveSwitch id={:?} breakpoint_width={}",
-                token.id, token.breakpoint_width
+                "{pad}AdaptiveSwitch id={:?} breakpoint_width={} resolved_width={:?} resolved_branch={}",
+                token.id,
+                token.breakpoint_width,
+                token.resolved_width,
+                token.resolved_branch_name()
             );
             match token.resolved_branch() {
                 Some(branch) => write_layout(output, branch, indent + 2),
@@ -681,7 +728,7 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Expander(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Expander id={:?} trailing={} expanded={}",
+                "{pad}Expander id={:?} trailing={} expanded={} motion=expand-collapse-reveal",
                 token.id,
                 token.trailing.len(),
                 token.expanded
@@ -727,7 +774,7 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::CaptureOverlay(token) => {
             let _ = writeln!(
                 output,
-                "{pad}CaptureOverlay id={:?} phase=\"{}\" depth={} dragging={} detected={:?} selection={:?} handles={} magnifier={}",
+                "{pad}CaptureOverlay id={:?} phase=\"{}\" depth={} dragging={} detected={:?} selection={:?} handles={} magnifier={} background_pixels={:?} cursor={:?}",
                 token.id,
                 token.phase,
                 token.detection_depth,
@@ -735,14 +782,18 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.detected_rect,
                 token.selection_rect,
                 token.handles_visible,
-                token.magnifier_visible
+                token.magnifier_visible,
+                token.background_pixel_size(),
+                token.cursor
             );
         }
         ViewToken::Image(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Image id={:?} bgra_path={:?} pixels={}x{} raster={:?} stretch={:?} width={:?} height={:?}",
+                "{pad}Image id={:?} source_kind={:?} fallback={} bgra_path={:?} pixels={}x{} raster={:?} stretch={:?} width={:?} height={:?}",
                 token.id,
+                token.source_kind(),
+                token.fallback_behavior(),
                 token.bgra_path,
                 token.pixel_width,
                 token.pixel_height,
@@ -759,6 +810,168 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.id, token.source, token.width, token.height
             );
         }
+        ViewToken::RichText(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}RichText id={:?} runs={} style={:?} wrapping={:?}",
+                token.id,
+                token.runs.len(),
+                token.style,
+                token.wrapping
+            );
+        }
+        ViewToken::ToggleButton(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}ToggleButton id={:?} pressed={} enabled={}",
+                token.id, token.pressed, token.state.enabled
+            );
+        }
+        ViewToken::SplitButton(token) => {
+            let disabled_items = token.items.iter().filter(|item| !item.enabled).count();
+            let _ = writeln!(
+                output,
+                "{pad}SplitButton id={:?} items={} disabled_items={} open={} enabled={}",
+                token.id,
+                token.items.len(),
+                disabled_items,
+                token.open,
+                token.state.enabled
+            );
+        }
+        ViewToken::InfoBar(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}InfoBar id={:?} severity={:?} title={:?}",
+                token.id, token.severity, token.title
+            );
+        }
+        ViewToken::TextEditor(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}TextEditor id={:?} secure={} read_only={} chrome={:?} width={:?} min_height={:?} max_height={:?} key_bindings={}",
+                token.id,
+                token.secure,
+                token.read_only,
+                token.chrome,
+                token.width,
+                token.min_height,
+                token.max_height,
+                token.key_bindings.len()
+            );
+        }
+        ViewToken::CheckBox(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}CheckBox id={:?} checked={} indeterminate={} enabled={}",
+                token.id, token.checked, token.indeterminate, token.state.enabled
+            );
+        }
+        ViewToken::RadioGroup(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}RadioGroup id={:?} options={} selected={:?} orientation={:?} enabled={}",
+                token.id,
+                token.options.len(),
+                token.selected,
+                token.orientation,
+                token.state.enabled
+            );
+        }
+        ViewToken::NumberBox(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}NumberBox id={:?} value={} min={:?} max={:?} step={} spin_buttons={} enabled={}",
+                token.id,
+                token.value,
+                token.min,
+                token.max,
+                token.step,
+                token.spin_buttons,
+                token.state.enabled
+            );
+        }
+        ViewToken::AutoSuggestBox(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}AutoSuggestBox id={:?} suggestions={} open={} highlighted_index={:?} width={:?} enabled={}",
+                token.id,
+                token.suggestions.len(),
+                token.open,
+                token.highlighted_index,
+                token.width,
+                token.state.enabled
+            );
+        }
+        ViewToken::Slider(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}Slider id={:?} value={:.2} min={:.2} max={:.2} step={:.2} preview_active={} width={:?} enabled={}",
+                token.id,
+                token.value,
+                token.min,
+                token.max,
+                token.step,
+                token.preview_active(),
+                token.width,
+                token.state.enabled
+            );
+        }
+        ViewToken::ComboBox(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}ComboBox id={:?} items={} selected={:?} selected_label={:?} width={:?} height={:?} enabled={}",
+                token.id,
+                token.items.len(),
+                token.selected,
+                token.selected_item().map(|item| item.label.as_str()),
+                token.width,
+                token.height,
+                token.state.enabled
+            );
+        }
+        ViewToken::TreeView(token) => {
+            let _ = writeln!(
+                output,
+                "{pad}TreeView id={:?} roots={} selected={:?}",
+                token.id,
+                token.roots.len(),
+                token.selected
+            );
+            write_tree_nodes(output, &token.roots, indent + 2);
+        }
+        ViewToken::TrayMenu(token) => {
+            let item_height = (token.style.item_font_size + token.style.item_vertical_padding)
+                .max(token.style.item_min_height);
+            let _ = writeln!(
+                output,
+                "{pad}TrayMenu id={:?} items={} min_width={} max_height={:?} radius={} shadow_margin={} animation_offset_y={} item_height={} item_padding={}x{} submenu_arrow={} hover_inset={}x{} separator={}x{} inset={} light={}/{}/{} dark={}/{}/{} hover_mix={}",
+                token.id,
+                token.items.len(),
+                token.min_width,
+                token.style.presenter_max_height,
+                token.style.presenter_corner_radius,
+                token.style.presenter_shadow_margin,
+                token.animation_offset_y,
+                item_height,
+                token.style.item_horizontal_padding,
+                token.style.item_vertical_padding,
+                token.style.submenu_arrow_column_width,
+                token.style.hover_inset_x,
+                token.style.hover_inset_y,
+                token.style.separator_height,
+                token.style.separator_line_thickness,
+                token.style.separator_horizontal_inset,
+                tray_color(token.style.light_surface),
+                tray_color(token.style.light_foreground),
+                tray_color(token.style.light_separator),
+                tray_color(token.style.dark_surface),
+                tray_color(token.style.dark_foreground),
+                tray_color(token.style.dark_separator),
+                token.style.hover_foreground_mix_percent
+            );
+            write_tray_menu_items(output, &token.items, indent + 2);
+        }
         ViewToken::Custom(token) => {
             let _ = writeln!(
                 output,
@@ -772,23 +985,61 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
             }
         }
         ViewToken::Text(_)
-        | ViewToken::RichText(_)
         | ViewToken::Button(_)
-        | ViewToken::ToggleButton(_)
-        | ViewToken::SplitButton(_)
-        | ViewToken::TreeView(_)
         | ViewToken::StatusBadge(_)
-        | ViewToken::InfoBar(_)
-        | ViewToken::TextEditor(_)
-        | ViewToken::CheckBox(_)
-        | ViewToken::RadioGroup(_)
-        | ViewToken::NumberBox(_)
-        | ViewToken::AutoSuggestBox(_)
         | ViewToken::ToggleSwitch(_)
-        | ViewToken::Slider(_)
-        | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_) => {}
+    }
+}
+
+fn write_tree_nodes(output: &mut String, roots: &[win_fluent::view::TreeNode], indent: usize) {
+    let pad = " ".repeat(indent);
+    for node in roots {
+        let _ = writeln!(
+            output,
+            "{pad}TreeNode id={:?} label={:?} expanded={} children={}",
+            node.id,
+            node.label,
+            node.expanded,
+            node.children.len()
+        );
+        write_tree_nodes(output, &node.children, indent + 2);
+    }
+}
+
+fn write_tray_menu_items<Message>(
+    output: &mut String,
+    items: &[win_fluent::platform::TrayMenuItem<Message>],
+    indent: usize,
+) {
+    let pad = " ".repeat(indent);
+    for item in items {
+        if item.is_separator() {
+            let _ = writeln!(output, "{pad}TrayMenuSeparator");
+            continue;
+        }
+
+        let _ = writeln!(
+            output,
+            "{pad}TrayMenuItem id={:?} label={:?} tooltip={:?} enabled={} submenu={} children={}",
+            item.id,
+            item.label,
+            item.tooltip,
+            item.enabled,
+            item.is_submenu(),
+            item.children.len()
+        );
+        write_tray_menu_items(output, &item.children, indent + 2);
+    }
+}
+
+fn tray_color(color: win_fluent::platform::TrayMenuColor) -> String {
+    match color {
+        win_fluent::platform::TrayMenuColor::SystemMenu => "SystemMenu".to_string(),
+        win_fluent::platform::TrayMenuColor::Rgb(red, green, blue) => {
+            format!("#{red:02X}{green:02X}{blue:02X}")
+        }
     }
 }
 
@@ -925,6 +1176,27 @@ mod tests {
             .issues
             .iter()
             .any(|issue| issue.message == "focusable node must have an accessible name"));
+    }
+
+    #[test]
+    fn reports_missing_names_for_extended_interactive_roles() {
+        for role in [
+            A11yRole::Hyperlink,
+            A11yRole::MenuItem,
+            A11yRole::ProgressBar,
+            A11yRole::RadioButton,
+            A11yRole::Slider,
+            A11yRole::TabItem,
+            A11yRole::TreeItem,
+        ] {
+            let audit = crate::audit_accessibility_tree(&A11yNode::new(role.clone()));
+
+            assert!(
+                audit.issues.iter().any(|issue| issue.role == role
+                    && issue.message == "missing required accessible name"),
+                "expected missing-name audit issue for {role:?}"
+            );
+        }
     }
 
     #[test]

@@ -125,6 +125,17 @@ mod tests {
     }
 
     #[test]
+    fn screenshot_frame_falls_back_to_96_dpi_for_invalid_scale() {
+        let screenshot =
+            WindowScreenshot::from_physical_rgba(200, 100, 0.0, vec![0; 200 * 100 * 4]).unwrap();
+
+        assert_eq!(screenshot.dpi, 96);
+        assert_eq!(screenshot.scale_factor, 1.0);
+        assert_eq!(screenshot.physical_size(), (200, 100));
+        assert_eq!(screenshot.dip_size(), (200.0, 100.0));
+    }
+
+    #[test]
     fn screenshot_frame_rejects_invalid_buffers() {
         let error = WindowScreenshot::from_physical_rgba(2, 1, 1.0, vec![0; 3]).unwrap_err();
 

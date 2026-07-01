@@ -9647,7 +9647,7 @@ fn default_tray_menu_covers_migration_contract() {
         .collect::<Vec<_>>();
 
     assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
-    assert_eq!(menu.presenter_min_width, Some(300));
+    assert_eq!(menu.presenter_min_width, Some(148));
     let icon_path = menu.icon_path.as_deref().expect("tray icon path");
     assert!(
         icon_path.ends_with("AppIcon.ico"),
@@ -9676,14 +9676,11 @@ fn default_tray_menu_covers_migration_contract() {
     assert!(labels.contains(&"OCR Translate (Ctrl+Alt+S)"));
     assert!(labels.contains(&"Browser Support"));
     assert!(labels.contains(&"Settings"));
-    assert_eq!(menu.items[0].tooltip.as_deref(), Some("Show Easydict"));
-    assert_eq!(
-        menu.items[2].tooltip.as_deref(),
-        Some("OCR Translate (Ctrl+Alt+S)")
-    );
+    assert_eq!(menu.items[0].tooltip.as_deref(), None);
+    assert_eq!(menu.items[2].tooltip.as_deref(), None);
     assert!(menu.items[5].is_separator());
     assert!(menu.items[6].is_submenu());
-    assert_eq!(menu.items[6].tooltip.as_deref(), Some("Browser Support"));
+    assert_eq!(menu.items[6].tooltip.as_deref(), None);
     assert!(menu.items[8].is_separator());
     let browser_menu = &menu.items[6];
     assert_eq!(
@@ -9705,8 +9702,8 @@ fn default_tray_menu_covers_migration_contract() {
     assert!(browser_menu.children[2].is_separator());
     let chrome_menu = &browser_menu.children[0];
     let firefox_menu = &browser_menu.children[1];
-    assert_eq!(chrome_menu.tooltip.as_deref(), Some("Chrome"));
-    assert_eq!(firefox_menu.tooltip.as_deref(), Some("Firefox"));
+    assert_eq!(chrome_menu.tooltip.as_deref(), None);
+    assert_eq!(firefox_menu.tooltip.as_deref(), None);
     assert_eq!(
         chrome_menu
             .children
@@ -9732,10 +9729,7 @@ fn default_tray_menu_covers_migration_contract() {
         ]
     );
     assert!(chrome_menu.children[0].enabled);
-    assert_eq!(
-        chrome_menu.children[0].tooltip.as_deref(),
-        Some("① Install Chrome Support")
-    );
+    assert_eq!(chrome_menu.children[0].tooltip.as_deref(), None);
     assert!(!chrome_menu.children[1].enabled);
     assert!(firefox_menu.children[0].enabled);
     assert!(!firefox_menu.children[1].enabled);
@@ -9807,6 +9801,22 @@ fn tray_menu_labels_follow_ui_language_like_winui_tray() {
 }
 
 #[test]
+fn tray_menu_uia_scroll_fixture_adds_extra_items_and_max_height() {
+    let _extra_items = EnvironmentVariableGuard::set("EASYDICT_UIA_TRAY_EXTRA_ITEMS", "12");
+    let _max_height = EnvironmentVariableGuard::set("EASYDICT_UIA_TRAY_MAX_HEIGHT_DIPS", "280");
+
+    let menu = tray_menu_for_browser_support_locale(&BrowserSupportState::default(), "en-US");
+
+    assert_eq!(menu.presenter_style.item_font_size, 14);
+    assert_eq!(menu.presenter_style.separator_line_thickness, 1);
+    assert_eq!(menu.presenter_style.presenter_max_height, Some(280));
+    assert!(menu
+        .items
+        .iter()
+        .any(|item| item.id == "uia-scroll-item-12" && item.label == "UIA Scroll Item 12"));
+}
+
+#[test]
 fn tray_browser_support_menu_reflects_installation_status() {
     let menu = tray_menu_for_browser_support(&BrowserSupportState {
         chrome_installed: true,
@@ -9835,7 +9845,7 @@ fn default_tray_menu_keeps_native_tray_shape_without_platform_adapter() {
     let menu = default_tray_menu();
 
     assert_eq!(menu.tooltip, "Easydict - Dictionary & Translation");
-    assert_eq!(menu.presenter_min_width, Some(300));
+    assert_eq!(menu.presenter_min_width, Some(148));
     assert_eq!(menu.default_item_id.as_deref(), Some(TRAY_SHOW_MAIN));
     assert_eq!(count_tray_items(&menu.items), 21);
     assert_eq!(count_tray_separators(&menu.items), 3);

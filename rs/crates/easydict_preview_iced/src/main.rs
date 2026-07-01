@@ -1,12 +1,12 @@
 use std::{fs, path::Path, time::Duration};
 
 use easydict_app::{
-    capture_overlay_window_options, default_settings_storage_path, fixed_window_options,
-    load_settings_file, main_window_options_for_settings, mini_window_options,
-    pop_button_view_with_state, pop_button_window_options, preview_control_state_from_id,
-    settings_window_options, EasydictApp, EasydictUiState, Message, SettingsState,
-    MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS, MAIN_WINDOW_MIN_HEIGHT_DIPS,
-    MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
+    capture_overlay_window_options, default_settings_storage_path, default_ui_language,
+    fixed_window_options, load_settings_file, main_window_options_for_settings,
+    mini_window_options, pop_button_view_with_state, pop_button_window_options,
+    preview_control_state_from_id, settings_window_options, EasydictApp, EasydictUiState, Message,
+    SettingsState, MAIN_WINDOW_DEFAULT_HEIGHT_DIPS, MAIN_WINDOW_DEFAULT_WIDTH_DIPS,
+    MAIN_WINDOW_MIN_HEIGHT_DIPS, MAIN_WINDOW_MIN_WIDTH_DIPS, SETTINGS_WINDOW_DEFAULT_HEIGHT_DIPS,
     SETTINGS_WINDOW_DEFAULT_WIDTH_DIPS, SETTINGS_WINDOW_MIN_HEIGHT_DIPS,
     SETTINGS_WINDOW_MIN_WIDTH_DIPS,
 };
@@ -80,6 +80,8 @@ fn production_initial_state_with_settings(settings: Option<SettingsState>) -> Ea
     let mut state = EasydictUiState::default();
     if let Some(settings) = settings {
         state.settings = settings;
+    } else {
+        state.settings.ui_language = default_ui_language();
     }
 
     state.source_text.clear();

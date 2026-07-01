@@ -62,7 +62,18 @@ fn catalog() -> &'static I18n {
     })
 }
 
+pub fn default_ui_language() -> String {
+    env_ui_language()
+        .or_else(system_ui_language)
+        .and_then(|locale| supported_locale(&locale).map(str::to_string))
+        .unwrap_or_else(|| "en-US".to_string())
+}
+
 fn current_locale() -> String {
+    default_ui_language()
+}
+
+fn env_ui_language() -> Option<String> {
     ["EASYDICT_PREVIEW_UI_LANGUAGE", "EASYDICT_UI_LANGUAGE"]
         .into_iter()
         .find_map(|key| {
@@ -71,16 +82,55 @@ fn current_locale() -> String {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
         })
-        .unwrap_or_else(|| "en-US".to_string())
 }
 
 fn normalize_locale(locale: &str) -> String {
-    let locale = locale.trim();
+    supported_locale(locale).unwrap_or("en-US").to_string()
+}
+
+fn supported_locale(locale: &str) -> Option<&'static str> {
+    let locale = locale.trim().replace('_', "-");
     if locale.is_empty() {
-        "en-US".to_string()
-    } else {
-        locale.to_string()
+        return None;
     }
+
+    let lower = locale.to_ascii_lowercase();
+    if lower == "zh"
+        || lower.starts_with("zh-cn")
+        || lower.starts_with("zh-hans")
+        || lower.starts_with("zh-sg")
+    {
+        return Some("zh-CN");
+    }
+    if lower.starts_with("zh-tw")
+        || lower.starts_with("zh-hant")
+        || lower.starts_with("zh-hk")
+        || lower.starts_with("zh-mo")
+    {
+        return Some("zh-TW");
+    }
+
+    LOCALE_PO_FILES
+        .iter()
+        .find(|(id, _)| id.eq_ignore_ascii_case(&locale))
+        .map(|(id, _)| *id)
+        .or_else(|| {
+            let language = lower.split('-').next()?;
+            LOCALE_PO_FILES
+                .iter()
+                .find(|(id, _)| id.to_ascii_lowercase().starts_with(&format!("{language}-")))
+                .map(|(id, _)| *id)
+        })
+}
+
+#[cfg(windows)]
+fn system_ui_language() -> Option<String> {
+    easydict_windows_shell::user_default_ui_language()
+}
+
+#[cfg(not(windows))]
+fn system_ui_language() -> Option<String> {
+    None
 }
 
 /// Build an [`I18nBundle`] from a gettext PO document. The translation tables
@@ -216,5 +266,13 @@ mod tests {
         // Unknown locale falls back to the en-US bundle (the configured fallback
         // locale), not the caller default.
         assert_eq!(tr_locale("xx-XX", "settings.tab.general", "x"), "General");
+    }
+
+    #[test]
+    fn locale_aliases_normalize_to_bundled_languages() {
+        assert_eq!(normalize_locale("zh-Hans-CN"), "zh-CN");
+        assert_eq!(normalize_locale("zh_Hant_TW"), "zh-TW");
+        assert_eq!(normalize_locale("de"), "de-DE");
+        assert_eq!(normalize_locale("xx-XX"), "en-US");
     }
 }

@@ -36,6 +36,8 @@ public sealed class AppLauncher : IDisposable
         if (!File.Exists(exePath))
             throw new FileNotFoundException($"App executable not found: {exePath}");
 
+        TryKillExistingExeInstances(exePath);
+
         var resolvedTimeout = ResolveLaunchTimeout(timeout ?? TimeSpan.FromSeconds(30));
         LaunchWithRetry(() =>
         {
@@ -255,6 +257,39 @@ public sealed class AppLauncher : IDisposable
         catch (InvalidOperationException)
         {
             return true;
+        }
+    }
+
+    private static void TryKillExistingExeInstances(string exePath)
+    {
+        var fullPath = Path.GetFullPath(exePath);
+        var processName = Path.GetFileNameWithoutExtension(fullPath);
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return;
+        }
+
+        foreach (var process in Process.GetProcessesByName(processName))
+        {
+            try
+            {
+                var modulePath = process.MainModule?.FileName;
+                if (!string.Equals(modulePath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(3000);
+            }
+            catch
+            {
+                // Best-effort cleanup for UI automation isolation.
+            }
+            finally
+            {
+                process.Dispose();
+            }
         }
     }
 

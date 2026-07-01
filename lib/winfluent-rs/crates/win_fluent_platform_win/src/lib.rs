@@ -7,7 +7,8 @@ use win_fluent::action::ActionKind;
 use win_fluent::platform::{
     ClipboardFormat, Hotkey, HotkeyKey, HotkeyModifier, NamedEventRegistration,
     ProtocolRegistration, ScreenCaptureRequest, ScreenCaptureResult, ScreenWindow,
-    ScreenWindowSnapshotRequest, ShellVerb, TrayMenu, TrayMenuItem,
+    ScreenWindowSnapshotRequest, ShellVerb, TrayMenu, TrayMenuItem, TrayMenuPresenterKind,
+    TrayMenuPresenterStyle,
 };
 use win_fluent::runtime::DesktopIntegrationPlan;
 use win_fluent::subscription::{Subscription, SubscriptionKind};
@@ -181,7 +182,9 @@ pub struct WindowsClipboardFormatSnapshot {
 pub struct WindowsTrayPlan {
     pub tooltip: String,
     pub icon_path: Option<String>,
+    pub presenter_kind: TrayMenuPresenterKind,
     pub presenter_min_width: Option<u16>,
+    pub presenter_style: TrayMenuPresenterStyle,
     pub callback_message: u32,
     pub item_count: usize,
     pub default_command_id: Option<u32>,
@@ -208,9 +211,9 @@ pub enum WindowsTrayItemKind {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WindowsTrayEvent {
-    pub id: String,
-    pub command_id: u32,
+pub enum WindowsTrayEvent {
+    Command { id: String, command_id: u32 },
+    OpenMenu { x: i32, y: i32 },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -424,7 +427,9 @@ impl WindowsPlatformAdapter {
             Some(WindowsTrayPlan {
                 tooltip: tray.tooltip.clone(),
                 icon_path: tray.icon_path.clone(),
+                presenter_kind: tray.presenter_kind,
                 presenter_min_width: tray.presenter_min_width,
+                presenter_style: tray.presenter_style,
                 callback_message: native::wm_user() + 1,
                 item_count: (next_command_id - 1000) as usize,
                 default_command_id: tray.default_item_id.as_deref().and_then(|id| {
@@ -647,13 +652,20 @@ impl WindowsPlatformAdapter {
 
         loop {
             if let Some(message) = native::poll_tray_message(handle)? {
-                if let Some(item) =
-                    find_tray_item_by_command(&handle.plan.items, message.command_id)
-                {
-                    return Ok(Some(WindowsTrayEvent {
-                        id: item.id.clone(),
-                        command_id: item.command_id,
-                    }));
+                match message {
+                    NativeTrayMessage::Command { command_id } => {
+                        if let Some(item) =
+                            find_tray_item_by_command(&handle.plan.items, command_id)
+                        {
+                            return Ok(Some(WindowsTrayEvent::Command {
+                                id: item.id.clone(),
+                                command_id: item.command_id,
+                            }));
+                        }
+                    }
+                    NativeTrayMessage::OpenMenu { x, y } => {
+                        return Ok(Some(WindowsTrayEvent::OpenMenu { x, y }));
+                    }
                 }
             }
 
@@ -872,8 +884,9 @@ struct NativeHotkeyMessage {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct NativeTrayMessage {
-    command_id: u32,
+enum NativeTrayMessage {
+    Command { command_id: u32 },
+    OpenMenu { x: i32, y: i32 },
 }
 
 fn map_hotkey_message(
@@ -913,7 +926,9 @@ fn collect_subscription<Message>(
                 registrations.push(WindowsRegistration::Tray(WindowsTrayPlan {
                     tooltip: String::new(),
                     icon_path: None,
+                    presenter_kind: TrayMenuPresenterKind::default(),
                     presenter_min_width: None,
+                    presenter_style: TrayMenuPresenterStyle::default(),
                     callback_message: native::wm_user() + 1,
                     item_count: 0,
                     default_command_id: None,
@@ -1309,6 +1324,29 @@ fn resolve_window_placement_with(
         WindowPlacement::CursorOffset { x, y } => {
             (cursor.x + x.round() as i32, cursor.y + y.round() as i32)
         }
+        WindowPlacement::ContextMenu { x, y } => context_menu_position(
+            x.round() as i32,
+            y.round() as i32,
+            width,
+            height,
+            constraint_area,
+            0,
+            0,
+        ),
+        WindowPlacement::ContextMenuInset {
+            x,
+            y,
+            inset_x,
+            inset_y,
+        } => context_menu_position(
+            x.round() as i32,
+            y.round() as i32,
+            width,
+            height,
+            constraint_area,
+            inset_x.round() as i32,
+            inset_y.round() as i32,
+        ),
         WindowPlacement::TopRight { margin_x, margin_y } => (
             work_area.right - width - margin_x.round() as i32,
             work_area.top + margin_y.round() as i32,
@@ -1389,6 +1427,40 @@ fn clamp_axis(value: i32, size: i32, min: i32, max: i32) -> i32 {
     value.clamp(min, max - size)
 }
 
+fn context_menu_position(
+    anchor_x: i32,
+    anchor_y: i32,
+    width: i32,
+    height: i32,
+    area: WindowsRect,
+    inset_x: i32,
+    inset_y: i32,
+) -> (i32, i32) {
+    let inset_x = inset_x.clamp(0, width.saturating_sub(1) / 2);
+    let inset_y = inset_y.clamp(0, height.saturating_sub(1) / 2);
+    let right_up_x = anchor_x - inset_x;
+    let left_up_x = anchor_x - width + inset_x;
+    let x = if right_up_x + width <= area.right {
+        right_up_x
+    } else if left_up_x >= area.left {
+        left_up_x
+    } else {
+        clamp_axis(right_up_x, width, area.left, area.right)
+    };
+
+    let upper_y = anchor_y - height + inset_y;
+    let lower_y = anchor_y - inset_y;
+    let y = if upper_y >= area.top {
+        upper_y
+    } else if lower_y + height <= area.bottom {
+        lower_y
+    } else {
+        clamp_axis(upper_y, height, area.top, area.bottom)
+    };
+
+    (x, y)
+}
+
 fn select_work_area_for_point(
     point: WindowsPoint,
     work_areas: &[WindowsRect],
@@ -1447,11 +1519,16 @@ mod native {
     };
     use win_fluent::platform::{
         ScreenCaptureRequest, ScreenCaptureResult, ScreenRect, ScreenWindow,
-        ScreenWindowSnapshotRequest,
+        ScreenWindowSnapshotRequest, TrayMenuColor, TrayMenuPopupAnimation, TrayMenuPresenterKind,
+        TrayMenuPresenterStyle,
     };
     use windows_sys::Win32::Foundation::{
         CloseHandle, GetLastError, GlobalFree, SetLastError, ERROR_FILE_NOT_FOUND, ERROR_SUCCESS,
         HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WAIT_OBJECT_0, WAIT_TIMEOUT, WPARAM,
+    };
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND,
+        DWMWCP_ROUNDSMALL,
     };
     use windows_sys::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
@@ -1462,8 +1539,9 @@ mod native {
     // Owner-drawn tray menu (fluent WinUI-style item rendering).
     use windows_sys::Win32::Graphics::Gdi::{
         CreateFontIndirectW, CreateRoundRectRgn, CreateSolidBrush, DrawTextW, FillRect, FillRgn,
-        GetSysColor, GetTextExtentPoint32W, SetBkMode, SetTextColor, COLOR_GRAYTEXT, COLOR_MENU,
-        COLOR_MENUTEXT, DT_LEFT, DT_RIGHT, DT_SINGLELINE, DT_VCENTER, HFONT, LOGFONTW, TRANSPARENT,
+        GetDeviceCaps, GetSysColor, GetTextExtentPoint32W, SetBkMode, SetTextColor, COLOR_GRAYTEXT,
+        COLOR_MENU, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HBRUSH, HFONT, LOGFONTW, LOGPIXELSX,
+        TRANSPARENT,
     };
     use windows_sys::Win32::Security::Cryptography::{
         CryptProtectData, CryptUnprotectData, CRYPTPROTECT_LOCAL_MACHINE,
@@ -1505,22 +1583,22 @@ mod native {
     #[cfg(test)]
     use windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu,
-        DestroyWindow, DispatchMessageW, EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos,
+        CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu, DestroyWindow,
+        DispatchMessageW, EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos,
         GetForegroundWindow, GetParent, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect,
         GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
-        LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetForegroundWindow,
-        SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenu, CS_HREDRAW,
-        CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE, HICON, HWND_NOTOPMOST, HWND_TOPMOST,
-        IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, MF_POPUP,
-        MF_SEPARATOR, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
+        LoadIconW, LoadImageW, PeekMessageW, PostMessageW, RegisterClassW, SetCursorPos,
+        SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow,
+        TrackPopupMenuEx, TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWL_EXSTYLE,
+        HICON, HWND_NOTOPMOST, HWND_TOPMOST, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE,
+        LR_LOADFROMFILE, MF_POPUP, MF_SEPARATOR, MF_SYSMENU, MSG, PM_REMOVE, SM_CXVIRTUALSCREEN,
         SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
         SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNORMAL,
-        TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TranslateMessage, WM_CONTEXTMENU, WM_HOTKEY,
-        WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_MENUSELECT, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW,
-        WS_BORDER,
-        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW,
-        WS_POPUP, WS_THICKFRAME,
+        TPM_LEFTALIGN, TPM_NOANIMATION, TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_VERNEGANIMATION,
+        TPM_VERPOSANIMATION, WM_CONTEXTMENU, WM_HOTKEY, WM_LBUTTONDBLCLK, WM_LBUTTONUP,
+        WM_MENUSELECT, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_BORDER, WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_MINIMIZEBOX, WS_OVERLAPPEDWINDOW, WS_POPUP,
+        WS_THICKFRAME,
     };
     // Owner-drawn tray menu support.
     use windows_sys::Win32::Foundation::SIZE;
@@ -1528,14 +1606,18 @@ mod native {
         DRAWITEMSTRUCT, MEASUREITEMSTRUCT, ODS_DISABLED, ODS_GRAYED, ODS_SELECTED,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        InsertMenuItemW, SystemParametersInfoW, MENUITEMINFOW, MFS_ENABLED, MFS_GRAYED,
-        MFT_OWNERDRAW, MIIM_DATA, MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_SUBMENU, NONCLIENTMETRICSW,
-        SPI_GETNONCLIENTMETRICS, WM_DRAWITEM, WM_MEASUREITEM,
+        InsertMenuItemW, SetMenuInfo, SystemParametersInfoW, MENUINFO, MENUITEMINFOW, MFS_ENABLED,
+        MFS_GRAYED, MFT_OWNERDRAW, MFT_SEPARATOR, MIIM_DATA, MIIM_FTYPE, MIIM_ID, MIIM_STATE,
+        MIIM_SUBMENU, MIM_APPLYTOSUBMENUS, MIM_BACKGROUND, MIM_MAXHEIGHT, MIM_STYLE,
+        MNS_AUTODISMISS, MNS_NOCHECK, NONCLIENTMETRICSW, SPI_GETNONCLIENTMETRICS, WM_DRAWITEM,
+        WM_MEASUREITEM,
     };
 
     static TEXT_INSERTION_TARGET: Mutex<isize> = Mutex::new(0);
     static TRAY_MENU_TOOLTIP_STATES: OnceLock<Mutex<BTreeMap<isize, TrayMenuTooltipState>>> =
         OnceLock::new();
+    const UIA_TRAY_CONTEXT_MENU_POINT_ENV: &str = "EASYDICT_UIA_TRAY_CONTEXT_MENU_POINT";
+    const UIA_TRAY_CONTEXT_MENU_DELAY_ENV: &str = "EASYDICT_UIA_TRAY_CONTEXT_MENU_DELAY_MS";
     pub(super) const NIN_KEYSELECT: u32 = WM_USER + 1;
 
     /// Per-window queue of resolved tray-callback events, keyed by HWND.
@@ -1572,7 +1654,9 @@ mod native {
         icon_id: u32,
         callback_message: u32,
         owned_icon: Option<HICON>,
+        presenter_kind: TrayMenuPresenterKind,
         presenter_min_width: Option<u16>,
+        presenter_style: TrayMenuPresenterStyle,
         default_command_id: Option<u32>,
         menu_items: Vec<super::WindowsTrayItemPlan>,
     }
@@ -1776,6 +1860,7 @@ mod native {
         // Ready to receive callbacks: register the queue the window procedure
         // pushes resolved tray events into for the poll loop to drain.
         register_tray_callback_queue(hwnd, plan.callback_message);
+        schedule_uia_tray_context_menu(hwnd, plan.callback_message);
 
         Ok(WindowsTrayHandle {
             plan: plan.clone(),
@@ -1784,7 +1869,9 @@ mod native {
                 icon_id,
                 callback_message: plan.callback_message,
                 owned_icon,
+                presenter_kind: plan.presenter_kind,
                 presenter_min_width: plan.presenter_min_width,
+                presenter_style: plan.presenter_style,
                 default_command_id: plan.default_command_id,
                 menu_items: plan.items.clone(),
             },
@@ -1821,12 +1908,21 @@ mod native {
                 })
                 .or_else(|| first_enabled_tray_command(&handle.native.menu_items));
 
-            return Ok(item.map(|item| NativeTrayMessage {
+            return Ok(item.map(|item| NativeTrayMessage::Command {
                 command_id: item.command_id,
             }));
         }
 
         if is_tray_context_menu_message(event) {
+            if handle.native.presenter_kind == TrayMenuPresenterKind::Fluent {
+                let cursor = cursor_position()?;
+                let monitor = monitor_metrics_for_point(cursor)?;
+                let anchor = super::physical_point_to_dips(cursor, monitor.scale_factor());
+                return Ok(Some(NativeTrayMessage::OpenMenu {
+                    x: anchor.x,
+                    y: anchor.y,
+                }));
+            }
             return show_tray_menu(&handle.native);
         }
 
@@ -1914,6 +2010,41 @@ mod native {
         queues
             .get_mut(&(hwnd as isize))
             .and_then(|queue| queue.events.pop_front())
+    }
+
+    fn schedule_uia_tray_context_menu(hwnd: HWND, callback_message: u32) {
+        let Some((x, y)) = uia_tray_context_menu_point() else {
+            return;
+        };
+
+        let delay_ms = uia_tray_context_menu_delay_ms();
+        let hwnd_value = hwnd as isize;
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            let hwnd = hwnd_value as HWND;
+            // Safety: SetCursorPos uses screen coordinates supplied by the UI automation test.
+            let _ = unsafe { SetCursorPos(x, y) };
+            // NOTIFYICON_VERSION_4 stores the event in LOWORD(lParam) and the icon id in HIWORD.
+            let lparam = ((1u32 << 16) | (WM_CONTEXTMENU & 0xffff)) as isize;
+            // Safety: hwnd is the hidden tray host window created by this process.
+            let _ = unsafe { PostMessageW(hwnd, callback_message, 0, lparam) };
+        });
+    }
+
+    fn uia_tray_context_menu_point() -> Option<(i32, i32)> {
+        let value = std::env::var(UIA_TRAY_CONTEXT_MENU_POINT_ENV).ok()?;
+        let (x, y) = value.split_once(',').or_else(|| value.split_once(';'))?;
+        let x = x.trim().parse::<i32>().ok()?;
+        let y = y.trim().parse::<i32>().ok()?;
+        Some((x, y))
+    }
+
+    fn uia_tray_context_menu_delay_ms() -> u64 {
+        std::env::var(UIA_TRAY_CONTEXT_MENU_DELAY_ENV)
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(|delay| delay.clamp(100, 10_000))
+            .unwrap_or(900)
     }
 
     pub fn create_named_event(
@@ -3618,6 +3749,7 @@ try {
             menu,
             &handle.menu_items,
             handle.presenter_min_width,
+            handle.presenter_style,
             &mut tooltip_state,
             &mut owner_draw_items,
         ) {
@@ -3625,10 +3757,24 @@ try {
             let _ = unsafe { DestroyMenu(menu) };
             return Err(error);
         }
+        let menu_background = tray_menu_background_color(handle.presenter_style);
+        let menu_background_brush = unsafe { CreateSolidBrush(menu_background) };
+        if menu_background_brush.is_null() {
+            let _ = unsafe { DestroyMenu(menu) };
+            return Err(last_error("CreateSolidBrush"));
+        }
+        if let Err(error) =
+            apply_tray_menu_presenter_info(menu, handle.presenter_style, menu_background_brush)
+        {
+            unsafe { DeleteObject(menu_background_brush as HGDIOBJ) };
+            let _ = unsafe { DestroyMenu(menu) };
+            return Err(error);
+        }
 
         let mut cursor = POINT { x: 0, y: 0 };
         // Safety: cursor is a valid out pointer.
         if unsafe { GetCursorPos(&mut cursor) } == 0 {
+            unsafe { DeleteObject(menu_background_brush as HGDIOBJ) };
             // Safety: menu is owned by this function.
             let _ = unsafe { DestroyMenu(menu) };
             return Err(last_error("GetCursorPos"));
@@ -3637,15 +3783,16 @@ try {
         // Safety: hidden HWND is valid while handle is alive. Foregrounding ensures the menu
         // dismisses when the user clicks elsewhere, per notification area menu guidance.
         let _ = unsafe { SetForegroundWindow(handle.hwnd) };
+        schedule_tray_presenter_corner_radius(cursor, handle.presenter_style);
         install_tray_menu_tooltip_state(handle.hwnd, tooltip_state);
         // Safety: menu and HWND are valid; TPM_RETURNCMD returns the chosen command id.
+        let popup_flags = tray_menu_popup_flags(handle.presenter_style.popup_animation, cursor);
         let command = unsafe {
-            TrackPopupMenu(
+            TrackPopupMenuEx(
                 menu,
-                TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD,
+                TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | popup_flags,
                 cursor.x,
                 cursor.y,
-                0,
                 handle.hwnd,
                 null(),
             )
@@ -3655,11 +3802,12 @@ try {
         clear_tray_menu_tooltip_state(handle.hwnd);
         // Safety: menu is owned by this function.
         let _ = unsafe { DestroyMenu(menu) };
+        unsafe { DeleteObject(menu_background_brush as HGDIOBJ) };
 
         if command == 0 {
             Ok(None)
         } else {
-            Ok(Some(NativeTrayMessage {
+            Ok(Some(NativeTrayMessage::Command {
                 command_id: command as u32,
             }))
         }
@@ -3676,27 +3824,32 @@ try {
         text_len: i32,
         /// Draw a trailing chevron for submenu items.
         is_submenu: bool,
+        /// Draw a WinUI-style separator instead of text.
+        is_separator: bool,
         /// Minimum item width in DIP/pixels (the menu's `presenter_min_width`),
         /// applied as a floor so the whole menu reaches the requested width.
         min_width: i32,
+        style: TrayMenuPresenterStyle,
     }
 
     fn append_tray_menu_items(
         menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
         items: &[super::WindowsTrayItemPlan],
         presenter_min_width: Option<u16>,
+        presenter_style: TrayMenuPresenterStyle,
         tooltip_state: &mut TrayMenuTooltipState,
         arena: &mut Vec<Box<TrayOwnerDrawItem>>,
     ) -> Result<(), WindowsPlatformError> {
         for (position, item) in items.iter().enumerate() {
             match item.kind {
                 super::WindowsTrayItemKind::Separator => {
-                    // Separators stay system-drawn (non-selectable); WinUI's inset
-                    // divider is approximated by the Win11 native separator.
-                    // Safety: menu is owned by caller; separator ignores id and label.
-                    if unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, null()) } == 0 {
-                        return Err(last_error("AppendMenuW"));
-                    }
+                    insert_owner_draw_separator(
+                        menu,
+                        position as u32,
+                        presenter_min_width,
+                        presenter_style,
+                        arena,
+                    )?;
                 }
                 super::WindowsTrayItemKind::Submenu => {
                     // Safety: CreatePopupMenu has no preconditions and returns an owned HMENU.
@@ -3708,6 +3861,7 @@ try {
                         submenu,
                         &item.children,
                         presenter_min_width,
+                        presenter_style,
                         tooltip_state,
                         arena,
                     ) {
@@ -3720,6 +3874,7 @@ try {
                         position as u32,
                         item,
                         presenter_min_width,
+                        presenter_style,
                         Some(submenu),
                         arena,
                     ) {
@@ -3739,6 +3894,7 @@ try {
                         position as u32,
                         item,
                         presenter_min_width,
+                        presenter_style,
                         None,
                         arena,
                     )?;
@@ -3761,6 +3917,7 @@ try {
         position: u32,
         item: &super::WindowsTrayItemPlan,
         presenter_min_width: Option<u16>,
+        presenter_style: TrayMenuPresenterStyle,
         submenu: Option<windows_sys::Win32::UI::WindowsAndMessaging::HMENU>,
         arena: &mut Vec<Box<TrayOwnerDrawItem>>,
     ) -> Result<(), WindowsPlatformError> {
@@ -3770,7 +3927,9 @@ try {
             text,
             text_len,
             is_submenu: submenu.is_some(),
+            is_separator: false,
             min_width: presenter_min_width.map(i32::from).unwrap_or(0),
+            style: presenter_style,
         });
         // The boxed state lives on the heap; moving the Box into the arena does
         // not move it, so this pointer stays valid for the menu's lifetime.
@@ -3790,7 +3949,11 @@ try {
                 MIIM_ID
             };
         info.fType = MFT_OWNERDRAW;
-        info.fState = if item.enabled { MFS_ENABLED } else { MFS_GRAYED };
+        info.fState = if item.enabled {
+            MFS_ENABLED
+        } else {
+            MFS_GRAYED
+        };
         if let Some(submenu) = submenu {
             info.hSubMenu = submenu;
         } else {
@@ -3805,9 +3968,64 @@ try {
         Ok(())
     }
 
+    fn insert_owner_draw_separator(
+        menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
+        position: u32,
+        presenter_min_width: Option<u16>,
+        presenter_style: TrayMenuPresenterStyle,
+        arena: &mut Vec<Box<TrayOwnerDrawItem>>,
+    ) -> Result<(), WindowsPlatformError> {
+        let draw = Box::new(TrayOwnerDrawItem {
+            text: wide_null(""),
+            text_len: 0,
+            is_submenu: false,
+            is_separator: true,
+            min_width: presenter_min_width.map(i32::from).unwrap_or(0),
+            style: presenter_style,
+        });
+        let data_ptr = draw.as_ref() as *const TrayOwnerDrawItem as usize;
+        arena.push(draw);
+
+        let mut info: MENUITEMINFOW = unsafe { std::mem::zeroed() };
+        info.cbSize = std::mem::size_of::<MENUITEMINFOW>() as u32;
+        info.fMask = MIIM_FTYPE | MIIM_STATE | MIIM_DATA;
+        info.fType = MFT_OWNERDRAW | MFT_SEPARATOR;
+        info.fState = MFS_GRAYED;
+        info.dwItemData = data_ptr;
+
+        if unsafe { InsertMenuItemW(menu, position, 1, &info) } == 0 {
+            return Err(last_error("InsertMenuItemW"));
+        }
+        Ok(())
+    }
+
+    fn apply_tray_menu_presenter_info(
+        menu: windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
+        style: TrayMenuPresenterStyle,
+        background: HBRUSH,
+    ) -> Result<(), WindowsPlatformError> {
+        let mut info: MENUINFO = unsafe { std::mem::zeroed() };
+        info.cbSize = std::mem::size_of::<MENUINFO>() as u32;
+        info.fMask = MIM_STYLE | MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+        info.dwStyle = MNS_AUTODISMISS | MNS_NOCHECK;
+        info.hbrBack = background;
+
+        if let Some(max_height) = style.presenter_max_height {
+            info.fMask |= MIM_MAXHEIGHT;
+            let height = tray_menu_dip(max_height, tray_menu_screen_scale());
+            info.cyMax = height.max(tray_menu_dip(style.item_min_height, 1.0)) as u32;
+        }
+
+        if unsafe { SetMenuInfo(menu, &info) } == 0 {
+            return Err(last_error("SetMenuInfo"));
+        }
+
+        Ok(())
+    }
+
     /// Creates an `HFONT` for the current system menu font, or null on failure
     /// (callers skip font selection when null). The caller owns and deletes it.
-    fn tray_menu_font() -> HFONT {
+    fn tray_menu_font(style: TrayMenuPresenterStyle, scale: f32) -> HFONT {
         let mut metrics: NONCLIENTMETRICSW = unsafe { std::mem::zeroed() };
         metrics.cbSize = std::mem::size_of::<NONCLIENTMETRICSW>() as u32;
         // Safety: pvParam points to a NONCLIENTMETRICSW whose cbSize is set.
@@ -3821,6 +4039,10 @@ try {
         };
         if ok == 0 {
             return null_mut();
+        }
+        if style.item_font_size > 0 {
+            metrics.lfMenuFont.lfHeight = -tray_menu_dip(style.item_font_size, scale);
+            metrics.lfMenuFont.lfWidth = 0;
         }
         // Safety: lfMenuFont is a valid LOGFONTW populated by the call above.
         unsafe { CreateFontIndirectW(&metrics.lfMenuFont as *const LOGFONTW) }
@@ -3839,7 +4061,19 @@ try {
     fn measure_tray_owner_draw_item(item: &TrayOwnerDrawItem) -> (u32, u32) {
         // Safety: GetDC(null) returns a screen DC; released below.
         let hdc = unsafe { GetDC(null_mut()) };
-        let font = tray_menu_font();
+        let scale = tray_menu_scale_from_hdc(hdc);
+
+        if item.is_separator {
+            // Safety: release the screen DC obtained above.
+            unsafe { ReleaseDC(null_mut(), hdc) };
+            let min_width = (item.min_width as f32 * scale).round() as i32;
+            return (
+                min_width.max(1) as u32,
+                tray_menu_dip(item.style.separator_height, scale).max(1) as u32,
+            );
+        }
+
+        let font = tray_menu_font(item.style, scale);
         let old_font = if font.is_null() {
             null_mut()
         } else {
@@ -3857,29 +4091,35 @@ try {
         // Safety: release the screen DC obtained above.
         unsafe { ReleaseDC(null_mut(), hdc) };
 
-        // Horizontal: left text gutter + text + right padding (+ chevron column).
-        let horizontal_padding = 28;
-        let chevron = if item.is_submenu { 18 } else { 0 };
-        let width = (size.cx + horizontal_padding + chevron)
-            .max(item.min_width)
+        let left_padding = tray_menu_dip(item.style.item_horizontal_padding, scale);
+        let right_padding = tray_menu_dip(item.style.item_horizontal_padding, scale);
+        let chevron = if item.is_submenu {
+            tray_menu_dip(item.style.submenu_arrow_column_width, scale)
+        } else {
+            0
+        };
+        let min_width = (item.min_width as f32 * scale).round() as i32;
+        let width = (size.cx + left_padding + right_padding + chevron)
+            .max(min_width)
             .max(1) as u32;
-        // Vertical: roomy WinUI-style item height.
-        let height = (size.cy + 12).max(28) as u32;
+        let height = (size.cy + tray_menu_dip(item.style.item_vertical_padding, scale))
+            .max(tray_menu_dip(item.style.item_min_height, scale))
+            .max(1) as u32;
         (width, height)
     }
 
     fn draw_tray_owner_draw_item(draw: &DRAWITEMSTRUCT, item: &TrayOwnerDrawItem) {
         let hdc = draw.hDC;
         let rect = draw.rcItem;
+        let scale = tray_menu_scale_from_hdc(hdc);
         let selected = (draw.itemState & ODS_SELECTED) != 0;
         let disabled = (draw.itemState & (ODS_GRAYED | ODS_DISABLED)) != 0;
 
-        // Safety: COLOR_* are valid system color indices.
-        let menu_bg = unsafe { GetSysColor(COLOR_MENU) };
+        let menu_bg = tray_menu_background_color(item.style);
         let text_color = if disabled {
             unsafe { GetSysColor(COLOR_GRAYTEXT) }
         } else {
-            unsafe { GetSysColor(COLOR_MENUTEXT) }
+            tray_menu_text_color(menu_bg, item.style)
         };
 
         // Base background.
@@ -3888,13 +4128,44 @@ try {
         unsafe { FillRect(hdc, &rect, bg_brush) };
         unsafe { DeleteObject(bg_brush as HGDIOBJ) };
 
+        if item.is_separator {
+            let thickness = tray_menu_dip(item.style.separator_line_thickness, scale);
+            let line_y = rect.top + (((rect.bottom - rect.top) - thickness) / 2).max(0);
+            let inset = tray_menu_dip(item.style.separator_horizontal_inset, scale);
+            let line_rect = RECT {
+                left: rect.left + inset,
+                top: line_y,
+                right: rect.right - inset,
+                bottom: line_y + thickness,
+            };
+            let line_brush =
+                unsafe { CreateSolidBrush(tray_menu_separator_color(menu_bg, item.style)) };
+            unsafe { FillRect(hdc, &line_rect, line_brush) };
+            unsafe { DeleteObject(line_brush as HGDIOBJ) };
+            return;
+        }
+
         // Fluent hover: subtle, inset, rounded highlight (theme-aware tint).
         if selected && !disabled {
-            let hover = blend_color(menu_bg, text_color, 0.10);
+            let hover = blend_color(
+                menu_bg,
+                text_color,
+                f32::from(item.style.hover_foreground_mix_percent) / 100.0,
+            );
+            let inset_x = tray_menu_dip(item.style.hover_inset_x, scale);
+            let inset_y = tray_menu_dip(item.style.hover_inset_y, scale);
+            let radius = tray_menu_dip(item.style.item_corner_radius, scale);
             // Safety: brush/region are valid and freed below.
             let brush = unsafe { CreateSolidBrush(hover) };
             let region = unsafe {
-                CreateRoundRectRgn(rect.left + 3, rect.top + 1, rect.right - 3, rect.bottom - 1, 8, 8)
+                CreateRoundRectRgn(
+                    rect.left + inset_x,
+                    rect.top + inset_y,
+                    rect.right - inset_x,
+                    rect.bottom - inset_y,
+                    radius,
+                    radius,
+                )
             };
             if !region.is_null() {
                 unsafe { FillRgn(hdc, region, brush) };
@@ -3903,7 +4174,7 @@ try {
             unsafe { DeleteObject(brush as HGDIOBJ) };
         }
 
-        let font = tray_menu_font();
+        let font = tray_menu_font(item.style, scale);
         let old_font = if font.is_null() {
             null_mut()
         } else {
@@ -3915,8 +4186,15 @@ try {
         unsafe { SetTextColor(hdc, text_color) };
 
         let mut text_rect = rect;
-        text_rect.left += 16;
-        text_rect.right -= 12;
+        text_rect.left += tray_menu_dip(item.style.item_horizontal_padding, scale);
+        text_rect.right -= if item.is_submenu {
+            tray_menu_dip(
+                item.style.item_horizontal_padding + item.style.submenu_arrow_column_width,
+                scale,
+            )
+        } else {
+            tray_menu_dip(item.style.item_horizontal_padding, scale)
+        };
         // Safety: text buffer and rect are valid for the duration of the call.
         unsafe {
             DrawTextW(
@@ -3928,26 +4206,190 @@ try {
             )
         };
 
-        if item.is_submenu {
-            let chevron: Vec<u16> = "\u{203A}".encode_utf16().collect();
-            let mut chevron_rect = rect;
-            chevron_rect.right -= 12;
-            // Safety: chevron buffer and rect are valid for the call.
-            unsafe {
-                DrawTextW(
-                    hdc,
-                    chevron.as_ptr(),
-                    chevron.len() as i32,
-                    &mut chevron_rect,
-                    DT_RIGHT | DT_VCENTER | DT_SINGLELINE,
-                )
-            };
-        }
-
         if !font.is_null() {
             // Safety: restore and delete the font created above.
             unsafe { SelectObject(hdc, old_font) };
             unsafe { DeleteObject(font as HGDIOBJ) };
+        }
+    }
+
+    fn tray_menu_background_color(style: TrayMenuPresenterStyle) -> u32 {
+        let system_bg = unsafe { GetSysColor(COLOR_MENU) };
+        if tray_color_luma(system_bg) < 128 {
+            tray_menu_color(style.dark_surface)
+        } else {
+            tray_menu_color(style.light_surface)
+        }
+    }
+
+    fn tray_menu_text_color(background: u32, style: TrayMenuPresenterStyle) -> u32 {
+        if tray_color_luma(background) < 128 {
+            tray_menu_color(style.dark_foreground)
+        } else {
+            tray_menu_color(style.light_foreground)
+        }
+    }
+
+    fn tray_menu_separator_color(background: u32, style: TrayMenuPresenterStyle) -> u32 {
+        if tray_color_luma(background) < 128 {
+            tray_menu_color(style.dark_separator)
+        } else {
+            tray_menu_color(style.light_separator)
+        }
+    }
+
+    fn tray_menu_color(color: TrayMenuColor) -> u32 {
+        match color {
+            TrayMenuColor::SystemMenu => unsafe { GetSysColor(COLOR_MENU) },
+            TrayMenuColor::Rgb(red, green, blue) => {
+                tray_rgb(u32::from(red), u32::from(green), u32::from(blue))
+            }
+        }
+    }
+
+    fn tray_color_luma(color: u32) -> u32 {
+        let red = color & 0xff;
+        let green = (color >> 8) & 0xff;
+        let blue = (color >> 16) & 0xff;
+        ((red * 299) + (green * 587) + (blue * 114)) / 1000
+    }
+
+    fn tray_rgb(red: u32, green: u32, blue: u32) -> u32 {
+        (red & 0xff) | ((green & 0xff) << 8) | ((blue & 0xff) << 16)
+    }
+
+    fn tray_menu_scale_from_hdc(hdc: HDC) -> f32 {
+        let dpi = if hdc.is_null() {
+            96
+        } else {
+            unsafe { GetDeviceCaps(hdc, LOGPIXELSX as i32) }
+        };
+        if dpi <= 0 {
+            1.0
+        } else {
+            dpi as f32 / 96.0
+        }
+    }
+
+    fn tray_menu_screen_scale() -> f32 {
+        let hdc = unsafe { GetDC(null_mut()) };
+        let scale = tray_menu_scale_from_hdc(hdc);
+        if !hdc.is_null() {
+            unsafe { ReleaseDC(null_mut(), hdc) };
+        }
+        scale
+    }
+
+    fn tray_menu_dip(value: u16, scale: f32) -> i32 {
+        ((value as f32) * scale).round().max(1.0) as i32
+    }
+
+    pub(super) fn tray_menu_popup_animation_flags(
+        animation: TrayMenuPopupAnimation,
+        opens_upward: bool,
+    ) -> u32 {
+        match animation {
+            TrayMenuPopupAnimation::System => 0,
+            TrayMenuPopupAnimation::None => TPM_NOANIMATION,
+            TrayMenuPopupAnimation::Vertical if opens_upward => TPM_VERNEGANIMATION,
+            TrayMenuPopupAnimation::Vertical => TPM_VERPOSANIMATION,
+        }
+    }
+
+    fn tray_menu_popup_flags(animation: TrayMenuPopupAnimation, cursor: POINT) -> u32 {
+        let screen_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+        let screen_height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+        let opens_upward = screen_height > 0 && cursor.y > screen_y + (screen_height / 2);
+        tray_menu_popup_animation_flags(animation, opens_upward)
+    }
+
+    fn schedule_tray_presenter_corner_radius(cursor: POINT, style: TrayMenuPresenterStyle) {
+        std::thread::spawn(move || {
+            for _ in 0..30 {
+                let hwnd = find_tray_menu_popup_window(cursor);
+                if !hwnd.is_null() {
+                    apply_tray_presenter_corner_radius(hwnd, style);
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        });
+    }
+
+    fn find_tray_menu_popup_window(cursor: POINT) -> HWND {
+        let mut search = TrayPopupCornerSearch {
+            cursor,
+            hwnd: null_mut(),
+        };
+        let _ = unsafe {
+            EnumWindows(
+                Some(enum_tray_menu_popup_corner_proc),
+                &mut search as *mut TrayPopupCornerSearch as LPARAM,
+            )
+        };
+        search.hwnd
+    }
+
+    struct TrayPopupCornerSearch {
+        cursor: POINT,
+        hwnd: HWND,
+    }
+
+    unsafe extern "system" fn enum_tray_menu_popup_corner_proc(hwnd: HWND, lparam: LPARAM) -> i32 {
+        if unsafe { IsWindowVisible(hwnd) } == 0 {
+            return 1;
+        }
+
+        let mut class_name = [0u16; 32];
+        let len = unsafe { GetClassNameW(hwnd, class_name.as_mut_ptr(), class_name.len() as i32) };
+        if len <= 0 {
+            return 1;
+        }
+        let class_name = String::from_utf16_lossy(&class_name[..len as usize]);
+        if class_name != "#32768" {
+            return 1;
+        }
+
+        let mut rect = RECT::default();
+        if unsafe { GetWindowRect(hwnd, &mut rect) } == 0 {
+            return 1;
+        }
+
+        let search = unsafe { &mut *(lparam as *mut TrayPopupCornerSearch) };
+        if !point_is_near_rect(search.cursor, rect, 12) {
+            return 1;
+        }
+
+        search.hwnd = hwnd;
+        0
+    }
+
+    fn point_is_near_rect(point: POINT, rect: RECT, margin: i32) -> bool {
+        point.x >= rect.left - margin
+            && point.x <= rect.right + margin
+            && point.y >= rect.top - margin
+            && point.y <= rect.bottom + margin
+    }
+
+    fn apply_tray_presenter_corner_radius(hwnd: HWND, style: TrayMenuPresenterStyle) {
+        let preference = tray_corner_preference_for_radius(style.presenter_corner_radius);
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                (&preference as *const i32).cast(),
+                std::mem::size_of_val(&preference) as u32,
+            )
+        };
+    }
+
+    pub(super) fn tray_corner_preference_for_radius(radius: u16) -> i32 {
+        if radius == 0 {
+            DWMWCP_DONOTROUND
+        } else if radius <= 4 {
+            DWMWCP_ROUNDSMALL
+        } else {
+            DWMWCP_ROUND
         }
     }
 
@@ -4461,7 +4903,10 @@ mod native {
 mod tests {
     use super::*;
     use win_fluent::a11y::{resolve_accessibility_tree, A11yNode, A11yRole};
-    use win_fluent::platform::{HotkeyKey, HotkeyModifier, TrayMenu, TrayMenuItem};
+    use win_fluent::platform::{
+        HotkeyKey, HotkeyModifier, TrayMenu, TrayMenuItem, TrayMenuPopupAnimation,
+        TrayMenuPresenterStyle,
+    };
     use win_fluent::prelude::{button, column, page, text_editor, IntoView};
     use win_fluent::runtime::DesktopIntegrationPlan;
     use win_fluent::subscription::Subscription;
@@ -4548,6 +4993,30 @@ mod tests {
         let err = WindowsPlatformAdapter::plan_hotkeys(&[hotkey]).unwrap_err();
 
         assert_eq!(err, WindowsPlatformError::InvalidFunctionKey(25));
+    }
+
+    #[test]
+    fn hotkey_planning_deduplicates_repeated_modifiers_as_bitflags() {
+        let hotkey = Hotkey::new("dedupe", HotkeyKey::Character('d'))
+            .modifier(HotkeyModifier::Control)
+            .modifier(HotkeyModifier::Control)
+            .modifier(HotkeyModifier::Alt);
+
+        let plan = WindowsPlatformAdapter::plan_hotkeys(&[hotkey]).expect("valid hotkey");
+
+        assert_eq!(plan[0].modifiers, native::mod_control() | native::mod_alt());
+    }
+
+    #[test]
+    fn rejects_unsupported_named_hotkey() {
+        let hotkey = Hotkey::new("bad", HotkeyKey::Named("browser-refresh".to_string()));
+
+        let err = WindowsPlatformAdapter::plan_hotkeys(&[hotkey]).unwrap_err();
+
+        assert_eq!(
+            err,
+            WindowsPlatformError::UnsupportedHotkeyKey("browser-refresh".to_string())
+        );
     }
 
     #[test]
@@ -4655,6 +5124,139 @@ mod tests {
         assert_eq!(placement.y, 720);
         assert_eq!(placement.width, 420);
         assert_eq!(placement.height, 360);
+    }
+
+    #[test]
+    fn resolves_context_menu_to_upper_right_of_anchor_by_default() {
+        let options = WindowOptions::new("tray-menu", "Tray Menu")
+            .size(200.0, 120.0)
+            .placement(WindowPlacement::ContextMenu { x: 320.0, y: 500.0 });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 320, y: 500 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+
+        assert_eq!(placement.x, 320);
+        assert_eq!(placement.y, 380);
+        assert_eq!(placement.width, 200);
+        assert_eq!(placement.height, 120);
+    }
+
+    #[test]
+    fn resolves_context_menu_to_upper_left_near_right_edge() {
+        let options = WindowOptions::new("tray-menu", "Tray Menu")
+            .size(200.0, 120.0)
+            .placement(WindowPlacement::ContextMenu {
+                x: 1880.0,
+                y: 500.0,
+            });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 1880, y: 500 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+
+        assert_eq!(placement.x, 1680);
+        assert_eq!(placement.y, 380);
+        assert_eq!(placement.width, 200);
+        assert_eq!(placement.height, 120);
+    }
+
+    #[test]
+    fn resolves_context_menu_inset_to_visible_upper_right_of_anchor() {
+        let options = WindowOptions::new("tray-menu", "Tray Menu")
+            .size(200.0, 120.0)
+            .placement(WindowPlacement::ContextMenuInset {
+                x: 320.0,
+                y: 500.0,
+                inset_x: 12.0,
+                inset_y: 12.0,
+            });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 320, y: 500 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+
+        assert_eq!(placement.x, 308);
+        assert_eq!(placement.y, 392);
+        assert_eq!(placement.x + 12, 320);
+        assert_eq!(placement.y + placement.height - 12, 500);
+    }
+
+    #[test]
+    fn resolves_context_menu_inset_to_visible_upper_left_near_right_edge() {
+        let options = WindowOptions::new("tray-menu", "Tray Menu")
+            .size(200.0, 120.0)
+            .placement(WindowPlacement::ContextMenuInset {
+                x: 1880.0,
+                y: 500.0,
+                inset_x: 12.0,
+                inset_y: 12.0,
+            });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 1880, y: 500 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+
+        assert_eq!(placement.x, 1692);
+        assert_eq!(placement.y, 392);
+        assert_eq!(placement.x + placement.width - 12, 1880);
+        assert_eq!(placement.y + placement.height - 12, 500);
+    }
+
+    #[test]
+    fn resolves_context_menu_inset_below_anchor_when_top_space_is_insufficient() {
+        let options = WindowOptions::new("tray-menu", "Tray Menu")
+            .size(200.0, 120.0)
+            .placement(WindowPlacement::ContextMenuInset {
+                x: 320.0,
+                y: 20.0,
+                inset_x: 12.0,
+                inset_y: 12.0,
+            });
+
+        let placement = WindowsPlatformAdapter::resolve_window_placement_for(
+            &options,
+            WindowsPoint { x: 320, y: 20 },
+            WindowsRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+        );
+
+        assert_eq!(placement.x, 308);
+        assert_eq!(placement.y, 8);
+        assert_eq!(placement.x + 12, 320);
+        assert_eq!(placement.y + 12, 20);
     }
 
     #[test]
@@ -4966,9 +5568,18 @@ mod tests {
 
     #[test]
     fn maps_tray_and_clipboard_tokens_to_native_plan() {
+        let style = TrayMenuPresenterStyle::winui()
+            .presenter_corner_radius(9)
+            .item_corner_radius(7)
+            .item_font_size(13)
+            .item_min_height(35)
+            .separator_line_thickness(2)
+            .presenter_max_height(Some(444))
+            .popup_animation(TrayMenuPopupAnimation::None);
         let tray = TrayMenu::new("win fluent")
             .icon_path("C:\\Easydict\\AppIcon.ico")
             .presenter_min_width(300)
+            .presenter_style(style)
             .item(TrayMenuItem::new("open", "Open").tooltip("Open"));
         let tray_plan = WindowsPlatformAdapter::plan_tray::<Msg>(&tray).expect("tray plan");
 
@@ -4977,6 +5588,7 @@ mod tests {
             Some("C:\\Easydict\\AppIcon.ico")
         );
         assert_eq!(tray_plan.presenter_min_width, Some(300));
+        assert_eq!(tray_plan.presenter_style, style);
         assert_eq!(tray_plan.callback_message, native::wm_user() + 1);
         assert_eq!(tray_plan.item_count, 1);
         assert_eq!(tray_plan.default_command_id, None);
@@ -5091,6 +5703,49 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn tray_presenter_radius_maps_to_dwm_corner_preference() {
+        use windows_sys::Win32::Graphics::Dwm::{
+            DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL,
+        };
+
+        assert_eq!(
+            native::tray_corner_preference_for_radius(0),
+            DWMWCP_DONOTROUND
+        );
+        assert_eq!(
+            native::tray_corner_preference_for_radius(4),
+            DWMWCP_ROUNDSMALL
+        );
+        assert_eq!(native::tray_corner_preference_for_radius(8), DWMWCP_ROUND);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tray_popup_animation_maps_to_native_track_popup_flags() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            TPM_NOANIMATION, TPM_VERNEGANIMATION, TPM_VERPOSANIMATION,
+        };
+
+        assert_eq!(
+            native::tray_menu_popup_animation_flags(TrayMenuPopupAnimation::System, false),
+            0
+        );
+        assert_eq!(
+            native::tray_menu_popup_animation_flags(TrayMenuPopupAnimation::None, false),
+            TPM_NOANIMATION
+        );
+        assert_eq!(
+            native::tray_menu_popup_animation_flags(TrayMenuPopupAnimation::Vertical, false),
+            TPM_VERPOSANIMATION
+        );
+        assert_eq!(
+            native::tray_menu_popup_animation_flags(TrayMenuPopupAnimation::Vertical, true),
+            TPM_VERNEGANIMATION
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn tray_callback_queue_records_canonical_version4_events_once() {
         use windows_sys::Win32::Foundation::HWND;
         use windows_sys::Win32::UI::Shell::NIN_SELECT;
@@ -5115,10 +5770,22 @@ mod tests {
         // A single left click also emits the legacy WM_LBUTTONUP; it must be
         // dropped so the action does not fire twice. Same for right click's
         // WM_RBUTTONUP vs WM_CONTEXTMENU.
-        assert!(native::record_tray_callback(hwnd, callback, pack(WM_LBUTTONUP)));
-        assert!(native::record_tray_callback(hwnd, callback, pack(WM_RBUTTONUP)));
+        assert!(native::record_tray_callback(
+            hwnd,
+            callback,
+            pack(WM_LBUTTONUP)
+        ));
+        assert!(native::record_tray_callback(
+            hwnd,
+            callback,
+            pack(WM_RBUTTONUP)
+        ));
         // The canonical v4 notifications are the ones queued.
-        assert!(native::record_tray_callback(hwnd, callback, pack(NIN_SELECT)));
+        assert!(native::record_tray_callback(
+            hwnd,
+            callback,
+            pack(NIN_SELECT)
+        ));
         assert!(native::record_tray_callback(
             hwnd,
             callback,
@@ -5132,7 +5799,11 @@ mod tests {
         // After unregistering, the window has no queue at all.
         native::unregister_tray_callback_queue(hwnd);
         assert_eq!(native::take_tray_callback_event(hwnd), None);
-        assert!(!native::record_tray_callback(hwnd, callback, pack(NIN_SELECT)));
+        assert!(!native::record_tray_callback(
+            hwnd,
+            callback,
+            pack(NIN_SELECT)
+        ));
     }
 
     #[cfg(windows)]

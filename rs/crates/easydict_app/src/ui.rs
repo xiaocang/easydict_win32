@@ -3259,13 +3259,13 @@ fn windows_ai_config_panel(state: &SettingsState) -> View<Message> {
                     "settings.services.local_ai.windows_update_link",
                     "Track download progress in Windows Update",
                 ))
-                    .id("WindowsLocalAIWindowsUpdateLink")
-                    .icon(icon::settings())
-                    .link()
-                    .text_style(TextStyle::Caption)
-                    .padding(Edges::ZERO)
-                    .on_press(Message::OpenWindowsAiUpdate)
-                    .into_view(),
+                .id("WindowsLocalAIWindowsUpdateLink")
+                .icon(icon::settings())
+                .link()
+                .text_style(TextStyle::Caption)
+                .padding(Edges::ZERO)
+                .on_press(Message::OpenWindowsAiUpdate)
+                .into_view(),
             ])
             .id("WindowsLocalAIPrepareProgressPanel")
             .spacing(4)
@@ -3486,9 +3486,7 @@ fn local_ai_status_severity(status: &str) -> ValidationSeverity {
 
 fn local_ai_status_title(severity: ValidationSeverity) -> String {
     match severity {
-        ValidationSeverity::Success => {
-            tr("settings.services.local_ai.status.ready", "Ready")
-        }
+        ValidationSeverity::Success => tr("settings.services.local_ai.status.ready", "Ready"),
         _ => tr(
             "settings.services.local_ai.status.unavailable",
             "Unavailable",

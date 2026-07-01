@@ -76,6 +76,10 @@ fn schema_node<Message>(view: &View<Message>) -> SchemaNode {
     let mut node = schema_node_inner(view);
     if let Some(tooltip) = view.tooltip_text() {
         node = node.property("tooltip", quoted(tooltip));
+        node = node.property(
+            "tooltip_placement",
+            format!("{:?}", view.tooltip_placement()),
+        );
     }
     node
 }
@@ -140,11 +144,9 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .runs
                 .iter()
                 .map(|run| match run.kind {
-                    crate::view::TextRunKind::Link => format!(
-                        "link({}->{})",
-                        run.text,
-                        run.href.as_deref().unwrap_or("")
-                    ),
+                    crate::view::TextRunKind::Link => {
+                        format!("link({}->{})", run.text, run.href.as_deref().unwrap_or(""))
+                    }
                     crate::view::TextRunKind::Bold => format!("bold({})", run.text),
                     crate::view::TextRunKind::Italic => format!("italic({})", run.text),
                     crate::view::TextRunKind::Plain => run.text.clone(),
@@ -205,6 +207,14 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::StatusBadge(token) => SchemaNode::new("StatusBadge", token.id.clone())
             .property("label", quoted(&token.label))
+            .property("kind", token.kind.as_str())
+            .property(
+                "count",
+                token
+                    .count
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "none".to_string()),
+            )
             .property("severity", format!("{:?}", token.severity))
             .property("icon", optional_icon(token.icon.as_ref())),
         ViewToken::InfoBar(token) => SchemaNode::new("InfoBar", token.id.clone())
@@ -221,7 +231,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property(
                 "value",
                 token
-                    .value
+                    .normalized_value()
                     .map(|value| format!("{value:.2}"))
                     .unwrap_or_else(|| "indeterminate".to_string()),
             )
@@ -365,14 +375,27 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("min", format!("{:.2}", token.min))
             .property("max", format!("{:.2}", token.max))
             .property("step", format!("{:.2}", token.step))
+            .property("preview_active", token.preview_active().to_string())
             .property("width", format!("{:?}", token.width))
             .property("height", "Fixed(32)")
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::NumberBox(token) => SchemaNode::new("NumberBox", token.id.clone())
             .property("value", format!("{:.2}", token.value))
-            .property("min", token.min.map(|v| format!("{v:.2}")).unwrap_or_else(|| "none".to_string()))
-            .property("max", token.max.map(|v| format!("{v:.2}")).unwrap_or_else(|| "none".to_string()))
+            .property(
+                "min",
+                token
+                    .min
+                    .map(|v| format!("{v:.2}"))
+                    .unwrap_or_else(|| "none".to_string()),
+            )
+            .property(
+                "max",
+                token
+                    .max
+                    .map(|v| format!("{v:.2}"))
+                    .unwrap_or_else(|| "none".to_string()),
+            )
             .property("step", format!("{:.2}", token.step))
             .property("header", optional_string(token.header.as_deref()))
             .property("placeholder", optional_string(token.placeholder.as_deref()))
@@ -384,6 +407,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("placeholder", optional_string(token.placeholder.as_deref()))
             .property("header", optional_string(token.header.as_deref()))
             .property("open", token.open.to_string())
+            .property("highlighted_index", optional_usize(token.highlighted_index))
             .property("suggestions", quoted(&token.suggestions.join(",")))
             .property("width", format!("{:?}", token.width))
             .property("state", token.state.to_string())
@@ -393,6 +417,10 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("label", optional_string(token.label.as_deref()))
             .property("placeholder", optional_string(token.placeholder.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
+            .property(
+                "selected_label",
+                optional_string(token.selected_item().map(|item| item.label.as_str())),
+            )
             .property("items", combo_items(&token.items))
             .property("width", format!("{:?}", token.width))
             .property(
@@ -416,7 +444,10 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("selected", optional_string(token.selected.as_deref()))
             .property("items", navigation_items(&token.items))
             .property("footer_items", navigation_items(&token.footer_items))
-            .property("pane_display_mode", format!("{:?}", token.pane_display_mode))
+            .property(
+                "pane_display_mode",
+                format!("{:?}", token.pane_display_mode),
+            )
             .property("header", optional_string(token.header.as_deref()))
             .property("settings_visible", token.settings_visible.to_string())
             .property("back_button", token.back_button_visible.to_string())
@@ -500,6 +531,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 let mut tab_node = SchemaNode::new("Tab", Some(tab.id.clone()))
                     .property("header", quoted(&tab.header))
                     .property("closable", tab.closable.to_string())
+                    .property("close_a11y_name", tab_close_a11y_name(tab))
                     .property(
                         "selected",
                         (token.selected.as_deref() == Some(tab.id.as_str())).to_string(),
@@ -531,6 +563,8 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::Flyout(token) => SchemaNode::new("Flyout", token.id.clone())
             .property("open", token.open.to_string())
             .property("placement", format!("{:?}", token.placement))
+            .property("light_dismiss", format!("{:?}", token.light_dismiss))
+            .property("focus_behavior", format!("{:?}", token.focus_behavior))
             .child(schema_node(&token.anchor))
             .child(schema_node(&token.content)),
         ViewToken::Overlay(token) => {
@@ -539,8 +573,11 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .iter()
                 .map(|layer| {
                     format!(
-                        "{:?}/{:?}/scrim={:?}/block={}",
-                        layer.align_x, layer.align_y, layer.scrim, layer.blocks_input
+                        "{:?}/{:?}/scrim={}/block={}",
+                        layer.align_x,
+                        layer.align_y,
+                        optional_f32(layer.scrim),
+                        layer.blocks_input
                     )
                 })
                 .collect::<Vec<_>>()
@@ -549,12 +586,16 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .chain(token.layers.iter().map(|layer| layer.content.as_ref()));
             SchemaNode::new("Overlay", token.id.clone())
                 .property("layers", token.layers.len().to_string())
+                .property("blocking_layers", token.blocking_layer_count().to_string())
+                .property("scrim_layers", token.scrim_layer_count().to_string())
                 .property("layout", quoted(&layers))
                 .children(children.map(schema_node))
         }
         ViewToken::AdaptiveSwitch(token) => {
             let node = SchemaNode::new("AdaptiveSwitch", token.id.clone())
-                .property("breakpoint_width", token.breakpoint_width.to_string());
+                .property("breakpoint_width", token.breakpoint_width.to_string())
+                .property("resolved_width", optional_f32(token.resolved_width))
+                .property("resolved_branch", token.resolved_branch_name());
             match token.resolved_branch() {
                 Some(branch) => node.child(schema_node(branch)),
                 None => node
@@ -577,6 +618,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .property("description", optional_string(token.description.as_deref()))
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("expanded", token.expanded.to_string())
+                .property("motion", "expand-collapse-reveal")
                 .property("state", format!("{}", token.header_state))
                 .property("header_style", token.header_style.summary())
                 .property("content_style", token.content_style.summary())
@@ -599,6 +641,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .property("description", optional_string(token.description.as_deref()))
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("kind", format!("{:?}", token.kind))
+                .property("has_content", token.content.is_some().to_string())
                 .property("trailing", token.trailing.len().to_string());
             if !token.margin.is_zero() {
                 node = node.property("margin", format!("{:?}", token.margin));
@@ -625,6 +668,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
         ViewToken::ResultList(token) => result_list_schema(token),
         ViewToken::ListView(token) => {
             let mut node = SchemaNode::new("ListView", token.id.clone())
+                .property("list_contract", token.list_contract_kind().as_str())
                 .property("items", token.items.len().to_string())
                 .property("selected", optional_string(token.selected.as_deref()))
                 .property("spacing", token.spacing.to_string())
@@ -639,6 +683,76 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                     )
                     .child(schema_node(&item.view));
                 node = node.child(row);
+            }
+            node
+        }
+        ViewToken::TrayMenu(token) => {
+            let mut node = SchemaNode::new("TrayMenu", token.id.clone())
+                .property("items", token.items.len().to_string())
+                .property("min_width", token.min_width.to_string())
+                .property("max_height", optional_u16(token.style.presenter_max_height))
+                .property(
+                    "corner_radius",
+                    token.style.presenter_corner_radius.to_string(),
+                )
+                .property(
+                    "shadow_margin",
+                    token.style.presenter_shadow_margin.to_string(),
+                )
+                .property("animation_offset_y", token.animation_offset_y.to_string())
+                .property("item_min_height", token.style.item_min_height.to_string())
+                .property("item_font_size", token.style.item_font_size.to_string())
+                .property(
+                    "item_corner_radius",
+                    token.style.item_corner_radius.to_string(),
+                )
+                .property(
+                    "item_vertical_padding",
+                    token.style.item_vertical_padding.to_string(),
+                )
+                .property(
+                    "item_horizontal_padding",
+                    token.style.item_horizontal_padding.to_string(),
+                )
+                .property(
+                    "submenu_arrow_column_width",
+                    token.style.submenu_arrow_column_width.to_string(),
+                )
+                .property("hover_inset_x", token.style.hover_inset_x.to_string())
+                .property("hover_inset_y", token.style.hover_inset_y.to_string())
+                .property("separator_height", token.style.separator_height.to_string())
+                .property(
+                    "separator_line_thickness",
+                    token.style.separator_line_thickness.to_string(),
+                )
+                .property(
+                    "separator_horizontal_inset",
+                    token.style.separator_horizontal_inset.to_string(),
+                )
+                .property("light_surface", tray_menu_color(token.style.light_surface))
+                .property(
+                    "light_foreground",
+                    tray_menu_color(token.style.light_foreground),
+                )
+                .property(
+                    "light_separator",
+                    tray_menu_color(token.style.light_separator),
+                )
+                .property("dark_surface", tray_menu_color(token.style.dark_surface))
+                .property(
+                    "dark_foreground",
+                    tray_menu_color(token.style.dark_foreground),
+                )
+                .property(
+                    "dark_separator",
+                    tray_menu_color(token.style.dark_separator),
+                )
+                .property(
+                    "hover_foreground_mix_percent",
+                    token.style.hover_foreground_mix_percent.to_string(),
+                );
+            for item in &token.items {
+                node = node.child(tray_menu_item_schema(item));
             }
             node
         }
@@ -671,8 +785,11 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("handles_visible", token.handles_visible.to_string())
             .property("magnifier_visible", token.magnifier_visible.to_string())
             .property("has_background", token.background.is_some().to_string())
+            .property("background_pixels", optional_capture_background(token))
             .property("cursor", optional_capture_point(token.cursor)),
         ViewToken::Image(token) => SchemaNode::new("Image", token.id.clone())
+            .property("source_kind", format!("{:?}", token.source_kind()))
+            .property("fallback", token.fallback_behavior())
             .property("bgra_path", quoted(&token.bgra_path))
             .property("pixel_width", token.pixel_width.to_string())
             .property("pixel_height", token.pixel_height.to_string())
@@ -692,7 +809,9 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .property("height", format!("{:?}", token.height))
         }
         ViewToken::Custom(token) => SchemaNode::new("Custom", token.id.clone())
+            .property("kind", token.kind.as_str())
             .property("control", quoted(&token.control))
+            .property("target_type", optional_string(token.target_type.as_deref()))
             .property("children", token.children.len().to_string())
             .children(token.children.iter().map(schema_node)),
     }
@@ -732,6 +851,7 @@ fn result_card_schema<Message>(token: &ResultCardToken<Message>) -> SchemaNode {
 
 fn result_list_schema<Message>(token: &ResultListToken<Message>) -> SchemaNode {
     SchemaNode::new("ResultList", token.id.clone())
+        .property("list_contract", token.list_contract_kind().as_str())
         .property("items", token.items.len().to_string())
         .property("virtualized", token.virtualized.to_string())
         .property("max_height", optional_u16(token.max_height))
@@ -896,6 +1016,30 @@ fn optional_u16(value: Option<u16>) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn optional_usize(value: Option<usize>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn optional_f32(value: Option<f32>) -> String {
+    value
+        .map(|value| format!("{value:.2}"))
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn tab_close_a11y_name<Message>(tab: &crate::view::TabItem<Message>) -> String {
+    if !tab.closable {
+        return "none".to_string();
+    }
+
+    let name = tab
+        .close_a11y_name
+        .clone()
+        .unwrap_or_else(|| format!("Close {}", tab.header));
+    quoted(&name)
+}
+
 fn optional_length(value: Option<crate::view::Length>) -> String {
     value
         .map(|value| format!("{value:?}"))
@@ -912,6 +1056,33 @@ fn tree_node_schema(node: &crate::view::TreeNode, selected: Option<&str>) -> Sch
         schema = schema.child(tree_node_schema(child, selected));
     }
     schema
+}
+
+fn tray_menu_color(color: crate::platform::TrayMenuColor) -> String {
+    match color {
+        crate::platform::TrayMenuColor::SystemMenu => "SystemMenu".to_string(),
+        crate::platform::TrayMenuColor::Rgb(red, green, blue) => {
+            format!("#{red:02X}{green:02X}{blue:02X}")
+        }
+    }
+}
+
+fn tray_menu_item_schema<Message>(item: &crate::platform::TrayMenuItem<Message>) -> SchemaNode {
+    if item.is_separator() {
+        return SchemaNode::new("TrayMenuSeparator", None);
+    }
+
+    let mut row = SchemaNode::new("TrayMenuItem", Some(item.id.clone()))
+        .property("label", quoted(&item.label))
+        .property("tooltip", optional_string(item.tooltip.as_deref()))
+        .property("enabled", item.enabled.to_string())
+        .property("submenu", item.is_submenu().to_string())
+        .property("children", item.children.len().to_string())
+        .property("action", format!("{:?}", item.action.kind()));
+    for child in &item.children {
+        row = row.child(tray_menu_item_schema(child));
+    }
+    row
 }
 
 fn lengths(values: &[crate::view::Length]) -> String {
@@ -1035,6 +1206,13 @@ fn optional_capture_rect(value: Option<crate::view::CaptureOverlayRect>) -> Stri
 fn optional_capture_point(value: Option<crate::view::CaptureOverlayPoint>) -> String {
     value
         .map(|point| format!("({},{})", point.x, point.y))
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn optional_capture_background(token: &crate::view::CaptureOverlayToken) -> String {
+    token
+        .background_pixel_size()
+        .map(|(width, height)| format!("{width}x{height}"))
         .unwrap_or_else(|| "none".to_string())
 }
 
@@ -1224,9 +1402,12 @@ mod tests {
     fn generic_flyout_emits_anchor_and_content() {
         use crate::view::{flyout, FlyoutPlacement};
         let view = page::<Msg>("Demo")
-            .content(column((flyout(button("Open").on_press(Msg::Run), text("Panel"))
-                .open(true)
-                .placement(FlyoutPlacement::Right),)))
+            .content(column((flyout(
+                button("Open").on_press(Msg::Run),
+                text("Panel"),
+            )
+            .open(true)
+            .placement(FlyoutPlacement::Right),)))
             .into_view();
 
         let snapshot = view_schema(&view).snapshot();

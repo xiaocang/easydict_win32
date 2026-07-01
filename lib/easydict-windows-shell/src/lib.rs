@@ -78,6 +78,10 @@ pub fn open_url(url: &str) -> Result<(), WindowsShellError> {
     platform::open_url(url)
 }
 
+pub fn user_default_ui_language() -> Option<String> {
+    platform::user_default_ui_language()
+}
+
 pub fn run_bundled_executable(
     executable_name: &str,
     arguments: &[String],
@@ -264,6 +268,7 @@ fn hide_process_window(command: &mut Command) {
 mod platform {
     use super::WindowsShellError;
     use windows::core::PCWSTR;
+    use windows::Win32::Globalization::{GetUserDefaultUILanguage, LCIDToLocaleName};
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -295,6 +300,23 @@ mod platform {
         Ok(())
     }
 
+    pub fn user_default_ui_language() -> Option<String> {
+        const LOCALE_NAME_MAX_LENGTH: usize = 85;
+
+        let language_id = unsafe { GetUserDefaultUILanguage() };
+        if language_id == 0 {
+            return None;
+        }
+
+        let mut buffer = [0u16; LOCALE_NAME_MAX_LENGTH];
+        let len = unsafe { LCIDToLocaleName(language_id as u32, Some(&mut buffer), 0) };
+        if len <= 1 {
+            return None;
+        }
+
+        Some(String::from_utf16_lossy(&buffer[..len as usize - 1]))
+    }
+
     fn wide_null(value: &str) -> Vec<u16> {
         value.encode_utf16().chain(std::iter::once(0)).collect()
     }
@@ -307,6 +329,10 @@ mod platform {
     pub fn open_url(url: &str) -> Result<(), WindowsShellError> {
         let _ = url;
         Ok(())
+    }
+
+    pub fn user_default_ui_language() -> Option<String> {
+        None
     }
 }
 

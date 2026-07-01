@@ -172,15 +172,15 @@ mod platform {
     use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, POINT, RECT};
     use windows::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
-        GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-        HBITMAP, HDC, HGDIOBJ, SRCCOPY,
+        GetDIBits, GetMonitorInfoW, MonitorFromPoint, ReleaseDC, SelectObject, BITMAPINFO,
+        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST, SRCCOPY,
     };
     use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetMonitorInfoW, GetParent,
+        EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetParent,
         GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
-        MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST, SM_CXVIRTUALSCREEN,
-        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
 
     pub fn primary_scale_factor() -> f32 {
@@ -195,12 +195,12 @@ mod platform {
 
     pub fn cursor_monitor() -> Result<ScreenMonitor, WindowsScreenCaptureError> {
         let mut point = POINT::default();
-        if unsafe { GetCursorPos(&mut point) } == 0 {
+        if unsafe { GetCursorPos(&mut point) }.is_err() {
             return Err(last_error("GetCursorPos"));
         }
 
         let monitor = unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) };
-        if monitor.is_null() {
+        if monitor.0.is_null() {
             return Err(last_error("MonitorFromPoint"));
         }
 
@@ -208,7 +208,7 @@ mod platform {
             cbSize: std::mem::size_of::<MONITORINFO>() as u32,
             ..MONITORINFO::default()
         };
-        if unsafe { GetMonitorInfoW(monitor, &mut info) } == 0 {
+        if !unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
             return Err(last_error("GetMonitorInfoW"));
         }
 
@@ -223,8 +223,16 @@ mod platform {
 
         let mut dpi_x = 96u32;
         let mut dpi_y = 96u32;
-        let hr = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
-        let dpi = if hr >= 0 && dpi_x > 0 { dpi_x } else { 96 };
+        let dpi = if unsafe {
+            GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
+        }
+        .is_ok()
+            && dpi_x > 0
+        {
+            dpi_x
+        } else {
+            96
+        };
 
         Ok(ScreenMonitor {
             screen_rect: ScreenRect::new(

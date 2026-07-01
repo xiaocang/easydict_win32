@@ -12,6 +12,75 @@ pub struct ControlState {
     pub validation: ValidationState,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommonVisualState {
+    Normal,
+    PointerOver,
+    Pressed,
+    Disabled,
+}
+
+impl CommonVisualState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::PointerOver => "PointerOver",
+            Self::Pressed => "Pressed",
+            Self::Disabled => "Disabled",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FocusVisualState {
+    Focused,
+    Unfocused,
+}
+
+impl FocusVisualState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Focused => "Focused",
+            Self::Unfocused => "Unfocused",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelectionVisualState {
+    Selected,
+    Unselected,
+}
+
+impl SelectionVisualState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Selected => "Selected",
+            Self::Unselected => "Unselected",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VisualStateSnapshot {
+    pub common: CommonVisualState,
+    pub focus: FocusVisualState,
+    pub selection: SelectionVisualState,
+    pub validation: Option<ValidationSeverity>,
+}
+
+impl VisualStateSnapshot {
+    pub fn automation_key(self) -> String {
+        format!(
+            "CommonStates:{},FocusStates:{},SelectionStates:{},Validation:{:?}",
+            self.common.as_str(),
+            self.focus.as_str(),
+            self.selection.as_str(),
+            self.validation
+        )
+    }
+}
+
 impl ControlState {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
@@ -49,6 +118,33 @@ impl ControlState {
 
     pub fn is_focusable(&self) -> bool {
         self.enabled
+    }
+
+    pub fn visual_state_snapshot(&self) -> VisualStateSnapshot {
+        let common = if !self.enabled {
+            CommonVisualState::Disabled
+        } else if self.pressed {
+            CommonVisualState::Pressed
+        } else if self.hovered {
+            CommonVisualState::PointerOver
+        } else {
+            CommonVisualState::Normal
+        };
+
+        VisualStateSnapshot {
+            common,
+            focus: if self.focused {
+                FocusVisualState::Focused
+            } else {
+                FocusVisualState::Unfocused
+            },
+            selection: if self.selected {
+                SelectionVisualState::Selected
+            } else {
+                SelectionVisualState::Unselected
+            },
+            validation: self.validation.severity,
+        }
     }
 }
 
@@ -136,4 +232,42 @@ pub enum ValidationSeverity {
     Warning,
     Error,
     Success,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visual_state_snapshot_matches_winui_vsm_groups() {
+        let state = ControlState::default()
+            .hovered(true)
+            .pressed(true)
+            .focused(true)
+            .selected(true)
+            .validation(ValidationState::warning("check"));
+
+        let snapshot = state.visual_state_snapshot();
+
+        assert_eq!(snapshot.common, CommonVisualState::Pressed);
+        assert_eq!(snapshot.focus, FocusVisualState::Focused);
+        assert_eq!(snapshot.selection, SelectionVisualState::Selected);
+        assert_eq!(snapshot.validation, Some(ValidationSeverity::Warning));
+        assert_eq!(
+            snapshot.automation_key(),
+            "CommonStates:Pressed,FocusStates:Focused,SelectionStates:Selected,Validation:Some(Warning)"
+        );
+    }
+
+    #[test]
+    fn disabled_state_wins_over_pointer_and_press_states() {
+        let snapshot = ControlState::default()
+            .hovered(true)
+            .pressed(true)
+            .disabled()
+            .visual_state_snapshot();
+
+        assert_eq!(snapshot.common, CommonVisualState::Disabled);
+        assert_eq!(snapshot.focus, FocusVisualState::Unfocused);
+    }
 }

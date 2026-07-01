@@ -152,6 +152,7 @@ pub use formula_text_reconstruction::{
     previous_line_likely_expects_formula_tail, reconstruct_formula_aware_text,
     should_use_letter_based_block_text, LetterGeometry,
 };
+pub use i18n::default_ui_language;
 pub use latex_formula::{
     is_script_signal as is_latex_script_signal, prepare_renderable_text_for_pdf,
     simplify as simplify_latex_formula, simplify_math_content, simplify_math_content_with_options,
@@ -1781,6 +1782,8 @@ pub const TRAY_BROWSER_UNINSTALL_FIREFOX: &str = "browser-uninstall-firefox";
 pub const TRAY_BROWSER_GET_FIREFOX_EXTENSION: &str = "browser-get-firefox-extension";
 pub const TRAY_OPEN_SETTINGS: &str = "open-settings";
 pub const TRAY_EXIT: &str = "exit";
+const UIA_TRAY_EXTRA_ITEMS_ENV: &str = "EASYDICT_UIA_TRAY_EXTRA_ITEMS";
+const UIA_TRAY_MAX_HEIGHT_ENV: &str = "EASYDICT_UIA_TRAY_MAX_HEIGHT_DIPS";
 pub const BROWSER_REGISTRAR_EXE: &str = "easydict_browser_registrar.exe";
 pub const CHROME_EXTENSION_URL: &str =
     "https://chromewebstore.google.com/detail/dmokdfinnomehfpmhoeekomncpobgagf";
@@ -1885,7 +1888,9 @@ pub fn tray_menu_for_browser_support_locale(
     let any_not_installed = !browser.chrome_installed || !browser.firefox_installed;
     let any_installed = browser.chrome_installed || browser.firefox_installed;
     let tray = TrayMenu::new("Easydict - Dictionary & Translation")
-        .presenter_min_width(300)
+        .presenter_kind(TrayMenuPresenterKind::Fluent)
+        .presenter_min_width(148)
+        .presenter_style(tray_presenter_style())
         .default_item(TRAY_SHOW_MAIN);
     let tray = if let Some(icon_path) = default_tray_icon_path() {
         tray.icon_path(icon_path)
@@ -1893,183 +1898,211 @@ pub fn tray_menu_for_browser_support_locale(
         tray
     };
 
-    tray.item(
-        tray_command_item(
-            TRAY_SHOW_MAIN,
-            crate::i18n::tr_locale(locale, "tray.show", "Show Easydict"),
-        )
-        .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
-    )
-    .item(
-        tray_command_item(
-            TRAY_TRANSLATE_CLIPBOARD,
-            crate::i18n::tr_locale(locale, "tray.translate_clipboard", "Translate Clipboard"),
-        )
-        .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
-    )
-    .item(
-        tray_command_item(
-            TRAY_OCR_TRANSLATE,
-            format!(
-                "{} (Ctrl+Alt+S)",
-                crate::i18n::tr_locale(locale, "tray.ocr_translate", "OCR Translate")
-            ),
-        )
-        .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
-    )
-    .item(
-        tray_command_item(
-            TRAY_SHOW_MINI,
-            format!(
-                "{} (Ctrl+Alt+M)",
-                crate::i18n::tr_locale(locale, "tray.show_mini", "Mini Window")
-            ),
-        )
-        .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
-    )
-    .item(
-        tray_command_item(
-            TRAY_SHOW_FIXED,
-            format!(
-                "{} (Ctrl+Alt+F)",
-                crate::i18n::tr_locale(locale, "tray.show_fixed", "Fixed Window")
-            ),
-        )
-        .on_invoke(Message::TrayCommand(TRAY_SHOW_FIXED.to_string())),
-    )
-    .separator()
-    .item(
-        tray_submenu_item(
-            "browser-support",
-            crate::i18n::tr_locale(locale, "tray.browser_support", "Browser Support"),
-        )
-        .item(
-            tray_submenu_item(
-                "browser-chrome",
-                crate::i18n::tr_locale(locale, "tray.browser.chrome", "Chrome"),
-            )
-            .item(
-                tray_command_item(
-                    TRAY_BROWSER_INSTALL_CHROME,
-                    crate::i18n::tr_locale(
-                        locale,
-                        "tray.browser.install_chrome",
-                        "① Install Chrome Support",
-                    ),
-                )
-                .enabled(!browser.chrome_installed)
-                .on_invoke(Message::TrayCommand(
-                    TRAY_BROWSER_INSTALL_CHROME.to_string(),
-                )),
-            )
-            .item(
-                tray_command_item(
-                    TRAY_BROWSER_UNINSTALL_CHROME,
-                    crate::i18n::tr_locale(
-                        locale,
-                        "tray.browser.uninstall_chrome",
-                        "Uninstall Chrome Support",
-                    ),
-                )
-                .enabled(browser.chrome_installed)
-                .on_invoke(Message::TrayCommand(
-                    TRAY_BROWSER_UNINSTALL_CHROME.to_string(),
-                )),
-            )
-            .item(
-                tray_command_item(
-                    TRAY_BROWSER_GET_CHROME_EXTENSION,
-                    crate::i18n::tr_locale(
-                        locale,
-                        "tray.browser.get_chrome_extension",
-                        "② Get Extension",
-                    ),
-                )
-                .on_invoke(Message::TrayCommand(
-                    TRAY_BROWSER_GET_CHROME_EXTENSION.to_string(),
-                )),
-            ),
-        )
-        .item(
-            tray_submenu_item(
-                "browser-firefox",
-                crate::i18n::tr_locale(locale, "tray.browser.firefox", "Firefox"),
-            )
-            .item(
-                tray_command_item(
-                    TRAY_BROWSER_INSTALL_FIREFOX,
-                    crate::i18n::tr_locale(
-                        locale,
-                        "tray.browser.install_firefox",
-                        "① Install Firefox Support",
-                    ),
-                )
-                .enabled(!browser.firefox_installed)
-                .on_invoke(Message::TrayCommand(
-                    TRAY_BROWSER_INSTALL_FIREFOX.to_string(),
-                )),
-            )
-            .item(
-                tray_command_item(
-                    TRAY_BROWSER_UNINSTALL_FIREFOX,
-                    crate::i18n::tr_locale(
-                        locale,
-                        "tray.browser.uninstall_firefox",
-                        "Uninstall Firefox Support",
-                    ),
-                )
-                .enabled(browser.firefox_installed)
-                .on_invoke(Message::TrayCommand(
-                    TRAY_BROWSER_UNINSTALL_FIREFOX.to_string(),
-                )),
-            )
-            .item(
-                tray_command_item(
-                    TRAY_BROWSER_GET_FIREFOX_EXTENSION,
-                    crate::i18n::tr_locale(
-                        locale,
-                        "tray.browser.get_firefox_extension",
-                        "② Get Extension",
-                    ),
-                )
-                .on_invoke(Message::TrayCommand(
-                    TRAY_BROWSER_GET_FIREFOX_EXTENSION.to_string(),
-                )),
-            ),
-        )
-        .item(TrayMenuItem::separator())
+    let tray = tray
         .item(
             tray_command_item(
-                TRAY_BROWSER_INSTALL,
-                crate::i18n::tr_locale(locale, "tray.browser.install_all", "Install All"),
+                TRAY_SHOW_MAIN,
+                crate::i18n::tr_locale(locale, "tray.show", "Show Easydict"),
             )
-            .enabled(any_not_installed)
-            .on_invoke(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string())),
+            .on_invoke(Message::TrayCommand(TRAY_SHOW_MAIN.to_string())),
         )
         .item(
             tray_command_item(
-                TRAY_BROWSER_UNINSTALL,
-                crate::i18n::tr_locale(locale, "tray.browser.uninstall_all", "Uninstall All"),
+                TRAY_TRANSLATE_CLIPBOARD,
+                crate::i18n::tr_locale(locale, "tray.translate_clipboard", "Translate Clipboard"),
             )
-            .enabled(any_installed)
-            .on_invoke(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string())),
-        ),
-    )
-    .item(
-        tray_command_item(
-            TRAY_OPEN_SETTINGS,
-            crate::i18n::tr_locale(locale, "tray.settings", "Settings"),
+            .on_invoke(Message::TrayCommand(TRAY_TRANSLATE_CLIPBOARD.to_string())),
         )
-        .on_invoke(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string())),
-    )
-    .separator()
-    .item(
-        tray_command_item(
-            TRAY_EXIT,
-            crate::i18n::tr_locale(locale, "tray.exit", "Exit"),
+        .item(
+            tray_command_item(
+                TRAY_OCR_TRANSLATE,
+                format!(
+                    "{} (Ctrl+Alt+S)",
+                    crate::i18n::tr_locale(locale, "tray.ocr_translate", "OCR Translate")
+                ),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_OCR_TRANSLATE.to_string())),
         )
-        .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
-    )
+        .item(
+            tray_command_item(
+                TRAY_SHOW_MINI,
+                format!(
+                    "{} (Ctrl+Alt+M)",
+                    crate::i18n::tr_locale(locale, "tray.show_mini", "Mini Window")
+                ),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_SHOW_MINI.to_string())),
+        )
+        .item(
+            tray_command_item(
+                TRAY_SHOW_FIXED,
+                format!(
+                    "{} (Ctrl+Alt+F)",
+                    crate::i18n::tr_locale(locale, "tray.show_fixed", "Fixed Window")
+                ),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_SHOW_FIXED.to_string())),
+        );
+    append_uia_tray_extra_items(tray)
+        .separator()
+        .item(
+            tray_submenu_item(
+                "browser-support",
+                crate::i18n::tr_locale(locale, "tray.browser_support", "Browser Support"),
+            )
+            .item(
+                tray_submenu_item(
+                    "browser-chrome",
+                    crate::i18n::tr_locale(locale, "tray.browser.chrome", "Chrome"),
+                )
+                .item(
+                    tray_command_item(
+                        TRAY_BROWSER_INSTALL_CHROME,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.install_chrome",
+                            "① Install Chrome Support",
+                        ),
+                    )
+                    .enabled(!browser.chrome_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_INSTALL_CHROME.to_string(),
+                    )),
+                )
+                .item(
+                    tray_command_item(
+                        TRAY_BROWSER_UNINSTALL_CHROME,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.uninstall_chrome",
+                            "Uninstall Chrome Support",
+                        ),
+                    )
+                    .enabled(browser.chrome_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_UNINSTALL_CHROME.to_string(),
+                    )),
+                )
+                .item(
+                    tray_command_item(
+                        TRAY_BROWSER_GET_CHROME_EXTENSION,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.get_chrome_extension",
+                            "② Get Extension",
+                        ),
+                    )
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_GET_CHROME_EXTENSION.to_string(),
+                    )),
+                ),
+            )
+            .item(
+                tray_submenu_item(
+                    "browser-firefox",
+                    crate::i18n::tr_locale(locale, "tray.browser.firefox", "Firefox"),
+                )
+                .item(
+                    tray_command_item(
+                        TRAY_BROWSER_INSTALL_FIREFOX,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.install_firefox",
+                            "① Install Firefox Support",
+                        ),
+                    )
+                    .enabled(!browser.firefox_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_INSTALL_FIREFOX.to_string(),
+                    )),
+                )
+                .item(
+                    tray_command_item(
+                        TRAY_BROWSER_UNINSTALL_FIREFOX,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.uninstall_firefox",
+                            "Uninstall Firefox Support",
+                        ),
+                    )
+                    .enabled(browser.firefox_installed)
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_UNINSTALL_FIREFOX.to_string(),
+                    )),
+                )
+                .item(
+                    tray_command_item(
+                        TRAY_BROWSER_GET_FIREFOX_EXTENSION,
+                        crate::i18n::tr_locale(
+                            locale,
+                            "tray.browser.get_firefox_extension",
+                            "② Get Extension",
+                        ),
+                    )
+                    .on_invoke(Message::TrayCommand(
+                        TRAY_BROWSER_GET_FIREFOX_EXTENSION.to_string(),
+                    )),
+                ),
+            )
+            .item(TrayMenuItem::separator())
+            .item(
+                tray_command_item(
+                    TRAY_BROWSER_INSTALL,
+                    crate::i18n::tr_locale(locale, "tray.browser.install_all", "Install All"),
+                )
+                .enabled(any_not_installed)
+                .on_invoke(Message::TrayCommand(TRAY_BROWSER_INSTALL.to_string())),
+            )
+            .item(
+                tray_command_item(
+                    TRAY_BROWSER_UNINSTALL,
+                    crate::i18n::tr_locale(locale, "tray.browser.uninstall_all", "Uninstall All"),
+                )
+                .enabled(any_installed)
+                .on_invoke(Message::TrayCommand(TRAY_BROWSER_UNINSTALL.to_string())),
+            ),
+        )
+        .item(
+            tray_command_item(
+                TRAY_OPEN_SETTINGS,
+                crate::i18n::tr_locale(locale, "tray.settings", "Settings"),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_OPEN_SETTINGS.to_string())),
+        )
+        .separator()
+        .item(
+            tray_command_item(
+                TRAY_EXIT,
+                crate::i18n::tr_locale(locale, "tray.exit", "Exit"),
+            )
+            .on_invoke(Message::TrayCommand(TRAY_EXIT.to_string())),
+        )
+}
+
+fn tray_presenter_style() -> TrayMenuPresenterStyle {
+    let style = TrayMenuPresenterStyle::winui();
+    std::env::var(UIA_TRAY_MAX_HEIGHT_ENV)
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .map(|height| style.presenter_max_height(Some(height.clamp(180, 900))))
+        .unwrap_or(style)
+}
+
+fn append_uia_tray_extra_items(mut tray: TrayMenu<Message>) -> TrayMenu<Message> {
+    let count = std::env::var(UIA_TRAY_EXTRA_ITEMS_ENV)
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or_default()
+        .min(48);
+
+    for index in 1..=count {
+        tray = tray.item(TrayMenuItem::new(
+            format!("uia-scroll-item-{index:02}"),
+            format!("UIA Scroll Item {index:02}"),
+        ));
+    }
+
+    tray
 }
 
 fn tray_command_item(id: &str, label: impl Into<String>) -> TrayMenuItem<Message> {

@@ -168,6 +168,8 @@ mod tests {
     #[derive(Clone, Debug, Eq, PartialEq)]
     enum Msg {
         Window(WindowEvent),
+        Clipboard,
+        Named(String),
     }
 
     #[test]
@@ -192,6 +194,58 @@ mod tests {
                 WindowId::new("mini"),
             ))),
             None
+        );
+        assert_eq!(map(PlatformEvent::ClipboardChanged), None);
+    }
+
+    #[test]
+    fn batch_flattens_nested_subscriptions_and_discards_none() {
+        let subscription = Subscription::batch([
+            Subscription::none(),
+            Subscription::batch([Subscription::clipboard(|| Msg::Clipboard)]),
+            Subscription::named_event("Local\\Test", true, Msg::Named),
+        ]);
+
+        let Subscription::Batch(values) = subscription else {
+            panic!("expected batch");
+        };
+
+        assert_eq!(values.len(), 2);
+    }
+
+    #[test]
+    fn batch_returns_single_event_without_extra_wrapper() {
+        let subscription = Subscription::batch([
+            Subscription::none(),
+            Subscription::clipboard(|| Msg::Clipboard),
+        ]);
+
+        let Subscription::Event { kind, map } = subscription else {
+            panic!("expected single event");
+        };
+
+        assert_eq!(kind, SubscriptionKind::Clipboard);
+        assert_eq!(map(PlatformEvent::ClipboardChanged), Some(Msg::Clipboard));
+    }
+
+    #[test]
+    fn named_event_subscription_maps_only_matching_event_kind() {
+        let subscription = Subscription::named_event("Local\\Wake", true, Msg::Named);
+
+        let Subscription::Event { kind, map } = subscription else {
+            panic!("expected named event subscription");
+        };
+
+        assert_eq!(
+            kind,
+            SubscriptionKind::NamedEvent {
+                name: "Local\\Wake".to_string(),
+                auto_reset: true
+            }
+        );
+        assert_eq!(
+            map(PlatformEvent::NamedEventSignaled("Local\\Wake".to_string())),
+            Some(Msg::Named("Local\\Wake".to_string()))
         );
         assert_eq!(map(PlatformEvent::ClipboardChanged), None);
     }

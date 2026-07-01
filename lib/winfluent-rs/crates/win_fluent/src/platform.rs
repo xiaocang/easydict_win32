@@ -256,7 +256,9 @@ impl FolderDialogOptions {
 pub struct TrayMenu<Message> {
     pub tooltip: String,
     pub icon_path: Option<String>,
+    pub presenter_kind: TrayMenuPresenterKind,
     pub presenter_min_width: Option<u16>,
+    pub presenter_style: TrayMenuPresenterStyle,
     pub default_item_id: Option<String>,
     pub items: Vec<TrayMenuItem<Message>>,
 }
@@ -266,7 +268,9 @@ impl<Message> TrayMenu<Message> {
         Self {
             tooltip: tooltip.into(),
             icon_path: None,
+            presenter_kind: TrayMenuPresenterKind::default(),
             presenter_min_width: None,
+            presenter_style: TrayMenuPresenterStyle::default(),
             default_item_id: None,
             items: Vec::new(),
         }
@@ -279,6 +283,16 @@ impl<Message> TrayMenu<Message> {
 
     pub fn presenter_min_width(mut self, width: u16) -> Self {
         self.presenter_min_width = Some(width);
+        self
+    }
+
+    pub fn presenter_kind(mut self, kind: TrayMenuPresenterKind) -> Self {
+        self.presenter_kind = kind;
+        self
+    }
+
+    pub fn presenter_style(mut self, style: TrayMenuPresenterStyle) -> Self {
+        self.presenter_style = style;
         self
     }
 
@@ -296,6 +310,197 @@ impl<Message> TrayMenu<Message> {
         self.items.push(TrayMenuItem::separator());
         self
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum TrayMenuPresenterKind {
+    #[default]
+    Native,
+    Fluent,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct TrayMenuPresenterStyle {
+    pub presenter_corner_radius: u16,
+    pub presenter_shadow_margin: u16,
+    pub presenter_max_height: Option<u16>,
+    pub popup_animation: TrayMenuPopupAnimation,
+    pub item_corner_radius: u16,
+    pub item_font_size: u16,
+    pub item_min_height: u16,
+    pub item_vertical_padding: u16,
+    pub item_horizontal_padding: u16,
+    pub submenu_arrow_column_width: u16,
+    pub hover_inset_x: u16,
+    pub hover_inset_y: u16,
+    pub separator_height: u16,
+    pub separator_line_thickness: u16,
+    pub separator_horizontal_inset: u16,
+    pub light_surface: TrayMenuColor,
+    pub light_foreground: TrayMenuColor,
+    pub light_separator: TrayMenuColor,
+    pub dark_surface: TrayMenuColor,
+    pub dark_foreground: TrayMenuColor,
+    pub dark_separator: TrayMenuColor,
+    pub hover_foreground_mix_percent: u8,
+}
+
+impl TrayMenuPresenterStyle {
+    pub const fn winui() -> Self {
+        Self {
+            presenter_corner_radius: 10,
+            presenter_shadow_margin: 12,
+            presenter_max_height: Some(520),
+            popup_animation: TrayMenuPopupAnimation::Vertical,
+            item_corner_radius: 8,
+            item_font_size: 14,
+            item_min_height: 30,
+            item_vertical_padding: 10,
+            item_horizontal_padding: 14,
+            submenu_arrow_column_width: 30,
+            hover_inset_x: 4,
+            hover_inset_y: 4,
+            separator_height: 7,
+            separator_line_thickness: 1,
+            separator_horizontal_inset: 4,
+            light_surface: TrayMenuColor::rgb(0xF9, 0xF9, 0xF9),
+            light_foreground: TrayMenuColor::rgb(0x1A, 0x1A, 0x1A),
+            light_separator: TrayMenuColor::rgb(0xE5, 0xE5, 0xE5),
+            dark_surface: TrayMenuColor::system_menu(),
+            dark_foreground: TrayMenuColor::rgb(0xF3, 0xF3, 0xF3),
+            dark_separator: TrayMenuColor::rgb(0x3A, 0x3A, 0x3A),
+            hover_foreground_mix_percent: 10,
+        }
+    }
+
+    pub fn presenter_corner_radius(mut self, radius: u16) -> Self {
+        self.presenter_corner_radius = radius;
+        self
+    }
+
+    pub fn presenter_shadow_margin(mut self, margin: u16) -> Self {
+        self.presenter_shadow_margin = margin;
+        self
+    }
+
+    pub fn presenter_max_height(mut self, height: Option<u16>) -> Self {
+        self.presenter_max_height = height;
+        self
+    }
+
+    pub fn popup_animation(mut self, animation: TrayMenuPopupAnimation) -> Self {
+        self.popup_animation = animation;
+        self
+    }
+
+    pub fn item_corner_radius(mut self, radius: u16) -> Self {
+        self.item_corner_radius = radius;
+        self
+    }
+
+    pub fn item_font_size(mut self, size: u16) -> Self {
+        self.item_font_size = size;
+        self
+    }
+
+    pub fn item_min_height(mut self, height: u16) -> Self {
+        self.item_min_height = height;
+        self
+    }
+
+    pub fn item_vertical_padding(mut self, padding: u16) -> Self {
+        self.item_vertical_padding = padding;
+        self
+    }
+
+    pub fn item_horizontal_padding(mut self, padding: u16) -> Self {
+        self.item_horizontal_padding = padding;
+        self
+    }
+
+    pub fn submenu_arrow_column_width(mut self, width: u16) -> Self {
+        self.submenu_arrow_column_width = width;
+        self
+    }
+
+    pub fn hover_inset(mut self, x: u16, y: u16) -> Self {
+        self.hover_inset_x = x;
+        self.hover_inset_y = y;
+        self
+    }
+
+    pub fn separator_height(mut self, height: u16) -> Self {
+        self.separator_height = height;
+        self
+    }
+
+    pub fn separator_line_thickness(mut self, thickness: u16) -> Self {
+        self.separator_line_thickness = thickness;
+        self
+    }
+
+    pub fn separator_horizontal_inset(mut self, inset: u16) -> Self {
+        self.separator_horizontal_inset = inset;
+        self
+    }
+
+    pub fn light_palette(
+        mut self,
+        surface: TrayMenuColor,
+        foreground: TrayMenuColor,
+        separator: TrayMenuColor,
+    ) -> Self {
+        self.light_surface = surface;
+        self.light_foreground = foreground;
+        self.light_separator = separator;
+        self
+    }
+
+    pub fn dark_palette(
+        mut self,
+        surface: TrayMenuColor,
+        foreground: TrayMenuColor,
+        separator: TrayMenuColor,
+    ) -> Self {
+        self.dark_surface = surface;
+        self.dark_foreground = foreground;
+        self.dark_separator = separator;
+        self
+    }
+
+    pub fn hover_foreground_mix_percent(mut self, percent: u8) -> Self {
+        self.hover_foreground_mix_percent = percent.min(100);
+        self
+    }
+}
+
+impl Default for TrayMenuPresenterStyle {
+    fn default() -> Self {
+        Self::winui()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TrayMenuColor {
+    SystemMenu,
+    Rgb(u8, u8, u8),
+}
+
+impl TrayMenuColor {
+    pub const fn system_menu() -> Self {
+        Self::SystemMenu
+    }
+
+    pub const fn rgb(red: u8, green: u8, blue: u8) -> Self {
+        Self::Rgb(red, green, blue)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TrayMenuPopupAnimation {
+    System,
+    None,
+    Vertical,
 }
 
 #[derive(Clone, Debug)]
@@ -396,6 +601,10 @@ impl ShellVerb {
         self.arguments.push(argument.into());
         self
     }
+
+    pub fn is_registry_safe_id(&self) -> bool {
+        is_registry_safe_identifier(&self.id)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -417,5 +626,48 @@ impl ProtocolRegistration {
     pub fn argument(mut self, argument: impl Into<String>) -> Self {
         self.arguments.push(argument.into());
         self
+    }
+
+    pub fn is_valid_scheme(&self) -> bool {
+        is_valid_protocol_scheme(&self.scheme)
+    }
+}
+
+fn is_registry_safe_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn is_valid_protocol_scheme(value: &str) -> bool {
+    let mut bytes = value.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+    first.is_ascii_alphabetic()
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_verb_ids_expose_registry_safety_guard() {
+        assert!(ShellVerb::new("inspect-files", "Inspect").is_registry_safe_id());
+        assert!(ShellVerb::new("inspect.files_2", "Inspect").is_registry_safe_id());
+        assert!(!ShellVerb::new("", "Empty").is_registry_safe_id());
+        assert!(!ShellVerb::new(r"bad\path", "Bad").is_registry_safe_id());
+        assert!(!ShellVerb::new("bad path", "Bad").is_registry_safe_id());
+    }
+
+    #[test]
+    fn protocol_registration_exposes_uri_scheme_guard() {
+        assert!(ProtocolRegistration::new("demo+v1", "Demo").is_valid_scheme());
+        assert!(ProtocolRegistration::new("demo.app", "Demo").is_valid_scheme());
+        assert!(!ProtocolRegistration::new("", "Empty").is_valid_scheme());
+        assert!(!ProtocolRegistration::new("1demo", "Bad").is_valid_scheme());
+        assert!(!ProtocolRegistration::new("demo app", "Bad").is_valid_scheme());
     }
 }

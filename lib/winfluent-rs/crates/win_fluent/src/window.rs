@@ -65,9 +65,33 @@ pub enum WindowPlacement {
     Center,
     Monitor,
     WorkArea,
-    CursorOffset { x: f32, y: f32 },
-    TopRight { margin_x: f32, margin_y: f32 },
-    Explicit { x: f32, y: f32 },
+    CursorOffset {
+        x: f32,
+        y: f32,
+    },
+    /// Anchor a context menu to a cursor point. The window opens above and to
+    /// the right by default, flips left near the right edge, and falls below
+    /// when there is not enough room above.
+    ContextMenu {
+        x: f32,
+        y: f32,
+    },
+    /// Anchor the visible content of a context menu to a cursor point while
+    /// allowing the native window to include an outer transparent shadow inset.
+    ContextMenuInset {
+        x: f32,
+        y: f32,
+        inset_x: f32,
+        inset_y: f32,
+    },
+    TopRight {
+        margin_x: f32,
+        margin_y: f32,
+    },
+    Explicit {
+        x: f32,
+        y: f32,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

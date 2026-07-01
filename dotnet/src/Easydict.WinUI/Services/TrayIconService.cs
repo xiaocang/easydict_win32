@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using H.NotifyIcon;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Media;
@@ -12,6 +13,14 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public sealed class TrayIconService : IDisposable
 {
+    private const string UiaTrayContextMenuPointEnvironmentVariable = "EASYDICT_UIA_TRAY_CONTEXT_MENU_POINT";
+    private const string UiaTrayContextMenuDelayEnvironmentVariable = "EASYDICT_UIA_TRAY_CONTEXT_MENU_DELAY_MS";
+    private const string UiaTrayExtraItemsEnvironmentVariable = "EASYDICT_UIA_TRAY_EXTRA_ITEMS";
+    private const string UiaTrayMaxHeightEnvironmentVariable = "EASYDICT_UIA_TRAY_MAX_HEIGHT_DIPS";
+    private const double TrayMenuMinWidth = 300d;
+    private const double TrayMenuMaxHeight = 520d;
+    private const double TrayMenuFontSize = 14d;
+
     private readonly Window _window;
     private readonly AppWindow? _appWindow;
     private TaskbarIcon? _taskbarIcon;
@@ -97,8 +106,98 @@ public sealed class TrayIconService : IDisposable
         // Force create the tray icon when created programmatically (not via XAML).
         // This is required by H.NotifyIcon for the icon to appear in the system tray.
         _taskbarIcon.ForceCreate();
+        MaybeScheduleUiaTrayContextMenu();
 
         Debug.WriteLine($"[TrayIcon] Initialized. Icon property set: {_taskbarIcon.Icon != null}, IconSource set: {_taskbarIcon.IconSource != null}");
+    }
+
+    public bool ShowContextMenuForUiAutomation(System.Drawing.Point point)
+    {
+        if (_taskbarIcon is not { IsCreated: true, ContextFlyout: not null })
+        {
+            return false;
+        }
+
+        _taskbarIcon.ShowContextMenu(point);
+        return true;
+    }
+
+    private void MaybeScheduleUiaTrayContextMenu()
+    {
+        if (!TryGetUiaTrayContextMenuPoint(out var point))
+        {
+            return;
+        }
+
+        var delayMs = GetUiaTrayContextMenuDelayMs();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(delayMs).ConfigureAwait(false);
+            for (var attempt = 1; attempt <= 8; attempt++)
+            {
+                var shown = await TryShowUiaTrayContextMenuAsync(point, attempt).ConfigureAwait(false);
+                if (shown)
+                {
+                    return;
+                }
+
+                await Task.Delay(250).ConfigureAwait(false);
+            }
+        });
+    }
+
+    private Task<bool> TryShowUiaTrayContextMenuAsync(System.Drawing.Point point, int attempt)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_window.DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    completion.TrySetResult(ShowContextMenuForUiAutomation(point));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[TrayIcon] UIA tray context menu attempt {attempt} failed: {ex.Message}");
+                    completion.TrySetResult(false);
+                }
+            }))
+        {
+            completion.TrySetResult(false);
+        }
+
+        return completion.Task;
+    }
+
+    private static bool TryGetUiaTrayContextMenuPoint(out System.Drawing.Point point)
+    {
+        point = default;
+        var value = Environment.GetEnvironmentVariable(UiaTrayContextMenuPointEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split(
+            [',', ';'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var x) ||
+            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var y))
+        {
+            Debug.WriteLine($"[TrayIcon] Ignoring invalid {UiaTrayContextMenuPointEnvironmentVariable}: {value}");
+            return false;
+        }
+
+        point = new System.Drawing.Point(x, y);
+        return true;
+    }
+
+    private static int GetUiaTrayContextMenuDelayMs()
+    {
+        var value = Environment.GetEnvironmentVariable(UiaTrayContextMenuDelayEnvironmentVariable);
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var delayMs)
+            ? Math.Clamp(delayMs, 100, 10_000)
+            : 900;
     }
 
     /// <summary>
@@ -201,10 +300,15 @@ public sealed class TrayIconService : IDisposable
     {
         var menu = new MenuFlyout();
 
-        // Set MinWidth to fit the longest menu item text
-        // This ensures proper width on first open (H.NotifyIcon SecondWindow mode quirk)
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
-        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 300d));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, TrayMenuMinWidth));
+        var maxHeight = GetUiaTrayMaxHeight();
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MaxHeightProperty, maxHeight));
+        if (HasUiaTrayMaxHeight())
+        {
+            presenterStyle.Setters.Add(new Setter(FrameworkElement.HeightProperty, maxHeight));
+        }
+        presenterStyle.Setters.Add(new Setter(Control.FontSizeProperty, TrayMenuFontSize));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
 
         var showItem = new MenuFlyoutItem { Text = L("TrayShow") };
@@ -232,6 +336,8 @@ public sealed class TrayIconService : IDisposable
         SetTip(fixedWindowItem);
         menu.Items.Add(fixedWindowItem);
 
+        AppendUiaTrayExtraItems(menu);
+
         menu.Items.Add(new MenuFlyoutSeparator());
 
         // Browser support submenu
@@ -251,6 +357,39 @@ public sealed class TrayIconService : IDisposable
         menu.Items.Add(exitItem);
 
         return menu;
+    }
+
+    private static double GetUiaTrayMaxHeight()
+    {
+        var value = Environment.GetEnvironmentVariable(UiaTrayMaxHeightEnvironmentVariable);
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var height)
+            ? Math.Clamp(height, 180d, 900d)
+            : TrayMenuMaxHeight;
+    }
+
+    private static bool HasUiaTrayMaxHeight() =>
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(UiaTrayMaxHeightEnvironmentVariable));
+
+    private static void AppendUiaTrayExtraItems(MenuFlyout menu)
+    {
+        var count = GetUiaTrayExtraItemCount();
+        for (var index = 1; index <= count; index++)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = FormattableString.Invariant($"UIA Scroll Item {index:00}")
+            };
+            SetTip(item);
+            menu.Items.Add(item);
+        }
+    }
+
+    private static int GetUiaTrayExtraItemCount()
+    {
+        var value = Environment.GetEnvironmentVariable(UiaTrayExtraItemsEnvironmentVariable);
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count)
+            ? Math.Clamp(count, 0, 48)
+            : 0;
     }
 
     private MenuFlyoutSubItem CreateBrowserSupportSubmenu()

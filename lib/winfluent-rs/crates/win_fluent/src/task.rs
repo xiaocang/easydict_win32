@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use crate::platform::{
     FileDialogOptions, FolderDialogOptions, PlatformCommand, ProtocolRegistration,
@@ -8,6 +9,7 @@ use crate::platform::{
 };
 use crate::window::WindowCommand;
 use futures_core::Stream;
+use futures_util::StreamExt;
 
 pub enum Task<Message> {
     None,
@@ -17,6 +19,7 @@ pub enum Task<Message> {
     Stream(Pin<Box<dyn Stream<Item = Message> + Send + 'static>>),
     Window(WindowCommand<Message>),
     Platform(PlatformCommand),
+    Cancel(String),
     Exit,
     /// Snap the scroll view with the given id back to the top (offset 0).
     ScrollToTop(String),
@@ -80,6 +83,70 @@ impl<Message> Task<Message> {
         Self::Future(Box::pin(async move { map(future.await) }))
     }
 
+    /// Map messages produced directly by this task while preserving window and
+    /// platform side effects. This is intentionally same-message mapping: view
+    /// trees inside `WindowCommand` keep their existing message type.
+    pub fn map(self, map: impl Fn(Message) -> Message + Send + Sync + 'static) -> Self
+    where
+        Message: Send + 'static,
+    {
+        self.map_with_arc(Arc::new(map))
+    }
+
+    fn map_with_arc(self, map: Arc<dyn Fn(Message) -> Message + Send + Sync + 'static>) -> Self
+    where
+        Message: Send + 'static,
+    {
+        match self {
+            Task::None => Task::None,
+            Task::Message(message) => Task::Message(map(message)),
+            Task::Batch(tasks) => Task::batch(
+                tasks
+                    .into_iter()
+                    .map(|task| task.map_with_arc(Arc::clone(&map))),
+            ),
+            Task::Future(future) => Task::Future(Box::pin(async move { map(future.await) })),
+            Task::Stream(stream) => Task::Stream(Box::pin(stream.map(move |message| map(message)))),
+            Task::ReadClipboardText(inner) => {
+                Task::ReadClipboardText(Box::new(move |value| map(inner(value))))
+            }
+            Task::CaptureScreenRegion {
+                request,
+                map: inner,
+            } => Task::CaptureScreenRegion {
+                request,
+                map: Box::new(move |value| map(inner(value))),
+            },
+            Task::CaptureScreenWindows {
+                request,
+                map: inner,
+            } => Task::CaptureScreenWindows {
+                request,
+                map: Box::new(move |value| map(inner(value))),
+            },
+            Task::OpenFileDialog {
+                options,
+                map: inner,
+            } => Task::OpenFileDialog {
+                options,
+                map: Box::new(move |value| map(inner(value))),
+            },
+            Task::OpenFolderDialog {
+                options,
+                map: inner,
+            } => Task::OpenFolderDialog {
+                options,
+                map: Box::new(move |value| map(inner(value))),
+            },
+            Task::Window(command) => Task::Window(command),
+            Task::Platform(command) => Task::Platform(command),
+            Task::Cancel(id) => Task::Cancel(id),
+            Task::Exit => Task::Exit,
+            Task::ScrollToTop(id) => Task::ScrollToTop(id),
+            Task::ScrollTo { id, x, y } => Task::ScrollTo { id, x, y },
+        }
+    }
+
     pub fn stream(stream: impl Stream<Item = Message> + Send + 'static) -> Self
     where
         Message: Send + 'static,
@@ -89,6 +156,10 @@ impl<Message> Task<Message> {
 
     pub fn window(command: WindowCommand<Message>) -> Self {
         Self::Window(command)
+    }
+
+    pub fn cancel(id: impl Into<String>) -> Self {
+        Self::Cancel(id.into())
     }
 
     pub const fn exit() -> Self {
@@ -229,13 +300,17 @@ impl<Message> Default for Task<Message> {
 mod tests {
     use super::*;
     use crate::platform::{
-        ScreenCaptureRequest, ScreenRect, ScreenWindow, ScreenWindowSnapshotRequest,
+        FileDialogFilter, ScreenCaptureRequest, ScreenRect, ScreenWindow,
+        ScreenWindowSnapshotRequest,
     };
 
     #[derive(Debug, Eq, PartialEq)]
     enum TestMessage {
         Captured(Option<ScreenCaptureResult>),
         Windows(Vec<ScreenWindow>),
+        Text(Option<String>),
+        Tagged(&'static str),
+        Path(Option<String>),
     }
 
     #[test]
@@ -247,6 +322,84 @@ mod tests {
         };
 
         assert_eq!(request, ScreenCaptureRequest::virtual_desktop());
+    }
+
+    #[test]
+    fn batch_flattens_nested_tasks_and_discards_none() {
+        let task = Task::batch([
+            Task::none(),
+            Task::batch([Task::message(TestMessage::Tagged("a"))]),
+            Task::message(TestMessage::Tagged("b")),
+        ]);
+
+        let Task::Batch(values) = task else {
+            panic!("expected batch");
+        };
+
+        assert_eq!(values.len(), 2);
+    }
+
+    #[test]
+    fn map_transforms_immediate_and_callback_tasks() {
+        let task = Task::message(TestMessage::Tagged("raw")).map(|message| match message {
+            TestMessage::Tagged(_) => TestMessage::Tagged("mapped"),
+            other => other,
+        });
+        assert!(matches!(task, Task::Message(TestMessage::Tagged("mapped"))));
+
+        let task = Task::read_clipboard_text(TestMessage::Text).map(|message| match message {
+            TestMessage::Text(_) => TestMessage::Tagged("clipboard"),
+            other => other,
+        });
+        let Task::ReadClipboardText(map) = task else {
+            panic!("expected clipboard task");
+        };
+        assert_eq!(
+            map(Some("value".to_string())),
+            TestMessage::Tagged("clipboard")
+        );
+    }
+
+    #[test]
+    fn cancel_task_preserves_cancellation_identifier() {
+        let task: Task<TestMessage> = Task::cancel("download:42");
+
+        let Task::Cancel(id) = task else {
+            panic!("expected cancel task");
+        };
+
+        assert_eq!(id, "download:42");
+    }
+
+    #[test]
+    fn clipboard_and_dialog_tasks_preserve_options_and_mappers() {
+        let clipboard = Task::<TestMessage>::clipboard_text("hello");
+        assert!(matches!(
+            clipboard,
+            Task::Platform(PlatformCommand::WriteClipboardText(text)) if text == "hello"
+        ));
+
+        let file_options = FileDialogOptions::new("Open document")
+            .initial_directory(r"C:\Users")
+            .filter(FileDialogFilter::new("Text", ["*.txt", "*.md"]));
+        let file_task = Task::open_file_dialog(file_options.clone(), TestMessage::Path);
+        let Task::OpenFileDialog { options, map } = file_task else {
+            panic!("expected file dialog task");
+        };
+        assert_eq!(options, file_options);
+        assert_eq!(
+            map(Some(r"C:\Users\notes.txt".to_string())),
+            TestMessage::Path(Some(r"C:\Users\notes.txt".to_string()))
+        );
+
+        let folder_options =
+            FolderDialogOptions::new("Choose output").initial_directory(r"C:\Temp");
+        let folder_task = Task::open_folder_dialog(folder_options.clone(), TestMessage::Path);
+        let Task::OpenFolderDialog { options, map } = folder_task else {
+            panic!("expected folder dialog task");
+        };
+        assert_eq!(options, folder_options);
+        assert_eq!(map(None), TestMessage::Path(None));
     }
 
     #[test]

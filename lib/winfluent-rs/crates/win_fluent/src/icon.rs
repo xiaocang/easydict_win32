@@ -29,6 +29,59 @@ impl IconToken {
             image: Some(image),
         }
     }
+
+    pub fn resolved_glyph(&self) -> Option<char> {
+        self.glyph.or_else(|| fluent_icon_glyph(self.name))
+    }
+}
+
+pub const STANDARD_ICON_NAMES: &[&str] = &[
+    "add",
+    "app",
+    "camera",
+    "check",
+    "clear",
+    "copy",
+    "delete",
+    "edit",
+    "help",
+    "keyboard",
+    "microphone",
+    "more",
+    "pin",
+    "play",
+    "refresh",
+    "search",
+    "settings",
+    "speaker",
+    "swap",
+    "translate",
+];
+
+pub fn fluent_icon_glyph(name: &str) -> Option<char> {
+    Some(match name {
+        "add" => '\u{E710}',
+        "app" => '\u{ECAA}',
+        "camera" => '\u{E722}',
+        "check" => '\u{E8FB}',
+        "clear" => '\u{E711}',
+        "copy" => '\u{E8C8}',
+        "delete" => '\u{E74D}',
+        "edit" => '\u{E70F}',
+        "help" => '\u{E897}',
+        "keyboard" => '\u{E765}',
+        "microphone" => '\u{E720}',
+        "more" => '\u{E712}',
+        "pin" => '\u{E718}',
+        "play" => '\u{E768}',
+        "refresh" => '\u{E72C}',
+        "search" => '\u{E721}',
+        "settings" => '\u{E713}',
+        "speaker" => '\u{E767}',
+        "swap" => '\u{E8AB}',
+        "translate" => '\u{E8C1}',
+        _ => return None,
+    })
 }
 
 pub const fn add() -> IconToken {

@@ -101,9 +101,9 @@ fn build_view(input: &str, enabled: bool, service: &str, translated: bool) -> Vi
                     .on_input(DemoMessage::InputChanged),
                 command_bar((
                     combo_box([
-                        ComboBoxItem::new("openai", "OpenAI"),
-                        ComboBoxItem::new("google", "Google"),
-                        ComboBoxItem::new("deepl", "DeepL"),
+                        ComboBoxItem::new("provider-a", "Provider A"),
+                        ComboBoxItem::new("provider-b", "Provider B"),
+                        ComboBoxItem::new("provider-c", "Provider C"),
                     ])
                     .selected(service)
                     .on_change(DemoMessage::ServiceChanged),

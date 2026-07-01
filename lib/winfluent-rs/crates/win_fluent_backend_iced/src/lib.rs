@@ -14,15 +14,15 @@ use iced::advanced::{
     widget::{self, Operation, Tree},
     Layout, Renderer as _, Shell, Widget,
 };
+use iced::theme::Base as _;
 use iced::widget::text_editor as iced_text_editor_state;
 use iced::widget::{
     button as iced_button, checkbox as iced_checkbox, column as iced_column,
     container as iced_container, image as iced_image, mouse_area as iced_mouse_area,
     opaque as iced_opaque, pick_list as iced_pick_list, progress_bar as iced_progress_bar,
-    responsive as iced_responsive,
-    row as iced_row, scrollable as iced_scrollable, slider as iced_slider, space as iced_space,
-    stack as iced_stack, text as iced_text, text_editor as iced_text_editor,
-    text_input as iced_text_input, toggler as iced_toggler,
+    responsive as iced_responsive, row as iced_row, scrollable as iced_scrollable,
+    slider as iced_slider, space as iced_space, stack as iced_stack, text as iced_text,
+    text_editor as iced_text_editor, text_input as iced_text_input, toggler as iced_toggler,
 };
 use iced::{
     alignment, font, keyboard, window, Background, Border, Color, Element, Event, Font,
@@ -36,7 +36,8 @@ use win_fluent::icon;
 use win_fluent::platform::FileDialogFilter;
 use win_fluent::platform::{
     FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand,
-    ProtocolRegistration, ShellVerb,
+    ProtocolRegistration, ShellVerb, TrayMenu, TrayMenuColor, TrayMenuPopupAnimation,
+    TrayMenuPresenterKind, TrayMenuPresenterStyle,
 };
 use win_fluent::runtime::{Application as FluentApplication, DesktopIntegrationPlan, RuntimePlan};
 use win_fluent::screenshot::WindowScreenshot;
@@ -50,18 +51,17 @@ use win_fluent::task::Task as FluentTask;
 use win_fluent::theme::{Color as FluentColor, ThemeMode, ThemeTokens};
 use win_fluent::view::{
     AdaptiveSwitchToken, Alignment, AutoSuggestBoxToken, BusyOverlayToken, ButtonKind,
-    CaptureOverlayToken, CardKind,
-    CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem, Edges, ExpanderToken,
-    FlyoutButtonToken, FlyoutPlacement, FlyoutToken, GridChild, GridToken, InfoBarToken,
-    LayoutDistribution, LayoutKind, RichTextToken, TextRunKind,
-    LayoutToken, Length, ListViewToken, NavigationViewToken, NumberBoxToken, Orientation,
-    OverlayToken, PaneDisplayMode, RadioGroupToken, SplitButtonToken, TabViewToken, TreeNode,
-    TreeViewToken,
-    PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel, ProgressBarToken,
-    ProgressRingToken, ResultCardToken, ResultItem, ResultListToken, ResultStatus, ScrollPolicy,
-    SettingsRowToken, SliderToken, StatusBadgeToken, TextEditorChrome, TextEditorKey,
-    TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken, TextStyle, TextToken,
-    TextWrapping, TitleBarToken, View, ViewToken, WrapToken,
+    CaptureOverlayToken, CardKind, CardToken, CheckBoxToken, CollapseTransition, ComboBoxItem,
+    Edges, ExpanderToken, FlyoutButtonToken, FlyoutMenuItem, FlyoutPlacement, FlyoutToken,
+    GridChild, GridToken, InfoBarToken, IntoView, LayoutDistribution, LayoutKind, LayoutToken,
+    Length, ListViewToken, NavigationViewToken, NumberBoxToken, Orientation, OverlayToken,
+    PaneDisplayMode, PointerPosition, PointerRegionAction, PointerRegionToken, PointerWheel,
+    ProgressBarToken, ProgressRingToken, RadioGroupToken, ResultCardToken, ResultItem,
+    ResultListToken, ResultStatus, RichTextToken, ScrollPolicy, SettingsRowToken, SliderToken,
+    SplitButtonToken, StatusBadgeKind, StatusBadgeToken, TabViewToken, TextEditorChrome,
+    TextEditorKey, TextEditorKeyBinding, TextEditorKeyModifiers, TextEditorToken, TextRunKind,
+    TextStyle, TextToken, TextWrapping, TitleBarToken, TooltipPlacement, TrayMenuToken, TreeNode,
+    TreeViewToken, View, ViewToken, WrapToken,
 };
 use win_fluent::window::{
     WindowCommand, WindowFrame, WindowId, WindowLevel, WindowOptions, WindowPlacement,
@@ -70,6 +70,33 @@ use win_fluent::window::{
 
 pub type IcedElement<'a, Message> = Element<'a, Message>;
 pub type IcedTextEditorContent = iced_text_editor_state::Content<iced::Renderer>;
+
+const FLUENT_TRAY_MENU_WINDOW_ID: &str = "__win_fluent_tray_menu";
+const FLUENT_TRAY_SUBMENU_WINDOW_ID: &str = "__win_fluent_tray_submenu";
+const FLUENT_TRAY_MENU_WINDOW_TITLE: &str = "WinFluent Tray Menu";
+const FLUENT_TRAY_SUBMENU_WINDOW_TITLE: &str = "WinFluent Tray Submenu";
+const FLUENT_TRAY_MENU_ANIMATION_OFFSET: u16 = 3;
+const FLUENT_TRAY_MENU_ANIMATION_DELAY_MS: u64 = 70;
+const FLUENT_TRAY_SUBMENU_GAP: u16 = 4;
+const FLUENT_TRAY_SUBMENU_MIN_INNER_WIDTH: u16 = 180;
+const FLUENT_TRAY_SUBMENU_MAX_INNER_WIDTH: u16 = 280;
+const UIA_TRAY_CONTEXT_MENU_POINT_ENV: &str = "EASYDICT_UIA_TRAY_CONTEXT_MENU_POINT";
+const UIA_TRAY_CONTEXT_MENU_DELAY_ENV: &str = "EASYDICT_UIA_TRAY_CONTEXT_MENU_DELAY_MS";
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FluentTrayRootPanelBounds {
+    x: f32,
+    y: f32,
+    width: f32,
+    work_left: f32,
+    work_right: f32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FluentTraySubmenuSide {
+    Right,
+    Left,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IcedHotkeyEvent {
@@ -86,6 +113,7 @@ pub enum IcedNamedEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IcedTrayEvent {
     Command { id: String },
+    OpenMenu { x: i32, y: i32 },
     Error { message: String },
 }
 
@@ -263,14 +291,32 @@ where
     )
     .title(|state: &IcedSingleWindowRuntime<App>, window| state.title_for_native_window(window))
     .subscription(IcedSingleWindowRuntime::<App>::subscription)
+    .style(transparent_daemon_style::<App>)
     .run()
     .map_err(|error| error.to_string())
+}
+
+fn transparent_daemon_style<App>(
+    _state: &IcedSingleWindowRuntime<App>,
+    theme: &iced::Theme,
+) -> iced::theme::Style
+where
+    App: FluentApplication,
+{
+    let base = theme.base();
+    iced::theme::Style {
+        background_color: Color::TRANSPARENT,
+        text_color: base.text_color,
+    }
 }
 
 #[derive(Debug, Clone)]
 enum IcedRuntimeMessage<Message> {
     App(Message),
     PlatformEvent(PlatformEvent),
+    TrayMenuOpen { x: i32, y: i32 },
+    TrayMenuActivateSubmenu(Option<String>),
+    TrayMenuAnimateOffset { offset_y: u16 },
     FocusWidget(String),
     WindowOpened(window::Id),
     WindowClosed(window::Id),
@@ -282,6 +328,7 @@ enum IcedRuntimeMessage<Message> {
 struct RuntimeWindow {
     logical_id: WindowId,
     options: WindowOptions,
+    custom_view: bool,
 }
 
 struct IcedSingleWindowRuntime<App: FluentApplication> {
@@ -295,6 +342,11 @@ struct IcedSingleWindowRuntime<App: FluentApplication> {
     views: HashMap<WindowId, View<App::Message>>,
     text_editors: HashMap<WindowId, TextEditorCache>,
     desktop_integration: DesktopIntegrationPlan<App::Message>,
+    fluent_tray_menu: Option<TrayMenu<App::Message>>,
+    fluent_tray_root_panel_bounds: Option<FluentTrayRootPanelBounds>,
+    fluent_tray_submenu_side: FluentTraySubmenuSide,
+    active_tray_submenu_id: Option<String>,
+    fluent_tray_menu_animation_offset: u16,
     /// Native id of the window that most recently gained OS focus. Used to route
     /// `*Current` window commands (close/minimize/drag) to the window the user is
     /// actually interacting with, instead of defaulting to the boot window — which
@@ -320,10 +372,11 @@ where
             iced::Task::none()
         };
         let focus_task = runtime.delayed_focused_text_editor_task();
+        let uia_tray_menu_task = uia_tray_menu_open_task();
 
         (
             runtime,
-            iced::Task::batch([open_task, initial_task, focus_task]),
+            iced::Task::batch([open_task, initial_task, focus_task, uia_tray_menu_task]),
         )
     }
 
@@ -345,6 +398,11 @@ where
             views: HashMap::new(),
             text_editors: HashMap::new(),
             desktop_integration,
+            fluent_tray_menu: None,
+            fluent_tray_root_panel_bounds: None,
+            fluent_tray_submenu_side: FluentTraySubmenuSide::Right,
+            active_tray_submenu_id: None,
+            fluent_tray_menu_animation_offset: 0,
             focused_native_window: None,
         };
         let boot_window_id = runtime.boot_window_id.clone();
@@ -364,7 +422,9 @@ where
         windows.dedup();
 
         for window in windows {
-            self.sync_window_view(&window, None);
+            if !self.has_custom_window_view(&window) {
+                self.sync_window_view(&window, None);
+            }
         }
     }
 
@@ -378,15 +438,51 @@ where
     }
 
     fn title_for_logical_window(&self, window: &WindowId) -> String {
-        self.window_title_overrides
-            .get(window)
-            .cloned()
-            .unwrap_or_else(|| self.app.title(window))
+        if let Some(title) = self.window_title_overrides.get(window) {
+            return title.clone();
+        }
+
+        if window != &self.boot_window_id {
+            if let Some(options) = self.opened_or_pending_window_options(window) {
+                return options.title.clone();
+            }
+        }
+
+        self.app.title(window)
     }
 
     fn title_for_native_window(&self, window: window::Id) -> String {
         let logical = self.logical_window_for_native(window);
         self.title_for_logical_window(&logical)
+    }
+
+    fn opened_or_pending_window_options(&self, window: &WindowId) -> Option<&WindowOptions> {
+        if let Some(native_id) = self.logical_windows.get(window) {
+            if let Some(runtime_window) = self.native_windows.get(native_id) {
+                return Some(&runtime_window.options);
+            }
+        }
+
+        self.pending_windows
+            .values()
+            .find(|runtime_window| &runtime_window.logical_id == window)
+            .map(|runtime_window| &runtime_window.options)
+    }
+
+    fn has_custom_window_view(&self, window: &WindowId) -> bool {
+        if let Some(native_id) = self.logical_windows.get(window) {
+            if self
+                .native_windows
+                .get(native_id)
+                .is_some_and(|runtime_window| runtime_window.custom_view)
+            {
+                return true;
+            }
+        }
+
+        self.pending_windows.values().any(|runtime_window| {
+            &runtime_window.logical_id == window && runtime_window.custom_view
+        })
     }
 
     fn update(
@@ -397,11 +493,22 @@ where
             IcedRuntimeMessage::App(message) => {
                 let task = state.app.update(message);
                 state.rebuild_views();
-                iced::Task::batch([state.fluent_task(task), state.focused_text_editor_task()])
+                iced::Task::batch([
+                    state.fluent_task(task),
+                    state.focused_text_editor_task(),
+                    state.hide_fluent_tray_menu_task(),
+                ])
             }
             IcedRuntimeMessage::PlatformEvent(event) => state
                 .platform_event_task(event)
                 .unwrap_or_else(iced::Task::none),
+            IcedRuntimeMessage::TrayMenuOpen { x, y } => state.open_fluent_tray_menu_task(x, y),
+            IcedRuntimeMessage::TrayMenuActivateSubmenu(id) => {
+                state.activate_fluent_tray_submenu_task(id)
+            }
+            IcedRuntimeMessage::TrayMenuAnimateOffset { offset_y } => {
+                state.update_fluent_tray_menu_animation_offset(offset_y)
+            }
             IcedRuntimeMessage::FocusWidget(id) => iced::widget::operation::focus(id),
             IcedRuntimeMessage::WindowOpened(window_id) => {
                 let runtime_window =
@@ -411,13 +518,16 @@ where
                         .unwrap_or_else(|| RuntimeWindow {
                             logical_id: state.boot_window_id.clone(),
                             options: state.boot_window_options.clone(),
+                            custom_view: false,
                         });
                 let logical_id = runtime_window.logical_id.clone();
                 state.logical_windows.insert(logical_id.clone(), window_id);
                 state
                     .native_windows
                     .insert(window_id, runtime_window.clone());
-                state.sync_window_view(&logical_id, None);
+                if !runtime_window.custom_view {
+                    state.sync_window_view(&logical_id, None);
+                }
                 let opened_task = state
                     .platform_event_task(PlatformEvent::Window(WindowEvent::Opened(
                         logical_id.clone(),
@@ -442,6 +552,16 @@ where
                     state.focused_native_window = None;
                 }
                 let logical_id = state.logical_window_for_native(window_id);
+                if logical_id.as_str() == FLUENT_TRAY_MENU_WINDOW_ID {
+                    state.fluent_tray_menu = None;
+                    state.fluent_tray_root_panel_bounds = None;
+                    state.fluent_tray_submenu_side = FluentTraySubmenuSide::Right;
+                    state.active_tray_submenu_id = None;
+                    state.fluent_tray_menu_animation_offset = 0;
+                } else if logical_id.as_str() == FLUENT_TRAY_SUBMENU_WINDOW_ID {
+                    state.active_tray_submenu_id = None;
+                    state.fluent_tray_submenu_side = FluentTraySubmenuSide::Right;
+                }
                 if let Some(runtime_window) = state.native_windows.remove(&window_id) {
                     state.logical_windows.remove(&runtime_window.logical_id);
                 }
@@ -461,6 +581,12 @@ where
                     state.focused_native_window = Some(window_id);
                 }
                 let logical_id = state.logical_window_for_native(window_id);
+                if (logical_id.as_str() == FLUENT_TRAY_MENU_WINDOW_ID
+                    || logical_id.as_str() == FLUENT_TRAY_SUBMENU_WINDOW_ID)
+                    && matches!(event, window::Event::Unfocused)
+                {
+                    return state.hide_fluent_tray_menu_task();
+                }
                 let event = match event {
                     window::Event::Focused => WindowEvent::Focused(logical_id),
                     window::Event::Rescaled(_) => WindowEvent::DpiChanged(logical_id),
@@ -489,6 +615,24 @@ where
     fn view(state: &Self, window: window::Id) -> IcedElement<'_, IcedRuntimeMessage<App::Message>> {
         let theme = state.app.theme_tokens();
         let logical = state.logical_window_for_native(window);
+        if logical.as_str() == FLUENT_TRAY_MENU_WINDOW_ID {
+            if let Some(menu) = state.fluent_tray_menu.as_ref() {
+                return compile_runtime_tray_menu_root(
+                    menu,
+                    state.active_tray_submenu_id.as_deref(),
+                    state.fluent_tray_menu_animation_offset,
+                    IcedVisualTheme::from_tokens(&theme),
+                );
+            }
+        } else if logical.as_str() == FLUENT_TRAY_SUBMENU_WINDOW_ID {
+            if let Some(menu) = state.fluent_tray_menu.as_ref() {
+                return compile_runtime_tray_submenu(
+                    menu,
+                    state.active_tray_submenu_id.as_deref(),
+                    IcedVisualTheme::from_tokens(&theme),
+                );
+            }
+        }
         let view = state
             .views
             .get(&logical)
@@ -534,6 +678,7 @@ where
             FluentTask::Stream(stream) => iced::Task::stream(stream).map(IcedRuntimeMessage::App),
             FluentTask::Window(command) => self.window_command(command),
             FluentTask::Platform(command) => self.platform_command(command),
+            FluentTask::Cancel(_) => iced::Task::none(),
             FluentTask::Exit => iced::exit(),
             FluentTask::ScrollToTop(id) => iced::widget::operation::snap_to(
                 iced::advanced::widget::Id::from(id),
@@ -649,6 +794,174 @@ where
         }
     }
 
+    fn current_tray_menu(&self) -> Option<TrayMenu<App::Message>> {
+        self.app
+            .tray_menu()
+            .or_else(|| self.desktop_integration.tray_menu.clone())
+    }
+
+    fn open_fluent_tray_menu_task(
+        &mut self,
+        x: i32,
+        y: i32,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        let Some(menu) = self.current_tray_menu() else {
+            return iced::Task::none();
+        };
+
+        if menu.presenter_kind != TrayMenuPresenterKind::Fluent {
+            return iced::Task::none();
+        }
+
+        let options = fluent_tray_menu_window_options(&menu, x, y);
+        self.fluent_tray_root_panel_bounds = fluent_tray_menu_root_panel_bounds(&menu, &options);
+        self.fluent_tray_submenu_side = FluentTraySubmenuSide::Right;
+        self.active_tray_submenu_id = None;
+        self.fluent_tray_menu_animation_offset =
+            fluent_tray_menu_initial_animation_offset(menu.presenter_style);
+        self.fluent_tray_menu = Some(menu.clone());
+
+        let initial_offset = fluent_tray_menu_initial_animation_offset(menu.presenter_style);
+        let animation_task = fluent_tray_menu_animation_task::<App::Message>(menu.presenter_style);
+        let view =
+            win_fluent::view::tray_menu_presenter_with_animation_offset(menu, initial_offset);
+        let id = options.id.clone();
+
+        if self.logical_windows.contains_key(&id) {
+            self.sync_window_view(&id, Some(view));
+            let show_task = self
+                .with_logical_window(&id, move |window_id| {
+                    show_window_task::<App::Message>(window_id, options.clone())
+                })
+                .unwrap_or_else(iced::Task::none);
+            return iced::Task::batch([
+                show_task,
+                animation_task,
+                self.hide_fluent_tray_submenu_task(),
+            ]);
+        }
+
+        iced::Task::batch([
+            self.open_window_task(options, Some(view)),
+            animation_task,
+            self.hide_fluent_tray_submenu_task(),
+        ])
+    }
+
+    fn activate_fluent_tray_submenu_task(
+        &mut self,
+        id: Option<String>,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        if self.active_tray_submenu_id == id {
+            return iced::Task::none();
+        }
+
+        self.active_tray_submenu_id = id;
+
+        let Some(menu) = self.fluent_tray_menu.as_ref() else {
+            return iced::Task::none();
+        };
+
+        let active_submenu_id = self.active_tray_submenu_id.as_deref();
+        // Keep the root tray menu window immutable while a submenu is open.
+        // Submenus are separate popup windows so hover expansion cannot flash
+        // the original menu through resize/move/show churn.
+        let Some((options, submenu_side)) = fluent_tray_submenu_window_options(
+            menu,
+            active_submenu_id,
+            self.fluent_tray_root_panel_bounds,
+        ) else {
+            return self.hide_fluent_tray_submenu_task();
+        };
+        self.fluent_tray_submenu_side = submenu_side;
+        let id = WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID);
+        let view = win_fluent::view::spacer::<App::Message>().into_view();
+        self.update_opened_or_pending_window_options(&id, options.clone());
+
+        if self.logical_windows.contains_key(&id) {
+            self.sync_window_view(&id, Some(view));
+            self.with_logical_window(&id, move |window_id| {
+                iced::Task::batch([
+                    update_window_geometry_task::<App::Message>(window_id, options.clone()),
+                    window::set_mode::<IcedRuntimeMessage<App::Message>>(
+                        window_id,
+                        window::Mode::Windowed,
+                    ),
+                ])
+            })
+            .unwrap_or_else(iced::Task::none)
+        } else {
+            self.open_window_task(options, Some(view))
+        }
+    }
+
+    fn update_fluent_tray_menu_animation_offset(
+        &mut self,
+        offset_y: u16,
+    ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        let Some(menu) = self.current_tray_menu() else {
+            return iced::Task::none();
+        };
+
+        if menu.presenter_kind != TrayMenuPresenterKind::Fluent {
+            return iced::Task::none();
+        }
+
+        self.fluent_tray_menu_animation_offset = offset_y;
+        self.fluent_tray_menu = Some(menu.clone());
+
+        let id = WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID);
+        if !self.logical_windows.contains_key(&id) && !self.has_custom_window_view(&id) {
+            return iced::Task::none();
+        }
+
+        self.sync_window_view(
+            &id,
+            Some(win_fluent::view::tray_menu_presenter_with_animation_offset(
+                menu, offset_y,
+            )),
+        );
+        iced::Task::none()
+    }
+
+    fn update_opened_or_pending_window_options(
+        &mut self,
+        logical_id: &WindowId,
+        options: WindowOptions,
+    ) {
+        if let Some(native_id) = self.logical_windows.get(logical_id).cloned() {
+            if let Some(runtime_window) = self.native_windows.get_mut(&native_id) {
+                runtime_window.options = options.clone();
+            }
+        }
+
+        for runtime_window in self.pending_windows.values_mut() {
+            if &runtime_window.logical_id == logical_id {
+                runtime_window.options = options.clone();
+            }
+        }
+    }
+
+    fn hide_fluent_tray_menu_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        iced::Task::batch([
+            self.with_logical_window(&WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID), |window_id| {
+                window::set_mode::<IcedRuntimeMessage<App::Message>>(
+                    window_id,
+                    window::Mode::Hidden,
+                )
+            })
+            .unwrap_or_else(iced::Task::none),
+            self.hide_fluent_tray_submenu_task(),
+        ])
+    }
+
+    fn hide_fluent_tray_submenu_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        self.with_logical_window(&WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID), |window_id| {
+            window::set_mode::<IcedRuntimeMessage<App::Message>>(window_id, window::Mode::Hidden)
+        })
+        .unwrap_or_else(iced::Task::none)
+    }
+
     fn window_command(
         &mut self,
         command: WindowCommand<App::Message>,
@@ -757,6 +1070,7 @@ where
         view: Option<View<App::Message>>,
     ) -> iced::Task<IcedRuntimeMessage<App::Message>> {
         let logical_id = options.id.clone();
+        let custom_view = view.is_some();
         self.sync_window_view(&logical_id, view);
         let settings = window_settings(&options);
         let (native_id, task) = window::open(settings);
@@ -765,6 +1079,7 @@ where
             RuntimeWindow {
                 logical_id,
                 options,
+                custom_view,
             },
         );
         task.map(move |_| IcedRuntimeMessage::WindowOpened(native_id))
@@ -835,6 +1150,322 @@ fn show_at_window_options(options: &WindowOptions, x: f32, y: f32) -> WindowOpti
         .placement(WindowPlacement::Explicit { x, y })
 }
 
+fn uia_tray_menu_open_task<Message>() -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: fmt::Debug + Send + 'static,
+{
+    let Some((x, y)) = uia_tray_context_menu_point() else {
+        return iced::Task::none();
+    };
+    let delay = uia_tray_context_menu_delay();
+
+    iced::Task::perform(
+        async move {
+            std::thread::sleep(delay);
+            (x, y)
+        },
+        |(x, y)| IcedRuntimeMessage::TrayMenuOpen { x, y },
+    )
+}
+
+fn uia_tray_context_menu_point() -> Option<(i32, i32)> {
+    let value = env::var(UIA_TRAY_CONTEXT_MENU_POINT_ENV).ok()?;
+    let (x, y) = value.split_once(',').or_else(|| value.split_once(';'))?;
+    let x = x.trim().parse::<i32>().ok()?;
+    let y = y.trim().parse::<i32>().ok()?;
+    Some((x, y))
+}
+
+fn uia_tray_context_menu_delay() -> Duration {
+    env::var(UIA_TRAY_CONTEXT_MENU_DELAY_ENV)
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|delay| delay.clamp(100, 10_000))
+        .map(Duration::from_millis)
+        .unwrap_or_else(|| Duration::from_millis(900))
+}
+
+fn fluent_tray_menu_window_options<Message>(
+    menu: &TrayMenu<Message>,
+    x: i32,
+    y: i32,
+) -> WindowOptions {
+    let style = menu.presenter_style;
+    let width = f32::from(fluent_tray_menu_root_window_width(menu));
+    let shadow_margin = f32::from(style.presenter_shadow_margin);
+    let height = f32::from(
+        tray_menu_panel_inner_height(tray_menu_items_height(&menu.items, style), style)
+            .saturating_add(style.presenter_shadow_margin.saturating_mul(2)),
+    );
+
+    WindowOptions::new(
+        WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID),
+        FLUENT_TRAY_MENU_WINDOW_TITLE,
+    )
+    .size(width, height)
+    .min_size(width, height)
+    .level(WindowLevel::ToolWindow)
+    .frame(WindowFrame::Acrylic)
+    .resize_mode(WindowResizeMode::Fixed)
+    .placement(WindowPlacement::ContextMenuInset {
+        x: x as f32,
+        y: y as f32,
+        inset_x: shadow_margin,
+        inset_y: shadow_margin,
+    })
+    .screen_constraint(win_fluent::window::WindowScreenConstraint::SizeAndPosition)
+    .skip_taskbar(true)
+}
+
+fn fluent_tray_submenu_window_options<Message>(
+    menu: &TrayMenu<Message>,
+    active_submenu_id: Option<&str>,
+    root_bounds: Option<FluentTrayRootPanelBounds>,
+) -> Option<(WindowOptions, FluentTraySubmenuSide)> {
+    let Some(root_bounds) = root_bounds else {
+        return None;
+    };
+    let Some(submenu) = active_tray_submenu(menu, active_submenu_id) else {
+        return None;
+    };
+
+    let style = menu.presenter_style;
+    let shadow_margin = f32::from(style.presenter_shadow_margin);
+    let root_inner_width = fluent_tray_menu_root_inner_width(menu);
+    let submenu_inner_width = tray_menu_submenu_inner_width(submenu, style, root_inner_width);
+    let width = f32::from(submenu_inner_width.saturating_add(style.presenter_shadow_margin * 2));
+    let submenu_inner_height = tray_menu_panel_inner_height(
+        tray_menu_submenu_items_height(&submenu.children, style),
+        style,
+    );
+    let height = f32::from(submenu_inner_height.saturating_add(style.presenter_shadow_margin * 2));
+    let submenu_side = fluent_tray_submenu_side(root_bounds, submenu_inner_width, style);
+    let x = match submenu_side {
+        FluentTraySubmenuSide::Right => {
+            root_bounds.x + root_bounds.width + f32::from(FLUENT_TRAY_SUBMENU_GAP) - shadow_margin
+        }
+        FluentTraySubmenuSide::Left => {
+            root_bounds.x
+                - f32::from(submenu_inner_width)
+                - f32::from(FLUENT_TRAY_SUBMENU_GAP)
+                - shadow_margin
+        }
+    };
+    let y = root_bounds.y - shadow_margin;
+
+    Some((
+        WindowOptions::new(
+            WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID),
+            FLUENT_TRAY_SUBMENU_WINDOW_TITLE,
+        )
+        .size(width, height)
+        .min_size(width, height)
+        .level(WindowLevel::ToolWindow)
+        .frame(WindowFrame::Acrylic)
+        .resize_mode(WindowResizeMode::Fixed)
+        .placement(WindowPlacement::Explicit { x, y })
+        .screen_constraint(win_fluent::window::WindowScreenConstraint::None)
+        .skip_taskbar(true),
+        submenu_side,
+    ))
+}
+
+fn fluent_tray_submenu_side(
+    root_bounds: FluentTrayRootPanelBounds,
+    submenu_inner_width: u16,
+    style: TrayMenuPresenterStyle,
+) -> FluentTraySubmenuSide {
+    let submenu_width = f32::from(submenu_inner_width);
+    let gap = f32::from(FLUENT_TRAY_SUBMENU_GAP);
+    let shadow = f32::from(style.presenter_shadow_margin);
+    let right_outer_right = root_bounds.x + root_bounds.width + gap + submenu_width + shadow;
+    let left_outer_left = root_bounds.x - gap - submenu_width - shadow;
+    let right_overflow = (right_outer_right - root_bounds.work_right).max(0.0);
+    let left_overflow = (root_bounds.work_left - left_outer_left).max(0.0);
+
+    if right_overflow <= left_overflow {
+        FluentTraySubmenuSide::Right
+    } else {
+        FluentTraySubmenuSide::Left
+    }
+}
+
+fn fluent_tray_menu_root_panel_bounds<Message>(
+    menu: &TrayMenu<Message>,
+    options: &WindowOptions,
+) -> Option<FluentTrayRootPanelBounds> {
+    #[cfg(windows)]
+    {
+        let placement =
+            win_fluent_platform_win::WindowsPlatformAdapter::resolve_window_placement(options)
+                .ok()?;
+        let shadow_margin = f32::from(menu.presenter_style.presenter_shadow_margin);
+        return Some(FluentTrayRootPanelBounds {
+            x: placement.x as f32 + shadow_margin,
+            y: placement.y as f32 + shadow_margin,
+            width: f32::from(fluent_tray_menu_root_inner_width(menu)),
+            work_left: placement.work_area.left as f32,
+            work_right: placement.work_area.right as f32,
+        });
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (menu, options);
+        None
+    }
+}
+
+fn fluent_tray_menu_root_window_width<Message>(menu: &TrayMenu<Message>) -> u16 {
+    menu.presenter_min_width.unwrap_or(240).max(120)
+}
+
+fn fluent_tray_menu_root_inner_width<Message>(menu: &TrayMenu<Message>) -> u16 {
+    let style = menu.presenter_style;
+    fluent_tray_menu_root_window_width(menu)
+        .saturating_sub(style.presenter_shadow_margin.saturating_mul(2))
+        .max(1)
+}
+
+fn tray_menu_panel_inner_height(natural_height: u16, style: TrayMenuPresenterStyle) -> u16 {
+    let max_inner_height = style.presenter_max_height.map(|height| {
+        height
+            .saturating_sub(style.presenter_shadow_margin.saturating_mul(2))
+            .max(1)
+    });
+
+    max_inner_height
+        .map(|height| natural_height.min(height))
+        .unwrap_or(natural_height)
+        .max(1)
+}
+
+fn active_tray_submenu<'a, Message>(
+    menu: &'a TrayMenu<Message>,
+    active_submenu_id: Option<&str>,
+) -> Option<&'a win_fluent::platform::TrayMenuItem<Message>> {
+    let id = active_submenu_id?;
+    menu.items
+        .iter()
+        .find(|item| item.enabled && item.is_submenu() && item.id == id)
+}
+
+fn fluent_tray_menu_initial_animation_offset(style: TrayMenuPresenterStyle) -> u16 {
+    if style.popup_animation == TrayMenuPopupAnimation::Vertical {
+        FLUENT_TRAY_MENU_ANIMATION_OFFSET
+    } else {
+        0
+    }
+}
+
+fn fluent_tray_menu_animation_task<Message>(
+    style: TrayMenuPresenterStyle,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    if style.popup_animation != TrayMenuPopupAnimation::Vertical {
+        return iced::Task::none();
+    }
+
+    iced::Task::perform(
+        async move {
+            std::thread::sleep(Duration::from_millis(FLUENT_TRAY_MENU_ANIMATION_DELAY_MS));
+            0u16
+        },
+        |offset_y| IcedRuntimeMessage::TrayMenuAnimateOffset { offset_y },
+    )
+}
+
+fn tray_menu_items_height<Message>(
+    items: &[win_fluent::platform::TrayMenuItem<Message>],
+    style: TrayMenuPresenterStyle,
+) -> u16 {
+    items.iter().fold(0u16, |height, item| {
+        height.saturating_add(if item.is_separator() {
+            style.separator_height.max(1)
+        } else {
+            tray_menu_item_height(style).max(1)
+        })
+    })
+}
+
+fn tray_menu_submenu_items_height<Message>(
+    items: &[win_fluent::platform::TrayMenuItem<Message>],
+    style: TrayMenuPresenterStyle,
+) -> u16 {
+    items.iter().fold(0u16, |height, item| {
+        let row_height = if item.is_separator() {
+            style.separator_height.max(1)
+        } else {
+            tray_menu_item_height(style).max(1)
+        };
+        let child_height = if item.is_submenu() {
+            tray_menu_submenu_items_height(&item.children, style)
+        } else {
+            0
+        };
+        height
+            .saturating_add(row_height)
+            .saturating_add(child_height)
+    })
+}
+
+fn tray_menu_submenu_inner_width<Message>(
+    submenu: &win_fluent::platform::TrayMenuItem<Message>,
+    style: TrayMenuPresenterStyle,
+    root_inner_width: u16,
+) -> u16 {
+    tray_menu_items_inner_width_estimate(&submenu.children, style, 0)
+        .max(root_inner_width)
+        .max(FLUENT_TRAY_SUBMENU_MIN_INNER_WIDTH)
+        .min(FLUENT_TRAY_SUBMENU_MAX_INNER_WIDTH)
+}
+
+fn tray_menu_items_inner_width_estimate<Message>(
+    items: &[win_fluent::platform::TrayMenuItem<Message>],
+    style: TrayMenuPresenterStyle,
+    depth: u16,
+) -> u16 {
+    items.iter().fold(0u16, |width, item| {
+        if item.is_separator() {
+            return width;
+        }
+
+        let child_width = if item.is_submenu() {
+            tray_menu_items_inner_width_estimate(&item.children, style, depth.saturating_add(1))
+        } else {
+            0
+        };
+
+        width.max(tray_menu_item_inner_width_estimate(item, style, depth).max(child_width))
+    })
+}
+
+fn tray_menu_item_inner_width_estimate<Message>(
+    item: &win_fluent::platform::TrayMenuItem<Message>,
+    style: TrayMenuPresenterStyle,
+    depth: u16,
+) -> u16 {
+    let text_width = item.label.chars().fold(0u16, |width, ch| {
+        let glyph_width = if ch.is_ascii() {
+            (f32::from(style.item_font_size) * 0.55).ceil() as u16
+        } else {
+            style.item_font_size
+        };
+        width.saturating_add(glyph_width.max(1))
+    });
+
+    text_width
+        .saturating_add(style.item_horizontal_padding.saturating_mul(2))
+        .saturating_add(depth.saturating_mul(18))
+        .saturating_add(if item.is_submenu() {
+            style.submenu_arrow_column_width
+        } else {
+            0
+        })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ShowWindowStep {
     ApplyNativeOptions { delayed_check: bool },
@@ -901,6 +1532,42 @@ where
     // utility windows (e.g. the selection pop-button) must stay unfocused.
     if !options.no_activate {
         tasks.push(window::gain_focus::<IcedRuntimeMessage<Message>>(window_id));
+    }
+
+    iced::Task::batch(tasks)
+}
+
+fn update_window_geometry_task<Message>(
+    window_id: window::Id,
+    options: WindowOptions,
+) -> iced::Task<IcedRuntimeMessage<Message>>
+where
+    Message: Send + 'static,
+{
+    let mut tasks = Vec::new();
+
+    #[cfg(windows)]
+    if let Some((position, size)) = resolved_window_position_and_size(&options) {
+        tasks.push(window::resize::<IcedRuntimeMessage<Message>>(
+            window_id, size,
+        ));
+        tasks.push(window::move_to::<IcedRuntimeMessage<Message>>(
+            window_id, position,
+        ));
+    }
+
+    #[cfg(not(windows))]
+    {
+        tasks.push(window::resize::<IcedRuntimeMessage<Message>>(
+            window_id,
+            Size::new(options.width, options.height),
+        ));
+        if let WindowPlacement::Explicit { x, y } = options.placement {
+            tasks.push(window::move_to::<IcedRuntimeMessage<Message>>(
+                window_id,
+                Point::new(x, y),
+            ));
+        }
     }
 
     iced::Task::batch(tasks)
@@ -1030,6 +1697,7 @@ where
                     IcedTrayEvent::Command { id } => {
                         IcedRuntimeMessage::PlatformEvent(PlatformEvent::TrayCommand(id))
                     }
+                    IcedTrayEvent::OpenMenu { x, y } => IcedRuntimeMessage::TrayMenuOpen { x, y },
                     IcedTrayEvent::Error { message } => {
                         IcedRuntimeMessage::PlatformEvent(PlatformEvent::Custom {
                             kind: "tray_error".to_string(),
@@ -1529,7 +2197,8 @@ fn collect_text_editor_values<Message>(view: &View<Message>, values: &mut HashMa
         | ViewToken::Slider(_)
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
-        | ViewToken::ResultList(_) => {}
+        | ViewToken::ResultList(_)
+        | ViewToken::TrayMenu(_) => {}
     }
 }
 
@@ -1563,6 +2232,15 @@ fn window_settings(options: &WindowOptions) -> iced::window::Settings {
             WindowPlacement::Explicit { x, y } => {
                 iced::window::Position::Specific(Point::new(x, y))
             }
+            WindowPlacement::ContextMenu { x, y } => {
+                iced::window::Position::Specific(Point::new(x, y))
+            }
+            WindowPlacement::ContextMenuInset {
+                x,
+                y,
+                inset_x,
+                inset_y,
+            } => iced::window::Position::Specific(Point::new(x - inset_x, y + inset_y)),
             WindowPlacement::Monitor
             | WindowPlacement::WorkArea
             | WindowPlacement::CursorOffset { .. }
@@ -1574,7 +2252,7 @@ fn window_settings(options: &WindowOptions) -> iced::window::Settings {
     #[cfg(windows)]
     {
         settings.platform_specific.skip_taskbar = options.skip_taskbar;
-        settings.platform_specific.undecorated_shadow = options.frame != WindowFrame::Standard;
+        settings.platform_specific.undecorated_shadow = options.frame == WindowFrame::Borderless;
         apply_windows_screen_constraints(&mut settings, options);
     }
 
@@ -1624,9 +2302,10 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
             .find_map(|child| focused_text_editor_id(&child.view)),
         ViewToken::Border(token) => focused_text_editor_id(&token.content),
         ViewToken::Viewbox(token) => focused_text_editor_id(&token.content),
-        ViewToken::TabView(token) => {
-            token.tabs.iter().find_map(|tab| focused_text_editor_id(&tab.content))
-        }
+        ViewToken::TabView(token) => token
+            .tabs
+            .iter()
+            .find_map(|tab| focused_text_editor_id(&tab.content)),
         ViewToken::ListView(token) => token
             .items
             .iter()
@@ -1680,6 +2359,7 @@ fn focused_text_editor_id<Message>(view: &View<Message>) -> Option<String> {
         | ViewToken::ComboBox(_)
         | ViewToken::ResultCard(_)
         | ViewToken::ResultList(_)
+        | ViewToken::TrayMenu(_)
         | ViewToken::CaptureOverlay(_)
         | ViewToken::Image(_)
         | ViewToken::WebView(_)
@@ -1705,11 +2385,20 @@ where
             iced::widget::container(iced_text(text.to_string()).size(visual.caption_size))
                 .padding([4, 8])
                 .style(move |_| tooltip_container_style(visual)),
-            iced::widget::tooltip::Position::Top,
+            tooltip_position(view.tooltip_placement()),
         )
         .gap(4)
         .into(),
         None => element,
+    }
+}
+
+fn tooltip_position(placement: TooltipPlacement) -> iced::widget::tooltip::Position {
+    match placement {
+        TooltipPlacement::Top => iced::widget::tooltip::Position::Top,
+        TooltipPlacement::Bottom => iced::widget::tooltip::Position::Bottom,
+        TooltipPlacement::Left => iced::widget::tooltip::Position::Left,
+        TooltipPlacement::Right => iced::widget::tooltip::Position::Right,
     }
 }
 
@@ -1855,9 +2544,8 @@ where
         ViewToken::ToggleButton(token) => {
             let state = token.state.clone();
             let pressed = token.pressed;
-            let label: IcedElement<Message> = iced_text(token.label.clone())
-                .size(visual.body_size)
-                .into();
+            let label: IcedElement<Message> =
+                iced_text(token.label.clone()).size(visual.body_size).into();
             let mut control = iced_button(label).style(move |_, status| {
                 let status = button_status_with_state(&state, status);
                 button_style_with_state(visual, ButtonKind::Subtle, state.focused, pressed, status)
@@ -2199,6 +2887,7 @@ where
         ViewToken::ResultCard(token) => compile_result_card(token, visual),
         ViewToken::ResultList(token) => compile_result_list(token, visual),
         ViewToken::ListView(token) => compile_list_view(token, provider, visual),
+        ViewToken::TrayMenu(token) => compile_tray_menu(token, visual),
         ViewToken::PointerRegion(token) => compile_pointer_region(token, provider, visual),
         ViewToken::CaptureOverlay(token) => compile_capture_overlay(token, visual),
         ViewToken::Image(token) => compile_image(token, visual),
@@ -2394,7 +3083,11 @@ impl<Message> iced::widget::canvas::Program<Message> for CaptureOverlayProgram {
                     .with_width(CAPTURE_BORDER_WIDTH),
             );
 
-            let label = format!("{} × {}", rect.width.round() as i32, rect.height.round() as i32);
+            let label = format!(
+                "{} × {}",
+                rect.width.round() as i32,
+                rect.height.round() as i32
+            );
             let label_y = if rect.y > 20.0 {
                 rect.y - 18.0
             } else {
@@ -2452,7 +3145,10 @@ impl CaptureOverlayProgram {
 
         let bx = mx + 2.0;
         let by = my + 2.0;
-        let box_rect = Rectangle::new(Point::new(bx, by), Size::new(CAPTURE_MAG_BOX, CAPTURE_MAG_BOX));
+        let box_rect = Rectangle::new(
+            Point::new(bx, by),
+            Size::new(CAPTURE_MAG_BOX, CAPTURE_MAG_BOX),
+        );
 
         // Zoomed frozen desktop (nearest-neighbour), clipped to the box.
         if let Some(background) = &self.background {
@@ -2465,7 +3161,10 @@ impl CaptureOverlayProgram {
                             box_cx - cursor.x * CAPTURE_MAG_ZOOM,
                             box_cy - cursor.y * CAPTURE_MAG_ZOOM,
                         ),
-                        Size::new(bounds.width * CAPTURE_MAG_ZOOM, bounds.height * CAPTURE_MAG_ZOOM),
+                        Size::new(
+                            bounds.width * CAPTURE_MAG_ZOOM,
+                            bounds.height * CAPTURE_MAG_ZOOM,
+                        ),
                     ),
                     iced::advanced::image::Image::new(background.handle.clone())
                         .filter_method(iced::advanced::image::FilterMethod::Nearest),
@@ -3240,13 +3939,15 @@ where
         );
     }
 
-    children.push(
-        iced_text(token.label.clone())
-            .font(text_font(TextStyle::Caption))
-            .size(text_size(TextStyle::Caption, visual))
-            .color(visual.text_on_accent)
-            .into(),
-    );
+    if token.kind != StatusBadgeKind::Dot {
+        children.push(
+            iced_text(token.label.clone())
+                .font(text_font(TextStyle::Caption))
+                .size(text_size(TextStyle::Caption, visual))
+                .color(visual.text_on_accent)
+                .into(),
+        );
+    }
 
     iced_container(
         iced_row(children)
@@ -4180,8 +4881,7 @@ where
         let mut cells: Vec<IcedElement<Message>> = Vec::with_capacity(n_cols);
         for c in 0..n_cols {
             let cell: IcedElement<Message> = if let Some(child) = origin.get(&(r, c)) {
-                let el =
-                    compile_view_with_text_editors_and_visual(&child.view, provider, visual);
+                let el = compile_view_with_text_editors_and_visual(&child.view, provider, visual);
                 iced_container(el).width(iced_length(col_len(c))).into()
             } else {
                 iced_space().width(iced_length(col_len(c))).into()
@@ -4910,6 +5610,595 @@ where
     iced_container(content)
         .style(move |_| result_card_container_style(visual))
         .into()
+}
+
+#[derive(Clone, Debug)]
+enum RuntimeTrayMenuHover {
+    None,
+    ClearSubmenu,
+    ActivateSubmenu(String),
+}
+
+fn compile_runtime_tray_menu_root<'a, Message>(
+    menu: &'a TrayMenu<Message>,
+    active_submenu_id: Option<&str>,
+    animation_offset_y: u16,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    let style = menu.presenter_style;
+    let shadow_margin = style.presenter_shadow_margin;
+    let root_inner_width = fluent_tray_menu_root_inner_width(menu);
+    let root_inner_height =
+        tray_menu_panel_inner_height(tray_menu_items_height(&menu.items, style), style);
+
+    let mut root_rows = iced_column(Vec::new()).spacing(0).width(IcedLength::Fill);
+    for item in &menu.items {
+        let is_active = active_submenu_id.is_some_and(|id| id == item.id);
+        let hover = if item.enabled && item.is_submenu() {
+            RuntimeTrayMenuHover::ActivateSubmenu(item.id.clone())
+        } else {
+            RuntimeTrayMenuHover::ClearSubmenu
+        };
+        root_rows = root_rows.push(compile_runtime_tray_menu_item(
+            item, style, visual, 0, is_active, hover, true,
+        ));
+    }
+
+    let root_content = compile_runtime_tray_menu_content(root_rows, style, root_inner_height);
+    let root_panel = compile_runtime_tray_menu_panel(
+        root_content,
+        root_inner_width,
+        root_inner_height,
+        style,
+        visual,
+    );
+
+    compile_runtime_tray_popup_frame(
+        root_panel,
+        root_inner_width,
+        shadow_margin,
+        animation_offset_y,
+    )
+}
+
+fn compile_runtime_tray_submenu<'a, Message>(
+    menu: &'a TrayMenu<Message>,
+    active_submenu_id: Option<&str>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    let style = menu.presenter_style;
+    let shadow_margin = style.presenter_shadow_margin;
+    let root_inner_width = fluent_tray_menu_root_inner_width(menu);
+    let Some(submenu) = active_tray_submenu(menu, active_submenu_id) else {
+        return iced_container(iced_space()).into();
+    };
+    let submenu_inner_width = tray_menu_submenu_inner_width(submenu, style, root_inner_width);
+    let submenu_inner_height = tray_menu_panel_inner_height(
+        tray_menu_submenu_items_height(&submenu.children, style),
+        style,
+    );
+    let submenu_rows = push_runtime_tray_submenu_rows(
+        iced_column(Vec::new()).spacing(0).width(IcedLength::Fill),
+        &submenu.children,
+        style,
+        visual,
+        0,
+    );
+    let submenu_content =
+        compile_runtime_tray_menu_content(submenu_rows, style, submenu_inner_height);
+    let submenu_panel = compile_runtime_tray_menu_panel(
+        submenu_content,
+        submenu_inner_width,
+        submenu_inner_height,
+        style,
+        visual,
+    );
+
+    compile_runtime_tray_popup_frame(submenu_panel, submenu_inner_width, shadow_margin, 0)
+}
+
+fn compile_runtime_tray_popup_frame<'a, Message>(
+    content: IcedElement<'a, IcedRuntimeMessage<Message>>,
+    inner_width: u16,
+    shadow_margin: u16,
+    animation_offset_y: u16,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    if shadow_margin == 0 {
+        content
+    } else {
+        let offset = animation_offset_y.min(shadow_margin.saturating_mul(2));
+        let top_padding = shadow_margin.saturating_add(offset);
+        let bottom_padding = shadow_margin.saturating_sub(offset.min(shadow_margin));
+        iced_container(content)
+            .width(IcedLength::Fixed(f32::from(
+                inner_width.saturating_add(shadow_margin.saturating_mul(2)),
+            )))
+            .padding(IcedPadding {
+                top: f32::from(top_padding),
+                right: f32::from(shadow_margin),
+                bottom: f32::from(bottom_padding),
+                left: f32::from(shadow_margin),
+            })
+            .style(|_| iced::widget::container::Style::default())
+            .into()
+    }
+}
+
+fn compile_runtime_tray_menu_content<'a, Message>(
+    rows: iced::widget::Column<'a, IcedRuntimeMessage<Message>>,
+    style: TrayMenuPresenterStyle,
+    inner_height: u16,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    if style.presenter_max_height.is_some() {
+        iced_scrollable(rows)
+            .width(IcedLength::Fill)
+            .height(IcedLength::Fixed(f32::from(inner_height.max(1))))
+            .direction(scroll_direction(
+                ScrollPolicy::Never,
+                ScrollPolicy::Auto,
+                false,
+            ))
+            .into()
+    } else {
+        rows.into()
+    }
+}
+
+fn compile_runtime_tray_menu_panel<'a, Message>(
+    content: IcedElement<'a, IcedRuntimeMessage<Message>>,
+    width: u16,
+    height: u16,
+    style: TrayMenuPresenterStyle,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    iced_container(content)
+        .width(IcedLength::Fixed(f32::from(width.max(1))))
+        .height(IcedLength::Fixed(f32::from(height.max(1))))
+        .style(move |_| tray_menu_container_style(visual, style))
+        .into()
+}
+
+fn push_runtime_tray_submenu_rows<'a, Message>(
+    mut rows: iced::widget::Column<'a, IcedRuntimeMessage<Message>>,
+    items: &'a [win_fluent::platform::TrayMenuItem<Message>],
+    style: TrayMenuPresenterStyle,
+    visual: IcedVisualTheme,
+    depth: u16,
+) -> iced::widget::Column<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    for item in items {
+        rows = rows.push(compile_runtime_tray_menu_item(
+            item,
+            style,
+            visual,
+            depth,
+            false,
+            RuntimeTrayMenuHover::None,
+            false,
+        ));
+
+        if item.is_submenu() {
+            rows = push_runtime_tray_submenu_rows(
+                rows,
+                &item.children,
+                style,
+                visual,
+                depth.saturating_add(1),
+            );
+        }
+    }
+
+    rows
+}
+
+fn compile_runtime_tray_menu_item<'a, Message>(
+    item: &'a win_fluent::platform::TrayMenuItem<Message>,
+    style: TrayMenuPresenterStyle,
+    visual: IcedVisualTheme,
+    depth: u16,
+    selected: bool,
+    hover: RuntimeTrayMenuHover,
+    show_submenu_arrow: bool,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    if item.is_separator() {
+        return compile_runtime_tray_menu_separator(style, visual);
+    }
+
+    let foreground = tray_menu_foreground_color(visual, style).scale_alpha(if item.enabled {
+        1.0
+    } else {
+        0.42
+    });
+    let label = iced_text(item.label.clone())
+        .font(text_font_for_value(TextStyle::Body, &item.label))
+        .width(IcedLength::Fill)
+        .size(f32::from(style.item_font_size))
+        .color(foreground)
+        .wrapping(iced::widget::text::Wrapping::None);
+
+    let mut cells: Vec<IcedElement<'a, IcedRuntimeMessage<Message>>> = Vec::new();
+    let indent = depth.saturating_mul(18);
+    if indent > 0 {
+        cells.push(
+            iced_space()
+                .width(IcedLength::Fixed(f32::from(indent)))
+                .into(),
+        );
+    }
+    cells.push(label.into());
+
+    let mut content = iced_row(cells)
+        .width(IcedLength::Fill)
+        .align_y(alignment::Vertical::Center);
+
+    if item.is_submenu() && show_submenu_arrow {
+        let arrow: IcedElement<'a, IcedRuntimeMessage<Message>> = iced_text("›")
+            .size(f32::from(style.item_font_size + 4))
+            .color(foreground)
+            .wrapping(iced::widget::text::Wrapping::None)
+            .into();
+        content = content.push(
+            iced_container(arrow)
+                .width(IcedLength::Fixed(f32::from(
+                    style.submenu_arrow_column_width,
+                )))
+                .align_x(alignment::Horizontal::Right),
+        );
+    }
+
+    let row_height = tray_menu_item_height(style);
+    let inner_height = row_height.saturating_sub(style.hover_inset_y.saturating_mul(2));
+    let horizontal_padding = style
+        .item_horizontal_padding
+        .saturating_sub(style.hover_inset_x);
+    let button_style = style;
+    let mut row = iced_button(content)
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fixed(f32::from(inner_height.max(1))))
+        .padding([0, horizontal_padding])
+        .style(move |_, status| {
+            tray_menu_item_button_style_with_selected(visual, button_style, status, selected)
+        });
+
+    if item.enabled {
+        match &hover {
+            RuntimeTrayMenuHover::ActivateSubmenu(id) if item.is_submenu() => {
+                row = row.on_press(IcedRuntimeMessage::TrayMenuActivateSubmenu(Some(
+                    id.clone(),
+                )));
+            }
+            _ if !item.is_submenu() => {
+                if let Some(message) = item.action.press() {
+                    row = row.on_press(IcedRuntimeMessage::App(message));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let row = iced_container(row)
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fixed(f32::from(row_height.max(1))))
+        .padding([style.hover_inset_y, style.hover_inset_x]);
+    let mut row = iced_mouse_area(row);
+
+    match hover {
+        RuntimeTrayMenuHover::None => {}
+        RuntimeTrayMenuHover::ClearSubmenu => {
+            row = row.on_enter(IcedRuntimeMessage::TrayMenuActivateSubmenu(None));
+        }
+        RuntimeTrayMenuHover::ActivateSubmenu(id) => {
+            row = row
+                .on_enter(IcedRuntimeMessage::TrayMenuActivateSubmenu(Some(id)))
+                .interaction(mouse::Interaction::Pointer);
+        }
+    }
+
+    row.into()
+}
+
+fn compile_runtime_tray_menu_separator<'a, Message>(
+    style: TrayMenuPresenterStyle,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    let line_style = style;
+    let line = iced_container(iced_space())
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fixed(f32::from(
+            style.separator_line_thickness.max(1),
+        )))
+        .style(move |_| tray_menu_separator_style(visual, line_style));
+
+    iced_container(line)
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fixed(f32::from(style.separator_height.max(1))))
+        .padding([0, style.separator_horizontal_inset])
+        .align_y(alignment::Vertical::Center)
+        .into()
+}
+
+fn compile_tray_menu<'a, Message>(
+    token: &'a TrayMenuToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    let mut rows = iced_column(Vec::new()).spacing(0).width(IcedLength::Fill);
+    for item in &token.items {
+        rows = rows.push(compile_tray_menu_item(item, token, visual));
+    }
+
+    let content: IcedElement<'a, Message> = if token.style.presenter_max_height.is_some() {
+        iced_scrollable(rows)
+            .width(IcedLength::Fill)
+            .height(IcedLength::Fill)
+            .direction(scroll_direction(
+                ScrollPolicy::Never,
+                ScrollPolicy::Auto,
+                false,
+            ))
+            .into()
+    } else {
+        rows.into()
+    };
+
+    let style = token.style;
+    let shadow_margin = style.presenter_shadow_margin;
+    let inner_width = token
+        .min_width
+        .saturating_sub(shadow_margin.saturating_mul(2))
+        .max(1);
+    let menu = iced_container(content)
+        .width(IcedLength::Fixed(f32::from(inner_width)))
+        .height(IcedLength::Fill)
+        .style(move |_| tray_menu_container_style(visual, style));
+
+    if shadow_margin == 0 {
+        menu.into()
+    } else {
+        let offset = token
+            .animation_offset_y
+            .min(shadow_margin.saturating_mul(2));
+        let top_padding = shadow_margin.saturating_add(offset);
+        let bottom_padding = shadow_margin.saturating_sub(offset.min(shadow_margin));
+        iced_container(menu)
+            .width(IcedLength::Fixed(f32::from(token.min_width)))
+            .height(IcedLength::Fill)
+            .padding(IcedPadding {
+                top: f32::from(top_padding),
+                right: f32::from(shadow_margin),
+                bottom: f32::from(bottom_padding),
+                left: f32::from(shadow_margin),
+            })
+            .style(|_| iced::widget::container::Style::default())
+            .into()
+    }
+}
+
+fn compile_tray_menu_item<'a, Message>(
+    item: &'a win_fluent::platform::TrayMenuItem<Message>,
+    token: &'a TrayMenuToken<Message>,
+    visual: IcedVisualTheme,
+) -> IcedElement<'a, Message>
+where
+    Message: Clone + Send + 'static,
+{
+    if item.is_separator() {
+        let style = token.style;
+        let line_style = style;
+        let line = iced_container(iced_space())
+            .width(IcedLength::Fill)
+            .height(IcedLength::Fixed(f32::from(
+                style.separator_line_thickness.max(1),
+            )))
+            .style(move |_| tray_menu_separator_style(visual, line_style));
+
+        return iced_container(line)
+            .width(IcedLength::Fill)
+            .height(IcedLength::Fixed(f32::from(style.separator_height.max(1))))
+            .padding([0, style.separator_horizontal_inset])
+            .align_y(alignment::Vertical::Center)
+            .into();
+    }
+
+    let style = token.style;
+    let foreground = tray_menu_foreground_color(visual, style).scale_alpha(if item.enabled {
+        1.0
+    } else {
+        0.42
+    });
+    let label = iced_text(item.label.clone())
+        .font(text_font_for_value(TextStyle::Body, &item.label))
+        .width(IcedLength::Fill)
+        .size(f32::from(style.item_font_size))
+        .color(foreground)
+        .wrapping(iced::widget::text::Wrapping::None);
+    let mut content = iced_row(vec![label.into()])
+        .width(IcedLength::Fill)
+        .align_y(alignment::Vertical::Center);
+
+    if item.is_submenu() {
+        let arrow: IcedElement<'a, Message> = iced_text("›")
+            .size(f32::from(style.item_font_size + 4))
+            .color(foreground)
+            .wrapping(iced::widget::text::Wrapping::None)
+            .into();
+        content = content.push(
+            iced_container(arrow)
+                .width(IcedLength::Fixed(f32::from(
+                    style.submenu_arrow_column_width,
+                )))
+                .align_x(alignment::Horizontal::Right),
+        );
+    }
+
+    let row_height = tray_menu_item_height(style);
+    let inner_height = row_height.saturating_sub(style.hover_inset_y.saturating_mul(2));
+    let horizontal_padding = style
+        .item_horizontal_padding
+        .saturating_sub(style.hover_inset_x);
+    let button_style = style;
+    let mut row = iced_button(content)
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fixed(f32::from(inner_height.max(1))))
+        .padding([0, horizontal_padding])
+        .style(move |_, status| {
+            tray_menu_item_button_style_with_selected(visual, button_style, status, false)
+        });
+
+    if item.enabled && !item.is_submenu() {
+        if let Some(message) = item.action.press() {
+            row = row.on_press(message);
+        }
+    }
+
+    iced_container(row)
+        .width(IcedLength::Fill)
+        .height(IcedLength::Fixed(f32::from(row_height.max(1))))
+        .padding([style.hover_inset_y, style.hover_inset_x])
+        .into()
+}
+
+fn tray_menu_item_height(style: TrayMenuPresenterStyle) -> u16 {
+    (style.item_font_size + style.item_vertical_padding).max(style.item_min_height)
+}
+
+fn tray_menu_container_style(
+    visual: IcedVisualTheme,
+    style: TrayMenuPresenterStyle,
+) -> iced::widget::container::Style {
+    let surface = tray_menu_surface_color(visual, style);
+    iced::widget::container::Style::default()
+        .background(surface)
+        .color(tray_menu_foreground_color(visual, style))
+        .border(control_border_with_radius(
+            mix_color(surface, Color::BLACK, 0.12),
+            0.5,
+            f32::from(style.presenter_corner_radius),
+        ))
+        .shadow(elevation_shadow(visual, 8.0))
+}
+
+fn tray_menu_separator_style(
+    visual: IcedVisualTheme,
+    style: TrayMenuPresenterStyle,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style::default()
+        .background(tray_menu_separator_color(visual, style))
+        .color(tray_menu_foreground_color(visual, style))
+}
+
+fn tray_menu_item_button_style_with_selected(
+    visual: IcedVisualTheme,
+    style: TrayMenuPresenterStyle,
+    status: iced::widget::button::Status,
+    selected: bool,
+) -> iced::widget::button::Style {
+    let surface = tray_menu_surface_color(visual, style);
+    let foreground = tray_menu_foreground_color(visual, style);
+    let background = match status {
+        iced::widget::button::Status::Hovered => Some(Background::Color(mix_color(
+            surface,
+            foreground,
+            f32::from(style.hover_foreground_mix_percent) / 100.0,
+        ))),
+        iced::widget::button::Status::Pressed => Some(Background::Color(mix_color(
+            surface,
+            foreground,
+            (f32::from(style.hover_foreground_mix_percent) + 4.0) / 100.0,
+        ))),
+        iced::widget::button::Status::Active if selected => Some(Background::Color(mix_color(
+            surface,
+            foreground,
+            f32::from(style.hover_foreground_mix_percent) / 100.0,
+        ))),
+        iced::widget::button::Status::Active | iced::widget::button::Status::Disabled => None,
+    };
+
+    iced::widget::button::Style {
+        background,
+        text_color: foreground,
+        border: control_border_with_radius(
+            Color::TRANSPARENT,
+            0.0,
+            f32::from(style.item_corner_radius),
+        ),
+        ..iced::widget::button::Style::default()
+    }
+}
+
+fn tray_menu_surface_color(visual: IcedVisualTheme, style: TrayMenuPresenterStyle) -> Color {
+    match visual.mode {
+        ThemeMode::Dark | ThemeMode::HighContrast => {
+            tray_menu_color(style.dark_surface, visual.surface)
+        }
+        ThemeMode::System | ThemeMode::Light | ThemeMode::Minimal => {
+            tray_menu_color(style.light_surface, visual.surface)
+        }
+    }
+}
+
+fn tray_menu_foreground_color(visual: IcedVisualTheme, style: TrayMenuPresenterStyle) -> Color {
+    match visual.mode {
+        ThemeMode::Dark | ThemeMode::HighContrast => {
+            tray_menu_color(style.dark_foreground, visual.text_primary)
+        }
+        ThemeMode::System | ThemeMode::Light | ThemeMode::Minimal => {
+            tray_menu_color(style.light_foreground, visual.text_primary)
+        }
+    }
+}
+
+fn tray_menu_separator_color(visual: IcedVisualTheme, style: TrayMenuPresenterStyle) -> Color {
+    match visual.mode {
+        ThemeMode::Dark | ThemeMode::HighContrast => {
+            tray_menu_color(style.dark_separator, visual.border)
+        }
+        ThemeMode::System | ThemeMode::Light | ThemeMode::Minimal => {
+            tray_menu_color(style.light_separator, visual.border)
+        }
+    }
+}
+
+fn tray_menu_color(color: TrayMenuColor, fallback: Color) -> Color {
+    match color {
+        TrayMenuColor::SystemMenu => fallback,
+        TrayMenuColor::Rgb(red, green, blue) => Color::from_rgb8(red, green, blue),
+    }
+}
+
+fn mix_color(from: Color, to: Color, amount: f32) -> Color {
+    let amount = amount.clamp(0.0, 1.0);
+    Color {
+        r: from.r + (to.r - from.r) * amount,
+        g: from.g + (to.g - from.g) * amount,
+        b: from.b + (to.b - from.b) * amount,
+        a: from.a + (to.a - from.a) * amount,
+    }
 }
 
 fn compile_list_view<'a, Message, Provider>(
@@ -6733,7 +8022,7 @@ fn icon_element<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    // Image-backed tokens (e.g. service icons like Google) must render as the
+    // Image-backed tokens (e.g. service icons) must render as the
     // bitmap; otherwise they fall back to `icon_symbol`'s default glyph. The
     // expander and result-list paths already do this — buttons funnel through
     // here, so handle it centrally.
@@ -6818,31 +8107,7 @@ where
 }
 
 fn icon_symbol(icon: &win_fluent::IconToken) -> char {
-    if let Some(glyph) = icon.glyph {
-        return glyph;
-    }
-
-    match icon.name {
-        "add" => '\u{E710}',
-        "camera" => '\u{E722}',
-        "check" => '\u{E8FB}',
-        "clear" => '\u{E711}',
-        "copy" => '\u{E8C8}',
-        "delete" => '\u{E74D}',
-        "edit" => '\u{E70F}',
-        "help" => '\u{E897}',
-        "keyboard" => '\u{E765}',
-        "microphone" => '\u{E720}',
-        "more" => '\u{E712}',
-        "pin" => '\u{E718}',
-        "play" => '\u{E768}',
-        "search" => '\u{E721}',
-        "settings" => '\u{E713}',
-        "speaker" => '\u{E767}',
-        "swap" => '\u{E8AB}',
-        "translate" => '\u{E8C1}',
-        _ => '\u{E8A5}',
-    }
+    icon.resolved_glyph().unwrap_or('\u{E8A5}')
 }
 
 fn button_text_size(kind: ButtonKind, visual: IcedVisualTheme) -> f32 {
@@ -8019,14 +9284,16 @@ where
     if token.open && !token.suggestions.is_empty() {
         let submittable = token.submit_action.kind() == ActionKind::SelectionInput;
         let mut list = iced_column(Vec::new()).spacing(2).width(IcedLength::Fill);
-        for suggestion in &token.suggestions {
+        for (index, suggestion) in token.suggestions.iter().enumerate() {
+            let highlighted = token.highlighted_index == Some(index);
             let row = iced_container(
                 iced_text(suggestion.clone())
                     .size(visual.body_size)
                     .color(visual.text_primary),
             )
             .width(IcedLength::Fill)
-            .padding(IcedPadding::from([4.0, 8.0]));
+            .padding(IcedPadding::from([4.0, 8.0]))
+            .style(move |_| list_view_row_style(visual, highlighted));
             let row_el: IcedElement<Message> = if submittable {
                 if let Some(message) = token.submit_action.input_text(suggestion.clone()) {
                     iced_mouse_area(row).on_press(message).into()
@@ -8098,10 +9365,10 @@ where
     let mut chevron = iced_button(iced_text("\u{25BE}".to_string()).size(visual.body_size))
         .style(move |_, status| button_style(visual, ButtonKind::Subtle, status));
     // Without retained open/close state in the backend, the chevron selects the
-    // first menu item as a pragmatic default; the token records the full menu and
-    // its open state for the schema/app layer.
+    // first enabled menu item as a pragmatic default; the token records the full
+    // menu and its open state for the schema/app layer.
     if token.state.enabled && token.select_action.kind() == ActionKind::SelectionInput {
-        if let Some(first) = token.items.first() {
+        if let Some(first) = first_enabled_flyout_item(&token.items) {
             if let Some(message) = token.select_action.input_text(first.id.clone()) {
                 chevron = chevron.on_press(message);
             }
@@ -8112,6 +9379,10 @@ where
         .spacing(1)
         .align_y(alignment::Vertical::Center)
         .into()
+}
+
+fn first_enabled_flyout_item(items: &[FlyoutMenuItem]) -> Option<&FlyoutMenuItem> {
+    items.iter().find(|item| item.enabled)
 }
 
 fn compile_tab_view<'a, Message, Provider>(
@@ -8279,9 +9550,7 @@ where
         Orientation::Vertical => iced_column(options)
             .spacing(f32::from(token.spacing))
             .into(),
-        Orientation::Horizontal => iced_row(options)
-            .spacing(f32::from(token.spacing))
-            .into(),
+        Orientation::Horizontal => iced_row(options).spacing(f32::from(token.spacing)).into(),
     };
 
     match &token.header {
@@ -9163,7 +10432,15 @@ fn tray_stream(data: &TraySubscriptionData) -> impl iced::futures::Stream<Item =
                         std::time::Duration::from_millis(100),
                     ) {
                         Ok(Some(event)) => {
-                            let _ = output.try_send(IcedTrayEvent::Command { id: event.id });
+                            let event = match event {
+                                win_fluent_platform_win::WindowsTrayEvent::Command {
+                                    id, ..
+                                } => IcedTrayEvent::Command { id },
+                                win_fluent_platform_win::WindowsTrayEvent::OpenMenu { x, y } => {
+                                    IcedTrayEvent::OpenMenu { x, y }
+                                }
+                            };
+                            let _ = output.try_send(event);
                         }
                         Ok(None) => {}
                         Err(error) => {
@@ -9237,7 +10514,9 @@ struct NamedEventSubscriptionData {
 struct TraySubscriptionData {
     tooltip: String,
     icon_path: Option<String>,
+    presenter_kind: TrayMenuPresenterKind,
     presenter_min_width: Option<u16>,
+    presenter_style: TrayMenuPresenterStyle,
     callback_message: u32,
     item_count: usize,
     default_command_id: Option<u32>,
@@ -9278,7 +10557,9 @@ impl TraySubscriptionData {
         win_fluent_platform_win::WindowsTrayPlan {
             tooltip: self.tooltip.clone(),
             icon_path: self.icon_path.clone(),
+            presenter_kind: self.presenter_kind,
             presenter_min_width: self.presenter_min_width,
+            presenter_style: self.presenter_style,
             callback_message: self.callback_message,
             item_count: self.item_count,
             default_command_id: self.default_command_id,
@@ -9325,7 +10606,9 @@ impl From<win_fluent_platform_win::WindowsTrayPlan> for TraySubscriptionData {
         Self {
             tooltip: plan.tooltip,
             icon_path: plan.icon_path,
+            presenter_kind: plan.presenter_kind,
             presenter_min_width: plan.presenter_min_width,
+            presenter_style: plan.presenter_style,
             callback_message: plan.callback_message,
             item_count: plan.item_count,
             default_command_id: plan.default_command_id,
@@ -9453,6 +10736,30 @@ mod tests {
         Pointer(PointerPosition),
         Wheel(PointerWheel),
         Run,
+    }
+
+    fn test_tray_menu_with_submenu() -> TrayMenu<Msg> {
+        TrayMenu::new("Easydict")
+            .presenter_kind(TrayMenuPresenterKind::Fluent)
+            .presenter_min_width(148)
+            .presenter_style(TrayMenuPresenterStyle::winui())
+            .item(
+                win_fluent::platform::TrayMenuItem::submenu("browser-support", "Browser Support")
+                    .item(
+                        win_fluent::platform::TrayMenuItem::new(
+                            "install-chrome",
+                            "Install Chrome Support",
+                        )
+                        .on_invoke(Msg::Run),
+                    )
+                    .item(
+                        win_fluent::platform::TrayMenuItem::new(
+                            "install-firefox",
+                            "Install Firefox Support",
+                        )
+                        .on_invoke(Msg::Run),
+                    ),
+            )
     }
 
     struct TestApp;
@@ -9776,6 +11083,60 @@ mod tests {
     }
 
     #[test]
+    fn pending_dynamic_window_title_uses_window_options() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+
+        let _ = runtime.window_command(WindowCommand::Show(WindowId::new("mini")));
+
+        assert_eq!(
+            runtime.title_for_logical_window(&WindowId::new("main")),
+            "Original title".to_string()
+        );
+        assert_eq!(
+            runtime.title_for_logical_window(&WindowId::new("mini")),
+            "Mini".to_string()
+        );
+    }
+
+    #[test]
+    fn opened_dynamic_window_preserves_custom_view() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let popup_id = WindowId::new("custom-popup");
+
+        let _ = runtime.open_window_task(
+            WindowOptions::new(popup_id.clone(), "Custom popup"),
+            Some(text("Custom popup content")),
+        );
+        let native_id = *runtime
+            .pending_windows
+            .iter()
+            .find(|(_, window)| window.logical_id == popup_id)
+            .map(|(id, _)| id)
+            .expect("custom popup should be pending");
+
+        assert_custom_popup_content(&runtime, &popup_id);
+
+        let _ = IcedSingleWindowRuntime::<TestApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowOpened(native_id),
+        );
+        assert_custom_popup_content(&runtime, &popup_id);
+
+        runtime.rebuild_views();
+        assert_custom_popup_content(&runtime, &popup_id);
+    }
+
+    #[test]
     fn show_logical_window_opens_pending_window_with_app_options() {
         let options = WindowOptions::new("main", "Boot title");
         let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
@@ -9798,6 +11159,34 @@ mod tests {
     }
 
     #[test]
+    fn show_at_window_command_routes_to_logical_window_with_explicit_placement() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
+            TestApp,
+            options,
+            empty_desktop_integration_plan(),
+        );
+
+        let _ = runtime.window_command(WindowCommand::ShowAt {
+            id: WindowId::new("mini"),
+            x: 120.0,
+            y: 80.0,
+        });
+
+        let pending = runtime
+            .pending_windows
+            .values()
+            .find(|window| window.logical_id.as_str() == "mini")
+            .expect("mini window should be pending");
+
+        assert_eq!(
+            pending.options.placement,
+            WindowPlacement::Explicit { x: 120.0, y: 80.0 }
+        );
+        assert!(runtime.views.contains_key(&WindowId::new("mini")));
+    }
+
+    #[test]
     fn closed_native_window_removes_logical_mapping() {
         let options = WindowOptions::new("main", "Boot title");
         let mut runtime = IcedSingleWindowRuntime::<TestApp>::new(
@@ -9809,6 +11198,7 @@ mod tests {
         let runtime_window = RuntimeWindow {
             logical_id: WindowId::new("mini"),
             options: WindowOptions::new("mini", "Mini"),
+            custom_view: false,
         };
         runtime
             .logical_windows
@@ -9838,6 +11228,7 @@ mod tests {
             RuntimeWindow {
                 logical_id: WindowId::new("mini"),
                 options: WindowOptions::new("mini", "Mini"),
+                custom_view: false,
             },
         );
 
@@ -9869,6 +11260,7 @@ mod tests {
         let runtime_window = RuntimeWindow {
             logical_id: WindowId::new("mini"),
             options: WindowOptions::new("mini", "Mini"),
+            custom_view: false,
         };
         runtime
             .logical_windows
@@ -9889,6 +11281,99 @@ mod tests {
     }
 
     #[test]
+    fn closing_fluent_tray_root_window_clears_submenu_lifecycle_state() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let root_native_id = window::Id::unique();
+        runtime
+            .logical_windows
+            .insert(WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID), root_native_id);
+        runtime.native_windows.insert(
+            root_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID),
+                options: WindowOptions::new(FLUENT_TRAY_MENU_WINDOW_ID, "Tray"),
+                custom_view: true,
+            },
+        );
+        runtime.fluent_tray_menu = Some(TrayMenu::<WindowEvent>::new("win fluent"));
+        runtime.fluent_tray_root_panel_bounds = Some(FluentTrayRootPanelBounds {
+            x: 320.0,
+            y: 420.0,
+            width: 240.0,
+            work_left: 0.0,
+            work_right: 1920.0,
+        });
+        runtime.fluent_tray_submenu_side = FluentTraySubmenuSide::Left;
+        runtime.active_tray_submenu_id = Some("tools".to_string());
+        runtime.fluent_tray_menu_animation_offset = 8;
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowClosed(root_native_id),
+        );
+
+        assert!(runtime.fluent_tray_menu.is_none());
+        assert!(runtime.fluent_tray_root_panel_bounds.is_none());
+        assert_eq!(
+            runtime.fluent_tray_submenu_side,
+            FluentTraySubmenuSide::Right
+        );
+        assert_eq!(runtime.active_tray_submenu_id, None);
+        assert_eq!(runtime.fluent_tray_menu_animation_offset, 0);
+    }
+
+    #[test]
+    fn closing_fluent_tray_submenu_window_clears_only_submenu_lifecycle_state() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let submenu_native_id = window::Id::unique();
+        runtime.logical_windows.insert(
+            WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID),
+            submenu_native_id,
+        );
+        runtime.native_windows.insert(
+            submenu_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID),
+                options: WindowOptions::new(FLUENT_TRAY_SUBMENU_WINDOW_ID, "Tray submenu"),
+                custom_view: true,
+            },
+        );
+        runtime.fluent_tray_menu = Some(TrayMenu::<WindowEvent>::new("win fluent"));
+        runtime.fluent_tray_root_panel_bounds = Some(FluentTrayRootPanelBounds {
+            x: 320.0,
+            y: 420.0,
+            width: 240.0,
+            work_left: 0.0,
+            work_right: 1920.0,
+        });
+        runtime.fluent_tray_submenu_side = FluentTraySubmenuSide::Left;
+        runtime.active_tray_submenu_id = Some("tools".to_string());
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowClosed(submenu_native_id),
+        );
+
+        assert!(runtime.fluent_tray_menu.is_some());
+        assert!(runtime.fluent_tray_root_panel_bounds.is_some());
+        assert_eq!(
+            runtime.fluent_tray_submenu_side,
+            FluentTraySubmenuSide::Right
+        );
+        assert_eq!(runtime.active_tray_submenu_id, None);
+    }
+
+    #[test]
     fn focused_native_window_dispatches_logical_focus_event() {
         let options = WindowOptions::new("main", "Boot title");
         let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
@@ -9905,6 +11390,7 @@ mod tests {
             RuntimeWindow {
                 logical_id: WindowId::new("mini"),
                 options: WindowOptions::new("mini", "Mini"),
+                custom_view: false,
             },
         );
 
@@ -9936,6 +11422,7 @@ mod tests {
             RuntimeWindow {
                 logical_id: WindowId::new("mini"),
                 options: WindowOptions::new("mini", "Mini"),
+                custom_view: false,
             },
         );
 
@@ -9969,6 +11456,21 @@ mod tests {
                 WindowId::new("main"),
             )))
             .is_some());
+    }
+
+    fn assert_custom_popup_content<App>(runtime: &IcedSingleWindowRuntime<App>, popup_id: &WindowId)
+    where
+        App: FluentApplication,
+    {
+        match runtime
+            .views
+            .get(popup_id)
+            .expect("custom popup view should exist")
+            .token()
+        {
+            ViewToken::Text(token) => assert_eq!(token.value, "Custom popup content"),
+            _ => panic!("expected custom text popup view"),
+        }
     }
 
     #[test]
@@ -10014,7 +11516,7 @@ mod tests {
                         .id("mini.input")
                         .on_input(Msg::Input),
                     command_bar((primary_button("Translate").on_press(Msg::Run),)),
-                    service_result_list([ResultItem::new("openai", "OpenAI", "Streaming")])
+                    service_result_list([ResultItem::new("provider-a", "Provider A", "Streaming")])
                         .on_copy(Msg::Run)
                         .on_speak(Msg::Run),
                 ))
@@ -11101,7 +12603,10 @@ mod tests {
         assert_eq!(settings.level, iced::window::Level::AlwaysOnTop);
 
         #[cfg(windows)]
-        assert!(settings.platform_specific.skip_taskbar);
+        {
+            assert!(settings.platform_specific.skip_taskbar);
+            assert!(!settings.platform_specific.undecorated_shadow);
+        }
     }
 
     #[test]
@@ -11124,7 +12629,10 @@ mod tests {
         assert_eq!(settings.level, iced::window::Level::AlwaysOnTop);
 
         #[cfg(windows)]
-        assert!(settings.platform_specific.skip_taskbar);
+        {
+            assert!(settings.platform_specific.skip_taskbar);
+            assert!(settings.platform_specific.undecorated_shadow);
+        }
     }
 
     #[test]
@@ -11151,6 +12659,156 @@ mod tests {
             show_at_options.placement,
             WindowPlacement::Explicit { x: 408.0, y: 208.0 }
         ));
+    }
+
+    #[test]
+    fn fluent_tray_submenu_expands_right_without_moving_root_panel() {
+        let menu = test_tray_menu_with_submenu();
+        let root_bounds = FluentTrayRootPanelBounds {
+            x: 320.0,
+            y: 420.0,
+            width: f32::from(fluent_tray_menu_root_inner_width(&menu)),
+            work_left: 0.0,
+            work_right: 1920.0,
+        };
+
+        let (options, side) =
+            fluent_tray_submenu_window_options(&menu, Some("browser-support"), Some(root_bounds))
+                .unwrap();
+
+        assert_eq!(side, FluentTraySubmenuSide::Right);
+        assert_eq!(options.id.as_str(), FLUENT_TRAY_SUBMENU_WINDOW_ID);
+        assert!(matches!(
+            options.placement,
+            WindowPlacement::Explicit { x, y }
+                if x == root_bounds.x
+                    + root_bounds.width
+                    + f32::from(FLUENT_TRAY_SUBMENU_GAP)
+                    - f32::from(menu.presenter_style.presenter_shadow_margin)
+                    && y == root_bounds.y - f32::from(menu.presenter_style.presenter_shadow_margin)
+        ));
+    }
+
+    #[test]
+    fn fluent_tray_submenu_expands_right_near_left_edge_on_offset_work_area() {
+        let menu = test_tray_menu_with_submenu();
+        let root_bounds = FluentTrayRootPanelBounds {
+            x: 304.0,
+            y: 420.0,
+            width: f32::from(fluent_tray_menu_root_inner_width(&menu)),
+            work_left: 300.0,
+            work_right: 1200.0,
+        };
+
+        let (options, side) =
+            fluent_tray_submenu_window_options(&menu, Some("browser-support"), Some(root_bounds))
+                .unwrap();
+
+        assert_eq!(side, FluentTraySubmenuSide::Right);
+        assert!(matches!(
+            options.placement,
+            WindowPlacement::Explicit { x, .. } if x >= root_bounds.work_left
+        ));
+    }
+
+    #[test]
+    fn fluent_tray_submenu_flips_left_without_moving_root_panel_near_right_edge() {
+        let menu = test_tray_menu_with_submenu();
+        let root_bounds = FluentTrayRootPanelBounds {
+            x: 1756.0,
+            y: 420.0,
+            width: f32::from(fluent_tray_menu_root_inner_width(&menu)),
+            work_left: 0.0,
+            work_right: 1920.0,
+        };
+
+        let (options, side) =
+            fluent_tray_submenu_window_options(&menu, Some("browser-support"), Some(root_bounds))
+                .unwrap();
+        let submenu = active_tray_submenu(&menu, Some("browser-support")).unwrap();
+        let submenu_width = tray_menu_submenu_inner_width(
+            submenu,
+            menu.presenter_style,
+            fluent_tray_menu_root_inner_width(&menu),
+        );
+
+        assert_eq!(side, FluentTraySubmenuSide::Left);
+        assert_eq!(options.id.as_str(), FLUENT_TRAY_SUBMENU_WINDOW_ID);
+        assert!(matches!(
+            options.placement,
+            WindowPlacement::Explicit { x, y }
+                if x == root_bounds.x
+                    - f32::from(submenu_width)
+                    - f32::from(FLUENT_TRAY_SUBMENU_GAP)
+                    - f32::from(menu.presenter_style.presenter_shadow_margin)
+                    && y == root_bounds.y - f32::from(menu.presenter_style.presenter_shadow_margin)
+        ));
+    }
+
+    #[test]
+    fn fluent_tray_panels_keep_independent_content_heights() {
+        let menu = test_tray_menu_with_submenu();
+        let style = menu.presenter_style;
+        let root_options = fluent_tray_menu_window_options(&menu, 320, 500);
+        let root_bounds = FluentTrayRootPanelBounds {
+            x: 320.0,
+            y: 420.0,
+            width: f32::from(fluent_tray_menu_root_inner_width(&menu)),
+            work_left: 0.0,
+            work_right: 1920.0,
+        };
+        let (submenu_options, _) =
+            fluent_tray_submenu_window_options(&menu, Some("browser-support"), Some(root_bounds))
+                .unwrap();
+        let root_height =
+            tray_menu_panel_inner_height(tray_menu_items_height(&menu.items, style), style);
+        let submenu = active_tray_submenu(&menu, Some("browser-support")).unwrap();
+        let submenu_height = tray_menu_panel_inner_height(
+            tray_menu_submenu_items_height(&submenu.children, style),
+            style,
+        );
+
+        assert_ne!(root_height, submenu_height);
+        assert_eq!(
+            root_options.height,
+            f32::from(root_height + style.presenter_shadow_margin * 2)
+        );
+        assert_eq!(
+            submenu_options.height,
+            f32::from(submenu_height + style.presenter_shadow_margin * 2)
+        );
+        assert_ne!(root_options.height, submenu_options.height);
+    }
+
+    #[test]
+    fn fluent_tray_root_and_submenu_heights_are_capped_by_presenter_max_height() {
+        let style = TrayMenuPresenterStyle::winui()
+            .presenter_shadow_margin(8)
+            .presenter_max_height(Some(96));
+        let menu = TrayMenu::<Msg>::new("win fluent")
+            .presenter_style(style)
+            .item(TrayMenuItem::new("one", "One"))
+            .item(TrayMenuItem::new("two", "Two"))
+            .item(TrayMenuItem::new("three", "Three"))
+            .item(
+                TrayMenuItem::submenu("tools", "Tools")
+                    .item(TrayMenuItem::new("a", "A"))
+                    .item(TrayMenuItem::new("b", "B"))
+                    .item(TrayMenuItem::new("c", "C"))
+                    .item(TrayMenuItem::new("d", "D")),
+            );
+        let max_inner_height =
+            style.presenter_max_height.unwrap() - style.presenter_shadow_margin * 2;
+        let root_height =
+            tray_menu_panel_inner_height(tray_menu_items_height(&menu.items, style), style);
+        let submenu = active_tray_submenu(&menu, Some("tools")).unwrap();
+        let submenu_height = tray_menu_panel_inner_height(
+            tray_menu_submenu_items_height(&submenu.children, style),
+            style,
+        );
+
+        assert_eq!(root_height, max_inner_height);
+        assert_eq!(submenu_height, max_inner_height);
     }
 
     #[test]
@@ -11243,7 +12901,9 @@ mod tests {
         let plan = win_fluent_platform_win::WindowsTrayPlan {
             tooltip: "Easydict".to_string(),
             icon_path: Some("C:\\Easydict\\AppIcon.ico".to_string()),
+            presenter_kind: TrayMenuPresenterKind::Fluent,
             presenter_min_width: Some(300),
+            presenter_style: TrayMenuPresenterStyle::default(),
             callback_message: 1025,
             item_count: 2,
             default_command_id: Some(1000),
@@ -11276,7 +12936,12 @@ mod tests {
 
         assert_eq!(round_trip.tooltip, plan.tooltip);
         assert_eq!(round_trip.icon_path, plan.icon_path);
+        assert_eq!(round_trip.presenter_kind, TrayMenuPresenterKind::Fluent);
         assert_eq!(round_trip.presenter_min_width, Some(300));
+        assert_eq!(
+            round_trip.presenter_style,
+            TrayMenuPresenterStyle::default()
+        );
         assert_eq!(round_trip.callback_message, plan.callback_message);
         assert_eq!(round_trip.item_count, plan.item_count);
         assert_eq!(round_trip.default_command_id, Some(1000));
@@ -11297,7 +12962,9 @@ mod tests {
         let plan = win_fluent_platform_win::WindowsTrayPlan {
             tooltip: "Easydict".to_string(),
             icon_path: Some("C:\\Easydict\\AppIcon.ico".to_string()),
+            presenter_kind: TrayMenuPresenterKind::Fluent,
             presenter_min_width: Some(300),
+            presenter_style: TrayMenuPresenterStyle::default(),
             callback_message: 1025,
             item_count: 2,
             default_command_id: Some(1000),
@@ -11353,7 +13020,12 @@ mod tests {
             Some("C:\\Easydict\\AppIcon.ico")
         );
         assert_eq!(round_trip.item_count, 2);
+        assert_eq!(round_trip.presenter_kind, TrayMenuPresenterKind::Fluent);
         assert_eq!(round_trip.presenter_min_width, Some(300));
+        assert_eq!(
+            round_trip.presenter_style,
+            TrayMenuPresenterStyle::default()
+        );
         assert_eq!(round_trip.default_command_id, Some(1000));
         assert_eq!(
             round_trip.items[0].kind,
@@ -11595,10 +13267,10 @@ mod tests {
 
     #[test]
     fn checkbox_label_italic_maps_to_iced_font_style() {
-        let normal = checkbox_label_font("OpenAI", false);
+        let normal = checkbox_label_font("Provider A", false);
         assert_eq!(normal.style, font::Style::Normal);
 
-        let italic = checkbox_label_font("OpenAI", true);
+        let italic = checkbox_label_font("Provider A", true);
         assert_eq!(italic.style, font::Style::Italic);
         match italic.family {
             font::Family::Name(name) => assert_eq!(name, "Segoe UI"),
@@ -11814,6 +13486,19 @@ mod tests {
         let chips = vec![Size::new(180.0, 32.0); 8];
         let (capped, _) = flow_positions(&chips, 4000.0, 8.0, 4.0, 4);
         assert_eq!(row_count(&capped), 2); // 8 items, cap 4 → 2 rows
+    }
+
+    #[test]
+    fn split_button_default_menu_activation_skips_disabled_items() {
+        let items = [
+            FlyoutMenuItem::command("disabled", "Disabled").enabled(false),
+            FlyoutMenuItem::command("enabled", "Enabled"),
+        ];
+
+        assert_eq!(
+            first_enabled_flyout_item(&items).map(|item| item.id.as_str()),
+            Some("enabled")
+        );
     }
 
     fn assert_button_style_visual_eq(

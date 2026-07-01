@@ -34,6 +34,14 @@ public sealed class DotnetRustParityTests : IDisposable
     private const string MainInitialOnlyEnvironmentVariable = "EASYDICT_UIA_PARITY_MAIN_INITIAL_ONLY";
     private const string AllowOversizedCaptureEnvironmentVariable = "EASYDICT_UIA_ALLOW_OVERSIZED_CAPTURE";
     private const string UiLanguageEnvironmentVariable = "EASYDICT_UIA_PARITY_UI_LANGUAGE";
+    private const string TrayContextMenuPointEnvironmentVariable = "EASYDICT_UIA_TRAY_CONTEXT_MENU_POINT";
+    private const string TrayContextMenuDelayEnvironmentVariable = "EASYDICT_UIA_TRAY_CONTEXT_MENU_DELAY_MS";
+    private const string TrayExtraItemsEnvironmentVariable = "EASYDICT_UIA_TRAY_EXTRA_ITEMS";
+    private const string TrayMaxHeightEnvironmentVariable = "EASYDICT_UIA_TRAY_MAX_HEIGHT_DIPS";
+    private const string RustFluentTrayMenuWindowTitle = "WinFluent Tray Menu";
+    private const int TrayMenuFluentAuditRoundCount = 20;
+    private const int UiaShowTrayContextMenuMessage = 0xAEAD;
+    private const uint SendMessageTimeoutAbortIfHung = 0x0002;
 
     private readonly ITestOutputHelper _output;
     private readonly AppLauncher _dotnetLauncher = new();
@@ -959,6 +967,49 @@ public sealed class DotnetRustParityTests : IDisposable
         _output.WriteLine($"[ocr.window-detect] Rust screenshot: {rustWindowDetectPath}");
         _output.WriteLine($"[ocr.drag-selection] Dotnet screenshot: {dotnetDragPath}");
         _output.WriteLine($"[ocr.drag-selection] Rust screenshot: {rustDragPath}");
+    }
+
+    [Fact]
+    public void SystemTrayMenu_ShouldRenderDotnetAndRustSideBySide()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine(
+                $"Dotnet/Rust parity run is opt-in. Set {EnableEnvironmentVariable}=1 to launch both UI processes.");
+            return;
+        }
+
+        EnsureParityDpiAwareness();
+        SeedDotnetParitySettings();
+
+        var manifestEntries = new List<UiParityManifestEntry>();
+        var anchor = ResolveTrayMenuAnchorPoint();
+        var anchorValue = $"{anchor.X.ToString(CultureInfo.InvariantCulture)},{anchor.Y.ToString(CultureInfo.InvariantCulture)}";
+        _output.WriteLine($"[tray-menu] Capture anchor: {anchorValue}");
+
+        var standard = CaptureTrayMenuPair(
+            "tray-menu",
+            "System Tray Menu",
+            "tray-menu-dotnet-winui-reference",
+            "tray-menu-rust-win-fluent-iced",
+            "tray-menu-dotnet-vs-rust-side-by-side",
+            anchor,
+            anchorValue,
+            extraItemCount: 0,
+            maxHeightDips: null);
+        manifestEntries.Add(standard.ManifestEntry);
+
+        SaveManifest(manifestEntries);
+
+        AssertTrayMenuCapture(standard, expectScrolling: false, extraItemCount: 0, maxHeightDips: null);
+        var auditRounds = AnalyzeTrayMenuFluentAuditRounds(standard);
+        AssertTrayMenuFluentAuditRounds(auditRounds);
+        var auditPath = SaveTrayMenuFluentAudit(auditRounds);
+
+        _output.WriteLine($"[tray-menu] Dotnet screenshot: {standard.DotnetScreenshot}");
+        _output.WriteLine($"[tray-menu] Rust screenshot: {standard.RustScreenshot}");
+        _output.WriteLine($"[tray-menu] Side-by-side screenshot: {standard.SideBySideScreenshot}");
+        _output.WriteLine($"[tray-menu.audit] Fluent audit: {auditPath}");
     }
 
     private static IReadOnlyList<SettingsParityCaptureStep> ResolveCaptureSteps()
@@ -2764,6 +2815,853 @@ public sealed class DotnetRustParityTests : IDisposable
         return outputPath;
     }
 
+    private TrayMenuCaptureResult CaptureTrayMenuPair(
+        string scenarioId,
+        string scenarioLabel,
+        string dotnetScreenshotName,
+        string rustScreenshotName,
+        string sideBySideScreenshotName,
+        Point anchor,
+        string anchorValue,
+        int extraItemCount,
+        int? maxHeightDips)
+    {
+        var extraItemsValue = extraItemCount > 0
+            ? extraItemCount.ToString(CultureInfo.InvariantCulture)
+            : null;
+        var maxHeightValue = maxHeightDips.HasValue
+            ? maxHeightDips.Value.ToString(CultureInfo.InvariantCulture)
+            : null;
+
+        string dotnetMenuPath;
+        UiParityWindowManifest dotnetMenuManifest;
+        using (new EnvironmentVariableScope(TrayContextMenuPointEnvironmentVariable, anchorValue))
+        using (new EnvironmentVariableScope(TrayContextMenuDelayEnvironmentVariable, "2200"))
+        using (new EnvironmentVariableScope(TrayExtraItemsEnvironmentVariable, extraItemsValue))
+        using (new EnvironmentVariableScope(TrayMaxHeightEnvironmentVariable, maxHeightValue))
+        using (var dotnetLauncher = new AppLauncher())
+        {
+            dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
+            var dotnetWindow = dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+            TriggerDotnetTrayContextMenu(dotnetWindow, anchor);
+            var dotnetMenuHwnd = WaitForTrayMenuWindow(
+                dotnetLauncher.Application.ProcessId,
+                anchor,
+                [SafeNativeWindowHandle(dotnetWindow)],
+                $"{scenarioId}.dotnet");
+            dotnetMenuPath = ScreenshotHelper.CaptureWindowHandlePhysical(
+                dotnetMenuHwnd,
+                dotnetScreenshotName);
+            dotnetMenuManifest = CaptureWindowManifest(dotnetMenuHwnd);
+            DismissTrayMenu();
+        }
+
+        var rustEnvironment = new Dictionary<string, string>
+        {
+            [TrayContextMenuPointEnvironmentVariable] = anchorValue,
+            [TrayContextMenuDelayEnvironmentVariable] = "2200"
+        };
+        if (extraItemsValue != null)
+        {
+            rustEnvironment[TrayExtraItemsEnvironmentVariable] = extraItemsValue;
+        }
+        if (maxHeightValue != null)
+        {
+            rustEnvironment[TrayMaxHeightEnvironmentVariable] = maxHeightValue;
+        }
+
+        string rustMenuPath;
+        UiParityWindowManifest rustMenuManifest;
+        using (var rustPreview = RustPreviewApp.LaunchMainPreview(
+                   "initial",
+                   "light",
+                   _output,
+                   rustEnvironment))
+        {
+            var rustWindow = rustPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+            var rustMenuHwnd = WaitForRustTrayMenuWindowWithRetries(
+                rustPreview.ProcessId,
+                rustWindow,
+                anchor,
+                scenarioId);
+            rustMenuPath = ScreenshotHelper.CaptureWindowHandlePhysical(
+                rustMenuHwnd,
+                rustScreenshotName);
+            rustMenuManifest = CaptureWindowManifest(rustMenuHwnd);
+            DismissTrayMenu();
+        }
+
+        var sideBySidePath = SaveSideBySideComparison(
+            dotnetMenuPath,
+            rustMenuPath,
+            sideBySideScreenshotName);
+        var manifestEntry = CreateTrayMenuManifestEntry(
+            scenarioId,
+            scenarioLabel,
+            dotnetMenuManifest,
+            rustMenuManifest,
+            dotnetMenuPath,
+            rustMenuPath,
+            sideBySidePath);
+
+        return new TrayMenuCaptureResult(
+            scenarioId,
+            dotnetMenuPath,
+            rustMenuPath,
+            sideBySidePath,
+            dotnetMenuManifest,
+            rustMenuManifest,
+            manifestEntry);
+    }
+
+    private IntPtr WaitForRustTrayMenuWindowWithRetries(
+        int processId,
+        Window rustWindow,
+        Point anchor,
+        string scenarioId)
+    {
+        const int maxAttempts = 3;
+        var excludedHwnds = new[] { SafeNativeWindowHandle(rustWindow) };
+        TimeoutException? lastTimeout = null;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            TriggerRustTrayContextMenu(processId, anchor);
+            try
+            {
+                return WaitForTrayMenuWindow(
+                    processId,
+                    anchor,
+                    excludedHwnds,
+                    $"{scenarioId}.rust");
+            }
+            catch (TimeoutException ex) when (attempt < maxAttempts)
+            {
+                lastTimeout = ex;
+                _output.WriteLine(
+                    $"[tray-menu.{scenarioId}.rust] Context-menu attempt {attempt} did not show a popup; retrying.");
+                DismissTrayMenu();
+            }
+        }
+
+        throw lastTimeout ??
+            new TimeoutException($"Rust tray menu popup did not appear for {scenarioId}.");
+    }
+
+    private void TriggerDotnetTrayContextMenu(Window dotnetWindow, Point anchor)
+    {
+        var hwnd = SafeNativeWindowHandle(dotnetWindow);
+        if (hwnd == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Cannot trigger .NET tray menu because the main window HWND is unavailable.");
+        }
+
+        SetCursorPos(anchor.X, anchor.Y);
+        var sent = SendMessageTimeout(
+            hwnd,
+            UiaShowTrayContextMenuMessage,
+            IntPtr.Zero,
+            MakePointLParam(anchor),
+            SendMessageTimeoutAbortIfHung,
+            1000,
+            out _);
+        if (sent == IntPtr.Zero &&
+            !PostMessage(hwnd, UiaShowTrayContextMenuMessage, IntPtr.Zero, MakePointLParam(anchor)))
+        {
+            throw new InvalidOperationException(
+                $"Failed to send or post .NET tray context-menu UIA message to HWND=0x{hwnd.ToInt64():X}; lastError={Marshal.GetLastWin32Error()}.");
+        }
+
+        _output.WriteLine($"[tray-menu.dotnet] Sent UIA tray context-menu message to HWND=0x{hwnd.ToInt64():X}");
+    }
+
+    private static Point ResolveTrayMenuAnchorPoint()
+    {
+        var screen = ScreenshotHelper.GetVirtualScreenBounds();
+        var marginX = Math.Min(96, Math.Max(24, screen.Width / 12));
+        var marginY = Math.Min(96, Math.Max(32, screen.Height / 12));
+        return new Point(screen.Left + marginX, screen.Bottom - marginY);
+    }
+
+    private static IntPtr MakePointLParam(Point point)
+    {
+        var x = unchecked((ushort)(short)point.X);
+        var y = unchecked((ushort)(short)point.Y);
+        return new IntPtr(unchecked((int)(x | ((uint)y << 16))));
+    }
+
+    private void TriggerRustTrayContextMenu(int processId, Point anchor)
+    {
+        var trayHost = WaitForRustTrayHostWindow(processId);
+        SetCursorPos(anchor.X, anchor.Y);
+        var lparam = new IntPtr((1 << 16) | WM_CONTEXTMENU);
+        var sent = SendMessageTimeout(
+            trayHost,
+            WM_USER + 1,
+            IntPtr.Zero,
+            lparam,
+            SendMessageTimeoutAbortIfHung,
+            1000,
+            out _);
+        if (sent == IntPtr.Zero && !PostMessage(trayHost, WM_USER + 1, IntPtr.Zero, lparam))
+        {
+            throw new InvalidOperationException(
+                $"Failed to post Rust tray context-menu callback to HWND=0x{trayHost.ToInt64():X}; lastError={Marshal.GetLastWin32Error()}.");
+        }
+    }
+
+    private IntPtr WaitForRustTrayHostWindow(int processId)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < TimeSpan.FromSeconds(12))
+        {
+            var hwnd = FindRustTrayHostWindow(processId);
+            if (hwnd != IntPtr.Zero)
+            {
+                _output.WriteLine($"[tray-menu.rust] Tray host HWND=0x{hwnd.ToInt64():X}");
+                return hwnd;
+            }
+
+            Thread.Sleep(120);
+        }
+
+        throw new TimeoutException($"Rust tray host window did not appear for process {processId}.");
+    }
+
+    private static IntPtr FindRustTrayHostWindow(int processId)
+    {
+        var result = IntPtr.Zero;
+        EnumWindows((hwnd, _) =>
+        {
+            GetWindowThreadProcessId(hwnd, out var ownerProcessId);
+            if (ownerProcessId == processId &&
+                GetWindowClassName(hwnd).StartsWith("WinFluentTrayHost-", StringComparison.Ordinal))
+            {
+                result = hwnd;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
+
+    private IntPtr WaitForTrayMenuWindow(
+        int processId,
+        Point anchor,
+        IReadOnlyCollection<IntPtr> excludedHwnds,
+        string label)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var requireRustFluentPopup = label.Contains("rust", StringComparison.OrdinalIgnoreCase);
+        var requireDotnetWinuiPopup = label.Contains("dotnet", StringComparison.OrdinalIgnoreCase);
+        IReadOnlyList<TrayMenuWindowCandidate> lastCandidates = [];
+        while (stopwatch.Elapsed < TimeSpan.FromSeconds(8))
+        {
+            lastCandidates = EnumerateTrayMenuWindowCandidates(processId, anchor, excludedHwnds);
+            var best = requireRustFluentPopup
+                ? lastCandidates.FirstOrDefault(candidate => IsRustFluentTrayMenuCandidate(candidate, anchor))
+                : requireDotnetWinuiPopup
+                    ? SelectDotnetWinuiTrayMenuCandidate(lastCandidates, anchor)
+                    : lastCandidates.FirstOrDefault();
+            if (best != null)
+            {
+                _output.WriteLine($"[tray-menu.{label}] Selected {best}");
+                foreach (var candidate in lastCandidates.Take(6))
+                {
+                    _output.WriteLine($"[tray-menu.{label}] Candidate {candidate}");
+                }
+                Thread.Sleep(requireRustFluentPopup ? 700 : 250);
+                return ResolveTrayMenuCaptureHwnd(best, requireDotnetWinuiPopup, anchor, label);
+            }
+
+            Thread.Sleep(120);
+        }
+
+        var details = lastCandidates.Count == 0
+            ? "No candidate windows were visible."
+            : string.Join(Environment.NewLine, lastCandidates.Select(candidate => candidate.ToString()));
+        throw new TimeoutException(
+            $"Tray menu popup for {label} did not appear for process {processId} near {anchor}. {details}");
+    }
+
+    private static IReadOnlyList<TrayMenuWindowCandidate> EnumerateTrayMenuWindowCandidates(
+        int processId,
+        Point anchor,
+        IReadOnlyCollection<IntPtr> excludedHwnds)
+    {
+        var excluded = excludedHwnds
+            .Where(hwnd => hwnd != IntPtr.Zero)
+            .ToHashSet();
+        var candidates = new List<TrayMenuWindowCandidate>();
+        EnumWindows((hwnd, _) =>
+        {
+            if (hwnd == IntPtr.Zero ||
+                excluded.Contains(hwnd) ||
+                !IsWindowVisible(hwnd))
+            {
+                return true;
+            }
+
+            GetWindowThreadProcessId(hwnd, out var ownerProcessId);
+            if (ownerProcessId != processId)
+            {
+                return true;
+            }
+
+            if (TryGetNativeWindowRectangle(hwnd) is not { } bounds ||
+                bounds.Width < 140 ||
+                bounds.Height < 120 ||
+                bounds.Width > 900 ||
+                bounds.Height > ScreenshotHelper.GetVirtualScreenBounds().Height + 120)
+            {
+                return true;
+            }
+
+            var className = GetWindowClassName(hwnd);
+            if (string.Equals(className, "SysShadow", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var title = GetWindowTitle(hwnd);
+            var score = ScoreTrayMenuCandidate(bounds, anchor, className, title);
+            if (score > 0)
+            {
+                candidates.Add(new TrayMenuWindowCandidate(hwnd, className, title, bounds, score));
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return candidates
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => Math.Abs(candidate.Bounds.Left - anchor.X) + Math.Abs(candidate.Bounds.Top - anchor.Y))
+            .ToArray();
+    }
+
+    private static bool IsRustFluentTrayMenuCandidate(
+        TrayMenuWindowCandidate candidate,
+        Point anchor)
+    {
+        if (string.Equals(candidate.Title, RustFluentTrayMenuWindowTitle, StringComparison.Ordinal))
+        {
+            return DistanceFromPointToRectangle(anchor, candidate.Bounds) <= 180;
+        }
+
+        return !string.Equals(candidate.ClassName, "#32768", StringComparison.Ordinal) &&
+            candidate.Bounds.Width is >= 240 and <= 760 &&
+            candidate.Bounds.Height is >= 180 and <= 760 &&
+            DistanceFromPointToRectangle(anchor, candidate.Bounds) <= 160;
+    }
+
+    private static TrayMenuWindowCandidate? SelectDotnetWinuiTrayMenuCandidate(
+        IReadOnlyList<TrayMenuWindowCandidate> candidates,
+        Point anchor)
+    {
+        return candidates.FirstOrDefault(candidate =>
+                string.Equals(
+                    candidate.ClassName,
+                    "Microsoft.UI.Content.PopupWindowSiteBridge",
+                    StringComparison.Ordinal) &&
+                IsDotnetWinuiTrayMenuCandidate(candidate, anchor)) ??
+            candidates.FirstOrDefault(candidate =>
+                IsDotnetWinuiTrayMenuContentCandidate(candidate) &&
+                DistanceFromPointToRectangle(anchor, candidate.Bounds) <= 160) ??
+            candidates.FirstOrDefault(candidate => IsDotnetWinuiTrayMenuCandidate(candidate, anchor));
+    }
+
+    private IntPtr ResolveTrayMenuCaptureHwnd(
+        TrayMenuWindowCandidate candidate,
+        bool preferDotnetWinuiContentHwnd,
+        Point anchor,
+        string label)
+    {
+        _ = preferDotnetWinuiContentHwnd;
+        _ = anchor;
+        _ = label;
+        return candidate.Hwnd;
+    }
+
+    private static TrayMenuWindowCandidate? FindDotnetWinuiTrayMenuContentCandidate(
+        TrayMenuWindowCandidate candidate,
+        Point anchor)
+    {
+        if (string.Equals(candidate.ClassName, "WinUIDesktopWin32WindowClass", StringComparison.Ordinal))
+        {
+            return candidate;
+        }
+
+        if (!string.Equals(
+                candidate.ClassName,
+                "Microsoft.UI.Content.PopupWindowSiteBridge",
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return EnumerateChildTrayMenuWindowCandidates(candidate.Hwnd, candidate.Bounds, anchor)
+            .FirstOrDefault(IsDotnetWinuiTrayMenuContentCandidate);
+    }
+
+    private static IReadOnlyList<TrayMenuWindowCandidate> EnumerateChildTrayMenuWindowCandidates(
+        IntPtr parentHwnd,
+        Rectangle parentBounds,
+        Point anchor)
+    {
+        var candidates = new List<TrayMenuWindowCandidate>();
+        var parentCaptureBounds = Rectangle.Inflate(parentBounds, 8, 8);
+        EnumChildWindows(parentHwnd, (hwnd, _) =>
+        {
+            if (hwnd == IntPtr.Zero ||
+                !IsWindowVisible(hwnd) ||
+                TryGetNativeWindowRectangle(hwnd) is not { } bounds ||
+                bounds.Width < 120 ||
+                bounds.Height < 120 ||
+                !parentCaptureBounds.IntersectsWith(bounds))
+            {
+                return true;
+            }
+
+            var className = GetWindowClassName(hwnd);
+            var title = GetWindowTitle(hwnd);
+            var score = ScoreTrayMenuCandidate(bounds, anchor, className, title);
+            if (string.Equals(className, "WinUIDesktopWin32WindowClass", StringComparison.Ordinal))
+            {
+                score += 120;
+            }
+            else if (className.Contains("Xaml", StringComparison.OrdinalIgnoreCase) ||
+                     className.Contains("Island", StringComparison.OrdinalIgnoreCase) ||
+                     className.Contains("Popup", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 40;
+            }
+
+            if (score > 0)
+            {
+                candidates.Add(new TrayMenuWindowCandidate(hwnd, className, title, bounds, score));
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return candidates
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenByDescending(candidate => candidate.Bounds.Width * candidate.Bounds.Height)
+            .ToArray();
+    }
+
+    private static bool IsDotnetWinuiTrayMenuContentCandidate(TrayMenuWindowCandidate candidate)
+    {
+        return candidate.Bounds.Width >= 140 &&
+            candidate.Bounds.Height >= 180 &&
+            (string.Equals(candidate.ClassName, "WinUIDesktopWin32WindowClass", StringComparison.Ordinal) ||
+             candidate.ClassName.Contains("Xaml", StringComparison.OrdinalIgnoreCase) ||
+             candidate.ClassName.Contains("Island", StringComparison.OrdinalIgnoreCase) ||
+             candidate.ClassName.Contains("Popup", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsDotnetWinuiTrayMenuCandidate(
+        TrayMenuWindowCandidate candidate,
+        Point anchor)
+    {
+        if (string.Equals(
+                candidate.ClassName,
+                "Microsoft.UI.Content.PopupWindowSiteBridge",
+                StringComparison.Ordinal))
+        {
+            return candidate.Bounds.Width >= 180 &&
+                candidate.Bounds.Height >= 240;
+        }
+
+        return string.Equals(candidate.ClassName, "WinUIDesktopWin32WindowClass", StringComparison.Ordinal) &&
+            candidate.Bounds.Width >= 180 &&
+            candidate.Bounds.Height >= 240 &&
+            DistanceFromPointToRectangle(anchor, candidate.Bounds) <= 160;
+    }
+
+    private static int ScoreTrayMenuCandidate(
+        Rectangle bounds,
+        Point anchor,
+        string className,
+        string title)
+    {
+        var padded = Rectangle.Inflate(bounds, 24, 24);
+        var distance = DistanceFromPointToRectangle(anchor, bounds);
+        var score = 0;
+
+        if (padded.Contains(anchor))
+        {
+            score += 100;
+        }
+        else if (distance <= 140)
+        {
+            score += 60;
+        }
+
+        if (string.Equals(className, "#32768", StringComparison.Ordinal))
+        {
+            score += 60;
+        }
+        else if (string.Equals(title, RustFluentTrayMenuWindowTitle, StringComparison.Ordinal))
+        {
+            score += 80;
+        }
+        else if (className.Contains("Popup", StringComparison.OrdinalIgnoreCase) ||
+                 className.Contains("Flyout", StringComparison.OrdinalIgnoreCase) ||
+                 className.Contains("Island", StringComparison.OrdinalIgnoreCase) ||
+                 className.Contains("Xaml", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 35;
+        }
+
+        if (bounds.Width is >= 240 and <= 560)
+        {
+            score += 20;
+        }
+
+        if (bounds.Height is >= 300 and <= 700)
+        {
+            score += 20;
+        }
+
+        return score;
+    }
+
+    private static int DistanceFromPointToRectangle(Point point, Rectangle rectangle)
+    {
+        var dx = point.X < rectangle.Left
+            ? rectangle.Left - point.X
+            : point.X > rectangle.Right
+                ? point.X - rectangle.Right
+                : 0;
+        var dy = point.Y < rectangle.Top
+            ? rectangle.Top - point.Y
+            : point.Y > rectangle.Bottom
+                ? point.Y - rectangle.Bottom
+                : 0;
+        return dx + dy;
+    }
+
+    private static void DismissTrayMenu()
+    {
+        try
+        {
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+        }
+        catch
+        {
+            // Best-effort cleanup; the next capture launches an isolated menu.
+        }
+
+        Thread.Sleep(300);
+    }
+
+    private static void AssertTrayMenuSizeAligned(
+        UiParityWindowManifest reference,
+        UiParityWindowManifest candidate)
+    {
+        var referenceWidthDips = reference.Bounds.Width / Math.Max(0.001, reference.DpiScale);
+        var referenceHeightDips = reference.Bounds.Height / Math.Max(0.001, reference.DpiScale);
+        var candidateWidthDips = candidate.Bounds.Width / Math.Max(0.001, candidate.DpiScale);
+        var candidateHeightDips = candidate.Bounds.Height / Math.Max(0.001, candidate.DpiScale);
+
+        Math.Abs(candidateWidthDips - referenceWidthDips).Should().BeLessThanOrEqualTo(
+            36,
+            "Rust tray menu width should track the WinUI reference");
+        Math.Abs(candidateHeightDips - referenceHeightDips).Should().BeLessThanOrEqualTo(
+            56,
+            "Rust tray menu height should track the WinUI reference");
+    }
+
+    private static void AssertTrayMenuCapture(
+        TrayMenuCaptureResult capture,
+        bool expectScrolling,
+        int extraItemCount,
+        int? maxHeightDips)
+    {
+        AssertImageHasVisibleContent(capture.DotnetScreenshot);
+        AssertImageHasVisibleContent(capture.RustScreenshot);
+        AssertImageHasVisibleContent(capture.SideBySideScreenshot);
+        AssertTrayMenuSizeAligned(capture.DotnetManifest, capture.RustManifest);
+        AssertTrayMenuSurfaceColorAligned(capture.DotnetScreenshot, capture.RustScreenshot);
+        if (!expectScrolling)
+        {
+            AssertTrayMenuSeparatorsVisible(capture.DotnetScreenshot, capture.RustScreenshot);
+        }
+
+        if (expectScrolling)
+        {
+            maxHeightDips.Should().NotBeNull("scrolling tray-menu capture must define a max height");
+            AssertTrayMenuScrollConstrained(
+                capture.DotnetManifest,
+                capture.RustManifest,
+                extraItemCount,
+                maxHeightDips!.Value);
+        }
+    }
+
+    private static IReadOnlyList<TrayMenuFluentAuditRound> AnalyzeTrayMenuFluentAuditRounds(
+        TrayMenuCaptureResult standard)
+    {
+        var rounds = new List<TrayMenuFluentAuditRound>(TrayMenuFluentAuditRoundCount);
+        for (var round = 1; round <= TrayMenuFluentAuditRoundCount; round++)
+        {
+            rounds.Add(AnalyzeTrayMenuFluentAuditRound(
+                round,
+                standard,
+                expectScrolling: false,
+                extraItemCount: 0,
+                maxHeightDips: null));
+        }
+
+        return rounds;
+    }
+
+    private static TrayMenuFluentAuditRound AnalyzeTrayMenuFluentAuditRound(
+        int round,
+        TrayMenuCaptureResult capture,
+        bool expectScrolling,
+        int extraItemCount,
+        int? maxHeightDips)
+    {
+        var referenceWidthDips = capture.DotnetManifest.Bounds.Width / Math.Max(0.001, capture.DotnetManifest.DpiScale);
+        var referenceHeightDips = capture.DotnetManifest.Bounds.Height / Math.Max(0.001, capture.DotnetManifest.DpiScale);
+        var candidateWidthDips = capture.RustManifest.Bounds.Width / Math.Max(0.001, capture.RustManifest.DpiScale);
+        var candidateHeightDips = capture.RustManifest.Bounds.Height / Math.Max(0.001, capture.RustManifest.DpiScale);
+        var widthDeltaDips = Math.Abs(candidateWidthDips - referenceWidthDips);
+        var heightDeltaDips = Math.Abs(candidateHeightDips - referenceHeightDips);
+        var referenceSurface = EstimateTrayMenuSurfaceColor(capture.DotnetScreenshot);
+        var candidateSurface = EstimateTrayMenuSurfaceColor(capture.RustScreenshot);
+        var surfaceColorDistance = ColorDistance(referenceSurface, candidateSurface);
+        var referenceSeparatorPixels = CountLikelySeparatorPixels(capture.DotnetScreenshot);
+        var candidateSeparatorPixels = CountLikelySeparatorPixels(capture.RustScreenshot);
+        var referenceDistinctColors = CountSampledDistinctColors(capture.DotnetScreenshot);
+        var candidateDistinctColors = CountSampledDistinctColors(capture.RustScreenshot);
+        var unboundedContentHeightDips = (8 + extraItemCount) * 34 + (2 * 8);
+
+        var hasVisibleContent = referenceDistinctColors > 8 && candidateDistinctColors > 8;
+        var sizeAligned = widthDeltaDips <= 36 && heightDeltaDips <= 56;
+        var surfaceAligned = ColorToHex(referenceSurface) == ColorToHex(candidateSurface);
+        var separatorsVisible = expectScrolling ||
+            (referenceSeparatorPixels > 160 && candidateSeparatorPixels > 160);
+        var scrollConstrained = !expectScrolling ||
+            (maxHeightDips.HasValue &&
+             unboundedContentHeightDips > maxHeightDips.Value + 180 &&
+             referenceHeightDips <= maxHeightDips.Value + 96 &&
+             candidateHeightDips <= maxHeightDips.Value + 96 &&
+             referenceHeightDips > maxHeightDips.Value * 0.6 &&
+             candidateHeightDips > maxHeightDips.Value * 0.6);
+        var passed = hasVisibleContent &&
+            sizeAligned &&
+            surfaceAligned &&
+            separatorsVisible &&
+            scrollConstrained;
+
+        return new TrayMenuFluentAuditRound(
+            Round: round,
+            ScenarioId: capture.ScenarioId,
+            ExpectScrolling: expectScrolling,
+            ReferenceWidthDips: Math.Round(referenceWidthDips, 2),
+            CandidateWidthDips: Math.Round(candidateWidthDips, 2),
+            WidthDeltaDips: Math.Round(widthDeltaDips, 2),
+            ReferenceHeightDips: Math.Round(referenceHeightDips, 2),
+            CandidateHeightDips: Math.Round(candidateHeightDips, 2),
+            HeightDeltaDips: Math.Round(heightDeltaDips, 2),
+            ReferenceSurfaceHex: ColorToHex(referenceSurface),
+            CandidateSurfaceHex: ColorToHex(candidateSurface),
+            SurfaceColorDistance: Math.Round(surfaceColorDistance, 2),
+            ReferenceSeparatorPixels: referenceSeparatorPixels,
+            CandidateSeparatorPixels: candidateSeparatorPixels,
+            ReferenceDistinctColors: referenceDistinctColors,
+            CandidateDistinctColors: candidateDistinctColors,
+            MaxHeightDips: maxHeightDips,
+            UnboundedContentHeightDips: unboundedContentHeightDips,
+            HasVisibleContent: hasVisibleContent,
+            SizeAligned: sizeAligned,
+            SurfaceAligned: surfaceAligned,
+            SeparatorsVisible: separatorsVisible,
+            ScrollConstrained: scrollConstrained,
+            Passed: passed);
+    }
+
+    private static void AssertTrayMenuFluentAuditRounds(
+        IReadOnlyList<TrayMenuFluentAuditRound> rounds)
+    {
+        rounds.Should().HaveCount(
+            TrayMenuFluentAuditRoundCount,
+            "the Fluent tray menu audit runs the captured system tray menu screenshot for 20 rounds");
+
+        foreach (var round in rounds)
+        {
+            round.HasVisibleContent.Should().BeTrue(
+                $"{round.ScenarioId} round {round.Round} should capture non-blank tray menu screenshots");
+            round.SizeAligned.Should().BeTrue(
+                $"{round.ScenarioId} round {round.Round} should keep Rust menu dimensions aligned with WinUI");
+            round.SurfaceAligned.Should().BeTrue(
+                $"{round.ScenarioId} round {round.Round} should keep Rust Fluent surface color aligned with WinUI");
+            round.SeparatorsVisible.Should().BeTrue(
+                $"{round.ScenarioId} round {round.Round} should expose Fluent menu separators");
+            round.ScrollConstrained.Should().BeTrue(
+                $"{round.ScenarioId} round {round.Round} should respect Fluent menu scrolling constraints");
+            round.Passed.Should().BeTrue(
+                $"{round.ScenarioId} round {round.Round} should satisfy all Fluent tray menu audit checks");
+        }
+    }
+
+    private static string SaveTrayMenuFluentAudit(
+        IReadOnlyList<TrayMenuFluentAuditRound> rounds)
+    {
+        var path = Path.Combine(ScreenshotHelper.OutputDir, "tray-menu-fluent-audit.json");
+        var report = new TrayMenuFluentAuditReport(
+            SchemaVersion: "easydict.tray-menu-fluent-audit.v1",
+            GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"),
+            RoundCount: TrayMenuFluentAuditRoundCount,
+            ScenariosPerRound: 1,
+            Rounds: rounds);
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+        return path;
+    }
+
+    private static void AssertTrayMenuScrollConstrained(
+        UiParityWindowManifest reference,
+        UiParityWindowManifest candidate,
+        int extraItemCount,
+        int maxHeightDips)
+    {
+        var referenceHeightDips = reference.Bounds.Height / Math.Max(0.001, reference.DpiScale);
+        var candidateHeightDips = candidate.Bounds.Height / Math.Max(0.001, candidate.DpiScale);
+        var unboundedContentHeight = (8 + extraItemCount) * 34 + (2 * 8);
+
+        unboundedContentHeight.Should().BeGreaterThan(
+            maxHeightDips + 180,
+            "the scroll fixture should contain enough tray items to require scrolling");
+        referenceHeightDips.Should().BeLessThanOrEqualTo(
+            maxHeightDips + 96,
+            "WinUI reference tray menu should be constrained by MaxHeight in the scroll fixture");
+        candidateHeightDips.Should().BeLessThanOrEqualTo(
+            maxHeightDips + 96,
+            "Rust tray menu should be constrained by the win_fluent presenter max height");
+        referenceHeightDips.Should().BeGreaterThan(
+            maxHeightDips * 0.6,
+            "scrolling reference should still show a meaningful menu viewport");
+        candidateHeightDips.Should().BeGreaterThan(
+            maxHeightDips * 0.6,
+            "scrolling Rust menu should still show a meaningful menu viewport");
+    }
+
+    private static void AssertTrayMenuSurfaceColorAligned(string referencePath, string candidatePath)
+    {
+        var reference = EstimateTrayMenuSurfaceColor(referencePath);
+        var candidate = EstimateTrayMenuSurfaceColor(candidatePath);
+        ColorToHex(candidate).Should().Be(
+            ColorToHex(reference),
+            "Rust tray menu surface color must exactly match the WinUI MenuFlyout surface");
+    }
+
+    private static Color EstimateTrayMenuSurfaceColor(string path)
+    {
+        using var bitmap = new Bitmap(path);
+        var samples = new List<Color>();
+        var left = Math.Max(0, bitmap.Width / 12);
+        var right = Math.Min(bitmap.Width - 1, bitmap.Width - (bitmap.Width / 12));
+        var top = Math.Max(0, bitmap.Height / 12);
+        var bottom = Math.Min(bitmap.Height - 1, bitmap.Height - (bitmap.Height / 12));
+
+        for (var y = top; y <= bottom; y += Math.Max(1, bitmap.Height / 40))
+        {
+            for (var x = left; x <= right; x += Math.Max(1, bitmap.Width / 40))
+            {
+                var color = bitmap.GetPixel(x, y);
+                if (IsNeutralSurfacePixel(color))
+                {
+                    samples.Add(color);
+                }
+            }
+        }
+
+        samples.Should().NotBeEmpty("tray menu screenshots should expose neutral Fluent menu surface pixels");
+        return Color.FromArgb(
+            (int)samples.Average(color => color.R),
+            (int)samples.Average(color => color.G),
+            (int)samples.Average(color => color.B));
+    }
+
+    private static bool IsNeutralSurfacePixel(Color color)
+    {
+        var max = Math.Max(color.R, Math.Max(color.G, color.B));
+        var min = Math.Min(color.R, Math.Min(color.G, color.B));
+        return max >= 225 && max - min <= 18;
+    }
+
+    private static double ColorDistance(Color a, Color b)
+    {
+        var dr = a.R - b.R;
+        var dg = a.G - b.G;
+        var db = a.B - b.B;
+        return Math.Sqrt((dr * dr) + (dg * dg) + (db * db));
+    }
+
+    private static void AssertTrayMenuSeparatorsVisible(string referencePath, string candidatePath)
+    {
+        var referenceSeparatorPixels = CountLikelySeparatorPixels(referencePath);
+        var candidateSeparatorPixels = CountLikelySeparatorPixels(candidatePath);
+
+        referenceSeparatorPixels.Should().BeGreaterThan(
+            160,
+            "WinUI reference tray menu should expose separator-colored pixels");
+        candidateSeparatorPixels.Should().BeGreaterThan(
+            160,
+            "Rust tray menu should draw separator-colored pixels");
+    }
+
+    private static int CountLikelySeparatorPixels(string path)
+    {
+        using var bitmap = new Bitmap(path);
+        var pixels = 0;
+        for (var y = 2; y < bitmap.Height - 2; y++)
+        {
+            for (var x = bitmap.Width / 12; x < bitmap.Width - (bitmap.Width / 12); x++)
+            {
+                if (IsSeparatorPixel(bitmap.GetPixel(x, y)))
+                {
+                    pixels++;
+                }
+            }
+        }
+
+        return pixels;
+    }
+
+    private static int CountSampledDistinctColors(string path)
+    {
+        using var bitmap = new Bitmap(path);
+        var distinct = new HashSet<int>();
+        var stepX = Math.Max(1, bitmap.Width / 96);
+        var stepY = Math.Max(1, bitmap.Height / 96);
+        for (var y = 0; y < bitmap.Height; y += stepY)
+        {
+            for (var x = 0; x < bitmap.Width; x += stepX)
+            {
+                distinct.Add(bitmap.GetPixel(x, y).ToArgb());
+            }
+        }
+
+        return distinct.Count;
+    }
+
+    private static string ColorToHex(Color color) =>
+        $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    private static bool IsSeparatorPixel(Color color)
+    {
+        var max = Math.Max(color.R, Math.Max(color.G, color.B));
+        var min = Math.Min(color.R, Math.Min(color.G, color.B));
+        return max - min <= 14 && color.R is >= 190 and <= 235;
+    }
+
     private static UiParityManifestEntry CreateManifestEntry(
         SettingsParityCaptureStep step,
         Window dotnetWindow,
@@ -3264,6 +4162,60 @@ public sealed class DotnetRustParityTests : IDisposable
             ReferenceUiSummary: EmptyUiSummary(),
             CandidateUiSummary: candidateUiSummary);
     }
+
+    private static UiParityManifestEntry CreateTrayMenuManifestEntry(
+        string scenarioId,
+        string sectionLabel,
+        UiParityWindowManifest referenceWindow,
+        UiParityWindowManifest candidateWindow,
+        string dotnetPath,
+        string rustPath,
+        string sideBySidePath)
+    {
+        return new UiParityManifestEntry(
+            ScenarioId: scenarioId,
+            WindowKind: "tray-menu",
+            SectionId: "tray-menu",
+            SectionLabel: sectionLabel,
+            Theme: "light",
+            ScrollPercent: 0,
+            ExpandAvailableLanguages: false,
+            ReferenceScreenshot: ToOutputRelativePath(dotnetPath),
+            CandidateScreenshot: ToOutputRelativePath(rustPath),
+            SideBySideScreenshot: ToOutputRelativePath(sideBySidePath),
+            ReferenceWindow: referenceWindow,
+            CandidateWindow: candidateWindow,
+            Regions: UiParityRegion.TrayMenuRegions,
+            RequiredSemanticTags: [],
+            ReferenceUiSummary: EmptyUiSummary(),
+            CandidateUiSummary: EmptyUiSummary(),
+            RequiredVisibleTexts: TrayMenuRequiredVisibleTexts());
+    }
+
+    private static IReadOnlyList<string> TrayMenuRequiredVisibleTexts() =>
+        string.Equals(ResolveParityUiLanguage(), "zh-CN", StringComparison.OrdinalIgnoreCase)
+            ?
+            [
+                "显示 Easydict",
+                "翻译剪贴板",
+                "OCR 截图翻译 (Ctrl+Alt+S)",
+                "迷你窗口 (Ctrl+Alt+M)",
+                "固定窗口 (Ctrl+Alt+F)",
+                "浏览器支持",
+                "设置",
+                "退出"
+            ]
+            :
+            [
+                "Show Easydict",
+                "Translate Clipboard",
+                "OCR Translate (Ctrl+Alt+S)",
+                "Mini Window (Ctrl+Alt+M)",
+                "Fixed Window (Ctrl+Alt+F)",
+                "Browser Support",
+                "Settings",
+                "Exit"
+            ];
 
     private static UiParityUiSummary EmptyUiSummary() =>
         new(
@@ -5056,6 +6008,13 @@ public sealed class DotnetRustParityTests : IDisposable
             new("popbutton-hit-target", 0.08, 0.08, 0.84, 0.84, 2.0)
         ];
 
+        public static readonly IReadOnlyList<UiParityRegion> TrayMenuRegions =
+        [
+            new("tray-menu-items", 0.0, 0.0, 1.0, 0.58, 2.4),
+            new("tray-menu-browser-row", 0.0, 0.58, 1.0, 0.14, 1.6),
+            new("tray-menu-footer", 0.0, 0.72, 1.0, 0.28, 1.8)
+        ];
+
         public static readonly IReadOnlyList<UiParityRegion> OcrOverlayRegions =
         [
             new("ocr-overlay", 0.0, 0.0, 1.0, 1.0, 1.0),
@@ -5063,6 +6022,77 @@ public sealed class DotnetRustParityTests : IDisposable
             new("ocr-status-panel", 0.0, 0.0, 0.46, 0.24, 1.4),
             new("ocr-magnifier", 0.62, 0.0, 0.38, 0.24, 1.8)
         ];
+    }
+
+    private sealed record TrayMenuWindowCandidate(
+        IntPtr Hwnd,
+        string ClassName,
+        string Title,
+        Rectangle Bounds,
+        int Score)
+    {
+        public override string ToString() =>
+            $"HWND=0x{Hwnd.ToInt64():X}, class='{ClassName}', title='{Title}', bounds={Bounds}, score={Score}";
+    }
+
+    private sealed record TrayMenuCaptureResult(
+        string ScenarioId,
+        string DotnetScreenshot,
+        string RustScreenshot,
+        string SideBySideScreenshot,
+        UiParityWindowManifest DotnetManifest,
+        UiParityWindowManifest RustManifest,
+        UiParityManifestEntry ManifestEntry);
+
+    private sealed record TrayMenuFluentAuditReport(
+        string SchemaVersion,
+        string GeneratedAtUtc,
+        int RoundCount,
+        int ScenariosPerRound,
+        IReadOnlyList<TrayMenuFluentAuditRound> Rounds);
+
+    private sealed record TrayMenuFluentAuditRound(
+        int Round,
+        string ScenarioId,
+        bool ExpectScrolling,
+        double ReferenceWidthDips,
+        double CandidateWidthDips,
+        double WidthDeltaDips,
+        double ReferenceHeightDips,
+        double CandidateHeightDips,
+        double HeightDeltaDips,
+        string ReferenceSurfaceHex,
+        string CandidateSurfaceHex,
+        double SurfaceColorDistance,
+        int ReferenceSeparatorPixels,
+        int CandidateSeparatorPixels,
+        int ReferenceDistinctColors,
+        int CandidateDistinctColors,
+        int? MaxHeightDips,
+        int UnboundedContentHeightDips,
+        bool HasVisibleContent,
+        bool SizeAligned,
+        bool SurfaceAligned,
+        bool SeparatorsVisible,
+        bool ScrollConstrained,
+        bool Passed);
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _previousValue);
+        }
     }
 
     private sealed class RustPreviewApp : IDisposable
@@ -5088,6 +6118,7 @@ public sealed class DotnetRustParityTests : IDisposable
         }
 
         public string SchemaPath { get; }
+        public int ProcessId => _application.ProcessId;
 
         public static RustPreviewApp Launch(SettingsParityCaptureStep step, ITestOutputHelper output)
         {
@@ -5257,6 +6288,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 }
             }
 
+            TryKillExistingProcessInstances(exePath);
             var automation = new UIA3Automation();
             try
             {
@@ -5272,6 +6304,39 @@ public sealed class DotnetRustParityTests : IDisposable
             {
                 automation.Dispose();
                 throw;
+            }
+        }
+
+        private static void TryKillExistingProcessInstances(string exePath)
+        {
+            var fullPath = Path.GetFullPath(exePath);
+            var processName = Path.GetFileNameWithoutExtension(fullPath);
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                return;
+            }
+
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                try
+                {
+                    var modulePath = process.MainModule?.FileName;
+                    if (!string.Equals(modulePath, fullPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(3000);
+                }
+                catch
+                {
+                    // Best-effort cleanup for UI automation isolation.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
             }
         }
 
@@ -5547,7 +6612,13 @@ public sealed class DotnetRustParityTests : IDisposable
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
     [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int processId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
@@ -5557,6 +6628,22 @@ public sealed class DotnetRustParityTests : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(IntPtr hWnd, out NativeWindowRect lpRect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd,
+        int msg,
+        IntPtr wParam,
+        IntPtr lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetCursorPos(int x, int y);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
@@ -5570,6 +6657,8 @@ public sealed class DotnetRustParityTests : IDisposable
     private const int GWL_EXSTYLE = -20;
     private const int ShowWindowHide = 0;
     private const int ShowWindowRestore = 9;
+    private const int WM_CONTEXTMENU = 0x007B;
+    private const int WM_USER = 0x0400;
     private static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_TOPMOST = 0x00000008;

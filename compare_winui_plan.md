@@ -271,6 +271,124 @@
 - **P2**：`toggle_button`、`split_button`、`tab_view`（+`TabItem`）、`tree_view`（+`TreeNode`）、独立 `border`、`viewbox`。
 - **决策项（未改动，待团队定夺）**：§5 #15 视觉状态自动化（VSM 等价，runtime 自动回灌 hover/press/focus）与 §5 #14 ControlTemplate 等价物属设计取舍，非可直接落地的接口缺口，保留现状。
 
+## 9. 100 项问题执行清单（2026-07-01 重新开始）
+
+本节把 Fluent UI / WinUI-like 通用 Windows UI 框架基线拆成 100 个可审计问题。状态列按实际实现推进：`todo` 表示尚未开始，`doing` 表示本轮正在补代码/测试，`done` 只能在对应修复和测试证据都落地后填写。不要把历史实现或仅文档描述视作完成。
+
+### 9.1 第一批：公开 API / schema / a11y / diff 合同
+
+本批先建立外部应用视角的合同测试：从 `win_fluent::prelude::*` 构造控件树，并同时经过 schema、a11y、diff 三条分析管线。对应测试文件：`lib/winfluent-rs/crates/win_fluent/tests/fluent_contract.rs`。
+
+| # | 状态 | 问题 | 修复目标 | 测试证据 |
+| ---: | --- | --- | --- | --- |
+| 1 | done | `info_bar` / builder / token 必须能从公开 prelude 使用 | 外部 crate 视角构造 `InfoBar` | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 2 | done | A11y role 必须能表达新增控件语义 | 合同视图解析 accessibility tree | `fluent_contract::contract_tree_flows_through_schema_a11y_and_diff` |
+| 3 | done | 新增控件必须进入 schema 合同 | schema snapshot 包含关键控件类型 | `fluent_contract::contract_tree_flows_through_schema_a11y_and_diff` |
+| 4 | done | 新增控件必须进入 diff 合同 | diff 能识别 contract view 更新 | `fluent_contract::contract_tree_flows_through_schema_a11y_and_diff` |
+| 5 | done | 通用 `View::tooltip()` 必须可从公开 API 使用 | `text(...).tooltip(...)` 进入合同视图 | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 6 | done | Grid rows/columns/cell/span 必须可从公开 API 使用 | 构造设置页式二维网格 | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 7 | done | 通用 ListView 必须可从公开 API 使用 | 构造 selected/virtualized list | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 8 | done | RadioGroup 必须可从公开 API 使用 | 构造 horizontal RadioButtons | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 9 | done | Image file/URI + stretch 必须可从公开 API 使用 | 构造 generic image | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 10 | done | NumberBox 必须可从公开 API 使用 | 构造 range/step/spin number box | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 11 | done | AutoSuggestBox 必须可从公开 API 使用 | 构造 suggestion dropdown | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 12 | done | NavigationView 增强项必须可从公开 API 使用 | 构造 pane mode/header/footer/settings/back | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 13 | done | Generic Flyout 必须可从公开 API 使用 | 构造 anchor/content/open/placement | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 14 | done | RichText runs/link 必须可从公开 API 使用 | 构造 styled/link runs | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 15 | done | WebView token 必须可从公开 API 使用 | 构造 URL WebView | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 16 | done | ToggleButton 必须可从公开 API 使用 | 构造 on/off toggle button | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 17 | done | SplitButton 必须可从公开 API 使用 | 构造 primary + menu split button | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 18 | done | TabView 必须可从公开 API 使用 | 构造 closable tab view | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 19 | done | TreeView 必须可从公开 API 使用 | 构造 branch/leaf tree | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 20 | done | Border/Viewbox 必须可从公开 API 使用 | 构造 border + viewbox | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 21 | done | Tray fluent presenter tokens 必须可从公开 API 使用 | 构造 `TrayMenuPresenterStyle::winui()` | `fluent_contract::tray_menu_style_is_public_and_tokenized` |
+| 22 | done | Windows UIA control type 映射需覆盖第一批控件 | 平台 UIA plan 补合同测试 | `uia_contract::first_wave_controls_map_to_windows_uia_control_types` |
+| 23 | done | `win_fluent_testkit` 需覆盖第一批控件布局输出 | testkit snapshot 补合同测试 | `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 24 | done | Iced backend 需覆盖第一批控件编译路径 | backend compile test 从 contract view 构造 | `compile_contract::iced_backend_compiles_first_wave_winui_controls` |
+| 25 | done | High Contrast 焦点/阴影策略需扩大到第一批控件 | HighContrast backend 编译合同 | `compile_contract::iced_backend_compiles_first_wave_controls_across_theme_and_disabled_states` |
+| 26 | done | ThemeTokens 映射需扩大到第一批控件 | Light/Dark/HighContrast backend 编译合同 | `compile_contract::iced_backend_compiles_first_wave_controls_across_theme_and_disabled_states` |
+| 27 | done | Disabled/read-only 状态需覆盖 NumberBox/AutoSuggestBox/RadioGroup | disabled/read-only backend 编译合同 | `compile_contract::iced_backend_compiles_first_wave_controls_across_theme_and_disabled_states` |
+| 28 | done | ListView 虚拟化语义只有 token，没有可审计布局边界 | layout snapshot 输出 `max_height`/`virtualized` | `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 29 | done | Grid span 目前 backend 近似，需明示/测试限制 | testkit 输出 GridCell row/column/span | `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 30 | done | WebView 仍是接口占位，需记录并测试占位 fallback | backend 编译 WebView placeholder | `compile_contract::iced_backend_compiles_first_wave_winui_controls` |
+| 31 | done | ToolTip 只有 top placement，缺 placement API | 新增 `TooltipPlacement` / `tooltip_at` + schema/backend 映射 | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 32 | done | Flyout 缺 light-dismiss/focus 行为合同 | 新增 `FlyoutLightDismiss`/`FlyoutFocusBehavior` + schema/a11y/testkit/backend 合同 | `fluent_contract::public_prelude_builds_first_wave_winui_controls`; `layout_contract::layout_snapshot_covers_first_wave_winui_controls`; `compile_contract::iced_backend_compiles_first_wave_winui_controls` |
+| 33 | done | SplitButton 缺 disabled menu item 行为覆盖 | disabled item 进入 schema/testkit，backend 默认菜单触发跳过 disabled 项 | `fluent_contract::public_prelude_builds_first_wave_winui_controls`; `tests::split_button_default_menu_activation_skips_disabled_items` |
+| 34 | done | TabView 缺 close button 可访问名称覆盖 | 新增 `TabItem::close_a11y_name`，a11y/UIA plan 覆盖 close button 名称 | `fluent_contract::contract_tree_flows_through_schema_a11y_and_diff`; `uia_contract::first_wave_controls_map_to_windows_uia_control_types` |
+| 35 | done | TreeView 缺 expanded/collapsed a11y 状态覆盖 | TreeItem a11y help text 输出 expanded/collapsed，schema/UIA 合同覆盖 | `fluent_contract::contract_tree_flows_through_schema_a11y_and_diff`; `uia_contract::first_wave_controls_map_to_windows_uia_control_types` |
+| 36 | done | Border/Viewbox 缺布局尺寸合同测试 | layout snapshot 输出 padding/width/height/stretch | `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 37 | done | Image URI/file source 缺 backend error/fallback 合同 | 新增 `ImageSourceKind` / fallback 行为，schema/testkit/backend 覆盖 Raster/BGRA/Empty | `fluent_contract::image_source_kind_and_fallback_contract_are_public`; `layout_contract::layout_snapshot_covers_first_wave_winui_controls`; `compile_contract::iced_backend_compiles_first_wave_winui_controls` |
+| 38 | done | NumberBox 缺 min/max/step clamp 行为 | 构造时 clamp 初始值并归一化非正/非 finite step，backend step action 继续 clamp | `fluent_contract::number_box_clamps_initial_value_and_normalizes_step`; `compile_contract::iced_backend_compiles_first_wave_winui_controls` |
+| 39 | done | AutoSuggestBox 缺 keyboard selection 合同 | 新增 `highlighted_index`，schema/testkit/backend 高亮行覆盖 | `fluent_contract::public_prelude_builds_first_wave_winui_controls`; `layout_contract::layout_snapshot_covers_first_wave_winui_controls`; `compile_contract::iced_backend_compiles_first_wave_winui_controls` |
+| 40 | done | NavigationView settings/back event 合同不够集中 | contract view 统一断言 settings/back visible 与 action kind | `fluent_contract::public_prelude_builds_first_wave_winui_controls` |
+| 41 | done | 托盘菜单只能走 native presenter，Fluent presenter runtime 需独立覆盖 | Fluent tray presenter/submenu runtime window options 与 testkit contract 覆盖 | `fluent_tray_submenu_expands_right_without_moving_root_panel`; `fluent_tray_submenu_flips_left_without_moving_root_panel_near_right_edge`; `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 42 | done | 托盘 Fluent 外观 token 缺完整 public contract | 补 `TrayMenuPresenterStyle` builder API、schema/testkit 完整 style 输出、Windows plan round-trip | `fluent_contract::tray_menu_style_is_public_and_tokenized`; `tray_contract::tray_plan_preserves_fluent_presenter_style_and_nested_submenus` |
+| 43 | done | 托盘项高度/字体/padding DPI 合同需覆盖 | schema/testkit 输出 item font/min-height/padding/submenu arrow/hover inset | `fluent_contract::tray_menu_style_is_public_and_tokenized`; `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 44 | done | 托盘 hover 色需覆盖主题混合边界 | 补 hover mix builder/schema/testkit，native blend helper 覆盖边界 | `tray_owner_draw_blend_color_interpolates_channels`; `fluent_contract::tray_menu_style_is_public_and_tokenized` |
+| 45 | done | 托盘 light/dark surface/foreground/separator 需覆盖 | 补 light/dark palette builder/schema/testkit/plan round-trip | `tray_contract::tray_plan_preserves_fluent_presenter_style_and_nested_submenus`; `layout_contract::layout_snapshot_covers_first_wave_winui_controls` |
+| 46 | done | 托盘 separator metrics 需覆盖 | schema/testkit 输出 separator height/thickness/inset，platform plan 保留 style | `fluent_contract::tray_menu_style_is_public_and_tokenized`; `tray_contract::tray_plan_preserves_fluent_presenter_style_and_nested_submenus` |
+| 47 | done | 托盘最大高度/滚动限制需覆盖 root/submenu | root/submenu 面板高度均受 presenter max-height clamp | `fluent_tray_root_and_submenu_heights_are_capped_by_presenter_max_height` |
+| 48 | done | 托盘 popup 动画 flags 需覆盖 upward/downward | native TrackPopupMenu vertical positive/negative flags 测试 | `tray_popup_animation_maps_to_native_track_popup_flags` |
+| 49 | done | native 托盘 popup DWM 角半径需覆盖更多 radius 边界 | radius 0/small/round DWM corner preference 测试 | `tray_presenter_radius_maps_to_dwm_corner_preference` |
+| 50 | done | 托盘 tooltip hover selection 需覆盖 submenu/native 两路 | command/submenu/separator/closed selection tooltip 映射测试 | `tray_menu_hover_tooltips_map_win32_selection_messages` |
+| 51 | done | 托盘 submenu round-trip 需覆盖多层 children | 多层 submenu Windows plan + backend subscription round-trip 覆盖 | `tray_contract::tray_plan_preserves_fluent_presenter_style_and_nested_submenus`; `tray_subscription_data_preserves_structured_menu_items` |
+| 52 | done | Fluent submenu 独立窗口需覆盖 hide/close/focus 生命周期 | root/submenu 独立窗口关闭时清理对应 runtime 状态 | `closing_fluent_tray_root_window_clears_submenu_lifecycle_state`; `closing_fluent_tray_submenu_window_clears_only_submenu_lifecycle_state` |
+| 53 | done | submenu 右边缘翻转需覆盖左边缘/多显示器 | right-edge flip、left-edge/non-zero work area expand-right 均覆盖 | `fluent_tray_submenu_flips_left_without_moving_root_panel_near_right_edge`; `fluent_tray_submenu_expands_right_near_left_edge_on_offset_work_area` |
+| 54 | done | root/submenu 独立高度需覆盖滚动上限 | root/submenu panel 独立 content height 与 window height 测试 | `fluent_tray_panels_keep_independent_content_heights` |
+| 55 | done | ContextMenuInset 需覆盖底边/顶边 clamp | upper-left/right 与顶部不足时向下打开的 inset 对齐覆盖 | `resolves_context_menu_inset_to_visible_upper_right_of_anchor`; `resolves_context_menu_inset_to_visible_upper_left_near_right_edge`; `resolves_context_menu_inset_below_anchor_when_top_space_is_insufficient` |
+| 56 | done | Fluent 4px spacing/token 规则缺 lint/contract | theme contract 固定 spacing 4px grid 与 2px half-step | `theme_contract::fluent_theme_tokens_follow_spacing_typography_touch_and_focus_contracts` |
+| 57 | done | Typography scale 缺控件级映射覆盖 | theme contract 固定 caption/body/subtitle/title scale 单调关系 | `theme_contract::fluent_theme_tokens_follow_spacing_typography_touch_and_focus_contracts` |
+| 58 | done | Touch target min size 缺控件合同 | theme contract 固定 min touch target/control/icon/round button metrics | `theme_contract::fluent_theme_tokens_follow_spacing_typography_touch_and_focus_contracts` |
+| 59 | done | Focus visual stroke 缺统一合同 | theme contract 固定 focus stroke 与 focus/border 区分 | `theme_contract::fluent_theme_tokens_follow_spacing_typography_touch_and_focus_contracts` |
+| 60 | done | Localization/i18n 文本方向与 fallback 覆盖不足 | 新增 `TextDirection` / `LocaleId::text_direction()` 与外部 i18n fallback 合同 | `i18n_contract::public_i18n_contract_resolves_locale_fallback_and_text_direction`; `i18n::tests::locale_direction_uses_primary_language_subtag` |
+| 61 | done | Keyboard accelerator 与 CommandBar 集成覆盖不足 | `advanced_controls_contract` | Page/Dialog command keyboard schema+a11y；CommandBar group/child contract |
+| 62 | done | Screen reader name/hint audit 规则覆盖不足 | `win_fluent_testkit::reports_missing_names_for_extended_interactive_roles` | 扩展 Hyperlink/MenuItem/ProgressBar/RadioButton/Slider/TabItem/TreeItem 名称规则 |
+| 63 | done | Empty interactive name 应作为 error 覆盖更多 roles | `win_fluent_testkit::reports_missing_names_for_extended_interactive_roles` | 新增角色空名称均报 error |
+| 64 | done | ProgressBar/ProgressRing a11y value 合同不足 | `advanced_controls_contract` | ProgressBar value clamp/help_text；ProgressRing active/inactive help_text |
+| 65 | done | Dialog primary/secondary command a11y 合同不足 | `advanced_controls_contract` | primary/secondary command 进入 Dialog a11y tree，含 enabled/keyboard |
+| 66 | done | ComboBox selected item/schema/action 合同需集中化 | `advanced_controls_contract` | `selected_item()`、invalid selected 过滤、schema selected_label/a11y selected |
+| 67 | done | TextEditor password/secure/read-only 合同需集中化 | `advanced_controls_contract` | secure/read_only/key_bindings schema；read-only 仍 focusable，a11y help_text |
+| 68 | done | Slider preview interaction state 合同需集中化 | `advanced_controls_contract` | `preview_active()` schema+a11y value/range/step |
+| 69 | done | Expander collapsed/expanded motion 合同需集中化 | `advanced_controls_contract` | schema motion=expand-collapse-reveal；a11y expanded/collapsed |
+| 70 | done | BusyOverlay blocks-input/a11y 合同不足 | `advanced_controls_contract` | blocks_input/fade schema；active blocking help_text/name |
+| 71 | done | Overlay layer alignment/scrim/blocking 合同不足 | `framework_contract`, `layout_contract` | Overlay scrim clamp、blocking/scrim layer count、schema/a11y/testkit 输出 |
+| 72 | done | AdaptiveSwitch resolved-width 合同不足 | `framework_contract` | schema/a11y/diff/testkit 输出 resolved_width + resolved_branch |
+| 73 | done | Lazy keyed subtree diff 合同不足 | `framework_contract::lazy_key_changes_are_reported_by_diff` | Lazy key 变更触发 diff Updated |
+| 74 | done | PointerRegion pointer/wheel/escape event schema 覆盖不足 | `framework_contract` | move/left/right/double/wheel/escape action kind schema |
+| 75 | done | CaptureOverlay DPI/magnifier/handles schema 覆盖不足 | `framework_contract` | background_pixels/cursor/handles/magnifier schema+a11y |
+| 76 | done | WindowOptions no-activate/toolwindow/frame 合同需扩充 | `win_fluent_platform_win native_plan/maps_mini_window_options` | toolwindow/no_activate/acrylic/skip_taskbar native plan |
+| 77 | done | Window placement 多显示器/DPI 合同需扩充 | `win_fluent_platform_win window_placement/high_dpi/multi_monitor` | work area/monitor/explicit/high-DPI/multi-monitor placement |
+| 78 | done | Window command current/logical routing 合同需扩充 | `show_at_window_command_routes_to_logical_window_with_explicit_placement` | ShowAt logical id -> pending window + Explicit placement |
+| 79 | done | Subscription merge/batch 行为合同不足 | `subscription::tests` | batch flatten/none discard/singleton unwrap/named-event mapper |
+| 80 | done | Task batch/map/cancel 语义合同不足 | `task::tests` | batch flatten、same-message map、Cancel token + backend no-op |
+| 81 | done | Clipboard/FileDialog/FolderDialog plan 合同需扩充 | `task::clipboard_and_dialog_tasks_preserve_options_and_mappers` | clipboard write + file/folder options/mapper contract |
+| 82 | done | ShellVerb/Protocol registration guard 合同需扩充 | `platform::tests`, platform_win shell/protocol tests | registry-safe verb id + URI scheme guard；shell/protocol plan tests |
+| 83 | done | NamedEvent IPC subscription 合同需扩充 | `subscription::named_event...`, platform_win named-event tests | named-event subscription + Windows plan action kind |
+| 84 | done | Hotkey registration edge cases 合同需扩充 | platform_win `hotkey` tests | duplicate modifiers bitflag dedupe；invalid F-key/named key errors |
+| 85 | done | Screenshot physical/DIP conversion 合同需集中化 | `screenshot::tests` | physical/dip/dpi conversion + invalid scale fallback |
+| 86 | done | Visual diff tolerance/artifact 合同需接入 gallery | `win_fluent_gallery::gallery_reference_covers_framework_controls_and_visual_diff_artifacts` | VisualDiffTolerance + PPM artifact bytes in gallery tests |
+| 87 | done | Gallery reference views 未覆盖全部新增控件 | `win_fluent_gallery` | gallery now covers Progress/AutoSuggest/Slider/BusyOverlay/Overlay/Adaptive/Lazy/Pointer/Capture |
+| 88 | done | Public API boundary 需防 iced/windows 类型泄漏 | `win_fluent_gallery` schema/UIA tests | gallery/main/mini/fixed/settings/capture snapshots assert no iced/windows leakage |
+| 89 | done | Product-specific strings 仍出现在 winfluent-rs 测试 fixture | `rg OpenAI/Google/DeepL/... crates` | fixtures neutralized to Provider A/B/C；rg returns no matches |
+| 90 | done | ARM64 compile/runtime evidence 与 framework contract 仍分散 | `.github/workflows/winfluent-rs.yml`, `arm64-msix-smoke.yml` | winfluent ARM64 check + ARM64 runtime smoke + app ARM64 MSIX smoke workflows |
+| 91 | done | Docs/examples 仍有 ignored snippets，缺编译覆盖 | `cargo test -p win_fluent --doc` | `view.rs` ignored snippets converted to compilable `no_run` doctests |
+| 92 | done | Deprecated service_result_* 别名缺迁移测试 | `remaining_contract::deprecated_service_result_aliases...` | deprecated token/builder aliases exported and migration-compiled |
+| 93 | done | Icon token set 缺 Fluent glyph contract | `remaining_contract::standard_icons_have_public_fluent_glyph_contract` | public Fluent glyph map + backend consumes `IconToken::resolved_glyph()` |
+| 94 | done | StatusBadge 数字/dot 语义不足 | `remaining_contract::status_badge_exposes_text_count_and_dot_semantics` | `StatusBadgeKind::{Text,Count,Dot}` + count/dot a11y/schema |
+| 95 | done | SettingsRow trailing/content/a11y 合同不足 | `remaining_contract::settings_row_schema_and_a11y...` | schema `has_content`/`trailing` + UIA description/help_text |
+| 96 | done | ResultCard collapse virtualization 与 generic ListView 关系不清 | `remaining_contract::result_list_contract_is_distinct...` | `ListContractKind` distinguishes result-list vs generic ListView |
+| 97 | done | ControlState 自动化（VSM 等价）仍未决 | `state::tests`, `remaining_contract::visual_state...` | Common/Focus/Selection visual-state snapshot + automation key |
+| 98 | done | ControlTemplate 等价能力仍未决 | `remaining_contract::control_template_is_a_public...` | public `control_template`/`custom_control` API + schema/a11y kind |
+| 99 | done | Fluent design token 到控件样式的覆盖率缺量化报告 | `theme::tests`, `remaining_contract::visual_state...` | `ThemeTokenCoverageReport` quantifies categories/colors/control metrics |
+| 100 | done | 100 项清单缺自动防回归入口 | `remaining_contract::compare_winui_plan_tracks_all_100_items_as_done` | test reads `compare_winui_plan.md` and asserts items 1-100 are done |
+
+复核命令：
+
+```bash
+cargo fmt -- --check
+cargo test --workspace
+```
+
 ## 附：基线来源
 - WinUI 3 控件索引：https://learn.microsoft.com/windows/apps/develop/ui/controls/
 - 布局面板：https://learn.microsoft.com/windows/apps/develop/ui/layout-panels

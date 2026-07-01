@@ -131,6 +131,7 @@ fn token_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
         ViewToken::Viewbox(token) => vec![token.content.as_ref()],
         ViewToken::TabView(token) => token.tabs.iter().map(|tab| &tab.content).collect(),
         ViewToken::ListView(token) => token.items.iter().map(|item| &item.view).collect(),
+        ViewToken::TrayMenu(_) => Vec::new(),
         ViewToken::Wrap(token) => token.children.iter().collect(),
         ViewToken::Flyout(token) => vec![token.anchor.as_ref(), token.content.as_ref()],
         ViewToken::Overlay(token) => {
@@ -241,6 +242,7 @@ fn token_kind<Message>(token: &ViewToken<Message>) -> &'static str {
         ViewToken::ResultCard(_) => "ResultCard",
         ViewToken::ResultList(_) => "ResultList",
         ViewToken::ListView(_) => "ListView",
+        ViewToken::TrayMenu(_) => "TrayMenu",
         ViewToken::PointerRegion(_) => "PointerRegion",
         ViewToken::CaptureOverlay(_) => "CaptureOverlay",
         ViewToken::Image(_) => "Image",
@@ -294,6 +296,7 @@ fn token_id<Message>(token: &ViewToken<Message>) -> Option<&str> {
         ViewToken::ResultCard(token) => token.id.as_deref(),
         ViewToken::ResultList(token) => token.id.as_deref(),
         ViewToken::ListView(token) => token.id.as_deref(),
+        ViewToken::TrayMenu(token) => token.id.as_deref(),
         ViewToken::PointerRegion(token) => token.id.as_deref(),
         ViewToken::CaptureOverlay(token) => token.id.as_deref(),
         ViewToken::Image(token) => token.id.as_deref(),
@@ -417,8 +420,10 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.action.kind()
         ),
         ViewToken::StatusBadge(token) => format!(
-            "{:?}|{:?}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}",
             token.label,
+            token.kind,
+            token.count,
             token.severity,
             token.icon.as_ref().map(|icon| icon.name)
         ),
@@ -623,10 +628,19 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join(",");
-            format!("layers=[{layers}]")
+            format!(
+                "layers=[{layers}]|blocking_layers={}|scrim_layers={}",
+                token.blocking_layer_count(),
+                token.scrim_layer_count()
+            )
         }
         ViewToken::AdaptiveSwitch(token) => {
-            format!("breakpoint_width={}", token.breakpoint_width)
+            format!(
+                "breakpoint_width={}|resolved_width={:?}|resolved_branch={}",
+                token.breakpoint_width,
+                token.resolved_width,
+                token.resolved_branch_name()
+            )
         }
         ViewToken::Lazy(token) => token.key.clone(),
         ViewToken::ScrollView(token) => format!(
@@ -667,7 +681,8 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.collapse_transition.duration_ms
         ),
         ViewToken::ResultList(token) => format!(
-            "items={}|virtualized={}|max_height={:?}|padding={:?}|border_width={:?}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "contract={}|items={}|virtualized={}|max_height={:?}|padding={:?}|border_width={:?}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            token.list_contract_kind().as_str(),
             token.items.len(),
             token.virtualized,
             token.max_height,
@@ -701,6 +716,23 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
                 .collect::<Vec<_>>()
                 .join(",")
         ),
+        ViewToken::TrayMenu(token) => format!(
+            "items={}|min_width={}|max_height={:?}|radius={}|shadow_margin={}|animation_offset_y={}|item_height={}|ids={}",
+            token.items.len(),
+            token.min_width,
+            token.style.presenter_max_height,
+            token.style.presenter_corner_radius,
+            token.style.presenter_shadow_margin,
+            token.animation_offset_y,
+            token.style.item_min_height,
+            token
+                .items
+                .iter()
+                .filter(|item| !item.is_separator())
+                .map(|item| item.id.clone())
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
         ViewToken::PointerRegion(token) => format!(
             "{:?}|{:?}|move={:?}|left_down={:?}|left_up={:?}|double_click={:?}|right_down={:?}|wheel={:?}|escape={:?}",
             token.width,
@@ -714,14 +746,16 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.escape_action.kind()
         ),
         ViewToken::CaptureOverlay(token) => format!(
-            "{}|depth={}|dragging={}|detected={:?}|selection={:?}|handles={}|magnifier={}",
+            "{}|depth={}|dragging={}|detected={:?}|selection={:?}|handles={}|magnifier={}|background={:?}|cursor={:?}",
             token.phase,
             token.detection_depth,
             token.dragging,
             token.detected_rect,
             token.selection_rect,
             token.handles_visible,
-            token.magnifier_visible
+            token.magnifier_visible,
+            token.background_pixel_size(),
+            token.cursor
         ),
         ViewToken::Image(token) => format!(
             "bgra_path={:?}|{}x{} px|raster={:?}|{:?}|{:?}|{:?}",
@@ -736,7 +770,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
         ViewToken::WebView(token) => {
             format!("{:?}|{:?}|{:?}", token.source, token.width, token.height)
         }
-        ViewToken::Custom(token) => token.control.clone(),
+        ViewToken::Custom(token) => format!(
+            "{}|{}|{:?}",
+            token.kind.as_str(),
+            token.control,
+            token.target_type
+        ),
     }
 }
 

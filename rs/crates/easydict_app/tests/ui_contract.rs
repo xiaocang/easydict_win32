@@ -1539,7 +1539,11 @@ fn services_settings_local_ai_status_bar_severity_tracks_status_text() {
     let snapshot = win_fluent_testkit::view_snapshot(&settings_view(&state.settings));
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "InfoBar");
     assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "severity=Warning");
-    assert_control_contains(&snapshot, "WindowsLocalAIStatusBar", "title=\"Unavailable\"");
+    assert_control_contains(
+        &snapshot,
+        "WindowsLocalAIStatusBar",
+        "title=\"Unavailable\"",
+    );
     assert_control_contains(
         &snapshot,
         "WindowsLocalAIStatusBar",

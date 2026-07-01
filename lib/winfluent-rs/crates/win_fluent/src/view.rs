@@ -6,8 +6,18 @@ use crate::action::Action;
 use crate::command::CommandToken;
 use crate::icon::IconToken;
 use crate::motion::Transition;
+use crate::platform::{TrayMenu, TrayMenuItem, TrayMenuPresenterStyle};
 use crate::state::{ControlState, ValidationSeverity, ValidationState};
 use crate::style::{utility_scale, FluentStyle};
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TooltipPlacement {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
 
 #[derive(Clone, Debug)]
 pub struct View<Message> {
@@ -16,6 +26,7 @@ pub struct View<Message> {
     /// Lives on the wrapper rather than per-token so it applies uniformly to
     /// every control, not just `button`.
     tooltip: Option<String>,
+    tooltip_placement: TooltipPlacement,
 }
 
 impl<Message> View<Message> {
@@ -23,6 +34,7 @@ impl<Message> View<Message> {
         Self {
             token,
             tooltip: None,
+            tooltip_placement: TooltipPlacement::default(),
         }
     }
 
@@ -41,9 +53,21 @@ impl<Message> View<Message> {
         self
     }
 
+    /// Attach a hover tooltip with an explicit placement.
+    pub fn tooltip_at(mut self, tooltip: impl Into<String>, placement: TooltipPlacement) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self.tooltip_placement = placement;
+        self
+    }
+
     /// The tooltip text attached via [`View::tooltip`], if any.
     pub fn tooltip_text(&self) -> Option<&str> {
         self.tooltip.as_deref()
+    }
+
+    /// The tooltip placement attached via [`View::tooltip_at`].
+    pub fn tooltip_placement(&self) -> TooltipPlacement {
+        self.tooltip_placement
     }
 
     pub fn text_margin(mut self, margin: Edges) -> Self {
@@ -191,6 +215,7 @@ pub enum ViewToken<Message> {
     ResultCard(ResultCardToken<Message>),
     ResultList(ResultListToken<Message>),
     ListView(ListViewToken<Message>),
+    TrayMenu(TrayMenuToken<Message>),
     PointerRegion(PointerRegionToken<Message>),
     CaptureOverlay(CaptureOverlayToken),
     Image(ImageToken),
@@ -300,6 +325,53 @@ pub enum SettingsRowKind {
     Normal,
     Expander,
     Warning,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StatusBadgeKind {
+    Text,
+    Count,
+    Dot,
+}
+
+impl StatusBadgeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Count => "count",
+            Self::Dot => "dot",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ListContractKind {
+    GenericListView,
+    TranslationResultList,
+}
+
+impl ListContractKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GenericListView => "generic-list-view",
+            Self::TranslationResultList => "translation-result-list",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CustomControlKind {
+    Custom,
+    ControlTemplate,
+}
+
+impl CustomControlKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Custom => "custom",
+            Self::ControlTemplate => "control-template",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -614,9 +686,27 @@ pub struct FlyoutButtonToken<Message> {
 pub struct StatusBadgeToken {
     pub id: Option<String>,
     pub label: String,
+    pub kind: StatusBadgeKind,
+    pub count: Option<u32>,
     pub severity: ValidationSeverity,
     pub icon: Option<IconToken>,
     pub a11y: A11yHint,
+}
+
+impl StatusBadgeToken {
+    pub fn automation_name(&self) -> String {
+        match self.kind {
+            StatusBadgeKind::Dot => format!("{:?} status", self.severity),
+            StatusBadgeKind::Count => {
+                format!(
+                    "{} {:?} notifications",
+                    self.count.unwrap_or_default(),
+                    self.severity
+                )
+            }
+            StatusBadgeKind::Text => self.label.clone(),
+        }
+    }
 }
 
 /// Fluent `InfoBar`-style status surface: a tinted box with a severity icon, a
@@ -650,6 +740,17 @@ pub struct ProgressBarToken {
     pub height: u16,
     pub label: Option<String>,
     pub a11y: A11yHint,
+}
+
+impl ProgressBarToken {
+    /// Determinate progress value normalized to WinUI's default `0..=100` range.
+    pub fn normalized_value(&self) -> Option<f32> {
+        self.value
+    }
+}
+
+fn normalize_progress_bar_value(value: f32) -> Option<f32> {
+    value.is_finite().then(|| value.clamp(0.0, 100.0))
 }
 
 #[derive(Clone, Debug)]
@@ -805,6 +906,13 @@ pub struct SliderToken<Message> {
     pub a11y: A11yHint,
 }
 
+impl<Message> SliderToken<Message> {
+    /// Whether the slider should expose its transient value preview state.
+    pub fn preview_active(&self) -> bool {
+        self.state.hovered || self.state.pressed || self.state.focused
+    }
+}
+
 /// A numeric input with optional spin buttons and range/step (WinUI `NumberBox`).
 #[derive(Clone, Debug)]
 pub struct NumberBoxToken<Message> {
@@ -824,14 +932,30 @@ pub struct NumberBoxToken<Message> {
 impl<Message> NumberBoxToken<Message> {
     /// Clamp a candidate value to the configured `[min, max]` range.
     pub fn clamp(&self, value: f32) -> f32 {
-        let mut v = value;
-        if let Some(min) = self.min {
-            v = v.max(min);
-        }
-        if let Some(max) = self.max {
-            v = v.min(max);
-        }
-        v
+        clamp_number_box_value(value, self.min, self.max)
+    }
+}
+
+fn clamp_number_box_value(value: f32, min: Option<f32>, max: Option<f32>) -> f32 {
+    let mut value = if value.is_finite() {
+        value
+    } else {
+        min.or(max).unwrap_or(0.0)
+    };
+    if let Some(min) = min {
+        value = value.max(min);
+    }
+    if let Some(max) = max {
+        value = value.min(max);
+    }
+    value
+}
+
+fn normalize_number_box_step(step: f32) -> f32 {
+    if step.is_finite() && step > 0.0 {
+        step
+    } else {
+        1.0
     }
 }
 
@@ -847,6 +971,8 @@ pub struct AutoSuggestBoxToken<Message> {
     pub suggestions: Vec<String>,
     /// Whether the suggestion list is open.
     pub open: bool,
+    /// Zero-based suggestion highlighted by keyboard navigation, if any.
+    pub highlighted_index: Option<usize>,
     pub width: Length,
     pub state: ControlState,
     /// Fired as the user types (`TextInput`).
@@ -883,6 +1009,14 @@ pub struct ComboBoxToken<Message> {
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
+}
+
+impl<Message> ComboBoxToken<Message> {
+    /// The selected item, if the selected id still matches an item.
+    pub fn selected_item(&self) -> Option<&ComboBoxItem> {
+        let selected = self.selected.as_deref()?;
+        self.items.iter().find(|item| item.id == selected)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1082,6 +1216,7 @@ pub struct TabItem<Message> {
     pub id: String,
     pub header: String,
     pub closable: bool,
+    pub close_a11y_name: Option<String>,
     pub content: View<Message>,
 }
 
@@ -1095,12 +1230,18 @@ impl<Message> TabItem<Message> {
             id: id.into(),
             header: header.into(),
             closable: false,
+            close_a11y_name: None,
             content: content.into_view(),
         }
     }
 
     pub fn closable(mut self, closable: bool) -> Self {
         self.closable = closable;
+        self
+    }
+
+    pub fn close_a11y_name(mut self, name: impl Into<String>) -> Self {
+        self.close_a11y_name = Some(name.into());
         self
     }
 }
@@ -1198,6 +1339,33 @@ pub enum FlyoutPlacement {
     Right,
 }
 
+/// Whether a flyout closes when pointer/keyboard focus moves outside it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FlyoutLightDismiss {
+    #[default]
+    Enabled,
+    Disabled,
+}
+
+impl From<bool> for FlyoutLightDismiss {
+    fn from(enabled: bool) -> Self {
+        if enabled {
+            Self::Enabled
+        } else {
+            Self::Disabled
+        }
+    }
+}
+
+/// Focus transition policy used when an open flyout is shown or dismissed.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FlyoutFocusBehavior {
+    #[default]
+    RestoreFocus,
+    KeepFocus,
+    MoveFocusToContent,
+}
+
 /// A generic flyout (WinUI `Flyout`): arbitrary `content` anchored to an
 /// `anchor` element, shown when `open`. Unlike `flyout_button`, the content is
 /// not limited to a menu and the anchor can be any view.
@@ -1208,6 +1376,8 @@ pub struct FlyoutToken<Message> {
     pub content: Box<View<Message>>,
     pub open: bool,
     pub placement: FlyoutPlacement,
+    pub light_dismiss: FlyoutLightDismiss,
+    pub focus_behavior: FlyoutFocusBehavior,
     pub a11y: A11yHint,
 }
 
@@ -1254,7 +1424,7 @@ impl<Message> OverlayLayer<Message> {
     }
 
     pub fn scrim(mut self, opacity: f32) -> Self {
-        self.scrim = Some(opacity);
+        self.scrim = Some(opacity.clamp(0.0, 1.0));
         self
     }
 
@@ -1269,6 +1439,22 @@ impl<Message> OverlayLayer<Message> {
             .align(Alignment::Center, Alignment::Center)
             .scrim(0.4)
             .blocks_input(true)
+    }
+}
+
+impl<Message> OverlayToken<Message> {
+    pub fn blocking_layer_count(&self) -> usize {
+        self.layers
+            .iter()
+            .filter(|layer| layer.blocks_input)
+            .count()
+    }
+
+    pub fn scrim_layer_count(&self) -> usize {
+        self.layers
+            .iter()
+            .filter(|layer| layer.scrim.is_some())
+            .count()
     }
 }
 
@@ -1297,6 +1483,14 @@ impl<Message> AdaptiveSwitchToken<Message> {
                 self.narrow.as_ref()
             }
         })
+    }
+
+    pub fn resolved_branch_name(&self) -> &'static str {
+        match self.resolved_width {
+            Some(width) if width >= f32::from(self.breakpoint_width) => "wide",
+            Some(_) => "narrow",
+            None => "unresolved",
+        }
     }
 }
 
@@ -1609,6 +1803,12 @@ pub struct ResultListToken<Message> {
     pub a11y: A11yHint,
 }
 
+impl<Message> ResultListToken<Message> {
+    pub const fn list_contract_kind(&self) -> ListContractKind {
+        ListContractKind::TranslationResultList
+    }
+}
+
 /// A generic, data-driven list (WinUI `ListView`/`ItemsRepeater`). Where
 /// `result_list` hardcodes the translation-result row shape, `ListView` renders
 /// arbitrary per-item views — the base primitive for history, dictionary entries,
@@ -1629,6 +1829,12 @@ pub struct ListViewToken<Message> {
     pub a11y: A11yHint,
 }
 
+impl<Message> ListViewToken<Message> {
+    pub const fn list_contract_kind(&self) -> ListContractKind {
+        ListContractKind::GenericListView
+    }
+}
+
 /// A single row in a [`ListViewToken`], pairing a stable id with its view.
 #[derive(Clone, Debug)]
 pub struct ListViewItem<Message> {
@@ -1643,6 +1849,19 @@ impl<Message> ListViewItem<Message> {
             view: view.into_view(),
         }
     }
+}
+
+/// A tray/context-menu presenter surface. Backends render this as a Fluent menu
+/// popup rather than as generic buttons, so row metrics and hover treatment can
+/// track the native WinUI `MenuFlyout` reference.
+#[derive(Clone, Debug)]
+pub struct TrayMenuToken<Message> {
+    pub id: Option<String>,
+    pub min_width: u16,
+    pub style: TrayMenuPresenterStyle,
+    pub animation_offset_y: u16,
+    pub items: Vec<TrayMenuItem<Message>>,
+    pub a11y: A11yHint,
 }
 
 #[deprecated(note = "use ResultCardToken")]
@@ -1742,6 +1961,14 @@ pub struct CaptureOverlayToken {
     pub a11y: A11yHint,
 }
 
+impl CaptureOverlayToken {
+    pub fn background_pixel_size(&self) -> Option<(u32, u32)> {
+        self.background
+            .as_ref()
+            .map(|background| (background.pixel_width, background.pixel_height))
+    }
+}
+
 /// A bitmap image. The only supported source today is a raw 32-bit BGRA pixel
 /// file (the format written by the platform screen-capture API), which lets the
 /// OCR capture overlay show the frozen desktop like the WinUI implementation.
@@ -1762,6 +1989,37 @@ pub struct ImageToken {
     pub width: Length,
     pub height: Length,
     pub a11y: A11yHint,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImageSourceKind {
+    Empty,
+    Bgra,
+    Raster,
+}
+
+impl ImageToken {
+    pub fn source_kind(&self) -> ImageSourceKind {
+        if self
+            .raster_path
+            .as_deref()
+            .is_some_and(|path| !path.is_empty())
+        {
+            ImageSourceKind::Raster
+        } else if !self.bgra_path.is_empty() && self.pixel_width > 0 && self.pixel_height > 0 {
+            ImageSourceKind::Bgra
+        } else {
+            ImageSourceKind::Empty
+        }
+    }
+
+    pub fn fallback_behavior(&self) -> &'static str {
+        match self.source_kind() {
+            ImageSourceKind::Raster => "backend-decodes-or-reserves-layout",
+            ImageSourceKind::Bgra => "empty-layout-slot-on-read-error",
+            ImageSourceKind::Empty => "empty-layout-slot",
+        }
+    }
 }
 
 /// How an image is scaled to fit its layout bounds (WinUI `Stretch`).
@@ -1806,7 +2064,9 @@ pub struct WebViewToken {
 #[derive(Clone, Debug)]
 pub struct CustomToken<Message> {
     pub id: Option<String>,
+    pub kind: CustomControlKind,
     pub control: String,
+    pub target_type: Option<String>,
     pub children: Vec<View<Message>>,
     pub a11y: A11yHint,
 }
@@ -1945,7 +2205,12 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
 /// Inline rich text (WinUI `RichTextBlock`): a run of styled spans with optional
 /// hyperlinks, for dictionary entries and MDX content.
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { OpenWord(String) }
+/// # fn main() {
+/// # let _: View<Msg> =
 /// text_runs([
 ///     TextRun::plain("see also "),
 ///     TextRun::link("hello", "word:hello"),
@@ -1954,10 +2219,9 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
 ///     TextRun::plain(")"),
 /// ])
 /// .on_link(Msg::OpenWord);
+/// # }
 /// ```
-pub fn text_runs<Message>(
-    runs: impl IntoIterator<Item = TextRun>,
-) -> RichTextBuilder<Message> {
+pub fn text_runs<Message>(runs: impl IntoIterator<Item = TextRun>) -> RichTextBuilder<Message> {
     RichTextBuilder {
         id: None,
         runs: runs.into_iter().collect(),
@@ -2049,9 +2313,7 @@ pub fn tab_view<Message>(
 }
 
 /// A hierarchical list (WinUI `TreeView`).
-pub fn tree_view<Message>(
-    roots: impl IntoIterator<Item = TreeNode>,
-) -> TreeViewBuilder<Message> {
+pub fn tree_view<Message>(roots: impl IntoIterator<Item = TreeNode>) -> TreeViewBuilder<Message> {
     TreeViewBuilder {
         id: None,
         roots: roots.into_iter().collect(),
@@ -2105,6 +2367,8 @@ pub fn status_badge<Message>(
     StatusBadgeBuilder {
         id: None,
         label: label.into(),
+        kind: StatusBadgeKind::Text,
+        count: None,
         severity,
         icon: None,
         a11y: A11yHint::default(),
@@ -2247,7 +2511,12 @@ pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBui
 
 /// A single-selection radio group (WinUI `RadioButtons`).
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { ThemeChanged(String) }
+/// # fn main() {
+/// # let _: View<Msg> =
 /// radio_group()
 ///     .header("Theme")
 ///     .option("system", "Use system setting")
@@ -2255,6 +2524,7 @@ pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBui
 ///     .option("dark", "Dark")
 ///     .selected("system")
 ///     .on_select(Msg::ThemeChanged);
+/// # }
 /// ```
 pub fn radio_group<Message>() -> RadioGroupBuilder<Message> {
     RadioGroupBuilder {
@@ -2272,8 +2542,14 @@ pub fn radio_group<Message>() -> RadioGroupBuilder<Message> {
 
 /// A numeric input (WinUI `NumberBox`) with optional spin buttons and range.
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { Speed(f32) }
+/// # fn main() {
+/// # let _: View<Msg> =
 /// number_box(1.0).range(0.5, 3.0).step(0.1).spin_buttons(true).on_change(Msg::Speed);
+/// # }
 /// ```
 pub fn number_box<Message>(value: f32) -> NumberBoxBuilder<Message> {
     NumberBoxBuilder {
@@ -2293,12 +2569,20 @@ pub fn number_box<Message>(value: f32) -> NumberBoxBuilder<Message> {
 
 /// A text box with as-you-type suggestions (WinUI `AutoSuggestBox`).
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { QueryChanged(String), LanguagePicked(String) }
+/// # fn main() {
+/// # let query = "";
+/// # let matches = ["English", "Chinese"];
+/// # let _: View<Msg> =
 /// auto_suggest_box(query)
 ///     .placeholder("Search languages")
 ///     .suggestions(matches)
 ///     .on_change(Msg::QueryChanged)
 ///     .on_submit(Msg::LanguagePicked);
+/// # }
 /// ```
 pub fn auto_suggest_box<Message>(text: impl Into<String>) -> AutoSuggestBoxBuilder<Message> {
     AutoSuggestBoxBuilder {
@@ -2308,6 +2592,7 @@ pub fn auto_suggest_box<Message>(text: impl Into<String>) -> AutoSuggestBoxBuild
         header: None,
         suggestions: Vec::new(),
         open: false,
+        highlighted_index: None,
         width: Length::Fill,
         state: ControlState::default(),
         change_action: Action::None,
@@ -2411,13 +2696,19 @@ where
 /// and [`columns`](GridBuilder::columns), then place children with
 /// [`cell`](GridBuilder::cell) / [`cell_span`](GridBuilder::cell_span).
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { Name(String), Save }
+/// # fn main() {
+/// # let _: GridBuilder<Msg> =
 /// grid()
 ///     .columns([Length::Shrink, Length::Fill])     // Auto | *
 ///     .rows([Length::Shrink, Length::Shrink])
 ///     .cell(0, 0, text("Name"))
 ///     .cell(0, 1, text_editor("").on_input(Msg::Name))
 ///     .cell_span(1, 0, 1, 2, button("Save").on_press(Msg::Save));
+/// # }
 /// ```
 pub fn grid<Message>() -> GridBuilder<Message> {
     GridBuilder {
@@ -2475,10 +2766,18 @@ where
 /// A generic flyout (WinUI `Flyout`): `content` anchored to `anchor`, shown when
 /// open. Use for any popover content (not just menus).
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { Toggle }
+/// # fn main() {
+/// # let settings_panel = text("Settings");
+/// # let menu_open = true;
+/// # let _: FlyoutBuilder<Msg> =
 /// flyout(button("Options").on_press(Msg::Toggle), settings_panel)
 ///     .open(menu_open)
 ///     .placement(FlyoutPlacement::Bottom);
+/// # }
 /// ```
 pub fn flyout<Message, Anchor, Content>(anchor: Anchor, content: Content) -> FlyoutBuilder<Message>
 where
@@ -2491,6 +2790,8 @@ where
         content: Box::new(content.into_view()),
         open: false,
         placement: FlyoutPlacement::default(),
+        light_dismiss: FlyoutLightDismiss::default(),
+        focus_behavior: FlyoutFocusBehavior::default(),
         a11y: A11yHint::default(),
     }
 }
@@ -2650,13 +2951,19 @@ pub fn result_list<Message>(
 /// pre-built [`ListViewItem`]s (id + view); `result_list` is a specialization of
 /// this for translation results.
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # #[derive(Clone)]
+/// # enum Msg { LanguagePicked(String) }
+/// # fn main() {
+/// # let _: View<Msg> =
 /// list_view([
 ///     ListViewItem::new("en", text("English")),
 ///     ListViewItem::new("zh", text("中文")),
 /// ])
 /// .selected("en")
 /// .on_select(Msg::LanguagePicked);
+/// # }
 /// ```
 pub fn list_view<Message>(
     items: impl IntoIterator<Item = ListViewItem<Message>>,
@@ -2671,6 +2978,59 @@ pub fn list_view<Message>(
         action: Action::None,
         a11y: A11yHint::default(),
     }
+}
+
+pub fn custom_control<Message, Children>(
+    control: impl Into<String>,
+    children: Children,
+) -> View<Message>
+where
+    Children: IntoChildren<Message>,
+{
+    View::new(ViewToken::Custom(CustomToken {
+        id: None,
+        kind: CustomControlKind::Custom,
+        control: control.into(),
+        target_type: None,
+        children: children.into_children(),
+        a11y: A11yHint::default(),
+    }))
+}
+
+pub fn control_template<Message, Children>(
+    target_type: impl Into<String>,
+    template_key: impl Into<String>,
+    children: Children,
+) -> View<Message>
+where
+    Children: IntoChildren<Message>,
+{
+    View::new(ViewToken::Custom(CustomToken {
+        id: None,
+        kind: CustomControlKind::ControlTemplate,
+        control: template_key.into(),
+        target_type: Some(target_type.into()),
+        children: children.into_children(),
+        a11y: A11yHint::default(),
+    }))
+}
+
+pub fn tray_menu_presenter<Message>(menu: TrayMenu<Message>) -> View<Message> {
+    tray_menu_presenter_with_animation_offset(menu, 0)
+}
+
+pub fn tray_menu_presenter_with_animation_offset<Message>(
+    menu: TrayMenu<Message>,
+    animation_offset_y: u16,
+) -> View<Message> {
+    View::new(ViewToken::TrayMenu(TrayMenuToken {
+        id: None,
+        min_width: menu.presenter_min_width.unwrap_or(240),
+        style: menu.presenter_style,
+        animation_offset_y,
+        items: menu.items,
+        a11y: A11yHint::default(),
+    }))
 }
 
 pub fn service_result_card<Message>(item: ResultItem) -> ResultCardBuilder<Message> {
@@ -3163,10 +3523,7 @@ impl<Message> TabViewBuilder<Message> {
     }
 
     /// Tab-close callback (receives the closed tab id).
-    pub fn on_close(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_close(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
         self.close_action = Action::selection_input(map);
         self
     }
@@ -3226,10 +3583,7 @@ impl<Message> TreeViewBuilder<Message> {
     }
 
     /// Node expand/collapse-toggle callback (receives the node id).
-    pub fn on_toggle(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_toggle(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
         self.toggle_action = Action::selection_input(map);
         self
     }
@@ -3609,6 +3963,8 @@ impl<Message> IntoView<Message> for FlyoutButtonBuilder<Message> {
 pub struct StatusBadgeBuilder<Message> {
     id: Option<String>,
     label: String,
+    kind: StatusBadgeKind,
+    count: Option<u32>,
     severity: ValidationSeverity,
     icon: Option<IconToken>,
     a11y: A11yHint,
@@ -3626,6 +3982,20 @@ impl<Message> StatusBadgeBuilder<Message> {
         self
     }
 
+    pub fn count(mut self, value: u32) -> Self {
+        self.label = value.to_string();
+        self.kind = StatusBadgeKind::Count;
+        self.count = Some(value);
+        self
+    }
+
+    pub fn dot(mut self) -> Self {
+        self.label.clear();
+        self.kind = StatusBadgeKind::Dot;
+        self.count = None;
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -3637,6 +4007,8 @@ impl<Message> IntoView<Message> for StatusBadgeBuilder<Message> {
         View::new(ViewToken::StatusBadge(StatusBadgeToken {
             id: self.id,
             label: self.label,
+            kind: self.kind,
+            count: self.count,
             severity: self.severity,
             icon: self.icon,
             a11y: self.a11y,
@@ -3764,7 +4136,7 @@ impl<Message> ProgressBarBuilder<Message> {
     }
 
     pub fn value(mut self, value: f32) -> Self {
-        self.value = Some(value);
+        self.value = normalize_progress_bar_value(value);
         self
     }
 
@@ -3799,7 +4171,7 @@ impl<Message> IntoView<Message> for ProgressBarBuilder<Message> {
         View::new(ViewToken::ProgressBar(ProgressBarToken {
             id: self.id,
             active: self.active,
-            value: self.value,
+            value: self.value.and_then(normalize_progress_bar_value),
             width: self.width,
             height: self.height,
             label: self.label,
@@ -4513,7 +4885,7 @@ impl<Message> NumberBoxBuilder<Message> {
     }
 
     pub fn step(mut self, step: f32) -> Self {
-        self.step = step;
+        self.step = normalize_number_box_step(step);
         self
     }
 
@@ -4558,12 +4930,13 @@ impl<Message> NumberBoxBuilder<Message> {
 
 impl<Message> IntoView<Message> for NumberBoxBuilder<Message> {
     fn into_view(self) -> View<Message> {
+        let value = clamp_number_box_value(self.value, self.min, self.max);
         View::new(ViewToken::NumberBox(NumberBoxToken {
             id: self.id,
-            value: self.value,
+            value,
             min: self.min,
             max: self.max,
-            step: self.step,
+            step: normalize_number_box_step(self.step),
             header: self.header,
             placeholder: self.placeholder,
             spin_buttons: self.spin_buttons,
@@ -4582,6 +4955,7 @@ pub struct AutoSuggestBoxBuilder<Message> {
     header: Option<String>,
     suggestions: Vec<String>,
     open: bool,
+    highlighted_index: Option<usize>,
     width: Length,
     state: ControlState,
     change_action: Action<Message>,
@@ -4618,6 +4992,11 @@ impl<Message> AutoSuggestBoxBuilder<Message> {
         self
     }
 
+    pub fn highlighted_index(mut self, index: Option<usize>) -> Self {
+        self.highlighted_index = index;
+        self
+    }
+
     pub fn width(mut self, width: Length) -> Self {
         self.width = width;
         self
@@ -4639,10 +5018,7 @@ impl<Message> AutoSuggestBoxBuilder<Message> {
     }
 
     /// As-you-type callback (fires on each edit).
-    pub fn on_change(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_change(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
         self.change_action = Action::text_input(map);
         self
     }
@@ -4664,6 +5040,9 @@ impl<Message> AutoSuggestBoxBuilder<Message> {
 
 impl<Message> IntoView<Message> for AutoSuggestBoxBuilder<Message> {
     fn into_view(self) -> View<Message> {
+        let highlighted_index = self
+            .highlighted_index
+            .filter(|index| *index < self.suggestions.len());
         View::new(ViewToken::AutoSuggestBox(AutoSuggestBoxToken {
             id: self.id,
             text: self.text,
@@ -4671,6 +5050,7 @@ impl<Message> IntoView<Message> for AutoSuggestBoxBuilder<Message> {
             header: self.header,
             suggestions: self.suggestions,
             open: self.open,
+            highlighted_index,
             width: self.width,
             state: self.state,
             change_action: self.change_action,
@@ -4873,12 +5253,15 @@ impl<Message> ComboBoxBuilder<Message> {
 
 impl<Message> IntoView<Message> for ComboBoxBuilder<Message> {
     fn into_view(self) -> View<Message> {
+        let selected = self
+            .selected
+            .filter(|selected| self.items.iter().any(|item| item.id == *selected));
         View::new(ViewToken::ComboBox(ComboBoxToken {
             id: self.id,
             label: self.label,
             placeholder: self.placeholder,
             items: self.items,
-            selected: self.selected,
+            selected,
             width: self.width,
             height: self.height,
             state: self.state,
@@ -5518,6 +5901,8 @@ pub struct FlyoutBuilder<Message> {
     content: Box<View<Message>>,
     open: bool,
     placement: FlyoutPlacement,
+    light_dismiss: FlyoutLightDismiss,
+    focus_behavior: FlyoutFocusBehavior,
     a11y: A11yHint,
 }
 
@@ -5537,6 +5922,21 @@ impl<Message> FlyoutBuilder<Message> {
         self
     }
 
+    pub fn light_dismiss(mut self, enabled: bool) -> Self {
+        self.light_dismiss = FlyoutLightDismiss::from(enabled);
+        self
+    }
+
+    pub fn light_dismiss_mode(mut self, mode: FlyoutLightDismiss) -> Self {
+        self.light_dismiss = mode;
+        self
+    }
+
+    pub fn focus_behavior(mut self, behavior: FlyoutFocusBehavior) -> Self {
+        self.focus_behavior = behavior;
+        self
+    }
+
     pub fn a11y(mut self, a11y: A11yHint) -> Self {
         self.a11y = a11y;
         self
@@ -5551,6 +5951,8 @@ impl<Message> IntoView<Message> for FlyoutBuilder<Message> {
             content: self.content,
             open: self.open,
             placement: self.placement,
+            light_dismiss: self.light_dismiss,
+            focus_behavior: self.focus_behavior,
             a11y: self.a11y,
         }))
     }
@@ -5945,8 +6347,12 @@ pub fn image_bgra_file(
 /// service icons, language flags, dictionary artwork, etc. Use
 /// [`stretch`](ImageBuilder::stretch) to control scaling.
 ///
-/// ```ignore
+/// ```no_run
+/// # use win_fluent::prelude::*;
+/// # fn main() {
+/// # let _ =
 /// image("assets/flags/zh.png").stretch(ImageStretch::Uniform).width(Length::Fixed(24));
+/// # }
 /// ```
 pub fn image(path: impl Into<String>) -> ImageBuilder {
     ImageBuilder {

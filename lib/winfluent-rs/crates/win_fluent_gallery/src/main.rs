@@ -50,7 +50,7 @@ fn gallery_view() -> View<Msg> {
             ])
             .selected("home")
             .content(scroll_view(
-                column((
+                column(vec![
                     text("Inputs"),
                     text_editor("")
                         .id("gallery.input")
@@ -68,19 +68,77 @@ fn gallery_view() -> View<Msg> {
                             .enabled(false)
                             .validation(ValidationState::info("Voice output is unavailable"))
                             .on_press(Msg::Speak),
-                    )),
+                    ))
+                    .into_view(),
                     settings_row("Background service")
                         .description("Controls whether the service starts with the session")
                         .icon(icon::settings())
-                        .trailing((toggle_switch("Enabled", true).on_toggle(Msg::ToggleChanged),)),
+                        .trailing((toggle_switch("Enabled", true).on_toggle(Msg::ToggleChanged),))
+                        .into_view(),
                     service_result_list([
                         ResultItem::new("one", "Provider A", "Ready"),
                         ResultItem::new("two", "Provider B", "Streaming")
                             .status(ResultStatus::Streaming),
                     ])
                     .on_copy(Msg::Copy)
-                    .on_speak(Msg::Speak),
-                ))
+                    .on_speak(Msg::Speak)
+                    .into_view(),
+                    progress_bar::<Msg>()
+                        .id("gallery.progress")
+                        .label("Progress")
+                        .value(48.0)
+                        .into_view(),
+                    progress_ring::<Msg>()
+                        .id("gallery.progress-ring")
+                        .label("Background work")
+                        .into_view(),
+                    auto_suggest_box("pro")
+                        .id("gallery.search")
+                        .placeholder("Search")
+                        .suggestions(["Provider A", "Provider B"])
+                        .highlighted_index(Some(0))
+                        .on_submit(Msg::Navigate),
+                    slider(42.0)
+                        .id("gallery.slider")
+                        .range(0.0, 100.0)
+                        .step(5.0)
+                        .focused(true)
+                        .on_change(|value| Msg::Navigate(format!("slider:{value:.0}"))),
+                    busy_overlay(text("Panel content"))
+                        .id("gallery.busy")
+                        .active(true)
+                        .blocks_input(true)
+                        .label("Loading")
+                        .into_view(),
+                    overlay(text("Base surface"))
+                        .id("gallery.overlay")
+                        .layer(OverlayLayer::modal(text("Modal surface")))
+                        .into_view(),
+                    adaptive_switch(720, text("Wide surface"), text("Narrow surface"))
+                        .id("gallery.adaptive")
+                        .resolved_width(640.0)
+                        .into_view(),
+                    lazy("gallery.lazy.reference", text("Lazy reference"))
+                        .id("gallery.lazy")
+                        .into_view(),
+                    pointer_region(text("Pointer surface"))
+                        .id("gallery.pointer")
+                        .width(Length::Fixed(240))
+                        .height(Length::Fixed(120))
+                        .on_move(|position| {
+                            Msg::Navigate(format!("move:{},{}", position.x, position.y))
+                        })
+                        .on_wheel(|wheel| Msg::Navigate(format!("wheel:{}", wheel.delta)))
+                        .on_escape(Msg::Run)
+                        .into_view(),
+                    capture_overlay(CaptureOverlayPhase::Detecting)
+                        .id("gallery.capture")
+                        .handles_visible(true)
+                        .magnifier_visible(true)
+                        .background(CaptureOverlayBackground::new("gallery.bgra", 800, 600))
+                        .cursor(CaptureOverlayPoint::new(40, 48))
+                        .into_view(),
+                ])
                 .padding(24)
                 .spacing(16),
             ))
@@ -177,9 +235,9 @@ fn mini_window_view() -> View<Msg> {
                 ))
                 .compact(true),
                 service_result_list([
-                    ResultItem::new("openai", "OpenAI", "Streaming result")
+                    ResultItem::new("provider-a", "Provider A", "Streaming result")
                         .status(ResultStatus::Streaming),
-                    ResultItem::new("google", "Google", "Ready result"),
+                    ResultItem::new("provider-b", "Provider B", "Ready result"),
                 ])
                 .on_copy(Msg::Copy)
                 .on_speak(Msg::Speak),
@@ -434,6 +492,45 @@ mod tests {
             assert!(!snapshot.contains("iced"));
             assert!(!snapshot.contains("windows::"));
         }
+    }
+
+    #[test]
+    fn gallery_reference_covers_framework_controls_and_visual_diff_artifacts() {
+        let snapshot = win_fluent_testkit::view_snapshot(&gallery_view());
+
+        for expected in [
+            "ProgressBar",
+            "ProgressRing",
+            "AutoSuggestBox",
+            "Slider",
+            "BusyOverlay",
+            "Overlay",
+            "AdaptiveSwitch",
+            "Lazy",
+            "PointerRegion",
+            "CaptureOverlay",
+        ] {
+            assert!(
+                snapshot.contains(expected),
+                "gallery schema missing {expected}\n{snapshot}"
+            );
+        }
+        assert!(!snapshot.contains("iced"));
+        assert!(!snapshot.contains("windows::"));
+
+        let before = win_fluent_testkit::VisualFrame::solid_rgba(2, 1, [0, 0, 0, 255]);
+        let after =
+            win_fluent_testkit::VisualFrame::from_rgba(2, 1, vec![0, 0, 0, 255, 1, 0, 0, 255])
+                .expect("valid frame");
+        let diff = before.diff(&after).expect("diff");
+
+        assert!(diff.passes(win_fluent_testkit::VisualDiffTolerance {
+            max_changed_pixels: 1,
+            max_total_delta: 1,
+            max_channel_delta: 1,
+        }));
+        assert!(!diff.passes(win_fluent_testkit::VisualDiffTolerance::EXACT));
+        assert!(after.to_ppm_rgb().starts_with(b"P6\n2 1\n255\n"));
     }
 
     #[test]

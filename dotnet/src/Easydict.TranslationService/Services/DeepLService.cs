@@ -404,10 +404,10 @@ public sealed class DeepLService : BaseTranslationService
         var host = GetApiHost();
         var url = $"{host}/v2/translate";
 
-        var targetCode = GetDeepLLanguageCode(request.ToLanguage);
+        var targetCode = GetDeepLApiTargetLanguageCode(request.ToLanguage);
         var sourceCode = request.FromLanguage == Language.Auto
             ? null
-            : GetDeepLLanguageCode(request.FromLanguage);
+            : GetDeepLApiSourceLanguageCode(request.FromLanguage);
 
         var formData = new List<KeyValuePair<string, string>>
         {
@@ -690,8 +690,29 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Get language code for DeepL API or web JSON-RPC.
-    /// The only difference is Portuguese: API uses "PT", web uses "PT-PT".
+    /// Get source language code for DeepL's official API.
+    /// DeepL accepts generic language codes for sources, e.g. EN for English.
+    /// </summary>
+    private static string GetDeepLApiSourceLanguageCode(Language language) =>
+        GetDeepLLanguageCode(language);
+
+    /// <summary>
+    /// Get target language code for DeepL's official API only.
+    /// DeepL requires regional variants for some target languages (notably English);
+    /// using generic EN as API target_lang causes HTTP 400 BadRequest.
+    /// Do not reuse this for the web JSON-RPC endpoint, which uses its own language codes.
+    /// </summary>
+    private static string GetDeepLApiTargetLanguageCode(Language language) => language switch
+    {
+        // DeepL API target languages are regionalized for English. Default to EN-US for the app's
+        // generic English option; EN is still valid as an API source language and for web JSON-RPC.
+        Language.English => "EN-US",
+        _ => GetDeepLLanguageCode(language)
+    };
+
+    /// <summary>
+    /// Get language code for DeepL web JSON-RPC or generic DeepL API source usage.
+    /// The only web-specific difference is Portuguese: API/source uses "PT", web uses "PT-PT".
     /// </summary>
     private static string GetDeepLLanguageCode(Language language, bool isWeb = false) => language switch
     {
@@ -743,4 +764,3 @@ public sealed class DeepLService : BaseTranslationService
         _ => language.ToIso639().ToUpperInvariant()
     };
 }
-

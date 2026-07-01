@@ -116,6 +116,31 @@ public class DeepLServiceMockTests
     }
 
     [Fact]
+    public async Task TranslateAsync_WebMode_ChineseToEnglish_KeepsGenericEnglishTarget()
+    {
+        // Arrange
+        var webResponse = """
+            {"jsonrpc":"2.0","id":123000,"result":{"texts":[{"text":"Hello"}],"lang":"ZH"}}
+            """;
+        _mockHandler.EnqueueJsonResponse(webResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("\"source_lang_user_selected\":\"ZH\"");
+        body.Should().Contain("\"target_lang\":\"EN\"");
+    }
+
+    [Fact]
     public async Task TranslateAsync_WebMode_SetsAntiDetectionHeaders()
     {
         // Arrange
@@ -282,6 +307,78 @@ public class DeepLServiceMockTests
         sentRequest!.Headers.Authorization.Should().NotBeNull();
         sentRequest.Headers.Authorization!.Scheme.Should().Be("DeepL-Auth-Key");
         sentRequest.Headers.Authorization.Parameter.Should().Be("my-deepl-key:fx");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ApiMode_SimplifiedChineseToEnglish_UsesRegionalEnglishTarget()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false);
+        var apiResponse = """{"translations":[{"text":"Hello"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.SimplifiedChinese,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("source_lang=ZH");
+        body.Should().Contain("target_lang=EN-US");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ApiMode_TraditionalChineseToEnglish_UsesRegionalEnglishTarget()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false);
+        var apiResponse = """{"translations":[{"text":"Hello"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.TraditionalChinese,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("source_lang=ZH-HANT");
+        body.Should().Contain("target_lang=EN-US");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ApiMode_EnglishSource_KeepsGenericEnglishSourceCode()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false);
+        var apiResponse = """{"translations":[{"text":"你好"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.TraditionalChinese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("source_lang=EN");
+        body.Should().Contain("target_lang=ZH-HANT");
     }
 
     [Fact]

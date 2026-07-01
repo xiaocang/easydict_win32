@@ -12395,6 +12395,7 @@ fn task_kind(task: &Task<Message>) -> &'static str {
         Task::CaptureScreenWindows { .. } => "capture_screen_windows",
         Task::OpenFileDialog { .. } => "file_dialog",
         Task::OpenFolderDialog { .. } => "folder_dialog",
+        Task::Cancel(_) => "cancel",
     }
 }
 

@@ -77,6 +77,7 @@ const FLUENT_TRAY_MENU_WINDOW_TITLE: &str = "WinFluent Tray Menu";
 const FLUENT_TRAY_SUBMENU_WINDOW_TITLE: &str = "WinFluent Tray Submenu";
 const FLUENT_TRAY_MENU_ANIMATION_OFFSET: u16 = 3;
 const FLUENT_TRAY_MENU_ANIMATION_DELAY_MS: u64 = 70;
+const FLUENT_TRAY_FOCUS_DISMISS_DELAY_MS: u64 = 120;
 const FLUENT_TRAY_SUBMENU_GAP: u16 = 4;
 const FLUENT_TRAY_SUBMENU_MIN_INNER_WIDTH: u16 = 180;
 const FLUENT_TRAY_SUBMENU_MAX_INNER_WIDTH: u16 = 280;
@@ -317,6 +318,7 @@ enum IcedRuntimeMessage<Message> {
     TrayMenuOpen { x: i32, y: i32 },
     TrayMenuActivateSubmenu(Option<String>),
     TrayMenuAnimateOffset { offset_y: u16 },
+    TrayMenuDismissIfFocusOutside { generation: u64 },
     FocusWidget(String),
     WindowOpened(window::Id),
     WindowClosed(window::Id),
@@ -347,6 +349,7 @@ struct IcedSingleWindowRuntime<App: FluentApplication> {
     fluent_tray_submenu_side: FluentTraySubmenuSide,
     active_tray_submenu_id: Option<String>,
     fluent_tray_menu_animation_offset: u16,
+    fluent_tray_menu_generation: u64,
     /// Native id of the window that most recently gained OS focus. Used to route
     /// `*Current` window commands (close/minimize/drag) to the window the user is
     /// actually interacting with, instead of defaulting to the boot window — which
@@ -403,6 +406,7 @@ where
             fluent_tray_submenu_side: FluentTraySubmenuSide::Right,
             active_tray_submenu_id: None,
             fluent_tray_menu_animation_offset: 0,
+            fluent_tray_menu_generation: 0,
             focused_native_window: None,
         };
         let boot_window_id = runtime.boot_window_id.clone();
@@ -509,6 +513,13 @@ where
             IcedRuntimeMessage::TrayMenuAnimateOffset { offset_y } => {
                 state.update_fluent_tray_menu_animation_offset(offset_y)
             }
+            IcedRuntimeMessage::TrayMenuDismissIfFocusOutside { generation } => {
+                if state.should_dismiss_fluent_tray_menu_after_focus_probe(generation) {
+                    state.hide_fluent_tray_menu_task()
+                } else {
+                    iced::Task::none()
+                }
+            }
             IcedRuntimeMessage::FocusWidget(id) => iced::widget::operation::focus(id),
             IcedRuntimeMessage::WindowOpened(window_id) => {
                 let runtime_window =
@@ -579,13 +590,16 @@ where
             IcedRuntimeMessage::WindowNativeEvent(window_id, event) => {
                 if matches!(event, window::Event::Focused) {
                     state.focused_native_window = Some(window_id);
+                } else if matches!(event, window::Event::Unfocused)
+                    && state.focused_native_window == Some(window_id)
+                {
+                    state.focused_native_window = None;
                 }
                 let logical_id = state.logical_window_for_native(window_id);
-                if (logical_id.as_str() == FLUENT_TRAY_MENU_WINDOW_ID
-                    || logical_id.as_str() == FLUENT_TRAY_SUBMENU_WINDOW_ID)
+                if is_fluent_tray_popup_window_id(&logical_id)
                     && matches!(event, window::Event::Unfocused)
                 {
-                    return state.hide_fluent_tray_menu_task();
+                    return state.defer_fluent_tray_focus_loss_task();
                 }
                 let event = match event {
                     window::Event::Focused => WindowEvent::Focused(logical_id),
@@ -710,6 +724,31 @@ where
         }
     }
 
+    fn defer_fluent_tray_focus_loss_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
+        let generation = self.fluent_tray_menu_generation;
+        iced::Task::perform(
+            async move {
+                std::thread::sleep(Duration::from_millis(FLUENT_TRAY_FOCUS_DISMISS_DELAY_MS));
+                generation
+            },
+            |generation| IcedRuntimeMessage::TrayMenuDismissIfFocusOutside { generation },
+        )
+    }
+
+    fn should_dismiss_fluent_tray_menu_after_focus_probe(&self, generation: u64) -> bool {
+        self.fluent_tray_menu.is_some()
+            && generation == self.fluent_tray_menu_generation
+            && !self.focused_native_window_is_fluent_tray_popup()
+    }
+
+    fn focused_native_window_is_fluent_tray_popup(&self) -> bool {
+        self.focused_native_window
+            .and_then(|window_id| self.native_windows.get(&window_id))
+            .is_some_and(|runtime_window| {
+                is_fluent_tray_popup_window_id(&runtime_window.logical_id)
+            })
+    }
+
     fn focused_text_editor_task(&self) -> iced::Task<IcedRuntimeMessage<App::Message>> {
         self.focused_text_editor_id()
             .map(IcedRuntimeMessage::FocusWidget)
@@ -814,6 +853,7 @@ where
         }
 
         let options = fluent_tray_menu_window_options(&menu, x, y);
+        self.fluent_tray_menu_generation = self.fluent_tray_menu_generation.wrapping_add(1);
         self.fluent_tray_root_panel_bounds = fluent_tray_menu_root_panel_bounds(&menu, &options);
         self.fluent_tray_submenu_side = FluentTraySubmenuSide::Right;
         self.active_tray_submenu_id = None;
@@ -1183,6 +1223,13 @@ fn uia_tray_context_menu_delay() -> Duration {
         .map(|delay| delay.clamp(100, 10_000))
         .map(Duration::from_millis)
         .unwrap_or_else(|| Duration::from_millis(900))
+}
+
+fn is_fluent_tray_popup_window_id(id: &WindowId) -> bool {
+    matches!(
+        id.as_str(),
+        FLUENT_TRAY_MENU_WINDOW_ID | FLUENT_TRAY_SUBMENU_WINDOW_ID
+    )
 }
 
 fn fluent_tray_menu_window_options<Message>(
@@ -11371,6 +11418,95 @@ mod tests {
             FluentTraySubmenuSide::Right
         );
         assert_eq!(runtime.active_tray_submenu_id, None);
+    }
+
+    #[test]
+    fn fluent_tray_focus_probe_keeps_menu_when_focus_moves_to_submenu() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let root_native_id = window::Id::unique();
+        let submenu_native_id = window::Id::unique();
+        runtime
+            .logical_windows
+            .insert(WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID), root_native_id);
+        runtime.native_windows.insert(
+            root_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID),
+                options: WindowOptions::new(FLUENT_TRAY_MENU_WINDOW_ID, "Tray"),
+                custom_view: true,
+            },
+        );
+        runtime.logical_windows.insert(
+            WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID),
+            submenu_native_id,
+        );
+        runtime.native_windows.insert(
+            submenu_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new(FLUENT_TRAY_SUBMENU_WINDOW_ID),
+                options: WindowOptions::new(FLUENT_TRAY_SUBMENU_WINDOW_ID, "Tray submenu"),
+                custom_view: true,
+            },
+        );
+        runtime.fluent_tray_menu = Some(TrayMenu::<WindowEvent>::new("win fluent"));
+        runtime.fluent_tray_menu_generation = 7;
+        runtime.focused_native_window = Some(root_native_id);
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowNativeEvent(root_native_id, window::Event::Unfocused),
+        );
+        assert_eq!(runtime.focused_native_window, None);
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowNativeEvent(submenu_native_id, window::Event::Focused),
+        );
+
+        assert_eq!(runtime.focused_native_window, Some(submenu_native_id));
+        assert!(!runtime.should_dismiss_fluent_tray_menu_after_focus_probe(7));
+    }
+
+    #[test]
+    fn fluent_tray_focus_probe_dismisses_when_focus_leaves_popup_group() {
+        let options = WindowOptions::new("main", "Boot title");
+        let mut runtime = IcedSingleWindowRuntime::<WindowEventRecorderApp>::new(
+            WindowEventRecorderApp { events: Vec::new() },
+            options,
+            empty_desktop_integration_plan(),
+        );
+        let root_native_id = window::Id::unique();
+        runtime
+            .logical_windows
+            .insert(WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID), root_native_id);
+        runtime.native_windows.insert(
+            root_native_id,
+            RuntimeWindow {
+                logical_id: WindowId::new(FLUENT_TRAY_MENU_WINDOW_ID),
+                options: WindowOptions::new(FLUENT_TRAY_MENU_WINDOW_ID, "Tray"),
+                custom_view: true,
+            },
+        );
+        runtime.fluent_tray_menu = Some(TrayMenu::<WindowEvent>::new("win fluent"));
+        runtime.fluent_tray_menu_generation = 7;
+        runtime.focused_native_window = Some(root_native_id);
+
+        let _ = IcedSingleWindowRuntime::<WindowEventRecorderApp>::update(
+            &mut runtime,
+            IcedRuntimeMessage::WindowNativeEvent(root_native_id, window::Event::Unfocused),
+        );
+
+        assert_eq!(runtime.focused_native_window, None);
+        assert!(runtime.should_dismiss_fluent_tray_menu_after_focus_probe(7));
+        assert!(
+            !runtime.should_dismiss_fluent_tray_menu_after_focus_probe(6),
+            "stale delayed focus probes must not close a newly opened tray menu"
+        );
     }
 
     #[test]

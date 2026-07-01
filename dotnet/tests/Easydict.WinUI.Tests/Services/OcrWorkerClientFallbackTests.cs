@@ -1,4 +1,5 @@
 using Easydict.SidecarClient;
+using Easydict.SidecarClient.Protocol;
 using Easydict.WinUI.Models;
 using Easydict.WinUI.Services;
 using Easydict.WinUI.Services.Workers;
@@ -57,6 +58,73 @@ public sealed class OcrWorkerClientFallbackTests
     {
         OcrWorkerClient.CanFallbackToInProc(new SidecarProcessExitedException(unchecked((int)0xC0000409)))
             .Should().BeTrue();
+    }
+
+    // Regression for issue #176: the worker used to naively join words with spaces, so CJK text
+    // came back as "你 好 世 界". MapResult must re-merge per-word data with the same CJK-aware
+    // merger as the in-process WindowsOcrService (no space between adjacent CJK characters).
+    [Fact]
+    public void MapResult_MergesCjkWordsWithoutSpaces_WhenWordsProvided()
+    {
+        var dto = new OcrResultDto
+        {
+            Text = "你 好 世 界", // legacy naive join — must be ignored when Words are present
+            Lines =
+            [
+                new OcrLineDto
+                {
+                    Text = "你 好 世 界",
+                    Words = ["你", "好", "世", "界"],
+                    BoundingRect = new OcrRectDto(0, 0, 100, 20),
+                },
+            ],
+        };
+
+        var result = OcrWorkerClient.MapResult(dto);
+
+        result.Text.Should().Be("你好世界");
+        result.Lines.Should().ContainSingle().Which.Text.Should().Be("你好世界");
+    }
+
+    [Fact]
+    public void MapResult_KeepsSpacesBetweenLatinWords()
+    {
+        var dto = new OcrResultDto
+        {
+            Lines =
+            [
+                new OcrLineDto
+                {
+                    Words = ["Hello", "world"],
+                    BoundingRect = new OcrRectDto(0, 0, 100, 20),
+                },
+            ],
+        };
+
+        var result = OcrWorkerClient.MapResult(dto);
+
+        result.Text.Should().Be("Hello world");
+    }
+
+    [Fact]
+    public void MapResult_FallsBackToWorkerText_WhenNoWordData()
+    {
+        var dto = new OcrResultDto
+        {
+            Text = "legacy joined text",
+            Lines =
+            [
+                new OcrLineDto
+                {
+                    Text = "legacy joined text",
+                    BoundingRect = new OcrRectDto(0, 0, 100, 20),
+                },
+            ],
+        };
+
+        var result = OcrWorkerClient.MapResult(dto);
+
+        result.Text.Should().Be("legacy joined text");
     }
 
     private sealed class FakeOcrService : IOcrService

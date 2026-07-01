@@ -968,6 +968,23 @@ namespace Easydict.WinUI
             ClipboardTextReceived?.Invoke(text);
         }
 
+        /// <summary>
+        /// Handles an activation that was redirected here from a second launch (single-instance).
+        /// Marshals to the UI thread and surfaces the existing window. Called from
+        /// <see cref="Program"/> on the primary instance's <c>Activated</c> event, which fires on a
+        /// background thread.
+        /// </summary>
+        internal static void HandleRedirectedActivation()
+        {
+            if (Current is not App app)
+            {
+                return;
+            }
+
+            var dispatcher = app._window?.DispatcherQueue;
+            dispatcher?.TryEnqueue(app.ShowAndActivateWindow);
+        }
+
         private void ShowAndActivateWindow()
         {
             if (_window == null) return;

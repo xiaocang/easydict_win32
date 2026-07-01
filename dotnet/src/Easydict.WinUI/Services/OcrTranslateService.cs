@@ -43,7 +43,9 @@ public sealed class OcrTranslateService
 
             using (capture)
             {
-                var ocrEngine = OcrServiceFactory.Create();
+                var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
+                LogOcrDiagnostics("OcrTranslate", ocrOptions);
+                var ocrEngine = OcrServiceFactory.Create(ocrOptions);
                 var preferredLanguage = GetPreferredOcrLanguage();
                 var ocrResult = await ocrEngine.RecognizeAsync(
                     capture, preferredLanguage, cts.Token);
@@ -101,7 +103,9 @@ public sealed class OcrTranslateService
 
             using (capture)
             {
-                var ocrEngine = OcrServiceFactory.Create();
+                var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
+                LogOcrDiagnostics("SilentOcr", ocrOptions);
+                var ocrEngine = OcrServiceFactory.Create(ocrOptions);
                 var preferredLanguage = GetPreferredOcrLanguage();
                 var ocrResult = await ocrEngine.RecognizeAsync(
                     capture, preferredLanguage, cts.Token);
@@ -159,5 +163,19 @@ public sealed class OcrTranslateService
     {
         var setting = SettingsService.Instance.OcrLanguage;
         return string.IsNullOrEmpty(setting) || setting == "auto" ? null : setting;
+    }
+
+    /// <summary>
+    /// Logs the OCR engine actually resolved for this flow, plus the current process id.
+    /// Helps diagnose settings-desync reports (e.g. issue #176) where a hotkey and the
+    /// in-app button appear to use different engines — divergent engines across the same
+    /// setting indicate the triggers ran in different processes.
+    /// </summary>
+    private static void LogOcrDiagnostics(string flow, OcrServiceOptions options)
+    {
+        var settings = SettingsService.Instance;
+        Debug.WriteLine(
+            $"[OcrTranslate] {flow} pid={Environment.ProcessId} engine={options.Engine} " +
+            $"useWorker={settings.UseOcrWorker} endpoint={options.Endpoint} model={options.Model}");
     }
 }

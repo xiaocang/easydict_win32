@@ -117,12 +117,22 @@ impl VisionLayoutHttpClient for ReqwestVisionLayoutHttpClient {
         &mut self,
         request: &VisionLayoutHttpRequestPlan,
     ) -> Result<VisionLayoutHttpResponse, OpenAiExecutionError> {
+        let started =
+            crate::debug_log::log_http_start("vision-layout", request.method, &request.endpoint);
         let mut builder = self.client.post(&request.endpoint).json(&request.body);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "vision-layout",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Vision layout HTTP request failed: {error}"),
@@ -131,11 +141,27 @@ impl VisionLayoutHttpClient for ReqwestVisionLayoutHttpClient {
         let status = response.status();
         let reason_phrase = status.canonical_reason().unwrap_or("Unknown").to_string();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "vision-layout",
+                request.method,
+                &request.endpoint,
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read Vision layout HTTP response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "vision-layout",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         Ok(VisionLayoutHttpResponse {
             status_code: status.as_u16(),

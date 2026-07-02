@@ -184,13 +184,32 @@ impl ResourceDownloadClient for ReqwestResourceDownloadClient {
         timeout: Duration,
     ) -> Result<ResourceProbeResult, ResourceDownloadError> {
         let started = Instant::now();
-        let result = self
-            .client
-            .head(url)
-            .timeout(timeout)
-            .send()
-            .map(|response| response.status().is_success())
-            .unwrap_or(false);
+        let http_started = crate::debug_log::log_http_start("resource-probe", "HEAD", url);
+        let result = match self.client.head(url).timeout(timeout).send() {
+            Ok(response) => {
+                let status = response.status();
+                crate::debug_log::log_http_finish(
+                    "resource-probe",
+                    "HEAD",
+                    url,
+                    status.as_u16(),
+                    None,
+                    http_started,
+                );
+                status.is_success()
+            }
+            Err(error) => {
+                crate::debug_log::log_http_reqwest_error(
+                    "resource-probe",
+                    "HEAD",
+                    url,
+                    "send",
+                    &error,
+                    http_started,
+                );
+                false
+            }
+        };
 
         Ok(ResourceProbeResult {
             ok: result,
@@ -209,15 +228,35 @@ impl ResourceDownloadClient for ReqwestResourceDownloadClient {
             fs::create_dir_all(parent)?;
         }
 
-        let mut response = self
-            .client
-            .get(url)
-            .send()
-            .map_err(|error| ResourceDownloadError::network(error.to_string()))?;
-        if !response.status().is_success() {
+        crate::debug_log::log(
+            "network",
+            format_args!("resource_download_start stage={stage}"),
+        );
+        let http_started = crate::debug_log::log_http_start("resource-download", "GET", url);
+        let mut response = self.client.get(url).send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "resource-download",
+                "GET",
+                url,
+                "send",
+                &error,
+                http_started,
+            );
+            ResourceDownloadError::network(error.to_string())
+        })?;
+        let status = response.status();
+        if !status.is_success() {
+            crate::debug_log::log_http_finish(
+                "resource-download",
+                "GET",
+                url,
+                status.as_u16(),
+                None,
+                http_started,
+            );
             return Err(ResourceDownloadError::network(format!(
                 "HTTP {} for {url}",
-                response.status()
+                status
             )));
         }
 
@@ -230,9 +269,17 @@ impl ResourceDownloadClient for ReqwestResourceDownloadClient {
         let mut bytes_downloaded = 0_u64;
 
         loop {
-            let read = response
-                .read(&mut buffer)
-                .map_err(|error| ResourceDownloadError::network(error.to_string()))?;
+            let read = response.read(&mut buffer).map_err(|error| {
+                crate::debug_log::log_http_io_error(
+                    "resource-download",
+                    "GET",
+                    url,
+                    "read_body",
+                    &error,
+                    http_started,
+                );
+                ResourceDownloadError::network(error.to_string())
+            })?;
             if read == 0 {
                 break;
             }
@@ -250,6 +297,14 @@ impl ResourceDownloadClient for ReqwestResourceDownloadClient {
                 percentage,
             });
         }
+        crate::debug_log::log_http_finish(
+            "resource-download",
+            "GET",
+            url,
+            status.as_u16(),
+            Some(bytes_downloaded as usize),
+            http_started,
+        );
 
         if total_bytes >= 0 && bytes_downloaded != total_bytes as u64 {
             return Err(ResourceDownloadError::Truncated {

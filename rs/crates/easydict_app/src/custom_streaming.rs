@@ -216,12 +216,22 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
         &mut self,
         request: &CustomStreamingHttpRequestPlan,
     ) -> Result<String, OpenAiExecutionError> {
+        let started =
+            crate::debug_log::log_http_start("custom-streaming", request.method, &request.endpoint);
         let mut builder = self.client.post(&request.endpoint).json(&request.body);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "custom-streaming",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Custom streaming HTTP request failed: {error}"),
@@ -229,11 +239,27 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
         })?;
         let status = response.status();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "custom-streaming",
+                request.method,
+                &request.endpoint,
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read custom streaming HTTP response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "custom-streaming",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         if !status.is_success() {
             return Err(custom_streaming_error_from_response(
@@ -251,12 +277,25 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
         request: &CustomStreamingHttpRequestPlan,
         on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
     ) -> Result<(), OpenAiExecutionError> {
+        let started = crate::debug_log::log_http_start(
+            "custom-streaming-lines",
+            request.method,
+            &request.endpoint,
+        );
         let mut builder = self.client.post(&request.endpoint).json(&request.body);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "custom-streaming-lines",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Custom streaming HTTP request failed: {error}"),
@@ -266,11 +305,27 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
 
         if !status.is_success() {
             let body = response.text().map_err(|error| {
+                crate::debug_log::log_http_reqwest_error(
+                    "custom-streaming-lines",
+                    request.method,
+                    &request.endpoint,
+                    "read_error_body",
+                    &error,
+                    started,
+                );
                 OpenAiExecutionError::new(
                     OpenAiExecutionErrorCode::NetworkError,
                     format!("Could not read custom streaming HTTP response: {error}"),
                 )
             })?;
+            crate::debug_log::log_http_finish(
+                "custom-streaming-lines",
+                request.method,
+                &request.endpoint,
+                status.as_u16(),
+                Some(body.len()),
+                started,
+            );
             return Err(custom_streaming_error_from_response(
                 status.as_u16(),
                 status.canonical_reason().unwrap_or("Unknown"),
@@ -280,9 +335,18 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
 
         let mut reader = BufReader::new(response);
         let mut line = String::new();
+        let mut bytes_read_total = 0_usize;
         loop {
             line.clear();
             let bytes_read = reader.read_line(&mut line).map_err(|error| {
+                crate::debug_log::log_http_io_error(
+                    "custom-streaming-lines",
+                    request.method,
+                    &request.endpoint,
+                    "read_stream",
+                    &error,
+                    started,
+                );
                 OpenAiExecutionError::new(
                     OpenAiExecutionErrorCode::NetworkError,
                     format!("Could not read custom streaming HTTP stream: {error}"),
@@ -291,11 +355,29 @@ impl CustomStreamingHttpClient for ReqwestCustomStreamingHttpClient {
             if bytes_read == 0 {
                 break;
             }
+            bytes_read_total += bytes_read;
 
             let line_without_newline = line.trim_end_matches(&['\r', '\n'][..]);
-            on_line(line_without_newline)?;
+            on_line(line_without_newline).map_err(|error| {
+                crate::debug_log::log_http_pipeline_error(
+                    "custom-streaming-lines",
+                    request.method,
+                    &request.endpoint,
+                    "consume_stream_line",
+                    started,
+                );
+                error
+            })?;
         }
 
+        crate::debug_log::log_http_finish(
+            "custom-streaming-lines",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(bytes_read_total),
+            started,
+        );
         Ok(())
     }
 }

@@ -512,12 +512,25 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         &mut self,
         request: &OpenAiHttpRequestPlan,
     ) -> Result<String, OpenAiExecutionError> {
+        let started = crate::debug_log::log_http_start(
+            "openai-compatible",
+            request.method,
+            &request.endpoint,
+        );
         let mut builder = self.client.post(&request.endpoint).json(&request.body);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "openai-compatible",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("OpenAI HTTP request failed: {error}"),
@@ -525,11 +538,27 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         })?;
         let status = response.status();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "openai-compatible",
+                request.method,
+                &request.endpoint,
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read OpenAI HTTP response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "openai-compatible",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         if !status.is_success() {
             return Err(openai_error_from_response(
@@ -547,12 +576,25 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         request: &OpenAiHttpRequestPlan,
         on_line: &mut dyn FnMut(&str) -> Result<(), OpenAiExecutionError>,
     ) -> Result<(), OpenAiExecutionError> {
+        let started = crate::debug_log::log_http_start(
+            "openai-compatible-lines",
+            request.method,
+            &request.endpoint,
+        );
         let mut builder = self.client.post(&request.endpoint).json(&request.body);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "openai-compatible-lines",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("OpenAI HTTP request failed: {error}"),
@@ -562,11 +604,27 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
 
         if !status.is_success() {
             let body = response.text().map_err(|error| {
+                crate::debug_log::log_http_reqwest_error(
+                    "openai-compatible-lines",
+                    request.method,
+                    &request.endpoint,
+                    "read_error_body",
+                    &error,
+                    started,
+                );
                 OpenAiExecutionError::new(
                     OpenAiExecutionErrorCode::NetworkError,
                     format!("Could not read OpenAI HTTP response: {error}"),
                 )
             })?;
+            crate::debug_log::log_http_finish(
+                "openai-compatible-lines",
+                request.method,
+                &request.endpoint,
+                status.as_u16(),
+                Some(body.len()),
+                started,
+            );
             return Err(openai_error_from_response(
                 status.as_u16(),
                 status.canonical_reason().unwrap_or("Unknown"),
@@ -576,9 +634,18 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
 
         let mut reader = BufReader::new(response);
         let mut line = String::new();
+        let mut bytes_read_total = 0_usize;
         loop {
             line.clear();
             let bytes_read = reader.read_line(&mut line).map_err(|error| {
+                crate::debug_log::log_http_io_error(
+                    "openai-compatible-lines",
+                    request.method,
+                    &request.endpoint,
+                    "read_stream",
+                    &error,
+                    started,
+                );
                 OpenAiExecutionError::new(
                     OpenAiExecutionErrorCode::NetworkError,
                     format!("Could not read OpenAI HTTP stream: {error}"),
@@ -587,11 +654,29 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
             if bytes_read == 0 {
                 break;
             }
+            bytes_read_total += bytes_read;
 
             let line_without_newline = line.trim_end_matches(&['\r', '\n'][..]);
-            on_line(line_without_newline)?;
+            on_line(line_without_newline).map_err(|error| {
+                crate::debug_log::log_http_pipeline_error(
+                    "openai-compatible-lines",
+                    request.method,
+                    &request.endpoint,
+                    "consume_stream_line",
+                    started,
+                );
+                error
+            })?;
         }
 
+        crate::debug_log::log_http_finish(
+            "openai-compatible-lines",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(bytes_read_total),
+            started,
+        );
         Ok(())
     }
 
@@ -599,12 +684,25 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         &mut self,
         request: &OpenAiHttpGetRequestPlan,
     ) -> Result<Option<OpenAiHttpTextResponse>, OpenAiExecutionError> {
+        let started = crate::debug_log::log_http_start(
+            "openai-compatible-get",
+            request.method,
+            &request.endpoint,
+        );
         let mut builder = self.client.get(&request.endpoint);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "openai-compatible-get",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("OpenAI HTTP GET request failed: {error}"),
@@ -613,11 +711,27 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         let status = response.status();
         let reason_phrase = status.canonical_reason().unwrap_or("Unknown").to_string();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "openai-compatible-get",
+                request.method,
+                &request.endpoint,
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read OpenAI HTTP GET response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "openai-compatible-get",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         Ok(Some(OpenAiHttpTextResponse {
             status_code: status.as_u16(),
@@ -632,12 +746,25 @@ impl BuiltInAiDeviceRegistrationHttpClient for ReqwestOpenAiHttpClient {
         &mut self,
         request: &BuiltInAiDeviceRegistrationRequestPlan,
     ) -> Result<BuiltInAiDeviceRegistrationHttpResponse, OpenAiExecutionError> {
+        let started = crate::debug_log::log_http_start(
+            "built-in-ai-registration",
+            request.method,
+            &request.endpoint,
+        );
         let mut builder = self.client.post(&request.endpoint);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "built-in-ai-registration",
+                request.method,
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Built-in AI device registration failed: {error}"),
@@ -646,11 +773,27 @@ impl BuiltInAiDeviceRegistrationHttpClient for ReqwestOpenAiHttpClient {
         let status = response.status();
         let reason_phrase = status.canonical_reason().unwrap_or("Unknown").to_string();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "built-in-ai-registration",
+                request.method,
+                &request.endpoint,
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read Built-in AI registration response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "built-in-ai-registration",
+            request.method,
+            &request.endpoint,
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         Ok(BuiltInAiDeviceRegistrationHttpResponse {
             status_code: status.as_u16(),

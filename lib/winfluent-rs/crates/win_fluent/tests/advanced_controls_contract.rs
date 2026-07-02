@@ -100,6 +100,21 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
     };
     assert_eq!(invalid_combo_token.selected, None);
 
+    let title_flyout = flyout_button("Easydict")
+        .id("mode-title")
+        .text_style(TextStyle::Subtitle)
+        .font_size(22)
+        .min_width(0)
+        .min_height(0)
+        .items([FlyoutMenuItem::radio("quick", "Quick Translation", true)])
+        .on_select(Msg::Selected);
+    let ViewToken::FlyoutButton(title_flyout_token) = title_flyout.token() else {
+        panic!("expected FlyoutButton");
+    };
+    assert_eq!(title_flyout_token.label, "Easydict");
+    assert_eq!(title_flyout_token.text_style, Some(TextStyle::Subtitle));
+    assert_eq!(title_flyout_token.font_size, Some(22));
+
     let view = column(vec![
         progress_bar::<Msg>()
             .id("download-progress")

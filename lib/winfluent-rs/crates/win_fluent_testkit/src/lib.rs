@@ -596,8 +596,9 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::FlyoutButton(token) => {
             let _ = writeln!(
                 output,
-                "{pad}FlyoutButton id={:?} items={} selected={:?} min_width={:?} min_height={:?} padding={:?} border_width={:?} radius={:?} align_y={:?}",
+                "{pad}FlyoutButton id={:?} label={:?} items={} selected={:?} min_width={:?} min_height={:?} padding={:?} border_width={:?} radius={:?} align_y={:?} text_style={:?} font_size={:?}",
                 token.id,
+                token.label,
                 token.items.len(),
                 token.selected,
                 token.min_width,
@@ -605,7 +606,9 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.padding,
                 token.border_width,
                 token.radius,
-                token.align_y
+                token.align_y,
+                token.text_style,
+                token.font_size
             );
         }
         ViewToken::ProgressRing(token) => {

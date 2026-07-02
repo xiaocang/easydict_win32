@@ -527,6 +527,8 @@ impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
         request: &TraditionalHttpRequestPlan,
     ) -> Result<String, OpenAiExecutionError> {
         let endpoint = traditional_http_request_endpoint(request);
+        let started =
+            crate::debug_log::log_http_start("traditional-http", request.method, endpoint.as_ref());
         let mut builder = match request.method {
             "GET" => self.client.get(endpoint.as_ref()),
             "POST" => {
@@ -548,6 +550,14 @@ impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
         }
 
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "traditional-http",
+                request.method,
+                endpoint.as_ref(),
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Traditional HTTP request failed: {error}"),
@@ -555,11 +565,27 @@ impl TraditionalHttpClient for ReqwestTraditionalHttpClient {
         })?;
         let status = response.status();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "traditional-http",
+                request.method,
+                endpoint.as_ref(),
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read traditional HTTP response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "traditional-http",
+            request.method,
+            endpoint.as_ref(),
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         if !status.is_success() {
             let status_code = status.as_u16();
@@ -1790,12 +1816,21 @@ impl BingHttpClient for ReqwestBingHttpClient {
         host: &str,
     ) -> Result<BingTranslatorPage, OpenAiExecutionError> {
         let url = bing_translator_page_endpoint(host);
+        let started = crate::debug_log::log_http_start("bing-page", "GET", &url);
         let response = self
             .client
             .get(&url)
             .header("User-Agent", BING_USER_AGENT)
             .send()
             .map_err(|error| {
+                crate::debug_log::log_http_reqwest_error(
+                    "bing-page",
+                    "GET",
+                    &url,
+                    "send",
+                    &error,
+                    started,
+                );
                 OpenAiExecutionError::new(
                     OpenAiExecutionErrorCode::NetworkError,
                     format!("Bing translator page request failed: {error}"),
@@ -1804,11 +1839,27 @@ impl BingHttpClient for ReqwestBingHttpClient {
         let resolved_host = response.url().host_str().unwrap_or(host).to_string();
         let status = response.status();
         let html = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "bing-page",
+                "GET",
+                &url,
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read Bing translator page: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "bing-page",
+            "GET",
+            &url,
+            status.as_u16(),
+            Some(html.len()),
+            started,
+        );
         if !status.is_success() {
             return Err(traditional_http_error_from_status(
                 status.as_u16(),
@@ -1827,6 +1878,8 @@ impl BingHttpClient for ReqwestBingHttpClient {
         plan: &TraditionalHttpRequestPlan,
     ) -> Result<BingHttpResponse, OpenAiExecutionError> {
         let endpoint = traditional_http_request_endpoint(plan);
+        let started =
+            crate::debug_log::log_http_start("bing-translate", plan.method, endpoint.as_ref());
         let mut builder = self.client.post(endpoint.as_ref());
         if let Some(body) = &plan.body {
             builder = builder.body(body.clone());
@@ -1835,6 +1888,14 @@ impl BingHttpClient for ReqwestBingHttpClient {
             builder = builder.header(name, value);
         }
         let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "bing-translate",
+                plan.method,
+                endpoint.as_ref(),
+                "send",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Bing translate request failed: {error}"),
@@ -1842,11 +1903,27 @@ impl BingHttpClient for ReqwestBingHttpClient {
         })?;
         let status = response.status().as_u16();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "bing-translate",
+                plan.method,
+                endpoint.as_ref(),
+                "read_body",
+                &error,
+                started,
+            );
             OpenAiExecutionError::new(
                 OpenAiExecutionErrorCode::NetworkError,
                 format!("Could not read Bing translate response: {error}"),
             )
         })?;
+        crate::debug_log::log_http_finish(
+            "bing-translate",
+            plan.method,
+            endpoint.as_ref(),
+            status,
+            Some(body.len()),
+            started,
+        );
         Ok(BingHttpResponse { status, body })
     }
 }

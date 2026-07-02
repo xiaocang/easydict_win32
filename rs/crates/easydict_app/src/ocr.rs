@@ -400,18 +400,43 @@ impl ReqwestOcrHttpClient {
 
 impl OcrHttpClient for ReqwestOcrHttpClient {
     fn post_json(&mut self, request: &OcrHttpRequestPlan) -> Result<String, OcrBackendError> {
+        let started = crate::debug_log::log_http_start("ocr", "POST", &request.endpoint);
         let mut builder = self.client.post(&request.endpoint).json(&request.body);
         if let Some(api_key) = request.authorization_bearer.as_deref() {
             builder = builder.bearer_auth(api_key);
         }
 
-        let response = builder
-            .send()
-            .map_err(|error| OcrBackendError::new(format!("OCR HTTP request failed: {error}")))?;
+        let response = builder.send().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "ocr",
+                "POST",
+                &request.endpoint,
+                "send",
+                &error,
+                started,
+            );
+            OcrBackendError::new(format!("OCR HTTP request failed: {error}"))
+        })?;
         let status = response.status();
         let body = response.text().map_err(|error| {
+            crate::debug_log::log_http_reqwest_error(
+                "ocr",
+                "POST",
+                &request.endpoint,
+                "read_body",
+                &error,
+                started,
+            );
             OcrBackendError::new(format!("Could not read OCR HTTP response: {error}"))
         })?;
+        crate::debug_log::log_http_finish(
+            "ocr",
+            "POST",
+            &request.endpoint,
+            status.as_u16(),
+            Some(body.len()),
+            started,
+        );
 
         if !status.is_success() {
             return Err(OcrBackendError::new(format!(

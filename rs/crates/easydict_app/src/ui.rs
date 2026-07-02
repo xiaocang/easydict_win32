@@ -521,37 +521,36 @@ fn main_header(state: &EasydictUiState) -> View<Message> {
         AppMode::QuickTranslate => "Translate",
         AppMode::LongDocument => "Long Document",
     };
-    let mut title_stack_children = vec![row((
-        styled_text_id_with_font_size("ModeTitleText", "Easydict", TextStyle::Subtitle, 22),
-        flyout_button("")
-            .id("ModeMenuButton")
-            .selected(state.mode.id())
-            .min_width(0)
-            .min_height(0)
-            .padding(Edges {
-                top: 2,
-                right: 4,
-                bottom: 2,
-                left: 4,
-            })
-            .border_width(0)
-            .radius(10)
-            .align_y(Alignment::Center)
-            .items([
-                FlyoutMenuItem::radio(
-                    AppMode::QuickTranslate.id(),
-                    mode_menu_label(AppMode::QuickTranslate, minimal),
-                    state.mode == AppMode::QuickTranslate,
-                ),
-                FlyoutMenuItem::radio(
-                    AppMode::LongDocument.id(),
-                    mode_menu_label(AppMode::LongDocument, minimal),
-                    state.mode == AppMode::LongDocument,
-                ),
-            ])
-            .a11y(A11yHint::named(format!("Mode: {mode_name}")))
-            .on_select(Message::ModeChanged),
-    ))
+    let mut title_stack_children = vec![row((flyout_button("Easydict")
+        .id("ModeMenuButton")
+        .selected(state.mode.id())
+        .min_width(0)
+        .min_height(0)
+        .padding(Edges {
+            top: 2,
+            right: 4,
+            bottom: 2,
+            left: 4,
+        })
+        .border_width(0)
+        .radius(10)
+        .align_y(Alignment::Center)
+        .text_style(TextStyle::Subtitle)
+        .font_size(22)
+        .items([
+            FlyoutMenuItem::radio(
+                AppMode::QuickTranslate.id(),
+                mode_menu_label(AppMode::QuickTranslate, minimal),
+                state.mode == AppMode::QuickTranslate,
+            ),
+            FlyoutMenuItem::radio(
+                AppMode::LongDocument.id(),
+                mode_menu_label(AppMode::LongDocument, minimal),
+                state.mode == AppMode::LongDocument,
+            ),
+        ])
+        .a11y(A11yHint::named(format!("Mode: {mode_name}")))
+        .on_select(Message::ModeChanged),))
     .id("main.mode_title")
     .spacing(4)
     .align(Alignment::Center)

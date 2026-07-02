@@ -677,6 +677,8 @@ pub struct FlyoutButtonToken<Message> {
     pub border_width: Option<u16>,
     pub radius: Option<u16>,
     pub align_y: Alignment,
+    pub text_style: Option<TextStyle>,
+    pub font_size: Option<u16>,
     pub state: ControlState,
     pub action: Action<Message>,
     pub a11y: A11yHint,
@@ -2338,6 +2340,8 @@ pub fn flyout_button<Message>(label: impl Into<String>) -> FlyoutButtonBuilder<M
         border_width: None,
         radius: None,
         align_y: Alignment::Start,
+        text_style: None,
+        font_size: None,
         state: ControlState::default(),
         action: Action::None,
         a11y: A11yHint::default(),
@@ -3827,6 +3831,8 @@ pub struct FlyoutButtonBuilder<Message> {
     border_width: Option<u16>,
     radius: Option<u16>,
     align_y: Alignment,
+    text_style: Option<TextStyle>,
+    font_size: Option<u16>,
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
@@ -3893,6 +3899,16 @@ impl<Message> FlyoutButtonBuilder<Message> {
         self
     }
 
+    pub fn text_style(mut self, style: TextStyle) -> Self {
+        self.text_style = Some(style);
+        self
+    }
+
+    pub fn font_size(mut self, size: u16) -> Self {
+        self.font_size = Some(size);
+        self
+    }
+
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.state.enabled = enabled;
         self
@@ -3952,6 +3968,8 @@ impl<Message> IntoView<Message> for FlyoutButtonBuilder<Message> {
             border_width: self.border_width,
             radius: self.radius,
             align_y: self.align_y,
+            text_style: self.text_style,
+            font_size: self.font_size,
             state: self.state,
             action: self.action,
             a11y: self.a11y,

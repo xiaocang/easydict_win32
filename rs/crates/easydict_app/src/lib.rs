@@ -13,6 +13,7 @@ pub mod compat_protocol;
 pub mod content_preservation;
 pub mod credential_protection;
 pub mod custom_streaming;
+mod debug_log;
 pub mod desktop_integration;
 pub mod desktop_shell;
 pub mod doc_layout_yolo;
@@ -593,6 +594,7 @@ impl Application for EasydictApp {
     type Flags = EasydictUiState;
 
     fn new(mut flags: Self::Flags) -> (Self, Task<Self::Message>) {
+        debug_log::log_startup();
         flags.browser_support = match load_browser_support_status() {
             Ok(status) => BrowserSupportState::from_status(&status),
             Err(error) => BrowserSupportState::failed(error),
@@ -661,6 +663,8 @@ impl Application for EasydictApp {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        debug_log::log_message(&message);
+
         if let Message::HotkeyTriggered(id) = &message {
             return self.hotkey_task(id);
         }
@@ -1039,6 +1043,7 @@ impl Application for EasydictApp {
         }
 
         if let Message::QuickTranslateServiceFinished(update) = &message {
+            debug_log::log_quick_translate_finished(update);
             self.store_quick_translate_cache_result(update);
             let auto_play_task = auto_play_translation_task(&self.state, update);
             self.state.apply(message);
@@ -1132,8 +1137,11 @@ impl Application for EasydictApp {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
+        let hotkeys = hotkeys_for_settings(&self.state.settings);
+        debug_log::log_subscription_plan(&hotkeys, &APP_WINDOW_SUBSCRIPTION_IDS, true);
+
         Subscription::batch(
-            hotkeys_for_settings(&self.state.settings)
+            hotkeys
                 .into_iter()
                 .map(|hotkey| Subscription::hotkey(hotkey, Message::HotkeyTriggered))
                 .chain(std::iter::once(Subscription::tray(Message::TrayCommand)))
@@ -1546,9 +1554,11 @@ impl EasydictApp {
                         if quick_translate::quick_translate_update_needs_youdao_phonetic_enrichment(
                             &request, &update,
                         ) {
+                            debug_log::log_quick_translate_cache_hit(&request);
                             return quick_translate_phonetic_enrichment_task(request, update);
                         }
 
+                        debug_log::log_quick_translate_cache_hit(&request);
                         return Task::message(Message::QuickTranslateServiceFinished(update));
                     }
                 }
@@ -1560,6 +1570,7 @@ impl EasydictApp {
             }
         }
 
+        debug_log::log_quick_translate_request(&request, bypass_cache_read);
         quick_translate_backend_service_task(request)
     }
 

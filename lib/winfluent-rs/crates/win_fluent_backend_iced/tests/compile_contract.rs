@@ -59,6 +59,14 @@ fn iced_backend_compiles_first_wave_winui_controls() {
                     FlyoutMenuItem::command("save-as", "Save as"),
                 ])
                 .on_select(Msg::Selected),
+            flyout_button("Easydict")
+                .id("mode-title")
+                .text_style(TextStyle::Subtitle)
+                .font_size(22)
+                .min_width(0)
+                .min_height(0)
+                .items([FlyoutMenuItem::radio("quick", "Quick Translation", true)])
+                .on_select(Msg::Selected),
             tab_view([TabItem::new("main", "Main", text("Main"))]).on_select(Msg::Selected),
             tree_view([TreeNode::leaf("leaf", "Leaf")]).on_select(Msg::Selected),
             border(viewbox(text("Scaled"))).into_view(),

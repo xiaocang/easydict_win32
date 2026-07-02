@@ -203,6 +203,8 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("border_width", optional_u16(token.border_width))
             .property("radius", optional_u16(token.radius))
             .property("align_y", format!("{:?}", token.align_y))
+            .property("text_style", optional_text_style(token.text_style))
+            .property("font_size", optional_u16(token.font_size))
             .property("state", token.state.to_string())
             .property("action", format!("{:?}", token.action.kind())),
         ViewToken::StatusBadge(token) => SchemaNode::new("StatusBadge", token.id.clone())
@@ -1470,6 +1472,28 @@ mod tests {
         assert!(snapshot.contains("SplitButton"));
         assert!(snapshot.contains("primary=message"));
         assert!(snapshot.contains("select=selection_input"));
+    }
+
+    #[test]
+    fn flyout_button_emits_title_trigger_styling() {
+        use crate::view::{flyout_button, FlyoutMenuItem, TextStyle};
+        let view = page::<Msg>("Demo")
+            .content(column((flyout_button("Easydict")
+                .text_style(TextStyle::Subtitle)
+                .font_size(22)
+                .min_width(0)
+                .min_height(0)
+                .items([FlyoutMenuItem::radio("quick", "Quick Translation", true)])
+                .on_select(Msg::Input),)))
+            .into_view();
+
+        let snapshot = view_schema(&view).snapshot();
+
+        assert!(snapshot.contains("FlyoutButton"));
+        assert!(snapshot.contains("label=\"Easydict\""));
+        assert!(snapshot.contains("text_style=Subtitle"));
+        assert!(snapshot.contains("font_size=22"));
+        assert!(snapshot.contains("action=selection_input"));
     }
 
     #[test]

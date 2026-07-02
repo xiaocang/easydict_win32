@@ -83,6 +83,14 @@ const FLUENT_TRAY_SUBMENU_MIN_INNER_WIDTH: u16 = 180;
 const FLUENT_TRAY_SUBMENU_MAX_INNER_WIDTH: u16 = 280;
 const UIA_TRAY_CONTEXT_MENU_POINT_ENV: &str = "EASYDICT_UIA_TRAY_CONTEXT_MENU_POINT";
 const UIA_TRAY_CONTEXT_MENU_DELAY_ENV: &str = "EASYDICT_UIA_TRAY_CONTEXT_MENU_DELAY_MS";
+#[cfg(debug_assertions)]
+const WIN_FLUENT_DEBUG_MEMORY_ENV: &str = "WIN_FLUENT_DEBUG_MEMORY";
+#[cfg(debug_assertions)]
+const WIN_FLUENT_RENDER_DEBUG_ENV: &str = "WIN_FLUENT_RENDER_DEBUG";
+#[cfg(debug_assertions)]
+const RENDER_DEBUG_LOG_INTERVAL_MS: u64 = 5_000;
+#[cfg(debug_assertions)]
+const RENDER_DEBUG_HIGH_REDRAWS_PER_SECOND: f64 = 30.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct FluentTrayRootPanelBounds {
@@ -216,14 +224,19 @@ impl IcedAdapter {
     }
 }
 
-/// Debug-only in-process memory self-report. Splits the app's footprint into its
-/// CPU side (process private commit / working set) and its GPU/rendering side
-/// (per-process video memory via DXGI), since the iced/wgpu renderer is in-process
-/// and otherwise can't be told apart from app logic in Task Manager. Logs once at
-/// startup and then every few seconds. Compiled out entirely in release builds.
+/// Opt-in debug-only in-process memory self-report. Splits the app's footprint
+/// into CPU side (process private commit / working set) and GPU/rendering side
+/// (per-process video memory via DXGI), since the iced/wgpu renderer is
+/// in-process and otherwise can't be told apart from app logic in Task Manager.
+/// Enable with `WIN_FLUENT_DEBUG_MEMORY=1`. Compiled out entirely in release
+/// builds.
 #[cfg(debug_assertions)]
 fn spawn_debug_memory_reporter() {
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    if !debug_memory_report_enabled() {
+        return;
+    }
 
     static STARTED: AtomicBool = AtomicBool::new(false);
     if STARTED.swap(true, Ordering::SeqCst) {
@@ -241,6 +254,39 @@ fn spawn_debug_memory_reporter() {
                 std::thread::sleep(Duration::from_secs(5));
             }
         });
+}
+
+#[cfg(debug_assertions)]
+fn debug_memory_report_enabled() -> bool {
+    debug_env_enabled(WIN_FLUENT_DEBUG_MEMORY_ENV)
+}
+
+#[cfg(debug_assertions)]
+fn render_debug_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| debug_env_enabled(WIN_FLUENT_RENDER_DEBUG_ENV))
+}
+
+#[cfg(debug_assertions)]
+fn debug_env_enabled(name: &str) -> bool {
+    matches!(
+        env::var(name)
+            .as_deref()
+            .map(str::to_ascii_lowercase),
+        Ok(value) if matches!(value.as_str(), "1" | "true" | "yes" | "on")
+    )
+}
+
+#[cfg(debug_assertions)]
+fn log_render_debug_startup() {
+    if render_debug_enabled() {
+        eprintln!(
+            "[render] debug enabled progress_ring_frame_ms={} log_interval_ms={} high_redraws_per_sec={:.1}",
+            PROGRESS_RING_FRAME_MS,
+            RENDER_DEBUG_LOG_INTERVAL_MS,
+            RENDER_DEBUG_HIGH_REDRAWS_PER_SECOND,
+        );
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -280,6 +326,8 @@ where
     App::Flags: Clone + Send + 'static,
     App::Message: fmt::Debug,
 {
+    #[cfg(debug_assertions)]
+    log_render_debug_startup();
     #[cfg(debug_assertions)]
     spawn_debug_memory_reporter();
 
@@ -4082,10 +4130,10 @@ where
             .collect::<Vec<_>>();
         let action = token.action.clone();
 
-        let trigger_width = if token.label.is_empty() {
-            IcedLength::Fixed(24.0)
-        } else {
-            IcedLength::Shrink
+        let trigger_width = match (token.min_width, token.label.is_empty()) {
+            (Some(0), true) | (None, true) => IcedLength::Fixed(24.0),
+            (Some(0), false) | (None, false) => IcedLength::Shrink,
+            (Some(width), _) => IcedLength::Fixed(f32::from(width)),
         };
 
         let padding = token
@@ -4094,6 +4142,11 @@ where
             .unwrap_or_else(|| IcedPadding::from([2.0, 4.0]));
         let border_width = token.border_width.map(f32::from).unwrap_or(0.0);
         let radius = token.radius.map(f32::from).unwrap_or(visual.radius_control);
+        let text_style = token.text_style.unwrap_or(TextStyle::Body);
+        let text_size = token
+            .font_size
+            .map(f32::from)
+            .unwrap_or_else(|| text_size(text_style, visual));
 
         let pick_list = iced_pick_list(choices, Option::<ComboChoice>::None, move |choice| {
             action
@@ -4103,14 +4156,17 @@ where
         .placeholder(token.label.clone())
         .width(trigger_width)
         .padding(padding)
-        .text_size(text_size(TextStyle::Body, visual))
+        .font(text_font_for_value(text_style, &token.label))
+        .text_size(text_size)
         .style(move |_, status| flyout_pick_list_style(visual, status, border_width, radius))
         .menu_style(move |_| menu_style(visual));
 
-        return if token.align_y != Alignment::Start {
-            iced_container(pick_list)
-                .align_y(vertical_alignment(token.align_y))
-                .into()
+        return if token.align_y != Alignment::Start || token.min_height.is_some_and(|h| h > 0) {
+            let mut trigger = iced_container(pick_list).align_y(vertical_alignment(token.align_y));
+            if let Some(height) = token.min_height.filter(|height| *height > 0) {
+                trigger = trigger.height(IcedLength::Fixed(f32::from(height)));
+            }
+            trigger.into()
         } else {
             pick_list.into()
         };
@@ -4125,8 +4181,8 @@ where
         &token.label,
         kind,
         token.icon.as_ref(),
-        None,
-        None,
+        token.text_style,
+        token.font_size,
         visual,
         false,
     ))
@@ -4195,6 +4251,8 @@ where
 
 const PROGRESS_RING_SEGMENTS: usize = 8;
 const PROGRESS_RING_FRAME_MS: u64 = 100;
+#[cfg(debug_assertions)]
+static PROGRESS_RING_RENDER_DEBUG_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
 struct AnimatedProgressRing {
@@ -4212,6 +4270,8 @@ impl AnimatedProgressRing {
 struct AnimatedProgressRingState {
     started_at: Option<iced::time::Instant>,
     frame_index: usize,
+    #[cfg(debug_assertions)]
+    render_debug: ProgressRingRenderDebugState,
 }
 
 impl AnimatedProgressRingState {
@@ -4219,21 +4279,190 @@ impl AnimatedProgressRingState {
         Self {
             started_at: None,
             frame_index: 0,
+            #[cfg(debug_assertions)]
+            render_debug: ProgressRingRenderDebugState::new(),
         }
     }
 
-    fn tick(&mut self, active: bool, now: iced::time::Instant) -> (bool, bool) {
+    fn tick(
+        &mut self,
+        active: bool,
+        now: iced::time::Instant,
+    ) -> (bool, Option<iced::time::Instant>) {
         if !active {
             let changed = self.started_at.take().is_some() || self.frame_index != 0;
             self.frame_index = 0;
-            return (changed, false);
+            #[cfg(debug_assertions)]
+            self.render_debug
+                .record_stop(now, changed, self.frame_index);
+            return (changed, None);
         }
 
+        let just_started = self.started_at.is_none();
         let started_at = *self.started_at.get_or_insert(now);
+        let elapsed_frames = progress_ring_elapsed_frames(started_at, now);
         let next_frame = progress_ring_frame_index(started_at, now);
         let changed = next_frame != self.frame_index;
         self.frame_index = next_frame;
-        (changed, true)
+        let next_redraw_at =
+            started_at + Duration::from_millis((elapsed_frames + 1) * PROGRESS_RING_FRAME_MS);
+        #[cfg(debug_assertions)]
+        self.render_debug
+            .record_tick(now, next_redraw_at, changed, self.frame_index, just_started);
+        (changed, Some(next_redraw_at))
+    }
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug)]
+struct ProgressRingRenderDebugState {
+    id: u64,
+    active_started_at: Option<iced::time::Instant>,
+    last_log_at: Option<iced::time::Instant>,
+    last_redraw_at: Option<iced::time::Instant>,
+    expected_next_redraw_at: Option<iced::time::Instant>,
+    redraws_since_log: u64,
+    frame_advances_since_log: u64,
+    early_redraws_since_log: u64,
+    sub_16ms_redraws_since_log: u64,
+}
+
+#[cfg(debug_assertions)]
+impl ProgressRingRenderDebugState {
+    fn new() -> Self {
+        Self {
+            id: PROGRESS_RING_RENDER_DEBUG_ID.fetch_add(1, Ordering::Relaxed),
+            active_started_at: None,
+            last_log_at: None,
+            last_redraw_at: None,
+            expected_next_redraw_at: None,
+            redraws_since_log: 0,
+            frame_advances_since_log: 0,
+            early_redraws_since_log: 0,
+            sub_16ms_redraws_since_log: 0,
+        }
+    }
+
+    fn record_tick(
+        &mut self,
+        now: iced::time::Instant,
+        next_redraw_at: iced::time::Instant,
+        frame_changed: bool,
+        frame_index: usize,
+        just_started: bool,
+    ) {
+        if !render_debug_enabled() {
+            return;
+        }
+
+        if self.active_started_at.is_none() || just_started {
+            self.active_started_at = Some(now);
+            self.last_log_at = Some(now);
+            self.redraws_since_log = 0;
+            self.frame_advances_since_log = 0;
+            self.early_redraws_since_log = 0;
+            self.sub_16ms_redraws_since_log = 0;
+            eprintln!(
+                "[render] progress_ring id={} start frame_ms={} frame_index={frame_index}",
+                self.id, PROGRESS_RING_FRAME_MS
+            );
+        }
+
+        if let Some(expected) = self.expected_next_redraw_at {
+            if now < expected {
+                self.early_redraws_since_log += 1;
+            }
+        }
+
+        if let Some(last) = self.last_redraw_at {
+            if now.saturating_duration_since(last) < Duration::from_millis(16) {
+                self.sub_16ms_redraws_since_log += 1;
+            }
+        }
+
+        self.redraws_since_log += 1;
+        if frame_changed {
+            self.frame_advances_since_log += 1;
+        }
+        self.last_redraw_at = Some(now);
+        self.expected_next_redraw_at = Some(next_redraw_at);
+
+        self.maybe_log_active_sample(now, next_redraw_at, frame_index);
+    }
+
+    fn record_stop(&mut self, now: iced::time::Instant, state_changed: bool, frame_index: usize) {
+        if !render_debug_enabled() || self.active_started_at.is_none() {
+            self.reset();
+            return;
+        }
+
+        let elapsed_ms = self
+            .active_started_at
+            .map(|started| now.saturating_duration_since(started).as_millis() as u64)
+            .unwrap_or_default();
+        eprintln!(
+            "[render] progress_ring id={} stop elapsed_ms={elapsed_ms} redraws={} frame_advances={} early_redraws={} sub_16ms_redraws={} state_changed={} frame_index={frame_index}",
+            self.id,
+            self.redraws_since_log,
+            self.frame_advances_since_log,
+            self.early_redraws_since_log,
+            self.sub_16ms_redraws_since_log,
+            state_changed,
+        );
+        self.reset();
+    }
+
+    fn maybe_log_active_sample(
+        &mut self,
+        now: iced::time::Instant,
+        next_redraw_at: iced::time::Instant,
+        frame_index: usize,
+    ) {
+        let Some(last_log_at) = self.last_log_at else {
+            self.last_log_at = Some(now);
+            return;
+        };
+
+        let elapsed_ms = now.saturating_duration_since(last_log_at).as_millis() as u64;
+        if elapsed_ms < RENDER_DEBUG_LOG_INTERVAL_MS {
+            return;
+        }
+
+        let elapsed_seconds = (elapsed_ms as f64 / 1000.0).max(0.001);
+        let redraws_per_sec = self.redraws_since_log as f64 / elapsed_seconds;
+        let frames_per_sec = self.frame_advances_since_log as f64 / elapsed_seconds;
+        let next_delay_ms = next_redraw_at.saturating_duration_since(now).as_millis() as u64;
+        let warning = if redraws_per_sec >= RENDER_DEBUG_HIGH_REDRAWS_PER_SECOND {
+            " warning=high_redraw_cadence"
+        } else {
+            ""
+        };
+
+        eprintln!(
+            "[render] progress_ring id={} sample elapsed_ms={elapsed_ms} redraws={} frame_advances={} early_redraws={} sub_16ms_redraws={} redraws_per_sec={redraws_per_sec:.1} frames_per_sec={frames_per_sec:.1} frame_index={frame_index} next_delay_ms={next_delay_ms}{warning}",
+            self.id,
+            self.redraws_since_log,
+            self.frame_advances_since_log,
+            self.early_redraws_since_log,
+            self.sub_16ms_redraws_since_log,
+        );
+
+        self.last_log_at = Some(now);
+        self.redraws_since_log = 0;
+        self.frame_advances_since_log = 0;
+        self.early_redraws_since_log = 0;
+        self.sub_16ms_redraws_since_log = 0;
+    }
+
+    fn reset(&mut self) {
+        self.active_started_at = None;
+        self.last_log_at = None;
+        self.last_redraw_at = None;
+        self.expected_next_redraw_at = None;
+        self.redraws_since_log = 0;
+        self.frame_advances_since_log = 0;
+        self.early_redraws_since_log = 0;
+        self.sub_16ms_redraws_since_log = 0;
     }
 }
 
@@ -4277,13 +4506,13 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for AnimatedProgressR
         _viewport: &Rectangle,
     ) {
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
-            let (_changed, animating) = tree
+            let (_changed, next_redraw_at) = tree
                 .state
                 .downcast_mut::<AnimatedProgressRingState>()
                 .tick(true, *now);
 
-            if animating {
-                shell.request_redraw();
+            if let Some(next_redraw_at) = next_redraw_at {
+                shell.request_redraw_at(next_redraw_at);
             }
         }
     }
@@ -4341,8 +4570,12 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for AnimatedProgressR
 }
 
 fn progress_ring_frame_index(started_at: iced::time::Instant, now: iced::time::Instant) -> usize {
+    (progress_ring_elapsed_frames(started_at, now) as usize) % PROGRESS_RING_SEGMENTS
+}
+
+fn progress_ring_elapsed_frames(started_at: iced::time::Instant, now: iced::time::Instant) -> u64 {
     let elapsed_ms = now.saturating_duration_since(started_at).as_millis() as u64;
-    ((elapsed_ms / PROGRESS_RING_FRAME_MS) as usize) % PROGRESS_RING_SEGMENTS
+    elapsed_ms / PROGRESS_RING_FRAME_MS
 }
 
 fn progress_ring_segment_alpha(segment: usize, frame_index: usize) -> f32 {
@@ -13509,19 +13742,38 @@ mod tests {
     }
 
     #[test]
-    fn active_progress_ring_state_keeps_requesting_redraws() {
+    fn active_progress_ring_state_schedules_redraws_at_frame_interval() {
         let start = iced::time::Instant::now();
         let mut state = AnimatedProgressRingState::new();
 
-        assert_eq!(state.tick(true, start), (false, true));
+        assert_eq!(
+            state.tick(true, start),
+            (false, Some(start + Duration::from_millis(100)))
+        );
         assert_eq!(
             state.tick(true, start + Duration::from_millis(100)),
-            (true, true)
+            (true, Some(start + Duration::from_millis(200)))
         );
         assert_eq!(state.frame_index, 1);
         assert_eq!(
             state.tick(false, start + Duration::from_millis(200)),
-            (true, false)
+            (true, None)
+        );
+        assert_eq!(state.frame_index, 0);
+    }
+
+    #[test]
+    fn progress_ring_state_ignores_redraws_before_next_frame() {
+        let start = iced::time::Instant::now();
+        let mut state = AnimatedProgressRingState::new();
+
+        assert_eq!(
+            state.tick(true, start),
+            (false, Some(start + Duration::from_millis(100)))
+        );
+        assert_eq!(
+            state.tick(true, start + Duration::from_millis(50)),
+            (false, Some(start + Duration::from_millis(100)))
         );
         assert_eq!(state.frame_index, 0);
     }

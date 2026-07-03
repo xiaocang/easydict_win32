@@ -176,6 +176,12 @@ public sealed class OcrTranslateService
         var settings = SettingsService.Instance;
         Debug.WriteLine(
             $"[OcrTranslate] {flow} pid={Environment.ProcessId} engine={options.Engine} " +
-            $"useWorker={settings.UseOcrWorker} endpoint={options.Endpoint} model={options.Model}");
+            $"useWorker={settings.UseOcrWorker} endpoint={FormatEndpointForDiagnostics(options)} " +
+            $"model={options.Model}");
     }
+
+    internal static string FormatEndpointForDiagnostics(OcrServiceOptions options) =>
+        OcrServiceOptions.IsKnownDefaultEndpoint(options.Endpoint)
+            ? options.Endpoint
+            : "<redacted>";
 }

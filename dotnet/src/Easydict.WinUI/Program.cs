@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppLifecycle;
@@ -179,34 +180,41 @@ public static class Program
     /// </summary>
     private static void RedirectActivationTo(AppActivationArguments args, AppInstance primary)
     {
-        var redirectCompleted = CreateEvent(IntPtr.Zero, true, false, null);
-        Task.Run(() =>
+        using var redirectCompleted = new EventWaitHandle(false, EventResetMode.ManualReset);
+        ExceptionDispatchInfo? redirectException = null;
+
+        _ = Task.Run(async () =>
         {
-            primary.RedirectActivationToAsync(args).AsTask().Wait();
-            SetEvent(redirectCompleted);
+            try
+            {
+                await primary.RedirectActivationToAsync(args).AsTask().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                redirectException = ExceptionDispatchInfo.Capture(ex);
+            }
+            finally
+            {
+                try { redirectCompleted.Set(); } catch (ObjectDisposedException) { }
+            }
         });
 
         _ = CoWaitForMultipleObjects(
             CWMO_DEFAULT,
             INFINITE,
             1,
-            new[] { redirectCompleted },
+            new[] { redirectCompleted.SafeWaitHandle.DangerousGetHandle() },
             out _);
+
+        redirectException?.Throw();
     }
 
     private const uint CWMO_DEFAULT = 0;
     private const uint INFINITE = 0xFFFFFFFF;
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr CreateEvent(
-        IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string? lpName);
-
-    [DllImport("kernel32.dll")]
-    private static extern bool SetEvent(IntPtr hEvent);
-
     [DllImport("ole32.dll")]
     private static extern uint CoWaitForMultipleObjects(
-        uint dwFlags, uint dwMilliseconds, ulong nHandles, IntPtr[] pHandles, out uint dwIndex);
+        uint dwFlags, uint dwMilliseconds, uint nHandles, IntPtr[] pHandles, out uint dwIndex);
 
     /// <summary>
     /// Checks whether this process was launched via easydict://ocr-translate protocol activation.

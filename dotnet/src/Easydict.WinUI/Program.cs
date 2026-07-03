@@ -199,18 +199,23 @@ public static class Program
             }
         });
 
-        _ = CoWaitForMultipleObjects(
+        var waitResult = CoWaitForMultipleObjects(
             CWMO_DEFAULT,
             INFINITE,
             1,
             new[] { redirectCompleted.SafeWaitHandle.DangerousGetHandle() },
             out _);
+        if (waitResult != S_OK)
+        {
+            Marshal.ThrowExceptionForHR(unchecked((int)waitResult));
+        }
 
         redirectException?.Throw();
     }
 
     private const uint CWMO_DEFAULT = 0;
     private const uint INFINITE = 0xFFFFFFFF;
+    private const uint S_OK = 0;
 
     [DllImport("ole32.dll")]
     private static extern uint CoWaitForMultipleObjects(

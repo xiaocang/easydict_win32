@@ -795,6 +795,11 @@ namespace Easydict.WinUI
             }
         }
 
+        internal void TriggerOcrTranslate()
+        {
+            OnTrayOcrTranslate();
+        }
+
         // Lazily instantiate OcrTranslateService on first use. Must run on UI thread because
         // OcrTranslateService captures DispatcherQueue. Called from all OCR entry points
         // (hotkeys, tray menu, shell context menu signal, browser extension signal,

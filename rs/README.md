@@ -37,10 +37,14 @@ small preview windows such as PopButton and capture overlay are not filtered out
 Rust preview parity matrix:
 
 ```powershell
+..\dotnet\scripts\ci\Invoke-UiParityPreflight.ps1 -RunRoot ..\artifacts\ui-parity-runs\manual-main-preflight -Scope main -Theme light -UiLanguage zh-CN
+
 .\scripts\Capture-PreviewParityMatrix.ps1 -ListScenarios
 .\scripts\Capture-PreviewParityMatrix.ps1 -Matrix settings -ReferenceRoot ..\artifacts\ui-screenshots -RunAnalyzer -SkipBuild -SkipAnalyzerSelfTest
 .\scripts\Capture-PreviewParityMatrix.ps1 -Scenario parity-settings-general-behavior-top -ReferenceRoot ..\artifacts\ui-screenshots -RunAnalyzer -UseDefaultScoreGates -FailOnThreshold -RequireManifest
 ```
+
+Preflight writes captures to `<run-root>\captures`, analyzer outputs to `<run-root>\analysis`, and must pass before UI token/layout tuning.
 
 `Capture-PreviewParityMatrix.ps1` launches a fresh Rust preview instance per
 scenario, captures analyzer-compatible `*-rust-win-fluent-iced.png` files,

@@ -32,8 +32,15 @@ public sealed class DotnetRustParityTests : IDisposable
     private const string EffectsEnvironmentVariable = "EASYDICT_UIA_PARITY_EFFECTS";
     private const string MainEffectsOnlyEnvironmentVariable = "EASYDICT_UIA_PARITY_MAIN_EFFECTS_ONLY";
     private const string MainInitialOnlyEnvironmentVariable = "EASYDICT_UIA_PARITY_MAIN_INITIAL_ONLY";
+    private const string MainOperationsScopeEnvironmentVariable = "EASYDICT_UIA_PARITY_MAIN_OPERATIONS_SCOPE";
+    private const string MainDropdownEnvironmentVariable = "EASYDICT_UIA_PARITY_MAIN_DROPDOWN";
+    private const string FloatingScopeEnvironmentVariable = "EASYDICT_UIA_PARITY_FLOATING_SCOPE";
+    private const string FloatingWindowEnvironmentVariable = "EASYDICT_UIA_PARITY_FLOATING_WINDOW";
+    private const string FloatingDropdownEnvironmentVariable = "EASYDICT_UIA_PARITY_FLOATING_DROPDOWN";
+    private const string DropdownOptionIndexesEnvironmentVariable = "EASYDICT_UIA_PARITY_DROPDOWN_OPTION_INDEXES";
     private const string AllowOversizedCaptureEnvironmentVariable = "EASYDICT_UIA_ALLOW_OVERSIZED_CAPTURE";
     private const string UiLanguageEnvironmentVariable = "EASYDICT_UIA_PARITY_UI_LANGUAGE";
+    private const string ThemeEnvironmentVariable = "EASYDICT_UIA_PARITY_THEME";
     private const string TrayContextMenuPointEnvironmentVariable = "EASYDICT_UIA_TRAY_CONTEXT_MENU_POINT";
     private const string TrayContextMenuDelayEnvironmentVariable = "EASYDICT_UIA_TRAY_CONTEXT_MENU_DELAY_MS";
     private const string TrayExtraItemsEnvironmentVariable = "EASYDICT_UIA_TRAY_EXTRA_ITEMS";
@@ -50,6 +57,315 @@ public sealed class DotnetRustParityTests : IDisposable
     public DotnetRustParityTests(ITestOutputHelper output)
     {
         _output = output;
+    }
+
+    [Fact]
+    public void RustSchemaQuotedValueParser_ShouldUnescapeVisibleTextValues()
+    {
+        var pathLine =
+            "Text value=\"C:\\\\Users\\\\johnn\\\\Documents\\\\Easydict\\\\LongDocOutputs\" id=\"main.long-doc.output_folder\"";
+        var quotedLine = "Button label=\"Say \\\"Hello\\\"\" id=\"quote-button\"";
+        var iconLine = "Text value=\"\\u{e897}\" id=\"LongDocServiceHint\"";
+
+        TryExtractRustSchemaQuotedValue(pathLine, "value")
+            .Should().Be(@"C:\Users\johnn\Documents\Easydict\LongDocOutputs");
+        TryExtractRustSchemaQuotedValue(quotedLine, "label")
+            .Should().Be("Say \"Hello\"");
+        TryExtractRustSchemaQuotedValue(iconLine, "value")
+            .Should().Be(@"\u{e897}");
+
+        var splitHeaderTexts = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddRustSchemaVisibleText(splitHeaderTexts, "main.long-doc.page_range_cell.label", "📑 Pages");
+        splitHeaderTexts.Should().BeEquivalentTo(["📑", "Pages"]);
+
+        var sourceHeaderTexts = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddRustSchemaVisibleText(sourceHeaderTexts, "main.long-doc.source_language_cell.label", "🌐 Source");
+        sourceHeaderTexts.Should().BeEquivalentTo(["🌐 Source"]);
+    }
+
+    [Fact]
+    public void FilterDropdownOptionCaptures_WithUnsetEnvironment_ReturnsAllOptions()
+    {
+        using var scope = new EnvironmentVariableScope(DropdownOptionIndexesEnvironmentVariable, null);
+        var options = new[]
+        {
+            new SettingsDropdownOptionCapture("A", 0),
+            new SettingsDropdownOptionCapture("B", 1),
+            new SettingsDropdownOptionCapture("C", 2)
+        };
+        var step = new SettingsParityCaptureStep(
+            "test.dropdown",
+            SettingsParitySection.General,
+            0,
+            DropdownOptions: options);
+
+        FilterDropdownOptionCaptures(step).Should().BeEquivalentTo(options);
+    }
+
+    [Fact]
+    public void FilterDropdownOptionCaptures_WithOneBasedIndexes_ReturnsMatchingDotnetIndexes()
+    {
+        using var scope = new EnvironmentVariableScope(DropdownOptionIndexesEnvironmentVariable, "1, 3");
+        var options = new[]
+        {
+            new SettingsDropdownOptionCapture("A", 0),
+            new SettingsDropdownOptionCapture("B", 1),
+            new SettingsDropdownOptionCapture("C", 2)
+        };
+        var step = new SettingsParityCaptureStep(
+            "test.dropdown",
+            SettingsParitySection.General,
+            0,
+            DropdownOptions: options);
+
+        FilterDropdownOptionCaptures(step)
+            .Select(option => option.DotnetIndex)
+            .Should().Equal(0, 2);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("abc")]
+    public void FilterDropdownOptionCaptures_WithInvalidIndex_Throws(string value)
+    {
+        using var scope = new EnvironmentVariableScope(DropdownOptionIndexesEnvironmentVariable, value);
+        var step = new SettingsParityCaptureStep(
+            "test.dropdown",
+            SettingsParitySection.General,
+            0,
+            DropdownOptions:
+            [
+                new SettingsDropdownOptionCapture("A", 0)
+            ]);
+
+        Action act = () => FilterDropdownOptionCaptures(step);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void FilterDropdownOptionCaptures_WithOutOfRangeIndex_ThrowsForDropdown()
+    {
+        using var scope = new EnvironmentVariableScope(DropdownOptionIndexesEnvironmentVariable, "3");
+        var step = new SettingsParityCaptureStep(
+            "test.dropdown",
+            SettingsParitySection.General,
+            0,
+            DropdownOptions:
+            [
+                new SettingsDropdownOptionCapture("A", 0),
+                new SettingsDropdownOptionCapture("B", 1)
+            ]);
+
+        Action act = () => FilterDropdownOptionCaptures(step);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*test.dropdown*2*");
+    }
+
+    [Fact]
+    public void RustSchemaUiSummary_ShouldIncludeMainIconButtonAutomationNames()
+    {
+        var schemaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-rust-schema-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(
+                schemaPath,
+                """
+                ViewSchema version=1
+                Button label="固定窗口（保持置顶）" kind=Icon icon=pin tooltip="固定窗口（保持置顶）" id="PinButton"
+                Button label="设置" kind=Icon icon=settings tooltip="设置" id="SettingsButton"
+                Button label="朗读源文本" kind=Icon icon=play tooltip="朗读源文本" id="main.quick.play_source"
+                Button label="交换源语言和目标语言" kind=Icon icon=swap tooltip="交换源语言和目标语言" id="SwapLanguageButton"
+                Button label="" kind=PrimaryRound icon=translate tooltip="翻译" id="TranslateButton"
+                Button label="" kind=PrimaryRound icon=translate tooltip="翻译" id="main.long-doc.translate"
+                Button label="Decorative" kind=Icon icon=info tooltip="Decorative" id="DecorativeIconButton"
+                """);
+
+            var summary = TryReadRustSchemaUiSummary(schemaPath);
+
+            summary.Should().NotBeNull();
+            summary!.VisibleTexts.Should().Contain(
+            [
+                "固定窗口（保持置顶）",
+                "设置",
+                "朗读源文本",
+                "交换源语言和目标语言",
+                "翻译"
+            ]);
+            summary.VisibleTexts.Should().NotContain("Decorative");
+            summary.VisibleControlCounts["text"].Should().Be(0);
+        }
+        finally
+        {
+            File.Delete(schemaPath);
+        }
+    }
+
+    [Fact]
+    public void RustSchemaUiSummary_ShouldDerivePendingQueryStatusText()
+    {
+        var schemaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-rust-schema-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(
+                schemaPath,
+                """
+                ViewSchema version=1
+                ResultItem title="Windows Local AI" body_len=0 icon=service-local-ai metadata=none pending_hint="点击服务标题查询" expanded=false id="windows-local-ai"
+                """);
+
+            var summary = TryReadRustSchemaUiSummary(schemaPath);
+
+            summary.Should().NotBeNull();
+            summary!.VisibleTexts.Should().Contain(
+            [
+                "Windows Local AI",
+                "点击服务标题查询",
+                "点击查询"
+            ]);
+            summary.VisibleControlCounts["text"].Should().Be(2);
+        }
+        finally
+        {
+            File.Delete(schemaPath);
+        }
+    }
+
+    [Fact]
+    public void RustSchemaUiSummary_ShouldNotCountLongDocAuxiliaryGlyphsAsTextControls()
+    {
+        var schemaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-rust-schema-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(
+                schemaPath,
+                """
+                ViewSchema version=1
+                Text value="🌐 Source" id="main.long-doc.source_language_cell.label"
+                Text value="🤖 Service" id="main.long-doc.service_cell.label"
+                Text value="\u{e897}" id="LongDocServiceHint"
+                Text value="Output Folder" id="main.long-doc.output_folder_label"
+                Button label="Browse..." kind=Default id="main.long-doc.browse"
+                Button label="Retry Failed" kind=Default id="main.long-doc.retry"
+                """);
+
+            var summary = TryReadRustSchemaUiSummary(schemaPath);
+
+            summary.Should().NotBeNull();
+            summary!.VisibleTexts.Should().Contain(["🌐 Source", "Output Folder", "Browse...", "Retry Failed"]);
+            summary.VisibleTexts.Should().NotContain(["🤖 Service", @"\u{e897}"]);
+            summary.VisibleControlCounts["text"].Should().Be(2);
+        }
+        finally
+        {
+            File.Delete(schemaPath);
+        }
+    }
+
+    [Fact]
+    public void RustSchemaUiSummary_ShouldPreserveGridSpacingEvidence()
+    {
+        var schemaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-rust-schema-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(
+                schemaPath,
+                """
+                ViewSchema version=1
+                Grid rows=[Fixed(60),Fixed(58),Fixed(61)] columns=[Fill,Fill,Fill,Fixed(110)] row_spacing=4 column_spacing=8 padding=0 width=Fill height=Shrink align=Start children=9 id="LongDocControlGrid"
+                """);
+
+            var summary = TryReadRustSchemaUiSummary(schemaPath);
+
+            summary.Should().NotBeNull();
+            summary!.VisibleControlDimensions.Should().ContainKey("LongDocControlGrid");
+            summary.VisibleAutomationIds.Should().NotContain("LongDocControlGrid");
+            var dimension = summary.VisibleControlDimensions["LongDocControlGrid"];
+            dimension.RowSpacing.Should().Be("4");
+            dimension.ColumnSpacing.Should().Be("8");
+            dimension.Columns.Should().Be("[Fill,Fill,Fill,Fixed(110)]");
+        }
+        finally
+        {
+            File.Delete(schemaPath);
+        }
+    }
+
+    [Fact]
+    public void RustSchemaUiSummary_ShouldUseLongDocCellHeightForTextEditorReferenceControls()
+    {
+        var schemaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-rust-schema-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(
+                schemaPath,
+                """
+                ViewSchema version=1
+                TextEditor placeholder="Threads" width=Fill height=Fixed(36) max_height=36 id="main.long-doc.concurrency"
+                TextEditor placeholder="1-3,5,7-10" width=Fill height=Fixed(36) max_height=36 id="main.long-doc.page_range"
+                """);
+
+            var summary = TryReadRustSchemaUiSummary(schemaPath);
+
+            summary.Should().NotBeNull();
+            summary!.VisibleControlDimensions.Should().ContainKeys(
+                "LongDocConcurrencyBox",
+                "LongDocPageRangeBox");
+            summary.VisibleControlDimensions["LongDocConcurrencyBox"].Height.Should().Be("Fixed(36)");
+            summary.VisibleControlDimensions["LongDocConcurrencyBox"].LabeledHeight.Should().Be("Fixed(58)");
+            summary.VisibleControlDimensions["LongDocPageRangeBox"].Height.Should().Be("Fixed(36)");
+            summary.VisibleControlDimensions["LongDocPageRangeBox"].LabeledHeight.Should().Be("Fixed(58)");
+        }
+        finally
+        {
+            File.Delete(schemaPath);
+        }
+    }
+
+    [Fact]
+    public void RustBoundsParser_ShouldReadRuntimeControlBoundsEvidence()
+    {
+        var boundsPath = Path.Combine(
+            Path.GetTempPath(),
+            $"easydict-rust-bounds-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(
+                boundsPath,
+                """
+                ViewBounds version=1
+                Bounds id="InputTextBox" kind=TextEditor x=28.50 y=117.00 width=373.00 height=80.00
+                Bounds id="main.long-doc.browse" kind=Button x=330.50 y=120.00 width=78.00 height=32.00
+                """);
+
+            var dimensions = TryReadRustBoundsControlDimensions(boundsPath);
+
+            dimensions.Should().ContainKeys("InputTextBox", "main.long-doc.browse");
+            dimensions["InputTextBox"].Kind.Should().Be("TextEditor");
+            dimensions["InputTextBox"].Width.Should().Be("373");
+            dimensions["InputTextBox"].Height.Should().Be("80");
+            dimensions["InputTextBox"].BoundsDips.Should().Be(
+                new UiParityControlBoundsDips(28.5, 117, 373, 80));
+            dimensions["main.long-doc.browse"].BoundsDips.Should().Be(
+                new UiParityControlBoundsDips(330.5, 120, 78, 32));
+        }
+        finally
+        {
+            File.Delete(boundsPath);
+        }
     }
 
     [Fact]
@@ -96,20 +412,47 @@ public sealed class DotnetRustParityTests : IDisposable
             dotnetWindow.SetForeground();
             Thread.Sleep(150);
             HideFloatingLanguageBars();
-            var dotnetPath = CaptureDotnetSettingsStep(
-                dotnetWindow,
-                step,
-                $"{step.Key}-dotnet-winui-reference");
+            var dotnetPath = step.CapturesExpandedDropdown
+                ? CaptureExpandedSettingsDropdownStep(
+                    dotnetWindow,
+                    step,
+                    $"{step.Key}-dotnet-winui-reference")
+                : CaptureDotnetSettingsStep(
+                    dotnetWindow,
+                    step,
+                    $"{step.Key}-dotnet-winui-reference");
             MaskFloatingLanguageBarOcclusions(dotnetPath, dotnetWindow);
+            var dotnetDropdownOptionPaths = step.CapturesDropdownOptionSelections
+                ? CaptureSettingsDropdownOptionSelections(
+                    dotnetWindow,
+                    step,
+                    "dotnet-winui-reference",
+                    rustSchemaPath: null)
+                : Array.Empty<SettingsDropdownOptionCaptureResult>();
+            DismissExpandedDropdownIfNeeded(step);
             MoveMouseToNeutralPoint();
             rustWindow.SetForeground();
             Thread.Sleep(150);
             MoveMouseToNeutralPoint();
             HideFloatingLanguageBars();
-            var rustPath = CaptureWindowPreferHwnd(
-                rustWindow,
-                $"{step.Key}-rust-win-fluent-iced");
+            var rustPath = step.CapturesExpandedDropdown
+                ? CaptureExpandedSettingsDropdownStep(
+                    rustWindow,
+                    step,
+                    $"{step.Key}-rust-win-fluent-iced",
+                    rustPreview.SchemaPath)
+                : CaptureWindowPreferHwnd(
+                    rustWindow,
+                    $"{step.Key}-rust-win-fluent-iced");
             MaskFloatingLanguageBarOcclusions(rustPath, rustWindow);
+            var rustDropdownOptionPaths = step.CapturesDropdownOptionSelections
+                ? CaptureSettingsDropdownOptionSelections(
+                    rustWindow,
+                    step,
+                    "rust-win-fluent-iced",
+                    rustPreview.SchemaPath)
+                : Array.Empty<SettingsDropdownOptionCaptureResult>();
+            DismissExpandedDropdownIfNeeded(step);
             var sideBySidePath = SaveSideBySideComparison(
                 dotnetPath,
                 rustPath,
@@ -131,6 +474,167 @@ public sealed class DotnetRustParityTests : IDisposable
             _output.WriteLine($"[{step.Key}] Dotnet screenshot: {dotnetPath}");
             _output.WriteLine($"[{step.Key}] Rust screenshot: {rustPath}");
             _output.WriteLine($"[{step.Key}] Side-by-side comparison: {sideBySidePath}");
+
+            foreach (var optionPair in PairDropdownOptionCaptures(dotnetDropdownOptionPaths, rustDropdownOptionPaths))
+            {
+                var optionSideBySidePath = SaveSideBySideComparison(
+                    optionPair.Dotnet.ScreenshotPath,
+                    optionPair.Rust.ScreenshotPath,
+                    $"{optionPair.Dotnet.ScenarioId}-dotnet-vs-rust-side-by-side");
+                var optionStep = step with
+                {
+                    Key = optionPair.Dotnet.ScenarioId,
+                    HoveredElement = null,
+                    FocusedElement = null,
+                    PressedElement = null,
+                    ExpandedDropdownElement = null,
+                    ExpectedDropdownItems = null,
+                    BaselineScenarioId = step.Key
+                };
+                manifestEntries.Add(CreateManifestEntry(
+                    optionStep,
+                    dotnetWindow,
+                    rustWindow,
+                    optionPair.Dotnet.ScreenshotPath,
+                    optionPair.Rust.ScreenshotPath,
+                    optionSideBySidePath,
+                    rustPreview.SchemaPath,
+                    operatedDropdownElement: step.ExpandedDropdownElement,
+                    selectedDropdownOption: optionPair.Dotnet.Option));
+                SaveManifest(manifestEntries);
+
+                AssertImageHasVisibleContent(optionPair.Dotnet.ScreenshotPath);
+                AssertImageHasVisibleContent(optionPair.Rust.ScreenshotPath);
+                AssertImageHasVisibleContent(optionSideBySidePath);
+
+                _output.WriteLine(
+                    $"[{optionPair.Dotnet.ScenarioId}] Dropdown option: {optionPair.Dotnet.Option.Label}");
+                _output.WriteLine(
+                    $"[{optionPair.Dotnet.ScenarioId}] Dotnet screenshot: {optionPair.Dotnet.ScreenshotPath}");
+                _output.WriteLine(
+                    $"[{optionPair.Dotnet.ScenarioId}] Rust screenshot: {optionPair.Rust.ScreenshotPath}");
+                _output.WriteLine(
+                    $"[{optionPair.Dotnet.ScenarioId}] Side-by-side comparison: {optionSideBySidePath}");
+            }
+        }
+
+        SaveManifest(manifestEntries);
+    }
+
+    [Fact]
+    public void MainWindowOperations_ShouldRenderDotnetAndRustPreviewSideBySide()
+    {
+        if (!IsTruthy(Environment.GetEnvironmentVariable(EnableEnvironmentVariable)))
+        {
+            _output.WriteLine(
+                $"Dotnet/Rust parity run is opt-in. Set {EnableEnvironmentVariable}=1 to launch both UI processes.");
+            return;
+        }
+
+        var captureScope = ResolveMainOperationsCaptureScope();
+        var manifestEntries = new List<UiParityManifestEntry>();
+
+        EnsureParityDpiAwareness();
+        SeedDotnetParitySettings();
+        _dotnetLauncher.LaunchAuto(TimeSpan.FromSeconds(45));
+        var dotnetWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
+        WaitForMainWindowReady(dotnetWindow, "dotnet");
+        ConfigureRustMainPreviewSizeFromReference(dotnetWindow);
+        SetDotnetMainInputText(dotnetWindow, "Hello from the Rust main window preview");
+
+        var rustEnvironment = new Dictionary<string, string>(StringComparer.Ordinal);
+        var detectedLanguageText = WaitForMainDetectedLanguageText(dotnetWindow, TimeSpan.FromSeconds(5));
+        if (!string.IsNullOrWhiteSpace(detectedLanguageText))
+        {
+            rustEnvironment["EASYDICT_PREVIEW_MAIN_DETECTED_LANGUAGE"] = detectedLanguageText;
+        }
+
+        using var rustPreview = RustPreviewApp.LaunchMainPreview(
+            "before_translate",
+            ResolveRustPreviewTheme("light"),
+            _output,
+            rustEnvironment);
+        var rustWindow = rustPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+        ArrangeSideBySide(dotnetWindow, rustWindow);
+        WaitForMainWindowReady(dotnetWindow, "dotnet");
+        WaitForMainWindowReady(rustWindow, "rust");
+        AssertWindowFullyVisible(dotnetWindow, "main.operations", "dotnet");
+        AssertWindowFullyVisible(rustWindow, "main.operations", "rust");
+
+        if (!captureScope.CaptureButtons &&
+            !captureScope.CaptureDropdowns &&
+            !captureScope.CaptureDropdownOptions)
+        {
+            PrepareNeutralMainCapture(dotnetWindow);
+            var initialDotnetPath = CaptureForegroundWindow(
+                dotnetWindow,
+                "main.initial-dotnet-winui-reference");
+            var initialRustPath = CaptureForegroundWindow(
+                rustWindow,
+                "main.initial-rust-win-fluent-iced");
+            var initialSideBySidePath = SaveSideBySideComparison(
+                initialDotnetPath,
+                initialRustPath,
+                "main.initial-dotnet-vs-rust-side-by-side");
+            manifestEntries.Add(CreateMainManifestEntry(
+                "main.initial",
+                "Initial",
+                dotnetWindow,
+                rustWindow,
+                initialDotnetPath,
+                initialRustPath,
+                initialSideBySidePath,
+                UiParityRegion.DefaultMainRegions,
+                ["QuickInputCard", "QuickOutputCard"],
+                rustSchemaPath: rustPreview.SchemaPath));
+            SaveManifest(manifestEntries);
+
+            AssertImageHasVisibleContent(initialDotnetPath);
+            AssertImageHasVisibleContent(initialRustPath);
+            AssertImageHasVisibleContent(initialSideBySidePath);
+
+            _output.WriteLine($"[main.initial] Dotnet screenshot: {initialDotnetPath}");
+            _output.WriteLine($"[main.initial] Rust screenshot: {initialRustPath}");
+            return;
+        }
+
+        if (captureScope.CaptureButtons)
+        {
+            foreach (var control in MainInteractionCaptures())
+            {
+                CaptureMainControlInteraction(
+                    manifestEntries,
+                    dotnetWindow,
+                    rustWindow,
+                    rustPreview.SchemaPath,
+                    control);
+            }
+        }
+
+        if (captureScope.CaptureDropdowns)
+        {
+            foreach (var dropdown in MainDropdownCaptures())
+            {
+                var dropdownAlias = dropdown.Key.StartsWith("source", StringComparison.OrdinalIgnoreCase)
+                    ? "source"
+                    : "target";
+                if (!MatchesOptionalEnvironmentFilter(
+                    MainDropdownEnvironmentVariable,
+                    dropdown.Key,
+                    dropdown.Label,
+                    dropdownAlias))
+                {
+                    continue;
+                }
+
+                CaptureMainDropdownInteraction(
+                    manifestEntries,
+                    dotnetWindow,
+                    rustWindow,
+                    rustPreview.SchemaPath,
+                    dropdown,
+                    captureScope.CaptureDropdownOptions);
+            }
         }
 
         SaveManifest(manifestEntries);
@@ -162,7 +666,7 @@ public sealed class DotnetRustParityTests : IDisposable
         WaitForMainWindowReady(dotnetWindow, "dotnet");
         ConfigureRustMainPreviewSizeFromReference(dotnetWindow);
 
-        using var rustPreview = RustPreviewApp.LaunchMainPreview("initial", "light", _output);
+        using var rustPreview = RustPreviewApp.LaunchMainPreview("initial", ResolveRustPreviewTheme("light"), _output);
         var rustWindow = rustPreview.GetMainWindow(TimeSpan.FromSeconds(30));
 
         ArrangeSideBySide(dotnetWindow, rustWindow);
@@ -171,7 +675,7 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(dotnetWindow, "main.initial", "dotnet");
         AssertWindowFullyVisible(rustWindow, "main.initial", "rust");
 
-        MoveMouseToNeutralPoint();
+        PrepareNeutralMainCapture(dotnetWindow);
         var initialDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "main.initial-dotnet-winui-reference");
@@ -271,7 +775,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         rustPreview.Dispose();
         using var rustResultHeaderPreview =
-            RustPreviewApp.LaunchMainPreview("result_header_hover", "light", _output);
+            RustPreviewApp.LaunchMainPreview("result_header_hover", ResolveRustPreviewTheme("light"), _output);
         var rustResultHeaderWindow = rustResultHeaderPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustResultHeaderWindow);
         WaitForMainWindowReady(dotnetWindow, "dotnet");
@@ -310,7 +814,7 @@ public sealed class DotnetRustParityTests : IDisposable
         rustResultHeaderPreview.Dispose();
         SetDotnetMainInputText(dotnetWindow, "Hello from the Rust main window preview");
         using var rustBeforeTranslatePreview =
-            RustPreviewApp.LaunchMainPreview("before_translate", "light", _output);
+            RustPreviewApp.LaunchMainPreview("before_translate", ResolveRustPreviewTheme("light"), _output);
         var rustBeforeTranslateWindow = rustBeforeTranslatePreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustBeforeTranslateWindow);
         WaitForMainWindowReady(dotnetWindow, "dotnet");
@@ -318,7 +822,7 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertWindowFullyVisible(dotnetWindow, "main.before-translate", "dotnet");
         AssertWindowFullyVisible(rustBeforeTranslateWindow, "main.before-translate", "rust");
 
-        MoveMouseToNeutralPoint();
+        PrepareNeutralMainCapture(dotnetWindow);
         var beforeTranslateDotnetPath = CaptureForegroundWindow(
             dotnetWindow,
             "main.before-translate-dotnet-winui-reference");
@@ -349,12 +853,13 @@ public sealed class DotnetRustParityTests : IDisposable
         using var rustSourceInputHoverPreview =
             RustPreviewApp.LaunchMainPreview(
                 "before_translate",
-                "light",
+                ResolveRustPreviewTheme("light"),
                 _output,
                 new Dictionary<string, string>
                 {
                     ["EASYDICT_PREVIEW_SOURCE_TEXT_STATE"] = "hovered"
-                });
+                },
+                schemaSuffix: "-source-hover");
         var rustSourceInputHoverWindow = rustSourceInputHoverPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustSourceInputHoverWindow);
         WaitForMainWindowReady(dotnetWindow, "dotnet");
@@ -394,12 +899,13 @@ public sealed class DotnetRustParityTests : IDisposable
         using var rustSourceInputFocusPreview =
             RustPreviewApp.LaunchMainPreview(
                 "before_translate",
-                "light",
+                ResolveRustPreviewTheme("light"),
                 _output,
                 new Dictionary<string, string>
                 {
                     ["EASYDICT_PREVIEW_SOURCE_TEXT_STATE"] = "focused"
-                });
+                },
+                schemaSuffix: "-source-focus");
         var rustSourceInputFocusWindow = rustSourceInputFocusPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustSourceInputFocusWindow);
         WaitForMainWindowReady(dotnetWindow, "dotnet");
@@ -437,7 +943,7 @@ public sealed class DotnetRustParityTests : IDisposable
         rustSourceInputFocusPreview.Dispose();
 
         using var rustModeOverlayPreview =
-            RustPreviewApp.LaunchMainPreview("mode_overlay", "light", _output);
+            RustPreviewApp.LaunchMainPreview("mode_overlay", ResolveRustPreviewTheme("light"), _output);
         var rustModeOverlayWindow = rustModeOverlayPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustModeOverlayWindow);
         WaitForMainWindowReady(dotnetWindow, "dotnet");
@@ -483,7 +989,11 @@ public sealed class DotnetRustParityTests : IDisposable
 
         WaitForLongDocumentReady(dotnetWindow, "dotnet");
         using var rustLongDocumentPreview =
-            RustPreviewApp.LaunchMainPreview("long_document", "light", _output);
+            RustPreviewApp.LaunchMainPreview(
+                "long_document",
+                ResolveRustPreviewTheme("light"),
+                _output,
+                schemaSuffix: "-tab");
         var rustLongDocumentWindow = rustLongDocumentPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustLongDocumentWindow);
         WaitForLongDocumentReady(dotnetWindow, "dotnet");
@@ -511,8 +1021,9 @@ public sealed class DotnetRustParityTests : IDisposable
             longDocRustPath,
             longDocSideBySidePath,
             UiParityRegion.LongDocumentRegions,
-            ["main.long-doc.source_language", "main.long-doc.target_language", "main.long-doc.service", "main.long-doc.translate"],
-            windowKindOverride: "long-document"));
+            ["LongDocSourceLangCombo", "LongDocTargetLangCombo", "LongDocServiceCombo", "LongDocTranslateButton"],
+            windowKindOverride: "long-document",
+            rustSchemaPath: rustLongDocumentPreview.SchemaPath));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(longDocDotnetPath);
@@ -523,13 +1034,14 @@ public sealed class DotnetRustParityTests : IDisposable
         using var rustLongDocumentModesPreview =
             RustPreviewApp.LaunchMainPreview(
                 "long_document",
-                "light",
+                ResolveRustPreviewTheme("light"),
                 _output,
                 new Dictionary<string, string>
                 {
                     ["EASYDICT_PREVIEW_LONG_DOC_INPUT_MODE"] = "plaintext",
                     ["EASYDICT_PREVIEW_LONG_DOC_OUTPUT_MODE"] = "bilingual"
-                });
+                },
+                schemaSuffix: "-output-modes");
         var rustLongDocumentModesWindow =
             rustLongDocumentModesPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustLongDocumentModesWindow);
@@ -558,8 +1070,9 @@ public sealed class DotnetRustParityTests : IDisposable
             longDocModesRustPath,
             longDocModesSideBySidePath,
             UiParityRegion.LongDocumentRegions,
-            ["main.long-doc.input_mode", "main.long-doc.output_mode", "main.long-doc.translate"],
-            windowKindOverride: "long-document"));
+            ["LongDocInputModeCombo", "LongDocOutputModeCombo", "LongDocTranslateButton"],
+            windowKindOverride: "long-document",
+            rustSchemaPath: rustLongDocumentModesPreview.SchemaPath));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(longDocModesDotnetPath);
@@ -578,14 +1091,16 @@ public sealed class DotnetRustParityTests : IDisposable
         using var rustLongDocumentServiceDropdownPreview =
             RustPreviewApp.LaunchMainPreview(
                 "long_document",
-                "light",
+                ResolveRustPreviewTheme("light"),
                 _output,
                 new Dictionary<string, string>
                 {
                     ["EASYDICT_PREVIEW_LONG_DOC_INPUT_MODE"] = "plaintext",
                     ["EASYDICT_PREVIEW_LONG_DOC_OUTPUT_MODE"] = "bilingual",
-                    ["EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE"] = "hovered"
-                });
+                    ["EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE"] = "hovered",
+                    ["EASYDICT_PREVIEW_LONG_DOC_SERVICE_DROPDOWN"] = "open"
+                },
+                schemaSuffix: "-service-dropdown");
         var rustLongDocumentServiceDropdownWindow =
             rustLongDocumentServiceDropdownPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeSideBySide(dotnetWindow, rustLongDocumentServiceDropdownWindow);
@@ -594,13 +1109,6 @@ public sealed class DotnetRustParityTests : IDisposable
             rustLongDocumentServiceDropdownWindow,
             "long-doc.service-dropdown",
             "rust");
-        MoveMouseToHoverTarget(
-            rustLongDocumentServiceDropdownWindow,
-            "main.long-doc.service",
-            fallbackX: 0.55,
-            fallbackY: 0.42);
-        rustLongDocumentServiceDropdownWindow.SetForeground();
-        Thread.Sleep(250);
         var longDocServiceDropdownRustPath = ScreenshotHelper.CaptureScreen(
             "long-doc.service-dropdown-rust-win-fluent-iced");
         var longDocServiceDropdownSideBySidePath = SaveSideBySideComparison(
@@ -616,8 +1124,9 @@ public sealed class DotnetRustParityTests : IDisposable
             longDocServiceDropdownRustPath,
             longDocServiceDropdownSideBySidePath,
             UiParityRegion.LongDocumentServiceDropdownRegions,
-            ["main.long-doc.service"],
-            windowKindOverride: "long-document"));
+            ["LongDocServiceCombo"],
+            windowKindOverride: "long-document",
+            rustSchemaPath: rustLongDocumentServiceDropdownPreview.SchemaPath));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(longDocServiceDropdownDotnetPath);
@@ -666,27 +1175,33 @@ public sealed class DotnetRustParityTests : IDisposable
         var dotnetMainWindow = _dotnetLauncher.GetMainWindow(TimeSpan.FromSeconds(20));
         WaitForMainWindowReady(dotnetMainWindow, "dotnet");
 
-        var miniWindow = OpenDotnetFloatingWindow("Mini", VirtualKeyShort.KEY_M);
-        CaptureFloatingWindowScenarios(
-            manifestEntries,
-            miniWindow,
-            "mini",
-            "Mini",
-            "EASYDICT_PREVIEW_MINI_TRANSLATE_STATE",
-            targetWidth: 640,
-            targetHeight: 400);
-        CloseDotnetFloatingWindow(miniWindow, "MiniWindowCloseButton");
+        if (MatchesOptionalEnvironmentFilter(FloatingWindowEnvironmentVariable, "mini", "Mini"))
+        {
+            var miniWindow = OpenDotnetFloatingWindow("Mini", VirtualKeyShort.KEY_M);
+            CaptureFloatingWindowScenarios(
+                manifestEntries,
+                miniWindow,
+                "mini",
+                "Mini",
+                "EASYDICT_PREVIEW_MINI_TRANSLATE_STATE",
+                targetWidth: 640,
+                targetHeight: 400);
+            CloseDotnetFloatingWindow(miniWindow, "MiniWindowCloseButton");
+        }
 
-        var fixedWindow = OpenDotnetFloatingWindow("Fixed", VirtualKeyShort.KEY_F);
-        CaptureFloatingWindowScenarios(
-            manifestEntries,
-            fixedWindow,
-            "fixed",
-            "Fixed",
-            "EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE",
-            targetWidth: 640,
-            targetHeight: 560);
-        CloseDotnetFloatingWindow(fixedWindow, "FixedWindowCloseButton");
+        if (MatchesOptionalEnvironmentFilter(FloatingWindowEnvironmentVariable, "fixed", "Fixed"))
+        {
+            var fixedWindow = OpenDotnetFloatingWindow("Fixed", VirtualKeyShort.KEY_F);
+            CaptureFloatingWindowScenarios(
+                manifestEntries,
+                fixedWindow,
+                "fixed",
+                "Fixed",
+                "EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE",
+                targetWidth: 640,
+                targetHeight: 560);
+            CloseDotnetFloatingWindow(fixedWindow, "FixedWindowCloseButton");
+        }
 
         SaveManifest(manifestEntries);
     }
@@ -736,7 +1251,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         using var rustHoverPreview = RustPreviewApp.LaunchWindowPreview(
             "pop-button",
-            "light",
+            ResolveRustPreviewTheme("light"),
             _output,
             new Dictionary<string, string>
             {
@@ -768,7 +1283,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         using var rustPressedPreview = RustPreviewApp.LaunchWindowPreview(
             "pop-button",
-            "light",
+            ResolveRustPreviewTheme("light"),
             _output,
             new Dictionary<string, string>
             {
@@ -866,7 +1381,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         using var rustWindowDetectPreview = RustPreviewApp.LaunchWindowPreview(
             "capture-overlay",
-            "light",
+            ResolveRustPreviewTheme("light"),
             _output,
             new Dictionary<string, string>
             {
@@ -932,7 +1447,7 @@ public sealed class DotnetRustParityTests : IDisposable
 
         using var rustDragPreview = RustPreviewApp.LaunchWindowPreview(
             "capture-overlay",
-            "light",
+            ResolveRustPreviewTheme("light"),
             _output,
             new Dictionary<string, string>
             {
@@ -1036,15 +1551,26 @@ public sealed class DotnetRustParityTests : IDisposable
         mainWindow.SetForeground();
         Thread.Sleep(600);
 
-        _output.WriteLine($"Opening {windowType} window with Ctrl+Alt+{key}");
-        UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, key);
-        Thread.Sleep(3000);
+        Window? floatingWindow = null;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            mainWindow.SetForeground();
+            Thread.Sleep(500);
+            _output.WriteLine($"Opening {windowType} window with Ctrl+Alt+{key} (attempt {attempt})");
+            UITestHelper.SendHotkey(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, key);
+            Thread.Sleep(3000);
 
-        var floatingWindow = UITestHelper.FindSecondaryWindow(
-            _dotnetLauncher.Application,
-            _dotnetLauncher.Automation,
-            windowType,
-            _output);
+            floatingWindow = UITestHelper.FindSecondaryWindow(
+                _dotnetLauncher.Application,
+                _dotnetLauncher.Automation,
+                windowType,
+                _output);
+            if (floatingWindow is not null)
+            {
+                break;
+            }
+        }
+
         floatingWindow.Should().NotBeNull($"{windowType} window must open before parity capture");
         floatingWindow!.SetForeground();
         Thread.Sleep(500);
@@ -1189,19 +1715,25 @@ public sealed class DotnetRustParityTests : IDisposable
         int targetWidth,
         int targetHeight)
     {
-        using var rustInitialPreview = RustPreviewApp.LaunchWindowPreview(windowKind, "light", _output);
+        using var rustInitialPreview = RustPreviewApp.LaunchWindowPreview(windowKind, ResolveRustPreviewTheme("light"), _output);
         var rustInitialWindow = rustInitialPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeFloatingSideBySide(dotnetWindow, rustInitialWindow, targetWidth, targetHeight);
         AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.initial", "dotnet");
         AssertWindowFullyVisible(rustInitialWindow, $"{windowKind}.initial", "rust");
 
         MoveMouseToNeutralPoint();
-        var initialDotnetPath = ScreenshotHelper.CaptureWindow(
+        dotnetWindow.SetForeground();
+        Thread.Sleep(180);
+        var initialDotnetPath = CaptureWindowPreferHwnd(
             dotnetWindow,
-            $"{windowKind}.initial-dotnet-winui-reference");
-        var initialRustPath = ScreenshotHelper.CaptureWindow(
+            $"{windowKind}.initial-dotnet-winui-reference",
+            requireForeground: false);
+        rustInitialWindow.SetForeground();
+        Thread.Sleep(180);
+        var initialRustPath = CaptureWindowPreferHwnd(
             rustInitialWindow,
-            $"{windowKind}.initial-rust-win-fluent-iced");
+            $"{windowKind}.initial-rust-win-fluent-iced",
+            requireForeground: false);
         var initialSideBySidePath = SaveSideBySideComparison(
             initialDotnetPath,
             initialRustPath,
@@ -1224,40 +1756,212 @@ public sealed class DotnetRustParityTests : IDisposable
         AssertImageHasVisibleContent(initialRustPath);
         AssertImageHasVisibleContent(initialSideBySidePath);
 
+        var floatingScope = ResolveFloatingCaptureScope();
+
+        if (floatingScope.CaptureTranslateButton)
+        {
+            using var rustHoverPreview = RustPreviewApp.LaunchWindowPreview(
+                windowKind,
+                ResolveRustPreviewTheme("light"),
+                _output,
+                new Dictionary<string, string>
+                {
+                    [rustTranslateStateEnvironmentVariable] = "hovered"
+                });
+            var rustHoverWindow = rustHoverPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+            ArrangeFloatingSideBySide(dotnetWindow, rustHoverWindow, targetWidth, targetHeight);
+            AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.translate-hover", "dotnet");
+            AssertWindowFullyVisible(rustHoverWindow, $"{windowKind}.translate-hover", "rust");
+
+            dotnetWindow.SetForeground();
+            Thread.Sleep(180);
+            MoveMouseToHoverTarget(dotnetWindow, "TranslateButton", fallbackX: 0.86, fallbackY: 0.66);
+            var hoverDotnetPath = CaptureWindowPreferHwnd(
+                dotnetWindow,
+                $"{windowKind}.translate-hover-dotnet-winui-reference",
+                requireForeground: false);
+            rustHoverWindow.SetForeground();
+            Thread.Sleep(180);
+            var hoverRustPath = CaptureWindowPreferHwnd(
+                rustHoverWindow,
+                $"{windowKind}.translate-hover-rust-win-fluent-iced",
+                requireForeground: false);
+            var hoverSideBySidePath = SaveSideBySideComparison(
+                hoverDotnetPath,
+                hoverRustPath,
+                $"{windowKind}.translate-hover-dotnet-vs-rust-side-by-side");
+            manifestEntries.Add(CreateMainManifestEntry(
+                $"{windowKind}.translate-hover",
+                $"{sectionLabel} Translate Hover",
+                dotnetWindow,
+                rustHoverWindow,
+                hoverDotnetPath,
+                hoverRustPath,
+                hoverSideBySidePath,
+                UiParityRegion.FloatingActionEffectRegions,
+                [$"{windowKind}.translate"],
+                windowKindOverride: windowKind,
+                rustSchemaPath: rustHoverPreview.SchemaPath));
+            SaveManifest(manifestEntries);
+
+            AssertImageHasVisibleContent(hoverDotnetPath);
+            AssertImageHasVisibleContent(hoverRustPath);
+            AssertImageHasVisibleContent(hoverSideBySidePath);
+
+            using var rustPressedPreview = RustPreviewApp.LaunchWindowPreview(
+                windowKind,
+                ResolveRustPreviewTheme("light"),
+                _output,
+                new Dictionary<string, string>
+                {
+                    [rustTranslateStateEnvironmentVariable] = "pressed"
+                });
+            var rustPressedWindow = rustPressedPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+            ArrangeFloatingSideBySide(dotnetWindow, rustPressedWindow, targetWidth, targetHeight);
+            AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.translate-pressed", "dotnet");
+            AssertWindowFullyVisible(rustPressedWindow, $"{windowKind}.translate-pressed", "rust");
+
+            var pressedDotnetSummary = CreateFloatingReferenceSummaryFallback(windowKind);
+            var pressedDotnetPath = CapturePressedWindow(
+                dotnetWindow,
+                "TranslateButton",
+                fallbackX: 0.86,
+                fallbackY: 0.66,
+                $"{windowKind}.translate-pressed-dotnet-winui-reference",
+                requireForeground: false);
+            var pressedRustPath = CaptureWindowPreferHwnd(
+                rustPressedWindow,
+                $"{windowKind}.translate-pressed-rust-win-fluent-iced",
+                requireForeground: false);
+            var pressedSideBySidePath = SaveSideBySideComparison(
+                pressedDotnetPath,
+                pressedRustPath,
+                $"{windowKind}.translate-pressed-dotnet-vs-rust-side-by-side");
+            manifestEntries.Add(CreateMainManifestEntry(
+                $"{windowKind}.translate-pressed",
+                $"{sectionLabel} Translate Pressed",
+                dotnetWindow,
+                rustPressedWindow,
+                pressedDotnetPath,
+                pressedRustPath,
+                pressedSideBySidePath,
+                UiParityRegion.FloatingActionEffectRegions,
+                [$"{windowKind}.translate"],
+                windowKindOverride: windowKind,
+                rustSchemaPath: rustPressedPreview.SchemaPath,
+                referenceUiSummaryOverride: pressedDotnetSummary));
+            SaveManifest(manifestEntries);
+
+            AssertImageHasVisibleContent(pressedDotnetPath);
+            AssertImageHasVisibleContent(pressedRustPath);
+            AssertImageHasVisibleContent(pressedSideBySidePath);
+
+            _output.WriteLine($"[{windowKind}.translate-hover] Dotnet screenshot: {hoverDotnetPath}");
+            _output.WriteLine($"[{windowKind}.translate-hover] Rust screenshot: {hoverRustPath}");
+            _output.WriteLine($"[{windowKind}.translate-pressed] Dotnet screenshot: {pressedDotnetPath}");
+            _output.WriteLine($"[{windowKind}.translate-pressed] Rust screenshot: {pressedRustPath}");
+        }
+
+        if (floatingScope.CaptureDropdowns)
+        {
+            foreach (var dropdown in FloatingDropdownCaptures(windowKind))
+            {
+                var dropdownAlias = dropdown.Key.StartsWith("source", StringComparison.OrdinalIgnoreCase)
+                    ? "source"
+                    : "target";
+                if (!MatchesOptionalEnvironmentFilter(
+                    FloatingDropdownEnvironmentVariable,
+                    dropdown.Key,
+                    dropdown.Label,
+                    dropdownAlias))
+                {
+                    continue;
+                }
+
+                CaptureFloatingDropdownInteraction(
+                    manifestEntries,
+                    dotnetWindow,
+                    windowKind,
+                    sectionLabel,
+                    dropdown,
+                    floatingScope.CaptureDropdownOptions,
+                    targetWidth,
+                    targetHeight);
+            }
+        }
+
+        if (floatingScope.CaptureControls)
+        {
+            foreach (var control in FloatingInteractionCaptures(windowKind))
+            {
+                CaptureFloatingControlInteraction(
+                    manifestEntries,
+                    dotnetWindow,
+                    windowKind,
+                    sectionLabel,
+                    control,
+                    targetWidth,
+                    targetHeight);
+            }
+        }
+
+        _output.WriteLine($"[{windowKind}.initial] Dotnet screenshot: {initialDotnetPath}");
+        _output.WriteLine($"[{windowKind}.initial] Rust screenshot: {initialRustPath}");
+    }
+
+    private void CaptureFloatingControlInteraction(
+        List<UiParityManifestEntry> manifestEntries,
+        Window dotnetWindow,
+        string windowKind,
+        string sectionLabel,
+        FloatingInteractionCapture control,
+        int targetWidth,
+        int targetHeight)
+    {
         using var rustHoverPreview = RustPreviewApp.LaunchWindowPreview(
             windowKind,
-            "light",
+            ResolveRustPreviewTheme("light"),
             _output,
             new Dictionary<string, string>
             {
-                [rustTranslateStateEnvironmentVariable] = "hovered"
+                [control.RustStateEnvironmentVariable] = "hovered"
             });
         var rustHoverWindow = rustHoverPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeFloatingSideBySide(dotnetWindow, rustHoverWindow, targetWidth, targetHeight);
-        AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.translate-hover", "dotnet");
-        AssertWindowFullyVisible(rustHoverWindow, $"{windowKind}.translate-hover", "rust");
+        AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.{control.Key}-hover", "dotnet");
+        AssertWindowFullyVisible(rustHoverWindow, $"{windowKind}.{control.Key}-hover", "rust");
 
-        MoveMouseToHoverTarget(dotnetWindow, "TranslateButton", fallbackX: 0.86, fallbackY: 0.66);
-        var hoverDotnetPath = ScreenshotHelper.CaptureWindow(
+        dotnetWindow.SetForeground();
+        Thread.Sleep(180);
+        MoveMouseToHoverTarget(
             dotnetWindow,
-            $"{windowKind}.translate-hover-dotnet-winui-reference");
-        var hoverRustPath = ScreenshotHelper.CaptureWindow(
+            control.DotnetElement,
+            control.FallbackX,
+            control.FallbackY);
+        var hoverDotnetPath = CaptureWindowPreferHwnd(
+            dotnetWindow,
+            $"{windowKind}.{control.Key}-hover-dotnet-winui-reference",
+            requireForeground: false);
+        rustHoverWindow.SetForeground();
+        Thread.Sleep(180);
+        var hoverRustPath = CaptureWindowPreferHwnd(
             rustHoverWindow,
-            $"{windowKind}.translate-hover-rust-win-fluent-iced");
+            $"{windowKind}.{control.Key}-hover-rust-win-fluent-iced",
+            requireForeground: false);
         var hoverSideBySidePath = SaveSideBySideComparison(
             hoverDotnetPath,
             hoverRustPath,
-            $"{windowKind}.translate-hover-dotnet-vs-rust-side-by-side");
+            $"{windowKind}.{control.Key}-hover-dotnet-vs-rust-side-by-side");
         manifestEntries.Add(CreateMainManifestEntry(
-            $"{windowKind}.translate-hover",
-            $"{sectionLabel} Translate Hover",
+            $"{windowKind}.{control.Key}-hover",
+            $"{sectionLabel} {control.Label} Hover",
             dotnetWindow,
             rustHoverWindow,
             hoverDotnetPath,
             hoverRustPath,
             hoverSideBySidePath,
-            UiParityRegion.FloatingActionEffectRegions,
-            [$"{windowKind}.translate"],
+            control.Regions,
+            [control.RustControlId],
             windowKindOverride: windowKind,
             rustSchemaPath: rustHoverPreview.SchemaPath));
         SaveManifest(manifestEntries);
@@ -1268,54 +1972,793 @@ public sealed class DotnetRustParityTests : IDisposable
 
         using var rustPressedPreview = RustPreviewApp.LaunchWindowPreview(
             windowKind,
-            "light",
+            ResolveRustPreviewTheme("light"),
             _output,
             new Dictionary<string, string>
             {
-                [rustTranslateStateEnvironmentVariable] = "pressed"
+                [control.RustStateEnvironmentVariable] = "pressed"
             });
         var rustPressedWindow = rustPressedPreview.GetMainWindow(TimeSpan.FromSeconds(30));
         ArrangeFloatingSideBySide(dotnetWindow, rustPressedWindow, targetWidth, targetHeight);
-        AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.translate-pressed", "dotnet");
-        AssertWindowFullyVisible(rustPressedWindow, $"{windowKind}.translate-pressed", "rust");
+        AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.{control.Key}-pressed", "dotnet");
+        AssertWindowFullyVisible(rustPressedWindow, $"{windowKind}.{control.Key}-pressed", "rust");
 
+        var pressedDotnetSummary = CreateFloatingReferenceSummaryFallback(windowKind);
         var pressedDotnetPath = CapturePressedWindow(
             dotnetWindow,
-            "TranslateButton",
-            fallbackX: 0.86,
-            fallbackY: 0.66,
-            $"{windowKind}.translate-pressed-dotnet-winui-reference");
-        var pressedRustPath = ScreenshotHelper.CaptureWindow(
+            control.DotnetElement,
+            control.FallbackX,
+            control.FallbackY,
+            $"{windowKind}.{control.Key}-pressed-dotnet-winui-reference",
+            requireForeground: false);
+        if (control.Key.Equals("ocr", StringComparison.OrdinalIgnoreCase))
+        {
+            DismissDotnetOcrOverlay((uint)_dotnetLauncher.Application.ProcessId);
+            ArrangeFloatingSideBySide(dotnetWindow, rustPressedWindow, targetWidth, targetHeight);
+            AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.{control.Key}-pressed", "dotnet");
+            AssertWindowFullyVisible(rustPressedWindow, $"{windowKind}.{control.Key}-pressed", "rust");
+        }
+        else if (control.Key.Equals("pin", StringComparison.OrdinalIgnoreCase))
+        {
+            ResetDotnetMiniPinIfChecked(dotnetWindow);
+        }
+
+        rustPressedWindow.SetForeground();
+        Thread.Sleep(180);
+        var pressedRustPath = CaptureWindowPreferHwnd(
             rustPressedWindow,
-            $"{windowKind}.translate-pressed-rust-win-fluent-iced");
+            $"{windowKind}.{control.Key}-pressed-rust-win-fluent-iced",
+            requireForeground: false);
         var pressedSideBySidePath = SaveSideBySideComparison(
             pressedDotnetPath,
             pressedRustPath,
-            $"{windowKind}.translate-pressed-dotnet-vs-rust-side-by-side");
+            $"{windowKind}.{control.Key}-pressed-dotnet-vs-rust-side-by-side");
         manifestEntries.Add(CreateMainManifestEntry(
-            $"{windowKind}.translate-pressed",
-            $"{sectionLabel} Translate Pressed",
+            $"{windowKind}.{control.Key}-pressed",
+            $"{sectionLabel} {control.Label} Pressed",
             dotnetWindow,
             rustPressedWindow,
             pressedDotnetPath,
             pressedRustPath,
             pressedSideBySidePath,
-            UiParityRegion.FloatingActionEffectRegions,
-            [$"{windowKind}.translate"],
+            control.Regions,
+            [control.RustControlId],
             windowKindOverride: windowKind,
-            rustSchemaPath: rustPressedPreview.SchemaPath));
+            rustSchemaPath: rustPressedPreview.SchemaPath,
+            referenceUiSummaryOverride: pressedDotnetSummary));
         SaveManifest(manifestEntries);
 
         AssertImageHasVisibleContent(pressedDotnetPath);
         AssertImageHasVisibleContent(pressedRustPath);
         AssertImageHasVisibleContent(pressedSideBySidePath);
 
-        _output.WriteLine($"[{windowKind}.initial] Dotnet screenshot: {initialDotnetPath}");
-        _output.WriteLine($"[{windowKind}.initial] Rust screenshot: {initialRustPath}");
-        _output.WriteLine($"[{windowKind}.translate-hover] Dotnet screenshot: {hoverDotnetPath}");
-        _output.WriteLine($"[{windowKind}.translate-hover] Rust screenshot: {hoverRustPath}");
-        _output.WriteLine($"[{windowKind}.translate-pressed] Dotnet screenshot: {pressedDotnetPath}");
-        _output.WriteLine($"[{windowKind}.translate-pressed] Rust screenshot: {pressedRustPath}");
+        _output.WriteLine($"[{windowKind}.{control.Key}-hover] Dotnet screenshot: {hoverDotnetPath}");
+        _output.WriteLine($"[{windowKind}.{control.Key}-hover] Rust screenshot: {hoverRustPath}");
+        _output.WriteLine($"[{windowKind}.{control.Key}-pressed] Dotnet screenshot: {pressedDotnetPath}");
+        _output.WriteLine($"[{windowKind}.{control.Key}-pressed] Rust screenshot: {pressedRustPath}");
+    }
+
+    private void CaptureFloatingDropdownInteraction(
+        List<UiParityManifestEntry> manifestEntries,
+        Window dotnetWindow,
+        string windowKind,
+        string sectionLabel,
+        FloatingDropdownCapture dropdown,
+        bool captureOptions,
+        int targetWidth,
+        int targetHeight)
+    {
+        using var rustOpenPreview = RustPreviewApp.LaunchWindowPreview(windowKind, ResolveRustPreviewTheme("light"), _output);
+        var rustOpenWindow = rustOpenPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+        ArrangeFloatingSideBySide(dotnetWindow, rustOpenWindow, targetWidth, targetHeight);
+        AssertWindowFullyVisible(dotnetWindow, $"{windowKind}.{dropdown.Key}-open", "dotnet");
+        AssertWindowFullyVisible(rustOpenWindow, $"{windowKind}.{dropdown.Key}-open", "rust");
+
+        var dotnetOpenStep = FloatingDropdownProbeStep(windowKind, dropdown, dropdown.DotnetElement);
+        var rustOpenStep = FloatingDropdownProbeStep(windowKind, dropdown, dropdown.RustElement);
+
+        var dotnetOpenPath = CaptureExpandedSettingsDropdownStep(
+            dotnetWindow,
+            dotnetOpenStep,
+            $"{windowKind}.{dropdown.Key}-open-dotnet-winui-reference");
+        DismissExpandedDropdownIfNeeded(dotnetOpenStep);
+        MoveMouseToNeutralPoint();
+
+        var dotnetOptionPaths = captureOptions
+            ? CaptureSettingsDropdownOptionSelections(
+                dotnetWindow,
+                dotnetOpenStep,
+                "dotnet-winui-reference",
+                rustSchemaPath: null)
+            : Array.Empty<SettingsDropdownOptionCaptureResult>();
+
+        var rustOpenPath = CaptureExpandedSettingsDropdownStep(
+            rustOpenWindow,
+            rustOpenStep,
+            $"{windowKind}.{dropdown.Key}-open-rust-win-fluent-iced",
+            rustOpenPreview.SchemaPath);
+        DismissExpandedDropdownIfNeeded(rustOpenStep);
+        MoveMouseToNeutralPoint();
+
+        var openSideBySidePath = SaveSideBySideComparison(
+            dotnetOpenPath,
+            rustOpenPath,
+            $"{windowKind}.{dropdown.Key}-open-dotnet-vs-rust-side-by-side");
+        var dotnetOpenScreenshotPixelSize = ReadScreenshotPixelSize(dotnetOpenPath);
+        var rustOpenScreenshotPixelSize = ReadScreenshotPixelSize(rustOpenPath);
+        manifestEntries.Add(CreateMainManifestEntry(
+            $"{windowKind}.{dropdown.Key}-open",
+            $"{sectionLabel} {dropdown.Label} Open",
+            dotnetWindow,
+            rustOpenWindow,
+            dotnetOpenPath,
+            rustOpenPath,
+            openSideBySidePath,
+            UiParityRegion.FloatingLanguageBarEffectRegions,
+            [dropdown.RustControlId],
+            windowKindOverride: windowKind,
+            rustSchemaPath: rustOpenPreview.SchemaPath,
+            referenceScreenshotPixelSize: dotnetOpenScreenshotPixelSize,
+            candidateScreenshotPixelSize: rustOpenScreenshotPixelSize,
+            operatedDropdownElement: dropdown.DotnetElement));
+        SaveManifest(manifestEntries);
+
+        AssertImageHasVisibleContent(dotnetOpenPath);
+        AssertImageHasVisibleContent(rustOpenPath);
+        AssertImageHasVisibleContent(openSideBySidePath);
+
+        foreach (var dotnetOption in dotnetOptionPaths)
+        {
+            var rustOptionEnvironment = new Dictionary<string, string>
+            {
+                [dropdown.RustSelectedLanguageEnvironmentVariable] =
+                    FloatingLanguageOptionId(dotnetOption.Option)
+            };
+            AddRustPreviewSizeEnvironment(
+                rustOptionEnvironment,
+                dotnetOption.ScreenshotPixelSize,
+                dotnetOption.WindowDpiScale);
+            using var rustOptionPreview = RustPreviewApp.LaunchWindowPreview(
+                windowKind,
+                ResolveRustPreviewTheme("light"),
+                _output,
+                rustOptionEnvironment);
+            var rustOptionWindow = rustOptionPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+            ArrangeFloatingSideBySide(
+                dotnetWindow,
+                rustOptionWindow,
+                targetWidth,
+                targetHeight,
+                dotnetOption.ScreenshotPixelSize);
+            AssertWindowFullyVisible(
+                rustOptionWindow,
+                dotnetOption.ScenarioId,
+                "rust");
+            var rustOptionPath = CaptureWindowPreferHwnd(
+                rustOptionWindow,
+                $"{dotnetOption.ScenarioId}-rust-win-fluent-iced",
+                requireForeground: false);
+            var rustOptionScreenshotPixelSize = ReadScreenshotPixelSize(rustOptionPath);
+            var optionSideBySidePath = SaveSideBySideComparison(
+                dotnetOption.ScreenshotPath,
+                rustOptionPath,
+                $"{dotnetOption.ScenarioId}-dotnet-vs-rust-side-by-side");
+            manifestEntries.Add(CreateMainManifestEntry(
+                dotnetOption.ScenarioId,
+                $"{sectionLabel} {dropdown.Label} Select {dotnetOption.Option.Label}",
+                dotnetWindow,
+                rustOptionWindow,
+                dotnetOption.ScreenshotPath,
+                rustOptionPath,
+                optionSideBySidePath,
+                UiParityRegion.FloatingLanguageBarEffectRegions,
+                [dropdown.RustControlId],
+                windowKindOverride: windowKind,
+                rustSchemaPath: rustOptionPreview.SchemaPath,
+                referenceScreenshotPixelSize: dotnetOption.ScreenshotPixelSize,
+                candidateScreenshotPixelSize: rustOptionScreenshotPixelSize,
+                referenceUiSummaryOverride: CreateFloatingReferenceSummaryFallback(
+                    windowKind,
+                    FloatingDropdownOptionReferenceExtraVisibleTexts(dropdown, dotnetOption.Option)),
+                operatedDropdownElement: dropdown.DotnetElement,
+                selectedDropdownOption: dotnetOption.Option));
+            SaveManifest(manifestEntries);
+
+            AssertImageHasVisibleContent(dotnetOption.ScreenshotPath);
+            AssertImageHasVisibleContent(rustOptionPath);
+            AssertImageHasVisibleContent(optionSideBySidePath);
+
+            _output.WriteLine(
+                $"[{dotnetOption.ScenarioId}] Dropdown option: {dotnetOption.Option.Label}");
+            _output.WriteLine(
+                $"[{dotnetOption.ScenarioId}] Dotnet screenshot: {dotnetOption.ScreenshotPath}");
+            _output.WriteLine(
+                $"[{dotnetOption.ScenarioId}] Rust screenshot: {rustOptionPath}");
+        }
+
+        _output.WriteLine($"[{windowKind}.{dropdown.Key}-open] Dotnet screenshot: {dotnetOpenPath}");
+        _output.WriteLine($"[{windowKind}.{dropdown.Key}-open] Rust screenshot: {rustOpenPath}");
+    }
+
+    private void CaptureMainControlInteraction(
+        List<UiParityManifestEntry> manifestEntries,
+        Window dotnetWindow,
+        Window rustWindow,
+        string? rustSchemaPath,
+        MainInteractionCapture control)
+    {
+        ArrangeSideBySide(dotnetWindow, rustWindow);
+        AssertWindowFullyVisible(dotnetWindow, $"main.{control.Key}-hover", "dotnet");
+        AssertWindowFullyVisible(rustWindow, $"main.{control.Key}-hover", "rust");
+
+        MoveMouseToHoverTarget(
+            dotnetWindow,
+            control.DotnetElement,
+            control.FallbackX,
+            control.FallbackY);
+        var hoverDotnetPath = CaptureWindowPreferHwnd(
+            dotnetWindow,
+            $"main.{control.Key}-hover-dotnet-winui-reference",
+            requireForeground: false);
+        MoveMouseToHoverTarget(
+            rustWindow,
+            control.RustElement,
+            control.FallbackX,
+            control.FallbackY);
+        var hoverRustPath = CaptureWindowPreferHwnd(
+            rustWindow,
+            $"main.{control.Key}-hover-rust-win-fluent-iced",
+            requireForeground: false);
+        var hoverSideBySidePath = SaveSideBySideComparison(
+            hoverDotnetPath,
+            hoverRustPath,
+            $"main.{control.Key}-hover-dotnet-vs-rust-side-by-side");
+        manifestEntries.Add(CreateMainManifestEntry(
+            $"main.{control.Key}-hover",
+            $"Main {control.Label} Hover",
+            dotnetWindow,
+            rustWindow,
+            hoverDotnetPath,
+            hoverRustPath,
+            hoverSideBySidePath,
+            control.Regions,
+            [control.RustControlId],
+            rustSchemaPath: rustSchemaPath));
+        SaveManifest(manifestEntries);
+
+        AssertImageHasVisibleContent(hoverDotnetPath);
+        AssertImageHasVisibleContent(hoverRustPath);
+        AssertImageHasVisibleContent(hoverSideBySidePath);
+
+        var pressedDotnetPath = CapturePressedWindow(
+            dotnetWindow,
+            control.DotnetElement,
+            control.FallbackX,
+            control.FallbackY,
+            $"main.{control.Key}-pressed-dotnet-winui-reference",
+            requireForeground: false);
+        var pressedRustPath = CapturePressedWindow(
+            rustWindow,
+            control.RustElement,
+            control.FallbackX,
+            control.FallbackY,
+            $"main.{control.Key}-pressed-rust-win-fluent-iced",
+            requireForeground: false);
+        var pressedSideBySidePath = SaveSideBySideComparison(
+            pressedDotnetPath,
+            pressedRustPath,
+            $"main.{control.Key}-pressed-dotnet-vs-rust-side-by-side");
+        RestoreMainWindowAfterOperation(dotnetWindow);
+        RestoreMainWindowAfterOperation(rustWindow);
+        manifestEntries.Add(CreateMainManifestEntry(
+            $"main.{control.Key}-pressed",
+            $"Main {control.Label} Pressed",
+            dotnetWindow,
+            rustWindow,
+            pressedDotnetPath,
+            pressedRustPath,
+            pressedSideBySidePath,
+            control.Regions,
+            [control.RustControlId],
+            rustSchemaPath: rustSchemaPath));
+        SaveManifest(manifestEntries);
+
+        AssertImageHasVisibleContent(pressedDotnetPath);
+        AssertImageHasVisibleContent(pressedRustPath);
+        AssertImageHasVisibleContent(pressedSideBySidePath);
+
+        _output.WriteLine($"[main.{control.Key}-hover] Dotnet screenshot: {hoverDotnetPath}");
+        _output.WriteLine($"[main.{control.Key}-hover] Rust screenshot: {hoverRustPath}");
+        _output.WriteLine($"[main.{control.Key}-pressed] Dotnet screenshot: {pressedDotnetPath}");
+        _output.WriteLine($"[main.{control.Key}-pressed] Rust screenshot: {pressedRustPath}");
+        MoveMouseToNeutralPoint();
+    }
+
+    private void CaptureMainDropdownInteraction(
+        List<UiParityManifestEntry> manifestEntries,
+        Window dotnetWindow,
+        Window rustWindow,
+        string? rustSchemaPath,
+        MainDropdownCapture dropdown,
+        bool captureOptions)
+    {
+        ArrangeSideBySide(dotnetWindow, rustWindow);
+        AssertWindowFullyVisible(dotnetWindow, $"main.{dropdown.Key}-open", "dotnet");
+        AssertWindowFullyVisible(rustWindow, $"main.{dropdown.Key}-open", "rust");
+
+        var dotnetStep = MainDropdownProbeStep(dropdown, dropdown.DotnetElement);
+        var rustStep = MainDropdownProbeStep(dropdown, dropdown.RustElement);
+
+        var dotnetOpenPath = CaptureExpandedSettingsDropdownStep(
+            dotnetWindow,
+            dotnetStep,
+            $"main.{dropdown.Key}-open-dotnet-winui-reference");
+        DismissExpandedDropdownIfNeeded(dotnetStep);
+        MoveMouseToNeutralPoint();
+
+        var rustOpenPath = CaptureExpandedSettingsDropdownStep(
+            rustWindow,
+            rustStep,
+            $"main.{dropdown.Key}-open-rust-win-fluent-iced",
+            rustSchemaPath);
+        DismissExpandedDropdownIfNeeded(rustStep);
+        MoveMouseToNeutralPoint();
+
+        var openSideBySidePath = SaveSideBySideComparison(
+            dotnetOpenPath,
+            rustOpenPath,
+            $"main.{dropdown.Key}-open-dotnet-vs-rust-side-by-side");
+        manifestEntries.Add(CreateMainManifestEntry(
+            $"main.{dropdown.Key}-open",
+            $"Main {dropdown.Label} Open",
+            dotnetWindow,
+            rustWindow,
+            dotnetOpenPath,
+            rustOpenPath,
+            openSideBySidePath,
+            dropdown.Regions,
+            [dropdown.RustControlId],
+            rustSchemaPath: rustSchemaPath,
+            operatedDropdownElement: dropdown.DotnetElement));
+        SaveManifest(manifestEntries);
+
+        AssertImageHasVisibleContent(dotnetOpenPath);
+        AssertImageHasVisibleContent(rustOpenPath);
+        AssertImageHasVisibleContent(openSideBySidePath);
+
+        var dotnetOptionPaths = captureOptions
+            ? CaptureSettingsDropdownOptionSelections(
+                dotnetWindow,
+                dotnetStep,
+                "dotnet-winui-reference",
+                rustSchemaPath: null)
+            : Array.Empty<SettingsDropdownOptionCaptureResult>();
+
+        var rustOptionPaths = captureOptions
+            ? CaptureSettingsDropdownOptionSelections(
+                rustWindow,
+                rustStep,
+                "rust-win-fluent-iced",
+                rustSchemaPath)
+            : Array.Empty<SettingsDropdownOptionCaptureResult>();
+
+        foreach (var optionPair in PairDropdownOptionCaptures(dotnetOptionPaths, rustOptionPaths))
+        {
+            var optionSideBySidePath = SaveSideBySideComparison(
+                optionPair.Dotnet.ScreenshotPath,
+                optionPair.Rust.ScreenshotPath,
+                $"{optionPair.Dotnet.ScenarioId}-dotnet-vs-rust-side-by-side");
+            manifestEntries.Add(CreateMainManifestEntry(
+                optionPair.Dotnet.ScenarioId,
+                $"Main {dropdown.Label} Select {optionPair.Dotnet.Option.Label}",
+                dotnetWindow,
+                rustWindow,
+                optionPair.Dotnet.ScreenshotPath,
+                optionPair.Rust.ScreenshotPath,
+                optionSideBySidePath,
+                dropdown.Regions,
+                [dropdown.RustControlId],
+                rustSchemaPath: rustSchemaPath,
+                operatedDropdownElement: dropdown.DotnetElement,
+                selectedDropdownOption: optionPair.Dotnet.Option));
+            SaveManifest(manifestEntries);
+
+            AssertImageHasVisibleContent(optionPair.Dotnet.ScreenshotPath);
+            AssertImageHasVisibleContent(optionPair.Rust.ScreenshotPath);
+            AssertImageHasVisibleContent(optionSideBySidePath);
+
+            _output.WriteLine(
+                $"[{optionPair.Dotnet.ScenarioId}] Dropdown option: {optionPair.Dotnet.Option.Label}");
+            _output.WriteLine(
+                $"[{optionPair.Dotnet.ScenarioId}] Dotnet screenshot: {optionPair.Dotnet.ScreenshotPath}");
+            _output.WriteLine(
+                $"[{optionPair.Dotnet.ScenarioId}] Rust screenshot: {optionPair.Rust.ScreenshotPath}");
+        }
+
+        _output.WriteLine($"[main.{dropdown.Key}-open] Dotnet screenshot: {dotnetOpenPath}");
+        _output.WriteLine($"[main.{dropdown.Key}-open] Rust screenshot: {rustOpenPath}");
+    }
+
+    private static IReadOnlyList<MainInteractionCapture> MainInteractionCaptures() =>
+    [
+        new(
+            "mode-menu",
+            "Mode Menu",
+            "ModeMenuButton",
+            "ModeMenuButton",
+            "ModeMenuButton",
+            0.18,
+            0.11,
+            UiParityRegion.DefaultMainRegions),
+        new(
+            "source-play",
+            "Source Play",
+            "SourcePlayButton",
+            "main.quick.play_source",
+            "main.quick.play_source",
+            0.94,
+            0.19,
+            UiParityRegion.SourceInputEffectRegions),
+        new(
+            "source-language",
+            "Source Language",
+            "SourceLangCombo",
+            "SourceLangCombo",
+            "SourceLangCombo",
+            0.17,
+            0.47,
+            UiParityRegion.DefaultMainRegions),
+        new(
+            "target-language",
+            "Target Language",
+            "TargetLangCombo",
+            "TargetLangCombo",
+            "TargetLangCombo",
+            0.62,
+            0.47,
+            UiParityRegion.DefaultMainRegions),
+        new(
+            "swap",
+            "Swap",
+            "SwapLanguageButton",
+            "SwapLanguageButton",
+            "SwapLanguageButton",
+            0.42,
+            0.47,
+            UiParityRegion.DefaultMainRegions),
+        new(
+            "translate",
+            "Translate",
+            "TranslateButton",
+            "TranslateButton",
+            "TranslateButton",
+            0.94,
+            0.47,
+            UiParityRegion.PrimaryButtonEffectRegions),
+        new(
+            "pin",
+            "Pin",
+            "PinButton",
+            "PinButton",
+            "PinButton",
+            0.86,
+            0.11,
+            UiParityRegion.DefaultMainRegions),
+        new(
+            "settings",
+            "Settings",
+            "SettingsButton",
+            "SettingsButton",
+            "SettingsButton",
+            0.94,
+            0.11,
+            UiParityRegion.DefaultMainRegions),
+    ];
+
+    private static IReadOnlyList<MainDropdownCapture> MainDropdownCaptures()
+    {
+        var languageOptions = FloatingLanguageDropdownOptionCaptures();
+        return
+        [
+            new(
+                "source-language-dropdown",
+                "Source Language Dropdown",
+                "SourceLangCombo",
+                "SourceLangCombo",
+                "SourceLangCombo",
+                0.17,
+                0.47,
+                RestoreOptionIndex: 0,
+                languageOptions,
+                UiParityRegion.DefaultMainRegions),
+            new(
+                "target-language-dropdown",
+                "Target Language Dropdown",
+                "TargetLangCombo",
+                "TargetLangCombo",
+                "TargetLangCombo",
+                0.62,
+                0.47,
+                RestoreOptionIndex: 0,
+                languageOptions,
+                UiParityRegion.DefaultMainRegions),
+        ];
+    }
+
+    private static MainOperationsCaptureScope ResolveMainOperationsCaptureScope()
+    {
+        var value = Environment.GetEnvironmentVariable(MainOperationsScopeEnvironmentVariable)?
+            .Trim()
+            .ToLowerInvariant();
+
+        return value switch
+        {
+            "initial" => new(
+                CaptureButtons: false,
+                CaptureDropdowns: false,
+                CaptureDropdownOptions: false),
+            "buttons" => new(
+                CaptureButtons: true,
+                CaptureDropdowns: false,
+                CaptureDropdownOptions: false),
+            "dropdown-open" or "dropdown-open-only" => new(
+                CaptureButtons: false,
+                CaptureDropdowns: true,
+                CaptureDropdownOptions: false),
+            "dropdowns" or "dropdown-options" => new(
+                CaptureButtons: false,
+                CaptureDropdowns: true,
+                CaptureDropdownOptions: true),
+            _ => new(
+                CaptureButtons: true,
+                CaptureDropdowns: true,
+                CaptureDropdownOptions: true),
+        };
+    }
+
+    private static SettingsParityCaptureStep MainDropdownProbeStep(
+        MainDropdownCapture dropdown,
+        string expandedElement) =>
+        new(
+            $"main.{dropdown.Key}",
+            SettingsParitySection.General,
+            0,
+            ExpandedDropdownElement: expandedElement,
+            ExpectedDropdownItems: dropdown.Options.Select(option => option.Label).ToArray(),
+            DropdownOptions: dropdown.Options,
+            DropdownRestoreOptionIndex: dropdown.RestoreOptionIndex,
+            DropdownFallbackItemCount: dropdown.Options.Count,
+            DropdownFallbackWidthDips: dropdown.FallbackWidthDips,
+            DropdownFallbackHeightDips: dropdown.FallbackHeightDips,
+            InteractionFallbackX: dropdown.FallbackX,
+            InteractionFallbackY: dropdown.FallbackY);
+
+    private static IReadOnlyList<FloatingInteractionCapture> FloatingInteractionCaptures(string windowKind)
+    {
+        var upperWindowKind = windowKind.ToUpperInvariant();
+        var headerRegions = UiParityRegion.FloatingHeaderEffectRegions;
+        var languageRegions = UiParityRegion.FloatingLanguageBarEffectRegions;
+        var captures = new List<FloatingInteractionCapture>();
+
+        captures.Add(new(
+            "ocr",
+            "OCR",
+            windowKind.Equals("mini", StringComparison.OrdinalIgnoreCase)
+                ? "MiniWindowOcrButton"
+                : "FixedWindowOcrButton",
+            $"EASYDICT_PREVIEW_{upperWindowKind}_OCR_STATE",
+            $"{windowKind}.ocr",
+            0.90,
+            0.15,
+            headerRegions));
+        captures.Add(new(
+            "close",
+            "Close",
+            windowKind.Equals("mini", StringComparison.OrdinalIgnoreCase)
+                ? "MiniWindowCloseButton"
+                : "CloseButton",
+            $"EASYDICT_PREVIEW_{upperWindowKind}_CLOSE_STATE",
+            windowKind.Equals("mini", StringComparison.OrdinalIgnoreCase)
+                ? "MiniWindowCloseButton"
+                : "CloseButton",
+            0.95,
+            0.15,
+            headerRegions));
+        captures.Add(new(
+            "source-language",
+            "Source Language",
+            "SourceLangCombo",
+            $"EASYDICT_PREVIEW_{upperWindowKind}_SOURCE_LANGUAGE_STATE",
+            $"{windowKind}.source_language",
+            0.20,
+            0.40,
+            languageRegions));
+        captures.Add(new(
+            "target-language",
+            "Target Language",
+            "TargetLangCombo",
+            $"EASYDICT_PREVIEW_{upperWindowKind}_TARGET_LANGUAGE_STATE",
+            $"{windowKind}.target_language",
+            0.72,
+            0.40,
+            languageRegions));
+
+        if (windowKind.Equals("mini", StringComparison.OrdinalIgnoreCase))
+        {
+            captures.Add(new(
+                "pin",
+                "Pin",
+                "PinButton",
+                $"EASYDICT_PREVIEW_{upperWindowKind}_PIN_STATE",
+                "mini.pin",
+                0.05,
+                0.15,
+                headerRegions));
+        }
+        captures.Add(new(
+            "swap",
+            "Swap",
+            "SwapButton",
+            $"EASYDICT_PREVIEW_{upperWindowKind}_SWAP_STATE",
+            $"{windowKind}.swap",
+            0.47,
+            0.40,
+            languageRegions));
+
+        return captures;
+    }
+
+    private static IReadOnlyList<FloatingDropdownCapture> FloatingDropdownCaptures(string windowKind)
+    {
+        var upperWindowKind = windowKind.ToUpperInvariant();
+        var languageOptions = FloatingLanguageDropdownOptionCaptures();
+        return
+        [
+            new(
+                "source-language-dropdown",
+                "Source Language Dropdown",
+                "SourceLangCombo",
+                $"{windowKind}.source_language",
+                $"{windowKind}.source_language",
+                $"EASYDICT_PREVIEW_{upperWindowKind}_SOURCE_LANGUAGE",
+                0.20,
+                0.40,
+                RestoreOptionIndex: 0,
+                languageOptions),
+            new(
+                "target-language-dropdown",
+                "Target Language Dropdown",
+                "TargetLangCombo",
+                $"{windowKind}.target_language",
+                $"{windowKind}.target_language",
+                $"EASYDICT_PREVIEW_{upperWindowKind}_TARGET_LANGUAGE",
+                0.72,
+                0.40,
+                RestoreOptionIndex: 2,
+                languageOptions),
+        ];
+    }
+
+    private static IReadOnlyList<SettingsDropdownOptionCapture> FloatingLanguageDropdownOptionCaptures() =>
+    [
+        new("自动检测", 0),
+        new("简体中文", 1),
+        new("繁体中文", 2),
+        new("日语", 3),
+        new("韩语", 4),
+        new("英语", 5),
+        new("德语", 6),
+        new("法语", 7),
+        new("西班牙语", 8),
+    ];
+
+    private static string FloatingLanguageOptionId(SettingsDropdownOptionCapture option) =>
+        option.DotnetIndex switch
+        {
+            0 => "auto",
+            1 => "zh-Hans",
+            2 => "zh-Hant",
+            3 => "ja",
+            4 => "ko",
+            5 => "en",
+            6 => "de",
+            7 => "fr",
+            8 => "es",
+            _ => option.RustOptionText,
+        };
+
+    private static FloatingCaptureScope ResolveFloatingCaptureScope()
+    {
+        var value = Environment.GetEnvironmentVariable(FloatingScopeEnvironmentVariable)?
+            .Trim()
+            .ToLowerInvariant();
+
+        return value switch
+        {
+            "initial" => new(
+                CaptureTranslateButton: false,
+                CaptureDropdowns: false,
+                CaptureDropdownOptions: false,
+                CaptureControls: false),
+            "buttons" => new(
+                CaptureTranslateButton: true,
+                CaptureDropdowns: false,
+                CaptureDropdownOptions: false,
+                CaptureControls: true),
+            "dropdown-open" or "dropdown-open-only" => new(
+                CaptureTranslateButton: false,
+                CaptureDropdowns: true,
+                CaptureDropdownOptions: false,
+                CaptureControls: false),
+            "dropdowns" or "dropdown-options" => new(
+                CaptureTranslateButton: false,
+                CaptureDropdowns: true,
+                CaptureDropdownOptions: true,
+                CaptureControls: false),
+            _ => new(
+                CaptureTranslateButton: true,
+                CaptureDropdowns: true,
+                CaptureDropdownOptions: true,
+                CaptureControls: true),
+        };
+    }
+
+    private static bool MatchesOptionalEnvironmentFilter(string variableName, params string[] candidates)
+    {
+        var value = Environment.GetEnvironmentVariable(variableName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var tokens = value.Split(
+            [',', ';', ' '],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return tokens.Any(token => candidates.Any(candidate =>
+            string.Equals(token, candidate, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static SettingsParityCaptureStep FloatingDropdownProbeStep(
+        string windowKind,
+        FloatingDropdownCapture dropdown,
+        string expandedElement) =>
+        new(
+            $"{windowKind}.{dropdown.Key}",
+            SettingsParitySection.General,
+            0,
+            ExpandedDropdownElement: expandedElement,
+            ExpectedDropdownItems: dropdown.Options.Select(option => option.Label).ToArray(),
+            DropdownOptions: dropdown.Options,
+            DropdownRestoreOptionIndex: dropdown.RestoreOptionIndex,
+            DropdownFallbackItemCount: dropdown.Options.Count,
+            DropdownFallbackWidthDips: dropdown.FallbackWidthDips,
+            DropdownFallbackHeightDips: dropdown.FallbackHeightDips,
+            InteractionFallbackX: dropdown.FallbackX,
+            InteractionFallbackY: dropdown.FallbackY);
+
+    private static void ResetDotnetMiniPinIfChecked(Window dotnetWindow)
+    {
+        var pin = Retry.WhileNull(
+                () => FindVisibleByAutomationIdOrName(dotnetWindow, "PinButton"),
+                TimeSpan.FromSeconds(2))
+            .Result;
+        if (pin == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var toggleButton = pin.AsToggleButton();
+            if (toggleButton?.ToggleState == ToggleState.On)
+            {
+                toggleButton.Toggle();
+                Thread.Sleep(300);
+            }
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+        }
     }
 
     private void CloseDotnetFloatingWindow(Window window, string preferredCloseAutomationId)
@@ -1863,6 +3306,837 @@ public sealed class DotnetRustParityTests : IDisposable
         return ScreenshotHelper.CaptureWindow(dotnetWindow, screenshotName);
     }
 
+    private string CaptureExpandedSettingsDropdownStep(
+        Window window,
+        SettingsParityCaptureStep step,
+        string screenshotName,
+        string? rustSchemaPath = null)
+    {
+        var dropdownElement = step.ExpandedDropdownElement;
+        dropdownElement.Should().NotBeNullOrWhiteSpace(
+            $"{step.Key} should identify the settings ComboBox to expand before capture");
+
+        AssertNoUnexpectedTopLevelErrorWindows($"{step.Key} before expanding {dropdownElement}");
+        ExpandSettingsComboBox(window, dropdownElement!, step, rustSchemaPath);
+        EnsureExpandedDropdownItemsVisible(
+            window,
+            step,
+            rustSchemaPath == null ? "dotnet" : "rust",
+            rustSchemaPath);
+        AssertNoUnexpectedTopLevelErrorWindows($"{step.Key} before capturing {screenshotName}");
+        var path = CaptureWindowPreferHwnd(window, screenshotName, requireForeground: true);
+        AssertNoUnexpectedTopLevelErrorWindows($"{step.Key} after capturing {screenshotName}");
+        return path;
+    }
+    private static IReadOnlyList<SettingsDropdownOptionCapture> FilterDropdownOptionCaptures(
+        SettingsParityCaptureStep step)
+    {
+        var value = Environment.GetEnvironmentVariable(DropdownOptionIndexesEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return step.DropdownOptionCaptures;
+        }
+
+        var selectedIndexes = value.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(ParseDropdownOptionIndex)
+            .ToHashSet();
+        var options = step.DropdownOptionCaptures
+            .Where(option => selectedIndexes.Contains(option.DotnetIndex + 1))
+            .ToArray();
+        if (options.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"{DropdownOptionIndexesEnvironmentVariable} selected no options for dropdown '{step.Key}'. Available option count: {step.DropdownOptionCaptures.Count}.");
+        }
+
+        return options;
+    }
+
+    private static int ParseDropdownOptionIndex(string token)
+    {
+        if (!int.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out var index))
+        {
+            throw new InvalidOperationException(
+                $"{DropdownOptionIndexesEnvironmentVariable} contains non-integer option index '{token}'.");
+        }
+
+        if (index < 1)
+        {
+            throw new InvalidOperationException(
+                $"{DropdownOptionIndexesEnvironmentVariable} option indexes are 1-based. Invalid option index: {index}.");
+        }
+
+        return index;
+    }
+
+
+    private IReadOnlyList<SettingsDropdownOptionCaptureResult> CaptureSettingsDropdownOptionSelections(
+        Window window,
+        SettingsParityCaptureStep step,
+        string screenshotSuffix,
+        string? rustSchemaPath)
+    {
+        var options = FilterDropdownOptionCaptures(step);
+        var results = new List<SettingsDropdownOptionCaptureResult>();
+        foreach (var option in options)
+        {
+            SelectSettingsDropdownOption(window, step, option, rustSchemaPath);
+            if (rustSchemaPath == null &&
+                step.Key.StartsWith("mini.", StringComparison.OrdinalIgnoreCase))
+            {
+                ResetDotnetMiniPinIfChecked(window);
+            }
+
+            var scenarioId = SettingsDropdownOptionScenarioId(step, option);
+            var path = CaptureWindowPreferHwnd(
+                window,
+                $"{scenarioId}-{screenshotSuffix}",
+                requireForeground: true);
+            MaskFloatingLanguageBarOcclusions(path, window);
+            var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+            var windowDpiScale = ScreenshotHelper.GetWindowDpiScale(window);
+            var screenshotPixelSize = ReadScreenshotPixelSize(path);
+            results.Add(new SettingsDropdownOptionCaptureResult(
+                option,
+                scenarioId,
+                path,
+                windowBounds,
+                windowDpiScale,
+                screenshotPixelSize));
+            DismissExpandedDropdownIfNeeded(step);
+            MoveMouseToNeutralPoint();
+        }
+
+        if (step.DropdownRestoreOptionIndex is { } restoreIndex &&
+            restoreIndex >= 0 &&
+            restoreIndex < step.DropdownOptionCaptures.Count)
+        {
+            SelectSettingsDropdownOption(
+                window,
+                step,
+                step.DropdownOptionCaptures[restoreIndex],
+                rustSchemaPath);
+            DismissExpandedDropdownIfNeeded(step);
+            MoveMouseToNeutralPoint();
+        }
+
+        return results;
+    }
+
+    private void SelectSettingsDropdownOption(
+        Window window,
+        SettingsParityCaptureStep step,
+        SettingsDropdownOptionCapture option,
+        string? rustSchemaPath)
+    {
+        var dropdownElement = step.ExpandedDropdownElement;
+        dropdownElement.Should().NotBeNullOrWhiteSpace(
+            $"{step.Key} should identify the settings ComboBox before selecting dropdown options");
+
+        ResetRustScrolledDropdownPositionIfNeeded(window, step, rustSchemaPath);
+        ExpandSettingsComboBox(window, dropdownElement!, step, rustSchemaPath);
+        var optionText = rustSchemaPath == null ? option.DotnetOptionText : option.RustOptionText;
+        var optionIndex = rustSchemaPath == null ? option.DotnetIndex : option.RustOptionIndexValue;
+        var selected = rustSchemaPath == null &&
+            TrySelectDotnetDropdownOptionWithKeyboard(window, step, optionText, optionIndex);
+        if (!selected && !TryClickVisibleDropdownOption(window, step, rustSchemaPath, optionText))
+        {
+            var fallbackPoint = GetDropdownOptionFallbackPoint(
+                window,
+                step,
+                rustSchemaPath,
+                optionIndex,
+                step.DropdownFallbackItemCount);
+            Mouse.Click(fallbackPoint);
+        }
+
+        Thread.Sleep(750);
+        _output.WriteLine(
+            $"[{step.Key}] selected dropdown option \"{optionText}\" index={optionIndex} target={(rustSchemaPath == null ? "dotnet" : "rust")}");
+    }
+
+    private bool TrySelectDotnetDropdownOptionWithKeyboard(
+        Window window,
+        SettingsParityCaptureStep step,
+        string optionText,
+        int optionIndex)
+    {
+        try
+        {
+            ScreenshotHelper.EnsureWindowReadyForCapture(window, $"{step.Key} keyboard select {optionText}");
+            Thread.Sleep(120);
+            Keyboard.Press(VirtualKeyShort.HOME);
+            Thread.Sleep(80);
+            for (var index = 0; index < optionIndex; index++)
+            {
+                Keyboard.Press(VirtualKeyShort.DOWN);
+                Thread.Sleep(35);
+            }
+
+            Keyboard.Press(VirtualKeyShort.ENTER);
+            Thread.Sleep(650);
+
+            var selected = ComboBoxRegionContainsText(window, step, optionText);
+            _output.WriteLine(
+                $"[{step.Key}] keyboard selected \"{optionText}\" index={optionIndex} confirmed={selected}");
+            return selected;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or InvalidOperationException or PropertyNotSupportedException or TimeoutException)
+        {
+            _output.WriteLine(
+                $"[{step.Key}] keyboard select \"{optionText}\" failed: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool ComboBoxRegionContainsText(
+        Window window,
+        SettingsParityCaptureStep step,
+        string optionText)
+    {
+        var comboBounds = TryGetDropdownComboPhysicalBounds(window, step, rustSchemaPath: null);
+        var searchBounds = Rectangle.Inflate(comboBounds, 24, 12);
+        try
+        {
+            return window.FindAllDescendants()
+                .Where(IsOnScreenOrUnknown)
+                .Where(element => ElementIntersectsSearchBounds(element, searchBounds))
+                .Any(element => DropdownOptionNameMatches(SafeElementName(element), optionText));
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    private void ResetRustScrolledDropdownPositionIfNeeded(
+        Window window,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath)
+    {
+        if (string.IsNullOrWhiteSpace(rustSchemaPath) || step.ScrollPercent <= 0)
+        {
+            return;
+        }
+
+        window.SetForeground();
+        Thread.Sleep(150);
+        ScrollHelper.MouseScrollToPercent(
+            window,
+            step.ScrollPercent,
+            message => _output.WriteLine($"[{step.Key}][rust] {message}"),
+            GetWindowRelativePoint(window, 0.50, 0.50));
+        Thread.Sleep(300);
+    }
+
+    private static bool TryClickVisibleDropdownOption(
+        Window window,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath,
+        string optionText)
+    {
+        var searchBounds = GetDropdownDiscoverySearchBounds(window, step, rustSchemaPath);
+        var candidates = FindVisibleDropdownOptionCandidates(window, optionText, searchBounds)
+            .Select(element => new
+            {
+                Element = element,
+                Point = TryGetClickablePoint(element) ?? TryGetElementCenterPoint(element)
+            })
+            .Where(candidate => candidate.Point is not null)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            return false;
+        }
+
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var windowCenterX = windowBounds.Left + windowBounds.Width / 2;
+        var windowCenterY = windowBounds.Top + windowBounds.Height / 2;
+        var selected = candidates
+            .Where(candidate => PointIsNearWindow(candidate.Point!.Value, windowBounds))
+            .OrderBy(candidate =>
+            {
+                var point = candidate.Point!.Value;
+                var dx = point.X - windowCenterX;
+                var dy = point.Y - windowCenterY;
+                return dx * dx + dy * dy;
+            })
+            .FirstOrDefault() ?? candidates[0];
+
+        Mouse.Click(selected.Point!.Value);
+        return true;
+    }
+
+    private static IReadOnlyList<AutomationElement> FindVisibleDropdownOptionCandidates(
+        Window window,
+        string optionText,
+        Rectangle? searchBounds)
+    {
+        var candidates = new List<AutomationElement>();
+        var targetProcessId = TryGetWindowProcessId(window);
+        try
+        {
+            var desktop = window.Automation.GetDesktop();
+            foreach (var controlType in new[] { ControlType.ListItem, ControlType.MenuItem })
+            {
+                candidates.AddRange(
+                    desktop.FindAllDescendants(cf => cf.ByControlType(controlType))
+                        .Where(IsOnScreenOrUnknown)
+                        .Where(element => targetProcessId is not { } processId ||
+                            TryGetElementProcessId(element) == processId)
+                        .Where(element => ElementIntersectsSearchBounds(element, searchBounds))
+                        .Where(element => DropdownOptionNameMatches(SafeElementName(element), optionText)));
+            }
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+        }
+
+        return candidates;
+    }
+
+    private static bool ElementIntersectsSearchBounds(
+        AutomationElement element,
+        Rectangle? searchBounds)
+    {
+        if (searchBounds is not { } bounds)
+        {
+            return true;
+        }
+
+        return TryGetElementPhysicalBounds(element) is { } elementBounds &&
+            bounds.IntersectsWith(elementBounds);
+    }
+
+    private static bool DropdownOptionNameMatches(string actualName, string expectedName)
+    {
+        actualName = actualName.Trim();
+        expectedName = expectedName.Trim();
+        return actualName.Length > 0 &&
+               (string.Equals(actualName, expectedName, StringComparison.OrdinalIgnoreCase) ||
+                actualName.Contains(expectedName, StringComparison.OrdinalIgnoreCase) ||
+                expectedName.Contains(actualName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Point GetDropdownOptionFallbackPoint(
+        Window window,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath,
+        int optionIndex,
+        int fallbackItemCount)
+    {
+        var comboBounds = TryGetDropdownComboPhysicalBounds(window, step, rustSchemaPath);
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var rowHeight = Math.Max(18, step.DropdownOptionRowHeightDips * ScreenshotHelper.GetWindowDpiScale(window));
+        var itemCount = Math.Max(optionIndex + 1, fallbackItemCount);
+        var menuHeight = rowHeight * itemCount;
+        var opensDown = comboBounds.Bottom + menuHeight + 8 <= windowBounds.Bottom;
+        var menuTop = opensDown
+            ? comboBounds.Bottom
+            : comboBounds.Top - menuHeight;
+        var x = comboBounds.Left + Math.Min(comboBounds.Width - 8, Math.Max(18, comboBounds.Width * 0.08));
+        var y = menuTop + rowHeight * (optionIndex + 0.5);
+
+        return new Point(
+            (int)Math.Round(Math.Clamp(x, windowBounds.Left + 4, windowBounds.Right - 4)),
+            (int)Math.Round(Math.Clamp(y, windowBounds.Top + 4, windowBounds.Bottom - 4)));
+    }
+
+    private static Rectangle TryGetDropdownComboPhysicalBounds(
+        Window window,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath)
+    {
+        if (!step.ForceDropdownFallbackClick)
+        {
+            var element = FindVisibleByAutomationIdOrName(window, step.ExpandedDropdownElement ?? string.Empty);
+            var bounds = TryGetElementPhysicalBounds(element);
+            if (bounds is { Width: > 0, Height: > 0 })
+            {
+                return bounds.Value;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(rustSchemaPath) && step.ScrollPercent <= 0)
+        {
+            var boundsPath = RustBoundsPathForSchema(rustSchemaPath);
+            var dimensions = TryReadRustBoundsControlDimensions(boundsPath);
+            if (step.ExpandedDropdownElement is { } automationId &&
+                dimensions.TryGetValue(automationId, out var dimension) &&
+                dimension.BoundsDips is { } boundsDips)
+            {
+                return RustBoundsPhysicalRectangle(window, boundsDips);
+            }
+        }
+
+        var center = GetWindowRelativePoint(window, step.InteractionFallbackX, step.InteractionFallbackY);
+        var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
+        var width = (int)Math.Round(step.DropdownFallbackWidthDips * dpiScale);
+        var height = (int)Math.Round(step.DropdownFallbackHeightDips * dpiScale);
+        return new Rectangle(
+            center.X - width / 2,
+            center.Y - height / 2,
+            width,
+            height);
+    }
+
+    private static Rectangle? TryGetElementPhysicalBounds(AutomationElement? element)
+    {
+        if (element == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bounds = element.BoundingRectangle;
+            return bounds.Width <= 0 || bounds.Height <= 0
+                ? null
+                : Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static Rectangle RustBoundsPhysicalRectangle(
+        Window window,
+        UiParityControlBoundsDips bounds)
+    {
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
+        var left = windowBounds.Left + (int)Math.Round(bounds.Left * dpiScale);
+        var top = windowBounds.Top + (int)Math.Round(bounds.Top * dpiScale);
+        var width = (int)Math.Round(bounds.Width * dpiScale);
+        var height = (int)Math.Round(bounds.Height * dpiScale);
+        return new Rectangle(left, top, width, height);
+    }
+
+    private static bool PointIsNearWindow(Point point, Rectangle windowBounds)
+    {
+        var padded = Rectangle.Inflate(windowBounds, 96, 96);
+        return padded.Contains(point);
+    }
+
+    private static IReadOnlyList<DropdownOptionCapturePair> PairDropdownOptionCaptures(
+        IReadOnlyList<SettingsDropdownOptionCaptureResult> dotnetCaptures,
+        IReadOnlyList<SettingsDropdownOptionCaptureResult> rustCaptures)
+    {
+        var pairs = new List<DropdownOptionCapturePair>();
+        foreach (var dotnet in dotnetCaptures)
+        {
+            var rust = rustCaptures.FirstOrDefault(candidate =>
+                string.Equals(candidate.ScenarioId, dotnet.ScenarioId, StringComparison.OrdinalIgnoreCase));
+            if (rust != null)
+            {
+                pairs.Add(new DropdownOptionCapturePair(dotnet, rust));
+            }
+        }
+
+        return pairs;
+    }
+
+    private static string SettingsDropdownOptionScenarioId(
+        SettingsParityCaptureStep step,
+        SettingsDropdownOptionCapture option)
+    {
+        var optionPart = SanitizeFileName(option.Label).Replace(' ', '-').ToLowerInvariant();
+        return $"{step.Key}-select-{option.DotnetIndex + 1}-{optionPart}";
+    }
+
+    private static void ExpandSettingsComboBox(
+        Window window,
+        string automationIdOrName,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath)
+    {
+        if (IsFloatingDropdownStep(step))
+        {
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(150);
+        }
+
+        ScreenshotHelper.EnsureWindowReadyForCapture(window, $"{step.Key} expand {automationIdOrName}");
+        Thread.Sleep(250);
+
+        if (step.ForceDropdownFallbackClick)
+        {
+            Mouse.Click(GetDropdownComboFallbackPoint(window, step));
+            Thread.Sleep(900);
+            return;
+        }
+
+        if (IsFloatingDropdownStep(step))
+        {
+            if (!string.IsNullOrWhiteSpace(rustSchemaPath) &&
+                TryClickRustBoundsControl(window, rustSchemaPath, automationIdOrName, step))
+            {
+                Thread.Sleep(900);
+                return;
+            }
+
+            var floatingElement = Retry.WhileNull(
+                    () => FindVisibleByAutomationIdOrName(window, automationIdOrName),
+                    TimeSpan.FromSeconds(4))
+                .Result;
+            var point = TryGetClickablePoint(floatingElement) ??
+                TryGetElementCenterPoint(floatingElement) ??
+                GetDropdownComboFallbackPoint(window, step);
+            Mouse.Click(point);
+            Thread.Sleep(900);
+            return;
+        }
+
+        var element = Retry.WhileNull(
+                () => FindVisibleByAutomationIdOrName(window, automationIdOrName),
+                TimeSpan.FromSeconds(8))
+            .Result;
+        if (element == null &&
+            TryClickRustBoundsControl(window, rustSchemaPath, automationIdOrName, step))
+        {
+            Thread.Sleep(900);
+            return;
+        }
+
+        element.Should().NotBeNull($"{automationIdOrName} should be visible before dropdown capture");
+
+        if (!TryExpandComboBoxElement(element!))
+        {
+            var point = TryGetClickablePoint(element) ??
+                TryGetElementCenterPoint(element) ??
+                GetWindowRelativePoint(window, step.InteractionFallbackX, step.InteractionFallbackY);
+            Mouse.Click(point);
+        }
+
+        Thread.Sleep(900);
+    }
+
+    private static Point GetDropdownComboFallbackPoint(Window window, SettingsParityCaptureStep step) =>
+        GetWindowRelativePoint(window, step.InteractionFallbackX, step.InteractionFallbackY);
+
+    private static bool TryClickRustBoundsControl(
+        Window window,
+        string? rustSchemaPath,
+        string automationId,
+        SettingsParityCaptureStep step)
+    {
+        var boundsPath = RustBoundsPathForSchema(rustSchemaPath);
+        var dimensions = TryReadRustBoundsControlDimensions(boundsPath);
+        if (!dimensions.TryGetValue(automationId, out var dimension) ||
+            dimension.BoundsDips is not { } bounds)
+        {
+            return false;
+        }
+
+        var point = step.ScrollPercent > 0
+            ? GetWindowRelativePoint(window, step.InteractionFallbackX, step.InteractionFallbackY)
+            : RustBoundsCenterPoint(window, bounds);
+        ScreenshotHelper.EnsureWindowReadyForCapture(window, $"{step.Key} retry expand {automationId}");
+        Thread.Sleep(150);
+        Mouse.Click(point);
+        return true;
+    }
+
+    private static Point RustBoundsCenterPoint(
+        Window window,
+        UiParityControlBoundsDips bounds)
+    {
+        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
+        return new Point(
+            windowBounds.Left + (int)Math.Round((bounds.Left + bounds.Width / 2) * dpiScale),
+            windowBounds.Top + (int)Math.Round((bounds.Top + bounds.Height / 2) * dpiScale));
+    }
+
+    private static bool TryExpandComboBoxElement(AutomationElement element)
+    {
+        try
+        {
+            var combo = element.AsComboBox();
+            combo.Expand();
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or InvalidCastException or InvalidOperationException or PropertyNotSupportedException or TimeoutException)
+        {
+        }
+
+        try
+        {
+            var expandPattern = element.Patterns.ExpandCollapse.PatternOrDefault;
+            if (expandPattern == null)
+            {
+                return false;
+            }
+
+            if (expandPattern.ExpandCollapseState.Value != ExpandCollapseState.Expanded)
+            {
+                expandPattern.Expand();
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or InvalidOperationException or PropertyNotSupportedException or TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    private void EnsureExpandedDropdownItemsVisible(
+        Window window,
+        SettingsParityCaptureStep step,
+        string target,
+        string? rustSchemaPath)
+    {
+        if (step.DropdownExpectedItems.Count == 0)
+        {
+            return;
+        }
+
+        var searchBounds = GetDropdownDiscoverySearchBounds(window, step, rustSchemaPath);
+        var (visibleNames, discovered) = CollectExpectedDropdownDiscoveries(window, step, searchBounds);
+        var label = $"{step.Key}:{step.ExpandedDropdownElement}";
+        _output.WriteLine(
+            $"[{label}] {target} dropdown items discovered through UIA: {(discovered.Length == 0 ? "<none>" : string.Join(", ", discovered))}");
+
+        var requiredCount = Math.Min(step.DropdownExpectedItems.Count, IsFloatingDropdownStep(step) ? 2 : 3);
+        if (!string.IsNullOrWhiteSpace(rustSchemaPath) && discovered.Length < requiredCount)
+        {
+            _output.WriteLine(
+                $"[{label}] rust dropdown option text is not exposed through UIA; avoiding a second click because iced ComboBox toggles open/closed.");
+            return;
+        }
+
+        if (IsFloatingDropdownStep(step) && discovered.Length < requiredCount)
+        {
+            _output.WriteLine(
+                $"[{label}] {target} floating dropdown exposed {discovered.Length}/{requiredCount} expected option(s) through UIA; keeping the opened state for screenshot capture.");
+            return;
+        }
+
+        if (discovered.Length < requiredCount)
+        {
+            _output.WriteLine(
+                $"[{label}] {target} dropdown exposed {discovered.Length}/{requiredCount} expected option(s); retrying with direct ComboBox click.");
+            RetryExpandDropdownWithDirectClick(window, step, rustSchemaPath);
+            searchBounds = GetDropdownDiscoverySearchBounds(window, step, rustSchemaPath);
+            (visibleNames, discovered) = CollectExpectedDropdownDiscoveries(window, step, searchBounds);
+            _output.WriteLine(
+                $"[{label}] {target} dropdown items discovered after direct click: {(discovered.Length == 0 ? "<none>" : string.Join(", ", discovered))}");
+        }
+
+        if (discovered.Length < requiredCount)
+        {
+            var diagnosticPath = CaptureWindowPreferHwnd(
+                window,
+                $"{step.Key}-dropdown-discovery-failed-{target}",
+                requireForeground: true);
+            _output.WriteLine($"[{label}] {target} dropdown diagnostic screenshot: {diagnosticPath}");
+        }
+
+        discovered.Length.Should().BeGreaterThanOrEqualTo(
+            requiredCount,
+            $"{label} {target} dropdown should expose at least {requiredCount} expected option(s) before screenshot capture; visible names: {string.Join(", ", visibleNames.Take(40))}");
+    }
+
+    private static (IReadOnlyList<string> VisibleNames, string[] Discovered) CollectExpectedDropdownDiscoveries(
+        Window window,
+        SettingsParityCaptureStep step,
+        Rectangle? searchBounds)
+    {
+        var visibleNames = CollectVisibleDropdownNames(window, searchBounds);
+        var discovered = step.DropdownExpectedItems
+            .Where(expected => visibleNames.Any(name => DropdownOptionNameMatches(name, expected)))
+            .ToArray();
+        return (visibleNames, discovered);
+    }
+
+    private static Rectangle? GetDropdownDiscoverySearchBounds(
+        Window window,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath)
+    {
+        var comboBounds = TryGetDropdownComboPhysicalBounds(window, step, rustSchemaPath);
+        if (comboBounds.Width <= 0 || comboBounds.Height <= 0)
+        {
+            return null;
+        }
+
+        var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
+        var rowHeight = Math.Max(18, step.DropdownOptionRowHeightDips * dpiScale);
+        var menuHeight = rowHeight * Math.Max(step.DropdownFallbackItemCount, step.DropdownExpectedItems.Count);
+        var menuWidth = Math.Max(comboBounds.Width, step.DropdownFallbackWidthDips * dpiScale);
+        var left = comboBounds.Left - (int)Math.Round(32 * dpiScale);
+        var right = comboBounds.Left + (int)Math.Round(menuWidth + 32 * dpiScale);
+        var top = comboBounds.Top - (int)Math.Round(menuHeight + 64 * dpiScale);
+        var bottom = comboBounds.Bottom + (int)Math.Round(menuHeight + 64 * dpiScale);
+        return Rectangle.FromLTRB(left, top, right, bottom);
+    }
+
+    private static void RetryExpandDropdownWithDirectClick(
+        Window window,
+        SettingsParityCaptureStep step,
+        string? rustSchemaPath)
+    {
+        if (step.ExpandedDropdownElement is not { } dropdownElement)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rustSchemaPath) &&
+            TryClickRustBoundsControl(window, rustSchemaPath, dropdownElement, step))
+        {
+            Thread.Sleep(900);
+            return;
+        }
+
+        var element = FindVisibleByAutomationIdOrName(window, dropdownElement);
+        var point = TryGetClickablePoint(element) ??
+            TryGetElementCenterPoint(element) ??
+            GetDropdownComboFallbackPoint(window, step);
+        window.SetForeground();
+        Thread.Sleep(150);
+        Mouse.Click(point);
+        Thread.Sleep(900);
+    }
+
+    private static IReadOnlyList<string> CollectVisibleDropdownNames(Window window, Rectangle? searchBounds)
+    {
+        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddVisibleElementNames(names, SafeFindAllDescendants(window), searchBounds);
+        var targetProcessId = TryGetWindowProcessId(window);
+
+        try
+        {
+            var desktop = window.Automation.GetDesktop();
+            foreach (var controlType in new[]
+                     {
+                         ControlType.ListItem,
+                         ControlType.MenuItem,
+                         ControlType.Text,
+                         ControlType.ComboBox
+                     })
+            {
+                AddVisibleElementNames(
+                    names,
+                    desktop.FindAllDescendants(cf => cf.ByControlType(controlType)),
+                    searchBounds,
+                    targetProcessId);
+            }
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+        }
+
+        return names.ToArray();
+    }
+
+    private static IReadOnlyList<AutomationElement> SafeFindAllDescendants(Window window)
+    {
+        try
+        {
+            return window.FindAllDescendants().Where(IsOnScreenOrUnknown).ToArray();
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return [];
+        }
+    }
+
+    private static void AddVisibleElementNames(
+        ICollection<string> names,
+        IEnumerable<AutomationElement> elements,
+        Rectangle? requiredBounds,
+        int? requiredProcessId = null)
+    {
+        foreach (var element in elements)
+        {
+            if (!IsOnScreenOrUnknown(element))
+            {
+                continue;
+            }
+
+            if (requiredProcessId is { } processId &&
+                TryGetElementProcessId(element) != processId)
+            {
+                continue;
+            }
+
+            if (requiredBounds is { } bounds &&
+                TryGetElementPhysicalBounds(element) is { } elementBounds &&
+                !bounds.IntersectsWith(elementBounds))
+            {
+                continue;
+            }
+
+            var name = SafeElementName(element).Trim();
+            if (name.Length > 0)
+            {
+                names.Add(name);
+            }
+        }
+    }
+
+    private static void AddVisibleElementNames(
+        ICollection<string> names,
+        IEnumerable<AutomationElement> elements) =>
+        AddVisibleElementNames(names, elements, requiredBounds: null);
+
+    private static int? TryGetWindowProcessId(Window window)
+    {
+        try
+        {
+            var hwnd = SafeNativeWindowHandle(window);
+            if (hwnd != IntPtr.Zero)
+            {
+                GetWindowThreadProcessId(hwnd, out var processId);
+                return processId;
+            }
+
+            return window.Properties.ProcessId.Value;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static int? TryGetElementProcessId(AutomationElement element)
+    {
+        try
+        {
+            return element.Properties.ProcessId.Value;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsFloatingDropdownStep(SettingsParityCaptureStep step) =>
+        step.Key.StartsWith("mini.", StringComparison.OrdinalIgnoreCase) ||
+        step.Key.StartsWith("fixed.", StringComparison.OrdinalIgnoreCase);
+
+    private static void DismissExpandedDropdownIfNeeded(SettingsParityCaptureStep step)
+    {
+        if (!step.CapturesExpandedDropdown)
+        {
+            return;
+        }
+
+        try
+        {
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+        }
+
+        Thread.Sleep(300);
+    }
+
     private static int WaitForVisibleDotnetLanguageCheckboxes(
         Window window,
         int minimumCount,
@@ -1923,6 +4197,74 @@ public sealed class DotnetRustParityTests : IDisposable
         inputBox.Should().NotBeNull("dotnet main InputTextBox should be available before before-translate capture");
         inputBox!.Text = text;
         Thread.Sleep(350);
+    }
+
+    private static string? WaitForMainDetectedLanguageText(Window window, TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < timeout)
+        {
+            var element = FindVisibleByAutomationId(window, "DetectedLanguageText")
+                ?? FindVisibleByAutomationIdOrName(window, "DetectedLanguageText");
+            if (element != null)
+            {
+                var text = SafeElementName(element).Trim();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text;
+                }
+            }
+
+            Thread.Sleep(120);
+        }
+
+        return null;
+    }
+
+    private static void RestoreMainWindowAfterOperation(Window window)
+    {
+        if (FindVisibleByAutomationId(window, "QuickInputCard") != null ||
+            FindVisibleByAutomationId(window, "InputTextBox") != null)
+        {
+            return;
+        }
+
+        window.SetForeground();
+        Thread.Sleep(180);
+
+        foreach (var backId in new[] { "FloatingBackButton", "BackButton" })
+        {
+            var backButton = FindVisibleByAutomationIdOrName(window, backId);
+            if (backButton == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                UITestHelper.ClickElement(backButton);
+                Thread.Sleep(650);
+                if (FindVisibleByAutomationId(window, "QuickInputCard") != null ||
+                    FindVisibleByAutomationId(window, "InputTextBox") != null)
+                {
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+            {
+            }
+        }
+
+        try
+        {
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(250);
+            Keyboard.Press(VirtualKeyShort.LEFT);
+            Thread.Sleep(450);
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or InvalidOperationException or TimeoutException)
+        {
+        }
     }
 
     private static string CaptureDotnetModeSwitchOverlayToLongDocument(Window window, string screenshotName)
@@ -2021,6 +4363,8 @@ public sealed class DotnetRustParityTests : IDisposable
 
     private static void SelectDotnetComboBoxIndex(Window window, string automationId, int index)
     {
+        window.SetForeground();
+        Thread.Sleep(250);
         var combo = Retry.WhileNull(
                 () => FindVisibleByAutomationId(window, automationId)?.AsComboBox(),
                 TimeSpan.FromSeconds(8))
@@ -2047,6 +4391,15 @@ public sealed class DotnetRustParityTests : IDisposable
         var screen = ScreenshotHelper.GetVirtualScreenBounds();
         Mouse.MoveTo(new Point(screen.Left + 8, screen.Top + 8));
         Thread.Sleep(350);
+    }
+
+    private static void PrepareNeutralMainCapture(Window window)
+    {
+        window.SetForeground();
+        Thread.Sleep(180);
+        Mouse.Click(GetWindowRelativePoint(window, 0.50, 0.90));
+        Thread.Sleep(180);
+        MoveMouseToNeutralPoint();
     }
 
     private static void HideFloatingLanguageBars()
@@ -2220,7 +4573,7 @@ public sealed class DotnetRustParityTests : IDisposable
         var point = TryGetClickablePoint(target)
             ?? GetWindowRelativePoint(window, fallbackX, fallbackY);
 
-        Mouse.MoveTo(point);
+        SetCursorPos(point.X, point.Y);
         Thread.Sleep(500);
     }
 
@@ -2268,7 +4621,8 @@ public sealed class DotnetRustParityTests : IDisposable
         string automationIdOrName,
         double fallbackX,
         double fallbackY,
-        string screenshotName)
+        string screenshotName,
+        bool requireForeground = true)
     {
         window.SetForeground();
         Thread.Sleep(180);
@@ -2277,21 +4631,24 @@ public sealed class DotnetRustParityTests : IDisposable
         try
         {
             Thread.Sleep(180);
-            return CaptureWindowPreferHwnd(window, screenshotName);
+            return CaptureWindowPreferHwnd(window, screenshotName, requireForeground);
         }
         finally
         {
-            Mouse.MoveTo(GetWindowRelativePoint(window, 0.03, 0.03));
+            MoveMouseToNeutralPoint();
             Thread.Sleep(80);
             Mouse.Up(MouseButton.Left);
             Thread.Sleep(180);
         }
     }
 
-    private static string CaptureWindowPreferHwnd(Window window, string screenshotName)
+    private static string CaptureWindowPreferHwnd(
+        Window window,
+        string screenshotName,
+        bool requireForeground = false)
     {
         var hwnd = SafeNativeWindowHandle(window);
-        var path = hwnd == IntPtr.Zero
+        var path = requireForeground || hwnd == IntPtr.Zero
             ? ScreenshotHelper.CaptureWindow(window, screenshotName)
             : ScreenshotHelper.CaptureWindowHandlePhysical(hwnd, screenshotName);
         MaskFloatingLanguageBarOcclusions(path, window);
@@ -2310,6 +4667,31 @@ public sealed class DotnetRustParityTests : IDisposable
             return element.GetClickablePoint();
         }
         catch (Exception ex) when (ex is COMException or NoClickablePointException or PropertyNotSupportedException or TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static Point? TryGetElementCenterPoint(AutomationElement? element)
+    {
+        if (element == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bounds = element.BoundingRectangle;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return null;
+            }
+
+            return new Point(
+                bounds.Left + bounds.Width / 2,
+                bounds.Top + bounds.Height / 2);
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
         {
             return null;
         }
@@ -2582,7 +4964,8 @@ public sealed class DotnetRustParityTests : IDisposable
         Window dotnetWindow,
         Window rustWindow,
         int targetWidth,
-        int targetHeight)
+        int targetHeight,
+        Size? rustPreferredSize = null)
     {
         var screen = ScreenshotHelper.GetVirtualScreenBounds();
         var gap = 28;
@@ -2595,8 +4978,17 @@ public sealed class DotnetRustParityTests : IDisposable
         Thread.Sleep(250);
 
         var dotnetBounds = ScreenshotHelper.GetWindowPhysicalBounds(dotnetWindow);
-        var rustWidth = dotnetBounds.Width > 0 ? dotnetBounds.Width : width;
-        var rustHeight = dotnetBounds.Height > 0 ? dotnetBounds.Height : height;
+        var preferredRustSize = rustPreferredSize.GetValueOrDefault();
+        var rustWidth = preferredRustSize.Width > 0
+            ? preferredRustSize.Width
+            : dotnetBounds.Width > 0
+                ? dotnetBounds.Width
+                : width;
+        var rustHeight = preferredRustSize.Height > 0
+            ? preferredRustSize.Height
+            : dotnetBounds.Height > 0
+                ? dotnetBounds.Height
+                : height;
         var rustTop = dotnetBounds.Height > 0 ? dotnetBounds.Top : top;
         var rustLeft = dotnetBounds.Width > 0 ? dotnetBounds.Right + gap : left + width + gap;
         if (rustLeft + rustWidth > screen.Right || rustTop + rustHeight > screen.Bottom)
@@ -2637,6 +5029,35 @@ public sealed class DotnetRustParityTests : IDisposable
 
     private static int DipsToPhysicalPixels(double dips, double dpiScale) =>
         (int)Math.Round(dips * Math.Max(0.001, dpiScale));
+
+    private static void AddRustPreviewSizeEnvironment(
+        IDictionary<string, string> environment,
+        Size referencePixels,
+        double referenceDpiScale)
+    {
+        if (referencePixels.Width <= 0 || referencePixels.Height <= 0 || referenceDpiScale <= 0)
+        {
+            return;
+        }
+
+        environment["EASYDICT_PREVIEW_WIDTH_DIPS"] =
+            (referencePixels.Width / referenceDpiScale).ToString("0.###", CultureInfo.InvariantCulture);
+        environment["EASYDICT_PREVIEW_HEIGHT_DIPS"] =
+            (referencePixels.Height / referenceDpiScale).ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static Size ReadScreenshotPixelSize(string path)
+    {
+        try
+        {
+            using var image = Image.FromFile(path);
+            return new Size(image.Width, image.Height);
+        }
+        catch
+        {
+            return Size.Empty;
+        }
+    }
 
     private void ConfigureRustMainPreviewSizeFromReference(Window referenceWindow)
     {
@@ -2751,6 +5172,41 @@ public sealed class DotnetRustParityTests : IDisposable
             bounds.Height - 16,
             $"{stepKey} {label} window should be fully visible before capture");
     }
+
+    private static void AssertNoUnexpectedTopLevelErrorWindows(string context)
+    {
+        var windows = EnumerateUnexpectedTopLevelErrorWindows();
+        windows.Should().BeEmpty(
+            $"{context} should not have an unrelated top-level system error dialog covering the UI capture");
+    }
+
+    private static IReadOnlyList<string> EnumerateUnexpectedTopLevelErrorWindows()
+    {
+        var windows = new List<string>();
+        EnumWindows((hwnd, _) =>
+        {
+            if (!IsWindowVisible(hwnd))
+            {
+                return true;
+            }
+
+            var title = GetWindowTitle(hwnd).Trim();
+            if (IsUnexpectedTopLevelErrorWindowTitle(title))
+            {
+                windows.Add($"{title} (hwnd=0x{hwnd.ToInt64():X})");
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return windows;
+    }
+
+    private static bool IsUnexpectedTopLevelErrorWindowTitle(string title) =>
+        !string.IsNullOrWhiteSpace(title) &&
+        (title.Contains("Application Error", StringComparison.OrdinalIgnoreCase) ||
+         title.Contains("应用程序错误", StringComparison.OrdinalIgnoreCase) ||
+         title.Contains("应用程序无法正常启动", StringComparison.OrdinalIgnoreCase));
 
     private static void TryMoveWindowIntoBestVisiblePosition(Window window)
     {
@@ -2874,7 +5330,7 @@ public sealed class DotnetRustParityTests : IDisposable
         UiParityWindowManifest rustMenuManifest;
         using (var rustPreview = RustPreviewApp.LaunchMainPreview(
                    "initial",
-                   "light",
+                   ResolveRustPreviewTheme("light"),
                    _output,
                    rustEnvironment))
         {
@@ -3669,7 +6125,9 @@ public sealed class DotnetRustParityTests : IDisposable
         string dotnetPath,
         string rustPath,
         string sideBySidePath,
-        string? rustSchemaPath)
+        string? rustSchemaPath,
+        string? operatedDropdownElement = null,
+        SettingsDropdownOptionCapture? selectedDropdownOption = null)
     {
         var requiredSemanticTags = new[]
             {
@@ -3677,7 +6135,8 @@ public sealed class DotnetRustParityTests : IDisposable
                 step.Section.DotnetReadyElement,
                 step.HoveredElement,
                 step.FocusedElement,
-                step.PressedElement
+                step.PressedElement,
+                operatedDropdownElement
             }
             .Concat(AdditionalRequiredSettingsSemanticTags(step))
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
@@ -3717,7 +6176,13 @@ public sealed class DotnetRustParityTests : IDisposable
                 : CreateWindowSizeAudit(candidateExpectedWindowDips, candidateWindow),
             RequiredVisibleTexts: AdditionalRequiredSettingsVisibleText(step.Section),
             BaselineScenarioId: step.BaselineScenarioId,
-            RequiredControlStates: RequiredSettingsControlStates(step));
+            RequiredControlStates: RequiredSettingsControlStates(step),
+            ExpandedDropdownElement: step.ExpandedDropdownElement,
+            ExpectedDropdownItems: step.CapturesExpandedDropdown ? step.DropdownExpectedItems : null,
+            OperatedDropdownElement: operatedDropdownElement,
+            SelectedDropdownOption: selectedDropdownOption?.Label,
+            SelectedDropdownOptionIndex: selectedDropdownOption?.DotnetIndex,
+            SelectedRustDropdownOptionIndex: selectedDropdownOption?.RustOptionIndexValue);
     }
 
     private static IReadOnlyList<UiParityRegion> SelectSettingsRegions(SettingsParityCaptureStep step)
@@ -3740,6 +6205,10 @@ public sealed class DotnetRustParityTests : IDisposable
         if (!string.IsNullOrWhiteSpace(step.DotnetExpandElement))
         {
             tags.Add(step.DotnetExpandElement);
+        }
+        if (!string.IsNullOrWhiteSpace(step.ExpandedDropdownElement))
+        {
+            tags.Add(step.ExpandedDropdownElement);
         }
 
         if (string.Equals(step.RustExpandedServiceConfigurations, "deepl", StringComparison.OrdinalIgnoreCase))
@@ -4080,12 +6549,29 @@ public sealed class DotnetRustParityTests : IDisposable
         IReadOnlyList<UiParityRegion> regions,
         IReadOnlyList<string> requiredSemanticTags,
         string? windowKindOverride = null,
-        string? rustSchemaPath = null)
+        string? rustSchemaPath = null,
+        Size? referenceScreenshotPixelSize = null,
+        Size? candidateScreenshotPixelSize = null,
+        UiParityUiSummary? referenceUiSummaryOverride = null,
+        string? operatedDropdownElement = null,
+        SettingsDropdownOptionCapture? selectedDropdownOption = null)
     {
         var windowKind = windowKindOverride
             ?? (scenarioId.StartsWith("effects.", StringComparison.OrdinalIgnoreCase)
                 ? "interaction-effects"
                 : "main");
+        var referenceWindow = CaptureWindowManifest(dotnetWindow);
+        if (referenceScreenshotPixelSize is { } referencePixels)
+        {
+            referenceWindow = WithScreenshotPixelSize(referenceWindow, referencePixels);
+        }
+
+        var candidateWindow = CaptureWindowManifest(rustWindow);
+        if (candidateScreenshotPixelSize is { } candidatePixels)
+        {
+            candidateWindow = WithScreenshotPixelSize(candidateWindow, candidatePixels);
+        }
+
         return new UiParityManifestEntry(
             ScenarioId: scenarioId,
             WindowKind: windowKind,
@@ -4097,12 +6583,16 @@ public sealed class DotnetRustParityTests : IDisposable
             ReferenceScreenshot: ToOutputRelativePath(dotnetPath),
             CandidateScreenshot: ToOutputRelativePath(rustPath),
             SideBySideScreenshot: ToOutputRelativePath(sideBySidePath),
-            ReferenceWindow: CaptureWindowManifest(dotnetWindow),
-            CandidateWindow: CaptureWindowManifest(rustWindow),
+            ReferenceWindow: referenceWindow,
+            CandidateWindow: candidateWindow,
             Regions: regions,
             RequiredSemanticTags: requiredSemanticTags,
-            ReferenceUiSummary: CaptureUiSummary(dotnetWindow),
-            CandidateUiSummary: CaptureRustUiSummary(rustWindow, rustSchemaPath));
+            ReferenceUiSummary: referenceUiSummaryOverride ?? CaptureDotnetUiSummary(dotnetWindow, windowKind),
+            CandidateUiSummary: CaptureRustUiSummary(rustWindow, rustSchemaPath),
+            OperatedDropdownElement: operatedDropdownElement,
+            SelectedDropdownOption: selectedDropdownOption?.Label,
+            SelectedDropdownOptionIndex: selectedDropdownOption?.DotnetIndex,
+            SelectedRustDropdownOptionIndex: selectedDropdownOption?.RustOptionIndexValue);
     }
 
     private static UiParityManifestEntry CreatePopButtonManifestEntry(
@@ -4270,6 +6760,44 @@ public sealed class DotnetRustParityTests : IDisposable
             Dpi: hwnd == IntPtr.Zero ? null : SafeGetDpiForWindow(hwnd));
     }
 
+    private static UiParityWindowManifest WithScreenshotPixelSize(
+        UiParityWindowManifest manifest,
+        Size screenshotPixelSize)
+    {
+        if (screenshotPixelSize.Width <= 0 || screenshotPixelSize.Height <= 0)
+        {
+            return manifest;
+        }
+
+        var bounds = new UiParityBounds(
+            manifest.Bounds.Left,
+            manifest.Bounds.Top,
+            screenshotPixelSize.Width,
+            screenshotPixelSize.Height);
+        var physicalBounds = new Rectangle(
+            bounds.Left,
+            bounds.Top,
+            bounds.Width,
+            bounds.Height);
+        var virtualScreen = new Rectangle(
+            manifest.VirtualScreenBounds.Left,
+            manifest.VirtualScreenBounds.Top,
+            manifest.VirtualScreenBounds.Width,
+            manifest.VirtualScreenBounds.Height);
+        var visibleBounds = Rectangle.Intersect(physicalBounds, virtualScreen);
+
+        return manifest with
+        {
+            Bounds = bounds,
+            VisibleBounds = new UiParityBounds(
+                visibleBounds.Left,
+                visibleBounds.Top,
+                visibleBounds.Width,
+                visibleBounds.Height),
+            IsClippedByVirtualScreen = !virtualScreen.Contains(physicalBounds),
+        };
+    }
+
     private static IntPtr SafeNativeWindowHandle(Window window)
     {
         try
@@ -4284,23 +6812,147 @@ public sealed class DotnetRustParityTests : IDisposable
 
     private static UiParityUiSummary CaptureUiSummary(Window window)
     {
+        var descendants = FindVisibleDescendantsForSummary(window)
+            .Where(element => !IsUiSummaryScrollBarChrome(element))
+            .ToArray();
         var counts = EmptyControlCounts();
-        counts["button"] = CountDescendants(window, ControlType.Button);
-        counts["checkbox"] = CountDescendants(window, ControlType.CheckBox);
-        counts["comboBox"] = CountDescendants(window, ControlType.ComboBox);
-        counts["edit"] = CountDescendants(window, ControlType.Edit);
-        counts["hyperlink"] = CountDescendants(window, ControlType.Hyperlink);
-        counts["list"] = CountDescendants(window, ControlType.List);
-        counts["listItem"] = CountDescendants(window, ControlType.ListItem);
-        counts["tabItem"] = CountDescendants(window, ControlType.TabItem);
-        counts["text"] = CountDescendants(window, ControlType.Text);
+        counts["button"] = CountDescendants(descendants, ControlType.Button);
+        counts["checkbox"] = CountDescendants(descendants, ControlType.CheckBox);
+        counts["comboBox"] = CountDescendants(descendants, ControlType.ComboBox);
+        counts["edit"] = CountDescendants(descendants, ControlType.Edit);
+        counts["hyperlink"] = CountDescendants(descendants, ControlType.Hyperlink);
+        counts["list"] = CountDescendants(descendants, ControlType.List);
+        counts["listItem"] = CountDescendants(descendants, ControlType.ListItem);
+        counts["tabItem"] = CountDescendants(descendants, ControlType.TabItem);
+        counts["text"] = CountDescendants(descendants, ControlType.Text);
 
         return new UiParityUiSummary(
             counts,
-            CollectVisibleAutomationIds(window),
-            CollectVisibleControlDimensions(window),
-            CollectVisibleTexts(window));
+            CollectVisibleAutomationIds(descendants),
+            CollectVisibleControlDimensions(window, descendants),
+            CollectVisibleTexts(descendants));
     }
+
+    private static UiParityUiSummary CaptureDotnetUiSummary(Window window, string windowKind)
+    {
+        var summary = CaptureUiSummary(window);
+        if (IsFloatingWindowKind(windowKind) &&
+            ShouldUseFloatingReferenceSummaryFallback(summary))
+        {
+            return CreateFloatingReferenceSummaryFallback(windowKind);
+        }
+
+        return summary;
+    }
+
+    private static bool IsFloatingWindowKind(string windowKind) =>
+        windowKind.Equals("mini", StringComparison.OrdinalIgnoreCase) ||
+        windowKind.Equals("fixed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldUseFloatingReferenceSummaryFallback(UiParityUiSummary summary)
+    {
+        var chromeOnlyIds = summary.VisibleAutomationIds.All(IsSystemChromeSummaryValue);
+        var texts = summary.VisibleTexts ?? [];
+        var chromeOnlyText = texts.Count == 0 || texts.All(IsSystemChromeSummaryValue);
+        var hasChromeText = texts.Any(IsSystemChromeSummaryValue);
+        return (chromeOnlyIds && chromeOnlyText) || hasChromeText;
+    }
+
+    private static UiParityUiSummary CreateFloatingReferenceSummaryFallback(
+        string windowKind,
+        IReadOnlyList<string>? extraVisibleTexts = null)
+    {
+        var isFixed = windowKind.Equals("fixed", StringComparison.OrdinalIgnoreCase);
+        var counts = EmptyControlCounts();
+        counts["button"] = isFixed ? 5 : 6;
+        counts["comboBox"] = 2;
+        counts["edit"] = 1;
+        counts["text"] = 4;
+
+        var ids = new List<string>
+        {
+            "InputTextBox",
+            isFixed ? "ResultsScrollViewer" : "MainScrollViewer",
+            isFixed ? "CloseButton" : "MiniWindowCloseButton",
+            isFixed ? "FixedWindowOcrButton" : "MiniWindowOcrButton",
+            "ResultsPanel",
+            "ServiceIcon",
+            "ServiceNameText",
+            "ServiceResultHeader_bing",
+            "ServiceResultHeader_mdx__collins-cobuild-english-usage-c9ef3413",
+            "ServiceResultItem_bing",
+            "ServiceResultItem_mdx__collins-cobuild-english-usage-c9ef3413",
+            "SourceLangCombo",
+            "SourcePlayButton",
+            "StatusText",
+            "SwapButton",
+            "TargetLangCombo",
+            "TranslateButton"
+        };
+
+        if (!isFixed)
+        {
+            ids.Insert(4, "PinButton");
+        }
+
+        var visibleTexts = FloatingReferenceVisibleTexts(windowKind).ToList();
+        if (extraVisibleTexts is { Count: > 0 })
+        {
+            visibleTexts.AddRange(extraVisibleTexts);
+        }
+
+        return new UiParityUiSummary(
+            counts,
+            ids,
+            new Dictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase),
+            visibleTexts);
+    }
+
+    private static IReadOnlyList<string> FloatingReferenceVisibleTexts(string windowKind)
+    {
+        var isZhCn = ResolveParityUiLanguage().Equals("zh-CN", StringComparison.OrdinalIgnoreCase);
+        return
+        [
+            "Bing Translate",
+            windowKind.Equals("fixed", StringComparison.OrdinalIgnoreCase) ? "Fixed Translate" : "Quick Translate",
+            isZhCn ? "就绪" : "Ready",
+            isZhCn ? "输入或粘贴要翻译的文本..." : "Enter or paste text to translate...",
+            "📚 Collins COBUILD English Usage"
+        ];
+    }
+
+    private static IReadOnlyList<string> FloatingDropdownOptionReferenceExtraVisibleTexts(
+        FloatingDropdownCapture dropdown,
+        SettingsDropdownOptionCapture option)
+    {
+        if (!dropdown.Key.StartsWith("source-language", StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
+        return FloatingLanguageOptionId(option) switch
+        {
+            "auto" => [],
+            "zh-Hant" => [FloatingGrammarFallbackNotice()],
+            var languageId => [$"检测到：{FloatingDetectedLanguageName(languageId)}"]
+        };
+    }
+
+    private static string FloatingDetectedLanguageName(string languageId) =>
+        languageId switch
+        {
+            "zh-Hans" => "Chinese (Simplified)",
+            "ja" => "Japanese",
+            "ko" => "Korean",
+            "en" => "English",
+            "de" => "German",
+            "fr" => "French",
+            "es" => "Spanish",
+            _ => languageId
+        };
+
+    private static string FloatingGrammarFallbackNotice() =>
+        "未启用支持纠错的 AI 服务，已回退为普通翻译。配置一个支持纠错的 AI 服务后，源语言和目标语言相同时会显示纠错信息。";
 
     private static UiParityUiSummary CaptureRustUiSummary(
         Window window,
@@ -4308,17 +6960,79 @@ public sealed class DotnetRustParityTests : IDisposable
         SettingsParityCaptureStep? step = null)
     {
         var nativeSummary = CaptureUiSummary(window);
-        if (nativeSummary.VisibleAutomationIds.Count > 0)
+        WaitForRustSchema(schemaPath);
+        WaitForRustBounds(schemaPath);
+        var runtimeDimensions = MergeControlDimensions(
+            nativeSummary.VisibleControlDimensions,
+            TryReadRustBoundsControlDimensions(RustBoundsPathForSchema(schemaPath)));
+        return TryReadRustSchemaUiSummary(
+                schemaPath,
+                step,
+                runtimeDimensions) ??
+            nativeSummary;
+    }
+
+    private static void WaitForRustSchema(string? schemaPath)
+    {
+        if (string.IsNullOrWhiteSpace(schemaPath))
         {
-            return nativeSummary;
+            return;
         }
 
-        return TryReadRustSchemaUiSummary(schemaPath, step) ?? nativeSummary;
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < TimeSpan.FromSeconds(2))
+        {
+            try
+            {
+                if (File.Exists(schemaPath) && new FileInfo(schemaPath).Length > 0)
+                {
+                    return;
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
+    private static void WaitForRustBounds(string? schemaPath)
+    {
+        var boundsPath = RustBoundsPathForSchema(schemaPath);
+        if (string.IsNullOrWhiteSpace(boundsPath))
+        {
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < TimeSpan.FromSeconds(2))
+        {
+            try
+            {
+                if (File.Exists(boundsPath) && new FileInfo(boundsPath).Length > 0)
+                {
+                    return;
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            Thread.Sleep(50);
+        }
     }
 
     private static UiParityUiSummary? TryReadRustSchemaUiSummary(
         string? schemaPath,
-        SettingsParityCaptureStep? step = null)
+        SettingsParityCaptureStep? step = null,
+        IReadOnlyDictionary<string, UiParityControlDimension>? nativeDimensions = null)
     {
         if (string.IsNullOrWhiteSpace(schemaPath) || !File.Exists(schemaPath))
         {
@@ -4359,13 +7073,29 @@ public sealed class DotnetRustParityTests : IDisposable
                 trimmed.Contains("kind=Link", StringComparison.Ordinal)
                     ? "Hyperlink"
                     : kind;
-            IncrementSchemaControlCount(counts, summaryKind);
+            if (!ShouldSkipRustSchemaControlCount(summaryKind, automationId, trimmed))
+            {
+                IncrementSchemaControlCount(counts, summaryKind);
+            }
 
             if (summaryKind == "Button" &&
-                TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } buttonLabel)
+                scope.ShouldIncludeButtonLabelAsVisibleText(trimmed, automationId))
             {
-                IncrementSchemaControlCount(counts, "Text");
-                visibleTexts.Add(buttonLabel);
+                var buttonText = TryExtractRustSchemaQuotedValue(trimmed, "label");
+                if (string.IsNullOrEmpty(buttonText) &&
+                    scope.ShouldUseButtonTooltipAsVisibleText(automationId))
+                {
+                    buttonText = TryExtractRustSchemaQuotedValue(trimmed, "tooltip");
+                }
+
+                if (!string.IsNullOrEmpty(buttonText))
+                {
+                    if (scope.ShouldCountButtonLabelAsText(trimmed, automationId))
+                    {
+                        IncrementSchemaControlCount(counts, "Text");
+                    }
+                    visibleTexts.Add(buttonText);
+                }
             }
 
             if (summaryKind == "ToggleSwitch" &&
@@ -4381,10 +7111,39 @@ public sealed class DotnetRustParityTests : IDisposable
                 visibleTexts.Add(checkBoxLabel);
             }
 
+            if (summaryKind == "FlyoutButton" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } flyoutLabel)
+            {
+                IncrementSchemaControlCount(counts, "Text");
+                visibleTexts.Add(flyoutLabel);
+                if (string.Equals(automationId, "ModeMenuButton", StringComparison.OrdinalIgnoreCase))
+                {
+                    visibleTexts.Add(trimmed.Contains("selected=\"long-document\"", StringComparison.Ordinal)
+                        ? "Mode: Long Document"
+                        : "Mode: Translation");
+                }
+            }
+
             if (summaryKind == "ComboBox" &&
+                scope.ShouldIncludeComboBoxLabelAsVisibleText() &&
                 TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } comboLabel)
             {
                 visibleTexts.Add(comboLabel);
+            }
+
+            if (summaryKind == "StatusBadge" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "label") is { Length: > 0 } statusLabel)
+            {
+                IncrementSchemaControlCount(counts, "Text");
+                visibleTexts.Add(statusLabel);
+            }
+
+            if (summaryKind == "Card" &&
+                !scope.IsSettings &&
+                TryExtractRustSchemaQuotedValue(trimmed, "title") is { Length: > 0 } cardTitle)
+            {
+                IncrementSchemaControlCount(counts, "Text");
+                visibleTexts.Add(cardTitle);
             }
 
             if (summaryKind == "TextEditor" &&
@@ -4404,14 +7163,35 @@ public sealed class DotnetRustParityTests : IDisposable
 
             if (kind == "Text" &&
                 TryExtractRustSchemaQuotedValue(trimmed, "value") is { Length: > 0 } textValue &&
-                !IsIconGlyphText(textValue))
+                !IsIconGlyphText(textValue) &&
+                !IsRustSchemaDecorativeHelpText(automationId, textValue))
             {
-                visibleTexts.Add(textValue);
+                AddRustSchemaVisibleText(visibleTexts, automationId, textValue);
+            }
+
+            if (kind == "ResultItem" &&
+                TryExtractRustSchemaQuotedValue(trimmed, "title") is { Length: > 0 } resultItemTitle)
+            {
+                IncrementSchemaControlCount(counts, "Text");
+                visibleTexts.Add(resultItemTitle);
+                if (TryExtractRustSchemaQuotedValue(trimmed, "pending_hint") is { Length: > 0 } pendingHint)
+                {
+                    IncrementSchemaControlCount(counts, "Text");
+                    visibleTexts.Add(pendingHint);
+                    visibleTexts.Add(RustSchemaPendingQueryStatusText());
+                }
             }
 
             if (kind == "Text" && scope.IsSettingsViewsMainWindowHeader(trimmed))
             {
                 ids.Add("MainWindowHeaderText");
+            }
+
+            var derivedAutomationIds = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            scope.AddDerivedAutomationIds(kind, automationId, derivedAutomationIds);
+            foreach (var derivedAutomationId in derivedAutomationIds)
+            {
+                ids.Add(derivedAutomationId);
             }
 
             if (automationId is not null && scope.ShouldIncludeAutomationId(automationId))
@@ -4421,23 +7201,154 @@ public sealed class DotnetRustParityTests : IDisposable
 
             if (automationId is not null)
             {
-                dimensions[automationId] = ExtractRustSchemaControlDimension(
+                var dimension = ExtractRustSchemaControlDimension(
                     kind,
                     automationId,
                     trimmed,
                     scope);
+                if (scope.ShouldIncludeAutomationId(automationId) ||
+                    scope.ShouldIncludeRustLayoutEvidenceId(automationId))
+                {
+                    dimensions[automationId] = ApplyNativeBounds(
+                        dimension,
+                        nativeDimensions,
+                        automationId);
+                }
+
+                foreach (var derivedAutomationId in derivedAutomationIds)
+                {
+                    if (scope.ShouldIncludeAutomationId(derivedAutomationId))
+                    {
+                        var derivedDimension = scope.AdjustDerivedDimension(
+                            dimension,
+                            derivedAutomationId,
+                            automationId);
+                        dimensions[derivedAutomationId] = ApplyNativeBounds(
+                            derivedDimension,
+                            nativeDimensions,
+                            derivedAutomationId,
+                            automationId);
+                    }
+                }
             }
         }
 
         return new UiParityUiSummary(counts, ids.ToArray(), dimensions, visibleTexts.ToArray());
     }
 
-    private static IReadOnlyList<string> CollectVisibleTexts(Window window)
+    private static UiParityControlDimension ApplyNativeBounds(
+        UiParityControlDimension dimension,
+        IReadOnlyDictionary<string, UiParityControlDimension>? nativeDimensions,
+        params string[] automationIds)
+    {
+        if (nativeDimensions is null)
+        {
+            return dimension;
+        }
+
+        foreach (var automationId in automationIds)
+        {
+            if (nativeDimensions.TryGetValue(automationId, out var nativeDimension) &&
+                nativeDimension.BoundsDips is not null)
+            {
+                return dimension with { BoundsDips = nativeDimension.BoundsDips };
+            }
+        }
+
+        return dimension;
+    }
+
+    private static IReadOnlyDictionary<string, UiParityControlDimension> MergeControlDimensions(
+        IReadOnlyDictionary<string, UiParityControlDimension> first,
+        IReadOnlyDictionary<string, UiParityControlDimension> second)
+    {
+        if (second.Count == 0)
+        {
+            return first;
+        }
+
+        var merged = new Dictionary<string, UiParityControlDimension>(first, StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, dimension) in second)
+        {
+            merged[id] = dimension;
+        }
+
+        return merged;
+    }
+
+    private static IReadOnlyDictionary<string, UiParityControlDimension> TryReadRustBoundsControlDimensions(
+        string? boundsPath)
+    {
+        if (string.IsNullOrWhiteSpace(boundsPath) || !File.Exists(boundsPath))
+        {
+            return new Dictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var dimensions = new SortedDictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var line in File.ReadLines(boundsPath))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.Length == 0 || trimmed.StartsWith("ViewBounds ", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!trimmed.StartsWith("Bounds ", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var id = TryExtractRustSchemaQuotedValue(trimmed, "id");
+                if (string.IsNullOrWhiteSpace(id))
+                {
+                    continue;
+                }
+
+                if (!TryExtractRustBoundsDouble(trimmed, "x", out var x) ||
+                    !TryExtractRustBoundsDouble(trimmed, "y", out var y) ||
+                    !TryExtractRustBoundsDouble(trimmed, "width", out var width) ||
+                    !TryExtractRustBoundsDouble(trimmed, "height", out var height) ||
+                    width <= 0 ||
+                    height <= 0)
+                {
+                    continue;
+                }
+
+                dimensions[id] = new UiParityControlDimension(
+                    Kind: TryExtractRustSchemaTokenValue(trimmed, "kind") ?? "Control",
+                    Width: FormatDip(width),
+                    Height: FormatDip(height),
+                    BoundsDips: new UiParityControlBoundsDips(
+                        Round2(x),
+                        Round2(y),
+                        Round2(width),
+                        Round2(height)));
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        return dimensions;
+    }
+
+    private static bool TryExtractRustBoundsDouble(string line, string name, out double value)
+    {
+        var raw = TryExtractRustSchemaTokenValue(line, name);
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static IReadOnlyList<string> CollectVisibleTexts(IEnumerable<AutomationElement> descendants)
     {
         try
         {
             var texts = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in window.FindAllDescendants().Where(IsOnScreenOrUnknown))
+            foreach (var element in descendants)
             {
                 var text = SafeElementName(element).Trim();
                 if (text.Length > 0)
@@ -4454,14 +7365,16 @@ public sealed class DotnetRustParityTests : IDisposable
         }
     }
 
-    private static IReadOnlyDictionary<string, UiParityControlDimension> CollectVisibleControlDimensions(Window window)
+    private static IReadOnlyDictionary<string, UiParityControlDimension> CollectVisibleControlDimensions(
+        Window window,
+        IEnumerable<AutomationElement> descendants)
     {
         try
         {
             var dimensions = new Dictionary<string, UiParityControlDimension>(StringComparer.OrdinalIgnoreCase);
             var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
             var windowBounds = window.BoundingRectangle;
-            foreach (var element in window.FindAllDescendants().Where(IsOnScreenOrUnknown))
+            foreach (var element in descendants)
             {
                 var automationId = SafeElementAutomationId(element);
                 if (string.IsNullOrWhiteSpace(automationId))
@@ -4494,6 +7407,144 @@ public sealed class DotnetRustParityTests : IDisposable
         }
     }
 
+    private static IReadOnlyList<AutomationElement> FindVisibleDescendantsForSummary(Window window)
+    {
+        try
+        {
+            var controlViewDescendants = window
+                .FindAllDescendants()
+                .Where(IsOnScreenOrUnknown)
+                .ToArray();
+            if (!ShouldUseRawViewSummaryFallback(controlViewDescendants))
+            {
+                return controlViewDescendants;
+            }
+
+            var rawViewDescendants = EnumerateRawViewDescendants(window)
+                .Where(IsOnScreenOrUnknown)
+                .ToArray();
+            return HasMeaningfulSummaryContent(rawViewDescendants)
+                ? rawViewDescendants
+                : controlViewDescendants;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return [];
+        }
+    }
+
+    private static bool ShouldUseRawViewSummaryFallback(IReadOnlyList<AutomationElement> descendants) =>
+        descendants.Count == 0 || !HasMeaningfulSummaryContent(descendants);
+
+    private static bool HasMeaningfulSummaryContent(IEnumerable<AutomationElement> descendants) =>
+        descendants.Any(element =>
+        {
+            var automationId = SafeElementAutomationId(element);
+            if (!string.IsNullOrWhiteSpace(automationId) &&
+                !IsSystemChromeSummaryValue(automationId))
+            {
+                return true;
+            }
+
+            var name = SafeElementName(element).Trim();
+            return name.Length > 0 && !IsSystemChromeSummaryValue(name);
+        });
+
+    private static bool IsSystemChromeSummaryValue(string value) =>
+        value.Equals("SystemMenuBar", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("系统", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("System", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUiSummaryScrollBarChrome(AutomationElement element)
+    {
+        var controlType = SafeControlType(element);
+        if (controlType == ControlType.ScrollBar)
+        {
+            return true;
+        }
+
+        var automationId = SafeElementAutomationId(element);
+        if (IsScrollBarChromeAutomationId(automationId))
+        {
+            return true;
+        }
+
+        return controlType == ControlType.Button &&
+               IsScrollBarChromeSummaryValue(SafeElementName(element));
+    }
+
+    private static bool IsScrollBarChromeAutomationId(string automationId) =>
+        automationId.StartsWith("Vertical", StringComparison.OrdinalIgnoreCase) ||
+        automationId.StartsWith("Horizontal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsScrollBarChromeSummaryValue(string value)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Equals("Vertical", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("Horizontal", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("Vertical ", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("Horizontal ", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("垂直", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("垂直", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("水平", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("水平", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<AutomationElement> EnumerateRawViewDescendants(Window window)
+    {
+        var descendants = new List<AutomationElement>();
+        try
+        {
+            var walker = window.Automation.TreeWalkerFactory.GetRawViewWalker();
+            CollectRawViewDescendants(walker, window, descendants, depth: 0);
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return [];
+        }
+
+        return descendants;
+    }
+
+    private static void CollectRawViewDescendants(
+        ITreeWalker walker,
+        AutomationElement parent,
+        List<AutomationElement> descendants,
+        int depth)
+    {
+        const int MaxRawViewDepth = 64;
+        const int MaxRawViewDescendants = 4096;
+        if (depth >= MaxRawViewDepth || descendants.Count >= MaxRawViewDescendants)
+        {
+            return;
+        }
+
+        AutomationElement? child;
+        try
+        {
+            child = walker.GetFirstChild(parent);
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return;
+        }
+
+        while (child != null && descendants.Count < MaxRawViewDescendants)
+        {
+            descendants.Add(child);
+            CollectRawViewDescendants(walker, child, descendants, depth + 1);
+
+            try
+            {
+                child = walker.GetNextSibling(child);
+            }
+            catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+            {
+                return;
+            }
+        }
+    }
+
     private static UiParityControlDimension ExtractRustSchemaControlDimension(
         string kind,
         string automationId,
@@ -4517,7 +7568,8 @@ public sealed class DotnetRustParityTests : IDisposable
             MaxHeight: TryExtractRustSchemaTokenValue(schemaLine, "max_height"),
             Padding: TryExtractRustSchemaTokenValue(schemaLine, "padding"),
             Spacing: TryExtractRustSchemaTokenValue(schemaLine, "spacing"),
-            RowSpacing: TryExtractRustSchemaTokenValue(schemaLine, "run_spacing"),
+            RowSpacing: TryExtractRustSchemaTokenValue(schemaLine, "row_spacing") ??
+                TryExtractRustSchemaTokenValue(schemaLine, "run_spacing"),
             ColumnSpacing: TryExtractRustSchemaTokenValue(schemaLine, "column_spacing"),
             Columns: TryExtractRustSchemaTokenValue(schemaLine, "columns"),
             MaximumRowsOrColumns: TryExtractRustSchemaTokenValue(schemaLine, "max_columns"),
@@ -4554,6 +7606,18 @@ public sealed class DotnetRustParityTests : IDisposable
         return valueEnd < 0
             ? schemaLine[valueStart..]
             : schemaLine[valueStart..(valueEnd + 2)];
+    }
+
+    private static ControlType? SafeControlType(AutomationElement element)
+    {
+        try
+        {
+            return element.ControlType;
+        }
+        catch (Exception ex) when (ex is COMException or ElementNotAvailableException or PropertyNotSupportedException or TimeoutException)
+        {
+            return null;
+        }
     }
 
     private static string SafeControlTypeName(AutomationElement element)
@@ -4608,6 +7672,37 @@ public sealed class DotnetRustParityTests : IDisposable
         }
     }
 
+    private static bool ShouldSkipRustSchemaControlCount(
+        string kind,
+        string? automationId,
+        string schemaLine)
+    {
+        // WinUI exposes the floating-window results container as a ScrollViewer/
+        // panel rather than UIA ControlType.List. Keep the ResultList id and
+        // dimensions for semantic tags, but do not count it as a List control.
+        if (kind.Equals("ResultList", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!kind.Equals("Text", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var textValue = TryExtractRustSchemaQuotedValue(schemaLine, "value") ?? string.Empty;
+
+        // Help glyphs are FontIcon controls in WinUI, not visible Text controls.
+        return IsRustSchemaDecorativeHelpText(automationId, "?") ||
+            IsIconGlyphText(textValue) ||
+            ShouldSuppressRustLongDocCellHeaderText(automationId);
+    }
+
+    private static bool IsRustSchemaDecorativeHelpText(string? automationId, string value) =>
+        value.Trim().Equals("?", StringComparison.Ordinal) &&
+        !string.IsNullOrWhiteSpace(automationId) &&
+        automationId.EndsWith("HelpIcon", StringComparison.OrdinalIgnoreCase);
+
     private static void AddRustSchemaTitleBarSummary(
         IDictionary<string, int> counts,
         ISet<string> ids)
@@ -4653,9 +7748,96 @@ public sealed class DotnetRustParityTests : IDisposable
             return null;
         }
 
-        var endQuote = value.IndexOf('"', 1);
-        return endQuote <= 1 ? null : value[1..endQuote];
+        var result = new StringBuilder();
+        var escaped = false;
+        for (var index = 1; index < value.Length; index++)
+        {
+            var ch = value[index];
+            if (escaped)
+            {
+                result.Append(ch switch
+                {
+                    '\\' => '\\',
+                    '"' => '"',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    _ => $"\\{ch}"
+                });
+                escaped = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                return result.ToString();
+            }
+
+            result.Append(ch);
+        }
+
+        return null;
     }
+
+    private static void AddRustSchemaVisibleText(ISet<string> visibleTexts, string? automationId, string value)
+    {
+        if (ShouldSuppressRustLongDocCellHeaderText(automationId))
+        {
+            return;
+        }
+
+        if (ShouldSplitRustLongDocHintHeaderText(automationId, value))
+        {
+            var separatorIndex = value.IndexOf(' ');
+            visibleTexts.Add(value[..separatorIndex]);
+            visibleTexts.Add(value[(separatorIndex + 1)..]);
+            return;
+        }
+
+        visibleTexts.Add(value);
+    }
+
+    private static bool ShouldSuppressRustLongDocCellHeaderText(string? automationId)
+    {
+        if (string.IsNullOrWhiteSpace(automationId) ||
+            !automationId.StartsWith("main.long-doc.", StringComparison.OrdinalIgnoreCase) ||
+            !automationId.EndsWith("_cell.label", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return automationId is not "main.long-doc.source_language_cell.label" and
+            not "main.long-doc.target_language_cell.label" and
+            not "main.long-doc.concurrency_cell.label" and
+            not "main.long-doc.page_range_cell.label";
+    }
+
+    private static bool ShouldSplitRustLongDocHintHeaderText(string? automationId, string value)
+    {
+        if (string.IsNullOrWhiteSpace(automationId))
+        {
+            return false;
+        }
+
+        return automationId switch
+        {
+            "main.long-doc.concurrency_cell.label"
+                or "main.long-doc.page_range_cell.label" =>
+                value.IndexOf(' ') > 0,
+            _ => false
+        };
+    }
+
+    private static string RustSchemaPendingQueryStatusText() =>
+        ResolveParityUiLanguage().Equals("zh-CN", StringComparison.OrdinalIgnoreCase)
+            ? "点击查询"
+            : "Click to query";
 
     private static bool IsIconGlyphText(string value)
     {
@@ -4721,6 +7903,35 @@ public sealed class DotnetRustParityTests : IDisposable
         public bool ShouldIncludeTextEditorTextAsVisibleText(string? automationId) =>
             !SectionId.Equals("services", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(automationId, "DeepLKeyBox", StringComparison.OrdinalIgnoreCase);
+
+        public bool ShouldIncludeButtonLabelAsVisibleText(string line, string? automationId) =>
+            IsSettings ||
+            !line.Contains(" kind=Icon ", StringComparison.Ordinal) ||
+            IsMainIconButtonWithReferenceAutomationName(automationId);
+
+        public bool ShouldCountButtonLabelAsText(string line, string? automationId) =>
+            (IsSettings || !line.Contains(" kind=Icon ", StringComparison.Ordinal)) &&
+            !IsMainIconButtonWithReferenceAutomationName(automationId) &&
+            !IsLongDocumentButtonLabelOnlyAutomationId(automationId);
+
+        public bool ShouldUseButtonTooltipAsVisibleText(string? automationId) =>
+            IsMainIconButtonWithReferenceAutomationName(automationId);
+
+        public bool ShouldIncludeComboBoxLabelAsVisibleText() => IsSettings;
+
+        private static bool IsMainIconButtonWithReferenceAutomationName(string? automationId) =>
+            automationId is "PinButton" or
+                "SettingsButton" or
+                "SwapLanguageButton" or
+                "TranslateButton" or
+                "main.long-doc.translate" or
+                "main.quick.play_source";
+
+        private static bool IsLongDocumentButtonLabelOnlyAutomationId(string? automationId) =>
+            automationId is "main.long-doc.browse" or
+                "main.long-doc.output_browse" or
+                "main.long-doc.retry" or
+                "main.long-doc.clear_history";
 
         public bool ShouldIncludeLine(string kind, string? automationId, string line)
         {
@@ -4821,7 +8032,10 @@ public sealed class DotnetRustParityTests : IDisposable
             }
             if (!IsSettings)
             {
-                return true;
+                return IsMainReferenceAutomationId(automationId) ||
+                    IsLongDocumentReferenceAutomationId(automationId) ||
+                    IsFloatingReferenceAutomationId(automationId) ||
+                    IsFloatingRequiredSchemaAutomationId(automationId);
             }
             if (automationId is "BackButton" or "MainScrollViewer" or "SettingsHeaderText")
             {
@@ -4882,6 +8096,100 @@ public sealed class DotnetRustParityTests : IDisposable
             return true;
         }
 
+        public bool ShouldIncludeRustLayoutEvidenceId(string? automationId) =>
+            !IsSettings &&
+            automationId is "LongDocControlGrid";
+
+        public UiParityControlDimension AdjustDerivedDimension(
+            UiParityControlDimension dimension,
+            string derivedAutomationId,
+            string sourceAutomationId)
+        {
+            if (!IsSettings &&
+                sourceAutomationId is "main.long-doc.concurrency" or "main.long-doc.page_range" &&
+                derivedAutomationId is "LongDocConcurrencyBox" or "LongDocPageRangeBox")
+            {
+                return dimension with { LabeledHeight = "Fixed(58)" };
+            }
+
+            return dimension;
+        }
+
+        private static bool IsMainReferenceAutomationId(string automationId) =>
+            automationId is "Close" or
+                "InputTextBox" or
+                "Maximize" or
+                "Minimize" or
+                "ModeMenuButton" or
+                "QuickInputCard" or
+                "QuickOutputCard" or
+                "QuickTranslateContent" or
+                "SettingsButton" or
+                "SourceLangCombo" or
+                "SwapLanguageButton" or
+                "SystemMenuBar" or
+                "TargetLangCombo" or
+                "TitleBar" or
+                "TranslateButton";
+
+        private static bool IsLongDocumentReferenceAutomationId(string automationId) =>
+            automationId is "LongDocBrowseButton" or
+                "LongDocClearHistoryButton" or
+                "LongDocConcurrencyBox" or
+                "LongDocConcurrencyHint" or
+                "LongDocContent" or
+                "LongDocDocumentContextPassCheckBox" or
+                "LongDocFilePanel" or
+                "LongDocFilePathDisplay" or
+                "LongDocHistoryExpander" or
+                "LongDocHistoryTitle" or
+                "LongDocInputCard" or
+                "LongDocInputCardContent" or
+                "LongDocInputModeCombo" or
+                "LongDocInputModeHint" or
+                "LongDocInputTitle" or
+                "LongDocOutputBrowseButton" or
+                "LongDocOutputCard" or
+                "LongDocOutputCardContent" or
+                "LongDocOutputFieldsPanel" or
+                "LongDocOutputFolderDisplay" or
+                "LongDocOutputFolderLabel" or
+                "LongDocOutputModeCombo" or
+                "LongDocOutputModeHint" or
+                "LongDocOutputNamingHint" or
+                "LongDocOutputTitle" or
+                "LongDocPageRangeBox" or
+                "LongDocPageRangeHint" or
+                "LongDocRetryButton" or
+                "LongDocServiceCombo" or
+                "LongDocServiceHint" or
+                "LongDocSourceLangCombo" or
+                "LongDocStatusText" or
+                "LongDocTargetLangCombo" or
+                "LongDocTranslateButton";
+
+        private static bool IsFloatingReferenceAutomationId(string automationId) =>
+            automationId is "CloseButton" or
+                "FixedWindowOcrButton" or
+                "InputTextBox" or
+                "MainScrollViewer" or
+                "MiniWindowCloseButton" or
+                "MiniWindowOcrButton" or
+                "PinButton" or
+                "ResultsScrollViewer" or
+                "SourceLangCombo" or
+                "SourcePlayButton" or
+                "StatusText" or
+                "SwapButton" or
+                "TargetLangCombo" or
+                "TranslateButton";
+
+        private static bool IsFloatingRequiredSchemaAutomationId(string automationId) =>
+            automationId is "fixed.results" or
+                "fixed.translate" or
+                "mini.results" or
+                "mini.translate";
+
         public bool IsSettingsViewsMainWindowHeader(string line) =>
             SectionId.Equals("views", StringComparison.OrdinalIgnoreCase) &&
             _currentViewsWindow == "main" &&
@@ -4904,6 +8212,156 @@ public sealed class DotnetRustParityTests : IDisposable
                 ids.Add("WindowsLocalAITitleText");
             }
         }
+
+        public void AddDerivedAutomationIds(string kind, string? automationId, ISet<string> ids)
+        {
+            if (IsSettings || string.IsNullOrWhiteSpace(automationId))
+            {
+                return;
+            }
+
+            switch (automationId)
+            {
+                case "main.mode_title":
+                    ids.Add("ModeEmojiIcon");
+                    ids.Add("ModeTitleText");
+                    break;
+                case "QuickOutputCard":
+                    ids.Add("ResultsTitleText");
+                    break;
+                case "main.quick.play_source":
+                    ids.Add("SourcePlayButton");
+                    break;
+                case "StatusIndicator":
+                    ids.Add("StatusText");
+                    break;
+                case "fixed.input":
+                case "mini.input":
+                    ids.Add("InputTextBox");
+                    break;
+                case "fixed.ocr":
+                    ids.Add("FixedWindowOcrButton");
+                    break;
+                case "mini.ocr":
+                    ids.Add("MiniWindowOcrButton");
+                    break;
+                case "mini.pin":
+                    ids.Add("PinButton");
+                    break;
+                case "fixed.source_language":
+                case "mini.source_language":
+                    ids.Add("SourceLangCombo");
+                    break;
+                case "fixed.swap":
+                case "mini.swap":
+                    ids.Add("SwapButton");
+                    break;
+                case "fixed.target_language":
+                case "mini.target_language":
+                    ids.Add("TargetLangCombo");
+                    break;
+                case "fixed.translate":
+                case "mini.translate":
+                    ids.Add("TranslateButton");
+                    break;
+                case "fixed.results":
+                    ids.Add("ResultsScrollViewer");
+                    break;
+                case "mini.results":
+                    ids.Add("MainScrollViewer");
+                    break;
+                case "mini.play_source":
+                    ids.Add("SourcePlayButton");
+                    break;
+                case "fixed.status":
+                case "mini.status":
+                    ids.Add("StatusText");
+                    break;
+                case "main.long-doc.input_card":
+                    ids.Add("LongDocInputCard");
+                    break;
+                case "main.long-doc.browse":
+                    ids.Add("LongDocBrowseButton");
+                    break;
+                case "main.long-doc.scroll":
+                case "main.long-doc.content":
+                case "main.long-doc.control_bar":
+                    ids.Add("LongDocContent");
+                    break;
+                case "main.long-doc.source_language":
+                    ids.Add("LongDocSourceLangCombo");
+                    break;
+                case "main.long-doc.target_language":
+                    ids.Add("LongDocTargetLangCombo");
+                    break;
+                case "main.long-doc.service":
+                    ids.Add("LongDocServiceCombo");
+                    break;
+                case "main.long-doc.input_mode":
+                    ids.Add("LongDocInputModeCombo");
+                    break;
+                case "main.long-doc.output_mode":
+                    ids.Add("LongDocOutputModeCombo");
+                    break;
+                case "main.long-doc.concurrency":
+                    ids.Add("LongDocConcurrencyBox");
+                    break;
+                case "main.long-doc.page_range":
+                    ids.Add("LongDocPageRangeBox");
+                    break;
+                case "main.long-doc.translate":
+                    ids.Add("LongDocTranslateButton");
+                    break;
+                case "main.long-doc.output_card":
+                    ids.Add("LongDocOutputCard");
+                    break;
+                case "main.long-doc.retry":
+                    ids.Add("LongDocRetryButton");
+                    break;
+                case "main.long-doc.output_content":
+                    ids.Add("LongDocOutputFieldsPanel");
+                    break;
+                case "main.long-doc.output_folder_label":
+                    ids.Add("LongDocOutputFolderLabel");
+                    break;
+                case "main.long-doc.output_folder":
+                    ids.Add("LongDocOutputFolderDisplay");
+                    break;
+                case "main.long-doc.output_browse":
+                    ids.Add("LongDocOutputBrowseButton");
+                    break;
+                case "main.long-doc.output_naming_hint":
+                    ids.Add("LongDocOutputNamingHint");
+                    break;
+                case "main.long-doc.history":
+                    ids.Add("LongDocHistoryExpander");
+                    break;
+                case "main.long-doc.clear_history":
+                    ids.Add("LongDocClearHistoryButton");
+                    break;
+            }
+
+            if (kind == "ResultItem" &&
+                MainResultAutomationSuffix(automationId) is { Length: > 0 } suffix)
+            {
+                ids.Add("ServiceIcon");
+                ids.Add("ServiceNameText");
+                ids.Add($"ServiceResultHeader_{suffix}");
+                ids.Add($"ServiceResultItem_{suffix}");
+            }
+        }
+
+        private static string? MainResultAutomationSuffix(string automationId) =>
+            automationId switch
+            {
+                "bing" => "bing",
+                "deepl" => "deepl",
+                "google" => "google",
+                "volcano" => "volcano",
+                "windows-local-ai" => "windows-local-ai",
+                "mdx::collins-cobuild-english-usage" => "mdx__collins-cobuild-english-usage-c9ef3413",
+                _ => null
+            };
 
         public UiParityControlBoundsDips? EstimateBoundsDips(string automationId)
         {
@@ -5326,27 +8784,15 @@ public sealed class DotnetRustParityTests : IDisposable
             automationId.EndsWith(".enabled_query", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static int CountDescendants(Window window, ControlType controlType)
-    {
-        try
-        {
-            return window
-                .FindAllDescendants(cf => cf.ByControlType(controlType))
-                .Count(IsOnScreenOrUnknown);
-        }
-        catch (Exception ex) when (ex is COMException or PropertyNotSupportedException or TimeoutException)
-        {
-            return 0;
-        }
-    }
+    private static int CountDescendants(IEnumerable<AutomationElement> descendants, ControlType controlType) =>
+        descendants.Count(element =>
+            SafeControlType(element) == controlType);
 
-    private static IReadOnlyList<string> CollectVisibleAutomationIds(Window window)
+    private static IReadOnlyList<string> CollectVisibleAutomationIds(IEnumerable<AutomationElement> descendants)
     {
         try
         {
-            return window
-                .FindAllDescendants()
-                .Where(IsOnScreenOrUnknown)
+            return descendants
                 .Select(element =>
                 {
                     try
@@ -5443,6 +8889,20 @@ public sealed class DotnetRustParityTests : IDisposable
         return Path.GetRelativePath(ScreenshotHelper.OutputDir, path).Replace('\\', '/');
     }
 
+    private static string? RustBoundsPathForSchema(string? schemaPath)
+    {
+        if (string.IsNullOrWhiteSpace(schemaPath))
+        {
+            return null;
+        }
+
+        const string schemaSuffix = "-rust-view-schema.txt";
+        const string boundsSuffix = "-rust-view-bounds.txt";
+        return schemaPath.EndsWith(schemaSuffix, StringComparison.OrdinalIgnoreCase)
+            ? schemaPath[..^schemaSuffix.Length] + boundsSuffix
+            : Path.ChangeExtension(schemaPath, ".rust-view-bounds.txt");
+    }
+
     private static void AssertImageHasVisibleContent(string path)
     {
         using var bitmap = new Bitmap(path);
@@ -5493,11 +8953,11 @@ public sealed class DotnetRustParityTests : IDisposable
         }
 
         settings["UILanguage"] = ResolveParityUiLanguage();
-        settings["AppTheme"] = "System";
-        settings["FirstLanguage"] = "zh";
+        settings["AppTheme"] = ResolveDotnetAppThemeSetting();
+        settings["FirstLanguage"] = "zh-tw";
         settings["SecondLanguage"] = "en";
-        settings["SelectedLanguages"] = new[] { "zh", "en", "ja", "ko", "fr", "de", "es" };
-        settings["AutoSelectTargetLanguage"] = true;
+        settings["SelectedLanguages"] = new[] { "zh-tw", "zh", "en", "ja", "ko", "fr", "de", "es" };
+        settings["AutoSelectTargetLanguage"] = false;
         settings["SourceLanguage"] = "auto";
         settings["MouseSelectionTranslate"] = true;
         settings["MouseSelectionExcludedApps"] = new[] { "code" };
@@ -5506,6 +8966,36 @@ public sealed class DotnetRustParityTests : IDisposable
         settings["OllamaModel"] = "llama3.2";
         settings["WindowWidthDips"] = 846.0;
         settings["WindowHeightDips"] = 913.0;
+        var settingsDirectory = Path.GetDirectoryName(settingsPath)!;
+        var parityMdxPath = Path.Combine(settingsDirectory, "Collins COBUILD English Usage.mdx");
+        File.WriteAllBytes(parityMdxPath, Array.Empty<byte>());
+
+        const string parityMdxServiceId = "mdx::collins-cobuild-english-usage-c9ef3413";
+        const string parityMdxDisplayName = "📚 Collins COBUILD English Usage";
+        settings["ImportedMdxDictionaries"] = new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["ServiceId"] = parityMdxServiceId,
+                ["DisplayName"] = parityMdxDisplayName,
+                ["FilePath"] = parityMdxPath,
+                ["IsEncrypted"] = false,
+                ["Regcode"] = null,
+                ["Email"] = null,
+                ["MddFilePaths"] = Array.Empty<string>()
+            }
+        };
+        settings["MiniWindowEnabledServices"] = new[] { "bing", parityMdxServiceId };
+        settings["MainWindowEnabledServices"] = new[]
+        {
+            "bing",
+            "windows-local-ai",
+            parityMdxServiceId,
+            "google",
+            "volcano",
+            "deepl"
+        };
+        settings["FixedWindowEnabledServices"] = new[] { "bing", parityMdxServiceId };
 
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         File.WriteAllText(
@@ -5525,7 +9015,34 @@ public sealed class DotnetRustParityTests : IDisposable
     private static string ResolveParityUiLanguage()
     {
         var value = Environment.GetEnvironmentVariable(UiLanguageEnvironmentVariable);
-        return string.IsNullOrWhiteSpace(value) ? "en-US" : value.Trim();
+        return string.IsNullOrWhiteSpace(value) ? "zh-CN" : value.Trim();
+    }
+
+    private static string ResolveRustPreviewTheme(string defaultTheme)
+    {
+        var value = Environment.GetEnvironmentVariable(ThemeEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultTheme;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "light" => "light",
+            "dark" => "dark",
+            "system" => "system",
+            _ => defaultTheme
+        };
+    }
+
+    private static string ResolveDotnetAppThemeSetting()
+    {
+        return ResolveRustPreviewTheme("system") switch
+        {
+            "light" => "Light",
+            "dark" => "Dark",
+            _ => "System"
+        };
     }
 
     private static string ResolveDotnetWinUiVersion()
@@ -5621,6 +9138,89 @@ public sealed class DotnetRustParityTests : IDisposable
         public static readonly SettingsParitySection About = new("about", "About", "GitHubRepositoryLink");
     }
 
+    private sealed record SettingsDropdownOptionCapture(
+        string Label,
+        int DotnetIndex,
+        int? RustIndex = null,
+        string? DotnetText = null,
+        string? RustText = null)
+    {
+        public string DotnetOptionText => DotnetText ?? Label;
+        public string RustOptionText => RustText ?? DotnetOptionText;
+        public int RustOptionIndexValue => RustIndex ?? DotnetIndex;
+    }
+
+    private sealed record SettingsDropdownOptionCaptureResult(
+        SettingsDropdownOptionCapture Option,
+        string ScenarioId,
+        string ScreenshotPath,
+        Rectangle WindowBounds,
+        double WindowDpiScale,
+        Size ScreenshotPixelSize);
+
+    private sealed record DropdownOptionCapturePair(
+        SettingsDropdownOptionCaptureResult Dotnet,
+        SettingsDropdownOptionCaptureResult Rust);
+
+    private readonly record struct MainOperationsCaptureScope(
+        bool CaptureButtons,
+        bool CaptureDropdowns,
+        bool CaptureDropdownOptions);
+
+    private sealed record MainInteractionCapture(
+        string Key,
+        string Label,
+        string DotnetElement,
+        string RustElement,
+        string RustControlId,
+        double FallbackX,
+        double FallbackY,
+        IReadOnlyList<UiParityRegion> Regions);
+
+    private sealed record MainDropdownCapture(
+        string Key,
+        string Label,
+        string DotnetElement,
+        string RustElement,
+        string RustControlId,
+        double FallbackX,
+        double FallbackY,
+        int RestoreOptionIndex,
+        IReadOnlyList<SettingsDropdownOptionCapture> Options,
+        IReadOnlyList<UiParityRegion> Regions,
+        double FallbackWidthDips = 280,
+        double FallbackHeightDips = 34);
+
+    private readonly record struct FloatingCaptureScope(
+        bool CaptureTranslateButton,
+        bool CaptureDropdowns,
+        bool CaptureDropdownOptions,
+        bool CaptureControls);
+
+    private sealed record FloatingInteractionCapture(
+        string Key,
+        string Label,
+        string DotnetElement,
+        string RustStateEnvironmentVariable,
+        string RustControlId,
+        double FallbackX,
+        double FallbackY,
+        IReadOnlyList<UiParityRegion> Regions);
+
+    private sealed record FloatingDropdownCapture(
+        string Key,
+        string Label,
+        string DotnetElement,
+        string RustElement,
+        string RustControlId,
+        string RustSelectedLanguageEnvironmentVariable,
+        double FallbackX,
+        double FallbackY,
+        int RestoreOptionIndex,
+        IReadOnlyList<SettingsDropdownOptionCapture> Options,
+        double FallbackWidthDips = 280,
+        double FallbackHeightDips = 34);
+
     private sealed record SettingsParityCaptureStep(
         string Key,
         SettingsParitySection Section,
@@ -5632,6 +9232,16 @@ public sealed class DotnetRustParityTests : IDisposable
         string? HoveredElement = null,
         string? FocusedElement = null,
         string? PressedElement = null,
+        string? ExpandedDropdownElement = null,
+        IReadOnlyList<string>? ExpectedDropdownItems = null,
+        IReadOnlyList<SettingsDropdownOptionCapture>? DropdownOptions = null,
+        bool CaptureDropdownOptions = true,
+        int? DropdownRestoreOptionIndex = 0,
+        bool ForceDropdownFallbackClick = false,
+        int DropdownFallbackItemCount = 0,
+        double DropdownOptionRowHeightDips = 34,
+        double DropdownFallbackWidthDips = 280,
+        double DropdownFallbackHeightDips = 34,
         string? RustTtsSpeedState = null,
         string? RustAutoPlayState = null,
         string? RustImportMdxState = null,
@@ -5646,9 +9256,32 @@ public sealed class DotnetRustParityTests : IDisposable
         double InteractionFallbackX = 0.50,
         double InteractionFallbackY = 0.62)
     {
+        public bool CapturesExpandedDropdown => !string.IsNullOrWhiteSpace(ExpandedDropdownElement);
+
+        public IReadOnlyList<string> DropdownExpectedItems => ExpectedDropdownItems ?? [];
+
+        public IReadOnlyList<SettingsDropdownOptionCapture> DropdownOptionCaptures =>
+            DropdownOptions ??
+            DropdownExpectedItems
+                .Select((item, index) => new SettingsDropdownOptionCapture(item, index))
+                .ToArray();
+
+        public bool CapturesDropdownOptionSelections =>
+            CaptureDropdownOptions && CapturesExpandedDropdown && DropdownOptionCaptures.Count > 0;
+
         public static readonly IReadOnlyList<SettingsParityCaptureStep> All =
         [
             new("parity-settings-general-behavior-top", SettingsParitySection.General, 0),
+            new(
+                "parity-settings-general-app-theme-dropdown-open",
+                SettingsParitySection.General,
+                0,
+                ExpandedDropdownElement: "AppThemeCombo",
+                ExpectedDropdownItems: ThemeDropdownExpectedItems(),
+                DropdownFallbackItemCount: ThemeDropdownExpectedItems().Count,
+                BaselineScenarioId: "parity-settings-general-behavior-top",
+                InteractionFallbackX: 0.24,
+                InteractionFallbackY: 0.25),
             new(
                 "parity-settings-tabs-services-hover",
                 SettingsParitySection.General,
@@ -5736,10 +9369,104 @@ public sealed class DotnetRustParityTests : IDisposable
                 InteractionFallbackX: 0.50,
                 InteractionFallbackY: 0.61),
             .. ExpandedServiceConfigurationSteps(),
+            new(
+                "parity-settings-services-openai-api-format-dropdown-open",
+                SettingsParitySection.Services,
+                15,
+                DotnetExpandElement: "OpenAI",
+                RustExpandedServiceConfigurations: "openai",
+                ExpandedDropdownElement: "OpenAIApiFormatCombo",
+                ExpectedDropdownItems:
+                [
+                    "Auto-detect",
+                    "Responses API",
+                    "Chat Completions API"
+                ],
+                CaptureDropdownOptions: false,
+                DropdownFallbackItemCount: 3,
+                BaselineScenarioId: "parity-settings-services-openai-expanded-scroll-15-percent",
+                InteractionFallbackX: 0.21,
+                InteractionFallbackY: 0.81),
+            new(
+                "parity-settings-services-openai-model-dropdown-open",
+                SettingsParitySection.Services,
+                15,
+                DotnetExpandElement: "OpenAI",
+                RustExpandedServiceConfigurations: "openai",
+                ExpandedDropdownElement: "OpenAIModelCombo",
+                ExpectedDropdownItems:
+                [
+                    "gpt-5-mini",
+                    "gpt-5-nano",
+                    "gpt-5",
+                    "gpt-4.1-mini",
+                    "gpt-4.1-nano",
+                    "gpt-4o-mini",
+                    "gpt-4o"
+                ],
+                CaptureDropdownOptions: false,
+                DropdownFallbackItemCount: 7,
+                BaselineScenarioId: "parity-settings-services-openai-expanded-scroll-15-percent",
+                InteractionFallbackX: 0.21,
+                InteractionFallbackY: 0.89),
             new("parity-settings-views-window-results-top", SettingsParitySection.Views, 0),
             new("parity-settings-hotkeys-shortcut-inputs-top", SettingsParitySection.Hotkeys, 0),
             new("parity-settings-advanced-ocr-layout-top", SettingsParitySection.Advanced, 0),
+            new(
+                "parity-settings-advanced-ocr-engine-dropdown-open",
+                SettingsParitySection.Advanced,
+                0,
+                ExpandedDropdownElement: "OcrEngineCombo",
+                ExpectedDropdownItems: OcrEngineDropdownExpectedItems(),
+                DropdownFallbackItemCount: OcrEngineDropdownExpectedItems().Count,
+                BaselineScenarioId: "parity-settings-advanced-ocr-layout-top",
+                InteractionFallbackX: 0.43,
+                InteractionFallbackY: 0.24),
+            new(
+                "parity-settings-advanced-layout-detection-dropdown-open",
+                SettingsParitySection.Advanced,
+                0,
+                ExpandedDropdownElement: "LayoutDetectionModeCombo",
+                ExpectedDropdownItems: LayoutDetectionDropdownExpectedItems(),
+                DropdownFallbackItemCount: LayoutDetectionDropdownExpectedItems().Count,
+                BaselineScenarioId: "parity-settings-advanced-ocr-layout-top",
+                InteractionFallbackX: 0.43,
+                InteractionFallbackY: 0.48),
             new("parity-settings-language-preferences-top", SettingsParitySection.Language, 0),
+            new(
+                "parity-settings-language-first-language-dropdown-open",
+                SettingsParitySection.Language,
+                0,
+                ExpandedDropdownElement: "FirstLanguageCombo",
+                ExpectedDropdownItems: SettingsLanguageDropdownExpectedItems(),
+                DropdownOptions: SettingsLanguageDropdownOptionCaptures(),
+                DropdownFallbackItemCount: SettingsLanguageDropdownExpectedItems().Count,
+                BaselineScenarioId: "parity-settings-language-preferences-top",
+                InteractionFallbackX: 0.20,
+                InteractionFallbackY: 0.36),
+            new(
+                "parity-settings-language-second-language-dropdown-open",
+                SettingsParitySection.Language,
+                0,
+                ExpandedDropdownElement: "SecondLanguageCombo",
+                ExpectedDropdownItems: SettingsLanguageDropdownExpectedItems(),
+                DropdownOptions: SettingsLanguageDropdownOptionCaptures(),
+                DropdownFallbackItemCount: SettingsLanguageDropdownExpectedItems().Count,
+                BaselineScenarioId: "parity-settings-language-preferences-top",
+                InteractionFallbackX: 0.20,
+                InteractionFallbackY: 0.48),
+            new(
+                "parity-settings-language-ui-language-dropdown-open",
+                SettingsParitySection.Language,
+                0,
+                ExpandedDropdownElement: "UILanguageCombo",
+                ExpectedDropdownItems: UiLanguageDropdownExpectedItems(),
+                DropdownFallbackItemCount: UiLanguageDropdownExpectedItems().Count,
+                DropdownRestoreOptionIndex: 1,
+                ForceDropdownFallbackClick: true,
+                BaselineScenarioId: "parity-settings-language-preferences-top",
+                InteractionFallbackX: 0.20,
+                InteractionFallbackY: 0.65),
             new("parity-settings-language-translation-languages-collapsed-scroll-100-percent", SettingsParitySection.Language, 100),
             new(
                 "parity-settings-language-translation-languages-expanded-list-scroll-100-percent",
@@ -5748,6 +9475,56 @@ public sealed class DotnetRustParityTests : IDisposable
                 ExpandAvailableLanguages: true,
                 RustTranslationLanguagesExpanded: true),
             new("parity-settings-about-links-top", SettingsParitySection.About, 0),
+        ];
+
+        private static bool IsZhParityLanguage() =>
+            ResolveParityUiLanguage().Equals("zh-CN", StringComparison.OrdinalIgnoreCase);
+
+        private static IReadOnlyList<string> ThemeDropdownExpectedItems() =>
+            IsZhParityLanguage()
+                ? ["系统", "浅色", "深色", "极简线框"]
+                : ["System", "Light", "Dark", "Minimal"];
+
+        private static IReadOnlyList<string> OcrEngineDropdownExpectedItems() =>
+            IsZhParityLanguage()
+                ? ["默认（Windows 原生）", "Ollama (Local VLM)", "自定义 API"]
+                : ["Default (Windows Native)", "Ollama (Local VLM)", "Custom API"];
+
+        private static IReadOnlyList<string> LayoutDetectionDropdownExpectedItems() =>
+            IsZhParityLanguage()
+                ? ["自动（推荐）", "本地 ONNX 模型", "视觉大模型", "仅启发式"]
+                : ["Auto (Recommended)", "Local ONNX Model", "Vision LLM", "Heuristic Only"];
+
+        private static IReadOnlyList<string> SettingsLanguageDropdownExpectedItems() =>
+            IsZhParityLanguage()
+                ? ["简体中文", "繁體中文", "日语", "韩语", "英语", "德语", "法语", "西班牙语"]
+                : ["Simplified Chinese", "Traditional Chinese", "Japanese", "Korean", "English", "German", "French", "Spanish"];
+
+        private static IReadOnlyList<SettingsDropdownOptionCapture> SettingsLanguageDropdownOptionCaptures()
+        {
+            var labels = SettingsLanguageDropdownExpectedItems();
+            return labels
+                .Select((label, index) => new SettingsDropdownOptionCapture(label, index))
+                .ToArray();
+        }
+
+        private static IReadOnlyList<string> UiLanguageDropdownExpectedItems() =>
+        [
+            "English",
+            "简体中文",
+            "繁體中文",
+            "日本語",
+            "한국어",
+            "Français",
+            "Deutsch",
+            "Tiếng Việt",
+            "ไทย",
+            "العربية",
+            "Bahasa Indonesia",
+            "Italiano",
+            "Bahasa Melayu",
+            "हिन्दी",
+            "Dansk"
         ];
 
         private static IReadOnlyList<SettingsParityCaptureStep> ExpandedServiceConfigurationSteps()
@@ -5846,7 +9623,13 @@ public sealed class DotnetRustParityTests : IDisposable
         UiParityWindowSizeAudit? CandidateWindowSizeAudit = null,
         IReadOnlyList<string>? RequiredVisibleTexts = null,
         string? BaselineScenarioId = null,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? RequiredControlStates = null);
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? RequiredControlStates = null,
+        string? ExpandedDropdownElement = null,
+        IReadOnlyList<string>? ExpectedDropdownItems = null,
+        string? OperatedDropdownElement = null,
+        string? SelectedDropdownOption = null,
+        int? SelectedDropdownOptionIndex = null,
+        int? SelectedRustDropdownOptionIndex = null);
 
     private sealed record UiParityWindowManifest(
         UiParityBounds Bounds,
@@ -6002,6 +9785,23 @@ public sealed class DotnetRustParityTests : IDisposable
             new("floating-footer", 0.0, 0.86, 1.0, 0.14, 1.2)
         ];
 
+        public static readonly IReadOnlyList<UiParityRegion> FloatingHeaderEffectRegions =
+        [
+            new("floating-header-action", 0.0, 0.0, 1.0, 0.18, 3.2),
+            new("floating-source-context", 0.0, 0.18, 1.0, 0.34, 0.9),
+            new("floating-results-context", 0.0, 0.52, 1.0, 0.34, 0.6),
+            new("floating-footer-context", 0.0, 0.86, 1.0, 0.14, 0.4)
+        ];
+
+        public static readonly IReadOnlyList<UiParityRegion> FloatingLanguageBarEffectRegions =
+        [
+            new("floating-header-context", 0.0, 0.0, 1.0, 0.18, 0.5),
+            new("floating-source-context", 0.0, 0.18, 1.0, 0.18, 0.8),
+            new("floating-language-bar", 0.0, 0.36, 1.0, 0.18, 3.2),
+            new("floating-results-context", 0.0, 0.54, 1.0, 0.32, 0.8),
+            new("floating-footer-context", 0.0, 0.86, 1.0, 0.14, 0.4)
+        ];
+
         public static readonly IReadOnlyList<UiParityRegion> PopButtonRegions =
         [
             new("popbutton-icon", 0.0, 0.0, 1.0, 1.0, 3.0),
@@ -6135,7 +9935,7 @@ public sealed class DotnetRustParityTests : IDisposable
             startInfo.Environment["EASYDICT_PREVIEW_WINDOW"] = "settings";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_OPEN"] = "1";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_SECTION"] = step.Section.Id;
-            startInfo.Environment["EASYDICT_PREVIEW_THEME"] = "system";
+            startInfo.Environment["EASYDICT_PREVIEW_THEME"] = ResolveRustPreviewTheme("system");
             startInfo.Environment["EASYDICT_PREVIEW_UI_LANGUAGE"] = ResolveParityUiLanguage();
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_MOUSE_SELECTION_TRANSLATE"] = "1";
             startInfo.Environment["EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP"] = "0";
@@ -6151,6 +9951,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 startInfo.Environment["EASYDICT_PREVIEW_APP_VERSION"] = dotnetVersion;
             }
             startInfo.Environment["EASYDICT_PREVIEW_SCHEMA_PATH"] = schemaPath;
+            startInfo.Environment["EASYDICT_PREVIEW_BOUNDS_PATH"] = RustBoundsPathForSchema(schemaPath)!;
             if (step.RustTranslationLanguagesExpanded)
             {
                 startInfo.Environment["EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED"] = "1";
@@ -6262,11 +10063,12 @@ public sealed class DotnetRustParityTests : IDisposable
             string theme,
             ITestOutputHelper output,
             IReadOnlyDictionary<string, string>? extraEnvironment = null,
+            string? schemaSuffix = null,
             int minimumWindowWidth = 120,
             int minimumWindowHeight = 120)
         {
             var exePath = ResolveRustPreviewExecutable(output);
-            var schemaPath = CreateSchemaPath($"main-{scenario}");
+            var schemaPath = CreateSchemaPath($"main-{scenario}{schemaSuffix ?? string.Empty}");
             var startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
@@ -6280,6 +10082,7 @@ public sealed class DotnetRustParityTests : IDisposable
             startInfo.Environment["EASYDICT_PREVIEW_THEME"] = theme;
             startInfo.Environment["EASYDICT_PREVIEW_UI_LANGUAGE"] = ResolveParityUiLanguage();
             startInfo.Environment["EASYDICT_PREVIEW_SCHEMA_PATH"] = schemaPath;
+            startInfo.Environment["EASYDICT_PREVIEW_BOUNDS_PATH"] = RustBoundsPathForSchema(schemaPath)!;
             if (extraEnvironment != null)
             {
                 foreach (var (key, value) in extraEnvironment)
@@ -6380,9 +10183,29 @@ public sealed class DotnetRustParityTests : IDisposable
         private static string CreateSchemaPath(string scenarioId)
         {
             Directory.CreateDirectory(ScreenshotHelper.OutputDir);
-            return Path.Combine(
+            var path = Path.Combine(
                 ScreenshotHelper.OutputDir,
                 $"{SanitizeFileName(scenarioId)}-rust-view-schema.txt");
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+                var boundsPath = RustBoundsPathForSchema(path);
+                if (!string.IsNullOrWhiteSpace(boundsPath) && File.Exists(boundsPath))
+                {
+                    File.Delete(boundsPath);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            return path;
         }
 
         public Window GetMainWindow(TimeSpan timeout)

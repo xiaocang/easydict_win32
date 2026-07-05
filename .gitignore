@@ -72,6 +72,22 @@ nul
 artifacts/
 screenshots/
 
+# Local alignment automation state
+.align/
+prompts/
+scripts/align-loop.ps1
+scripts/codex-align-one.ps1
+scripts/codex-discover.ps1
+scripts/mark-blocked.ps1
+scripts/mark-done.ps1
+scripts/verify-all.ps1
+scripts/verify-component.ps1
+scripts/verify-ui-component.ps1
+
+# Local planning scratch docs
+0701-top50.md
+compare_winui_plan.md
+
 # Local review and package files
 packages-microsoft-prod.deb
 pr-comments.txt

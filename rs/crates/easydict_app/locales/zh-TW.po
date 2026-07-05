@@ -30,6 +30,15 @@ msgstr "{count} 個服務已完成"
 msgid "status.ready"
 msgstr "已就緒"
 
+msgid "DetectedLanguage"
+msgstr "偵測到：{0}"
+
+msgid "GrammarCorrectionActiveNotice"
+msgstr "目前為糾錯模式：將僅執行 AI 糾錯服務。修改目標語言可回到翻譯。"
+
+msgid "GrammarCorrectionFallbackNotice"
+msgstr "未啟用支援糾錯的 AI 服務，已回退為普通翻譯。設定一個支援糾錯的 AI 服務後，源語言和目標語言相同時會顯示糾錯資訊。"
+
 msgid "ocr.capture.title"
 msgstr "OCR Capture"
 
@@ -45,6 +54,9 @@ msgstr "自動偵測"
 msgid "main.target_zh_hans"
 msgstr "簡體中文"
 
+msgid "main.ocr_screenshot_translate"
+msgstr "OCR 截圖翻譯"
+
 msgid "main.language_help"
 msgstr "Language help"
 
@@ -53,6 +65,15 @@ msgstr "翻譯"
 
 msgid "main.settings"
 msgstr "設定"
+
+msgid "main.pin_window"
+msgstr "固定視窗（保持置頂）"
+
+msgid "main.swap_languages"
+msgstr "交換來源語言和目標語言"
+
+msgid "main.play_source_text"
+msgstr "朗讀來源文字"
 
 msgid "settings.title"
 msgstr "設定"

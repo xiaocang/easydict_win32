@@ -337,7 +337,7 @@ public static class ScreenshotHelper
         return bounds;
     }
 
-    private static void EnsureWindowReadyForCapture(Window window, string name)
+    public static void EnsureWindowReadyForCapture(Window window, string name)
     {
         var hwnd = window.Properties.NativeWindowHandle.Value;
         if (hwnd == IntPtr.Zero)
@@ -383,7 +383,7 @@ public static class ScreenshotHelper
             }
 
             Thread.Sleep(250);
-            if (IsForegroundWindow(hwnd))
+            if (IsForegroundWindow(hwnd) || IsWindowVisibleAtCapturePoints(hwnd))
             {
                 Thread.Sleep(150);
                 return;
@@ -392,11 +392,75 @@ public static class ScreenshotHelper
 
         var foreground = GetForegroundWindow();
         throw new InvalidOperationException(
-            $"Screenshot '{name}' would capture the wrong window: target HWND=0x{hwnd.ToInt64():X}, foreground HWND=0x{foreground.ToInt64():X}.");
+            $"Screenshot '{name}' would capture the wrong window: target HWND=0x{hwnd.ToInt64():X}, foreground HWND=0x{foreground.ToInt64():X}, hit-test HWND=0x{WindowFromCapturePoint(hwnd).ToInt64():X}.");
     }
 
     private static bool IsForegroundWindow(IntPtr hwnd)
         => GetForegroundWindow() == hwnd;
+
+    private static bool IsWindowVisibleAtCapturePoints(IntPtr hwnd)
+    {
+        var bounds = GetWindowPhysicalBounds(hwnd);
+        if (bounds.Width <= 1 || bounds.Height <= 1)
+        {
+            return false;
+        }
+
+        var testedPoints = 0;
+        foreach (var point in GetInteriorCapturePoints(bounds))
+        {
+            testedPoints++;
+            if (!IsPointOwnedByWindow(hwnd, point))
+            {
+                return false;
+            }
+        }
+
+        return testedPoints > 0;
+    }
+
+    private static IntPtr WindowFromCapturePoint(IntPtr hwnd)
+    {
+        var bounds = GetWindowPhysicalBounds(hwnd);
+        if (bounds.Width <= 1 || bounds.Height <= 1)
+        {
+            return IntPtr.Zero;
+        }
+
+        return WindowFromPoint(ToWindowPoint(new Point(
+            bounds.Left + bounds.Width / 2,
+            bounds.Top + bounds.Height / 2)));
+    }
+
+    private static IEnumerable<Point> GetInteriorCapturePoints(Rectangle bounds)
+    {
+        var insetX = Math.Min(48, Math.Max(4, bounds.Width / 8));
+        var insetY = Math.Min(48, Math.Max(4, bounds.Height / 8));
+        yield return new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+        yield return new Point(bounds.Left + insetX, bounds.Top + insetY);
+        yield return new Point(bounds.Right - insetX, bounds.Top + insetY);
+        yield return new Point(bounds.Left + insetX, bounds.Bottom - insetY);
+        yield return new Point(bounds.Right - insetX, bounds.Bottom - insetY);
+    }
+
+    private static bool IsPointOwnedByWindow(IntPtr hwnd, Point point)
+    {
+        var hit = WindowFromPoint(ToWindowPoint(point));
+        if (hit == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        return hit == hwnd ||
+            GetAncestor(hit, GetAncestorRoot) == hwnd ||
+            GetAncestor(hit, GetAncestorRootOwner) == hwnd;
+    }
+
+    private static WindowPoint ToWindowPoint(Point point) => new()
+    {
+        X = point.X,
+        Y = point.Y
+    };
 
     private static Rectangle IntersectWithVirtualScreen(Rectangle bounds)
     {
@@ -453,6 +517,12 @@ public static class ScreenshotHelper
     private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(WindowPoint point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
+    [DllImport("user32.dll")]
     private static extern bool IsIconic(IntPtr hWnd);
 
     [DllImport("user32.dll")]
@@ -475,6 +545,8 @@ public static class ScreenshotHelper
     private const int SystemMetricVirtualScreenWidth = 78;
     private const int SystemMetricVirtualScreenHeight = 79;
     private const int ShowWindowRestore = 9;
+    private const uint GetAncestorRoot = 2;
+    private const uint GetAncestorRootOwner = 3;
     private static readonly IntPtr HwndTopMost = new(-1);
     private static readonly IntPtr HwndNoTopMost = new(-2);
 
@@ -485,5 +557,12 @@ public static class ScreenshotHelper
         public readonly int Top;
         public readonly int Right;
         public readonly int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowPoint
+    {
+        public int X;
+        public int Y;
     }
 }

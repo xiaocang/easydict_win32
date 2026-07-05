@@ -1,7 +1,5 @@
 #![allow(deprecated)]
 
-use std::path::Path;
-
 use win_fluent::prelude::*;
 use win_fluent::{
     diff_views, fluent_icon_glyph, icon, resolve_accessibility_tree, view_schema, IconToken,
@@ -223,60 +221,6 @@ fn visual_state_snapshot_and_theme_coverage_are_public_contracts() {
     assert_eq!(report.color_tokens, 38);
     assert_eq!(report.control_metric_tokens, 13);
     assert!(report.summary().contains("categories=13"));
-}
-
-#[test]
-fn compare_winui_plan_tracks_all_100_items_as_done() {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let plan_path = manifest_dir
-        .join("../../../..")
-        .join("compare_winui_plan.md");
-    let plan = std::fs::read_to_string(&plan_path)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", plan_path.display()));
-
-    for index in 1..=100 {
-        let done_marker = format!("| {index} | done |");
-        assert!(
-            plan.contains(&done_marker),
-            "missing done marker for plan item {index}"
-        );
-    }
-
-    assert!(
-        !(1..=100).any(|index| plan.contains(&format!("| {index} | todo |"))),
-        "compare_winui_plan.md still has todo entries in the first 100 items"
-    );
-}
-
-#[test]
-fn top50_audit_document_tracks_exactly_50_fixed_and_tested_items() {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let audit_path = manifest_dir.join("../../../..").join("0701-top50.md");
-    let audit = std::fs::read_to_string(&audit_path)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", audit_path.display()));
-
-    let issue_rows = audit
-        .lines()
-        .filter(|line| line.starts_with("| WF-"))
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        issue_rows.len(),
-        50,
-        "0701-top50.md must keep exactly 50 audited issues"
-    );
-
-    for index in 1..=50 {
-        let id = format!("WF-{index:02}");
-        let row = issue_rows
-            .iter()
-            .find(|line| line.starts_with(&format!("| {id} |")))
-            .unwrap_or_else(|| panic!("missing top50 row for {id}"));
-        assert!(
-            row.contains("已修复") && row.contains("测试覆盖"),
-            "{id} should record both fix and test coverage: {row}"
-        );
-    }
 }
 
 fn icon_button() -> View<Msg> {

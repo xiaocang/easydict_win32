@@ -253,6 +253,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
                 .property("description", optional_string(token.description.as_deref()))
                 .property("icon", optional_icon(token.icon.as_ref()))
                 .property("kind", format!("{:?}", token.kind))
+                .property("padding", optional_edges(token.padding))
                 .property("content_spacing", token.content_spacing.to_string())
                 .property("margin", format!("{:?}", token.margin))
                 .property("max_height", optional_u16(token.max_height))
@@ -419,10 +420,7 @@ fn schema_node_inner<Message>(view: &View<Message>) -> SchemaNode {
             .property("label", optional_string(token.label.as_deref()))
             .property("placeholder", optional_string(token.placeholder.as_deref()))
             .property("selected", optional_string(token.selected.as_deref()))
-            .property(
-                "selected_label",
-                optional_string(token.selected_item().map(|item| item.label.as_str())),
-            )
+            .property("selected_label", optional_string(token.selected_label()))
             .property("items", combo_items(&token.items))
             .property("width", format!("{:?}", token.width))
             .property(
@@ -856,7 +854,15 @@ fn result_list_schema<Message>(token: &ResultListToken<Message>) -> SchemaNode {
         .property("list_contract", token.list_contract_kind().as_str())
         .property("items", token.items.len().to_string())
         .property("virtualized", token.virtualized.to_string())
+        .property(
+            "height",
+            token
+                .height
+                .map(|value| format!("{value:?}"))
+                .unwrap_or_else(|| "none".to_string()),
+        )
         .property("max_height", optional_u16(token.max_height))
+        .property("spacing", optional_u16(token.spacing))
         .property("padding", optional_edges(token.padding))
         .property("border_width", optional_u16(token.border_width))
         .property("copy", format!("{:?}", token.copy_action.kind()))
@@ -1383,7 +1389,7 @@ mod tests {
     fn navigation_view_emits_pane_mode_header_footer_settings() {
         use crate::view::{navigation_view, NavigationItem, PaneDisplayMode};
         let view = navigation_view::<Msg>([NavigationItem::new("home", "Home")])
-            .header("Easydict")
+            .header("DemoApp")
             .pane_display_mode(PaneDisplayMode::LeftCompact)
             .footer_items([NavigationItem::new("about", "About")])
             .settings_visible(true)
@@ -1394,7 +1400,7 @@ mod tests {
         let snapshot = view_schema(&view).snapshot();
 
         assert!(snapshot.contains("pane_display_mode=LeftCompact"));
-        assert!(snapshot.contains("header=\"Easydict\""));
+        assert!(snapshot.contains("header=\"DemoApp\""));
         assert!(snapshot.contains("settings_visible=true"));
         assert!(snapshot.contains("back_button=true"));
         assert!(snapshot.contains("back_action=message"));
@@ -1478,7 +1484,7 @@ mod tests {
     fn flyout_button_emits_title_trigger_styling() {
         use crate::view::{flyout_button, FlyoutMenuItem, TextStyle};
         let view = page::<Msg>("Demo")
-            .content(column((flyout_button("Easydict")
+            .content(column((flyout_button("DemoApp")
                 .text_style(TextStyle::Subtitle)
                 .font_size(22)
                 .min_width(0)
@@ -1490,7 +1496,7 @@ mod tests {
         let snapshot = view_schema(&view).snapshot();
 
         assert!(snapshot.contains("FlyoutButton"));
-        assert!(snapshot.contains("label=\"Easydict\""));
+        assert!(snapshot.contains("label=\"DemoApp\""));
         assert!(snapshot.contains("text_style=Subtitle"));
         assert!(snapshot.contains("font_size=22"));
         assert!(snapshot.contains("action=selection_input"));

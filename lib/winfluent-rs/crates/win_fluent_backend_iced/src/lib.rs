@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fmt;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -2474,7 +2474,7 @@ where
     let element = compile_view_body(view, provider, visual);
     // Generic `View::tooltip()` (WinUI ToolTipService.ToolTip) — wrap any element
     // in an iced tooltip when one is attached at the wrapper level.
-    match view.tooltip_text() {
+    let element = match view.tooltip_text() {
         Some(text) => iced::widget::tooltip(
             element,
             iced::widget::container(iced_text(text.to_string()).size(visual.caption_size))
@@ -2485,6 +2485,11 @@ where
         .gap(4)
         .into(),
         None => element,
+    };
+
+    match view_bounds_probe_identity(view) {
+        Some((id, kind)) => BoundsProbe::new(id.to_string(), kind, element).into(),
+        None => element,
     }
 }
 
@@ -2494,6 +2499,66 @@ fn tooltip_position(placement: TooltipPlacement) -> iced::widget::tooltip::Posit
         TooltipPlacement::Bottom => iced::widget::tooltip::Position::Bottom,
         TooltipPlacement::Left => iced::widget::tooltip::Position::Left,
         TooltipPlacement::Right => iced::widget::tooltip::Position::Right,
+    }
+}
+
+fn view_bounds_probe_identity<Message>(view: &View<Message>) -> Option<(&str, &'static str)> {
+    match view.token() {
+        ViewToken::Page(token) => token.id.as_deref().map(|id| (id, "Page")),
+        ViewToken::TitleBar(token) => token.id.as_deref().map(|id| (id, "TitleBar")),
+        ViewToken::Text(token) => token.id.as_deref().map(|id| (id, "Text")),
+        ViewToken::RichText(token) => token.id.as_deref().map(|id| (id, "RichText")),
+        ViewToken::Button(token) => token.id.as_deref().map(|id| (id, "Button")),
+        ViewToken::ToggleButton(token) => token.id.as_deref().map(|id| (id, "ToggleButton")),
+        ViewToken::SplitButton(token) => token.id.as_deref().map(|id| (id, "SplitButton")),
+        ViewToken::FlyoutButton(token) => token.id.as_deref().map(|id| (id, "FlyoutButton")),
+        ViewToken::StatusBadge(token) => token.id.as_deref().map(|id| (id, "StatusBadge")),
+        ViewToken::InfoBar(token) => token.id.as_deref().map(|id| (id, "InfoBar")),
+        ViewToken::ProgressRing(token) => token.id.as_deref().map(|id| (id, "ProgressRing")),
+        ViewToken::ProgressBar(token) => token.id.as_deref().map(|id| (id, "ProgressBar")),
+        ViewToken::BusyOverlay(token) => token.id.as_deref().map(|id| (id, "BusyOverlay")),
+        ViewToken::Card(token) => token.id.as_deref().map(|id| (id, "Card")),
+        ViewToken::Spacer(token) => token.id.as_deref().map(|id| (id, "Spacer")),
+        ViewToken::TextEditor(token) => token.id.as_deref().map(|id| (id, "TextEditor")),
+        ViewToken::CheckBox(token) => token.id.as_deref().map(|id| (id, "CheckBox")),
+        ViewToken::RadioGroup(token) => token.id.as_deref().map(|id| (id, "RadioGroup")),
+        ViewToken::ToggleSwitch(token) => token.id.as_deref().map(|id| (id, "ToggleSwitch")),
+        ViewToken::Slider(token) => token.id.as_deref().map(|id| (id, "Slider")),
+        ViewToken::NumberBox(token) => token.id.as_deref().map(|id| (id, "NumberBox")),
+        ViewToken::AutoSuggestBox(token) => token.id.as_deref().map(|id| (id, "AutoSuggestBox")),
+        ViewToken::ComboBox(token) => token.id.as_deref().map(|id| (id, "ComboBox")),
+        ViewToken::CommandBar(token) => token.id.as_deref().map(|id| (id, "CommandBar")),
+        ViewToken::NavigationView(token) => token.id.as_deref().map(|id| (id, "NavigationView")),
+        ViewToken::Dialog(token) => token.id.as_deref().map(|id| (id, "Dialog")),
+        ViewToken::Layout(token) => token.id.as_deref().map(|id| {
+            let kind = match token.kind {
+                LayoutKind::Column => "Column",
+                LayoutKind::Row => "Row",
+            };
+            (id, kind)
+        }),
+        ViewToken::Grid(token) => token.id.as_deref().map(|id| (id, "Grid")),
+        ViewToken::Border(token) => token.id.as_deref().map(|id| (id, "Border")),
+        ViewToken::Viewbox(token) => token.id.as_deref().map(|id| (id, "Viewbox")),
+        ViewToken::TabView(token) => token.id.as_deref().map(|id| (id, "TabView")),
+        ViewToken::TreeView(token) => token.id.as_deref().map(|id| (id, "TreeView")),
+        ViewToken::Wrap(token) => token.id.as_deref().map(|id| (id, "Wrap")),
+        ViewToken::Flyout(token) => token.id.as_deref().map(|id| (id, "Flyout")),
+        ViewToken::Overlay(token) => token.id.as_deref().map(|id| (id, "Overlay")),
+        ViewToken::AdaptiveSwitch(token) => token.id.as_deref().map(|id| (id, "AdaptiveSwitch")),
+        ViewToken::Lazy(token) => token.id.as_deref().map(|id| (id, "Lazy")),
+        ViewToken::ScrollView(token) => token.id.as_deref().map(|id| (id, "ScrollView")),
+        ViewToken::Expander(token) => token.id.as_deref().map(|id| (id, "Expander")),
+        ViewToken::SettingsRow(token) => token.id.as_deref().map(|id| (id, "SettingsRow")),
+        ViewToken::ResultCard(token) => token.id.as_deref().map(|id| (id, "ResultCard")),
+        ViewToken::ResultList(token) => token.id.as_deref().map(|id| (id, "ResultList")),
+        ViewToken::ListView(token) => token.id.as_deref().map(|id| (id, "ListView")),
+        ViewToken::TrayMenu(token) => token.id.as_deref().map(|id| (id, "TrayMenu")),
+        ViewToken::PointerRegion(token) => token.id.as_deref().map(|id| (id, "PointerRegion")),
+        ViewToken::CaptureOverlay(token) => token.id.as_deref().map(|id| (id, "CaptureOverlay")),
+        ViewToken::Image(token) => token.id.as_deref().map(|id| (id, "Image")),
+        ViewToken::WebView(token) => token.id.as_deref().map(|id| (id, "WebView")),
+        ViewToken::Custom(token) => token.id.as_deref().map(|id| (id, "Custom")),
     }
 }
 
@@ -2513,11 +2578,12 @@ where
                 .as_deref()
                 .map(|content| compile_view_with_text_editors_and_visual(content, provider, visual))
                 .unwrap_or_else(empty);
+            let page_id = token.id.clone();
             iced_container(content)
                 .width(IcedLength::Fill)
                 .height(IcedLength::Fill)
                 .padding(0)
-                .style(move |_| page_container_style(visual))
+                .style(move |_| page_container_style_for_page(visual, page_id.as_deref()))
                 .into()
         }
         ViewToken::TitleBar(token) => compile_title_bar(token, provider, visual),
@@ -2526,6 +2592,10 @@ where
         ViewToken::Button(token) => {
             let kind = token.kind;
             let state = token.state.clone();
+            let transparent_icon_chrome = token
+                .id
+                .as_deref()
+                .is_some_and(is_transparent_icon_button_id);
             let mut content = button_content(
                 &token.label,
                 kind,
@@ -2549,7 +2619,11 @@ where
             }
             let mut control = iced_button(content).style(move |_, status| {
                 let status = button_status_with_state(&state, status);
-                button_style_with_state(visual, kind, state.focused, state.selected, status)
+                if transparent_icon_chrome {
+                    transparent_icon_button_style_with_state(visual, state.focused, status)
+                } else {
+                    button_style_with_state(visual, kind, state.focused, state.selected, status)
+                }
             });
 
             control = match kind {
@@ -2727,6 +2801,7 @@ where
         }
         ViewToken::Slider(token) => compile_slider(token, visual),
         ViewToken::ComboBox(token) => compile_combo_box(
+            token.id.as_deref(),
             &token.items,
             token.selected.as_deref(),
             token.label.as_deref(),
@@ -3838,6 +3913,627 @@ where
     fn from(region: PointerRegionWidget<'a, Message>) -> Self {
         Self::new(region)
     }
+}
+
+struct BoundsProbe<'a, Message> {
+    id: String,
+    kind: &'static str,
+    content: IcedElement<'a, Message>,
+}
+
+impl<'a, Message> BoundsProbe<'a, Message> {
+    fn new(id: String, kind: &'static str, content: IcedElement<'a, Message>) -> Self {
+        Self { id, kind, content }
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer> for BoundsProbe<'_, Message> {
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_ref(&self.content));
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
+        layout::Node::with_children(child.size(), vec![child])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            self.content.as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                operation,
+            );
+        });
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        record_preview_bounds(&self.id, self.kind, layout.bounds());
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            viewport,
+            translation,
+        )
+    }
+}
+
+impl<'a, Message> From<BoundsProbe<'a, Message>> for IcedElement<'a, Message>
+where
+    Message: 'a,
+{
+    fn from(probe: BoundsProbe<'a, Message>) -> Self {
+        Self::new(probe)
+    }
+}
+
+struct SelectedAlignedComboOverlay<'a, Message> {
+    content: IcedElement<'a, Message>,
+    selected_index: Option<usize>,
+    row_height: f32,
+    row_alignment_bias: usize,
+    visual: IcedVisualTheme,
+}
+
+impl<'a, Message> SelectedAlignedComboOverlay<'a, Message> {
+    fn new(
+        content: IcedElement<'a, Message>,
+        selected_index: Option<usize>,
+        row_height: f32,
+        row_alignment_bias: usize,
+        visual: IcedVisualTheme,
+    ) -> Self {
+        Self {
+            content,
+            selected_index,
+            row_height,
+            row_alignment_bias,
+            visual,
+        }
+    }
+}
+
+impl<Message> Widget<Message, iced::Theme, iced::Renderer>
+    for SelectedAlignedComboOverlay<'_, Message>
+{
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_ref(&self.content));
+    }
+
+    fn size(&self) -> Size<IcedLength> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
+        layout::Node::with_children(child.size(), vec![child])
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content.as_widget_mut().operate(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
+        let child_layout = layout.children().next().unwrap();
+        let child_overlay = self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            child_layout,
+            renderer,
+            viewport,
+            translation,
+        )?;
+        let child_bounds = child_layout.bounds();
+        let offset_y = selected_aligned_combo_overlay_offset(
+            self.selected_index,
+            child_bounds.height,
+            self.row_height,
+            self.row_alignment_bias,
+        );
+        let desired_top = child_bounds.y + child_bounds.height + offset_y;
+
+        Some(overlay::Element::new(Box::new(ShiftedOverlay::new(
+            child_overlay,
+            desired_top,
+            self.selected_index,
+            self.row_height,
+            self.visual,
+        ))))
+    }
+}
+
+impl<'a, Message> From<SelectedAlignedComboOverlay<'a, Message>> for IcedElement<'a, Message>
+where
+    Message: 'a,
+{
+    fn from(overlay: SelectedAlignedComboOverlay<'a, Message>) -> Self {
+        Self::new(overlay)
+    }
+}
+
+struct ShiftedOverlay<'a, Message> {
+    content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
+    desired_top: f32,
+    selected_index: Option<usize>,
+    row_height: f32,
+    visual: IcedVisualTheme,
+}
+
+impl<'a, Message> ShiftedOverlay<'a, Message> {
+    fn new(
+        content: overlay::Element<'a, Message, iced::Theme, iced::Renderer>,
+        desired_top: f32,
+        selected_index: Option<usize>,
+        row_height: f32,
+        visual: IcedVisualTheme,
+    ) -> Self {
+        Self {
+            content,
+            desired_top,
+            selected_index,
+            row_height,
+            visual,
+        }
+    }
+}
+
+impl<Message> overlay::Overlay<Message, iced::Theme, iced::Renderer>
+    for ShiftedOverlay<'_, Message>
+{
+    fn layout(&mut self, renderer: &iced::Renderer, bounds: Size) -> layout::Node {
+        let mut node = self.content.as_overlay_mut().layout(renderer, bounds);
+        let node_bounds = node.bounds();
+        let translation = Vector::new(0.0, self.desired_top - node_bounds.y);
+        node.translate_mut(translation);
+        node
+    }
+
+    fn draw(
+        &self,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+    ) {
+        self.content
+            .as_overlay()
+            .draw(renderer, theme, style, layout, cursor);
+
+        if let Some(bounds) =
+            selected_combo_indicator_bounds(layout.bounds(), self.selected_index, self.row_height)
+        {
+            renderer.fill_quad(
+                renderer::Quad {
+                    bounds,
+                    border: Border::default().rounded(1.5),
+                    ..renderer::Quad::default()
+                },
+                Background::Color(self.visual.accent),
+            );
+        }
+
+        if let Some(bounds) =
+            selected_combo_focus_bounds(layout.bounds(), self.selected_index, self.row_height)
+        {
+            let stroke = self.visual.stroke_focus.max(1.0).min(bounds.height / 2.0);
+            let color = Background::Color(self.visual.text_primary);
+            for segment in selected_combo_focus_segments(bounds, stroke) {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: segment,
+                        ..renderer::Quad::default()
+                    },
+                    color,
+                );
+            }
+        }
+    }
+
+    fn operate(
+        &mut self,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content
+            .as_overlay_mut()
+            .operate(layout, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+    ) {
+        self.content
+            .as_overlay_mut()
+            .update(event, layout, cursor, renderer, clipboard, shell);
+    }
+
+    fn mouse_interaction(
+        &self,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content
+            .as_overlay()
+            .mouse_interaction(layout, cursor, renderer)
+    }
+
+    fn overlay<'a>(
+        &'a mut self,
+        layout: Layout<'a>,
+        renderer: &iced::Renderer,
+    ) -> Option<overlay::Element<'a, Message, iced::Theme, iced::Renderer>> {
+        self.content.as_overlay_mut().overlay(layout, renderer)
+    }
+
+    fn index(&self) -> f32 {
+        self.content.as_overlay().index()
+    }
+}
+
+fn selected_aligned_combo_overlay_offset(
+    selected_index: Option<usize>,
+    control_height: f32,
+    row_height: f32,
+    row_alignment_bias: usize,
+) -> f32 {
+    let selected_index = (selected_index.unwrap_or_default() + row_alignment_bias) as f32;
+    -(control_height.max(0.0) + selected_index * row_height.max(1.0))
+}
+
+fn combo_box_selected_row_alignment_bias(
+    _id: Option<&str>,
+    _selected_index: Option<usize>,
+) -> usize {
+    0
+}
+
+fn selected_combo_indicator_bounds(
+    menu_bounds: Rectangle,
+    selected_index: Option<usize>,
+    row_height: f32,
+) -> Option<Rectangle> {
+    let selected_index = selected_index?;
+    let row_height = row_height.max(1.0);
+    let row_y = menu_bounds.y + selected_index as f32 * row_height;
+    let row_bottom = row_y + row_height;
+    let menu_bottom = menu_bounds.y + menu_bounds.height;
+    if row_y < menu_bounds.y || row_bottom > menu_bottom {
+        return None;
+    }
+
+    let height = 18.0_f32.min(row_height - 8.0).max(8.0);
+    Some(Rectangle {
+        x: menu_bounds.x + 6.0,
+        y: row_y + (row_height - height) / 2.0,
+        width: 3.0,
+        height,
+    })
+}
+
+fn selected_combo_focus_bounds(
+    menu_bounds: Rectangle,
+    selected_index: Option<usize>,
+    row_height: f32,
+) -> Option<Rectangle> {
+    let selected_index = selected_index?;
+    if selected_index != 0 {
+        return None;
+    }
+
+    let row_height = row_height.max(1.0);
+    let row_y = menu_bounds.y + selected_index as f32 * row_height;
+    let row_bottom = row_y + row_height;
+    let menu_bottom = menu_bounds.y + menu_bounds.height;
+    if row_y < menu_bounds.y || row_bottom > menu_bottom {
+        return None;
+    }
+
+    let inset_x = 4.0_f32.min(menu_bounds.width / 4.0);
+    let inset_y = 2.0_f32.min(row_height / 4.0);
+    Some(Rectangle {
+        x: menu_bounds.x + inset_x,
+        y: row_y + inset_y,
+        width: (menu_bounds.width - inset_x * 2.0).max(0.0),
+        height: (row_height - inset_y * 2.0).max(0.0),
+    })
+}
+
+fn selected_combo_focus_segments(bounds: Rectangle, stroke: f32) -> [Rectangle; 4] {
+    let stroke = stroke
+        .max(1.0)
+        .min(bounds.height / 2.0)
+        .min(bounds.width / 2.0);
+    let inner_height = (bounds.height - stroke * 2.0).max(0.0);
+    [
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: stroke,
+        },
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y + bounds.height - stroke,
+            width: bounds.width,
+            height: stroke,
+        },
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y + stroke,
+            width: stroke,
+            height: inner_height,
+        },
+        Rectangle {
+            x: bounds.x + bounds.width - stroke,
+            y: bounds.y + stroke,
+            width: stroke,
+            height: inner_height,
+        },
+    ]
+}
+
+#[derive(Clone, Debug)]
+struct PreviewBoundsEntry {
+    kind: &'static str,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+static PREVIEW_BOUNDS: OnceLock<Mutex<BTreeMap<String, PreviewBoundsEntry>>> = OnceLock::new();
+
+fn record_preview_bounds(id: &str, kind: &'static str, bounds: Rectangle) {
+    let Ok(path) = env::var("EASYDICT_PREVIEW_BOUNDS_PATH") else {
+        return;
+    };
+    if id.trim().is_empty() || bounds.width <= 0.0 || bounds.height <= 0.0 {
+        return;
+    }
+
+    let entries = PREVIEW_BOUNDS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let snapshot = {
+        let Ok(mut entries) = entries.lock() else {
+            return;
+        };
+        entries.insert(
+            id.to_string(),
+            PreviewBoundsEntry {
+                kind,
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            },
+        );
+        preview_bounds_snapshot(&entries)
+    };
+
+    let path = Path::new(&path);
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, snapshot);
+}
+
+fn preview_bounds_snapshot(entries: &BTreeMap<String, PreviewBoundsEntry>) -> String {
+    let mut output = String::from("ViewBounds version=1\n");
+    for (id, entry) in entries {
+        output.push_str(&format!(
+            "Bounds id=\"{}\" kind={} x={:.2} y={:.2} width={:.2} height={:.2}\n",
+            preview_bounds_quote(id),
+            entry.kind,
+            entry.x,
+            entry.y,
+            entry.width,
+            entry.height
+        ));
+    }
+    output
+}
+
+fn preview_bounds_quote(value: &str) -> String {
+    let mut output = String::new();
+    for ch in value.chars() {
+        match ch {
+            '\\' => output.push_str("\\\\"),
+            '"' => output.push_str("\\\""),
+            _ => output.push(ch),
+        }
+    }
+    output
 }
 
 fn pointer_position(bounds: Rectangle, cursor: mouse::Cursor) -> Option<PointerPosition> {
@@ -5291,6 +5987,8 @@ where
             bottom: 10.0,
             left: 12.0,
         }
+    } else if let Some(padding) = token.padding {
+        iced_padding_from_edges(padding)
     } else {
         iced::Padding::from(visual.card_padding)
     };
@@ -5491,6 +6189,7 @@ where
 }
 
 fn compile_combo_box<'a, Message>(
+    id: Option<&str>,
     items: &[ComboBoxItem],
     selected: Option<&str>,
     label: Option<&str>,
@@ -5511,14 +6210,17 @@ where
             label: item.label.clone(),
         })
         .collect::<Vec<_>>();
-    let selected = selected.and_then(|id| choices.iter().find(|item| item.id == id).cloned());
+    let selected_choice =
+        selected.and_then(|id| choices.iter().find(|item| item.id == id).cloned());
+    let selected_fallback_label = selected.filter(|_| selected_choice.is_none());
 
     if !state.enabled || !matches!(action.kind(), ActionKind::SelectionInput) {
         let placeholder = placeholder.or(label).unwrap_or("Select");
         return compile_read_only_combo_box(
-            selected
+            selected_choice
                 .as_ref()
                 .map(|item| item.label.as_str())
+                .or(selected_fallback_label)
                 .or(label)
                 .unwrap_or_default(),
             placeholder,
@@ -5531,30 +6233,58 @@ where
 
     let action = action.clone();
     let padding = combo_box_padding_for_height(height);
+    let placeholder = if selected_choice.is_none() {
+        selected_fallback_label
+            .or(placeholder)
+            .or(label)
+            .unwrap_or("Select")
+    } else {
+        placeholder.or(label).unwrap_or("Select")
+    };
 
-    iced_pick_list(choices, selected, move |choice| {
-        action
-            .input_text(choice.id)
-            .expect("selection action must produce a message")
-    })
-    .placeholder(placeholder.or(label).unwrap_or("Select"))
-    .width(iced_length(width))
-    .padding(padding)
-    .text_size(text_size(TextStyle::Body, visual))
-    .handle(iced::widget::pick_list::Handle::Static(
-        iced::widget::pick_list::Icon {
-            font: caption_icon_font(),
-            code_point: '\u{E70D}',
-            size: Some(Pixels(12.0)),
-            line_height: iced_text_core::LineHeight::default(),
-            shaping: iced_text_core::Shaping::Basic,
-        },
-    ))
-    .style({
-        let state = state.clone();
-        move |_, status| pick_list_style_with_state(visual, status, &state)
-    })
-    .menu_style(move |_| menu_style(visual))
+    let selected_index = selected_choice
+        .as_ref()
+        .and_then(|selected| choices.iter().position(|choice| choice == selected));
+    let row_alignment_bias = combo_box_selected_row_alignment_bias(id, selected_index);
+    let row_height = f32::from(
+        iced_text_core::LineHeight::default()
+            .to_absolute(text_size(TextStyle::Body, visual).into()),
+    ) + padding.top
+        + padding.bottom;
+
+    let pick_list: IcedElement<'a, Message> =
+        iced_pick_list(choices, selected_choice, move |choice| {
+            action
+                .input_text(choice.id)
+                .expect("selection action must produce a message")
+        })
+        .placeholder(placeholder)
+        .width(iced_length(width))
+        .padding(padding)
+        .text_size(text_size(TextStyle::Body, visual))
+        .handle(iced::widget::pick_list::Handle::Static(
+            iced::widget::pick_list::Icon {
+                font: caption_icon_font(),
+                code_point: '\u{E70D}',
+                size: Some(Pixels(12.0)),
+                line_height: iced_text_core::LineHeight::default(),
+                shaping: iced_text_core::Shaping::Basic,
+            },
+        ))
+        .style({
+            let state = state.clone();
+            move |_, status| pick_list_style_with_state(visual, status, &state)
+        })
+        .menu_style(move |_| menu_style(visual))
+        .into();
+
+    SelectedAlignedComboOverlay::new(
+        pick_list,
+        selected_index,
+        row_height,
+        row_alignment_bias,
+        visual,
+    )
     .into()
 }
 
@@ -6540,7 +7270,7 @@ fn compile_result_list<'a, Message>(
 where
     Message: Clone + Send + 'static,
 {
-    let mut list = iced_column(Vec::new()).spacing(8);
+    let mut list = iced_column(Vec::new()).spacing(u32::from(token.spacing.unwrap_or(8)));
 
     for item in &token.items {
         list = list.push(
@@ -6558,17 +7288,34 @@ where
                 .width(IcedLength::Fill),
             )
             .width(IcedLength::Fill)
+            // WinUI paints the ServiceResultItem RootBorder outside the header
+            // fill. Keep a 1px inset so the outlined row edge remains visible.
+            .padding(1)
             .style(move |_| result_card_container_style(visual)),
         );
     }
 
-    let needs_container =
-        token.max_height.is_some() || token.padding.is_some() || token.border_width.is_some();
+    let needs_container = token.height.is_some()
+        || token.max_height.is_some()
+        || token.padding.is_some()
+        || token.border_width.is_some();
     if !needs_container {
         return list.width(IcedLength::Fill).into();
     }
 
-    let mut container = iced_container(list.width(IcedLength::Fill)).width(IcedLength::Fill);
+    let list: IcedElement<'a, Message> = if let Some(height) = token.height {
+        iced_scrollable(list.width(IcedLength::Fill))
+            .width(IcedLength::Fill)
+            .height(iced_length(height))
+            .into()
+    } else {
+        list.width(IcedLength::Fill).into()
+    };
+
+    let mut container = iced_container(list).width(IcedLength::Fill);
+    if let Some(height) = token.height {
+        container = container.height(iced_length(height));
+    }
     if let Some(padding) = token.padding {
         container = container.padding(iced_padding_from_edges(padding));
     }
@@ -6642,6 +7389,13 @@ where
         .then_some(item.pending_hint.as_deref())
         .flatten();
     let header_metadata = item.metadata.as_deref().or(header_hint);
+    let body_is_pending_hint = item.body.trim().is_empty() && item.pending_hint.is_some();
+    let body_text = if item.body.trim().is_empty() {
+        item.pending_hint.as_deref().unwrap_or_default()
+    } else {
+        item.body.as_str()
+    };
+    let header_has_content = item.expanded && !body_text.trim().is_empty();
     if let Some(metadata) = header_metadata {
         header_right_children.push(
             iced_text(metadata.to_string())
@@ -6705,7 +7459,8 @@ where
     }
 
     let header_left = iced_row(header_left_children)
-        .spacing(6)
+        // The icon container already includes the WinUI Image.Margin right gap.
+        .spacing(0)
         .align_y(alignment::Vertical::Center);
     let header_right = iced_row(header_right_children)
         .spacing(8)
@@ -6720,13 +7475,16 @@ where
     .align_y(alignment::Vertical::Center);
 
     let header_state = item.header_state.clone();
+    let header_divider_height = visual.stroke_control.max(1.0);
     let mut header = iced_button(header_content)
-        .height(IcedLength::Fixed(visual.result_header_height))
+        .height(IcedLength::Fixed(
+            (visual.result_header_height - header_divider_height).max(0.0),
+        ))
         .padding([0, 8])
         .width(IcedLength::Fill)
         .style(move |_, status| {
             let status = button_status_with_state(&header_state, status);
-            result_header_button_style(visual, status)
+            result_header_button_style(visual, status, header_has_content)
         });
 
     if item.toggleable && matches!(toggle_action.kind(), ActionKind::SelectionInput) {
@@ -6735,27 +7493,37 @@ where
         }
     }
 
-    let mut content = iced_column(vec![header.into()]).width(IcedLength::Fill);
-
-    let body_text = if item.body.trim().is_empty() {
-        item.pending_hint.as_deref().unwrap_or_default()
-    } else {
-        item.body.as_str()
-    };
+    let header_divider: IcedElement<'a, Message> = iced_container(iced_space())
+        .height(IcedLength::Fixed(header_divider_height))
+        .width(IcedLength::Fill)
+        .style(move |_| result_header_divider_style(visual))
+        .into();
+    let mut content = iced_column(vec![header.into(), header_divider]).width(IcedLength::Fill);
 
     if !body_text.trim().is_empty() {
+        let body_text_style = if body_is_pending_hint {
+            TextStyle::Caption
+        } else {
+            TextStyle::BodyLarge
+        };
+        let body_text_color = if item.status == ResultStatus::Error {
+            visual.error
+        } else if body_is_pending_hint {
+            secondary_color
+        } else {
+            primary_color
+        };
+        let body_text_size = if body_is_pending_hint { 12.0 } else { 13.0 };
         let body: IcedElement<'a, Message> = iced_container(
             iced_text(body_text.to_string())
                 // Match the WinUI ServiceResultItem `ResultText` (FontSize=13);
                 // BodyLarge (15) renders the translation noticeably larger than
                 // the .NET result bar.
-                .font(text_font(TextStyle::BodyLarge))
-                .size(13.0)
-                .color(if item.status == ResultStatus::Error {
-                    visual.error
-                } else {
-                    primary_color
-                })
+                // Pending manual-query hints use the dedicated WinUI
+                // `PendingQueryText` style (FontSize=12, tertiary/secondary).
+                .font(text_font_for_value(body_text_style, body_text))
+                .size(body_text_size)
+                .color(body_text_color)
                 .width(IcedLength::Fill),
         )
         // Match the WinUI ServiceResultItem `ContentArea` (Padding="10,8,10,10");
@@ -8354,6 +9122,14 @@ impl CaptionButtonKind {
             Self::Close => '\u{E8BB}',
         }
     }
+
+    const fn bounds_probe_id(self) -> &'static str {
+        match self {
+            Self::Minimize => "Minimize",
+            Self::ToggleMaximize => "Maximize",
+            Self::Close => "Close",
+        }
+    }
 }
 
 fn caption_button<'a, Message>(
@@ -8383,7 +9159,7 @@ where
         button = button.on_press(message);
     }
 
-    button.into()
+    BoundsProbe::new(kind.bounds_probe_id().to_string(), "Button", button.into()).into()
 }
 
 fn icon_symbol(icon: &win_fluent::IconToken) -> char {
@@ -8425,6 +9201,7 @@ fn title_bar_title_size(visual: IcedVisualTheme) -> f32 {
 
 fn text_size(style: TextStyle, visual: IcedVisualTheme) -> f32 {
     match style {
+        TextStyle::Accent => visual.caption_size,
         TextStyle::Caption => visual.caption_size,
         TextStyle::CaptionSmall => 11.0,
         TextStyle::Body => visual.body_size,
@@ -8448,9 +9225,11 @@ fn text_font(style: TextStyle) -> Font {
         | TextStyle::Subtitle
         | TextStyle::Title
         | TextStyle::TitleLarge => font::Weight::Semibold,
-        TextStyle::Caption | TextStyle::CaptionSmall | TextStyle::Body | TextStyle::BodyLarge => {
-            font::Weight::Normal
-        }
+        TextStyle::Accent
+        | TextStyle::Caption
+        | TextStyle::CaptionSmall
+        | TextStyle::Body
+        | TextStyle::BodyLarge => font::Weight::Normal,
     };
 
     Font {
@@ -8664,6 +9443,7 @@ struct IcedVisualTheme {
     title_size: f32,
     title_large_size: f32,
     radius_control: f32,
+    radius_overlay: f32,
     stroke_control: f32,
     stroke_focus: f32,
     control_height: f32,
@@ -8677,6 +9457,7 @@ struct IcedVisualTheme {
     card_padding: f32,
     result_header_height: f32,
     elevation_raised: f32,
+    elevation_flyout: f32,
     disabled_opacity: f32,
     dimmed_opacity: f32,
     floating_action_rest_opacity: f32,
@@ -8735,6 +9516,7 @@ impl IcedVisualTheme {
             title_size: theme.typography.title,
             title_large_size: theme.typography.title_large,
             radius_control: theme.radius.control,
+            radius_overlay: theme.radius.overlay,
             stroke_control: theme.stroke.control,
             stroke_focus: theme.stroke.focus,
             control_height: theme.control.height,
@@ -8748,6 +9530,7 @@ impl IcedVisualTheme {
             card_padding: theme.control.card_padding,
             result_header_height: theme.control.result_header_height,
             elevation_raised: theme.elevation.raised,
+            elevation_flyout: theme.elevation.flyout,
             disabled_opacity: theme.effects.disabled_opacity,
             dimmed_opacity: theme.effects.dimmed_opacity,
             floating_action_rest_opacity: theme.effects.floating_action_rest_opacity,
@@ -8765,6 +9548,21 @@ fn page_container_style(visual: IcedVisualTheme) -> iced::widget::container::Sty
     iced::widget::container::Style::default()
         .background(visual.background)
         .color(visual.text_primary)
+}
+
+fn page_container_style_for_page(
+    visual: IcedVisualTheme,
+    page_id: Option<&str>,
+) -> iced::widget::container::Style {
+    if is_acrylic_floating_page(page_id) {
+        iced::widget::container::Style::default().color(visual.text_primary)
+    } else {
+        page_container_style(visual)
+    }
+}
+
+fn is_acrylic_floating_page(page_id: Option<&str>) -> bool {
+    matches!(page_id, Some("mini.window" | "fixed.window"))
 }
 
 fn title_bar_container_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
@@ -9288,6 +10086,45 @@ fn button_style_with_state(
     }
 }
 
+fn is_transparent_icon_button_id(id: &str) -> bool {
+    matches!(
+        id,
+        "mini.pin"
+            | "PinButton"
+            | "mini.ocr"
+            | "fixed.ocr"
+            | "MiniWindowOcrButton"
+            | "FixedWindowOcrButton"
+    )
+}
+
+fn transparent_icon_button_style_with_state(
+    visual: IcedVisualTheme,
+    focused: bool,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
+    let disabled = matches!(status, iced::widget::button::Status::Disabled);
+    let focus_visible = focused && !disabled;
+    let text_color = if disabled {
+        visual.text_secondary.scale_alpha(visual.disabled_opacity)
+    } else {
+        visual.text_primary
+    };
+    let border = if focus_visible {
+        control_border_with_radius(visual.focus, visual.stroke_focus, visual.radius_control)
+    } else {
+        control_border_with_radius(Color::TRANSPARENT, 0.0, visual.radius_control)
+    };
+
+    iced::widget::button::Style {
+        background: None,
+        text_color,
+        border,
+        shadow: Shadow::default(),
+        ..iced::widget::button::Style::default()
+    }
+}
+
 fn caption_button_style(
     visual: IcedVisualTheme,
     kind: CaptionButtonKind,
@@ -9326,6 +10163,7 @@ fn caption_button_style(
 fn result_header_button_style(
     visual: IcedVisualTheme,
     status: iced::widget::button::Status,
+    has_content: bool,
 ) -> iced::widget::button::Style {
     // WinUI result headers keep their resting fill on hover/press: the
     // ServiceResultHeaderHoverBackgroundColor delta is imperceptible in the
@@ -9336,9 +10174,33 @@ fn result_header_button_style(
     iced::widget::button::Style {
         background: Some(Background::Color(visual.result_header)),
         text_color: visual.result_header_foreground,
-        border: control_border_with_radius(Color::TRANSPARENT, 0.0, visual.radius_control),
+        // WinUI ServiceResultItem keeps the outer RootBorder at
+        // EasydictCardCornerRadius=10, but UpdateUI() sets HeaderBar to 6.
+        // When content is visible only the top header corners stay rounded; the
+        // RootBorder keeps the app card radius around the whole result item.
+        border: Border {
+            radius: result_header_radius(visual, has_content),
+            ..Border::default().color(Color::TRANSPARENT).width(0.0)
+        },
         shadow: Shadow::default(),
         ..iced::widget::button::Style::default()
+    }
+}
+
+fn result_header_divider_style(visual: IcedVisualTheme) -> iced::widget::container::Style {
+    iced::widget::container::Style::default().background(result_card_border_color(visual))
+}
+
+fn result_header_radius(visual: IcedVisualTheme, has_content: bool) -> iced::border::Radius {
+    if matches!(visual.mode, ThemeMode::Minimal | ThemeMode::HighContrast) {
+        return iced::border::Radius::new(0.0);
+    }
+
+    let header_radius = 6.0;
+    if has_content {
+        iced::border::Radius::default().top(header_radius)
+    } else {
+        iced::border::Radius::new(header_radius)
     }
 }
 
@@ -10148,7 +11010,7 @@ fn pick_list_style(
             control_border(visual, visual.border, visual.stroke_control)
         }
         iced::widget::pick_list::Status::Opened { .. } => {
-            control_border(visual, visual.focus, visual.stroke_focus)
+            control_border(visual, visual.border, visual.stroke_control)
         }
     };
 
@@ -10174,7 +11036,7 @@ fn pick_list_style_with_state(
         style.handle_color = visual.text_secondary.scale_alpha(visual.disabled_opacity);
         style.border = control_border(visual, visual.border, visual.stroke_control);
     } else if state.pressed {
-        style.background = Background::Color(visual.button_pressed);
+        style.background = Background::Color(visual.surface);
     } else if state.hovered {
         style.background = Background::Color(visual.button_hover);
     }
@@ -10234,11 +11096,15 @@ fn flyout_pick_list_style(
 fn menu_style(visual: IcedVisualTheme) -> iced::overlay::menu::Style {
     iced::overlay::menu::Style {
         background: Background::Color(visual.surface),
-        border: control_border(visual, visual.border, visual.stroke_control),
+        border: control_border_with_radius(
+            visual.border,
+            visual.stroke_control,
+            visual.radius_overlay,
+        ),
         text_color: visual.text_primary,
-        selected_text_color: visual.text_on_accent,
-        selected_background: Background::Color(visual.accent),
-        shadow: elevation_shadow(visual, visual.elevation_raised),
+        selected_text_color: visual.text_primary,
+        selected_background: Background::Color(visual.button_hover),
+        shadow: flyout_shadow(visual),
     }
 }
 
@@ -10399,7 +11265,7 @@ fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget
         _ => visual.radius_control,
     };
 
-    let mut style = iced::widget::container::Style::default()
+    let style = iced::widget::container::Style::default()
         .background(background)
         .color(visual.text_primary)
         .border(control_border_with_radius(
@@ -10407,10 +11273,6 @@ fn card_container_style(visual: IcedVisualTheme, kind: CardKind) -> iced::widget
             visual.stroke_control,
             border_radius,
         ));
-
-    if kind == CardKind::Elevated {
-        style = style.shadow(elevation_shadow(visual, visual.elevation_raised));
-    }
 
     style
 }
@@ -10437,18 +11299,22 @@ fn result_card_container_style(visual: IcedVisualTheme) -> iced::widget::contain
         .color(visual.text_primary)
         .border(control_border(
             visual,
-            // WinUI card stroke color (light-blue #DDE4EE in Light, #3A4250 in
-            // Dark), not the grayer generic control border.
-            match visual.mode {
-                ThemeMode::Light => Color::from_rgb8(0xDD, 0xE4, 0xEE),
-                ThemeMode::Dark => Color::from_rgb8(0x3A, 0x42, 0x50),
-                _ => visual.border,
-            },
+            result_card_border_color(visual),
             visual.stroke_control,
         ))
         // The WinUI reference uses flat outlined result rows in the main list.
         // Keep them visually quiet so hover/pressed effects are not polluted by elevation.
         .shadow(Shadow::default())
+}
+
+fn result_card_border_color(visual: IcedVisualTheme) -> Color {
+    // WinUI card stroke color (light-blue #DDE4EE in Light, #3A4250 in Dark),
+    // not the grayer generic control border.
+    match visual.mode {
+        ThemeMode::Light => Color::from_rgb8(0xDD, 0xE4, 0xEE),
+        ThemeMode::Dark => Color::from_rgb8(0x3A, 0x42, 0x50),
+        _ => visual.border,
+    }
 }
 
 fn result_list_container_style(
@@ -10484,8 +11350,21 @@ fn elevation_shadow(visual: IcedVisualTheme, elevation: f32) -> Shadow {
     }
 }
 
+fn flyout_shadow(visual: IcedVisualTheme) -> Shadow {
+    if visual.mode == ThemeMode::HighContrast || visual.elevation_flyout == 0.0 {
+        return Shadow::default();
+    }
+
+    Shadow {
+        color: Color::BLACK.scale_alpha(0.22),
+        offset: Vector::new(0.0, visual.elevation_flyout / 4.0),
+        blur_radius: visual.elevation_flyout,
+    }
+}
+
 fn text_color(style: TextStyle, visual: IcedVisualTheme) -> Color {
     match style {
+        TextStyle::Accent => visual.accent,
         TextStyle::Caption | TextStyle::CaptionSmall => visual.text_secondary,
         TextStyle::Body
         | TextStyle::BodyLarge
@@ -12092,6 +12971,12 @@ mod tests {
             iced_color(theme.background)
         );
         assert_eq!(page.text_color, Some(iced_color(theme.text_primary)));
+        let floating_page = page_container_style_for_page(visual, Some("mini.window"));
+        assert!(floating_page.background.is_none());
+        assert_eq!(
+            floating_page.text_color,
+            Some(iced_color(theme.text_primary))
+        );
 
         let primary = button_style(
             visual,
@@ -12244,13 +13129,31 @@ mod tests {
         assert_eq!(pick_list.border.color, iced_color(theme.border));
         assert_eq!(pick_list.border.width, theme.stroke.control);
 
+        let opened_pick_list = pick_list_style(
+            visual,
+            iced::widget::pick_list::Status::Opened { is_hovered: true },
+        );
+        assert_eq!(
+            opened_pick_list.border.color,
+            iced_color(theme.border),
+            "WinUI ComboBox popup-open chrome keeps the normal control border; focus is separate"
+        );
+        assert_eq!(opened_pick_list.border.width, theme.stroke.control);
+
         let menu = menu_style(visual);
         assert_eq!(background_color(menu.background), iced_color(theme.surface));
         assert_eq!(
             background_color(menu.selected_background),
-            iced_color(theme.accent.base)
+            iced_color(theme.button_hover)
         );
-        assert!(menu.shadow.blur_radius > 0.0);
+        assert_eq!(menu.selected_text_color, iced_color(theme.text_primary));
+        assert_eq!(menu.border.radius.top_left, theme.radius.overlay);
+        assert_eq!(menu.shadow.blur_radius, theme.elevation.flyout);
+        assert_eq!(
+            menu.shadow.offset,
+            Vector::new(0.0, theme.elevation.flyout / 4.0)
+        );
+        assert_eq!(menu.shadow.color, iced::Color::BLACK.scale_alpha(0.22));
 
         let settings_row = settings_row_container_style(visual);
         assert_eq!(
@@ -12382,6 +13285,9 @@ mod tests {
         // Result rows are flat outlined strips like the WinUI reference.
         assert_eq!(result_card.shadow, Shadow::default());
 
+        let elevated_card = card_container_style(visual, CardKind::Elevated);
+        assert_eq!(elevated_card.shadow, Shadow::default());
+
         let floating_action = button_style(
             visual,
             ButtonKind::FloatingAction,
@@ -12450,7 +13356,7 @@ mod tests {
         assert_eq!(tile_pressed.border.color, iced_color(theme.tile_border));
 
         let result_header_hover =
-            result_header_button_style(visual, iced::widget::button::Status::Hovered);
+            result_header_button_style(visual, iced::widget::button::Status::Hovered, true);
         assert_eq!(
             optional_background_color(result_header_hover.background),
             iced_color(theme.result_header),
@@ -12458,7 +13364,7 @@ mod tests {
         );
 
         let result_header_pressed =
-            result_header_button_style(visual, iced::widget::button::Status::Pressed);
+            result_header_button_style(visual, iced::widget::button::Status::Pressed, true);
         assert_eq!(
             optional_background_color(result_header_pressed.background),
             iced_color(theme.result_header),
@@ -12550,6 +13456,44 @@ mod tests {
         );
         assert_eq!(focused_icon.border.color, iced_color(theme.focus));
         assert_eq!(focused_icon.border.width, theme.stroke.focus);
+
+        assert!(is_transparent_icon_button_id("mini.pin"));
+        assert!(is_transparent_icon_button_id("mini.ocr"));
+        assert!(is_transparent_icon_button_id("fixed.ocr"));
+        assert!(is_transparent_icon_button_id("MiniWindowOcrButton"));
+        assert!(is_transparent_icon_button_id("FixedWindowOcrButton"));
+        let transparent_pin_hover = transparent_icon_button_style_with_state(
+            visual,
+            false,
+            iced::widget::button::Status::Hovered,
+        );
+        assert!(
+            transparent_pin_hover.background.is_none(),
+            "MiniWindow PinButton keeps its explicit WinUI transparent background on hover"
+        );
+        assert_eq!(transparent_pin_hover.border.width, 0.0);
+
+        let transparent_pin_pressed = transparent_icon_button_style_with_state(
+            visual,
+            false,
+            iced::widget::button::Status::Pressed,
+        );
+        assert!(
+            transparent_pin_pressed.background.is_none(),
+            "MiniWindow PinButton keeps its explicit WinUI transparent background while pressed"
+        );
+        assert_eq!(transparent_pin_pressed.border.width, 0.0);
+
+        let transparent_pin_focused = transparent_icon_button_style_with_state(
+            visual,
+            true,
+            iced::widget::button::Status::Active,
+        );
+        assert_eq!(
+            transparent_pin_focused.border.color,
+            iced_color(theme.focus)
+        );
+        assert_eq!(transparent_pin_focused.border.width, theme.stroke.focus);
 
         let focused_disabled = button_style_with_state(
             visual,
@@ -12822,10 +13766,7 @@ mod tests {
             iced::widget::pick_list::Status::Active,
             &combo_pressed,
         );
-        assert_eq!(
-            background_color(combo.background),
-            iced_color(theme.button_pressed)
-        );
+        assert_eq!(background_color(combo.background), visual.surface);
 
         let combo_focused = ControlState::default().focused(true);
         assert_eq!(
@@ -12840,6 +13781,153 @@ mod tests {
         assert_eq!(background_color(combo.background), visual.surface);
         assert_eq!(combo.border.color, visual.focus);
         assert_eq!(combo.border.width, visual.stroke_focus);
+
+        let combo_opened = pick_list_style_with_state(
+            visual,
+            iced::widget::pick_list::Status::Opened { is_hovered: true },
+            &ControlState::default(),
+        );
+        assert_eq!(combo_opened.border.color, visual.border);
+        assert_eq!(combo_opened.border.width, visual.stroke_control);
+        assert_eq!(
+            selected_aligned_combo_overlay_offset(None, 34.0, 34.0, 0),
+            -34.0
+        );
+        assert_eq!(
+            selected_aligned_combo_overlay_offset(Some(2), 34.0, 34.0, 0),
+            -102.0,
+            "WinUI ComboBox flyouts keep the selected row visually near the collapsed ComboBox"
+        );
+        assert_eq!(
+            combo_box_selected_row_alignment_bias(Some("fixed.source_language"), Some(0)),
+            0
+        );
+        assert_eq!(
+            combo_box_selected_row_alignment_bias(Some("mini.source_language"), Some(0)),
+            0
+        );
+        assert_eq!(
+            combo_box_selected_row_alignment_bias(Some("fixed.target_language"), Some(2)),
+            0
+        );
+        assert_eq!(
+            combo_box_selected_row_alignment_bias(Some("main.long-doc.source_language"), Some(0)),
+            0
+        );
+        assert_eq!(
+            selected_aligned_combo_overlay_offset(Some(0), 34.0, 34.0, 1),
+            -68.0,
+            "nonzero alignment bias moves the selected row up by additional item rows"
+        );
+        assert_eq!(
+            selected_aligned_combo_overlay_offset(Some(0), 34.0, 34.0, 0),
+            -34.0,
+            "floating source-language flyouts keep the first selected row aligned with the collapsed control"
+        );
+        assert_eq!(
+            selected_combo_indicator_bounds(
+                Rectangle {
+                    x: 100.0,
+                    y: 40.0,
+                    width: 220.0,
+                    height: 160.0,
+                },
+                Some(2),
+                32.0,
+            ),
+            Some(Rectangle {
+                x: 106.0,
+                y: 111.0,
+                width: 3.0,
+                height: 18.0,
+            }),
+            "WinUI ComboBox selected-row marker uses a narrow accent bar inside the row"
+        );
+        assert_eq!(
+            selected_combo_indicator_bounds(
+                Rectangle {
+                    x: 100.0,
+                    y: 40.0,
+                    width: 220.0,
+                    height: 64.0,
+                },
+                Some(3),
+                32.0,
+            ),
+            None,
+            "off-viewport selected rows must not paint an accent marker outside the flyout"
+        );
+        assert_eq!(
+            selected_combo_focus_bounds(
+                Rectangle {
+                    x: 100.0,
+                    y: 40.0,
+                    width: 220.0,
+                    height: 160.0,
+                },
+                Some(0),
+                34.0,
+            ),
+            Some(Rectangle {
+                x: 104.0,
+                y: 42.0,
+                width: 212.0,
+                height: 30.0,
+            }),
+            "WinUI source-language flyouts show a focus rectangle around the first selected row"
+        );
+        assert_eq!(
+            selected_combo_focus_bounds(
+                Rectangle {
+                    x: 100.0,
+                    y: 40.0,
+                    width: 220.0,
+                    height: 160.0,
+                },
+                Some(2),
+                34.0,
+            ),
+            None,
+            "target-language flyouts with a non-first selected row should keep the softer selected surface"
+        );
+        assert_eq!(
+            selected_combo_focus_segments(
+                Rectangle {
+                    x: 104.0,
+                    y: 42.0,
+                    width: 212.0,
+                    height: 30.0,
+                },
+                2.0,
+            ),
+            [
+                Rectangle {
+                    x: 104.0,
+                    y: 42.0,
+                    width: 212.0,
+                    height: 2.0,
+                },
+                Rectangle {
+                    x: 104.0,
+                    y: 70.0,
+                    width: 212.0,
+                    height: 2.0,
+                },
+                Rectangle {
+                    x: 104.0,
+                    y: 44.0,
+                    width: 2.0,
+                    height: 26.0,
+                },
+                Rectangle {
+                    x: 314.0,
+                    y: 44.0,
+                    width: 2.0,
+                    height: 26.0,
+                },
+            ],
+            "focus rectangle segments paint visibly even when the interior remains transparent"
+        );
 
         let combo_disabled = ControlState::default()
             .hovered(true)
@@ -12872,7 +13960,8 @@ mod tests {
         let visual = IcedVisualTheme::from_tokens(&theme);
 
         let hovered = ControlState::default().hovered(true);
-        let active_style = result_header_button_style(visual, iced::widget::button::Status::Active);
+        let active_style =
+            result_header_button_style(visual, iced::widget::button::Status::Active, true);
         assert_eq!(
             optional_background_color(active_style.background),
             iced_color(theme.result_header),
@@ -12882,17 +13971,43 @@ mod tests {
         let hover_style = result_header_button_style(
             visual,
             button_status_with_state(&hovered, iced::widget::button::Status::Active),
+            true,
         );
         assert_eq!(
             optional_background_color(hover_style.background),
             iced_color(theme.result_header)
         );
-        assert_eq!(hover_style.border.radius.top_left, theme.radius.control);
+        assert_eq!(hover_style.border.radius.top_left, 6.0);
+        assert_eq!(hover_style.border.radius.top_right, 6.0);
+        assert_eq!(hover_style.border.radius.bottom_right, 0.0);
+        assert_eq!(hover_style.border.radius.bottom_left, 0.0);
+
+        let collapsed_style =
+            result_header_button_style(visual, iced::widget::button::Status::Active, false);
+        assert_eq!(collapsed_style.border.radius.top_left, 6.0);
+        assert_eq!(collapsed_style.border.radius.top_right, 6.0);
+        assert_eq!(collapsed_style.border.radius.bottom_right, 6.0);
+        assert_eq!(collapsed_style.border.radius.bottom_left, 6.0);
+
+        let divider_style = result_header_divider_style(visual);
+        assert_eq!(
+            optional_background_color(divider_style.background),
+            result_card_border_color(visual)
+        );
+
+        let minimal = IcedVisualTheme::from_tokens(&ThemeTokens::minimal());
+        let minimal_style =
+            result_header_button_style(minimal, iced::widget::button::Status::Active, true);
+        assert_eq!(minimal_style.border.radius.top_left, 0.0);
+        assert_eq!(minimal_style.border.radius.top_right, 0.0);
+        assert_eq!(minimal_style.border.radius.bottom_right, 0.0);
+        assert_eq!(minimal_style.border.radius.bottom_left, 0.0);
 
         let pressed = ControlState::default().pressed(true);
         let pressed_style = result_header_button_style(
             visual,
             button_status_with_state(&pressed, iced::widget::button::Status::Active),
+            true,
         );
         assert_eq!(
             optional_background_color(pressed_style.background),

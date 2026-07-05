@@ -6715,6 +6715,7 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
     let palette = compare_palette(&reference, &candidate);
     let palette_score = clamp_score(100.0 - f64::min(100.0, palette.average_color_delta / 1.35));
     let ui_summary = compare_ui_summaries(pair.metadata.as_ref());
+    let evidence_audit = build_evidence_audit(pair.metadata.as_ref());
     let semantic_score = ui_summary.as_ref().map(|value| value.score);
     let scoring_profile = ScenarioScoringProfile::for_pair(pair, semantic_score.is_some());
 
@@ -6865,6 +6866,7 @@ fn analyze_pair(pair: &ScreenshotPair, options: &CliOptions) -> Result<ScenarioR
         },
         metadata: pair.metadata.clone(),
         gate,
+        evidence_audit,
         metrics: ScenarioMetrics {
             pixel_error_percent: round4(full_pixel.pixel_error_percent),
             mean_channel_delta: round4(full_pixel.mean_channel_delta),
@@ -8047,6 +8049,140 @@ fn compare_ui_summaries(metadata: Option<&ManifestScenario>) -> Option<UiSummary
     })
 }
 
+fn build_evidence_audit(metadata: Option<&ManifestScenario>) -> Option<EvidenceAudit> {
+    let metadata = metadata?;
+    let reference_summary = metadata.reference_ui_summary.as_ref()?;
+    let candidate_summary = metadata.candidate_ui_summary.as_ref()?;
+    let reference_ids = sorted_visible_ids(reference_summary.visible_automation_ids.as_ref());
+    let candidate_ids = sorted_visible_ids(candidate_summary.visible_automation_ids.as_ref());
+    let missing_candidate_automation_ids = reference_ids
+        .iter()
+        .filter(|id| !contains_case_insensitive(&candidate_ids, id))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let reference_dimensions = reference_summary.visible_control_dimensions.as_ref();
+    let candidate_dimensions = candidate_summary.visible_control_dimensions.as_ref();
+    let reference_dimension_ids = sorted_dimension_ids(reference_dimensions);
+    let candidate_dimension_ids = sorted_dimension_ids(candidate_dimensions);
+    let missing_candidate_dimension_ids = reference_dimension_ids
+        .iter()
+        .filter(|id| {
+            candidate_dimensions
+                .and_then(|dimensions| get_case_insensitive_dimension(dimensions, id))
+                .is_none()
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let reference_control_bounds_count = reference_dimensions
+        .map(|dimensions| {
+            dimensions
+                .values()
+                .filter(|dimension| dimension.bounds_dips.is_some())
+                .count()
+        })
+        .unwrap_or_default();
+    let candidate_control_bounds_count = candidate_dimensions
+        .map(|dimensions| {
+            dimensions
+                .values()
+                .filter(|dimension| dimension.bounds_dips.is_some())
+                .count()
+        })
+        .unwrap_or_default();
+
+    let mut missing_candidate_bounds = Vec::new();
+    if let Some(reference_dimensions) = reference_dimensions {
+        for id in &reference_dimension_ids {
+            let Some(reference) = get_case_insensitive_dimension(reference_dimensions, id) else {
+                continue;
+            };
+            let Some(reference_bounds) = reference.bounds_dips.as_ref() else {
+                continue;
+            };
+            let candidate = candidate_dimensions
+                .and_then(|dimensions| get_case_insensitive_dimension(dimensions, id));
+            if candidate
+                .and_then(|dimension| dimension.bounds_dips.as_ref())
+                .is_some()
+            {
+                continue;
+            }
+            missing_candidate_bounds.push(ControlBoundsEvidenceGap {
+                id: id.clone(),
+                reference_bounds: format_bounds_dips(reference_bounds),
+                candidate: if candidate.is_some() {
+                    "missing bounds_dips evidence".to_string()
+                } else {
+                    "missing control dimension evidence".to_string()
+                },
+            });
+        }
+    }
+
+    let candidate_dimension_without_bounds_ids = candidate_dimensions
+        .map(|dimensions| {
+            let mut ids = dimensions
+                .iter()
+                .filter(|(_, dimension)| dimension.bounds_dips.is_none())
+                .map(|(id, _)| id.clone())
+                .collect::<Vec<_>>();
+            ids.sort_by_key(|id| id.to_ascii_lowercase());
+            ids
+        })
+        .unwrap_or_default();
+
+    Some(EvidenceAudit {
+        reference_automation_id_count: reference_ids.len(),
+        candidate_automation_id_count: candidate_ids.len(),
+        missing_candidate_automation_id_count: missing_candidate_automation_ids.len(),
+        missing_candidate_automation_ids,
+        reference_control_dimension_count: reference_dimension_ids.len(),
+        candidate_control_dimension_count: candidate_dimension_ids.len(),
+        missing_candidate_dimension_count: missing_candidate_dimension_ids.len(),
+        missing_candidate_dimension_ids,
+        reference_control_bounds_count,
+        candidate_control_bounds_count,
+        missing_candidate_bounds_count: missing_candidate_bounds.len(),
+        missing_candidate_bounds,
+        candidate_dimension_without_bounds_count: candidate_dimension_without_bounds_ids.len(),
+        candidate_dimension_without_bounds_ids,
+    })
+}
+
+fn sorted_visible_ids(values: Option<&Vec<String>>) -> Vec<String> {
+    let mut ids = values
+        .into_iter()
+        .flatten()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    ids.sort_by_key(|id| id.to_ascii_lowercase());
+    ids.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    ids
+}
+
+fn sorted_dimension_ids(
+    dimensions: Option<&BTreeMap<String, ManifestControlDimension>>,
+) -> Vec<String> {
+    let mut ids = dimensions
+        .into_iter()
+        .flat_map(|dimensions| dimensions.keys())
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    ids.sort_by_key(|id| id.to_ascii_lowercase());
+    ids
+}
+
+fn contains_case_insensitive(values: &[String], needle: &str) -> bool {
+    values
+        .iter()
+        .any(|value| value.eq_ignore_ascii_case(needle))
+}
+
 fn compare_required_control_states(
     required_control_states: &BTreeMap<String, Vec<String>>,
     candidate_summary: &ManifestUiSummary,
@@ -8620,6 +8756,7 @@ fn canonical_floating_semantic_id(lower: &str, surface: &str) -> Option<Option<S
 
     let mapped = match lower {
         "closebutton" | "miniwindowclosebutton" | "fixedwindowclosebutton" => "close",
+        "miniwindowocrbutton" | "fixedwindowocrbutton" => "ocr",
         "pinbutton" => "pin",
         "inputtextbox" | "sourcetextcollapsed" | "sourcetextcontainer" => "input",
         "sourceplaybutton" => "play_source",
@@ -10112,6 +10249,35 @@ fn markdown_report(report: &ParityReport) -> String {
             scenario.diff_heatmap_path
         ));
     }
+    out.push_str("\n## Evidence Audit\n\n");
+    let audited = report
+        .scenarios
+        .iter()
+        .filter_map(|scenario| {
+            scenario
+                .evidence_audit
+                .as_ref()
+                .filter(|audit| audit.has_gaps())
+                .map(|audit| (scenario, audit))
+        })
+        .collect::<Vec<_>>();
+    if audited.is_empty() {
+        out.push_str("No manifest evidence gaps were found.\n");
+    } else {
+        out.push_str("| Scenario | Missing IDs | Missing dimensions | Missing bounds | Candidate dims without bounds | Next evidence |\n");
+        out.push_str("| --- | ---: | ---: | ---: | ---: | --- |\n");
+        for (scenario, audit) in audited {
+            out.push_str(&format!(
+                "| `{}` | {} | {} | {} | {} | {} |\n",
+                scenario.scenario_id,
+                audit.missing_candidate_automation_id_count,
+                audit.missing_candidate_dimension_count,
+                audit.missing_candidate_bounds_count,
+                audit.candidate_dimension_without_bounds_count,
+                evidence_audit_next_evidence(audit, 6)
+            ));
+        }
+    }
     out.push_str("\n## Findings\n\n");
     for scenario in &report.scenarios {
         out.push_str(&format!("### {}\n\n", scenario.scenario_id));
@@ -10161,6 +10327,12 @@ fn markdown_report(report: &ParityReport) -> String {
             "- Control absolute sizes: {}\n",
             semantic_control_dimension_summary(scenario.metadata.as_ref())
         ));
+        if let Some(audit) = scenario.evidence_audit.as_ref() {
+            out.push_str(&format!(
+                "- Evidence audit: {}\n",
+                evidence_audit_summary(audit, 6)
+            ));
+        }
         if let Some(summary) = semantic_ui_summary_delta_summary(scenario.metadata.as_ref()) {
             out.push_str(&format!("- UI semantic summary: {summary}\n"));
         }
@@ -10184,6 +10356,66 @@ fn markdown_report(report: &ParityReport) -> String {
         out.push('\n');
     }
     out
+}
+
+fn evidence_audit_summary(audit: &EvidenceAudit, limit: usize) -> String {
+    let mut parts = vec![
+        format!(
+            "automation IDs {}/{} candidate/reference, missing {}",
+            audit.candidate_automation_id_count,
+            audit.reference_automation_id_count,
+            audit.missing_candidate_automation_id_count
+        ),
+        format!(
+            "control dimensions {}/{} candidate/reference, missing {}",
+            audit.candidate_control_dimension_count,
+            audit.reference_control_dimension_count,
+            audit.missing_candidate_dimension_count
+        ),
+        format!(
+            "bounds {}/{} candidate/reference, missing {}",
+            audit.candidate_control_bounds_count,
+            audit.reference_control_bounds_count,
+            audit.missing_candidate_bounds_count
+        ),
+    ];
+    let next = evidence_audit_next_evidence(audit, limit);
+    if next != "none" {
+        parts.push(format!("next evidence {next}"));
+    }
+    parts.join("; ")
+}
+
+fn evidence_audit_next_evidence(audit: &EvidenceAudit, limit: usize) -> String {
+    let mut items = Vec::new();
+    for gap in &audit.missing_candidate_bounds {
+        items.push(format!("bounds `{}` ({})", gap.id, gap.candidate));
+    }
+    for id in &audit.missing_candidate_dimension_ids {
+        if !items.iter().any(|item| item.contains(&format!("`{id}`"))) {
+            items.push(format!("dimension `{id}`"));
+        }
+    }
+    for id in &audit.missing_candidate_automation_ids {
+        if !items.iter().any(|item| item.contains(&format!("`{id}`"))) {
+            items.push(format!("automation `{id}`"));
+        }
+    }
+    for id in &audit.candidate_dimension_without_bounds_ids {
+        if !items.iter().any(|item| item.contains(&format!("`{id}`"))) {
+            items.push(format!("candidate bounds `{id}`"));
+        }
+    }
+
+    if items.is_empty() {
+        return "none".to_string();
+    }
+    let hidden = items.len().saturating_sub(limit);
+    let mut visible = items.into_iter().take(limit).collect::<Vec<_>>();
+    if hidden > 0 {
+        visible.push(format!("+{hidden} more"));
+    }
+    visible.join("; ")
 }
 
 fn interaction_effect_delta_summary(scenario: &ScenarioResult) -> Option<String> {
@@ -10977,6 +11209,7 @@ fn llm_review_requests(report: &ParityReport) -> Vec<LlmReviewRequest> {
             ui_semantic_delta_summary: semantic_ui_summary_delta_summary(
                 scenario.metadata.as_ref(),
             ),
+            evidence_audit: scenario.evidence_audit.clone(),
             metrics: scenario.metrics.clone(),
             findings: scenario.findings.clone(),
             regions: scenario.regions.clone(),
@@ -11042,6 +11275,12 @@ fn llm_review_prompts(requests: &[LlmReviewRequest]) -> String {
         ));
         if let Some(summary) = request.ui_semantic_delta_summary.as_ref() {
             out.push_str(&format!("UI semantic summary: {summary}.\n\n"));
+        }
+        if let Some(audit) = request.evidence_audit.as_ref() {
+            out.push_str(&format!(
+                "Evidence audit: {}.\n\n",
+                evidence_audit_summary(audit, 8)
+            ));
         }
         if let Some(baseline) = request.metrics.effect_baseline_scenario_id.as_ref() {
             out.push_str(&format!(
@@ -11767,6 +12006,34 @@ struct ControlDimensionDelta {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "PascalCase")]
+struct EvidenceAudit {
+    reference_automation_id_count: usize,
+    candidate_automation_id_count: usize,
+    missing_candidate_automation_id_count: usize,
+    missing_candidate_automation_ids: Vec<String>,
+    reference_control_dimension_count: usize,
+    candidate_control_dimension_count: usize,
+    missing_candidate_dimension_count: usize,
+    missing_candidate_dimension_ids: Vec<String>,
+    reference_control_bounds_count: usize,
+    candidate_control_bounds_count: usize,
+    missing_candidate_bounds_count: usize,
+    missing_candidate_bounds: Vec<ControlBoundsEvidenceGap>,
+    candidate_dimension_without_bounds_count: usize,
+    candidate_dimension_without_bounds_ids: Vec<String>,
+}
+
+impl EvidenceAudit {
+    fn has_gaps(&self) -> bool {
+        self.missing_candidate_automation_id_count > 0
+            || self.missing_candidate_dimension_count > 0
+            || self.missing_candidate_bounds_count > 0
+            || self.candidate_dimension_without_bounds_count > 0
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "PascalCase")]
 struct ControlBoundsEvidenceGap {
     id: String,
     reference_bounds: String,
@@ -11896,6 +12163,7 @@ struct ScenarioResult {
     candidate_size: ImageSize,
     metadata: Option<ManifestScenario>,
     gate: ScenarioScoreGate,
+    evidence_audit: Option<EvidenceAudit>,
     metrics: ScenarioMetrics,
     regions: Vec<RegionResult>,
     findings: Vec<Finding>,
@@ -12494,21 +12762,21 @@ fn coverage_evidence_status(matches: &[&ScenarioResult]) -> CoverageEvidenceStat
 
 #[derive(Clone)]
 struct ExpectedCoverageItem {
-    area: &'static str,
-    id: &'static str,
-    display_name: &'static str,
+    area: String,
+    id: String,
+    display_name: String,
     priority: CoveragePriority,
-    match_terms: &'static [&'static str],
-    window_kinds: &'static [&'static str],
-    layer_hint: &'static str,
-    next_evidence: &'static str,
+    match_terms: Vec<String>,
+    window_kinds: Vec<String>,
+    layer_hint: String,
+    next_evidence: String,
 }
 
 struct CoverageCatalog;
 
 impl CoverageCatalog {
     fn items() -> Vec<ExpectedCoverageItem> {
-        vec![
+        let mut items = vec![
             item("main", "main.initial", "Main window initial", CoveragePriority::Critical, &["main", "initial"], &["main"]),
             item("main", "main.after-translate", "Main window after translate", CoveragePriority::Critical, &["main", "after", "translate"], &["main"]),
             item("main", "main.loading", "Main window loading", CoveragePriority::Critical, &["main", "loading"], &["main"]),
@@ -12524,7 +12792,7 @@ impl CoverageCatalog {
             item("interaction-effects", "effects.settings-slider-focus", "Settings TTS speed slider focus", CoveragePriority::Normal, &["tts", "speed", "slider", "focus"], &["settings"]).with_next("Add side-by-side screenshot evidence for the Settings TTS speed slider keyboard focus ring."),
             item("interaction-effects", "effects.settings-toggle-focus", "Settings auto-play toggle focus", CoveragePriority::Normal, &["auto", "play", "toggle", "focus"], &["settings"]).with_next("Add side-by-side screenshot evidence for the Settings auto-play toggle keyboard focus ring."),
             item("interaction-effects", "effects.floating-action-hover", "Floating action hover", CoveragePriority::Critical, &["translate", "hover"], &["mini", "fixed", "popbutton"]),
-            item("interaction-effects", "effects.floating-action-pressed", "Floating action pressed", CoveragePriority::Normal, &["pressed"], &["mini", "fixed", "popbutton"]),
+            item("interaction-effects", "effects.floating-action-pressed", "Floating action pressed", CoveragePriority::Normal, &["translate", "pressed"], &["mini", "fixed", "popbutton"]),
             item("interaction-effects", "effects.overlay-fade", "Mode overlay fade", CoveragePriority::Normal, &["overlay", "fade"], &["main"]),
             item("interaction-effects", "effects.result-collapse-toggle", "Result collapse/expand visibility toggle", CoveragePriority::Critical, &["collapse", "expand"], &[]),
             item("floating", "mini.initial", "Mini window initial", CoveragePriority::Critical, &["mini", "initial"], &["mini"]),
@@ -12559,7 +12827,9 @@ impl CoverageCatalog {
             item("long-document", "long-doc.running", "Long document running", CoveragePriority::Critical, &["long", "doc", "running"], &["main", "long-document"]),
             item("long-document", "long-doc.service-hover", "Long document service hover", CoveragePriority::Normal, &["long", "doc", "service", "hover"], &["main", "long-document"]),
             item("long-document", "long-doc.service-dropdown", "Long document service dropdown", CoveragePriority::Critical, &["long", "doc", "service"], &["main", "long-document"]),
-        ]
+        ];
+        items.extend(floating_operation_items());
+        items
     }
 
     fn layer_hints_for(pair: &ScreenshotPair) -> Vec<String> {
@@ -12589,25 +12859,157 @@ fn item(
     window_kinds: &'static [&'static str],
 ) -> ExpectedCoverageItem {
     ExpectedCoverageItem {
-        area,
-        id,
-        display_name,
+        area: area.to_string(),
+        id: id.to_string(),
+        display_name: display_name.to_string(),
         priority,
-        match_terms,
-        window_kinds,
-        layer_hint: "final_effect",
-        next_evidence: "Add a dotnet/rust screenshot pair and manifest entry for this scenario.",
+        match_terms: match_terms.iter().map(|term| (*term).to_string()).collect(),
+        window_kinds: window_kinds
+            .iter()
+            .map(|kind| (*kind).to_string())
+            .collect(),
+        layer_hint: "final_effect".to_string(),
+        next_evidence: "Add a dotnet/rust screenshot pair and manifest entry for this scenario."
+            .to_string(),
     }
 }
 
+fn dynamic_item(
+    area: impl Into<String>,
+    id: impl Into<String>,
+    display_name: impl Into<String>,
+    priority: CoveragePriority,
+    match_terms: Vec<String>,
+    window_kinds: Vec<String>,
+) -> ExpectedCoverageItem {
+    ExpectedCoverageItem {
+        area: area.into(),
+        id: id.into(),
+        display_name: display_name.into(),
+        priority,
+        match_terms,
+        window_kinds,
+        layer_hint: "final_effect".to_string(),
+        next_evidence: "Add a dotnet/rust screenshot pair and manifest entry for this scenario."
+            .to_string(),
+    }
+}
+
+fn floating_operation_items() -> Vec<ExpectedCoverageItem> {
+    let mut items = Vec::new();
+    for window in ["mini", "fixed"] {
+        for (key, label) in floating_button_controls(window) {
+            for state in ["hover", "pressed"] {
+                let id = format!("{window}.{key}-{state}");
+                items.push(
+                    dynamic_item(
+                        "floating-operations",
+                        &id,
+                        format!("{window} {label} {state} operation"),
+                        CoveragePriority::Critical,
+                        floating_operation_terms(window, key, state),
+                        vec![window.to_string()],
+                    )
+                    .with_next(format!(
+                        "Capture and compare the `{id}` dotnet/rust operation screenshot pair."
+                    )),
+                );
+            }
+        }
+
+        for (key, label) in floating_dropdown_controls() {
+            let open_id = format!("{window}.{key}-open");
+            items.push(
+                dynamic_item(
+                    "floating-operations",
+                    &open_id,
+                    format!("{window} {label} dropdown open"),
+                    CoveragePriority::Critical,
+                    floating_operation_terms(window, key, "open"),
+                    vec![window.to_string()],
+                )
+                .with_next(format!(
+                    "Capture and compare the `{open_id}` dotnet/rust opened dropdown screenshot pair."
+                )),
+            );
+
+            for (index, option_label) in floating_language_option_labels() {
+                let select_id = format!("{window}.{key}-select-{index}");
+                let mut terms = floating_operation_terms(window, key, "select");
+                terms.push(index.to_string());
+                items.push(
+                    dynamic_item(
+                        "floating-operations",
+                        &select_id,
+                        format!("{window} {label} select {option_label}"),
+                        CoveragePriority::Critical,
+                        terms,
+                        vec![window.to_string()],
+                    )
+                    .with_next(format!(
+                        "Capture and compare the `{select_id}` dotnet/rust selected-option screenshot pair."
+                    )),
+                );
+            }
+        }
+    }
+    items
+}
+
+fn floating_button_controls(window: &str) -> Vec<(&'static str, &'static str)> {
+    let mut controls = vec![
+        ("translate", "Translate"),
+        ("ocr", "OCR"),
+        ("close", "Close"),
+        ("source-language", "Source language ComboBox"),
+        ("target-language", "Target language ComboBox"),
+        ("swap", "Swap"),
+    ];
+    if window == "mini" {
+        controls.push(("pin", "Pin"));
+    }
+    controls
+}
+
+fn floating_dropdown_controls() -> [(&'static str, &'static str); 2] {
+    [
+        ("source-language-dropdown", "Source language"),
+        ("target-language-dropdown", "Target language"),
+    ]
+}
+
+fn floating_language_option_labels() -> [(usize, &'static str); 9] {
+    [
+        (1, "Auto detect"),
+        (2, "Simplified Chinese"),
+        (3, "Traditional Chinese"),
+        (4, "Japanese"),
+        (5, "Korean"),
+        (6, "English"),
+        (7, "German"),
+        (8, "French"),
+        (9, "Spanish"),
+    ]
+}
+
+fn floating_operation_terms(window: &str, key: &str, state: &str) -> Vec<String> {
+    let mut terms = vec![window.to_string(), state.to_string()];
+    terms.extend(
+        key.split('-')
+            .filter(|term| !term.is_empty())
+            .map(str::to_string),
+    );
+    terms
+}
+
 impl ExpectedCoverageItem {
-    fn with_layer(mut self, layer_hint: &'static str) -> Self {
-        self.layer_hint = layer_hint;
+    fn with_layer(mut self, layer_hint: impl Into<String>) -> Self {
+        self.layer_hint = layer_hint.into();
         self
     }
 
-    fn with_next(mut self, next_evidence: &'static str) -> Self {
-        self.next_evidence = next_evidence;
+    fn with_next(mut self, next_evidence: impl Into<String>) -> Self {
+        self.next_evidence = next_evidence.into();
         self
     }
 }
@@ -12625,7 +13027,7 @@ fn coverage_matches(expected: &ExpectedCoverageItem, scenario: &ScenarioResult) 
 }
 
 fn coverage_matches_text(expected: &ExpectedCoverageItem, text: &str, window_kind: &str) -> bool {
-    let expected_id = normalize_search(expected.id);
+    let expected_id = normalize_search(&expected.id);
     if text == expected_id || text.starts_with(&format!("{expected_id} ")) {
         return true;
     }
@@ -12827,6 +13229,7 @@ struct LlmReviewRequest {
     reference_ui_summary: Option<ManifestUiSummary>,
     candidate_ui_summary: Option<ManifestUiSummary>,
     ui_semantic_delta_summary: Option<String>,
+    evidence_audit: Option<EvidenceAudit>,
     metrics: ScenarioMetrics,
     findings: Vec<Finding>,
     regions: Vec<RegionResult>,
@@ -13404,6 +13807,23 @@ mod tests {
     }
 
     #[test]
+    fn floating_semantic_summary_maps_ocr_button_aliases() {
+        let manifest = semantic_manifest(
+            "mini.ocr-hover",
+            "mini",
+            &["mini.ocr"],
+            ui_summary(&[("button", 1)], &["MiniWindowOcrButton"]),
+            ui_summary(&[("button", 1)], &["mini.ocr"]),
+        );
+
+        let summary = compare_ui_summaries(Some(&manifest)).expect("summary");
+
+        assert_eq!(summary.missing_required_semantic_tags, Vec::<String>::new());
+        assert_eq!(summary.automation_id_jaccard, Some(100.0));
+        assert_eq!(summary.score, 100.0);
+    }
+
+    #[test]
     fn semantic_summary_reports_missing_required_visible_texts() {
         let mut manifest = semantic_manifest(
             "settings.about",
@@ -13967,6 +14387,107 @@ mod tests {
     }
 
     #[test]
+    fn floating_operation_capture_scenarios_count_toward_operation_coverage() {
+        let dir = tempdir().expect("temp dir");
+        let cases = [
+            ("mini.ocr-hover", "mini", "mini.ocr-hover"),
+            ("mini.pin-pressed", "mini", "mini.pin-pressed"),
+            ("fixed.close-hover", "fixed", "fixed.close-hover"),
+            (
+                "fixed.target-language-pressed",
+                "fixed",
+                "fixed.target-language-pressed",
+            ),
+            (
+                "mini.source-language-dropdown-open",
+                "mini",
+                "mini.source-language-dropdown-open",
+            ),
+            (
+                "mini.source-language-dropdown-select-1-auto-detect",
+                "mini",
+                "mini.source-language-dropdown-select-1",
+            ),
+            (
+                "fixed.target-language-dropdown-select-9-spanish",
+                "fixed",
+                "fixed.target-language-dropdown-select-9",
+            ),
+        ];
+
+        let mut scenarios = Vec::new();
+        for (scenario_id, window_kind, _) in cases {
+            let reference = dir.path().join(format!("{scenario_id}{DOTNET_SUFFIX}"));
+            let candidate = dir.path().join(format!("{scenario_id}{RUST_SUFFIX}"));
+            create_synthetic_frame(false)
+                .save(&reference)
+                .expect("save reference");
+            create_synthetic_frame(false)
+                .save(&candidate)
+                .expect("save candidate");
+            scenarios.push(serde_json::json!({
+                "ScenarioId": scenario_id,
+                "WindowKind": window_kind,
+                "SectionId": window_kind,
+                "SectionLabel": window_kind,
+                "Theme": "system",
+                "ScrollPercent": 0.0,
+                "ExpandAvailableLanguages": false,
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "Regions": [],
+                "RequiredSemanticTags": []
+            }));
+        }
+
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": scenarios
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let coverage_text =
+            fs::read_to_string(output.join("ui-parity-coverage.json")).expect("coverage json");
+        let coverage = serde_json::from_str::<Value>(&coverage_text).expect("coverage value");
+
+        for (scenario_id, _, expected_id) in cases {
+            let item = find_coverage_item(&coverage, expected_id);
+            assert_eq!(
+                item.get("IsCovered").and_then(Value::as_bool),
+                Some(true),
+                "{expected_id} should be covered"
+            );
+            assert_eq!(
+                item.get("EvidenceStatus").and_then(Value::as_str),
+                Some("covered-pass"),
+                "{expected_id} should pass in synthetic evidence"
+            );
+            assert!(
+                item.get("MatchingScenarioIds")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| items
+                        .iter()
+                        .any(|item| item.as_str() == Some(scenario_id))),
+                "{expected_id} should list {scenario_id} as matching evidence"
+            );
+        }
+    }
+
+    #[test]
     fn llm_review_outputs_include_metrics_findings_and_regions() {
         let dir = tempdir().expect("temp dir");
         let reference = dir.path().join(format!("main.hover{DOTNET_SUFFIX}"));
@@ -14474,6 +14995,170 @@ mod tests {
         assert!(markdown.contains("bounds_dips=(30.00,276.00,796.00,24.00)"));
         assert!(markdown.contains("AboutHeaderText.top"));
         assert!(markdown.contains("missingControlBoundsEvidence"));
+    }
+
+    #[test]
+    fn manifest_evidence_audit_summarizes_missing_ids_dimensions_and_bounds() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("settings.audit{DOTNET_SUFFIX}"));
+        let candidate = dir.path().join(format!("settings.audit{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        create_synthetic_frame(false)
+            .save(&candidate)
+            .expect("save candidate");
+
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        let manifest = serde_json::json!({
+            "SchemaVersion": "easydict.ui-parity.manifest.v1",
+            "Scenarios": [{
+                "ScenarioId": "settings.audit",
+                "WindowKind": "settings",
+                "SectionId": "about",
+                "SectionLabel": "About",
+                "Theme": "system",
+                "ScrollPercent": 0.0,
+                "ExpandAvailableLanguages": false,
+                "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                "Regions": [],
+                "RequiredSemanticTags": ["AboutHeaderText", "LicenseText"],
+                "ReferenceUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["AboutHeaderText", "LicenseText", "VersionText"],
+                    "VisibleControlDimensions": {
+                        "AboutHeaderText": {
+                            "Kind": "Text",
+                            "Width": "796",
+                            "Height": "24",
+                            "BoundsDips": {
+                                "Left": 30.0,
+                                "Top": 276.0,
+                                "Width": 796.0,
+                                "Height": 24.0
+                            }
+                        },
+                        "LicenseText": {
+                            "Kind": "Text",
+                            "Width": "150",
+                            "Height": "18",
+                            "BoundsDips": {
+                                "Left": 30.0,
+                                "Top": 398.0,
+                                "Width": 150.0,
+                                "Height": 18.0
+                            }
+                        },
+                        "VersionText": {
+                            "Kind": "Text",
+                            "Width": "120",
+                            "Height": "18"
+                        }
+                    }
+                },
+                "CandidateUiSummary": {
+                    "VisibleControlCounts": {},
+                    "VisibleAutomationIds": ["AboutHeaderText"],
+                    "VisibleControlDimensions": {
+                        "AboutHeaderText": {
+                            "Kind": "Text",
+                            "Width": "796",
+                            "Height": "24"
+                        },
+                        "ExtraCandidateButton": {
+                            "Kind": "Button",
+                            "Width": "80",
+                            "Height": "32"
+                        }
+                    }
+                }
+            }]
+        });
+        fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let report_text =
+            fs::read_to_string(output.join("ui-parity-report.json")).expect("report json");
+        let report = serde_json::from_str::<Value>(&report_text).expect("report value");
+        let scenario = report
+            .get("Scenarios")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    item.get("ScenarioId").and_then(Value::as_str) == Some("settings.audit")
+                })
+            })
+            .expect("settings.audit scenario");
+        let audit = scenario
+            .get("EvidenceAudit")
+            .expect("scenario should include evidence audit");
+
+        assert_eq!(
+            audit
+                .get("MissingCandidateAutomationIdCount")
+                .and_then(Value::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            audit
+                .get("MissingCandidateDimensionCount")
+                .and_then(Value::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            audit
+                .get("MissingCandidateBoundsCount")
+                .and_then(Value::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            audit
+                .get("CandidateDimensionWithoutBoundsCount")
+                .and_then(Value::as_u64),
+            Some(2)
+        );
+        assert!(audit
+            .get("MissingCandidateAutomationIds")
+            .and_then(Value::as_array)
+            .is_some_and(|items| items
+                .iter()
+                .any(|item| item.as_str() == Some("VersionText"))));
+        assert!(audit
+            .get("MissingCandidateBounds")
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.iter().any(|item| {
+                item.get("Id").and_then(Value::as_str) == Some("AboutHeaderText")
+                    && item
+                        .get("Candidate")
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| value.contains("missing bounds_dips"))
+            })));
+
+        let markdown =
+            fs::read_to_string(output.join("ui-parity-report.md")).expect("report markdown");
+        assert!(markdown.contains("## Evidence Audit"));
+        assert!(markdown.contains("settings.audit"));
+        assert!(markdown.contains("bounds `AboutHeaderText`"));
+        assert!(markdown.contains("bounds `LicenseText`"));
+        assert!(markdown.contains("dimension `VersionText`"));
+
+        let prompts =
+            fs::read_to_string(output.join("llm-review-prompts.md")).expect("llm prompts");
+        assert!(prompts.contains("Evidence audit:"));
+        assert!(prompts.contains("bounds `AboutHeaderText`"));
     }
 
     #[test]

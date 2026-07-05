@@ -12,6 +12,9 @@ msgstr "Easydict"
 msgid "app.beta"
 msgstr "ᵇᵉᵗᵃ"
 
+msgid "main.long_document.subtitle"
+msgstr "长文档翻译"
+
 msgid "main.source_text"
 msgstr "Source Text"
 
@@ -24,11 +27,23 @@ msgstr "翻译结果"
 msgid "main.result.pending_query"
 msgstr "点击查询"
 
+msgid "main.result.pending_query_hint"
+msgstr "点击服务标题查询"
+
 msgid "main.completed"
 msgstr "已完成 {count} 个服务"
 
 msgid "status.ready"
 msgstr "就绪"
+
+msgid "DetectedLanguage"
+msgstr "检测到：{0}"
+
+msgid "GrammarCorrectionActiveNotice"
+msgstr "当前为纠错模式：将仅运行 AI 纠错服务。修改目标语言可回到翻译。"
+
+msgid "GrammarCorrectionFallbackNotice"
+msgstr "未启用支持纠错的 AI 服务，已回退为普通翻译。配置一个支持纠错的 AI 服务后，源语言和目标语言相同时会显示纠错信息。"
 
 msgid "ocr.capture.title"
 msgstr "OCR 截图"
@@ -45,6 +60,9 @@ msgstr "自动检测"
 msgid "main.target_zh_hans"
 msgstr "简体中文"
 
+msgid "main.ocr_screenshot_translate"
+msgstr "OCR 截图翻译"
+
 msgid "main.language_help"
 msgstr "语言帮助"
 
@@ -53,6 +71,15 @@ msgstr "翻译"
 
 msgid "main.settings"
 msgstr "设置"
+
+msgid "main.pin_window"
+msgstr "固定窗口（保持置顶）"
+
+msgid "main.swap_languages"
+msgstr "交换源语言和目标语言"
+
+msgid "main.play_source_text"
+msgstr "朗读源文本"
 
 msgid "settings.title"
 msgstr "设置"

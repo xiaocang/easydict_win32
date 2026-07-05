@@ -100,7 +100,7 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
     };
     assert_eq!(invalid_combo_token.selected, None);
 
-    let title_flyout = flyout_button("Easydict")
+    let title_flyout = flyout_button("DemoApp")
         .id("mode-title")
         .text_style(TextStyle::Subtitle)
         .font_size(22)
@@ -111,7 +111,7 @@ fn progress_text_editor_slider_combo_expander_and_busy_overlay_expose_fluent_sta
     let ViewToken::FlyoutButton(title_flyout_token) = title_flyout.token() else {
         panic!("expected FlyoutButton");
     };
-    assert_eq!(title_flyout_token.label, "Easydict");
+    assert_eq!(title_flyout_token.label, "DemoApp");
     assert_eq!(title_flyout_token.text_style, Some(TextStyle::Subtitle));
     assert_eq!(title_flyout_token.font_size, Some(22));
 

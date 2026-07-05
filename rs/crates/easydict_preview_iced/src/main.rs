@@ -15,6 +15,9 @@ use win_fluent::prelude::*;
 fn main() {
     let preview_mode = preview_mode_requested();
     let initial_state = initial_state_for_mode(preview_mode);
+    if preview_mode {
+        dump_preview_schema_on_large_stack(initial_state.clone());
+    }
     let window_options = initial_window_options(preview_mode, &initial_state);
 
     win_fluent_backend_iced::run_single_window_application::<PreviewApp>(
@@ -119,8 +122,8 @@ fn preview_window_options() -> WindowOptions {
     let window_id = preview_window_id();
     match window_id.as_str() {
         "settings" => return settings_window_options(),
-        "mini" => return mini_window_options(),
-        "fixed" => return fixed_window_options(),
+        "mini" => return floating_preview_window_options(mini_window_options()),
+        "fixed" => return floating_preview_window_options(fixed_window_options()),
         "capture-overlay" => return capture_overlay_window_options(),
         "pop-button" => return pop_button_window_options(),
         _ => {}
@@ -162,6 +165,12 @@ fn preview_window_options() -> WindowOptions {
         .frame(WindowFrame::Borderless)
         .resize_mode(WindowResizeMode::CanResize)
         .placement(WindowPlacement::Explicit { x: 40.0, y: 20.0 })
+}
+
+fn floating_preview_window_options(options: WindowOptions) -> WindowOptions {
+    let width = preview_env_f32("EASYDICT_PREVIEW_WIDTH_DIPS").unwrap_or(options.width);
+    let height = preview_env_f32("EASYDICT_PREVIEW_HEIGHT_DIPS").unwrap_or(options.height);
+    options.size(width, height)
 }
 
 fn preview_window_id() -> String {
@@ -274,9 +283,6 @@ impl Application for PreviewApp {
         } else {
             EasydictApp::new(flags)
         };
-        if preview_mode {
-            dump_preview_schema_if_requested(&inner);
-        }
 
         let auto_toggle_task = if preview_mode {
             std::env::var("EASYDICT_PREVIEW_AUTO_TOGGLE_RESULT")
@@ -359,7 +365,12 @@ impl Application for PreviewApp {
     }
 
     fn window_options(&self, window: &WindowId) -> Option<WindowOptions> {
-        self.inner.window_options(window)
+        let options = self.inner.window_options(window)?;
+        if self.preview_mode && matches!(window.as_str(), "mini" | "fixed") {
+            Some(floating_preview_window_options(options))
+        } else {
+            Some(options)
+        }
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -389,6 +400,20 @@ impl Application for PreviewApp {
     fn theme_tokens(&self) -> ThemeTokens {
         self.inner.theme_tokens()
     }
+}
+
+fn dump_preview_schema_on_large_stack(state: EasydictUiState) {
+    if std::env::var("EASYDICT_PREVIEW_SCHEMA_PATH").is_err() {
+        return;
+    }
+
+    std::thread::Builder::new()
+        .name("easydict-preview-schema".to_string())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || dump_preview_schema_if_requested(&EasydictApp { state }))
+        .expect("failed to spawn Easydict preview schema thread")
+        .join()
+        .expect("Easydict preview schema thread panicked");
 }
 
 fn dump_preview_schema_if_requested(app: &EasydictApp) {
@@ -724,6 +749,39 @@ mod tests {
             options.placement,
             WindowPlacement::Explicit { x: 40.0, y: 20.0 }
         ));
+    }
+
+    #[test]
+    fn floating_preview_window_options_honor_explicit_size_environment() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let previous_window = std::env::var("EASYDICT_PREVIEW_WINDOW").ok();
+        let previous_width = std::env::var("EASYDICT_PREVIEW_WIDTH_DIPS").ok();
+        let previous_height = std::env::var("EASYDICT_PREVIEW_HEIGHT_DIPS").ok();
+
+        std::env::set_var("EASYDICT_PREVIEW_WINDOW", "mini");
+        std::env::set_var("EASYDICT_PREVIEW_WIDTH_DIPS", "318.5");
+        std::env::set_var("EASYDICT_PREVIEW_HEIGHT_DIPS", "299.25");
+
+        let options = preview_window_options();
+
+        assert_eq!(options.id.as_str(), "mini");
+        assert_eq!(options.width, 318.5);
+        assert_eq!(options.height, 299.25);
+        assert_eq!(options.min_width, Some(280.0));
+        assert_eq!(options.min_height, Some(200.0));
+
+        let state =
+            EasydictUiState::preview(easydict_app::PreviewScenario::Initial, ThemeMode::Light);
+        let (app, _) = PreviewApp::new(state);
+        let runtime_options = app
+            .window_options(&WindowId::new("mini"))
+            .expect("mini window options");
+        assert_eq!(runtime_options.width, 318.5);
+        assert_eq!(runtime_options.height, 299.25);
+
+        restore_env("EASYDICT_PREVIEW_WINDOW", previous_window);
+        restore_env("EASYDICT_PREVIEW_WIDTH_DIPS", previous_width);
+        restore_env("EASYDICT_PREVIEW_HEIGHT_DIPS", previous_height);
     }
 
     #[test]

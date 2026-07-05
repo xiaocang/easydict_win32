@@ -448,7 +448,6 @@ impl TranslationResultPreview {
             self.service_name.clone(),
             self.result_body(),
         )
-        .icon(service_icon(&self.id))
         .expanded(self.expanded)
         .toggleable(!self.demoted)
         .dimmed(self.demoted)
@@ -458,14 +457,18 @@ impl TranslationResultPreview {
             self.header_state.hovered || self.header_state.pressed || self.header_state.focused,
         );
 
+        if let Some(icon) = service_icon(&self.id) {
+            item = item.icon(icon);
+        }
+
         if let Some(metadata) = self.result_metadata() {
             item = item.metadata(metadata);
         }
 
         if !self.enabled_query && !self.has_queried {
             item = item.pending_hint(tr(
-                "main.result.pending_query",
-                "Click to query this service",
+                "main.result.pending_query_hint",
+                "Click header to query",
             ));
         }
 
@@ -680,48 +683,50 @@ fn format_phonetic_text(text: &str) -> String {
     }
 }
 
-fn service_icon(service_id: &str) -> IconToken {
+fn service_icon(service_id: &str) -> Option<IconToken> {
     match service_id {
-        "google" | "google_web" => IconToken::with_image(
+        "google" | "google_web" => Some(IconToken::with_image(
             "service-google",
             include_bytes!("../resources/service-icons/Google.scale-100.png"),
-        ),
-        "bing" => IconToken::with_image(
+        )),
+        "bing" => Some(IconToken::with_image(
             "service-bing",
             include_bytes!("../resources/service-icons/Bing.scale-100.png"),
-        ),
-        "windows-local-ai" => IconToken::with_image(
+        )),
+        "windows-local-ai" => Some(IconToken::with_image(
             "service-local-ai",
             include_bytes!("../resources/service-icons/windows-local-ai.scale-100.png"),
-        ),
-        "openai" => IconToken::with_image(
+        )),
+        "openai" => Some(IconToken::with_image(
             "service-ai",
             include_bytes!("../resources/service-icons/OpenAI.scale-100.png"),
-        ),
-        "deepseek" => IconToken::with_image(
+        )),
+        "deepseek" => Some(IconToken::with_image(
             "service-deepseek",
             include_bytes!("../resources/service-icons/DeepSeek.scale-100.png"),
-        ),
-        "deepl" => IconToken::with_image(
+        )),
+        "deepl" => Some(IconToken::with_image(
             "service-deepl",
             include_bytes!("../resources/service-icons/DeepL.scale-100.png"),
-        ),
-        "ollama" => IconToken::with_image(
+        )),
+        "ollama" => Some(IconToken::with_image(
             "service-ollama",
             include_bytes!("../resources/service-icons/Ollama.scale-100.png"),
-        ),
-        "zhipu" => IconToken::with_image(
+        )),
+        "zhipu" => Some(IconToken::with_image(
             "service-zhipu",
             include_bytes!("../resources/service-icons/Zhipu.scale-100.png"),
-        ),
-        "groq" => IconToken::with_image(
+        )),
+        "groq" => Some(IconToken::with_image(
             "service-groq",
             include_bytes!("../resources/service-icons/Groq.scale-100.png"),
-        ),
-        service_id if service_id.starts_with("mdx::") => {
-            IconToken::with_glyph("service-mdx", '\u{E8D5}')
-        }
-        _ => icon::translate(),
+        )),
+        "volcano" => Some(IconToken::with_image(
+            "service-volcano",
+            include_bytes!("../resources/service-icons/Volcano.scale-100.png"),
+        )),
+        service_id if service_id.starts_with("mdx::") => None,
+        _ => Some(icon::translate()),
     }
 }
 
@@ -742,6 +747,7 @@ pub struct LongDocumentState {
     pub target_language: String,
     pub service: String,
     pub service_combo_state: ControlState,
+    pub service_dropdown_open: bool,
     pub input_mode: String,
     pub output_mode: String,
     pub concurrency: String,
@@ -765,15 +771,16 @@ impl Default for LongDocumentState {
             source_text: String::new(),
             selected_file: "No file selected".to_string(),
             source_language: "auto".to_string(),
-            target_language: "zh-Hans".to_string(),
-            service: "openai".to_string(),
+            target_language: "zh-Hant".to_string(),
+            service: "windows-local-ai".to_string(),
             service_combo_state: ControlState::default(),
+            service_dropdown_open: false,
             input_mode: "pdf".to_string(),
             output_mode: "mono".to_string(),
             concurrency: "4".to_string(),
             page_range: String::new(),
             two_pass_context: true,
-            output_folder: "(same as input file folder)".to_string(),
+            output_folder: default_long_document_output_folder(),
             status_text: "Idle".to_string(),
             is_translating: false,
             active_query_id: None,
@@ -782,13 +789,29 @@ impl Default for LongDocumentState {
             progress_percentage: None,
             progress_detail: None,
             last_translated_block: None,
-            history: vec![TranslationResultPreview::new(
-                "sample-history",
-                "Recent document",
-                "No completed long document translation yet.",
-            )],
+            history: Vec::new(),
         }
     }
+}
+
+fn default_long_document_output_folder() -> String {
+    let documents = std::env::var_os("USERPROFILE")
+        .map(std::path::PathBuf::from)
+        .map(|path| path.join("Documents"))
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(std::path::PathBuf::from)
+                .map(|path| path.join("Documents"))
+        });
+
+    documents
+        .map(|path| {
+            path.join("Easydict")
+                .join("LongDocOutputs")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .unwrap_or_else(|| "(same as input file folder)".to_string())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -808,6 +831,12 @@ pub struct FloatingWindowState {
     pub active_query_id: Option<u64>,
     pub active_query_service_count: usize,
     pub active_query_success_count: usize,
+    pub source_language_state: ControlState,
+    pub target_language_state: ControlState,
+    pub swap_button_state: ControlState,
+    pub pin_button_state: ControlState,
+    pub ocr_button_state: ControlState,
+    pub close_button_state: ControlState,
     pub translate_button_state: ControlState,
     pub results: Vec<TranslationResultPreview>,
 }
@@ -872,6 +901,12 @@ impl FloatingWindowState {
             active_query_id: None,
             active_query_service_count: 0,
             active_query_success_count: 0,
+            source_language_state: ControlState::default(),
+            target_language_state: ControlState::default(),
+            swap_button_state: ControlState::default(),
+            pin_button_state: ControlState::default(),
+            ocr_button_state: ControlState::default(),
+            close_button_state: ControlState::default(),
             translate_button_state: ControlState::default(),
             results: vec![TranslationResultPreview::new(
                 "google",
@@ -899,6 +934,12 @@ impl FloatingWindowState {
             active_query_id: None,
             active_query_service_count: 0,
             active_query_success_count: 0,
+            source_language_state: ControlState::default(),
+            target_language_state: ControlState::default(),
+            swap_button_state: ControlState::default(),
+            pin_button_state: ControlState::default(),
+            ocr_button_state: ControlState::default(),
+            close_button_state: ControlState::default(),
             translate_button_state: ControlState::default(),
             results: vec![TranslationResultPreview::new(
                 "google",
@@ -1465,9 +1506,8 @@ impl EasydictUiState {
             }
             PreviewScenario::ModeOverlay => {
                 state.mode = AppMode::LongDocument;
-                state.mode_overlay_active = true;
-                state.is_translating = true;
-                state.status_text = "Switching mode".to_string();
+                state.connection_status = ConnectionStatus::Connected;
+                state.status_text = "Ready".to_string();
             }
             PreviewScenario::PrimaryHover => {
                 apply_initial_quick_translate_preview(&mut state);
@@ -1496,7 +1536,12 @@ impl EasydictUiState {
                 apply_initial_quick_translate_preview(&mut state);
                 state.source_text_focused = false;
                 state.source_text_state = ControlState::default();
-                if let Some(result) = state.results.first_mut() {
+                let hover_index = state
+                    .results
+                    .iter()
+                    .position(|result| result.id == "google")
+                    .unwrap_or(0);
+                if let Some(result) = state.results.get_mut(hover_index) {
                     result.header_state = ControlState::default().hovered(true);
                 }
             }
@@ -1662,6 +1707,10 @@ impl EasydictUiState {
             state.source_text_state = preview_control_state_from_id(&value);
             state.source_text_focused = state.source_text_state.focused;
         }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_DETECTED_LANGUAGE") {
+            let value = value.trim();
+            state.detected_language = (!value.is_empty()).then(|| value.to_string());
+        }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_STATE") {
             let service_id = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_SERVICE_ID")
                 .ok()
@@ -1693,6 +1742,13 @@ impl EasydictUiState {
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE") {
             state.long_document.service_combo_state = preview_control_state_from_id(&value);
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_SERVICE_DROPDOWN") {
+            state.long_document.service_dropdown_open =
+                env_truthy(&value) || matches_preview_open(&value);
+            if state.long_document.service_dropdown_open {
+                state.long_document.service_combo_state = ControlState::default().hovered(true);
+            }
         }
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE") {
             state.settings.tts_speed_slider_state = preview_control_state_from_id(&value);
@@ -1840,28 +1896,28 @@ impl EasydictUiState {
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE") {
             state.fixed.translate_button_state = preview_control_state_from_id(&value);
         }
+        apply_floating_preview_control_states_from_env(&mut state.mini, "MINI");
+        apply_floating_preview_control_states_from_env(&mut state.fixed, "FIXED");
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FLOATING_CONTENT") {
             if matches!(
                 value.trim().to_ascii_lowercase().as_str(),
                 "empty" | "blank" | "initial"
             ) {
+                set_selected_language(&mut state.settings, "zh-Hant", true);
                 apply_empty_floating_preview(&mut state.mini);
                 apply_empty_floating_preview(&mut state.fixed);
-                // Match the .NET fixed window's initial rows: Bing plus the
-                // imported MDX dictionary expander.
-                state.fixed.results.push(
-                    TranslationResultPreview::new("bing", "Bing Translate", "").expanded(false),
-                );
-                state.fixed.results.push(
-                    TranslationResultPreview::new(
-                        "mdx::collins-cobuild-english-usage",
-                        PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
-                        "",
-                    )
-                    .expanded(false),
-                );
+                // Match the .NET floating-window preview seed: enabled services
+                // remain visible as collapsed empty result headers before text is
+                // entered.
+                state.mini.results = preview_empty_mini_results();
+                state.fixed.results = preview_empty_fixed_results();
             }
         }
+        apply_floating_preview_languages_from_env(&mut state.mini, "MINI");
+        apply_floating_preview_languages_from_env(&mut state.fixed, "FIXED");
+        let preview_locale = state.settings.ui_language.clone();
+        apply_floating_preview_language_status(&mut state.mini, &preview_locale);
+        apply_floating_preview_language_status(&mut state.fixed, &preview_locale);
 
         state
     }
@@ -2233,6 +2289,7 @@ impl EasydictUiState {
                 self.last_opened_settings_link = Some(link);
             }
             Message::ThemeChanged(id) => {
+                let had_unsaved_changes = self.settings.unsaved_changes;
                 self.settings.theme = match id.as_str() {
                     "dark" => ThemeMode::Dark,
                     "minimal" => ThemeMode::Minimal,
@@ -2240,7 +2297,10 @@ impl EasydictUiState {
                     "system" => ThemeMode::System,
                     _ => ThemeMode::Light,
                 };
-                mark_settings_changed(&mut self.settings);
+                if !had_unsaved_changes {
+                    self.settings.show_unsaved_changes_dialog = false;
+                    self.settings.save_error_message = None;
+                }
             }
             Message::ToggleMinimizeToTray(value) => {
                 self.settings.minimize_to_tray = value;
@@ -3028,6 +3088,88 @@ impl EasydictUiState {
     }
 }
 
+fn apply_floating_preview_control_states_from_env(
+    floating: &mut FloatingWindowState,
+    window_kind: &str,
+) {
+    for (suffix, state) in [
+        ("SOURCE_LANGUAGE_STATE", &mut floating.source_language_state),
+        ("TARGET_LANGUAGE_STATE", &mut floating.target_language_state),
+        ("SWAP_STATE", &mut floating.swap_button_state),
+        ("PIN_STATE", &mut floating.pin_button_state),
+        ("OCR_STATE", &mut floating.ocr_button_state),
+        ("CLOSE_STATE", &mut floating.close_button_state),
+    ] {
+        let name = format!("EASYDICT_PREVIEW_{window_kind}_{suffix}");
+        if let Ok(value) = std::env::var(name) {
+            *state = preview_control_state_from_id(&value);
+        }
+    }
+}
+
+fn apply_floating_preview_languages_from_env(
+    floating: &mut FloatingWindowState,
+    window_kind: &str,
+) {
+    for (suffix, language) in [
+        ("SOURCE_LANGUAGE", &mut floating.source_language),
+        ("TARGET_LANGUAGE", &mut floating.target_language),
+    ] {
+        let name = format!("EASYDICT_PREVIEW_{window_kind}_{suffix}");
+        if let Ok(value) = std::env::var(name) {
+            let value = value.trim();
+            if !value.is_empty() {
+                *language = preview_language_id(value);
+            }
+        }
+    }
+}
+
+fn apply_floating_preview_language_status(floating: &mut FloatingWindowState, locale: &str) {
+    let source = floating.source_language.trim().to_string();
+    if source.is_empty() || source.eq_ignore_ascii_case("auto") {
+        floating.detected_language = None;
+        floating.current_quick_query_mode = QuickQueryMode::Translation;
+        floating.grammar_correction_fallback = false;
+        return;
+    }
+
+    floating.current_quick_query_mode = QuickQueryMode::Translation;
+    if source.eq_ignore_ascii_case(floating.target_language.trim()) {
+        floating.grammar_correction_fallback = true;
+        floating.detected_language = Some(tr_locale(
+            locale,
+            "GrammarCorrectionFallbackNotice",
+            "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.",
+        ));
+        return;
+    }
+
+    floating.grammar_correction_fallback = false;
+    floating.detected_language = Some(preview_detected_language_label(&source, locale));
+}
+
+fn preview_detected_language_label(language_id: &str, locale: &str) -> String {
+    let language = crate::translation_language::TranslationLanguage::from_code(language_id);
+    let display_name = if language == crate::translation_language::TranslationLanguage::Auto {
+        language_id.trim().to_string()
+    } else {
+        language.display_name().to_string()
+    };
+    tr_locale(locale, "DetectedLanguage", "Detected: {0}").replace("{0}", &display_name)
+}
+
+fn preview_language_id(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "auto" | "automatic" | "auto-detect" | "autodetect" => "auto".to_string(),
+        "zh" | "zh-cn" | "zh-hans" | "simplified-chinese" | "simplifiedchinese" => {
+            "zh-Hans".to_string()
+        }
+        "zh-tw" | "zh-hant" | "traditional-chinese" | "traditionalchinese" => "zh-Hant".to_string(),
+        _ => value.trim().to_string(),
+    }
+}
+
 fn apply_window_runtime_event(state: &mut EasydictUiState, event: &WindowEvent) {
     let id = event.window_id().clone();
 
@@ -3077,6 +3219,9 @@ fn apply_window_runtime_event(state: &mut EasydictUiState, event: &WindowEvent) 
 
 fn apply_empty_floating_preview(state: &mut FloatingWindowState) {
     state.text.clear();
+    state.source_language = "auto".to_string();
+    state.target_language = "zh-Hant".to_string();
+    state.target_language_manually_selected = true;
     state.detected_language = None;
     state.status_text.clear();
     state.is_translating = false;
@@ -3555,7 +3700,7 @@ fn apply_preview_imported_mdx_dictionary(settings: &mut SettingsState) {
 
 const PREVIEW_PARITY_REFERENCE_PROFILE: &str = "parity-reference";
 const PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID: &str = "mdx::collins-cobuild-english-usage";
-const PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME: &str = "Collins COBUILD English Usage";
+const PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME: &str = "📚 Collins COBUILD English Usage";
 
 fn parity_reference_window_services() -> Vec<WindowServiceSetting> {
     let mut remaining = default_window_services(&[]);
@@ -3691,7 +3836,7 @@ fn hotkey_setting_mut<'a>(
 }
 
 fn default_selected_languages() -> Vec<String> {
-    ["zh-Hans", "en", "ja", "ko", "fr", "de", "es"]
+    ["zh-Hans", "zh-Hant", "en", "ja", "ko", "fr", "de", "es"]
         .into_iter()
         .map(str::to_string)
         .collect()
@@ -4756,8 +4901,42 @@ fn unique_capture_crop_path() -> Result<std::path::PathBuf, String> {
 
 fn preview_waiting_results() -> Vec<TranslationResultPreview> {
     vec![
-        TranslationResultPreview::new("bing", "Bing Translate", "").manual_query(),
-        TranslationResultPreview::new("windows-local-ai", "Windows Local AI", "").manual_query(),
+        TranslationResultPreview::new("bing", "Bing Translate", "")
+            .expanded(false)
+            .manual_query(),
+        TranslationResultPreview::new("windows-local-ai", "Windows Local AI", "")
+            .expanded(false)
+            .grammar_capable(true)
+            .streaming_capable(true)
+            .manual_query(),
+        TranslationResultPreview::new(
+            PREVIEW_PARITY_REFERENCE_MDX_SERVICE_ID,
+            PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
+            "",
+        )
+        .expanded(false),
+        TranslationResultPreview::new("google", "Google Translate", "").expanded(false),
+        TranslationResultPreview::new("volcano", "Volcano", "")
+            .manual_query()
+            .expanded(true),
+    ]
+}
+
+fn preview_empty_mini_results() -> Vec<TranslationResultPreview> {
+    vec![
+        TranslationResultPreview::new("bing", "Bing Translate", "").expanded(false),
+        TranslationResultPreview::new(
+            "mdx::collins-cobuild-english-usage",
+            PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
+            "",
+        )
+        .expanded(false),
+    ]
+}
+
+fn preview_empty_fixed_results() -> Vec<TranslationResultPreview> {
+    vec![
+        TranslationResultPreview::new("bing", "Bing Translate", "").expanded(false),
         TranslationResultPreview::new(
             "mdx::collins-cobuild-english-usage",
             PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME,
@@ -4779,6 +4958,9 @@ fn apply_before_translate_preview(state: &mut EasydictUiState) {
     state.detected_language = None;
     state.services_completed = 0;
     state.results = preview_waiting_results();
+    state
+        .results
+        .push(TranslationResultPreview::new("deepl", "DeepL", "").expanded(false));
 }
 
 pub fn theme_from_id(id: &str) -> ThemeMode {
@@ -4795,6 +4977,13 @@ fn env_truthy(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
+    )
+}
+
+fn matches_preview_open(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "open" | "opened" | "expand" | "expanded"
     )
 }
 
@@ -5073,6 +5262,9 @@ pub enum Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn parity_reference_window_services_use_catalog_ids_for_parity_order() {
@@ -5155,5 +5347,62 @@ mod tests {
                 PREVIEW_PARITY_REFERENCE_MDX_DISPLAY_NAME
             ))
         );
+    }
+
+    #[test]
+    fn floating_preview_language_env_applies_dotnet_status_rows() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let saved = [
+            (
+                "EASYDICT_PREVIEW_FLOATING_CONTENT",
+                std::env::var("EASYDICT_PREVIEW_FLOATING_CONTENT").ok(),
+            ),
+            (
+                "EASYDICT_PREVIEW_UI_LANGUAGE",
+                std::env::var("EASYDICT_PREVIEW_UI_LANGUAGE").ok(),
+            ),
+            (
+                "EASYDICT_PREVIEW_MINI_SOURCE_LANGUAGE",
+                std::env::var("EASYDICT_PREVIEW_MINI_SOURCE_LANGUAGE").ok(),
+            ),
+            (
+                "EASYDICT_PREVIEW_MINI_TARGET_LANGUAGE",
+                std::env::var("EASYDICT_PREVIEW_MINI_TARGET_LANGUAGE").ok(),
+            ),
+        ];
+
+        std::env::set_var("EASYDICT_PREVIEW_FLOATING_CONTENT", "empty");
+        std::env::set_var("EASYDICT_PREVIEW_UI_LANGUAGE", "zh-CN");
+        std::env::set_var("EASYDICT_PREVIEW_MINI_SOURCE_LANGUAGE", "zh-Hant");
+        std::env::set_var("EASYDICT_PREVIEW_MINI_TARGET_LANGUAGE", "zh-Hant");
+
+        let fallback = EasydictUiState::preview_from_env();
+        assert!(fallback.mini.grammar_correction_fallback);
+        assert_eq!(
+            fallback.mini.detected_language.as_deref(),
+            Some("未启用支持纠错的 AI 服务，已回退为普通翻译。配置一个支持纠错的 AI 服务后，源语言和目标语言相同时会显示纠错信息。")
+        );
+
+        std::env::set_var("EASYDICT_PREVIEW_MINI_SOURCE_LANGUAGE", "ja");
+        std::env::set_var("EASYDICT_PREVIEW_MINI_TARGET_LANGUAGE", "zh-Hant");
+
+        let detected = EasydictUiState::preview_from_env();
+        assert!(!detected.mini.grammar_correction_fallback);
+        assert_eq!(
+            detected.mini.detected_language.as_deref(),
+            Some("检测到：Japanese")
+        );
+
+        for (name, value) in saved {
+            restore_env(name, value);
+        }
+    }
+
+    fn restore_env(name: &str, value: Option<String>) {
+        if let Some(value) = value {
+            std::env::set_var(name, value);
+        } else {
+            std::env::remove_var(name);
+        }
     }
 }

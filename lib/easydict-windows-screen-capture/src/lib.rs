@@ -178,9 +178,9 @@ mod platform {
     };
     use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetParent,
-        GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
-        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetParent, GetSystemMetrics,
+        GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible, SM_CXVIRTUALSCREEN,
+        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
 
     pub fn primary_scale_factor() -> f32 {
@@ -223,10 +223,8 @@ mod platform {
 
         let mut dpi_x = 96u32;
         let mut dpi_y = 96u32;
-        let dpi = if unsafe {
-            GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
-        }
-        .is_ok()
+        let dpi = if unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) }
+            .is_ok()
             && dpi_x > 0
         {
             dpi_x

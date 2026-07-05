@@ -43,6 +43,7 @@
 
             <ToggleButton
                 x:Name="PinButton"
+                AutomationProperties.AutomationId="PinButton"
                 Grid.Column="0"
                 Click="OnPinClicked"
                 ToolTipService.ToolTip="Pin window (stay on top)"
@@ -67,20 +68,38 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"/>
 
-            <Button
-                x:Name="CloseButton"
-                AutomationProperties.AutomationId="MiniWindowCloseButton"
+            <StackPanel
                 Grid.Column="2"
-                Click="OnCloseClicked"
-                Style="{StaticResource EasydictIconButtonStyle}"
-                ToolTipService.ToolTip="Close"
-                Width="28"
-                Height="28"
-                Padding="0">
-                <FontIcon Glyph="&#xE8BB;"
-                        FontSize="14"
-                        Foreground="{ThemeResource ButtonForeground}"/>
-            </Button>
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="OcrButton"
+                    AutomationProperties.AutomationId="MiniWindowOcrButton"
+                    Click="OnOcrClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="OCR Screenshot Translate"
+                    Width="28"
+                    Height="28"
+                    Padding="0">
+                    <FontIcon Glyph="&#xE722;"
+                            FontSize="14"
+                            Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+
+                <Button
+                    x:Name="CloseButton"
+                    AutomationProperties.AutomationId="MiniWindowCloseButton"
+                    Click="OnCloseClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="Close"
+                    Width="28"
+                    Height="28"
+                    Padding="0">
+                    <FontIcon Glyph="&#xE8BB;"
+                            FontSize="14"
+                            Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Compact Input -->
@@ -140,6 +159,7 @@
                 </Grid>
 
                 <Button x:Name="SourcePlayButton"
+                        AutomationProperties.AutomationId="SourcePlayButton"
                         Grid.Column="1"
                         Click="OnSourcePlayClicked"
                         Style="{StaticResource EasydictIconButtonStyle}"
@@ -174,6 +194,7 @@
 
             <ComboBox
                 x:Name="SourceLangCombo"
+                AutomationProperties.AutomationId="SourceLangCombo"
                 Grid.Column="0"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnSourceLangChanged"
@@ -183,6 +204,7 @@
 
             <Button
                 x:Name="SwapButton"
+                AutomationProperties.AutomationId="SwapButton"
                 Grid.Column="1"
                 Click="OnSwapClicked"
                 Width="28"
@@ -198,6 +220,7 @@
 
             <ComboBox
                 x:Name="TargetLangCombo"
+                AutomationProperties.AutomationId="TargetLangCombo"
                 Grid.Column="2"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnTargetLangChanged"
@@ -207,6 +230,7 @@
 
             <Button
                 x:Name="TranslateButton"
+                AutomationProperties.AutomationId="TranslateButton"
                 Grid.Column="3"
                 Click="OnTranslateClicked"
                 Width="32"

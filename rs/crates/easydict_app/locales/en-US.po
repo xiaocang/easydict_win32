@@ -22,13 +22,25 @@ msgid "main.results"
 msgstr "Translation Results"
 
 msgid "main.result.pending_query"
-msgstr "Click to query this service"
+msgstr "Click to query"
+
+msgid "main.result.pending_query_hint"
+msgstr "Click header to query"
 
 msgid "main.completed"
 msgstr "{count} service(s) completed"
 
 msgid "status.ready"
 msgstr "Ready"
+
+msgid "DetectedLanguage"
+msgstr "Detected: {0}"
+
+msgid "GrammarCorrectionActiveNotice"
+msgstr "Grammar check mode: AI correction services will run. Choose a different target language to translate."
+
+msgid "GrammarCorrectionFallbackNotice"
+msgstr "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same."
 
 msgid "ocr.capture.title"
 msgstr "OCR Capture"
@@ -45,6 +57,9 @@ msgstr "Auto Detect"
 msgid "main.target_zh_hans"
 msgstr "Chinese (Simplified)"
 
+msgid "main.ocr_screenshot_translate"
+msgstr "OCR Screenshot Translate"
+
 msgid "main.language_help"
 msgstr "Language help"
 
@@ -53,6 +68,15 @@ msgstr "Translate"
 
 msgid "main.settings"
 msgstr "Settings"
+
+msgid "main.pin_window"
+msgstr "Pin window (stay on top)"
+
+msgid "main.swap_languages"
+msgstr "Swap source and target languages"
+
+msgid "main.play_source_text"
+msgstr "Play source text"
 
 msgid "settings.title"
 msgstr "Settings"

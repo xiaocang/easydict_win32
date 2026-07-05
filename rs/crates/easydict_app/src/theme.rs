@@ -31,7 +31,7 @@ fn easydict_light() -> ThemeTokens {
             rest: 0.0,
             raised: 1.0,
             overlay: 6.0,
-            flyout: 12.0,
+            flyout: 16.0,
         },
         control: ControlMetrics {
             height: 32.0,
@@ -116,7 +116,7 @@ fn easydict_dark() -> ThemeTokens {
             rest: 0.0,
             raised: 1.0,
             overlay: 6.0,
-            flyout: 12.0,
+            flyout: 16.0,
         },
         control: ControlMetrics {
             height: 32.0,

@@ -153,7 +153,7 @@ pub use formula_text_reconstruction::{
     previous_line_likely_expects_formula_tail, reconstruct_formula_aware_text,
     should_use_letter_based_block_text, LetterGeometry,
 };
-pub use i18n::default_ui_language;
+pub use i18n::{default_ui_language, tr_locale};
 pub use latex_formula::{
     is_script_signal as is_latex_script_signal, prepare_renderable_text_for_pdf,
     simplify as simplify_latex_formula, simplify_math_content, simplify_math_content_with_options,

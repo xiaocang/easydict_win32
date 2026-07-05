@@ -119,7 +119,7 @@ public sealed partial class FixedWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { CloseButton },
+                new FrameworkElement[] { OcrButton, CloseButton },
                 "FixedWindow");
             _titleBarHelper.Initialize();
         }
@@ -159,6 +159,7 @@ public sealed partial class FixedWindow : Window
         InputTextBox.PlaceholderText = loc.GetString("InputPlaceholder");
 
         // Tooltips
+        ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrScreenshotTranslate"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("HideWindow"));
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
@@ -1547,6 +1548,14 @@ public sealed partial class FixedWindow : Window
     private void OnCloseClicked(object sender, RoutedEventArgs e)
     {
         HideWindow();
+    }
+
+    private void OnOcrClicked(object sender, RoutedEventArgs e)
+    {
+        if (Microsoft.UI.Xaml.Application.Current is Easydict.WinUI.App app)
+        {
+            app.TriggerOcrTranslate();
+        }
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)

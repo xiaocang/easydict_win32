@@ -273,6 +273,7 @@ impl Edges {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextStyle {
+    Accent,
     Caption,
     CaptionSmall,
     Body,
@@ -774,6 +775,7 @@ pub struct CardToken<Message> {
     pub description: Option<String>,
     pub icon: Option<IconToken>,
     pub kind: CardKind,
+    pub padding: Option<Edges>,
     pub content_spacing: u16,
     pub margin: Edges,
     pub max_height: Option<u16>,
@@ -1018,6 +1020,14 @@ impl<Message> ComboBoxToken<Message> {
     pub fn selected_item(&self) -> Option<&ComboBoxItem> {
         let selected = self.selected.as_deref()?;
         self.items.iter().find(|item| item.id == selected)
+    }
+
+    /// The display label for the current selection. Editable WinUI ComboBoxes
+    /// may show a current value that is not present in the suggestion list.
+    pub fn selected_label(&self) -> Option<&str> {
+        self.selected_item()
+            .map(|item| item.label.as_str())
+            .or(self.selected.as_deref())
     }
 }
 
@@ -1798,7 +1808,9 @@ pub struct ResultListToken<Message> {
     pub retry_action: Action<Message>,
     pub toggle_action: Action<Message>,
     pub virtualized: bool,
+    pub height: Option<Length>,
     pub max_height: Option<u16>,
+    pub spacing: Option<u16>,
     pub padding: Option<Edges>,
     pub border_width: Option<u16>,
     pub collapse_transition: CollapseTransition,
@@ -2442,6 +2454,7 @@ pub fn card<Message>(title: impl Into<String>) -> CardBuilder<Message> {
         description: None,
         icon: None,
         kind: CardKind::Surface,
+        padding: None,
         content_spacing: 12,
         margin: Edges::ZERO,
         max_height: None,
@@ -2943,7 +2956,9 @@ pub fn result_list<Message>(
         retry_action: Action::None,
         toggle_action: Action::None,
         virtualized: true,
+        height: None,
         max_height: None,
+        spacing: None,
         padding: None,
         border_width: None,
         collapse_transition: CollapseTransition::default(),
@@ -4276,6 +4291,7 @@ pub struct CardBuilder<Message> {
     description: Option<String>,
     icon: Option<IconToken>,
     kind: CardKind,
+    padding: Option<Edges>,
     content_spacing: u16,
     margin: Edges,
     max_height: Option<u16>,
@@ -4302,6 +4318,21 @@ impl<Message> CardBuilder<Message> {
 
     pub fn kind(mut self, kind: CardKind) -> Self {
         self.kind = kind;
+        self
+    }
+
+    pub fn padding(mut self, value: u16) -> Self {
+        self.padding = Some(Edges {
+            top: value,
+            right: value,
+            bottom: value,
+            left: value,
+        });
+        self
+    }
+
+    pub fn padding_edges(mut self, value: Edges) -> Self {
+        self.padding = Some(value);
         self
     }
 
@@ -4344,6 +4375,7 @@ impl<Message> IntoView<Message> for CardBuilder<Message> {
             description: self.description,
             icon: self.icon,
             kind: self.kind,
+            padding: self.padding,
             content_spacing: self.content_spacing,
             margin: self.margin,
             max_height: self.max_height,
@@ -5271,15 +5303,12 @@ impl<Message> ComboBoxBuilder<Message> {
 
 impl<Message> IntoView<Message> for ComboBoxBuilder<Message> {
     fn into_view(self) -> View<Message> {
-        let selected = self
-            .selected
-            .filter(|selected| self.items.iter().any(|item| item.id == *selected));
         View::new(ViewToken::ComboBox(ComboBoxToken {
             id: self.id,
             label: self.label,
             placeholder: self.placeholder,
             items: self.items,
-            selected,
+            selected: self.selected,
             width: self.width,
             height: self.height,
             state: self.state,
@@ -6897,7 +6926,9 @@ pub struct ResultListBuilder<Message> {
     retry_action: Action<Message>,
     toggle_action: Action<Message>,
     virtualized: bool,
+    height: Option<Length>,
     max_height: Option<u16>,
+    spacing: Option<u16>,
     padding: Option<Edges>,
     border_width: Option<u16>,
     collapse_transition: CollapseTransition,
@@ -6969,8 +7000,18 @@ impl<Message> ResultListBuilder<Message> {
         self
     }
 
+    pub fn height(mut self, value: Length) -> Self {
+        self.height = Some(value);
+        self
+    }
+
     pub fn max_height(mut self, value: u16) -> Self {
         self.max_height = Some(value);
+        self
+    }
+
+    pub fn spacing(mut self, value: u16) -> Self {
+        self.spacing = Some(value);
         self
     }
 
@@ -7006,7 +7047,9 @@ impl<Message> IntoView<Message> for ResultListBuilder<Message> {
             retry_action: self.retry_action,
             toggle_action: self.toggle_action,
             virtualized: self.virtualized,
+            height: self.height,
             max_height: self.max_height,
+            spacing: self.spacing,
             padding: self.padding,
             border_width: self.border_width,
             collapse_transition: self.collapse_transition,

@@ -10,6 +10,40 @@ public sealed class WorkerPackagingTests
     private static readonly string ProjectRoot = FindProjectRoot();
 
     [Fact]
+    public void UiParityPreflight_OrchestratesExplicitRunRootManifestAndAnalysis()
+    {
+        var preflightPath = Path.GetFullPath(Path.Combine(
+            ProjectRoot,
+            "scripts",
+            "ci",
+            "Invoke-UiParityPreflight.ps1"));
+
+        File.Exists(preflightPath).Should().BeTrue();
+        var script = File.ReadAllText(preflightPath).Replace("\r\n", "\n");
+
+        script.Should().Contain("SCREENSHOT_OUTPUT_DIR");
+        script.Should().Contain("EASYDICT_UIA_DOTNET_RUST_PARITY");
+        script.Should().Contain("EASYDICT_UIA_PARITY_UI_LANGUAGE");
+        script.Should().Contain("EASYDICT_UIA_PARITY_THEME");
+        script.Should().Contain("EASYDICT_RUST_PREVIEW_EXE_PATH");
+        script.Should().Contain("EASYDICT_UIA_PARITY_MAIN_OPERATIONS_SCOPE");
+        script.Should().Contain("dropdown-open-only");
+        script.Should().Contain("EASYDICT_UIA_PARITY_MAIN_DROPDOWN");
+        script.Should().Contain("Invoke-UiParityAnalysis.ps1");
+        script.Should().Contain("-RequireManifest");
+        script.Should().Contain("-ManifestOnly");
+        script.Should().Contain("preflight.json");
+        script.Should().Contain("run-summary.md");
+        script.Should().Contain("preflight-build-failed");
+        script.Should().Contain("preflight-no-window");
+        script.Should().Contain("preflight-no-manifest");
+        script.Should().Contain("preflight-no-screenshot");
+        script.Should().Contain("preflight-analyzer-failed");
+        script.Should().Contain("preflight-uia-failed");
+        script.Should().NotContain(@"artifacts\ui-screenshots");
+    }
+
+    [Fact]
     public void ReleaseWorkflow_PublishesRemainingDotnetWorkersButNotOcrWorker()
     {
         var workflowPath = Path.GetFullPath(Path.Combine(

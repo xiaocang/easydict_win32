@@ -681,11 +681,12 @@ fn token_summary<Message>(token: &ViewToken<Message>) -> String {
             token.collapse_transition.duration_ms
         ),
         ViewToken::ResultList(token) => format!(
-            "contract={}|items={}|virtualized={}|max_height={:?}|padding={:?}|border_width={:?}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "contract={}|items={}|virtualized={}|max_height={:?}|spacing={:?}|padding={:?}|border_width={:?}|collapse_transition_ms={}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
             token.list_contract_kind().as_str(),
             token.items.len(),
             token.virtualized,
             token.max_height,
+            token.spacing,
             token.padding,
             token.border_width,
             token.collapse_transition.duration_ms,

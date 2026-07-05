@@ -707,9 +707,10 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
         ViewToken::Card(token) => {
             let _ = writeln!(
                 output,
-                "{pad}Card id={:?} trailing={} content_spacing={} margin={:?} max_height={:?}",
+                "{pad}Card id={:?} trailing={} padding={:?} content_spacing={} margin={:?} max_height={:?}",
                 token.id,
                 token.trailing.len(),
+                token.padding,
                 token.content_spacing,
                 token.margin,
                 token.max_height
@@ -927,7 +928,7 @@ fn write_layout<Message>(output: &mut String, view: &View<Message>, indent: usiz
                 token.id,
                 token.items.len(),
                 token.selected,
-                token.selected_item().map(|item| item.label.as_str()),
+                token.selected_label(),
                 token.width,
                 token.height,
                 token.state.enabled

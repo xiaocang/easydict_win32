@@ -1356,6 +1356,29 @@ function Add-RustSchemaVisibleText {
     }
 }
 
+function Test-RustSchemaMainButtonWithReferenceAutomationName {
+    param(
+        [string]$Id
+    )
+
+    return $Id -in @(
+        "PinButton",
+        "SettingsButton",
+        "SwapLanguageButton",
+        "TranslateButton",
+        "main.quick.play_source"
+    )
+}
+
+function Get-RustSchemaPendingQueryStatusText {
+    if ($env:EASYDICT_UIA_PARITY_UI_LANGUAGE -eq "zh-CN" -or
+        $env:EASYDICT_PREVIEW_UI_LANGUAGE -eq "zh-CN") {
+        return "点击查询"
+    }
+
+    return "Click to query"
+}
+
 function Get-SchemaEdgesValue {
     param(
         [string]$Line,
@@ -2341,18 +2364,30 @@ function New-RustSchemaUiSummary {
             Add-RustSchemaVisibleText `
                 -Texts $visibleTexts `
                 -Value (Get-SchemaQuotedValue -Line $trimmed -Name "pending_hint")
+            if (-not [string]::IsNullOrWhiteSpace((Get-SchemaQuotedValue -Line $trimmed -Name "pending_hint"))) {
+                Add-RustSchemaVisibleText `
+                    -Texts $visibleTexts `
+                    -Value (Get-RustSchemaPendingQueryStatusText)
+            }
         }
 
         if ($summaryKind -eq "Button") {
+            $hasReferenceAutomationName = Test-RustSchemaMainButtonWithReferenceAutomationName -Id $id
             $label = Get-SchemaQuotedValue -Line $trimmed -Name "label"
             if ([string]::IsNullOrWhiteSpace($label) -and $kind -eq "Expander") {
                 $label = Get-SchemaQuotedValue -Line $trimmed -Name "title"
             }
+            if ([string]::IsNullOrWhiteSpace($label) -and $hasReferenceAutomationName) {
+                $label = Get-SchemaQuotedValue -Line $trimmed -Name "tooltip"
+            }
             $labelIsVisible = $scope.IsSettings -or
                 $kind -eq "Expander" -or
+                $hasReferenceAutomationName -or
                 ($trimmed -notmatch '\bkind=Icon\b' -and $trimmed -notmatch '\bkind=SubtleIcon\b')
             if ($labelIsVisible -and -not [string]::IsNullOrWhiteSpace($label)) {
-                Add-SchemaControlCount -Counts $counts -Kind "Text"
+                if (-not $hasReferenceAutomationName) {
+                    Add-SchemaControlCount -Counts $counts -Kind "Text"
+                }
                 Add-RustSchemaVisibleText -Texts $visibleTexts -Value $label
             }
         }

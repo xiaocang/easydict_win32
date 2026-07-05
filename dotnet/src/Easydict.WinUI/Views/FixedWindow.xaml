@@ -49,19 +49,38 @@
                 VerticalAlignment="Center"
                 Margin="4,0,0,0"/>
 
-            <Button
-                x:Name="CloseButton"
+            <StackPanel
                 Grid.Column="1"
-                Click="OnCloseClicked"
-                Style="{StaticResource EasydictIconButtonStyle}"
-                ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"
-                Width="28"
-                Height="28"
-                Padding="0">
-                <FontIcon Glyph="&#xE8BB;"
-                        FontSize="14"
-                        Foreground="{ThemeResource ButtonForeground}"/>
-            </Button>
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="OcrButton"
+                    AutomationProperties.AutomationId="FixedWindowOcrButton"
+                    Click="OnOcrClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="OCR Screenshot Translate"
+                    Width="28"
+                    Height="28"
+                    Padding="0">
+                    <FontIcon Glyph="&#xE722;"
+                            FontSize="14"
+                            Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+
+                <Button
+                    x:Name="CloseButton"
+                    AutomationProperties.AutomationId="CloseButton"
+                    Click="OnCloseClicked"
+                    Style="{StaticResource EasydictIconButtonStyle}"
+                    ToolTipService.ToolTip="Hide (Ctrl+Alt+F to show again)"
+                    Width="28"
+                    Height="28"
+                    Padding="0">
+                    <FontIcon Glyph="&#xE8BB;"
+                            FontSize="14"
+                            Foreground="{ThemeResource ButtonForeground}"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Compact Input -->
@@ -109,6 +128,7 @@
 
             <ComboBox
                 x:Name="SourceLangCombo"
+                AutomationProperties.AutomationId="SourceLangCombo"
                 Grid.Column="0"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnSourceLangChanged"
@@ -118,6 +138,7 @@
 
             <Button
                 x:Name="SwapButton"
+                AutomationProperties.AutomationId="SwapButton"
                 Grid.Column="1"
                 Click="OnSwapClicked"
                 Width="28"
@@ -133,6 +154,7 @@
 
             <ComboBox
                 x:Name="TargetLangCombo"
+                AutomationProperties.AutomationId="TargetLangCombo"
                 Grid.Column="2"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnTargetLangChanged"
@@ -142,6 +164,7 @@
 
             <Button
                 x:Name="TranslateButton"
+                AutomationProperties.AutomationId="TranslateButton"
                 Grid.Column="3"
                 Click="OnTranslateClicked"
                 Width="32"

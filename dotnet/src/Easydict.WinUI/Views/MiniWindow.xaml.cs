@@ -142,7 +142,7 @@ public sealed partial class MiniWindow : Window
                 this,
                 _appWindow,
                 TitleBarRegion,
-                new FrameworkElement[] { PinButton, CloseButton },
+                new FrameworkElement[] { PinButton, OcrButton, CloseButton },
                 "MiniWindow");
             _titleBarHelper.Initialize();
         }
@@ -183,6 +183,7 @@ public sealed partial class MiniWindow : Window
 
         // Tooltips
         ToolTipService.SetToolTip(PinButton, loc.GetString("PinWindowTooltip"));
+        ToolTipService.SetToolTip(OcrButton, loc.GetString("OcrScreenshotTranslate"));
         ToolTipService.SetToolTip(CloseButton, loc.GetString("Close"));
         ToolTipService.SetToolTip(SourceLangCombo, loc.GetString("SourceLanguageTooltip"));
         ToolTipService.SetToolTip(SwapButton, loc.GetString("SwapLanguagesTooltip"));
@@ -1775,6 +1776,14 @@ public sealed partial class MiniWindow : Window
     private void OnCloseClicked(object sender, RoutedEventArgs e)
     {
         HideWindow();
+    }
+
+    private void OnOcrClicked(object sender, RoutedEventArgs e)
+    {
+        if (Microsoft.UI.Xaml.Application.Current is Easydict.WinUI.App app)
+        {
+            app.TriggerOcrTranslate();
+        }
     }
 
     private async void OnTranslateClicked(object sender, RoutedEventArgs e)

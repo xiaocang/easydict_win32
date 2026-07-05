@@ -56,6 +56,8 @@ if (-not $SkipSelfTest) {
         $resolvedCargoManifest,
         "-p",
         $AnalyzerPackage,
+        "--bin",
+        $AnalyzerPackage,
         "--",
         "--self-test"
     )
@@ -113,6 +115,8 @@ $arguments = @(
     "--manifest-path",
     $resolvedCargoManifest,
     "-p",
+    $AnalyzerPackage,
+    "--bin",
     $AnalyzerPackage,
     "--",
     "--screenshot-root",

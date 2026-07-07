@@ -285,6 +285,55 @@ public class DeepLServiceMockTests
     }
 
     [Fact]
+    public async Task TranslateAsync_ApiMode_TraditionalChineseToEnglish_UsesSupportedApiCodes()
+    {
+        // Arrange: reproduces the app log path source=TraditionalChinese, target=English.
+        _service.Configure("test-key:fx", useWebFirst: false);
+        var apiResponse = """{"translations":[{"text":"Hello"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "你好",
+            FromLanguage = Language.TraditionalChinese,
+            ToLanguage = Language.English
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("source_lang=ZH");
+        body.Should().Contain("target_lang=EN-US");
+        body.Should().NotContain("source_lang=ZH-HANT");
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ApiMode_PortugueseTarget_UsesTargetVariant()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false);
+        var apiResponse = """{"translations":[{"text":"Olá"}]}""";
+        _mockHandler.EnqueueJsonResponse(apiResponse);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            FromLanguage = Language.English,
+            ToLanguage = Language.Portuguese
+        };
+
+        // Act
+        await _service.TranslateAsync(request);
+
+        // Assert
+        var body = _mockHandler.LastRequestBody;
+        body.Should().Contain("source_lang=EN");
+        body.Should().Contain("target_lang=PT-PT");
+    }
+
+    [Fact]
     public async Task TranslateAsync_ApiMode_ThrowsOnForbidden()
     {
         // Arrange
@@ -322,6 +371,28 @@ public class DeepLServiceMockTests
             () => _service.TranslateAsync(request));
 
         exception.ErrorCode.Should().Be(TranslationErrorCode.RateLimited);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_ApiMode_BadRequest_IncludesDeepLErrorMessage()
+    {
+        // Arrange
+        _service.Configure("test-key:fx", useWebFirst: false);
+        _mockHandler.EnqueueJsonResponse(
+            """{"message":"Value for 'target_lang' not supported."}""",
+            HttpStatusCode.BadRequest);
+
+        var request = new TranslationRequest
+        {
+            Text = "Hello",
+            ToLanguage = Language.English
+        };
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<TranslationException>(
+            () => _service.TranslateAsync(request));
+
+        exception.Message.Should().Contain("Value for 'target_lang' not supported.");
     }
 
     [Fact]

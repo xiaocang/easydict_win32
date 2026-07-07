@@ -97,16 +97,16 @@ public sealed class HotkeyService : IDisposable
     /// Reads hotkey configurations from SettingsService.
     /// Toggle hotkeys are derived by adding Shift to the base hotkey.
     /// </summary>
-    public void Initialize()
+    public IReadOnlyList<HotkeyRegistrationFailure> Initialize()
     {
-        if (_isInitialized) return;
+        if (_isInitialized) return Array.Empty<HotkeyRegistrationFailure>();
 
         App.LogToFile("[Hotkey] Initializing hotkey service...");
 
         if (_hwnd == IntPtr.Zero)
         {
             App.LogToFile("[Hotkey] ABORTING: Cannot initialize with zero HWND");
-            return;
+            return Array.Empty<HotkeyRegistrationFailure>();
         }
 
         // Set up window subclass to intercept WM_HOTKEY messages
@@ -114,10 +114,11 @@ public sealed class HotkeyService : IDisposable
         var subclassResult = SetWindowSubclass(_hwnd, _subclassProc, 1, 0);
         App.LogToFile($"[Hotkey] SetWindowSubclass: {subclassResult}");
 
-        RegisterAllHotkeys();
+        var failures = RegisterAllHotkeys();
 
         _isInitialized = true;
-        App.LogToFile("[Hotkey] Hotkey service initialized.");
+        App.LogToFile($"[Hotkey] Hotkey service initialized. {failures.Count} failure(s).");
+        return failures;
     }
 
     /// <summary>

@@ -138,6 +138,40 @@ public class OcrServiceFactoryTests
     }
 
     [Fact]
+    public void FormatEndpointForDiagnostics_KeepsKnownDefaultEndpoint()
+    {
+        var options = new OcrServiceOptions(OcrEngineType.Ollama, null, null, null, null);
+
+        OcrTranslateService.FormatEndpointForDiagnostics(options)
+            .Should().Be(OcrServiceOptions.DefaultOllamaEndpoint);
+    }
+
+    [Fact]
+    public void FormatEndpointForDiagnostics_RedactsCustomEndpoint()
+    {
+        var options = new OcrServiceOptions(
+            OcrEngineType.CustomApi,
+            null,
+            "https://example.test/v1/responses?api_key=secret",
+            null,
+            null);
+
+        OcrTranslateService.FormatEndpointForDiagnostics(options)
+            .Should().Be("<redacted>");
+    }
+
+    [Fact]
+    public void CreateProxyAwareHttpClient_UsesApiOcrTimeout_ByDefault()
+    {
+        using var client = OcrServiceFactory.CreateProxyAwareHttpClient(
+            proxyEnabled: false,
+            proxyUri: null,
+            proxyBypassLocal: true);
+
+        client.Timeout.Should().Be(OcrServiceFactory.ApiOcrRequestTimeout);
+    }
+
+    [Fact]
     public void CreateProxyAwareHandler_ConfiguresExplicitProxy_WhenEnabled()
     {
         using var handler = OcrServiceFactory.CreateProxyAwareHandler(

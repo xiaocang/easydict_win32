@@ -404,20 +404,15 @@ public sealed class DeepLService : BaseTranslationService
         var host = GetApiHost();
         var url = $"{host}/v2/translate";
 
-        var targetCode = GetDeepLLanguageCode(request.ToLanguage);
-        var sourceCode = request.FromLanguage == Language.Auto
-            ? null
-            : GetDeepLLanguageCode(request.FromLanguage);
-
         var formData = new List<KeyValuePair<string, string>>
         {
             new("text", request.Text),
-            new("target_lang", targetCode)
+            new("target_lang", GetDeepLApiTargetLanguageCode(request.ToLanguage))
         };
 
-        if (sourceCode != null)
+        if (request.FromLanguage != Language.Auto)
         {
-            formData.Add(new("source_lang", sourceCode));
+            formData.Add(new("source_lang", GetDeepLApiSourceLanguageCode(request.FromLanguage)));
         }
 
         if (_useQualityOptimized)
@@ -434,6 +429,8 @@ public sealed class DeepLService : BaseTranslationService
 
         if (!response.IsSuccessStatusCode)
         {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var errorMessage = TryGetDeepLErrorMessage(errorBody);
             var errorCode = response.StatusCode switch
             {
                 HttpStatusCode.Forbidden => TranslationErrorCode.InvalidApiKey,
@@ -442,7 +439,7 @@ public sealed class DeepLService : BaseTranslationService
                 _ => TranslationErrorCode.ServiceUnavailable
             };
 
-            throw new TranslationException($"DeepL API error: {response.StatusCode}")
+            throw new TranslationException(FormatApiError(response.StatusCode, errorMessage))
             {
                 ErrorCode = errorCode,
                 ServiceId = ServiceId
@@ -690,8 +687,8 @@ public sealed class DeepLService : BaseTranslationService
     }
 
     /// <summary>
-    /// Get language code for DeepL API or web JSON-RPC.
-    /// The only difference is Portuguese: API uses "PT", web uses "PT-PT".
+    /// Get common language code for DeepL API sources or web JSON-RPC.
+    /// API target codes use <see cref="GetDeepLApiTargetLanguageCode"/> because some targets require variants.
     /// </summary>
     private static string GetDeepLLanguageCode(Language language, bool isWeb = false) => language switch
     {
@@ -742,5 +739,58 @@ public sealed class DeepLService : BaseTranslationService
         // ToUpperInvariant: DeepL codes are ASCII; avoid locale-sensitive casing (e.g. Turkish 'i').
         _ => language.ToIso639().ToUpperInvariant()
     };
+
+    /// <summary>
+    /// Source codes are broad language identifiers. DeepL's API accepts variants such as EN-US as
+    /// targets, but source_lang uses EN; likewise Chinese source is ZH while target can be ZH-HANT.
+    /// </summary>
+    private static string GetDeepLApiSourceLanguageCode(Language language) => language switch
+    {
+        Language.SimplifiedChinese or Language.TraditionalChinese => "ZH",
+        Language.English => "EN",
+        Language.Portuguese => "PT",
+        _ => GetDeepLLanguageCode(language)
+    };
+
+    /// <summary>
+    /// Target codes must use DeepL's target-capable variants for languages where the generic code is
+    /// source-only or deprecated as a target.
+    /// </summary>
+    private static string GetDeepLApiTargetLanguageCode(Language language) => language switch
+    {
+        Language.English => "EN-US",
+        Language.Portuguese => "PT-PT",
+        _ => GetDeepLLanguageCode(language)
+    };
+
+    private static string? TryGetDeepLErrorMessage(string? errorBody)
+    {
+        if (string.IsNullOrWhiteSpace(errorBody))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(errorBody);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("message", out var messageElement) &&
+                messageElement.ValueKind == JsonValueKind.String)
+            {
+                return messageElement.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static string FormatApiError(HttpStatusCode statusCode, string? errorMessage) =>
+        string.IsNullOrWhiteSpace(errorMessage)
+            ? $"DeepL API error: {statusCode}"
+            : $"DeepL API error: {statusCode} ({errorMessage})";
 }
 

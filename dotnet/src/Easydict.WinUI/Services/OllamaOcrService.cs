@@ -71,21 +71,37 @@ public sealed class OllamaOcrService : IOcrService
         request.Content = new StringContent(
             JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var text = ParseOllamaResponse(json);
-
-        Debug.WriteLine($"[OllamaOcr] Recognized {text.Length} chars");
-
-        return new OcrResult
+        HttpResponseMessage response;
+        try
         {
-            Text = text,
-            Lines = [],
-            TextAngle = null,
-            DetectedLanguage = null
-        };
+            response = await _httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            Debug.WriteLine(
+                $"[OllamaOcr] Request timed out. timeout={FormatTimeout(_httpClient.Timeout)}");
+            throw new TimeoutException(
+                $"Ollama OCR request timed out after {FormatTimeout(_httpClient.Timeout)}.",
+                ex);
+        }
+
+        using (response)
+        {
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var text = ParseOllamaResponse(json);
+
+            Debug.WriteLine($"[OllamaOcr] Recognized {text.Length} chars");
+
+            return new OcrResult
+            {
+                Text = text,
+                Lines = [],
+                TextAngle = null,
+                DetectedLanguage = null
+            };
+        }
     }
 
     /// <inheritdoc />
@@ -107,6 +123,13 @@ public sealed class OllamaOcrService : IOcrService
             Debug.WriteLine($"[OllamaOcr] Failed to parse response: {ex.Message}");
             return string.Empty;
         }
+    }
+
+    private static string FormatTimeout(TimeSpan timeout)
+    {
+        return timeout == Timeout.InfiniteTimeSpan
+            ? "infinite"
+            : $"{timeout.TotalSeconds:0.#}s";
     }
 
     /// <summary>

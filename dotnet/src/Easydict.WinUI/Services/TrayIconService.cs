@@ -358,15 +358,38 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void ExitApplication()
     {
-        // Clean up all services including Win32 hooks before exit
-        App.CleanupServices();
+        App.LogToFile($"[TrayExit] Exit requested. pid={Environment.ProcessId}");
 
-        // Terminate the WinUI message loop
-        Application.Current.Exit();
+        try
+        {
+            // Clean up all services including Win32 hooks before exit.
+            App.CleanupServices();
+            App.LogToFile($"[TrayExit] Cleanup completed. pid={Environment.ProcessId}");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TrayExit] Cleanup failed: {ex}");
+            App.LogToFile($"[TrayExit] Cleanup failed. pid={Environment.ProcessId}, error={ex}");
+        }
+        finally
+        {
+            try
+            {
+                // Terminate the WinUI message loop.
+                Application.Current.Exit();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TrayExit] Application.Current.Exit failed: {ex}");
+                App.LogToFile($"[TrayExit] Application.Current.Exit failed. pid={Environment.ProcessId}, error={ex}");
+            }
 
-        // Fallback: force process termination if any stubborn threads remain
-        // This ensures the process doesn't become a zombie
-        Environment.Exit(0);
+            App.LogToFile($"[TrayExit] Forcing process exit. pid={Environment.ProcessId}");
+
+            // Fallback: force process termination if any stubborn threads remain.
+            // This ensures the process doesn't become a zombie.
+            Environment.Exit(0);
+        }
     }
 
     public void Dispose()

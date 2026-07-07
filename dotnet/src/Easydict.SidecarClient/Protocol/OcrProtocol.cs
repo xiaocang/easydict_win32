@@ -42,6 +42,14 @@ public sealed class OcrLineDto
     [JsonPropertyName("text")]
     public string Text { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Individual recognized words for this line. Sent so the host can apply the same
+    /// CJK-aware merging used by the in-process engine (no space between CJK characters).
+    /// Empty when produced by an older worker; consumers must fall back to <see cref="Text"/>.
+    /// </summary>
+    [JsonPropertyName("words")]
+    public IReadOnlyList<string> Words { get; init; } = [];
+
     [JsonPropertyName("boundingRect")]
     public OcrRectDto BoundingRect { get; init; }
 }

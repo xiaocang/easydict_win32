@@ -3,6 +3,7 @@ using Easydict.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.Windows.AppLifecycle;
 using Microsoft.Win32;
 using WinRT.Interop;
 
@@ -60,6 +61,8 @@ namespace Easydict.WinUI
         private int _systemThemeRefreshQueued;
         private nint _themeSubclassHwnd;
         private SubclassProc? _themeSubclassProc;
+        private bool _servicesInitialized;
+        private static int _pendingRedirectedOcrTranslate;
 
         // IPC: named event for context menu --ocr-translate signaling
         private EventWaitHandle? _ocrSignalEvent;
@@ -293,6 +296,7 @@ namespace Easydict.WinUI
             // Initialize services
             LogToFile("[OnLaunched] Initializing services...");
             InitializeServices();
+            _servicesInitialized = true;
             LogToFile("[OnLaunched] Launch complete!");
 
             // If "minimize to tray on startup" is enabled, hide the window immediately
@@ -304,29 +308,7 @@ namespace Easydict.WinUI
                 HideWindow();
             }
 
-            // If cold-launched via protocol activation (easydict://ocr-translate) or
-            // --ocr-translate when app wasn't running, trigger OCR after initialization.
-            if (Program.PendingOcrTranslate)
-            {
-                _window.DispatcherQueue.TryEnqueue(async () =>
-                {
-                    // Small delay to let the window fully render before capturing the screen
-                    await Task.Delay(500);
-                    try
-                    {
-                        var ocrService = EnsureOcrTranslateService();
-                        if (ocrService != null)
-                        {
-                            await ocrService.OcrTranslateAsync();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[App] PendingOcrTranslate error: {ex.Message}");
-                    }
-                });
-            }
+            TriggerStartupOcrTranslateIfNeeded();
 
             // Run region detection asynchronously after startup completes.
             // On first launch this detects China region and switches defaults (Google → Bing).
@@ -370,7 +352,8 @@ namespace Easydict.WinUI
                 _hotkeyService.OnToggleFixedWindow += OnToggleFixedWindowHotkey;
                 _hotkeyService.OnOcrTranslate += OnOcrTranslateHotkey;
                 _hotkeyService.OnSilentOcr += OnSilentOcrHotkey;
-                _hotkeyService.Initialize();
+                var hotkeyFailures = _hotkeyService.Initialize();
+                QueueHotkeyRegistrationWarning(hotkeyFailures);
                 LogToFile("[App] HotkeyService initialization call completed.");
             }
             catch (Exception ex)
@@ -811,6 +794,116 @@ namespace Easydict.WinUI
             return _ocrTranslateService;
         }
 
+        private void QueueHotkeyRegistrationWarning(IReadOnlyList<HotkeyRegistrationFailure> failures)
+        {
+            if (failures.Count == 0)
+            {
+                return;
+            }
+
+            var dispatcher = _window?.DispatcherQueue;
+            if (dispatcher == null)
+            {
+                return;
+            }
+
+            _ = dispatcher.TryEnqueue(async () =>
+            {
+                await Task.Delay(700);
+
+                if (_window?.Content is not FrameworkElement root || root.XamlRoot is null)
+                {
+                    return;
+                }
+
+                var loc = LocalizationService.Instance;
+                var lines = failures
+                    .Select(f => $"{loc.GetString(f.NameKey)}: {f.HotkeyString}")
+                    .Distinct()
+                    .ToList();
+
+                var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                {
+                    Title = loc.GetString("HotkeyRegistrationFailedTitle"),
+                    Content = loc.GetString("HotkeyRegistrationFailedMessage")
+                        + "\n\n"
+                        + string.Join("\n", lines),
+                    CloseButtonText = loc.GetString("OK"),
+                    XamlRoot = root.XamlRoot
+                };
+
+                try
+                {
+                    await dialog.ShowAsync();
+                }
+                catch (COMException ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Hotkey warning dialog failed: {ex.Message}");
+                }
+            });
+        }
+
+        private void TriggerStartupOcrTranslateIfNeeded()
+        {
+            // If cold-launched via protocol activation (easydict://ocr-translate) or
+            // --ocr-translate when app wasn't running, trigger OCR after initialization.
+            if (Program.PendingOcrTranslate)
+            {
+                QueueOcrTranslate("PendingOcrTranslate", delayMs: 500);
+            }
+
+            DrainRedirectedOcrTranslateIfReady(delayMs: 500);
+        }
+
+        private void DrainRedirectedOcrTranslateIfReady(int delayMs = 0)
+        {
+            if (!_servicesInitialized)
+            {
+                return;
+            }
+
+            if (Interlocked.Exchange(ref _pendingRedirectedOcrTranslate, 0) != 0)
+            {
+                QueueOcrTranslate("RedirectedActivation", delayMs);
+            }
+        }
+
+        private void QueueOcrTranslate(string source, int delayMs = 0)
+        {
+            var dispatcher = _window?.DispatcherQueue;
+            if (dispatcher == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] {source}: dispatcher unavailable");
+                return;
+            }
+
+            var enqueued = dispatcher.TryEnqueue(async () =>
+            {
+                if (delayMs > 0)
+                {
+                    await Task.Delay(delayMs);
+                }
+
+                try
+                {
+                    var ocrService = EnsureOcrTranslateService();
+                    if (ocrService != null)
+                    {
+                        await ocrService.OcrTranslateAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] {source} error: {ex.Message}");
+                }
+            });
+
+            if (!enqueued)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] {source}: failed to enqueue OCR action");
+            }
+        }
+
         /// <summary>
         /// Public entry point for the OCR quick-action button in the translation windows.
         /// Runs the capture → OCR → translate flow on the UI thread (issue #172).
@@ -966,6 +1059,33 @@ namespace Easydict.WinUI
             }
 
             ClipboardTextReceived?.Invoke(text);
+        }
+
+        /// <summary>
+        /// Handles an activation that was redirected here from a second launch (single-instance).
+        /// Marshals to the UI thread, surfaces the existing window, and replays OCR intents that
+        /// arrived before the named-event listener was ready. Called from <see cref="Program"/>
+        /// on the primary instance's <c>Activated</c> event, which fires on a background thread.
+        /// </summary>
+        internal static void HandleRedirectedActivation(AppActivationArguments activationArgs)
+        {
+            var shouldTriggerOcr = Program.IsOcrTranslateActivation(activationArgs);
+            if (shouldTriggerOcr)
+            {
+                Interlocked.Exchange(ref _pendingRedirectedOcrTranslate, 1);
+            }
+
+            if (Current is not App app)
+            {
+                return;
+            }
+
+            var dispatcher = app._window?.DispatcherQueue;
+            dispatcher?.TryEnqueue(() =>
+            {
+                app.ShowAndActivateWindow();
+                app.DrainRedirectedOcrTranslateIfReady();
+            });
         }
 
         private void ShowAndActivateWindow()

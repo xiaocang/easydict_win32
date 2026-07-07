@@ -4711,7 +4711,7 @@ fn effective_source_language(query_state: &SurfaceQueryState<'_>) -> String {
         .unwrap_or_else(|| "auto".to_string())
 }
 
-fn normalize_language_code(value: &str) -> String {
+pub(crate) fn normalize_language_code(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "" | "auto" => "auto".to_string(),
         "ar" | "ar-sa" => "ar".to_string(),
@@ -4734,11 +4734,11 @@ fn normalize_language_code(value: &str) -> String {
     }
 }
 
-fn is_auto_language(value: &str) -> bool {
+pub(crate) fn is_auto_language(value: &str) -> bool {
     value.trim().is_empty() || value.eq_ignore_ascii_case("auto")
 }
 
-fn language_code_from_detected_label(value: &str) -> Option<String> {
+pub(crate) fn language_code_from_detected_label(value: &str) -> Option<String> {
     let value = value
         .trim()
         .strip_prefix("Detected:")

@@ -24,6 +24,9 @@ msgstr "输入或粘贴要翻译的文本..."
 msgid "main.results"
 msgstr "翻译结果"
 
+msgid "main.results.grammar"
+msgstr "语法检查结果"
+
 msgid "main.result.pending_query"
 msgstr "点击查询"
 
@@ -68,6 +71,9 @@ msgstr "语言帮助"
 
 msgid "main.translate"
 msgstr "翻译"
+
+msgid "main.translate.grammar"
+msgstr "检查语法"
 
 msgid "main.settings"
 msgstr "设置"

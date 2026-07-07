@@ -21,6 +21,9 @@ msgstr "輸入或貼上要翻譯的文字..."
 msgid "main.results"
 msgstr "翻譯結果"
 
+msgid "main.results.grammar"
+msgstr "語法檢查結果"
+
 msgid "main.result.pending_query"
 msgstr "Click to query this service"
 
@@ -62,6 +65,9 @@ msgstr "Language help"
 
 msgid "main.translate"
 msgstr "翻譯"
+
+msgid "main.translate.grammar"
+msgstr "檢查語法"
 
 msgid "main.settings"
 msgstr "設定"

@@ -883,6 +883,112 @@ fn same_language_without_grammar_falls_back_to_different_translation_target() {
 }
 
 #[test]
+fn main_same_language_selection_updates_preview_mode_when_capable_service_enabled() {
+    let mut state = EasydictUiState::default();
+    state.source_language = "en".to_string();
+    state.target_language = "ja".to_string();
+    state.detected_language = Some("Detected: English".to_string());
+    state.results = vec![
+        easydict_app::TranslationResultPreview::new("google", "Google Translate", "")
+            .grammar_capable(false),
+        easydict_app::TranslationResultPreview::new("openai", "OpenAI", "").grammar_capable(true),
+    ];
+    let detected_language = state.detected_language.clone();
+
+    state.apply(Message::TargetLanguageChanged("en".to_string()));
+
+    assert_eq!(
+        state.current_quick_query_mode,
+        QuickQueryMode::GrammarCorrection
+    );
+    assert!(!state.grammar_correction_fallback);
+    assert_eq!(
+        state
+            .results
+            .iter()
+            .find(|result| result.id == "openai")
+            .expect("openai result should exist")
+            .query_mode,
+        QuickQueryMode::GrammarCorrection
+    );
+    assert_eq!(
+        state
+            .results
+            .iter()
+            .find(|result| result.id == "google")
+            .expect("google result should exist")
+            .query_mode,
+        QuickQueryMode::Translation
+    );
+    assert_eq!(state.detected_language, detected_language);
+}
+
+#[test]
+fn main_same_language_selection_falls_back_without_capable_service() {
+    let mut state = EasydictUiState::default();
+    state.source_language = "en".to_string();
+    state.target_language = "ja".to_string();
+    state.results = vec![
+        easydict_app::TranslationResultPreview::new("google", "Google Translate", "")
+            .grammar_capable(false),
+        easydict_app::TranslationResultPreview::new("bing", "Bing Translate", "")
+            .grammar_capable(false),
+    ];
+
+    state.apply(Message::TargetLanguageChanged("en".to_string()));
+
+    assert_eq!(state.current_quick_query_mode, QuickQueryMode::Translation);
+    assert!(state.grammar_correction_fallback);
+    assert!(state
+        .results
+        .iter()
+        .all(|result| result.query_mode == QuickQueryMode::Translation));
+}
+
+#[test]
+fn floating_same_language_selection_updates_preview_mode_when_capable_service_enabled() {
+    let mut state = EasydictUiState::default();
+    state.mini.source_language = "en".to_string();
+    state.mini.target_language = "ja".to_string();
+    state.mini.results = vec![
+        easydict_app::TranslationResultPreview::new("google", "Google Translate", "")
+            .grammar_capable(false),
+        easydict_app::TranslationResultPreview::new("openai", "OpenAI", "").grammar_capable(true),
+    ];
+
+    state.apply(Message::FloatingTargetLanguageChanged(
+        QuickTranslateSurface::Mini,
+        "en".to_string(),
+    ));
+
+    assert_eq!(
+        state.mini.current_quick_query_mode,
+        QuickQueryMode::GrammarCorrection
+    );
+    assert!(!state.mini.grammar_correction_fallback);
+    assert_eq!(
+        state
+            .mini
+            .results
+            .iter()
+            .find(|result| result.id == "openai")
+            .expect("openai result should exist")
+            .query_mode,
+        QuickQueryMode::GrammarCorrection
+    );
+    assert_eq!(
+        state
+            .mini
+            .results
+            .iter()
+            .find(|result| result.id == "google")
+            .expect("google result should exist")
+            .query_mode,
+        QuickQueryMode::Translation
+    );
+}
+
+#[test]
 fn plan_rejects_empty_text_and_all_disabled_services() {
     let mut state = EasydictUiState::default();
     state.source_text = "   ".to_string();

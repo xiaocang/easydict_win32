@@ -12,7 +12,10 @@ use crate::protocol::{
     local_ai_provider_modes, normalize_local_ai_provider_mode, ImportedMdxDictionarySnapshot,
     SettingsSnapshot, WordResultDto,
 };
-use crate::quick_translate::{QuickQueryMode, QuickTranslateSurface};
+use crate::quick_translate::{
+    language_code_from_detected_label, normalize_language_code, resolve_quick_query_language,
+    QuickQueryMode, QuickTranslateSurface,
+};
 use crate::translation_services::{
     default_translation_service_descriptors, translation_service_capabilities,
     DEFAULT_FLOATING_WINDOW_SERVICE_IDS, DEFAULT_MAIN_WINDOW_SERVICE_IDS,
@@ -1330,6 +1333,7 @@ pub struct EasydictUiState {
     pub source_language: String,
     pub target_language: String,
     pub target_language_manually_selected: bool,
+    pub main_open_language_dropdown: Option<String>,
     pub current_quick_query_mode: QuickQueryMode,
     pub grammar_correction_fallback: bool,
     pub is_translating: bool,
@@ -1387,6 +1391,7 @@ impl Default for EasydictUiState {
             source_language: "auto".to_string(),
             target_language: "auto".to_string(),
             target_language_manually_selected: false,
+            main_open_language_dropdown: None,
             current_quick_query_mode: QuickQueryMode::Translation,
             grammar_correction_fallback: false,
             is_translating: false,
@@ -1711,6 +1716,49 @@ impl EasydictUiState {
             let value = value.trim();
             state.detected_language = (!value.is_empty()).then(|| value.to_string());
         }
+        let main_effective_source_language =
+            std::env::var("EASYDICT_PREVIEW_MAIN_EFFECTIVE_SOURCE_LANGUAGE")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE") {
+            let value = value.trim();
+            if !value.is_empty() {
+                state.source_language = preview_language_id(value);
+            }
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE") {
+            let value = value.trim();
+            if !value.is_empty() {
+                state.target_language = preview_language_id(value);
+                state.target_language_manually_selected =
+                    !state.target_language.eq_ignore_ascii_case("auto");
+            }
+        }
+        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_OPEN_DROPDOWN") {
+            let value = value.trim().to_ascii_lowercase();
+            if matches!(value.as_str(), "source" | "target") {
+                state.main_open_language_dropdown = Some(value);
+            }
+        }
+        if let Ok(service_id) = std::env::var("EASYDICT_PREVIEW_MAIN_GRAMMAR_CAPABLE_SERVICE") {
+            let service_id = service_id.trim();
+            if !service_id.is_empty() {
+                if let Some(result) = state
+                    .results
+                    .iter_mut()
+                    .find(|result| result.id == service_id)
+                {
+                    result.enabled_query = true;
+                    result.grammar_capable = true;
+                    result.has_queried = true;
+                }
+            }
+        }
+        refresh_main_quick_query_mode_preview(
+            &mut state,
+            main_effective_source_language.as_deref(),
+        );
         if let Ok(value) = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_STATE") {
             let service_id = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_SERVICE_ID")
                 .ok()
@@ -1915,9 +1963,8 @@ impl EasydictUiState {
         }
         apply_floating_preview_languages_from_env(&mut state.mini, "MINI");
         apply_floating_preview_languages_from_env(&mut state.fixed, "FIXED");
-        let preview_locale = state.settings.ui_language.clone();
-        apply_floating_preview_language_status(&mut state.mini, &preview_locale);
-        apply_floating_preview_language_status(&mut state.fixed, &preview_locale);
+        refresh_floating_quick_query_mode_preview(&mut state.mini, &state.settings, None);
+        refresh_floating_quick_query_mode_preview(&mut state.fixed, &state.settings, None);
 
         state
     }
@@ -1972,20 +2019,26 @@ impl EasydictUiState {
             }
             Message::SourceLanguageChanged(value) => {
                 self.source_language = value;
+                refresh_main_quick_query_mode_preview(self, None);
             }
             Message::TargetLanguageChanged(value) => {
                 self.target_language = value;
                 self.target_language_manually_selected = true;
+                refresh_main_quick_query_mode_preview(self, None);
             }
             Message::FloatingSourceLanguageChanged(surface, value) => {
+                let settings = self.settings.clone();
                 if let Some(floating) = floating_surface_mut(self, surface) {
                     floating.source_language = value;
+                    refresh_floating_quick_query_mode_preview(floating, &settings, None);
                 }
             }
             Message::FloatingTargetLanguageChanged(surface, value) => {
+                let settings = self.settings.clone();
                 if let Some(floating) = floating_surface_mut(self, surface) {
                     floating.target_language = value;
                     floating.target_language_manually_selected = true;
+                    refresh_floating_quick_query_mode_preview(floating, &settings, None);
                 }
             }
             Message::LongDocumentSourceLanguageChanged(value) => {
@@ -2934,11 +2987,14 @@ impl EasydictUiState {
             Message::SwapLanguages => {
                 std::mem::swap(&mut self.source_language, &mut self.target_language);
                 self.target_language_manually_selected = true;
+                refresh_main_quick_query_mode_preview(self, None);
             }
             Message::SwapFloatingLanguages(surface) => {
+                let settings = self.settings.clone();
                 if let Some(floating) = floating_surface_mut(self, surface) {
                     std::mem::swap(&mut floating.source_language, &mut floating.target_language);
                     floating.target_language_manually_selected = true;
+                    refresh_floating_quick_query_mode_preview(floating, &settings, None);
                 }
             }
             Message::ToggleResultExpanded(id) => {
@@ -3125,28 +3181,119 @@ fn apply_floating_preview_languages_from_env(
     }
 }
 
-fn apply_floating_preview_language_status(floating: &mut FloatingWindowState, locale: &str) {
-    let source = floating.source_language.trim().to_string();
-    if source.is_empty() || source.eq_ignore_ascii_case("auto") {
-        floating.detected_language = None;
-        floating.current_quick_query_mode = QuickQueryMode::Translation;
-        floating.grammar_correction_fallback = false;
-        return;
+fn refresh_main_quick_query_mode_preview(
+    state: &mut EasydictUiState,
+    effective_source_override: Option<&str>,
+) {
+    let effective_source = preview_effective_source_language(
+        &state.source_language,
+        state.detected_language.as_deref(),
+        effective_source_override,
+    );
+    let selected_target = preview_selected_target_language(
+        &state.target_language,
+        state.target_language_manually_selected,
+        &state.settings,
+    );
+    let grammar_available = preview_grammar_correction_available(&state.results);
+    let resolution = resolve_quick_query_language(
+        &state.source_language,
+        selected_target,
+        &effective_source,
+        grammar_available,
+        &state.settings.first_language,
+        &state.settings.second_language,
+    );
+
+    state.current_quick_query_mode = resolution.effective_mode;
+    state.grammar_correction_fallback = resolution.grammar_correction_fallback;
+    apply_preview_result_query_modes(&mut state.results, resolution.effective_mode);
+}
+
+fn refresh_floating_quick_query_mode_preview(
+    floating: &mut FloatingWindowState,
+    settings: &SettingsState,
+    effective_source_override: Option<&str>,
+) {
+    let effective_source = preview_effective_source_language(
+        &floating.source_language,
+        floating.detected_language.as_deref(),
+        effective_source_override,
+    );
+    let selected_target = preview_selected_target_language(
+        &floating.target_language,
+        floating.target_language_manually_selected,
+        settings,
+    );
+    let grammar_available = preview_grammar_correction_available(&floating.results);
+    let resolution = resolve_quick_query_language(
+        &floating.source_language,
+        selected_target,
+        &effective_source,
+        grammar_available,
+        &settings.first_language,
+        &settings.second_language,
+    );
+
+    floating.current_quick_query_mode = resolution.effective_mode;
+    floating.grammar_correction_fallback = resolution.grammar_correction_fallback;
+    apply_preview_result_query_modes(&mut floating.results, resolution.effective_mode);
+}
+
+fn preview_effective_source_language(
+    selected_source: &str,
+    detected_language: Option<&str>,
+    effective_source_override: Option<&str>,
+) -> String {
+    if let Some(value) = effective_source_override {
+        let normalized = normalize_language_code(value);
+        if normalized != "auto" {
+            return normalized;
+        }
     }
 
-    floating.current_quick_query_mode = QuickQueryMode::Translation;
-    if source.eq_ignore_ascii_case(floating.target_language.trim()) {
-        floating.grammar_correction_fallback = true;
-        floating.detected_language = Some(tr_locale(
-            locale,
-            "GrammarCorrectionFallbackNotice",
-            "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.",
-        ));
-        return;
+    let normalized_source = normalize_language_code(selected_source);
+    if normalized_source != "auto" {
+        return normalized_source;
     }
 
-    floating.grammar_correction_fallback = false;
-    floating.detected_language = Some(preview_detected_language_label(&source, locale));
+    detected_language
+        .and_then(language_code_from_detected_label)
+        .unwrap_or_else(|| "auto".to_string())
+}
+
+fn preview_selected_target_language<'a>(
+    target_language: &'a str,
+    target_language_manually_selected: bool,
+    settings: &'a SettingsState,
+) -> &'a str {
+    if settings.auto_select_target_language && !target_language_manually_selected {
+        "auto"
+    } else {
+        target_language
+    }
+}
+
+fn preview_grammar_correction_available(results: &[TranslationResultPreview]) -> bool {
+    results
+        .iter()
+        .any(|result| result.enabled_query && result.grammar_capable)
+}
+
+fn apply_preview_result_query_modes(
+    results: &mut [TranslationResultPreview],
+    mode: QuickQueryMode,
+) {
+    for result in results {
+        result.query_mode = if mode == QuickQueryMode::GrammarCorrection
+            && result.enabled_query
+            && result.grammar_capable
+        {
+            QuickQueryMode::GrammarCorrection
+        } else {
+            QuickQueryMode::Translation
+        };
+    }
 }
 
 fn preview_detected_language_label(language_id: &str, locale: &str) -> String {

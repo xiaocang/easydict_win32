@@ -21,6 +21,9 @@ msgstr "Enter or paste text to translate..."
 msgid "main.results"
 msgstr "Translation Results"
 
+msgid "main.results.grammar"
+msgstr "Grammar Check Results"
+
 msgid "main.result.pending_query"
 msgstr "Click to query"
 
@@ -65,6 +68,9 @@ msgstr "Language help"
 
 msgid "main.translate"
 msgstr "Translate"
+
+msgid "main.translate.grammar"
+msgstr "Check Grammar"
 
 msgid "main.settings"
 msgstr "Settings"

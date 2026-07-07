@@ -1,7 +1,7 @@
 use crate::i18n::{tr, tr_count, tr_count_locale, tr_locale};
 use crate::mdx_native::native_mdx_dictionary_can_route_natively;
 use crate::protocol::local_ai_provider_modes;
-use crate::quick_translate::QuickTranslateSurface;
+use crate::quick_translate::{QuickQueryMode, QuickTranslateSurface};
 use crate::screen_capture::{CaptureInteractionState, CapturePhase, CaptureRect};
 use crate::state::{
     AppMode, EasydictUiState, FloatingWindowState, HotkeySetting, ImportedMdxDictionary,
@@ -55,22 +55,99 @@ pub fn main_window_view(state: &EasydictUiState) -> View<Message> {
     .id("main.root")
     .tw("p-0 gap-0 w-full h-full")
     .into_view();
-    let root_content =
-        if state.mode == AppMode::LongDocument && state.long_document.service_dropdown_open {
-            overlay(root_content)
-                .id("main.long-doc.service_dropdown_overlay")
-                .layer(
-                    OverlayLayer::new(long_document_service_dropdown_preview(&state.long_document))
-                        .align(Alignment::Start, Alignment::Start),
-                )
-                .into_view()
-        } else {
-            root_content
-        };
+    let root_content = if state.mode == AppMode::LongDocument
+        && state.long_document.service_dropdown_open
+    {
+        overlay(root_content)
+            .id("main.long-doc.service_dropdown_overlay")
+            .layer(
+                OverlayLayer::new(long_document_service_dropdown_preview(&state.long_document))
+                    .align(Alignment::Start, Alignment::Start),
+            )
+            .into_view()
+    } else if state.mode == AppMode::QuickTranslate && state.main_open_language_dropdown.is_some() {
+        overlay(root_content)
+            .id("main.language_dropdown_overlay")
+            .layer(
+                OverlayLayer::new(main_language_dropdown_preview(state))
+                    .align(Alignment::Start, Alignment::Start),
+            )
+            .into_view()
+    } else {
+        root_content
+    };
 
     page("Easydict")
         .id("main.window")
         .content(root_content)
+        .into_view()
+}
+
+fn main_language_dropdown_preview(state: &EasydictUiState) -> View<Message> {
+    let dropdown = state
+        .main_open_language_dropdown
+        .as_deref()
+        .unwrap_or("target");
+    let is_source = dropdown == "source";
+    let selected_language = if is_source {
+        state.source_language.as_str()
+    } else {
+        state.target_language.as_str()
+    };
+    let id_prefix = if is_source {
+        "main.source_language_dropdown"
+    } else {
+        "main.target_language_dropdown"
+    };
+
+    let rows = selected_language_items(true, &state.settings)
+        .into_iter()
+        .map(|item| {
+            let selected = item.id.as_str() == selected_language;
+            let item_id = item.id;
+            let item_label = item.label;
+            let row_view = row((styled_text_id(
+                &format!("{id_prefix}.item.{item_id}.label"),
+                item_label,
+                TextStyle::Body,
+            ),))
+            .id(format!("{id_prefix}.item.{item_id}"))
+            .width(Length::Fill)
+            .height(Length::Fixed(36))
+            .align(Alignment::Center)
+            .padding_edges(Edges {
+                left: 20,
+                right: 8,
+                ..Edges::ZERO
+            })
+            .into_view();
+
+            if selected {
+                row((row_view,))
+                    .id(format!("{id_prefix}.item.{item_id}.selected"))
+                    .width(Length::Fill)
+                    .tw("bg-border")
+                    .into_view()
+            } else {
+                row_view
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let dropdown_width = if is_source { 134 } else { 138 };
+
+    column(rows)
+        .id(id_prefix)
+        .padding(8)
+        .spacing(0)
+        .width(Length::Fixed(dropdown_width))
+        .max_height(360)
+        .margin(Edges {
+            top: 258,
+            left: if is_source { 16 } else { 206 },
+            ..Edges::ZERO
+        })
+        .tw("surface-card border rounded-[10px]")
         .into_view()
 }
 
@@ -730,7 +807,21 @@ fn main_results_card(state: &EasydictUiState) -> View<Message> {
         results
     };
 
-    card(tr("main.results", "Translation Results"))
+    let title = if state.current_quick_query_mode == QuickQueryMode::GrammarCorrection {
+        tr_locale(
+            &state.settings.ui_language,
+            "main.results.grammar",
+            "Grammar Check Results",
+        )
+    } else {
+        tr_locale(
+            &state.settings.ui_language,
+            "main.results",
+            "Translation Results",
+        )
+    };
+
+    card(title)
         .id("QuickOutputCard")
         .kind(CardKind::Elevated)
         .padding(0)
@@ -741,6 +832,54 @@ fn main_results_card(state: &EasydictUiState) -> View<Message> {
         })
         .content(content)
         .into_view()
+}
+
+fn main_quick_query_status_text(state: &EasydictUiState) -> Option<String> {
+    if state.grammar_correction_fallback {
+        return Some(tr_locale(
+            &state.settings.ui_language,
+            "GrammarCorrectionFallbackNotice",
+            "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.",
+        ));
+    }
+
+    if state.current_quick_query_mode == QuickQueryMode::GrammarCorrection {
+        return Some(tr_locale(
+            &state.settings.ui_language,
+            "GrammarCorrectionActiveNotice",
+            "Grammar check mode: AI correction services will run. Choose a different target language to translate.",
+        ));
+    }
+
+    state
+        .detected_language
+        .as_ref()
+        .filter(|value| !value.is_empty())
+        .cloned()
+}
+
+fn floating_quick_query_status_text(state: &FloatingWindowState, locale: &str) -> Option<String> {
+    if state.grammar_correction_fallback {
+        return Some(tr_locale(
+            locale,
+            "GrammarCorrectionFallbackNotice",
+            "No grammar-capable AI service is enabled, so this query fell back to translation. Enable an AI service that supports grammar correction to show correction details when source and target are the same.",
+        ));
+    }
+
+    if state.current_quick_query_mode == QuickQueryMode::GrammarCorrection {
+        return Some(tr_locale(
+            locale,
+            "GrammarCorrectionActiveNotice",
+            "Grammar check mode: AI correction services will run. Choose a different target language to translate.",
+        ));
+    }
+
+    state
+        .detected_language
+        .as_ref()
+        .filter(|value| !value.is_empty())
+        .cloned()
 }
 
 fn main_results_should_hold_initial_height(results: &[TranslationResultPreview]) -> bool {
@@ -812,13 +951,11 @@ fn source_text_card(state: &EasydictUiState) -> View<Message> {
 
     body_children.push(
         column((
-            state
-                .detected_language
-                .as_ref()
-                .map(|detected_language| {
+            main_quick_query_status_text(state)
+                .map(|status_text| {
                     styled_text_id_with_font_size(
                         "DetectedLanguageText",
-                        detected_language.clone(),
+                        status_text,
                         TextStyle::Caption,
                         11,
                     )
@@ -1742,9 +1879,11 @@ fn floating_translate_view(
                 state.target_language_state.clone(),
                 state.swap_button_state.clone(),
                 state.translate_button_state.clone(),
+                state.current_quick_query_mode,
+                &settings.ui_language,
             ),
             spacer().height(Length::Fixed(2)).into_view(),
-            floating_results_section(id_prefix, surface, state),
+            floating_results_section(id_prefix, surface, state, &settings.ui_language),
             spacer().height(Length::Fixed(4)).into_view(),
             floating_status_text(id_prefix, state, &settings.ui_language),
         ])
@@ -1780,8 +1919,10 @@ fn floating_translate_view(
                 state.target_language_state.clone(),
                 state.swap_button_state.clone(),
                 state.translate_button_state.clone(),
+                state.current_quick_query_mode,
+                &settings.ui_language,
             ),
-            floating_results_section(id_prefix, surface, state),
+            floating_results_section(id_prefix, surface, state, &settings.ui_language),
             floating_status_text(id_prefix, state, &settings.ui_language),
         ))
         .id(format!("{id_prefix}.content"))
@@ -1815,14 +1956,15 @@ fn floating_results_section(
     id_prefix: &'static str,
     surface: QuickTranslateSurface,
     state: &FloatingWindowState,
+    locale: &str,
 ) -> View<Message> {
-    let has_detected_language = state
-        .detected_language
+    let status_text = floating_quick_query_status_text(state, locale);
+    let has_detected_language = status_text
         .as_deref()
         .is_some_and(|value| !value.is_empty());
 
     column((
-        floating_detected_language_label(id_prefix, state),
+        floating_detected_language_label(id_prefix, status_text),
         results_list(
             &format!("{id_prefix}.results"),
             &state.results,
@@ -1845,16 +1987,12 @@ fn floating_results_section(
 
 fn floating_detected_language_label(
     id_prefix: &'static str,
-    state: &FloatingWindowState,
+    status_text: Option<String>,
 ) -> View<Message> {
-    match state
-        .detected_language
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
+    match status_text.filter(|value| !value.is_empty()) {
         Some(value) => sized_styled_text_id_with_font_size_and_wrapping(
             "DetectedLangText",
-            value.to_string(),
+            value,
             TextStyle::Accent,
             10,
             Length::Fill,
@@ -2176,6 +2314,8 @@ fn main_translate_action_bar_wide(state: &EasydictUiState) -> View<Message> {
         "TranslateButton",
         state.is_translating,
         state.main_translate_button_state.clone(),
+        state.current_quick_query_mode,
+        &state.settings.ui_language,
     ));
 
     row(children)
@@ -2233,6 +2373,8 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
             "TranslateButtonNarrow",
             state.is_translating,
             state.main_translate_button_state.clone(),
+            state.current_quick_query_mode,
+            &state.settings.ui_language,
         ),
     ))
     .id("ActionBarNarrow")
@@ -2247,7 +2389,13 @@ fn main_translate_action_bar_narrow(state: &EasydictUiState) -> View<Message> {
     .into_view()
 }
 
-fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState) -> View<Message> {
+fn main_translate_button(
+    id: &'static str,
+    is_loading: bool,
+    state: ControlState,
+    query_mode: QuickQueryMode,
+    locale: &str,
+) -> View<Message> {
     if is_loading {
         match id {
             "TranslateButtonNarrow" => progress_ring()
@@ -2262,6 +2410,12 @@ fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState
                 .into_view(),
         }
     } else {
+        let label = if query_mode == QuickQueryMode::GrammarCorrection {
+            tr_locale(locale, "main.translate.grammar", "Check Grammar")
+        } else {
+            tr_locale(locale, "main.translate", "Translate")
+        };
+
         primary_button("")
             .id(id)
             .icon(icon::translate())
@@ -2270,9 +2424,9 @@ fn main_translate_button(id: &'static str, is_loading: bool, state: ControlState
             .height(Length::Fixed(40))
             .padding(Edges::ZERO)
             .font_size(16)
-            .tooltip(tr("main.translate", "Translate"))
+            .tooltip(label.clone())
             .state(state)
-            .a11y(A11yHint::named(tr("main.translate", "Translate")))
+            .a11y(A11yHint::named(label))
             .on_press(Message::QuickTranslate)
     }
 }
@@ -2301,6 +2455,8 @@ fn translate_language_bar(
     target_language_state: ControlState,
     swap_button_state: ControlState,
     translate_button_state: ControlState,
+    query_mode: QuickQueryMode,
+    locale: &str,
 ) -> View<Message> {
     let is_main = id_prefix.starts_with("main");
     let source_width = if is_main {
@@ -2357,6 +2513,8 @@ fn translate_language_bar(
             surface,
             is_translating,
             translate_button_state,
+            query_mode,
+            locale,
         ),
     ))
     .id(format!("{id_prefix}.language_bar"))
@@ -2378,6 +2536,8 @@ fn floating_translate_button(
     surface: QuickTranslateSurface,
     is_loading: bool,
     state: ControlState,
+    query_mode: QuickQueryMode,
+    locale: &str,
 ) -> View<Message> {
     if is_loading {
         match surface {
@@ -2393,6 +2553,12 @@ fn floating_translate_button(
                 .into_view(),
         }
     } else {
+        let label = if query_mode == QuickQueryMode::GrammarCorrection {
+            tr_locale(locale, "main.translate.grammar", "Check Grammar")
+        } else {
+            tr_locale(locale, "main.translate", "Translate")
+        };
+
         primary_button("")
             .id(id)
             .icon(icon::translate())
@@ -2405,9 +2571,9 @@ fn floating_translate_button(
                 left: 4,
                 ..Edges::ZERO
             })
-            .tooltip(tr("main.translate", "Translate"))
+            .tooltip(label.clone())
             .state(state)
-            .a11y(A11yHint::named(tr("main.translate", "Translate")))
+            .a11y(A11yHint::named(label))
             .on_press(Message::QuickTranslateIn(surface))
     }
 }

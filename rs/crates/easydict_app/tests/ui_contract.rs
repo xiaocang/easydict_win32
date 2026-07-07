@@ -149,6 +149,84 @@ fn main_quick_translate_matches_current_xaml_surface() {
 }
 
 #[test]
+fn main_same_language_grammar_preview_renders_notice_and_title() {
+    let mut state = EasydictUiState::default();
+    state.settings.ui_language = "zh-CN".to_string();
+    state.source_language = "en".to_string();
+    state.target_language = "ja".to_string();
+    state.results = vec![
+        TranslationResultPreview::new("google", "Google Translate", "").grammar_capable(false),
+        TranslationResultPreview::new("openai", "OpenAI", "").grammar_capable(true),
+    ];
+
+    state.apply(easydict_app::Message::TargetLanguageChanged(
+        "en".to_string(),
+    ));
+
+    let snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
+    assert!(snapshot.contains("当前为纠错模式"), "{snapshot}");
+    assert!(snapshot.contains("语法检查结果"), "{snapshot}");
+    assert!(
+        snapshot.contains("id=\"DetectedLanguageText\""),
+        "{snapshot}"
+    );
+    assert!(!snapshot.contains("Card title=\"翻译结果\""), "{snapshot}");
+}
+
+#[test]
+fn main_language_dropdown_overlay_matches_combo_widths() {
+    let mut state = EasydictUiState::default();
+    state.main_open_language_dropdown = Some("source".to_string());
+    let source_snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
+    assert_control_contains(
+        &source_snapshot,
+        "main.source_language_dropdown",
+        "width=Fixed(134)",
+    );
+    assert_control_contains(
+        &source_snapshot,
+        "main.source_language_dropdown",
+        "top: 258",
+    );
+    assert_control_contains(
+        &source_snapshot,
+        "main.source_language_dropdown",
+        "left: 16",
+    );
+    assert!(source_snapshot.contains("id=\"main.language_dropdown_overlay\""));
+
+    state.main_open_language_dropdown = Some("target".to_string());
+    let target_snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
+    assert_control_contains(
+        &target_snapshot,
+        "main.target_language_dropdown",
+        "width=Fixed(138)",
+    );
+    assert_control_contains(
+        &target_snapshot,
+        "main.target_language_dropdown",
+        "top: 258",
+    );
+    assert_control_contains(
+        &target_snapshot,
+        "main.target_language_dropdown",
+        "left: 206",
+    );
+    assert!(target_snapshot.contains("id=\"main.language_dropdown_overlay\""));
+}
+
+#[test]
+fn main_selected_language_state_has_no_open_overlay() {
+    let mut state = EasydictUiState::default();
+    state.target_language = "en".to_string();
+    state.main_open_language_dropdown = None;
+
+    let snapshot = win_fluent_testkit::view_snapshot(&main_window_view(&state));
+    assert_control_contains(&snapshot, "TargetLangCombo", "selected=\"en\"");
+    assert!(!snapshot.contains("id=\"main.language_dropdown_overlay\""));
+}
+
+#[test]
 fn main_and_long_document_operation_controls_have_action_contracts() {
     let state = EasydictUiState::default();
     let main = win_fluent_testkit::view_snapshot(&main_window_view(&state));

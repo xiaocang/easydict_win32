@@ -548,6 +548,8 @@ public sealed class DotnetRustParityTests : IDisposable
         {
             rustEnvironment["EASYDICT_PREVIEW_MAIN_DETECTED_LANGUAGE"] = detectedLanguageText;
         }
+        rustEnvironment["EASYDICT_PREVIEW_MAIN_EFFECTIVE_SOURCE_LANGUAGE"] = "en";
+        rustEnvironment["EASYDICT_PREVIEW_MAIN_GRAMMAR_CAPABLE_SERVICE"] = "windows-local-ai";
 
         using var rustPreview = RustPreviewApp.LaunchMainPreview(
             "before_translate",
@@ -630,8 +632,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 CaptureMainDropdownInteraction(
                     manifestEntries,
                     dotnetWindow,
-                    rustWindow,
-                    rustPreview.SchemaPath,
+                    rustEnvironment,
                     dropdown,
                     captureScope.CaptureDropdownOptions);
             }
@@ -2277,17 +2278,13 @@ public sealed class DotnetRustParityTests : IDisposable
     private void CaptureMainDropdownInteraction(
         List<UiParityManifestEntry> manifestEntries,
         Window dotnetWindow,
-        Window rustWindow,
-        string? rustSchemaPath,
+        IReadOnlyDictionary<string, string> rustBaseEnvironment,
         MainDropdownCapture dropdown,
         bool captureOptions)
     {
-        ArrangeSideBySide(dotnetWindow, rustWindow);
         AssertWindowFullyVisible(dotnetWindow, $"main.{dropdown.Key}-open", "dotnet");
-        AssertWindowFullyVisible(rustWindow, $"main.{dropdown.Key}-open", "rust");
 
         var dotnetStep = MainDropdownProbeStep(dropdown, dropdown.DotnetElement);
-        var rustStep = MainDropdownProbeStep(dropdown, dropdown.RustElement);
 
         var dotnetOpenPath = CaptureExpandedSettingsDropdownStep(
             dotnetWindow,
@@ -2296,13 +2293,26 @@ public sealed class DotnetRustParityTests : IDisposable
         DismissExpandedDropdownIfNeeded(dotnetStep);
         MoveMouseToNeutralPoint();
 
-        var rustOpenPath = CaptureExpandedSettingsDropdownStep(
-            rustWindow,
-            rustStep,
+        var openEnvironment = MainRustDropdownEnvironment(rustBaseEnvironment, dropdown);
+        openEnvironment["EASYDICT_PREVIEW_MAIN_OPEN_DROPDOWN"] = MainDropdownAlias(dropdown);
+        AddRustPreviewSizeEnvironment(
+            openEnvironment,
+            ReadScreenshotPixelSize(dotnetOpenPath),
+            ScreenshotHelper.GetWindowDpiScale(dotnetWindow));
+        using var rustOpenPreview = RustPreviewApp.LaunchMainPreview(
+            "before_translate",
+            ResolveRustPreviewTheme("light"),
+            _output,
+            openEnvironment,
+            schemaSuffix: $"-{dropdown.Key}-open");
+        var rustOpenWindow = rustOpenPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+        ArrangeSideBySide(dotnetWindow, rustOpenWindow);
+        WaitForMainWindowReady(rustOpenWindow, "rust");
+        AssertWindowFullyVisible(rustOpenWindow, $"main.{dropdown.Key}-open", "rust");
+        var rustOpenPath = CaptureWindowPreferHwnd(
+            rustOpenWindow,
             $"main.{dropdown.Key}-open-rust-win-fluent-iced",
-            rustSchemaPath);
-        DismissExpandedDropdownIfNeeded(rustStep);
-        MoveMouseToNeutralPoint();
+            requireForeground: false);
 
         var openSideBySidePath = SaveSideBySideComparison(
             dotnetOpenPath,
@@ -2312,13 +2322,13 @@ public sealed class DotnetRustParityTests : IDisposable
             $"main.{dropdown.Key}-open",
             $"Main {dropdown.Label} Open",
             dotnetWindow,
-            rustWindow,
+            rustOpenWindow,
             dotnetOpenPath,
             rustOpenPath,
             openSideBySidePath,
             dropdown.Regions,
             [dropdown.RustControlId],
-            rustSchemaPath: rustSchemaPath,
+            rustSchemaPath: rustOpenPreview.SchemaPath,
             operatedDropdownElement: dropdown.DotnetElement));
         SaveManifest(manifestEntries);
 
@@ -2334,50 +2344,81 @@ public sealed class DotnetRustParityTests : IDisposable
                 rustSchemaPath: null)
             : Array.Empty<SettingsDropdownOptionCaptureResult>();
 
-        var rustOptionPaths = captureOptions
-            ? CaptureSettingsDropdownOptionSelections(
-                rustWindow,
-                rustStep,
-                "rust-win-fluent-iced",
-                rustSchemaPath)
-            : Array.Empty<SettingsDropdownOptionCaptureResult>();
-
-        foreach (var optionPair in PairDropdownOptionCaptures(dotnetOptionPaths, rustOptionPaths))
+        foreach (var dotnetOption in dotnetOptionPaths)
         {
+            var rustOptionEnvironment = MainRustDropdownEnvironment(rustBaseEnvironment, dropdown);
+            rustOptionEnvironment[dropdown.RustSelectedLanguageEnvironmentVariable] =
+                FloatingLanguageOptionId(dotnetOption.Option);
+            AddRustPreviewSizeEnvironment(
+                rustOptionEnvironment,
+                dotnetOption.ScreenshotPixelSize,
+                dotnetOption.WindowDpiScale);
+            using var rustOptionPreview = RustPreviewApp.LaunchMainPreview(
+                "before_translate",
+                ResolveRustPreviewTheme("light"),
+                _output,
+                rustOptionEnvironment,
+                schemaSuffix: $"-{dropdown.Key}-select-{dotnetOption.Option.DotnetIndex + 1}");
+            var rustOptionWindow = rustOptionPreview.GetMainWindow(TimeSpan.FromSeconds(30));
+            ArrangeSideBySide(dotnetWindow, rustOptionWindow);
+            WaitForMainWindowReady(rustOptionWindow, "rust");
+            AssertWindowFullyVisible(
+                rustOptionWindow,
+                dotnetOption.ScenarioId,
+                "rust");
+            var rustOptionPath = CaptureWindowPreferHwnd(
+                rustOptionWindow,
+                $"{dotnetOption.ScenarioId}-rust-win-fluent-iced",
+                requireForeground: false);
             var optionSideBySidePath = SaveSideBySideComparison(
-                optionPair.Dotnet.ScreenshotPath,
-                optionPair.Rust.ScreenshotPath,
-                $"{optionPair.Dotnet.ScenarioId}-dotnet-vs-rust-side-by-side");
+                dotnetOption.ScreenshotPath,
+                rustOptionPath,
+                $"{dotnetOption.ScenarioId}-dotnet-vs-rust-side-by-side");
             manifestEntries.Add(CreateMainManifestEntry(
-                optionPair.Dotnet.ScenarioId,
-                $"Main {dropdown.Label} Select {optionPair.Dotnet.Option.Label}",
+                dotnetOption.ScenarioId,
+                $"Main {dropdown.Label} Select {dotnetOption.Option.Label}",
                 dotnetWindow,
-                rustWindow,
-                optionPair.Dotnet.ScreenshotPath,
-                optionPair.Rust.ScreenshotPath,
+                rustOptionWindow,
+                dotnetOption.ScreenshotPath,
+                rustOptionPath,
                 optionSideBySidePath,
                 dropdown.Regions,
                 [dropdown.RustControlId],
-                rustSchemaPath: rustSchemaPath,
+                rustSchemaPath: rustOptionPreview.SchemaPath,
                 operatedDropdownElement: dropdown.DotnetElement,
-                selectedDropdownOption: optionPair.Dotnet.Option));
+                selectedDropdownOption: dotnetOption.Option));
             SaveManifest(manifestEntries);
 
-            AssertImageHasVisibleContent(optionPair.Dotnet.ScreenshotPath);
-            AssertImageHasVisibleContent(optionPair.Rust.ScreenshotPath);
+            AssertImageHasVisibleContent(dotnetOption.ScreenshotPath);
+            AssertImageHasVisibleContent(rustOptionPath);
             AssertImageHasVisibleContent(optionSideBySidePath);
 
             _output.WriteLine(
-                $"[{optionPair.Dotnet.ScenarioId}] Dropdown option: {optionPair.Dotnet.Option.Label}");
+                $"[{dotnetOption.ScenarioId}] Dropdown option: {dotnetOption.Option.Label}");
             _output.WriteLine(
-                $"[{optionPair.Dotnet.ScenarioId}] Dotnet screenshot: {optionPair.Dotnet.ScreenshotPath}");
+                $"[{dotnetOption.ScenarioId}] Dotnet screenshot: {dotnetOption.ScreenshotPath}");
             _output.WriteLine(
-                $"[{optionPair.Dotnet.ScenarioId}] Rust screenshot: {optionPair.Rust.ScreenshotPath}");
+                $"[{dotnetOption.ScenarioId}] Rust screenshot: {rustOptionPath}");
         }
 
         _output.WriteLine($"[main.{dropdown.Key}-open] Dotnet screenshot: {dotnetOpenPath}");
         _output.WriteLine($"[main.{dropdown.Key}-open] Rust screenshot: {rustOpenPath}");
     }
+
+    private static Dictionary<string, string> MainRustDropdownEnvironment(
+        IReadOnlyDictionary<string, string> rustBaseEnvironment,
+        MainDropdownCapture dropdown)
+    {
+        var environment = new Dictionary<string, string>(rustBaseEnvironment, StringComparer.Ordinal);
+        environment[dropdown.RustSelectedLanguageEnvironmentVariable] = dropdown.RestoreOptionIndex >= 0 &&
+            dropdown.RestoreOptionIndex < dropdown.Options.Count
+                ? FloatingLanguageOptionId(dropdown.Options[dropdown.RestoreOptionIndex])
+                : "auto";
+        return environment;
+    }
+
+    private static string MainDropdownAlias(MainDropdownCapture dropdown) =>
+        dropdown.Key.StartsWith("source", StringComparison.OrdinalIgnoreCase) ? "source" : "target";
 
     private static IReadOnlyList<MainInteractionCapture> MainInteractionCaptures() =>
     [
@@ -2466,6 +2507,7 @@ public sealed class DotnetRustParityTests : IDisposable
                 "SourceLangCombo",
                 "SourceLangCombo",
                 "SourceLangCombo",
+                "EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE",
                 0.17,
                 0.47,
                 RestoreOptionIndex: 0,
@@ -2477,9 +2519,10 @@ public sealed class DotnetRustParityTests : IDisposable
                 "TargetLangCombo",
                 "TargetLangCombo",
                 "TargetLangCombo",
+                "EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE",
                 0.62,
                 0.47,
-                RestoreOptionIndex: 0,
+                RestoreOptionIndex: 5,
                 languageOptions,
                 UiParityRegion.DefaultMainRegions),
         ];
@@ -3440,8 +3483,19 @@ public sealed class DotnetRustParityTests : IDisposable
         var optionText = rustSchemaPath == null ? option.DotnetOptionText : option.RustOptionText;
         var optionIndex = rustSchemaPath == null ? option.DotnetIndex : option.RustOptionIndexValue;
         var selected = rustSchemaPath == null &&
-            TrySelectDotnetDropdownOptionWithKeyboard(window, step, optionText, optionIndex);
-        if (!selected && !TryClickVisibleDropdownOption(window, step, rustSchemaPath, optionText))
+            TryClickVisibleDropdownOption(window, step, rustSchemaPath, optionText);
+        if (!selected)
+        {
+            selected = rustSchemaPath == null &&
+                TrySelectDotnetDropdownOptionWithKeyboard(window, step, optionText, optionIndex);
+        }
+
+        if (!selected)
+        {
+            selected = TryClickVisibleDropdownOption(window, step, rustSchemaPath, optionText);
+        }
+
+        if (!selected)
         {
             var fallbackPoint = GetDropdownOptionFallbackPoint(
                 window,
@@ -3453,8 +3507,19 @@ public sealed class DotnetRustParityTests : IDisposable
         }
 
         Thread.Sleep(750);
+        var confirmed = (rustSchemaPath == null && selected) ||
+            ComboBoxRegionContainsText(window, step, optionText, rustSchemaPath);
         _output.WriteLine(
-            $"[{step.Key}] selected dropdown option \"{optionText}\" index={optionIndex} target={(rustSchemaPath == null ? "dotnet" : "rust")}");
+            $"[{step.Key}] selected dropdown option \"{optionText}\" index={optionIndex} target={(rustSchemaPath == null ? "dotnet" : "rust")} confirmed={confirmed}");
+        if (!confirmed)
+        {
+            var diagnosticPath = CaptureWindowPreferHwnd(
+                window,
+                $"{SettingsDropdownOptionScenarioId(step, option)}-selection-unconfirmed-{(rustSchemaPath == null ? "dotnet" : "rust")}",
+                requireForeground: true);
+            throw new InvalidOperationException(
+                $"{step.Key} did not show selected dropdown option '{optionText}' after selection for {(rustSchemaPath == null ? "dotnet" : "rust")}. Diagnostic screenshot: {diagnosticPath}");
+        }
     }
 
     private bool TrySelectDotnetDropdownOptionWithKeyboard(
@@ -3478,7 +3543,7 @@ public sealed class DotnetRustParityTests : IDisposable
             Keyboard.Press(VirtualKeyShort.ENTER);
             Thread.Sleep(650);
 
-            var selected = ComboBoxRegionContainsText(window, step, optionText);
+            var selected = ComboBoxRegionContainsText(window, step, optionText, rustSchemaPath: null);
             _output.WriteLine(
                 $"[{step.Key}] keyboard selected \"{optionText}\" index={optionIndex} confirmed={selected}");
             return selected;
@@ -3494,9 +3559,20 @@ public sealed class DotnetRustParityTests : IDisposable
     private static bool ComboBoxRegionContainsText(
         Window window,
         SettingsParityCaptureStep step,
-        string optionText)
+        string optionText,
+        string? rustSchemaPath)
     {
-        var comboBounds = TryGetDropdownComboPhysicalBounds(window, step, rustSchemaPath: null);
+        if (!string.IsNullOrWhiteSpace(step.ExpandedDropdownElement))
+        {
+            var comboElement = FindVisibleByAutomationIdOrName(window, step.ExpandedDropdownElement);
+            if (comboElement != null &&
+                DropdownOptionNameMatches(SafeElementName(comboElement), optionText))
+            {
+                return true;
+            }
+        }
+
+        var comboBounds = TryGetDropdownComboPhysicalBounds(window, step, rustSchemaPath);
         var searchBounds = Rectangle.Inflate(comboBounds, 24, 12);
         try
         {
@@ -3530,6 +3606,7 @@ public sealed class DotnetRustParityTests : IDisposable
             GetWindowRelativePoint(window, 0.50, 0.50));
         Thread.Sleep(300);
     }
+
 
     private static bool TryClickVisibleDropdownOption(
         Window window,
@@ -3790,16 +3867,17 @@ public sealed class DotnetRustParityTests : IDisposable
             return;
         }
 
-        var element = Retry.WhileNull(
-                () => FindVisibleByAutomationIdOrName(window, automationIdOrName),
-                TimeSpan.FromSeconds(8))
-            .Result;
-        if (element == null &&
+        if (!string.IsNullOrWhiteSpace(rustSchemaPath) &&
             TryClickRustBoundsControl(window, rustSchemaPath, automationIdOrName, step))
         {
             Thread.Sleep(900);
             return;
         }
+
+        var element = Retry.WhileNull(
+                () => FindVisibleByAutomationIdOrName(window, automationIdOrName),
+                TimeSpan.FromSeconds(8))
+            .Result;
 
         element.Should().NotBeNull($"{automationIdOrName} should be visible before dropdown capture");
 
@@ -3833,23 +3911,31 @@ public sealed class DotnetRustParityTests : IDisposable
 
         var point = step.ScrollPercent > 0
             ? GetWindowRelativePoint(window, step.InteractionFallbackX, step.InteractionFallbackY)
-            : RustBoundsCenterPoint(window, bounds);
+            : RustBoundsClickPoint(window, bounds, automationId);
+        window.SetForeground();
         ScreenshotHelper.EnsureWindowReadyForCapture(window, $"{step.Key} retry expand {automationId}");
         Thread.Sleep(150);
         Mouse.Click(point);
         return true;
     }
-
-    private static Point RustBoundsCenterPoint(
+    private static Point RustBoundsClickPoint(
         Window window,
-        UiParityControlBoundsDips bounds)
+        UiParityControlBoundsDips bounds,
+        string automationId)
     {
         var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
         var dpiScale = Math.Max(0.001, ScreenshotHelper.GetWindowDpiScale(window));
+        var xDips = bounds.Left + bounds.Width / 2;
+        if (automationId.Contains("Combo", StringComparison.OrdinalIgnoreCase))
+        {
+            xDips = bounds.Left + Math.Max(4, bounds.Width - 18);
+        }
+
         return new Point(
-            windowBounds.Left + (int)Math.Round((bounds.Left + bounds.Width / 2) * dpiScale),
+            windowBounds.Left + (int)Math.Round(xDips * dpiScale),
             windowBounds.Top + (int)Math.Round((bounds.Top + bounds.Height / 2) * dpiScale));
     }
+
 
     private static bool TryExpandComboBoxElement(AutomationElement element)
     {
@@ -3902,10 +3988,12 @@ public sealed class DotnetRustParityTests : IDisposable
             $"[{label}] {target} dropdown items discovered through UIA: {(discovered.Length == 0 ? "<none>" : string.Join(", ", discovered))}");
 
         var requiredCount = Math.Min(step.DropdownExpectedItems.Count, IsFloatingDropdownStep(step) ? 2 : 3);
-        if (!string.IsNullOrWhiteSpace(rustSchemaPath) && discovered.Length < requiredCount)
+        if (!string.IsNullOrWhiteSpace(rustSchemaPath) &&
+            IsFloatingDropdownStep(step) &&
+            discovered.Length < requiredCount)
         {
             _output.WriteLine(
-                $"[{label}] rust dropdown option text is not exposed through UIA; avoiding a second click because iced ComboBox toggles open/closed.");
+                $"[{label}] rust floating dropdown option text is not exposed through UIA; keeping the opened state for screenshot capture.");
             return;
         }
 
@@ -3985,11 +4073,15 @@ public sealed class DotnetRustParityTests : IDisposable
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(rustSchemaPath) &&
-            TryClickRustBoundsControl(window, rustSchemaPath, dropdownElement, step))
+        if (!string.IsNullOrWhiteSpace(rustSchemaPath))
         {
-            Thread.Sleep(900);
-            return;
+            Keyboard.Press(VirtualKeyShort.ESCAPE);
+            Thread.Sleep(150);
+            if (TryClickRustBoundsControl(window, rustSchemaPath, dropdownElement, step))
+            {
+                Thread.Sleep(900);
+                return;
+            }
         }
 
         var element = FindVisibleByAutomationIdOrName(window, dropdownElement);
@@ -9183,6 +9275,7 @@ public sealed class DotnetRustParityTests : IDisposable
         string DotnetElement,
         string RustElement,
         string RustControlId,
+        string RustSelectedLanguageEnvironmentVariable,
         double FallbackX,
         double FallbackY,
         int RestoreOptionIndex,
@@ -9190,7 +9283,6 @@ public sealed class DotnetRustParityTests : IDisposable
         IReadOnlyList<UiParityRegion> Regions,
         double FallbackWidthDips = 280,
         double FallbackHeightDips = 34);
-
     private readonly record struct FloatingCaptureScope(
         bool CaptureTranslateButton,
         bool CaptureDropdowns,

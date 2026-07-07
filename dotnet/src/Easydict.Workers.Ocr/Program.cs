@@ -198,7 +198,10 @@ internal static class Program
 
     private static OcrLineDto ConvertLine(WinOcr.OcrLine line)
     {
-        var words = line.Words.Select(word => word.Text).Where(text => !string.IsNullOrWhiteSpace(text)).ToList();
+        var recognizedWords = line.Words
+            .Where(word => !string.IsNullOrWhiteSpace(word.Text))
+            .ToList();
+        var words = recognizedWords.Select(word => word.Text).ToList();
         // Legacy fallback text (naive space join). The host prefers the raw Words below and
         // re-merges them with the CJK-aware merger so this space join is not used when Words flow through.
         var text = string.Join(" ", words);
@@ -208,7 +211,7 @@ internal static class Program
         double maxX = double.MinValue;
         double maxY = double.MinValue;
 
-        foreach (var word in line.Words)
+        foreach (var word in recognizedWords)
         {
             var rect = word.BoundingRect;
             minX = Math.Min(minX, rect.X);

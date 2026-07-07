@@ -78,9 +78,8 @@ public static class Program
         }
 
         // Determine if this launch should trigger OCR
-        var shouldTriggerOcr = args.Contains("--ocr-translate")
-            || IsOcrProtocolActivation()
-            || args.Any(a => a.StartsWith("easydict://ocr-translate", StringComparison.OrdinalIgnoreCase));
+        var shouldTriggerOcr = IsOcrTranslateCommandLine(args)
+            || IsOcrProtocolActivation();
 
         if (shouldTriggerOcr)
         {
@@ -106,8 +105,9 @@ public static class Program
         // the newer window uses the current config. That desync is the root cause of issue #176
         // (Alt+S OCR uses Windows OCR while the in-app camera button uses the configured engine).
         //
-        // The transient --ocr-translate signaler handled above never reaches here (it exits after
-        // signaling the running instance via the named event), so OCR IPC is unaffected.
+        // The transient --ocr-translate signaler normally exits above after signaling the
+        // running instance. If the primary is still starting and has not created the named
+        // event yet, the activation is redirected and the primary replays the OCR intent.
         if (!TryClaimPrimaryInstance())
         {
             return; // This activation was redirected to the already-running instance.
@@ -167,8 +167,9 @@ public static class Program
     private static void OnPrimaryActivated(object? sender, AppActivationArguments args)
     {
         // A second launch was redirected to us — bring the existing window to the foreground.
-        // (OCR intents from a running instance arrive via the named event, not here.)
-        App.HandleRedirectedActivation();
+        // OCR intents normally arrive via the named event, but a startup race can redirect
+        // the activation before the primary has created that event.
+        App.HandleRedirectedActivation(args);
     }
 
     /// <summary>
@@ -236,15 +237,7 @@ public static class Program
         try
         {
             var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            if (activatedArgs.Kind != ExtendedActivationKind.Protocol)
-                return false;
-
-            if (activatedArgs.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs)
-            {
-                // easydict://ocr-translate → Host = "ocr-translate"
-                return string.Equals(protocolArgs.Uri.Host, "ocr-translate",
-                    StringComparison.OrdinalIgnoreCase);
-            }
+            return IsOcrTranslateActivation(activatedArgs);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -252,4 +245,34 @@ public static class Program
         }
         return false;
     }
+
+    internal static bool IsOcrTranslateActivation(AppActivationArguments activationArgs)
+    {
+        if (activationArgs.Kind == ExtendedActivationKind.Protocol &&
+            activationArgs.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs)
+        {
+            return IsOcrTranslateUri(protocolArgs.Uri);
+        }
+
+        if (activationArgs.Kind == ExtendedActivationKind.Launch &&
+            activationArgs.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs)
+        {
+            return IsOcrTranslateCommandLine(launchArgs.Arguments);
+        }
+
+        return false;
+    }
+
+    private static bool IsOcrTranslateCommandLine(IEnumerable<string> args) =>
+        args.Any(arg =>
+            string.Equals(arg, "--ocr-translate", StringComparison.OrdinalIgnoreCase) ||
+            arg.StartsWith("easydict://ocr-translate", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsOcrTranslateCommandLine(string? arguments) =>
+        !string.IsNullOrWhiteSpace(arguments) &&
+        (arguments.Contains("--ocr-translate", StringComparison.OrdinalIgnoreCase) ||
+            arguments.Contains("easydict://ocr-translate", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsOcrTranslateUri(Uri uri) =>
+        string.Equals(uri.Host, "ocr-translate", StringComparison.OrdinalIgnoreCase);
 }

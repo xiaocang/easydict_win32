@@ -11,6 +11,8 @@ namespace Easydict.WinUI.Services;
 /// </summary>
 public static class OcrServiceFactory
 {
+    internal static readonly TimeSpan ApiOcrRequestTimeout = TimeSpan.FromMinutes(3);
+
     private static readonly object _httpClientLock = new();
     private static HttpClient? _sharedHttpClient;
     private static ProxySnapshot? _sharedProxySnapshot;
@@ -22,7 +24,7 @@ public static class OcrServiceFactory
     /// <param name="options">OCR engine and request options to use for this service instance.</param>
     /// <param name="httpClient">
     /// Optional shared <see cref="HttpClient"/> for API-based engines.
-    /// If null, a shared client with a 60-second timeout is used.
+    /// If null, a shared client with a 3-minute timeout is used.
     /// </param>
     /// <returns>An <see cref="IOcrService"/> ready to recognize text.</returns>
     public static IOcrService Create(OcrServiceOptions? options = null, HttpClient? httpClient = null)
@@ -59,7 +61,7 @@ public static class OcrServiceFactory
     {
         return new HttpClient(CreateProxyAwareHandler(proxyEnabled, proxyUri, proxyBypassLocal))
         {
-            Timeout = timeout ?? TimeSpan.FromSeconds(60)
+            Timeout = timeout ?? ApiOcrRequestTimeout
         };
     }
 

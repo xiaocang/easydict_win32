@@ -68,9 +68,21 @@ public sealed class OcrTranslateService
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (TimeoutException ex)
+        {
+            var message = $"[OcrTranslate] OCR request timed out: {ex.Message}";
+            Debug.WriteLine(message);
+            App.LogToFile(message);
+        }
+        catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
         {
             Debug.WriteLine("[OcrTranslate] Operation cancelled");
+        }
+        catch (OperationCanceledException ex)
+        {
+            var message = $"[OcrTranslate] OCR operation cancelled unexpectedly: {ex.Message}";
+            Debug.WriteLine(message);
+            App.LogToFile(message);
         }
         catch (Exception ex)
         {
@@ -137,9 +149,21 @@ public sealed class OcrTranslateService
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (TimeoutException ex)
+        {
+            var message = $"[OcrTranslate] Silent OCR request timed out: {ex.Message}";
+            Debug.WriteLine(message);
+            App.LogToFile(message);
+        }
+        catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
         {
             Debug.WriteLine("[OcrTranslate] Silent OCR cancelled");
+        }
+        catch (OperationCanceledException ex)
+        {
+            var message = $"[OcrTranslate] Silent OCR operation cancelled unexpectedly: {ex.Message}";
+            Debug.WriteLine(message);
+            App.LogToFile(message);
         }
         catch (Exception ex)
         {
@@ -174,10 +198,12 @@ public sealed class OcrTranslateService
     private static void LogOcrDiagnostics(string flow, OcrServiceOptions options)
     {
         var settings = SettingsService.Instance;
-        Debug.WriteLine(
+        var message =
             $"[OcrTranslate] {flow} pid={Environment.ProcessId} engine={options.Engine} " +
             $"useWorker={settings.UseOcrWorker} endpoint={FormatEndpointForDiagnostics(options)} " +
-            $"model={options.Model}");
+            $"model={options.Model}";
+        Debug.WriteLine(message);
+        App.LogToFile(message);
     }
 
     internal static string FormatEndpointForDiagnostics(OcrServiceOptions options) =>

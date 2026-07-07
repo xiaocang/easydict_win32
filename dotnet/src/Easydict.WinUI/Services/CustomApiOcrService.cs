@@ -70,23 +70,39 @@ public sealed class CustomApiOcrService : IOcrService
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         }
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var text = usesResponses
-            ? ParseResponsesTextResponse(json)
-            : ParseOpenAIVisionResponse(json);
-
-        Debug.WriteLine($"[CustomApiOcr] Recognized {text.Length} chars");
-
-        return new OcrResult
+        HttpResponseMessage response;
+        try
         {
-            Text = text,
-            Lines = [],
-            TextAngle = null,
-            DetectedLanguage = null
-        };
+            response = await _httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            Debug.WriteLine(
+                $"[CustomApiOcr] Request timed out. timeout={FormatTimeout(_httpClient.Timeout)}");
+            throw new TimeoutException(
+                $"Custom API OCR request timed out after {FormatTimeout(_httpClient.Timeout)}.",
+                ex);
+        }
+
+        using (response)
+        {
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var text = usesResponses
+                ? ParseResponsesTextResponse(json)
+                : ParseOpenAIVisionResponse(json);
+
+            Debug.WriteLine($"[CustomApiOcr] Recognized {text.Length} chars");
+
+            return new OcrResult
+            {
+                Text = text,
+                Lines = [],
+                TextAngle = null,
+                DetectedLanguage = null
+            };
+        }
     }
 
     /// <inheritdoc />
@@ -118,6 +134,13 @@ public sealed class CustomApiOcrService : IOcrService
                 }
             }
         };
+    }
+
+    private static string FormatTimeout(TimeSpan timeout)
+    {
+        return timeout == Timeout.InfiniteTimeSpan
+            ? "infinite"
+            : $"{timeout.TotalSeconds:0.#}s";
     }
 
     private static object BuildResponsesRequestBody(

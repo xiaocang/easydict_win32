@@ -89,4 +89,21 @@ public class CustomApiOcrServiceTests
             .GetString()
             .Should().Be("input_image");
     }
+
+    [Fact]
+    public async Task RecognizeAsync_ThrowsTimeoutException_WhenHttpClientCancelsRequest()
+    {
+        var handler = new RecordingHttpMessageHandler((_, _) =>
+            throw new TaskCanceledException("simulated timeout"));
+        using var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
+        var service = new CustomApiOcrService(client);
+
+        var act = async () => await service.RecognizeAsync(new byte[4], 1, 1);
+
+        await act.Should().ThrowAsync<TimeoutException>()
+            .WithMessage("*Custom API OCR request timed out*5s*");
+    }
 }

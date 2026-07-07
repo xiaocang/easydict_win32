@@ -161,6 +161,17 @@ public class OcrServiceFactoryTests
     }
 
     [Fact]
+    public void CreateProxyAwareHttpClient_UsesApiOcrTimeout_ByDefault()
+    {
+        using var client = OcrServiceFactory.CreateProxyAwareHttpClient(
+            proxyEnabled: false,
+            proxyUri: null,
+            proxyBypassLocal: true);
+
+        client.Timeout.Should().Be(OcrServiceFactory.ApiOcrRequestTimeout);
+    }
+
+    [Fact]
     public void CreateProxyAwareHandler_ConfiguresExplicitProxy_WhenEnabled()
     {
         using var handler = OcrServiceFactory.CreateProxyAwareHandler(

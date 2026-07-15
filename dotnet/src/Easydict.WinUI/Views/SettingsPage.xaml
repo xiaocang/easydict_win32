@@ -300,6 +300,7 @@
 
                         <!-- Windows Local AI (Phi Silica, Foundry Local, and OpenVINO fallback) -->
                         <Expander x:Name="WindowsLocalAIExpander"
+                                AutomationProperties.AutomationId="WindowsLocalAIExpander"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
                                 Tag="windows-local-ai">
@@ -383,6 +384,7 @@
                                                    ToolTipService.ToolTip="Best quality when available."/>
                                     </StackPanel>
                                     <InfoBar x:Name="WindowsLocalAIStatusBar"
+                                             AutomationProperties.AutomationId="WindowsLocalAIStatusBar"
                                              IsOpen="True"
                                              IsClosable="False"
                                              Severity="Informational"

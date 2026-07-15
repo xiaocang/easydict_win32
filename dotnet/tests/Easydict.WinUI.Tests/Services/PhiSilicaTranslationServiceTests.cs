@@ -72,6 +72,42 @@ public class PhiSilicaTranslationServiceTests
     }
 
     [Fact]
+    public void GetReadyState_BelowMinimumOsBaseline_DoesNotProbeLanguageModel()
+    {
+        var probeCount = 0;
+        var client = new WindowsLanguageModelClient(
+            () => new WindowsLanguageModelClient.WindowsBuildInfo("19045", 0),
+            () =>
+            {
+                probeCount++;
+                throw new InvalidOperationException("LanguageModel must not be probed.");
+            });
+
+        client.GetReadyState().Should().Be(WindowsAIReadyState.UnsupportedWindowsAIBaseline);
+        probeCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void GetHealthFingerprint_BelowMinimumOsBaseline_DoesNotProbeLanguageModel()
+    {
+        var probeCount = 0;
+        var client = new WindowsLanguageModelClient(
+            () => new WindowsLanguageModelClient.WindowsBuildInfo("19045", 0),
+            () =>
+            {
+                probeCount++;
+                throw new InvalidOperationException("LanguageModel must not be probed.");
+            });
+
+        var fingerprint = client.GetHealthFingerprint();
+
+        fingerprint.WindowsAppSdkVersion.Should().Be("not-probed");
+        fingerprint.ComponentMarker.Should().Be("Microsoft.Windows.AI.Text; readyState=not-probed");
+        fingerprint.PhiSilicaAiComponentsPresent.Should().BeNull();
+        probeCount.Should().Be(0);
+    }
+
+    [Fact]
     public void MapReadyStateToStatus_UnsupportedBaseline_UsesDedicatedResource()
     {
         var status = PhiSilicaTranslationService.MapReadyStateToStatus(

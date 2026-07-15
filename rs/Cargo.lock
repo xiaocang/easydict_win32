@@ -1394,6 +1394,8 @@ name = "easydict_preview_iced"
 version = "0.1.0"
 dependencies = [
  "easydict_app",
+ "serde",
+ "serde_json",
  "win_fluent",
  "win_fluent_backend_iced",
 ]
@@ -6765,6 +6767,8 @@ version = "0.1.0"
 dependencies = [
  "easydict_windows_shell",
  "iced",
+ "serde",
+ "serde_json",
  "win_fluent",
  "win_fluent_platform_win",
 ]

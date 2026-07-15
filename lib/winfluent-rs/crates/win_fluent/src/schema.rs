@@ -22,6 +22,66 @@ impl ViewSchema {
     }
 }
 
+#[cfg(feature = "parity-diagnostics")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiagnosticViewSchema {
+    pub version: u16,
+    pub root: DiagnosticNode,
+    pub warnings: Vec<String>,
+}
+#[cfg(feature = "parity-diagnostics")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiagnosticNode {
+    pub path: crate::diff::ViewPath,
+    pub kind: String,
+    pub id: Option<String>,
+    pub properties: Vec<SchemaProperty>,
+    pub style_classes: Vec<String>,
+    pub provenance: crate::provenance::ViewProvenance,
+    pub children: Vec<DiagnosticNode>,
+}
+
+#[cfg(feature = "parity-diagnostics")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiagnosticViewDiff {
+    pub changes: Vec<DiagnosticChange>,
+}
+
+#[cfg(feature = "parity-diagnostics")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiagnosticChange {
+    pub path: crate::diff::ViewPath,
+    pub property: Option<String>,
+    pub before: Option<String>,
+    pub after: Option<String>,
+    pub before_source: Option<crate::provenance::SourceLocation>,
+    pub after_source: Option<crate::provenance::SourceLocation>,
+}
+
+#[cfg(feature = "parity-diagnostics")]
+pub fn diagnostic_view_schema<Message>(view: &View<Message>) -> DiagnosticViewSchema {
+    let root = diagnostic_node(view, crate::diff::ViewPath::root());
+    let mut warnings = Vec::new();
+    collect_duplicate_id_warnings(&root, &mut warnings);
+    DiagnosticViewSchema {
+        version: VIEW_SCHEMA_VERSION,
+        root,
+        warnings,
+    }
+}
+
+#[cfg(feature = "parity-diagnostics")]
+pub fn diagnostic_diff_views<Message>(
+    before: &View<Message>,
+    after: &View<Message>,
+) -> DiagnosticViewDiff {
+    let before_schema = diagnostic_view_schema(before);
+    let after_schema = diagnostic_view_schema(after);
+    let mut changes = Vec::new();
+    diff_diagnostic_nodes(&mut changes, &before_schema.root, &after_schema.root);
+    DiagnosticViewDiff { changes }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SchemaNode {
     pub kind: &'static str,
@@ -1602,5 +1662,270 @@ mod tests {
         assert!(snapshot.contains(
             "Text value=\"Adjust speech rate\" style=Caption selectable=false id=\"TtsSpeedDescriptionText\""
         ));
+    }
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn diagnostic_node<Message>(
+    view: &View<Message>,
+    path: crate::diff::ViewPath,
+) -> DiagnosticNode {
+    let declarative = schema_node(view);
+    let children = diagnostic_children(view.token())
+        .into_iter()
+        .enumerate()
+        .map(|(index, child)| {
+            let id = schema_node(child).id;
+            let segment = id
+                .map(|id| format!("{index}:{id}"))
+                .unwrap_or_else(|| format!("{index}:{}", schema_node(child).kind));
+            diagnostic_node(child, path.child(segment))
+        })
+        .collect();
+    DiagnosticNode {
+        path,
+        kind: declarative.kind.to_string(),
+        id: declarative.id,
+        properties: declarative.properties,
+        style_classes: diagnostic_style_classes(view.token()),
+        provenance: view.provenance().clone(),
+        children,
+    }
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn diagnostic_style_classes<Message>(token: &ViewToken<Message>) -> Vec<String> {
+    match token {
+        ViewToken::Layout(token) => token.style.classes().to_vec(),
+        ViewToken::Expander(token) => token
+            .header_style
+            .classes()
+            .iter()
+            .chain(token.content_style.classes().iter())
+            .cloned()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn diagnostic_children<Message>(token: &ViewToken<Message>) -> Vec<&View<Message>> {
+    match token {
+        ViewToken::Page(token) => token.content.iter().map(Box::as_ref).collect(),
+        ViewToken::TitleBar(token) => token.commands.iter().collect(),
+        ViewToken::BusyOverlay(token) => vec![token.content.as_ref()],
+        ViewToken::CommandBar(token) => token.items.iter().collect(),
+        ViewToken::NavigationView(token) => token.content.iter().map(Box::as_ref).collect(),
+        ViewToken::Dialog(token) => token.content.iter().map(Box::as_ref).collect(),
+        ViewToken::Layout(token) => token.children.iter().collect(),
+        ViewToken::Grid(token) => token.children.iter().map(|child| &child.view).collect(),
+        ViewToken::Border(token) => vec![token.content.as_ref()],
+        ViewToken::Viewbox(token) => vec![token.content.as_ref()],
+        ViewToken::TabView(token) => token.tabs.iter().map(|tab| &tab.content).collect(),
+        ViewToken::ListView(token) => token.items.iter().map(|item| &item.view).collect(),
+        ViewToken::Wrap(token) => token.children.iter().collect(),
+        ViewToken::Flyout(token) => vec![token.anchor.as_ref(), token.content.as_ref()],
+        ViewToken::Overlay(token) => {
+            let mut children: Vec<&View<Message>> = vec![token.base.as_ref()];
+            children.extend(token.layers.iter().map(|layer| layer.content.as_ref()));
+            children
+        }
+        ViewToken::AdaptiveSwitch(token) => match token.resolved_branch() {
+            Some(branch) => vec![branch],
+            None => vec![token.wide.as_ref(), token.narrow.as_ref()],
+        },
+        ViewToken::Lazy(token) => vec![token.content.as_ref()],
+        ViewToken::ScrollView(token) => token.content.iter().map(Box::as_ref).collect(),
+        ViewToken::Card(token) => {
+            let mut children: Vec<&View<Message>> =
+                token.content.iter().map(Box::as_ref).collect();
+            children.extend(token.trailing.iter());
+            children
+        }
+        ViewToken::Expander(token) => {
+            let mut children: Vec<&View<Message>> = if token.expanded {
+                token.content.iter().map(Box::as_ref).collect()
+            } else {
+                Vec::new()
+            };
+            children.extend(token.trailing.iter());
+            children
+        }
+        ViewToken::SettingsRow(token) => {
+            let mut children: Vec<&View<Message>> =
+                token.content.iter().map(Box::as_ref).collect();
+            children.extend(token.trailing.iter());
+            children
+        }
+        ViewToken::PointerRegion(token) => vec![token.content.as_ref()],
+        ViewToken::Custom(token) => token.children.iter().collect(),
+        ViewToken::Text(_)
+        | ViewToken::RichText(_)
+        | ViewToken::Button(_)
+        | ViewToken::ToggleButton(_)
+        | ViewToken::SplitButton(_)
+        | ViewToken::TreeView(_)
+        | ViewToken::FlyoutButton(_)
+        | ViewToken::StatusBadge(_)
+        | ViewToken::InfoBar(_)
+        | ViewToken::ProgressRing(_)
+        | ViewToken::ProgressBar(_)
+        | ViewToken::Spacer(_)
+        | ViewToken::TextEditor(_)
+        | ViewToken::CheckBox(_)
+        | ViewToken::RadioGroup(_)
+        | ViewToken::ToggleSwitch(_)
+        | ViewToken::Slider(_)
+        | ViewToken::NumberBox(_)
+        | ViewToken::AutoSuggestBox(_)
+        | ViewToken::ComboBox(_)
+        | ViewToken::ResultCard(_)
+        | ViewToken::ResultList(_)
+        | ViewToken::TrayMenu(_)
+        | ViewToken::CaptureOverlay(_)
+        | ViewToken::Image(_)
+        | ViewToken::WebView(_) => Vec::new(),
+    }
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn collect_duplicate_id_warnings(node: &DiagnosticNode, warnings: &mut Vec<String>) {
+    let mut seen: Vec<(&str, &crate::diff::ViewPath)> = Vec::new();
+    for child in &node.children {
+        if let Some(id) = child.id.as_deref() {
+            if let Some((_, first_path)) = seen.iter().find(|(seen_id, _)| *seen_id == id) {
+                warnings.push(format!(
+                    "duplicate-id:{id}:{}:{}",
+                    first_path, child.path
+                ));
+            } else {
+                seen.push((id, &child.path));
+            }
+        }
+    }
+    for child in &node.children {
+        collect_duplicate_id_warnings(child, warnings);
+    }
+}
+
+
+#[cfg(feature = "parity-diagnostics")]
+fn diff_diagnostic_nodes(
+    changes: &mut Vec<DiagnosticChange>,
+    before: &DiagnosticNode,
+    after: &DiagnosticNode,
+) {
+    if before.kind != after.kind || before.id != after.id {
+        changes.push(DiagnosticChange {
+            path: after.path.clone(),
+            property: None,
+            before: Some(before.kind.clone()),
+            after: Some(after.kind.clone()),
+            before_source: Some(before.provenance.constructor),
+            after_source: Some(after.provenance.constructor),
+        });
+        return;
+    }
+    for property in before
+        .properties
+        .iter()
+        .filter_map(|property| Some(property.name.as_str()))
+        .chain(after.properties.iter().map(|property| property.name.as_str()))
+    {
+        if changes.iter().any(|change: &DiagnosticChange| {
+            change.path == after.path && change.property.as_deref() == Some(property)
+        }) {
+            continue;
+        }
+        let left = before.properties.iter().find(|item| item.name == property);
+        let right = after.properties.iter().find(|item| item.name == property);
+        if left.map(|item| &item.value) != right.map(|item| &item.value) {
+            changes.push(DiagnosticChange {
+                path: after.path.clone(),
+                property: Some(property.to_string()),
+                before: left.map(|item| item.value.clone()),
+                after: right.map(|item| item.value.clone()),
+                before_source: left.and_then(|_| before.provenance.source_for(property)),
+                after_source: right.and_then(|_| after.provenance.source_for(property)),
+            });
+        }
+    }
+    let max = before.children.len().max(after.children.len());
+    for index in 0..max {
+        match (before.children.get(index), after.children.get(index)) {
+            (Some(left), Some(right)) => diff_diagnostic_nodes(changes, left, right),
+            (Some(left), None) => changes.push(DiagnosticChange {
+                path: left.path.clone(),
+                property: None,
+                before: Some(left.kind.clone()),
+                after: None,
+                before_source: Some(left.provenance.constructor),
+                after_source: None,
+            }),
+            (None, Some(right)) => changes.push(DiagnosticChange {
+                path: right.path.clone(),
+                property: None,
+                before: None,
+                after: Some(right.kind.clone()),
+                before_source: None,
+                after_source: Some(right.provenance.constructor),
+            }),
+            (None, None) => {}
+        }
+    }
+}
+
+#[cfg(all(test, feature = "parity-diagnostics"))]
+mod diagnostic_tests {
+    use super::*;
+    use crate::view::{button, text, IntoView, Length};
+
+    #[test]
+    fn explicit_width_records_setter_source_and_default_constructor() {
+        let default_view = text::<()>("default");
+        let explicit_view = button::<()>("run")
+            .width(Length::Fixed(120))
+            .into_view();
+        let diagnostic = diagnostic_view_schema(&explicit_view);
+        let width = diagnostic
+            .root
+            .properties
+            .iter()
+            .find(|property| property.name == "width")
+            .expect("button width property");
+        let source = diagnostic
+            .root
+            .provenance
+            .source_for(&width.name)
+            .expect("width source");
+        assert_ne!(source.file, "<unavailable>");
+        assert!(source.line > 0);
+        assert_ne!(
+            default_view.provenance().constructor,
+            crate::provenance::SourceLocation {
+                file: "<unavailable>",
+                line: 0,
+                column: 0
+            }
+        );
+    }
+
+    #[test]
+    fn duplicate_ids_keep_structural_paths() {
+        let view = crate::view::column((
+            button::<()>("one").id("dup").into_view(),
+            button::<()>("two").id("dup").into_view(),
+        ))
+        .id("root")
+        .into_view();
+        let diagnostic = diagnostic_view_schema(&view);
+        let paths = diagnostic
+            .root
+            .children
+            .iter()
+            .map(|node| node.path.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(paths, vec!["root/0:dup", "root/1:dup"]);
+        assert_eq!(diagnostic.warnings.len(), 1);
     }
 }

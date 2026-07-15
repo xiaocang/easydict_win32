@@ -4,6 +4,10 @@ edition.workspace = true
 license.workspace = true
 version.workspace = true
 
+ 
+[features]
+default = []
+parity-diagnostics = []
 [dependencies]
 futures-core = "0.3"
 futures-util = "0.3"

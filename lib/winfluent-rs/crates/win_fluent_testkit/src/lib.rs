@@ -16,6 +16,21 @@ pub fn view_snapshot<Message>(view: &View<Message>) -> String {
     view_schema(view).snapshot()
 }
 
+#[cfg(feature = "parity-diagnostics")]
+pub fn diagnostic_snapshot<Message>(
+    view: &View<Message>,
+) -> win_fluent::DiagnosticViewSchema {
+    win_fluent::diagnostic_view_schema(view)
+}
+
+#[cfg(feature = "parity-diagnostics")]
+pub fn diagnostic_diff<Message>(
+    before: &View<Message>,
+    after: &View<Message>,
+) -> win_fluent::DiagnosticViewDiff {
+    win_fluent::diagnostic_diff_views(before, after)
+}
+
 pub fn layout_snapshot<Message>(view: &View<Message>) -> String {
     let mut output = String::new();
     write_layout(&mut output, view, 0);
@@ -1267,5 +1282,204 @@ mod tests {
 
         assert!(ppm.starts_with(b"P6\n1 2\n255\n"));
         assert!(ppm.ends_with(&[1, 2, 3, 4, 5, 6]));
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    fn diagnostic_source_line(node: &win_fluent::DiagnosticNode, property: &str) -> u32 {
+        node.provenance
+            .source_for(property)
+            .unwrap_or_else(|| panic!("missing provenance for {property}"))
+            .line
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn diagnostics_track_layout_constructor_defaults_setters_and_style_classes() {
+        let constructor_line = line!() + 1;
+        let builder = column::<Msg, _>(());
+        let width_line = line!() + 1;
+        let builder = builder.width(Length::Fill);
+        let style_line = line!() + 1;
+        let view = builder.tw("gap-3 items-center").into_view();
+
+        let diagnostic = crate::diagnostic_snapshot(&view);
+
+        assert_eq!(diagnostic.root.provenance.constructor.line, constructor_line);
+        assert_eq!(
+            diagnostic_source_line(&diagnostic.root, "height"),
+            constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&diagnostic.root, "width"),
+            width_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&diagnostic.root, "style"),
+            style_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&diagnostic.root, "spacing"),
+            style_line
+        );
+        assert_eq!(
+            diagnostic.root.style_classes,
+            vec!["gap-3".to_string(), "items-center".to_string()]
+        );
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn diagnostics_track_setters_across_previously_uninstrumented_builders() {
+        let card_constructor_line = line!() + 1;
+        let card_builder = card::<Msg>("Result");
+        let card_padding_line = line!() + 1;
+        let card = card_builder.padding(16).into_view();
+        let card_diagnostic = crate::diagnostic_snapshot(&card);
+        assert_eq!(
+            card_diagnostic.root.provenance.constructor.line,
+            card_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&card_diagnostic.root, "padding"),
+            card_padding_line
+        );
+
+        let editor_constructor_line = line!() + 1;
+        let editor_builder = text_editor::<Msg>("value");
+        let editor_height_line = line!() + 1;
+        let editor = editor_builder.min_height(72).into_view();
+        let editor_diagnostic = crate::diagnostic_snapshot(&editor);
+        assert_eq!(
+            editor_diagnostic.root.provenance.constructor.line,
+            editor_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&editor_diagnostic.root, "height"),
+            editor_height_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&editor_diagnostic.root, "min_height"),
+            editor_height_line
+        );
+
+        let grid_constructor_line = line!() + 1;
+        let grid_builder = grid::<Msg>();
+        let grid_rows_line = line!() + 1;
+        let grid_builder = grid_builder.rows([Length::Shrink, Length::Fill]);
+        let grid_spacing_line = line!() + 1;
+        let grid = grid_builder.spacing(8).into_view();
+        let grid_diagnostic = crate::diagnostic_snapshot(&grid);
+        assert_eq!(
+            grid_diagnostic.root.provenance.constructor.line,
+            grid_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&grid_diagnostic.root, "rows"),
+            grid_rows_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&grid_diagnostic.root, "row_spacing"),
+            grid_spacing_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&grid_diagnostic.root, "column_spacing"),
+            grid_spacing_line
+        );
+
+        let flyout_constructor_line = line!() + 1;
+        let flyout_builder = flyout::<Msg, _, _>(text("anchor"), text("content"));
+        let flyout_placement_line = line!() + 2;
+        let flyout = flyout_builder
+            .placement(FlyoutPlacement::Top)
+            .into_view();
+        let flyout_diagnostic = crate::diagnostic_snapshot(&flyout);
+        assert_eq!(
+            flyout_diagnostic.root.provenance.constructor.line,
+            flyout_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&flyout_diagnostic.root, "placement"),
+            flyout_placement_line
+        );
+
+        let overlay_constructor_line = line!() + 1;
+        let overlay_builder = overlay::<Msg, _>(text("base"));
+        let overlay_layer_line = line!() + 2;
+        let overlay = overlay_builder
+            .layer(OverlayLayer::new(text("layer")).blocks_input(true))
+            .into_view();
+        let overlay_diagnostic = crate::diagnostic_snapshot(&overlay);
+        assert_eq!(
+            overlay_diagnostic.root.provenance.constructor.line,
+            overlay_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&overlay_diagnostic.root, "layers"),
+            overlay_layer_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&overlay_diagnostic.root, "blocking_layers"),
+            overlay_layer_line
+        );
+
+        let list_constructor_line = line!() + 1;
+        let list_builder = result_list::<Msg>([ResultItem::new("one", "One", "Body")]);
+        let list_height_line = line!() + 1;
+        let list = list_builder.height(Length::Fill).into_view();
+        let list_diagnostic = crate::diagnostic_snapshot(&list);
+        assert_eq!(
+            list_diagnostic.root.provenance.constructor.line,
+            list_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(&list_diagnostic.root, "height"),
+            list_height_line
+        );
+
+        let result_card_constructor_line = line!() + 2;
+        let result_card_builder =
+            result_card::<Msg>(ResultItem::new("card", "Card", "Body"));
+        let result_card_transition_line = line!() + 1;
+        let result_card = result_card_builder.collapse_transition_ms(180).into_view();
+        let result_card_diagnostic = crate::diagnostic_snapshot(&result_card);
+        assert_eq!(
+            result_card_diagnostic.root.provenance.constructor.line,
+            result_card_constructor_line
+        );
+        assert_eq!(
+            diagnostic_source_line(
+                &result_card_diagnostic.root,
+                "collapse_transition_ms"
+            ),
+            result_card_transition_line
+        );
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn diagnostics_keep_duplicate_ids_distinct_by_structural_path() {
+        let first = card::<Msg>("First").id("duplicate").into_view();
+        let second = card::<Msg>("Second").id("duplicate").into_view();
+        let view = column((first, second)).into_view();
+
+        let diagnostic = crate::diagnostic_snapshot(&view);
+
+        assert_eq!(diagnostic.root.children.len(), 2);
+        assert_eq!(
+            diagnostic.root.children[0].id.as_deref(),
+            Some("duplicate")
+        );
+        assert_eq!(
+            diagnostic.root.children[1].id.as_deref(),
+            Some("duplicate")
+        );
+        assert_ne!(
+            diagnostic.root.children[0].path,
+            diagnostic.root.children[1].path
+        );
+        assert!(diagnostic
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("duplicate-id:duplicate")));
     }
 }

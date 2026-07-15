@@ -10,6 +10,8 @@ use crate::platform::{TrayMenu, TrayMenuItem, TrayMenuPresenterStyle};
 use crate::state::{ControlState, ValidationSeverity, ValidationState};
 use crate::style::{utility_scale, FluentStyle};
 
+#[cfg(feature = "parity-diagnostics")]
+use crate::provenance::ViewProvenance;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TooltipPlacement {
     #[default]
@@ -27,10 +29,37 @@ pub struct View<Message> {
     /// every control, not just `button`.
     tooltip: Option<String>,
     tooltip_placement: TooltipPlacement,
+    #[cfg(feature = "parity-diagnostics")]
+    provenance: ViewProvenance,
 }
 
 impl<Message> View<Message> {
+    #[track_caller]
     pub fn new(token: ViewToken<Message>) -> Self {
+        Self::with_provenance(token, {
+            #[cfg(feature = "parity-diagnostics")]
+            {
+                ViewProvenance::caller()
+            }
+            #[cfg(not(feature = "parity-diagnostics"))]
+            {
+                ()
+            }
+        })
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    pub(crate) fn with_provenance(token: ViewToken<Message>, provenance: ViewProvenance) -> Self {
+        Self {
+            token,
+            tooltip: None,
+            tooltip_placement: TooltipPlacement::default(),
+            provenance,
+        }
+    }
+
+    #[cfg(not(feature = "parity-diagnostics"))]
+    fn with_provenance(token: ViewToken<Message>, _: ()) -> Self {
         Self {
             token,
             tooltip: None,
@@ -42,21 +71,32 @@ impl<Message> View<Message> {
         &self.token
     }
 
+    #[cfg(feature = "parity-diagnostics")]
+    pub fn provenance(&self) -> &ViewProvenance {
+        &self.provenance
+    }
     pub fn into_token(self) -> ViewToken<Message> {
         self.token
     }
 
     /// Attach a hover tooltip to this view. Works on any element, mirroring
     /// WinUI's attached `ToolTipService.ToolTip` property.
-    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
-        self.tooltip = Some(tooltip.into());
-        self
-    }
+    #[track_caller]
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["tooltip"]); self.tooltip = Some(tooltip.into());
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("tooltip");
+    self }
 
     /// Attach a hover tooltip with an explicit placement.
+    #[track_caller]
     pub fn tooltip_at(mut self, tooltip: impl Into<String>, placement: TooltipPlacement) -> Self {
         self.tooltip = Some(tooltip.into());
         self.tooltip_placement = placement;
+        #[cfg(feature = "parity-diagnostics")]
+        {
+            self.provenance.set("tooltip");
+            self.provenance.set("tooltip_placement");
+        }
         self
     }
 
@@ -70,34 +110,58 @@ impl<Message> View<Message> {
         self.tooltip_placement
     }
 
+    #[track_caller]
     pub fn text_margin(mut self, margin: Edges) -> Self {
         if let ViewToken::Text(token) = &mut self.token {
             token.margin = margin;
         }
+        #[cfg(feature = "parity-diagnostics")]
+        self.provenance.set("margin");
         self
     }
 
+    #[track_caller]
     pub fn text_align_x(mut self, align: Alignment) -> Self {
         if let ViewToken::Text(token) = &mut self.token {
             token.align_x = align;
         }
+        #[cfg(feature = "parity-diagnostics")]
+        self.provenance.set("align_x");
         self
     }
 
+    #[track_caller]
     pub fn text_align_y(mut self, align: Alignment) -> Self {
         if let ViewToken::Text(token) = &mut self.token {
             token.align_y = align;
         }
+        #[cfg(feature = "parity-diagnostics")]
+        self.provenance.set("align_y");
         self
     }
 
+    #[track_caller]
     pub fn text_align(mut self, x: Alignment, y: Alignment) -> Self {
         if let ViewToken::Text(token) = &mut self.token {
             token.align_x = x;
             token.align_y = y;
         }
+        #[cfg(feature = "parity-diagnostics")]
+        self.provenance.set_many(&["align_x", "align_y"]);
         self
     }
+}
+macro_rules! view_from_builder {
+    ($builder:ident, $token:expr) => {{
+        #[cfg(feature = "parity-diagnostics")]
+        {
+            View::with_provenance($token, $builder.provenance)
+        }
+        #[cfg(not(feature = "parity-diagnostics"))]
+        {
+            View::new($token)
+        }
+    }};
 }
 
 pub trait IntoView<Message> {
@@ -105,9 +169,8 @@ pub trait IntoView<Message> {
 }
 
 impl<Message> IntoView<Message> for View<Message> {
-    fn into_view(self) -> View<Message> {
-        self
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { self }
 }
 
 pub trait IntoChildren<Message> {
@@ -546,13 +609,12 @@ impl TextRun {
 
     /// A hyperlink run. The `href` is the value passed to the rich text's
     /// `on_link` handler when clicked.
-    pub fn link(text: impl Into<String>, href: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            kind: TextRunKind::Link,
-            href: Some(href.into()),
-        }
-    }
+    #[track_caller]
+    pub fn link(text: impl Into<String>, href: impl Into<String>) -> Self { Self {
+        text: text.into(),
+        kind: TextRunKind::Link,
+        href: Some(href.into()),
+    } }
 }
 
 /// Inline rich text composed of styled [`TextRun`]s (WinUI `RichTextBlock`):
@@ -631,16 +693,15 @@ pub struct FlyoutMenuItem {
 }
 
 impl FlyoutMenuItem {
-    pub fn command(id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            label: label.into(),
-            icon: None,
-            kind: FlyoutMenuItemKind::Command,
-            checked: false,
-            enabled: true,
-        }
-    }
+    #[track_caller]
+    pub fn command(id: impl Into<String>, label: impl Into<String>) -> Self { Self {
+        id: id.into(),
+        label: label.into(),
+        icon: None,
+        kind: FlyoutMenuItemKind::Command,
+        checked: false,
+        enabled: true,
+    } }
 
     pub fn radio(id: impl Into<String>, label: impl Into<String>, checked: bool) -> Self {
         Self {
@@ -653,15 +714,13 @@ impl FlyoutMenuItem {
         }
     }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { self.icon = Some(icon);
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { self.enabled = enabled;
+    self }
 }
 
 #[derive(Clone, Debug)]
@@ -875,10 +934,9 @@ impl RadioOption {
         }
     }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { self.enabled = enabled;
+    self }
 }
 
 /// A single-selection radio group (WinUI `RadioButtons`). One option is selected
@@ -1058,10 +1116,9 @@ impl NavigationItem {
         }
     }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { self.icon = Some(icon);
+    self }
 }
 
 /// How the NavigationView pane is laid out (WinUI `NavigationViewPaneDisplayMode`).
@@ -1304,10 +1361,9 @@ impl TreeNode {
         }
     }
 
-    pub fn expanded(mut self, expanded: bool) -> Self {
-        self.expanded = expanded;
-        self
-    }
+    #[track_caller]
+    pub fn expanded(mut self, expanded: bool) -> Self { self.expanded = expanded;
+    self }
 }
 
 /// A hierarchical list (WinUI `TreeView`): dictionary/settings hierarchies and
@@ -1429,21 +1485,19 @@ impl<Message> OverlayLayer<Message> {
         }
     }
 
-    pub fn align(mut self, x: Alignment, y: Alignment) -> Self {
-        self.align_x = x;
-        self.align_y = y;
-        self
-    }
+    #[track_caller]
+    pub fn align(mut self, x: Alignment, y: Alignment) -> Self { self.align_x = x;
+    self.align_y = y;
+    self }
 
     pub fn scrim(mut self, opacity: f32) -> Self {
         self.scrim = Some(opacity.clamp(0.0, 1.0));
         self
     }
 
-    pub fn blocks_input(mut self, value: bool) -> Self {
-        self.blocks_input = value;
-        self
-    }
+    #[track_caller]
+    pub fn blocks_input(mut self, value: bool) -> Self { self.blocks_input = value;
+    self }
 
     /// Convenience for a centered, scrimmed, input-blocking modal layer.
     pub fn modal(content: impl IntoView<Message>) -> Self {
@@ -1592,10 +1646,9 @@ impl ResultItem {
         }
     }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { self.icon = Some(icon);
+    self }
 
     pub fn metadata(mut self, metadata: impl Into<String>) -> Self {
         self.metadata = Some(metadata.into());
@@ -1607,10 +1660,9 @@ impl ResultItem {
         self
     }
 
-    pub fn expanded(mut self, expanded: bool) -> Self {
-        self.expanded = expanded;
-        self
-    }
+    #[track_caller]
+    pub fn expanded(mut self, expanded: bool) -> Self { self.expanded = expanded;
+    self }
 
     pub fn toggleable(mut self, toggleable: bool) -> Self {
         self.toggleable = toggleable;
@@ -1627,25 +1679,22 @@ impl ResultItem {
         self
     }
 
-    pub fn header_state(mut self, state: ControlState) -> Self {
-        self.header_state = state;
-        self
-    }
+    #[track_caller]
+    pub fn header_state(mut self, state: ControlState) -> Self { self.header_state = state;
+    self }
 
     pub fn actions_visible(mut self, visible: bool) -> Self {
         self.actions_visible = visible;
         self
     }
 
-    pub fn header_hovered(mut self, hovered: bool) -> Self {
-        self.header_state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn header_hovered(mut self, hovered: bool) -> Self { self.header_state.hovered = hovered;
+    self }
 
-    pub fn header_pressed(mut self, pressed: bool) -> Self {
-        self.header_state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn header_pressed(mut self, pressed: bool) -> Self { self.header_state.pressed = pressed;
+    self }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2189,6 +2238,7 @@ pub struct PointerRegionToken<Message> {
     pub a11y: A11yHint,
 }
 
+#[track_caller]
 pub fn page<Message>(title: impl Into<String>) -> PageBuilder<Message> {
     PageBuilder {
         id: None,
@@ -2196,9 +2246,12 @@ pub fn page<Message>(title: impl Into<String>) -> PageBuilder<Message> {
         content: None,
         commands: Vec::new(),
         a11y: A11yHint::default(),
+        #[cfg(feature = "parity-diagnostics")]
+        provenance: ViewProvenance::caller(),
     }
 }
 
+#[track_caller]
 pub fn text<Message>(value: impl Into<String>) -> View<Message> {
     View::new(ViewToken::Text(TextToken {
         id: None,
@@ -2235,131 +2288,125 @@ pub fn text<Message>(value: impl Into<String>) -> View<Message> {
 /// .on_link(Msg::OpenWord);
 /// # }
 /// ```
+#[track_caller]
 pub fn text_runs<Message>(runs: impl IntoIterator<Item = TextRun>) -> RichTextBuilder<Message> {
-    RichTextBuilder {
-        id: None,
-        runs: runs.into_iter().collect(),
-        style: TextStyle::Body,
-        wrapping: TextWrapping::Word,
-        link_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    RichTextBuilder { id: None,
+    runs: runs.into_iter().collect(),
+    style: TextStyle::Body,
+    wrapping: TextWrapping::Word,
+    link_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn button<Message>(label: impl Into<String>) -> ButtonBuilder<Message> {
     ButtonBuilder::new(label, ButtonKind::Standard)
 }
-
+#[track_caller]
 pub fn primary_button<Message>(label: impl Into<String>) -> ButtonBuilder<Message> {
     ButtonBuilder::new(label, ButtonKind::Primary)
 }
 
 /// A button with a sticky on/off pressed state (WinUI `ToggleButton`).
+#[track_caller]
 pub fn toggle_button<Message>(
     label: impl Into<String>,
     pressed: bool,
 ) -> ToggleButtonBuilder<Message> {
-    ToggleButtonBuilder {
-        id: None,
-        label: label.into(),
-        icon: None,
-        pressed,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    ToggleButtonBuilder { id: None,
+    label: label.into(),
+    icon: None,
+    pressed,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A primary action segment plus a dropdown menu (WinUI `SplitButton`).
+#[track_caller]
 pub fn split_button<Message>(label: impl Into<String>) -> SplitButtonBuilder<Message> {
-    SplitButtonBuilder {
-        id: None,
-        label: label.into(),
-        icon: None,
-        items: Vec::new(),
-        open: false,
-        state: ControlState::default(),
-        primary_action: Action::None,
-        select_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    SplitButtonBuilder { id: None,
+    label: label.into(),
+    icon: None,
+    items: Vec::new(),
+    open: false,
+    state: ControlState::default(),
+    primary_action: Action::None,
+    select_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A single-child rounded/stroked container (WinUI `Border`).
+#[track_caller]
 pub fn border<Message>(content: impl IntoView<Message>) -> BorderBuilder<Message> {
-    BorderBuilder {
-        id: None,
-        content: Box::new(content.into_view()),
-        corner_radius: 4,
-        stroke_width: 1,
-        filled: false,
-        padding: Edges::ZERO,
-        width: Length::Shrink,
-        height: Length::Shrink,
-        a11y: A11yHint::default(),
-    }
+    BorderBuilder { id: None,
+    content: Box::new(content.into_view()),
+    corner_radius: 4,
+    stroke_width: 1,
+    filled: false,
+    padding: Edges::ZERO,
+    width: Length::Shrink,
+    height: Length::Shrink,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A single-child uniformly scaling container (WinUI `Viewbox`).
+#[track_caller]
 pub fn viewbox<Message>(content: impl IntoView<Message>) -> ViewboxBuilder<Message> {
-    ViewboxBuilder {
-        id: None,
-        content: Box::new(content.into_view()),
-        stretch: ImageStretch::Uniform,
-        width: Length::Shrink,
-        height: Length::Shrink,
-        a11y: A11yHint::default(),
-    }
+    ViewboxBuilder { id: None,
+    content: Box::new(content.into_view()),
+    stretch: ImageStretch::Uniform,
+    width: Length::Shrink,
+    height: Length::Shrink,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A tabbed container (WinUI `TabView`).
+#[track_caller]
 pub fn tab_view<Message>(
     tabs: impl IntoIterator<Item = TabItem<Message>>,
 ) -> TabViewBuilder<Message> {
-    TabViewBuilder {
-        id: None,
-        tabs: tabs.into_iter().collect(),
-        selected: None,
-        action: Action::None,
-        close_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    TabViewBuilder { id: None,
+    tabs: tabs.into_iter().collect(),
+    selected: None,
+    action: Action::None,
+    close_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A hierarchical list (WinUI `TreeView`).
+#[track_caller]
 pub fn tree_view<Message>(roots: impl IntoIterator<Item = TreeNode>) -> TreeViewBuilder<Message> {
-    TreeViewBuilder {
-        id: None,
-        roots: roots.into_iter().collect(),
-        selected: None,
-        action: Action::None,
-        toggle_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    TreeViewBuilder { id: None,
+    roots: roots.into_iter().collect(),
+    selected: None,
+    action: Action::None,
+    toggle_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn flyout_button<Message>(label: impl Into<String>) -> FlyoutButtonBuilder<Message> {
-    FlyoutButtonBuilder {
-        id: None,
-        label: label.into(),
-        icon: None,
-        tooltip: None,
-        selected: None,
-        items: Vec::new(),
-        min_width: None,
-        min_height: None,
-        padding: None,
-        border_width: None,
-        radius: None,
-        align_y: Alignment::Start,
-        text_style: None,
-        font_size: None,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    FlyoutButtonBuilder { id: None,
+    label: label.into(),
+    icon: None,
+    tooltip: None,
+    selected: None,
+    items: Vec::new(),
+    min_width: None,
+    min_height: None,
+    padding: None,
+    border_width: None,
+    radius: None,
+    align_y: Alignment::Start,
+    text_style: None,
+    font_size: None,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn title_bar<Message>(title: impl Into<String>) -> TitleBarBuilder<Message> {
     TitleBarBuilder {
         id: None,
@@ -2373,157 +2420,149 @@ pub fn title_bar<Message>(title: impl Into<String>) -> TitleBarBuilder<Message> 
         close_action: Action::None,
         drag_action: Action::None,
         a11y: A11yHint::default(),
+        #[cfg(feature = "parity-diagnostics")]
+        provenance: ViewProvenance::caller(),
     }
 }
 
+#[track_caller]
 pub fn status_badge<Message>(
     label: impl Into<String>,
     severity: ValidationSeverity,
 ) -> StatusBadgeBuilder<Message> {
-    StatusBadgeBuilder {
-        id: None,
-        label: label.into(),
-        kind: StatusBadgeKind::Text,
-        count: None,
-        severity,
-        icon: None,
-        a11y: A11yHint::default(),
-        _message: std::marker::PhantomData,
-    }
+    StatusBadgeBuilder { id: None,
+    label: label.into(),
+    kind: StatusBadgeKind::Text,
+    count: None,
+    severity,
+    icon: None,
+    a11y: A11yHint::default(),
+    _message: std::marker::PhantomData, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn info_bar<Message>(
     title: impl Into<String>,
     severity: ValidationSeverity,
 ) -> InfoBarBuilder<Message> {
-    InfoBarBuilder {
-        id: None,
-        title: title.into(),
-        message: String::new(),
-        severity,
-        icon: None,
-        a11y: A11yHint::default(),
-        _message: std::marker::PhantomData,
-    }
+    InfoBarBuilder { id: None,
+    title: title.into(),
+    message: String::new(),
+    severity,
+    icon: None,
+    a11y: A11yHint::default(),
+    _message: std::marker::PhantomData, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn progress_ring<Message>() -> ProgressRingBuilder<Message> {
-    ProgressRingBuilder {
-        id: None,
-        active: true,
-        size: 16,
-        label: None,
-        a11y: A11yHint::default(),
-        _message: std::marker::PhantomData,
-    }
+    ProgressRingBuilder { id: None,
+    active: true,
+    size: 16,
+    label: None,
+    a11y: A11yHint::default(),
+    _message: std::marker::PhantomData, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn progress_bar<Message>() -> ProgressBarBuilder<Message> {
-    ProgressBarBuilder {
-        id: None,
-        active: true,
-        value: None,
-        width: Length::Fill,
-        height: 4,
-        label: None,
-        a11y: A11yHint::default(),
-        _message: std::marker::PhantomData,
-    }
+    ProgressBarBuilder { id: None,
+    active: true,
+    value: None,
+    width: Length::Fill,
+    height: 4,
+    label: None,
+    a11y: A11yHint::default(),
+    _message: std::marker::PhantomData, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn busy_overlay<Message, Child>(content: Child) -> BusyOverlayBuilder<Message>
 where
     Child: IntoView<Message>,
 {
-    BusyOverlayBuilder {
-        id: None,
-        active: false,
-        opacity: 0.72,
-        fade_transition_ms: 120,
-        blocks_input: true,
-        label: None,
-        content: Box::new(content.into_view()),
-        a11y: A11yHint::default(),
-    }
+    BusyOverlayBuilder { id: None,
+    active: false,
+    opacity: 0.72,
+    fade_transition_ms: 120,
+    blocks_input: true,
+    label: None,
+    content: Box::new(content.into_view()),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn card<Message>(title: impl Into<String>) -> CardBuilder<Message> {
-    CardBuilder {
-        id: None,
-        title: title.into(),
-        description: None,
-        icon: None,
-        kind: CardKind::Surface,
-        padding: None,
-        content_spacing: 12,
-        margin: Edges::ZERO,
-        max_height: None,
-        content: None,
-        trailing: Vec::new(),
-        a11y: A11yHint::default(),
-    }
+    CardBuilder { id: None,
+    title: title.into(),
+    description: None,
+    icon: None,
+    kind: CardKind::Surface,
+    padding: None,
+    content_spacing: 12,
+    margin: Edges::ZERO,
+    max_height: None,
+    content: None,
+    trailing: Vec::new(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn spacer<Message>() -> SpacerBuilder<Message> {
-    SpacerBuilder {
-        id: None,
-        width: Length::Fill,
-        height: Length::Shrink,
-        _message: std::marker::PhantomData,
-    }
+    SpacerBuilder { id: None,
+    width: Length::Fill,
+    height: Length::Shrink,
+    _message: std::marker::PhantomData, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn text_editor<Message>(text: impl Into<String>) -> TextEditorBuilder<Message> {
-    TextEditorBuilder {
-        id: None,
-        text: text.into(),
-        placeholder: None,
-        width: None,
-        min_height: None,
-        max_height: None,
-        padding: None,
-        text_style: TextStyle::Body,
-        chrome: TextEditorChrome::Standard,
-        secure: false,
-        read_only: false,
-        state: ControlState::default(),
-        action: Action::None,
-        key_bindings: Vec::new(),
-        trailing_icon: None,
-        a11y: A11yHint::default(),
-    }
+    TextEditorBuilder { id: None,
+    text: text.into(),
+    placeholder: None,
+    width: None,
+    min_height: None,
+    max_height: None,
+    padding: None,
+    text_style: TextStyle::Body,
+    chrome: TextEditorChrome::Standard,
+    secure: false,
+    read_only: false,
+    state: ControlState::default(),
+    action: Action::None,
+    key_bindings: Vec::new(),
+    trailing_icon: None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn toggle_switch<Message>(
     label: impl Into<String>,
     checked: bool,
 ) -> ToggleSwitchBuilder<Message> {
-    ToggleSwitchBuilder {
-        id: None,
-        header: None,
-        label: label.into(),
-        checked,
-        width: None,
-        height: None,
-        margin: Edges::ZERO,
-        align_y: Alignment::Start,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    ToggleSwitchBuilder { id: None,
+    header: None,
+    label: label.into(),
+    checked,
+    width: None,
+    height: None,
+    margin: Edges::ZERO,
+    align_y: Alignment::Start,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBuilder<Message> {
-    CheckBoxBuilder {
-        id: None,
-        label: label.into(),
-        checked,
-        indeterminate: false,
-        label_italic: false,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    CheckBoxBuilder { id: None,
+    label: label.into(),
+    checked,
+    indeterminate: false,
+    label_italic: false,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A single-selection radio group (WinUI `RadioButtons`).
@@ -2543,18 +2582,17 @@ pub fn checkbox<Message>(label: impl Into<String>, checked: bool) -> CheckBoxBui
 ///     .on_select(Msg::ThemeChanged);
 /// # }
 /// ```
+#[track_caller]
 pub fn radio_group<Message>() -> RadioGroupBuilder<Message> {
-    RadioGroupBuilder {
-        id: None,
-        header: None,
-        options: Vec::new(),
-        selected: None,
-        orientation: Orientation::Vertical,
-        spacing: 6,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    RadioGroupBuilder { id: None,
+    header: None,
+    options: Vec::new(),
+    selected: None,
+    orientation: Orientation::Vertical,
+    spacing: 6,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A numeric input (WinUI `NumberBox`) with optional spin buttons and range.
@@ -2568,20 +2606,19 @@ pub fn radio_group<Message>() -> RadioGroupBuilder<Message> {
 /// number_box(1.0).range(0.5, 3.0).step(0.1).spin_buttons(true).on_change(Msg::Speed);
 /// # }
 /// ```
+#[track_caller]
 pub fn number_box<Message>(value: f32) -> NumberBoxBuilder<Message> {
-    NumberBoxBuilder {
-        id: None,
-        value,
-        min: None,
-        max: None,
-        step: 1.0,
-        header: None,
-        placeholder: None,
-        spin_buttons: true,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    NumberBoxBuilder { id: None,
+    value,
+    min: None,
+    max: None,
+    step: 1.0,
+    header: None,
+    placeholder: None,
+    spin_buttons: true,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A text box with as-you-type suggestions (WinUI `AutoSuggestBox`).
@@ -2601,37 +2638,36 @@ pub fn number_box<Message>(value: f32) -> NumberBoxBuilder<Message> {
 ///     .on_submit(Msg::LanguagePicked);
 /// # }
 /// ```
+#[track_caller]
 pub fn auto_suggest_box<Message>(text: impl Into<String>) -> AutoSuggestBoxBuilder<Message> {
-    AutoSuggestBoxBuilder {
-        id: None,
-        text: text.into(),
-        placeholder: None,
-        header: None,
-        suggestions: Vec::new(),
-        open: false,
-        highlighted_index: None,
-        width: Length::Fill,
-        state: ControlState::default(),
-        change_action: Action::None,
-        submit_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    AutoSuggestBoxBuilder { id: None,
+    text: text.into(),
+    placeholder: None,
+    header: None,
+    suggestions: Vec::new(),
+    open: false,
+    highlighted_index: None,
+    width: Length::Fill,
+    state: ControlState::default(),
+    change_action: Action::None,
+    submit_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn slider<Message>(value: f32) -> SliderBuilder<Message> {
-    SliderBuilder {
-        id: None,
-        value,
-        min: 0.0,
-        max: 1.0,
-        step: 0.1,
-        width: Length::Fill,
-        state: ControlState::default(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    SliderBuilder { id: None,
+    value,
+    min: 0.0,
+    max: 1.0,
+    step: 0.1,
+    width: Length::Fill,
+    state: ControlState::default(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn combo_box<Message>(
     items: impl IntoIterator<Item = ComboBoxItem>,
 ) -> ComboBoxBuilder<Message> {
@@ -2645,56 +2681,56 @@ pub fn combo_box<Message>(
         height: Length::Fixed(32),
         state: ControlState::default(),
         action: Action::None,
+        #[cfg(feature = "parity-diagnostics")]
+        provenance: ViewProvenance::caller(),
         a11y: A11yHint::default(),
     }
 }
 
+#[track_caller]
 pub fn command_bar<Message, Children>(children: Children) -> CommandBarBuilder<Message>
 where
     Children: IntoChildren<Message>,
 {
-    CommandBarBuilder {
-        id: None,
-        items: children.into_children(),
-        compact: false,
-        width: Length::Shrink,
-        align: Alignment::Center,
-        distribution: LayoutDistribution::Start,
-        a11y: A11yHint::default(),
-    }
+    CommandBarBuilder { id: None,
+    items: children.into_children(),
+    compact: false,
+    width: Length::Shrink,
+    align: Alignment::Center,
+    distribution: LayoutDistribution::Start,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn navigation_view<Message>(
     items: impl IntoIterator<Item = NavigationItem>,
 ) -> NavigationViewBuilder<Message> {
-    NavigationViewBuilder {
-        id: None,
-        selected: None,
-        items: items.into_iter().collect(),
-        footer_items: Vec::new(),
-        content: None,
-        pane_display_mode: PaneDisplayMode::default(),
-        header: None,
-        settings_visible: false,
-        back_button_visible: false,
-        action: Action::None,
-        back_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    NavigationViewBuilder { id: None,
+    selected: None,
+    items: items.into_iter().collect(),
+    footer_items: Vec::new(),
+    content: None,
+    pane_display_mode: PaneDisplayMode::default(),
+    header: None,
+    settings_visible: false,
+    back_button_visible: false,
+    action: Action::None,
+    back_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn dialog<Message>(title: impl Into<String>) -> DialogBuilder<Message> {
-    DialogBuilder {
-        id: None,
-        title: title.into(),
-        kind: DialogKind::Content,
-        content: None,
-        primary: None,
-        secondary: None,
-        a11y: A11yHint::default(),
-    }
+    DialogBuilder { id: None,
+    title: title.into(),
+    kind: DialogKind::Content,
+    content: None,
+    primary: None,
+    secondary: None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn column<Message, Children>(children: Children) -> LayoutBuilder<Message>
 where
     Children: IntoChildren<Message>,
@@ -2702,6 +2738,7 @@ where
     LayoutBuilder::new(LayoutKind::Column, children.into_children())
 }
 
+#[track_caller]
 pub fn row<Message, Children>(children: Children) -> LayoutBuilder<Message>
 where
     Children: IntoChildren<Message>,
@@ -2727,21 +2764,20 @@ where
 ///     .cell_span(1, 0, 1, 2, button("Save").on_press(Msg::Save));
 /// # }
 /// ```
+#[track_caller]
 pub fn grid<Message>() -> GridBuilder<Message> {
-    GridBuilder {
-        id: None,
-        rows: Vec::new(),
-        columns: Vec::new(),
-        row_spacing: 0,
-        column_spacing: 0,
-        padding: 0,
-        padding_edges: None,
-        width: Length::Shrink,
-        height: Length::Shrink,
-        align: Alignment::Start,
-        children: Vec::new(),
-        a11y: A11yHint::default(),
-    }
+    GridBuilder { id: None,
+    rows: Vec::new(),
+    columns: Vec::new(),
+    row_spacing: 0,
+    column_spacing: 0,
+    padding: 0,
+    padding_edges: None,
+    width: Length::Shrink,
+    height: Length::Shrink,
+    align: Alignment::Start,
+    children: Vec::new(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A width-responsive flow layout (WinUI `ItemsWrapGrid`): children pack
@@ -2750,34 +2786,32 @@ pub fn grid<Message>() -> GridBuilder<Message> {
 ///
 /// Use instead of hand-splitting children across fixed rows. Set the per-row
 /// column cap with [`max_columns`](WrapBuilder::max_columns) (defaults to 1).
+#[track_caller]
 pub fn wrap<Message, Children>(children: Children) -> WrapBuilder<Message>
 where
     Children: IntoChildren<Message>,
 {
-    WrapBuilder {
-        id: None,
-        children: children.into_children(),
-        max_columns: 1,
-        spacing: 0,
-        run_spacing: 0,
-        a11y: A11yHint::default(),
-    }
+    WrapBuilder { id: None,
+    children: children.into_children(),
+    max_columns: 1,
+    spacing: 0,
+    run_spacing: 0,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A z-stacked layering: `base` with [`layer`](OverlayBuilder::layer)s on top.
 ///
 /// Use for floating action bars and modal dialogs instead of stacking siblings
 /// in a column. See [`OverlayLayer`] for per-layer alignment / scrim / input.
+#[track_caller]
 pub fn overlay<Message, Base>(base: Base) -> OverlayBuilder<Message>
 where
     Base: IntoView<Message>,
 {
-    OverlayBuilder {
-        id: None,
-        base: Box::new(base.into_view()),
-        layers: Vec::new(),
-        a11y: A11yHint::default(),
-    }
+    OverlayBuilder { id: None,
+    base: Box::new(base.into_view()),
+    layers: Vec::new(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A generic flyout (WinUI `Flyout`): `content` anchored to `anchor`, shown when
@@ -2796,23 +2830,23 @@ where
 ///     .placement(FlyoutPlacement::Bottom);
 /// # }
 /// ```
+#[track_caller]
 pub fn flyout<Message, Anchor, Content>(anchor: Anchor, content: Content) -> FlyoutBuilder<Message>
 where
     Anchor: IntoView<Message>,
     Content: IntoView<Message>,
 {
-    FlyoutBuilder {
-        id: None,
-        anchor: Box::new(anchor.into_view()),
-        content: Box::new(content.into_view()),
-        open: false,
-        placement: FlyoutPlacement::default(),
-        light_dismiss: FlyoutLightDismiss::default(),
-        focus_behavior: FlyoutFocusBehavior::default(),
-        a11y: A11yHint::default(),
-    }
+    FlyoutBuilder { id: None,
+    anchor: Box::new(anchor.into_view()),
+    content: Box::new(content.into_view()),
+    open: false,
+    placement: FlyoutPlacement::default(),
+    light_dismiss: FlyoutLightDismiss::default(),
+    focus_behavior: FlyoutFocusBehavior::default(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn adaptive_switch<Message, Wide, Narrow>(
     breakpoint_width: u16,
     wide: Wide,
@@ -2822,148 +2856,138 @@ where
     Wide: IntoView<Message>,
     Narrow: IntoView<Message>,
 {
-    AdaptiveSwitchBuilder {
-        id: None,
-        breakpoint_width,
-        wide: Box::new(wide.into_view()),
-        narrow: Box::new(narrow.into_view()),
-        resolved_width: None,
-        a11y: A11yHint::default(),
-    }
+    AdaptiveSwitchBuilder { id: None,
+    breakpoint_width,
+    wide: Box::new(wide.into_view()),
+    narrow: Box::new(narrow.into_view()),
+    resolved_width: None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn lazy<Message, Child>(key: impl Into<String>, content: Child) -> LazyBuilder<Message>
 where
     Child: IntoView<Message>,
 {
-    LazyBuilder {
-        id: None,
-        key: key.into(),
-        content: Box::new(content.into_view()),
-        a11y: A11yHint::default(),
-    }
+    LazyBuilder { id: None,
+    key: key.into(),
+    content: Box::new(content.into_view()),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn scroll_view<Message, Child>(content: Child) -> ScrollViewBuilder<Message>
 where
     Child: IntoView<Message>,
 {
-    ScrollViewBuilder {
-        id: None,
-        content: Some(Box::new(content.into_view())),
-        horizontal: ScrollPolicy::Never,
-        vertical: ScrollPolicy::Auto,
-        scrollbars_visible: false,
-        a11y: A11yHint::default(),
-    }
+    ScrollViewBuilder { id: None,
+    content: Some(Box::new(content.into_view())),
+    horizontal: ScrollPolicy::Never,
+    vertical: ScrollPolicy::Auto,
+    scrollbars_visible: false,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn pointer_region<Message, Child>(content: Child) -> PointerRegionBuilder<Message>
 where
     Child: IntoView<Message>,
 {
-    PointerRegionBuilder {
-        id: None,
-        content: Box::new(content.into_view()),
-        width: Length::Fill,
-        height: Length::Fill,
-        move_action: PointerRegionAction::None,
-        left_down_action: PointerRegionAction::None,
-        left_up_action: PointerRegionAction::None,
-        double_click_action: PointerRegionAction::None,
-        right_down_action: Action::None,
-        wheel_action: PointerRegionAction::None,
-        escape_action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    PointerRegionBuilder { id: None,
+    content: Box::new(content.into_view()),
+    width: Length::Fill,
+    height: Length::Fill,
+    move_action: PointerRegionAction::None,
+    left_down_action: PointerRegionAction::None,
+    left_up_action: PointerRegionAction::None,
+    double_click_action: PointerRegionAction::None,
+    right_down_action: Action::None,
+    wheel_action: PointerRegionAction::None,
+    escape_action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn capture_overlay(phase: CaptureOverlayPhase) -> CaptureOverlayBuilder {
-    CaptureOverlayBuilder {
-        id: None,
-        phase,
-        detection_depth: 0,
-        dragging: false,
-        detected_rect: None,
-        selection_rect: None,
-        handles_visible: false,
-        magnifier_visible: false,
-        background: None,
-        cursor: None,
-        a11y: A11yHint::default(),
-    }
+    CaptureOverlayBuilder { id: None,
+    phase,
+    detection_depth: 0,
+    dragging: false,
+    detected_rect: None,
+    selection_rect: None,
+    handles_visible: false,
+    magnifier_visible: false,
+    background: None,
+    cursor: None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn expander<Message>(title: impl Into<String>) -> ExpanderBuilder<Message> {
-    ExpanderBuilder {
-        id: None,
-        title: title.into(),
-        title_id: None,
-        description: None,
-        icon: None,
-        expanded: false,
-        header_state: ControlState::default(),
-        header_style: FluentStyle::new(),
-        content_style: FluentStyle::new(),
-        content: None,
-        trailing: Vec::new(),
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    ExpanderBuilder { id: None,
+    title: title.into(),
+    title_id: None,
+    description: None,
+    icon: None,
+    expanded: false,
+    header_state: ControlState::default(),
+    header_style: FluentStyle::new(),
+    content_style: FluentStyle::new(),
+    content: None,
+    trailing: Vec::new(),
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn settings_row<Message>(title: impl Into<String>) -> SettingsRowBuilder<Message> {
-    SettingsRowBuilder {
-        id: None,
-        title: title.into(),
-        title_id: None,
-        description: None,
-        description_id: None,
-        icon: None,
-        kind: SettingsRowKind::Normal,
-        margin: Edges::ZERO,
-        align_x: Alignment::Start,
-        content_align_x: Alignment::Start,
-        content: None,
-        trailing: Vec::new(),
-        a11y: A11yHint::default(),
-    }
+    SettingsRowBuilder { id: None,
+    title: title.into(),
+    title_id: None,
+    description: None,
+    description_id: None,
+    icon: None,
+    kind: SettingsRowKind::Normal,
+    margin: Edges::ZERO,
+    align_x: Alignment::Start,
+    content_align_x: Alignment::Start,
+    content: None,
+    trailing: Vec::new(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn result_card<Message>(item: ResultItem) -> ResultCardBuilder<Message> {
-    ResultCardBuilder {
-        id: None,
-        item,
-        copy_action: Action::None,
-        speak_action: Action::None,
-        replace_action: Action::None,
-        retry_action: Action::None,
-        toggle_action: Action::None,
-        collapse_transition: CollapseTransition::default(),
-        a11y: A11yHint::default(),
-    }
+    ResultCardBuilder { id: None,
+    item,
+    copy_action: Action::None,
+    speak_action: Action::None,
+    replace_action: Action::None,
+    retry_action: Action::None,
+    toggle_action: Action::None,
+    collapse_transition: CollapseTransition::default(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn result_list<Message>(
     items: impl IntoIterator<Item = ResultItem>,
 ) -> ResultListBuilder<Message> {
-    ResultListBuilder {
-        id: None,
-        items: items.into_iter().collect(),
-        copy_action: Action::None,
-        speak_action: Action::None,
-        replace_action: Action::None,
-        retry_action: Action::None,
-        toggle_action: Action::None,
-        virtualized: true,
-        height: None,
-        max_height: None,
-        spacing: None,
-        padding: None,
-        border_width: None,
-        collapse_transition: CollapseTransition::default(),
-        a11y: A11yHint::default(),
-    }
+    ResultListBuilder { id: None,
+    items: items.into_iter().collect(),
+    copy_action: Action::None,
+    speak_action: Action::None,
+    replace_action: Action::None,
+    retry_action: Action::None,
+    toggle_action: Action::None,
+    virtualized: true,
+    height: None,
+    max_height: None,
+    spacing: None,
+    padding: None,
+    border_width: None,
+    collapse_transition: CollapseTransition::default(),
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A generic data-driven list (WinUI `ListView`/`ItemsRepeater`). Pass
@@ -2984,21 +3008,21 @@ pub fn result_list<Message>(
 /// .on_select(Msg::LanguagePicked);
 /// # }
 /// ```
+#[track_caller]
 pub fn list_view<Message>(
     items: impl IntoIterator<Item = ListViewItem<Message>>,
 ) -> ListViewBuilder<Message> {
-    ListViewBuilder {
-        id: None,
-        items: items.into_iter().collect(),
-        selected: None,
-        spacing: 4,
-        max_height: None,
-        virtualized: true,
-        action: Action::None,
-        a11y: A11yHint::default(),
-    }
+    ListViewBuilder { id: None,
+    items: items.into_iter().collect(),
+    selected: None,
+    spacing: 4,
+    max_height: None,
+    virtualized: true,
+    action: Action::None,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
+#[track_caller]
 pub fn custom_control<Message, Children>(
     control: impl Into<String>,
     children: Children,
@@ -3016,6 +3040,7 @@ where
     }))
 }
 
+#[track_caller]
 pub fn control_template<Message, Children>(
     target_type: impl Into<String>,
     template_key: impl Into<String>,
@@ -3034,10 +3059,12 @@ where
     }))
 }
 
+#[track_caller]
 pub fn tray_menu_presenter<Message>(menu: TrayMenu<Message>) -> View<Message> {
     tray_menu_presenter_with_animation_offset(menu, 0)
 }
 
+#[track_caller]
 pub fn tray_menu_presenter_with_animation_offset<Message>(
     menu: TrayMenu<Message>,
     animation_offset_y: u16,
@@ -3052,10 +3079,12 @@ pub fn tray_menu_presenter_with_animation_offset<Message>(
     }))
 }
 
+#[track_caller]
 pub fn service_result_card<Message>(item: ResultItem) -> ResultCardBuilder<Message> {
     result_card(item)
 }
 
+#[track_caller]
 pub fn service_result_list<Message>(
     items: impl IntoIterator<Item = ResultItem>,
 ) -> ResultListBuilder<Message> {
@@ -3069,40 +3098,42 @@ pub struct PageBuilder<Message> {
     content: Option<Box<View<Message>>>,
     commands: Vec<CommandToken<Message>>,
     a11y: A11yHint,
+    #[cfg(feature = "parity-diagnostics")]
+    provenance: ViewProvenance,
 }
-
 impl<Message> PageBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("id");
+    self }
 
-    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
-        self.content = Some(Box::new(content.into_view()));
-        self
-    }
+    #[track_caller]
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content"]); self.content = Some(Box::new(content.into_view()));
+    self }
 
-    pub fn command(mut self, command: CommandToken<Message>) -> Self {
-        self.commands.push(command);
-        self
-    }
+    #[track_caller]
+    pub fn command(mut self, command: CommandToken<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["commands"]); self.commands.push(command);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for PageBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Page(PageToken {
-            id: self.id,
-            title: self.title,
-            content: self.content,
-            commands: self.commands,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let token = ViewToken::Page(PageToken {
+        id: self.id,
+        title: self.title,
+        content: self.content,
+        commands: self.commands,
+        a11y: self.a11y,
+    });
+    #[cfg(feature = "parity-diagnostics")]
+    return View::with_provenance(token, self.provenance);
+    #[cfg(not(feature = "parity-diagnostics"))]
+    View::new(token) }
 }
 
 #[derive(Clone, Debug)]
@@ -3118,125 +3149,111 @@ pub struct TitleBarBuilder<Message> {
     close_action: Action<Message>,
     drag_action: Action<Message>,
     a11y: A11yHint,
+    #[cfg(feature = "parity-diagnostics")]
+    provenance: ViewProvenance,
 }
-
 impl<Message> TitleBarBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("id");
+    self }
 
-    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
-        self.subtitle = Some(subtitle.into());
-        self
-    }
+    #[track_caller]
+    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["subtitle"]); self.subtitle = Some(subtitle.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn commands(mut self, commands: impl IntoChildren<Message>) -> Self {
-        self.commands = commands.into_children();
-        self
-    }
+    #[track_caller]
+    pub fn commands(mut self, commands: impl IntoChildren<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["commands"]); self.commands = commands.into_children();
+    self }
 
-    pub fn caption_controls(mut self, visible: bool) -> Self {
-        self.show_caption_controls = visible;
-        self
-    }
+    #[track_caller]
+    pub fn caption_controls(mut self, visible: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["caption_controls"]); self.show_caption_controls = visible;
+    self }
 
-    pub fn on_minimize(mut self, message: Message) -> Self {
-        self.minimize_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_minimize(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["minimize"]); self.minimize_action = Action::Message(message);
+    self }
 
-    pub fn on_toggle_maximize(mut self, message: Message) -> Self {
-        self.toggle_maximize_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_toggle_maximize(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["toggle_maximize"]); self.toggle_maximize_action = Action::Message(message);
+    self }
 
-    pub fn on_close(mut self, message: Message) -> Self {
-        self.close_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_close(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["close"]); self.close_action = Action::Message(message);
+    self }
 
     /// Message emitted when the user presses the empty title-bar region,
     /// used by the backend to begin an OS-level window move/drag.
-    pub fn on_drag(mut self, message: Message) -> Self {
-        self.drag_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_drag(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["drag"]); self.drag_action = Action::Message(message);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for TitleBarBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::TitleBar(TitleBarToken {
-            id: self.id,
-            title: self.title,
-            subtitle: self.subtitle,
-            icon: self.icon,
-            commands: self.commands,
-            show_caption_controls: self.show_caption_controls,
-            minimize_action: self.minimize_action,
-            toggle_maximize_action: self.toggle_maximize_action,
-            close_action: self.close_action,
-            drag_action: self.drag_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let token = ViewToken::TitleBar(TitleBarToken {
+        id: self.id,
+        title: self.title,
+        subtitle: self.subtitle,
+        icon: self.icon,
+        commands: self.commands,
+        show_caption_controls: self.show_caption_controls,
+        minimize_action: self.minimize_action,
+        toggle_maximize_action: self.toggle_maximize_action,
+        close_action: self.close_action,
+        drag_action: self.drag_action,
+        a11y: self.a11y,
+    });
+    #[cfg(feature = "parity-diagnostics")]
+    return View::with_provenance(token, self.provenance);
+    #[cfg(not(feature = "parity-diagnostics"))]
+    View::new(token) }
 }
 
 #[derive(Clone, Debug)]
-pub struct RichTextBuilder<Message> {
-    id: Option<String>,
-    runs: Vec<TextRun>,
-    style: TextStyle,
-    wrapping: TextWrapping,
-    link_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct RichTextBuilder<Message> { id: Option<String>,
+runs: Vec<TextRun>,
+style: TextStyle,
+wrapping: TextWrapping,
+link_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> RichTextBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn style(mut self, style: TextStyle) -> Self {
-        self.style = style;
-        self
-    }
+    #[track_caller]
+    pub fn style(mut self, style: TextStyle) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["style"]); self.style = style;
+    self }
 
-    pub fn wrapping(mut self, wrapping: TextWrapping) -> Self {
-        self.wrapping = wrapping;
-        self
-    }
+    #[track_caller]
+    pub fn wrapping(mut self, wrapping: TextWrapping) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["wrapping"]); self.wrapping = wrapping;
+    self }
 
     /// Append a run.
-    pub fn run(mut self, run: TextRun) -> Self {
-        self.runs.push(run);
-        self
-    }
+    #[track_caller]
+    pub fn run(mut self, run: TextRun) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["runs"]); self.runs.push(run);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Link-clicked callback: receives the clicked run's `href`.
-    pub fn on_link(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.link_action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_link(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["on_link"]); self.link_action = Action::selection_input(map);
+    self.into_view() }
 
     /// Finish without a link handler.
     pub fn build(self) -> View<Message> {
@@ -3245,136 +3262,112 @@ impl<Message> RichTextBuilder<Message> {
 }
 
 impl<Message> IntoView<Message> for RichTextBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::RichText(RichTextToken {
-            id: self.id,
-            runs: self.runs,
-            style: self.style,
-            wrapping: self.wrapping,
-            link_action: self.link_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::RichText(RichTextToken {
+        id: self.id,
+        runs: self.runs,
+        style: self.style,
+        wrapping: self.wrapping,
+        link_action: self.link_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ToggleButtonBuilder<Message> {
-    id: Option<String>,
-    label: String,
-    icon: Option<IconToken>,
-    pressed: bool,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct ToggleButtonBuilder<Message> { id: Option<String>,
+label: String,
+icon: Option<IconToken>,
+pressed: bool,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ToggleButtonBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_toggle(
-        mut self,
-        map: impl Fn(bool) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::bool_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_toggle(mut self,
+    map: impl Fn(bool) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::bool_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for ToggleButtonBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ToggleButton(ToggleButtonToken {
-            id: self.id,
-            label: self.label,
-            icon: self.icon,
-            pressed: self.pressed,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ToggleButton(ToggleButtonToken {
+        id: self.id,
+        label: self.label,
+        icon: self.icon,
+        pressed: self.pressed,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct SplitButtonBuilder<Message> {
-    id: Option<String>,
-    label: String,
-    icon: Option<IconToken>,
-    items: Vec<FlyoutMenuItem>,
-    open: bool,
-    state: ControlState,
-    primary_action: Action<Message>,
-    select_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct SplitButtonBuilder<Message> { id: Option<String>,
+label: String,
+icon: Option<IconToken>,
+items: Vec<FlyoutMenuItem>,
+open: bool,
+state: ControlState,
+primary_action: Action<Message>,
+select_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> SplitButtonBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn items(mut self, items: impl IntoIterator<Item = FlyoutMenuItem>) -> Self {
-        self.items = items.into_iter().collect();
-        self
-    }
+    #[track_caller]
+    pub fn items(mut self, items: impl IntoIterator<Item = FlyoutMenuItem>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["items"]); self.items = items.into_iter().collect();
+    self }
 
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = open;
-        self
-    }
+    #[track_caller]
+    pub fn open(mut self, open: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["open"]); self.open = open;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Primary-segment press callback.
-    pub fn on_press(mut self, message: Message) -> Self {
-        self.primary_action = Action::message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_press(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["primary"]); self.primary_action = Action::message(message);
+    self }
 
     /// Menu-item-chosen callback (receives the item id).
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.select_action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["select"]); self.select_action = Action::selection_input(map);
+    self.into_view() }
 
     /// Finish without a menu-select handler.
     pub fn build(self) -> View<Message> {
@@ -3383,183 +3376,154 @@ impl<Message> SplitButtonBuilder<Message> {
 }
 
 impl<Message> IntoView<Message> for SplitButtonBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::SplitButton(SplitButtonToken {
-            id: self.id,
-            label: self.label,
-            icon: self.icon,
-            items: self.items,
-            open: self.open,
-            state: self.state,
-            primary_action: self.primary_action,
-            select_action: self.select_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::SplitButton(SplitButtonToken {
+        id: self.id,
+        label: self.label,
+        icon: self.icon,
+        items: self.items,
+        open: self.open,
+        state: self.state,
+        primary_action: self.primary_action,
+        select_action: self.select_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct BorderBuilder<Message> {
-    id: Option<String>,
-    content: Box<View<Message>>,
-    corner_radius: u16,
-    stroke_width: u16,
-    filled: bool,
-    padding: Edges,
-    width: Length,
-    height: Length,
-    a11y: A11yHint,
-}
+pub struct BorderBuilder<Message> { id: Option<String>,
+content: Box<View<Message>>,
+corner_radius: u16,
+stroke_width: u16,
+filled: bool,
+padding: Edges,
+width: Length,
+height: Length,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> BorderBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn corner_radius(mut self, radius: u16) -> Self {
-        self.corner_radius = radius;
-        self
-    }
+    #[track_caller]
+    pub fn corner_radius(mut self, radius: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["corner_radius"]); self.corner_radius = radius;
+    self }
 
-    pub fn stroke_width(mut self, width: u16) -> Self {
-        self.stroke_width = width;
-        self
-    }
+    #[track_caller]
+    pub fn stroke_width(mut self, width: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["stroke_width"]); self.stroke_width = width;
+    self }
 
     /// Fill the interior with the theme surface color.
-    pub fn filled(mut self, filled: bool) -> Self {
-        self.filled = filled;
-        self
-    }
+    #[track_caller]
+    pub fn filled(mut self, filled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["filled"]); self.filled = filled;
+    self }
 
-    pub fn padding(mut self, padding: Edges) -> Self {
-        self.padding = padding;
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, padding: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = padding;
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for BorderBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Border(BorderToken {
-            id: self.id,
-            content: self.content,
-            corner_radius: self.corner_radius,
-            stroke_width: self.stroke_width,
-            filled: self.filled,
-            padding: self.padding,
-            width: self.width,
-            height: self.height,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Border(BorderToken {
+        id: self.id,
+        content: self.content,
+        corner_radius: self.corner_radius,
+        stroke_width: self.stroke_width,
+        filled: self.filled,
+        padding: self.padding,
+        width: self.width,
+        height: self.height,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ViewboxBuilder<Message> {
-    id: Option<String>,
-    content: Box<View<Message>>,
-    stretch: ImageStretch,
-    width: Length,
-    height: Length,
-    a11y: A11yHint,
-}
+pub struct ViewboxBuilder<Message> { id: Option<String>,
+content: Box<View<Message>>,
+stretch: ImageStretch,
+width: Length,
+height: Length,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ViewboxBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn stretch(mut self, stretch: ImageStretch) -> Self {
-        self.stretch = stretch;
-        self
-    }
+    #[track_caller]
+    pub fn stretch(mut self, stretch: ImageStretch) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["stretch"]); self.stretch = stretch;
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for ViewboxBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Viewbox(ViewboxToken {
-            id: self.id,
-            content: self.content,
-            stretch: self.stretch,
-            width: self.width,
-            height: self.height,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Viewbox(ViewboxToken {
+        id: self.id,
+        content: self.content,
+        stretch: self.stretch,
+        width: self.width,
+        height: self.height,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct TabViewBuilder<Message> {
-    id: Option<String>,
-    tabs: Vec<TabItem<Message>>,
-    selected: Option<String>,
-    action: Action<Message>,
-    close_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct TabViewBuilder<Message> { id: Option<String>,
+tabs: Vec<TabItem<Message>>,
+selected: Option<String>,
+action: Action<Message>,
+close_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> TabViewBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn selected(mut self, id: impl Into<String>) -> Self {
-        self.selected = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected"]); self.selected = Some(id.into());
+    self }
 
     /// Tab-close callback (receives the closed tab id).
-    pub fn on_close(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.close_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_close(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["close_action"]); self.close_action = Action::selection_input(map);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Tab-selected callback (receives the selected tab id).
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 
     /// Finish without a select handler.
     pub fn build(self) -> View<Message> {
@@ -3568,58 +3532,48 @@ impl<Message> TabViewBuilder<Message> {
 }
 
 impl<Message> IntoView<Message> for TabViewBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::TabView(TabViewToken {
-            id: self.id,
-            tabs: self.tabs,
-            selected: self.selected,
-            action: self.action,
-            close_action: self.close_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::TabView(TabViewToken {
+        id: self.id,
+        tabs: self.tabs,
+        selected: self.selected,
+        action: self.action,
+        close_action: self.close_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct TreeViewBuilder<Message> {
-    id: Option<String>,
-    roots: Vec<TreeNode>,
-    selected: Option<String>,
-    action: Action<Message>,
-    toggle_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct TreeViewBuilder<Message> { id: Option<String>,
+roots: Vec<TreeNode>,
+selected: Option<String>,
+action: Action<Message>,
+toggle_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> TreeViewBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn selected(mut self, id: impl Into<String>) -> Self {
-        self.selected = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected"]); self.selected = Some(id.into());
+    self }
 
-    /// Node expand/collapse-toggle callback (receives the node id).
-    pub fn on_toggle(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.toggle_action = Action::selection_input(map);
-        self
-    }
+    /// Node expand/collapse-toggle callback.
+    #[track_caller]
+    pub fn on_toggle(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["toggle_action"]); self.toggle_action = Action::selection_input(map);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    /// Node-selected callback (receives the node id).
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 
     /// Finish without a select handler.
     pub fn build(self) -> View<Message> {
@@ -3628,16 +3582,15 @@ impl<Message> TreeViewBuilder<Message> {
 }
 
 impl<Message> IntoView<Message> for TreeViewBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::TreeView(TreeViewToken {
-            id: self.id,
-            roots: self.roots,
-            selected: self.selected,
-            action: self.action,
-            toggle_action: self.toggle_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::TreeView(TreeViewToken {
+        id: self.id,
+        roots: self.roots,
+        selected: self.selected,
+        action: self.action,
+        toggle_action: self.toggle_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
@@ -3652,6 +3605,8 @@ pub struct ButtonBuilder<Message> {
     padding: Option<Edges>,
     text_style: Option<TextStyle>,
     font_size: Option<u16>,
+    #[cfg(feature = "parity-diagnostics")]
+    provenance: ViewProvenance,
     margin: Edges,
     state: ControlState,
     action: Action<Message>,
@@ -3659,6 +3614,7 @@ pub struct ButtonBuilder<Message> {
 }
 
 impl<Message> ButtonBuilder<Message> {
+    #[track_caller]
     fn new(label: impl Into<String>, kind: ButtonKind) -> Self {
         Self {
             id: None,
@@ -3675,1412 +3631,1192 @@ impl<Message> ButtonBuilder<Message> {
             state: ControlState::default(),
             action: Action::None,
             a11y: A11yHint::default(),
+            #[cfg(feature = "parity-diagnostics")]
+            provenance: ViewProvenance::caller(),
         }
     }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("id");
+    self }
 
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["tooltip"]); self.tooltip = Some(tooltip.into());
+    self }
 
-    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
-        self.tooltip = Some(tooltip.into());
-        self
-    }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = Some(width);
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = Some(value);
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = Some(height);
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = Some(height);
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("height");
+    self }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = Some(width);
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("width");
+    self }
 
-    pub fn padding(mut self, value: Edges) -> Self {
-        self.padding = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn text_style(mut self, style: TextStyle) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["text_style"]); self.text_style = Some(style);
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("text_style");
+    self }
 
-    pub fn text_style(mut self, style: TextStyle) -> Self {
-        self.text_style = Some(style);
-        self
-    }
+    #[track_caller]
+    pub fn font_size(mut self, size: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["font_size"]); self.font_size = Some(size);
+    self }
 
-    pub fn font_size(mut self, size: u16) -> Self {
-        self.font_size = Some(size);
-        self
-    }
+    #[track_caller]
+    pub fn margin(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["margin"]); self.margin = value;
+    self }
 
-    pub fn margin(mut self, value: Edges) -> Self {
-        self.margin = value;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.hovered = hovered;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.pressed = pressed;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
-
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.focused = focused;
+    self }
 
     /// Marks the button as persistently selected (e.g. the active tab), distinct
     /// from keyboard focus. Renders the theme's selected surface.
-    pub fn selected(mut self, selected: bool) -> Self {
-        self.state.selected = selected;
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, selected: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.selected = selected;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.validation = validation;
+    self }
 
-    pub fn subtle(mut self) -> Self {
-        self.kind = ButtonKind::Subtle;
-        self
-    }
+    #[track_caller]
+    pub fn subtle(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::Subtle;
+    self }
 
-    pub fn link(mut self) -> Self {
-        self.kind = ButtonKind::Link;
-        self
-    }
+    #[track_caller]
+    pub fn link(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::Link;
+    self }
 
-    pub fn chip(mut self) -> Self {
-        self.kind = ButtonKind::Chip;
-        self
-    }
+    #[track_caller]
+    pub fn chip(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::Chip;
+    self }
 
-    pub fn tile(mut self) -> Self {
-        self.kind = ButtonKind::Tile;
-        self
-    }
+    #[track_caller]
+    pub fn tile(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::Tile;
+    self }
 
-    pub fn icon_only(mut self) -> Self {
-        self.kind = ButtonKind::Icon;
-        self
-    }
+    #[track_caller]
+    pub fn icon_only(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::Icon;
+    self }
 
-    pub fn result_action(mut self) -> Self {
-        self.kind = ButtonKind::ResultAction;
-        self
-    }
+    #[track_caller]
+    pub fn result_action(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::ResultAction;
+    self }
 
-    pub fn floating_action(mut self) -> Self {
-        self.kind = ButtonKind::FloatingAction;
-        self
-    }
+    #[track_caller]
+    pub fn floating_action(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::FloatingAction;
+    self }
 
-    pub fn primary_round(mut self) -> Self {
-        self.kind = ButtonKind::PrimaryRound;
-        self
-    }
+    #[track_caller]
+    pub fn primary_round(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = ButtonKind::PrimaryRound;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_press(mut self, message: Message) -> View<Message> {
-        self.action = Action::Message(message);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_press(mut self, message: Message) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::Message(message);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for ButtonBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Button(ButtonToken {
-            id: self.id,
-            label: self.label,
-            kind: self.kind,
-            icon: self.icon,
-            tooltip: self.tooltip,
-            width: self.width,
-            height: self.height,
-            padding: self.padding,
-            text_style: self.text_style,
-            font_size: self.font_size,
-            margin: self.margin,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let token = ViewToken::Button(ButtonToken {
+        id: self.id,
+        label: self.label,
+        kind: self.kind,
+        icon: self.icon,
+        tooltip: self.tooltip,
+        width: self.width,
+        height: self.height,
+        padding: self.padding,
+        text_style: self.text_style,
+        font_size: self.font_size,
+        margin: self.margin,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    });
+    #[cfg(feature = "parity-diagnostics")]
+    return View::with_provenance(token, self.provenance);
+    #[cfg(not(feature = "parity-diagnostics"))]
+    View::new(token) }
 }
 
 #[derive(Clone, Debug)]
-pub struct FlyoutButtonBuilder<Message> {
-    id: Option<String>,
-    label: String,
-    icon: Option<IconToken>,
-    tooltip: Option<String>,
-    selected: Option<String>,
-    items: Vec<FlyoutMenuItem>,
-    min_width: Option<u16>,
-    min_height: Option<u16>,
-    padding: Option<Edges>,
-    border_width: Option<u16>,
-    radius: Option<u16>,
-    align_y: Alignment,
-    text_style: Option<TextStyle>,
-    font_size: Option<u16>,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct FlyoutButtonBuilder<Message> { id: Option<String>,
+label: String,
+icon: Option<IconToken>,
+tooltip: Option<String>,
+selected: Option<String>,
+items: Vec<FlyoutMenuItem>,
+min_width: Option<u16>,
+min_height: Option<u16>,
+padding: Option<Edges>,
+border_width: Option<u16>,
+radius: Option<u16>,
+align_y: Alignment,
+text_style: Option<TextStyle>,
+font_size: Option<u16>,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> FlyoutButtonBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
-        self.tooltip = Some(tooltip.into());
-        self
-    }
+    #[track_caller]
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["tooltip"]); self.tooltip = Some(tooltip.into());
+    self }
 
-    pub fn selected(mut self, selected: impl Into<String>) -> Self {
-        self.selected = Some(selected.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, selected: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected"]); self.selected = Some(selected.into());
+    self }
 
-    pub fn items(mut self, items: impl IntoIterator<Item = FlyoutMenuItem>) -> Self {
-        self.items = items.into_iter().collect();
-        self
-    }
+    #[track_caller]
+    pub fn items(mut self, items: impl IntoIterator<Item = FlyoutMenuItem>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["items"]); self.items = items.into_iter().collect();
+    self }
 
-    pub fn item(mut self, item: FlyoutMenuItem) -> Self {
-        self.items.push(item);
-        self
-    }
+    #[track_caller]
+    pub fn item(mut self, item: FlyoutMenuItem) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["items"]); self.items.push(item);
+    self }
 
-    pub fn min_width(mut self, value: u16) -> Self {
-        self.min_width = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn min_width(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["min_width"]); self.min_width = Some(value);
+    self }
 
-    pub fn min_height(mut self, value: u16) -> Self {
-        self.min_height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn min_height(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["min_height"]); self.min_height = Some(value);
+    self }
 
-    pub fn padding(mut self, value: Edges) -> Self {
-        self.padding = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = Some(value);
+    self }
 
-    pub fn border_width(mut self, value: u16) -> Self {
-        self.border_width = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn border_width(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["border_width"]); self.border_width = Some(value);
+    self }
 
-    pub fn radius(mut self, value: u16) -> Self {
-        self.radius = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn radius(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["radius"]); self.radius = Some(value);
+    self }
 
-    pub fn align_y(mut self, align_y: Alignment) -> Self {
-        self.align_y = align_y;
-        self
-    }
+    #[track_caller]
+    pub fn align_y(mut self, align_y: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["align_y"]); self.align_y = align_y;
+    self }
 
-    pub fn text_style(mut self, style: TextStyle) -> Self {
-        self.text_style = Some(style);
-        self
-    }
+    #[track_caller]
+    pub fn text_style(mut self, style: TextStyle) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["text_style"]); self.text_style = Some(style);
+    self }
 
-    pub fn font_size(mut self, size: u16) -> Self {
-        self.font_size = Some(size);
-        self
-    }
+    #[track_caller]
+    pub fn font_size(mut self, size: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["font_size"]); self.font_size = Some(size);
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.hovered = hovered;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.pressed = pressed;
+    self }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.focused = focused;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.validation = validation;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for FlyoutButtonBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::FlyoutButton(FlyoutButtonToken {
-            id: self.id,
-            label: self.label,
-            icon: self.icon,
-            tooltip: self.tooltip,
-            selected: self.selected,
-            items: self.items,
-            min_width: self.min_width,
-            min_height: self.min_height,
-            padding: self.padding,
-            border_width: self.border_width,
-            radius: self.radius,
-            align_y: self.align_y,
-            text_style: self.text_style,
-            font_size: self.font_size,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::FlyoutButton(FlyoutButtonToken {
+        id: self.id,
+        label: self.label,
+        icon: self.icon,
+        tooltip: self.tooltip,
+        selected: self.selected,
+        items: self.items,
+        min_width: self.min_width,
+        min_height: self.min_height,
+        padding: self.padding,
+        border_width: self.border_width,
+        radius: self.radius,
+        align_y: self.align_y,
+        text_style: self.text_style,
+        font_size: self.font_size,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct StatusBadgeBuilder<Message> {
-    id: Option<String>,
-    label: String,
-    kind: StatusBadgeKind,
-    count: Option<u32>,
-    severity: ValidationSeverity,
-    icon: Option<IconToken>,
-    a11y: A11yHint,
-    _message: std::marker::PhantomData<Message>,
-}
+pub struct StatusBadgeBuilder<Message> { id: Option<String>,
+label: String,
+kind: StatusBadgeKind,
+count: Option<u32>,
+severity: ValidationSeverity,
+icon: Option<IconToken>,
+a11y: A11yHint,
+_message: std::marker::PhantomData<Message>, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> StatusBadgeBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn count(mut self, value: u32) -> Self {
-        self.label = value.to_string();
-        self.kind = StatusBadgeKind::Count;
-        self.count = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn count(mut self, value: u32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["count"]); self.label = value.to_string();
+    self.kind = StatusBadgeKind::Count;
+    self.count = Some(value);
+    self }
 
-    pub fn dot(mut self) -> Self {
-        self.label.clear();
-        self.kind = StatusBadgeKind::Dot;
-        self.count = None;
-        self
-    }
+    #[track_caller]
+    pub fn dot(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["dot"]); self.label.clear();
+    self.kind = StatusBadgeKind::Dot;
+    self.count = None;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for StatusBadgeBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::StatusBadge(StatusBadgeToken {
-            id: self.id,
-            label: self.label,
-            kind: self.kind,
-            count: self.count,
-            severity: self.severity,
-            icon: self.icon,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::StatusBadge(StatusBadgeToken {
+        id: self.id,
+        label: self.label,
+        kind: self.kind,
+        count: self.count,
+        severity: self.severity,
+        icon: self.icon,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct InfoBarBuilder<Message> {
-    id: Option<String>,
-    title: String,
-    message: String,
-    severity: ValidationSeverity,
-    icon: Option<IconToken>,
-    a11y: A11yHint,
-    _message: std::marker::PhantomData<Message>,
-}
+pub struct InfoBarBuilder<Message> { id: Option<String>,
+title: String,
+message: String,
+severity: ValidationSeverity,
+icon: Option<IconToken>,
+a11y: A11yHint,
+_message: std::marker::PhantomData<Message>, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> InfoBarBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn message(mut self, message: impl Into<String>) -> Self {
-        self.message = message.into();
-        self
-    }
+    #[track_caller]
+    pub fn message(mut self, message: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["message"]); self.message = message.into();
+    self }
 
     /// Override the default severity glyph (CheckMark / Warning / Error / Info).
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for InfoBarBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::InfoBar(InfoBarToken {
-            id: self.id,
-            title: self.title,
-            message: self.message,
-            severity: self.severity,
-            icon: self.icon,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::InfoBar(InfoBarToken {
+        id: self.id,
+        title: self.title,
+        message: self.message,
+        severity: self.severity,
+        icon: self.icon,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ProgressRingBuilder<Message> {
-    id: Option<String>,
-    active: bool,
-    size: u16,
-    label: Option<String>,
-    a11y: A11yHint,
-    _message: std::marker::PhantomData<Message>,
-}
+pub struct ProgressRingBuilder<Message> { id: Option<String>,
+active: bool,
+size: u16,
+label: Option<String>,
+a11y: A11yHint,
+_message: std::marker::PhantomData<Message>, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ProgressRingBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn active(mut self, active: bool) -> Self {
-        self.active = active;
-        self
-    }
+    #[track_caller]
+    pub fn active(mut self, active: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["active"]); self.active = active;
+    self }
 
-    pub fn size(mut self, size: u16) -> Self {
-        self.size = size;
-        self
-    }
+    #[track_caller]
+    pub fn size(mut self, size: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["size"]); self.size = size;
+    self }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
+    #[track_caller]
+    pub fn label(mut self, label: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["label"]); self.label = Some(label.into());
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for ProgressRingBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ProgressRing(ProgressRingToken {
-            id: self.id,
-            active: self.active,
-            size: self.size,
-            label: self.label,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ProgressRing(ProgressRingToken {
+        id: self.id,
+        active: self.active,
+        size: self.size,
+        label: self.label,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ProgressBarBuilder<Message> {
-    id: Option<String>,
-    active: bool,
-    value: Option<f32>,
-    width: Length,
-    height: u16,
-    label: Option<String>,
-    a11y: A11yHint,
-    _message: std::marker::PhantomData<Message>,
-}
+pub struct ProgressBarBuilder<Message> { id: Option<String>,
+active: bool,
+value: Option<f32>,
+width: Length,
+height: u16,
+label: Option<String>,
+a11y: A11yHint,
+_message: std::marker::PhantomData<Message>, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ProgressBarBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn active(mut self, active: bool) -> Self {
-        self.active = active;
-        self
-    }
+    #[track_caller]
+    pub fn active(mut self, active: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["active"]); self.active = active;
+    self }
 
-    pub fn value(mut self, value: f32) -> Self {
-        self.value = normalize_progress_bar_value(value);
-        self
-    }
+    #[track_caller]
+    pub fn value(mut self, value: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["value"]); self.value = normalize_progress_bar_value(value);
+    self }
 
-    pub fn indeterminate(mut self) -> Self {
-        self.value = None;
-        self
-    }
+    #[track_caller]
+    pub fn indeterminate(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["value"]); self.value = None;
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: u16) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
+    #[track_caller]
+    pub fn label(mut self, label: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["label"]); self.label = Some(label.into());
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for ProgressBarBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ProgressBar(ProgressBarToken {
-            id: self.id,
-            active: self.active,
-            value: self.value.and_then(normalize_progress_bar_value),
-            width: self.width,
-            height: self.height,
-            label: self.label,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ProgressBar(ProgressBarToken {
+        id: self.id,
+        active: self.active,
+        value: self.value.and_then(normalize_progress_bar_value),
+        width: self.width,
+        height: self.height,
+        label: self.label,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct BusyOverlayBuilder<Message> {
-    id: Option<String>,
-    active: bool,
-    opacity: f32,
-    fade_transition_ms: u16,
-    blocks_input: bool,
-    label: Option<String>,
-    content: Box<View<Message>>,
-    a11y: A11yHint,
-}
+pub struct BusyOverlayBuilder<Message> { id: Option<String>,
+active: bool,
+opacity: f32,
+fade_transition_ms: u16,
+blocks_input: bool,
+label: Option<String>,
+content: Box<View<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> BusyOverlayBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn active(mut self, active: bool) -> Self {
-        self.active = active;
-        self
-    }
+    #[track_caller]
+    pub fn active(mut self, active: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["active"]); self.active = active;
+    self }
 
     /// Drives the overlay directly from a [`Loadable`](crate::loadable::Loadable):
     /// the busy indicator is shown while the value is loading. This is the
     /// packaged "async load → loading state → overlay" interface.
+    #[track_caller]
     pub fn loading<T, E>(self, loadable: &crate::loadable::Loadable<T, E>) -> Self {
         self.active(loadable.is_loading())
     }
 
-    pub fn opacity(mut self, opacity: f32) -> Self {
-        self.opacity = opacity.clamp(0.0, 1.0);
-        self
-    }
+    #[track_caller]
+    pub fn opacity(mut self, opacity: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["opacity"]); self.opacity = opacity.clamp(0.0, 1.0);
+    self }
 
-    pub fn fade_transition_ms(mut self, duration_ms: u16) -> Self {
-        self.fade_transition_ms = duration_ms;
-        self
-    }
+    #[track_caller]
+    pub fn fade_transition_ms(mut self, duration_ms: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["fade_transition_ms"]); self.fade_transition_ms = duration_ms;
+    self }
 
-    pub fn blocks_input(mut self, blocks_input: bool) -> Self {
-        self.blocks_input = blocks_input;
-        self
-    }
+    #[track_caller]
+    pub fn blocks_input(mut self, blocks_input: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["blocks_input"]); self.blocks_input = blocks_input;
+    self }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
+    #[track_caller]
+    pub fn label(mut self, label: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["label"]); self.label = Some(label.into());
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for BusyOverlayBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::BusyOverlay(BusyOverlayToken {
-            id: self.id,
-            active: self.active,
-            opacity: self.opacity,
-            fade_transition_ms: self.fade_transition_ms,
-            blocks_input: self.blocks_input,
-            label: self.label,
-            content: self.content,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::BusyOverlay(BusyOverlayToken {
+        id: self.id,
+        active: self.active,
+        opacity: self.opacity,
+        fade_transition_ms: self.fade_transition_ms,
+        blocks_input: self.blocks_input,
+        label: self.label,
+        content: self.content,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct CardBuilder<Message> {
-    id: Option<String>,
-    title: String,
-    description: Option<String>,
-    icon: Option<IconToken>,
-    kind: CardKind,
-    padding: Option<Edges>,
-    content_spacing: u16,
-    margin: Edges,
-    max_height: Option<u16>,
-    content: Option<Box<View<Message>>>,
-    trailing: Vec<View<Message>>,
-    a11y: A11yHint,
-}
+pub struct CardBuilder<Message> { id: Option<String>,
+title: String,
+description: Option<String>,
+icon: Option<IconToken>,
+kind: CardKind,
+padding: Option<Edges>,
+content_spacing: u16,
+margin: Edges,
+max_height: Option<u16>,
+content: Option<Box<View<Message>>>,
+trailing: Vec<View<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> CardBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
+    #[track_caller]
+    pub fn description(mut self, description: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["description"]); self.description = Some(description.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn kind(mut self, kind: CardKind) -> Self {
-        self.kind = kind;
-        self
-    }
+    #[track_caller]
+    pub fn kind(mut self, kind: CardKind) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = kind;
+    self }
 
-    pub fn padding(mut self, value: u16) -> Self {
-        self.padding = Some(Edges {
-            top: value,
-            right: value,
-            bottom: value,
-            left: value,
-        });
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = Some(Edges {
+        top: value,
+        right: value,
+        bottom: value,
+        left: value,
+    });
+    self }
 
-    pub fn padding_edges(mut self, value: Edges) -> Self {
-        self.padding = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn padding_edges(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = Some(value);
+    self }
 
-    pub fn content_spacing(mut self, spacing: u16) -> Self {
-        self.content_spacing = spacing;
-        self
-    }
+    #[track_caller]
+    pub fn content_spacing(mut self, spacing: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content_spacing"]); self.content_spacing = spacing;
+    self }
 
-    pub fn margin(mut self, value: Edges) -> Self {
-        self.margin = value;
-        self
-    }
+    #[track_caller]
+    pub fn margin(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["margin"]); self.margin = value;
+    self }
 
-    pub fn max_height(mut self, value: u16) -> Self {
-        self.max_height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn max_height(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_height"]); self.max_height = Some(value);
+    self }
 
-    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
-        self.content = Some(Box::new(content.into_view()));
-        self
-    }
+    #[track_caller]
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content"]); self.content = Some(Box::new(content.into_view()));
+    self }
 
-    pub fn trailing(mut self, trailing: impl IntoChildren<Message>) -> Self {
-        self.trailing = trailing.into_children();
-        self
-    }
+    #[track_caller]
+    pub fn trailing(mut self, trailing: impl IntoChildren<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["trailing"]); self.trailing = trailing.into_children();
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for CardBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Card(CardToken {
-            id: self.id,
-            title: self.title,
-            description: self.description,
-            icon: self.icon,
-            kind: self.kind,
-            padding: self.padding,
-            content_spacing: self.content_spacing,
-            margin: self.margin,
-            max_height: self.max_height,
-            content: self.content,
-            trailing: self.trailing,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Card(CardToken {
+        id: self.id,
+        title: self.title,
+        description: self.description,
+        icon: self.icon,
+        kind: self.kind,
+        padding: self.padding,
+        content_spacing: self.content_spacing,
+        margin: self.margin,
+        max_height: self.max_height,
+        content: self.content,
+        trailing: self.trailing,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct SpacerBuilder<Message> {
-    id: Option<String>,
-    width: Length,
-    height: Length,
-    _message: std::marker::PhantomData<Message>,
-}
+pub struct SpacerBuilder<Message> { id: Option<String>,
+width: Length,
+height: Length,
+_message: std::marker::PhantomData<Message>, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> SpacerBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 }
 
 impl<Message> IntoView<Message> for SpacerBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Spacer(SpacerToken {
-            id: self.id,
-            width: self.width,
-            height: self.height,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Spacer(SpacerToken {
+        id: self.id,
+        width: self.width,
+        height: self.height,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct TextEditorBuilder<Message> {
-    id: Option<String>,
-    text: String,
-    placeholder: Option<String>,
-    width: Option<Length>,
-    min_height: Option<u16>,
-    max_height: Option<u16>,
-    padding: Option<Edges>,
-    text_style: TextStyle,
-    chrome: TextEditorChrome,
-    secure: bool,
-    read_only: bool,
-    state: ControlState,
-    action: Action<Message>,
-    key_bindings: Vec<TextEditorKeyBinding<Message>>,
-    trailing_icon: Option<TextEditorTrailingIcon>,
-    a11y: A11yHint,
-}
+pub struct TextEditorBuilder<Message> { id: Option<String>,
+text: String,
+placeholder: Option<String>,
+width: Option<Length>,
+min_height: Option<u16>,
+max_height: Option<u16>,
+padding: Option<Edges>,
+text_style: TextStyle,
+chrome: TextEditorChrome,
+secure: bool,
+read_only: bool,
+state: ControlState,
+action: Action<Message>,
+key_bindings: Vec<TextEditorKeyBinding<Message>>,
+trailing_icon: Option<TextEditorTrailingIcon>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> TextEditorBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn placeholder(mut self, value: impl Into<String>) -> Self {
-        self.placeholder = Some(value.into());
-        self
-    }
+    #[track_caller]
+    pub fn placeholder(mut self, value: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["placeholder"]); self.placeholder = Some(value.into());
+    self }
 
-    pub fn width(mut self, value: Length) -> Self {
-        self.width = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, value: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = Some(value);
+    self }
 
-    pub fn min_height(mut self, value: u16) -> Self {
-        self.min_height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn min_height(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["min_height", "height"]); self.min_height = Some(value);
+    self }
 
-    pub fn max_height(mut self, value: u16) -> Self {
-        self.max_height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn max_height(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_height", "height"]); self.max_height = Some(value);
+    self }
 
-    pub fn padding(mut self, value: Edges) -> Self {
-        self.padding = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = Some(value);
+    self }
 
-    pub fn text_style(mut self, style: TextStyle) -> Self {
-        self.text_style = style;
-        self
-    }
+    #[track_caller]
+    pub fn text_style(mut self, style: TextStyle) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["text_style"]); self.text_style = style;
+    self }
 
-    pub fn chrome(mut self, chrome: TextEditorChrome) -> Self {
-        self.chrome = chrome;
-        self
-    }
+    #[track_caller]
+    pub fn chrome(mut self, chrome: TextEditorChrome) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["chrome"]); self.chrome = chrome;
+    self }
 
-    pub fn frameless(mut self) -> Self {
-        self.chrome = TextEditorChrome::Frameless;
-        self
-    }
+    #[track_caller]
+    pub fn frameless(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["chrome"]); self.chrome = TextEditorChrome::Frameless;
+    self }
 
-    pub fn secure(mut self, secure: bool) -> Self {
-        self.secure = secure;
-        self
-    }
+    #[track_caller]
+    pub fn secure(mut self, secure: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["secure"]); self.secure = secure;
+    self }
 
+    #[track_caller]
     pub fn password(self) -> Self {
         self.secure(true)
     }
 
-    pub fn read_only(mut self, read_only: bool) -> Self {
-        self.read_only = read_only;
-        self
-    }
+    #[track_caller]
+    pub fn read_only(mut self, read_only: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["read_only"]); self.read_only = read_only;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.hovered = hovered;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.pressed = pressed;
+    self }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.focused = focused;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.validation = validation;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_key(
-        mut self,
-        key: TextEditorKey,
-        modifiers: TextEditorKeyModifiers,
-        message: Message,
-    ) -> Self {
-        self.key_bindings.push(TextEditorKeyBinding {
-            key,
-            modifiers,
-            message,
-        });
-        self
-    }
+    #[track_caller]
+    pub fn on_key(mut self,
+    key: TextEditorKey,
+    modifiers: TextEditorKeyModifiers,
+    message: Message,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["key_bindings"]); self.key_bindings.push(TextEditorKeyBinding {
+        key,
+        modifiers,
+        message,
+    });
+    self }
 
-    pub fn trailing_icon(
-        mut self,
-        id: impl Into<String>,
-        icon: IconToken,
-        label: impl Into<String>,
-    ) -> Self {
-        self.trailing_icon = Some(TextEditorTrailingIcon {
-            id: id.into(),
-            icon,
-            label: label.into(),
-            width: 28,
-            height: 28,
-            spacing: 6,
-        });
-        self
-    }
+    #[track_caller]
+    pub fn trailing_icon(mut self,
+    id: impl Into<String>,
+    icon: IconToken,
+    label: impl Into<String>,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["trailing_icon"]); self.trailing_icon = Some(TextEditorTrailingIcon {
+        id: id.into(),
+        icon,
+        label: label.into(),
+        width: 28,
+        height: 28,
+        spacing: 6,
+    });
+    self }
 
-    pub fn on_input(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::text_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_input(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::text_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for TextEditorBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::TextEditor(TextEditorToken {
-            id: self.id,
-            text: self.text,
-            placeholder: self.placeholder,
-            width: self.width,
-            min_height: self.min_height,
-            max_height: self.max_height,
-            padding: self.padding,
-            text_style: self.text_style,
-            chrome: self.chrome,
-            secure: self.secure,
-            read_only: self.read_only,
-            state: self.state,
-            action: self.action,
-            key_bindings: self.key_bindings,
-            trailing_icon: self.trailing_icon,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::TextEditor(TextEditorToken {
+        id: self.id,
+        text: self.text,
+        placeholder: self.placeholder,
+        width: self.width,
+        min_height: self.min_height,
+        max_height: self.max_height,
+        padding: self.padding,
+        text_style: self.text_style,
+        chrome: self.chrome,
+        secure: self.secure,
+        read_only: self.read_only,
+        state: self.state,
+        action: self.action,
+        key_bindings: self.key_bindings,
+        trailing_icon: self.trailing_icon,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ToggleSwitchBuilder<Message> {
-    id: Option<String>,
-    header: Option<String>,
-    label: String,
-    checked: bool,
-    width: Option<Length>,
-    height: Option<Length>,
-    margin: Edges,
-    align_y: Alignment,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct ToggleSwitchBuilder<Message> { id: Option<String>,
+header: Option<String>,
+label: String,
+checked: bool,
+width: Option<Length>,
+height: Option<Length>,
+margin: Edges,
+align_y: Alignment,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ToggleSwitchBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn header(mut self, header: impl Into<String>) -> Self {
-        self.header = Some(header.into());
-        self
-    }
+    #[track_caller]
+    pub fn header(mut self, header: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["header", "width", "height", "labeled_height"]); self.header = Some(header.into());
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = Some(width);
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = Some(width);
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = Some(height);
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = Some(height);
+    self }
 
-    pub fn margin(mut self, margin: Edges) -> Self {
-        self.margin = margin;
-        self
-    }
+    #[track_caller]
+    pub fn margin(mut self, margin: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["margin"]); self.margin = margin;
+    self }
 
-    pub fn align_y(mut self, align_y: Alignment) -> Self {
-        self.align_y = align_y;
-        self
-    }
+    #[track_caller]
+    pub fn align_y(mut self, align_y: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["align_y"]); self.align_y = align_y;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.hovered = hovered;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.pressed = pressed;
+    self }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.focused = focused;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.validation = validation;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_toggle(
-        mut self,
-        map: impl Fn(bool) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::bool_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_toggle(mut self,
+    map: impl Fn(bool) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::bool_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for ToggleSwitchBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ToggleSwitch(ToggleSwitchToken {
-            id: self.id,
-            header: self.header,
-            label: self.label,
-            checked: self.checked,
-            width: self.width,
-            height: self.height,
-            margin: self.margin,
-            align_y: self.align_y,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ToggleSwitch(ToggleSwitchToken {
+        id: self.id,
+        header: self.header,
+        label: self.label,
+        checked: self.checked,
+        width: self.width,
+        height: self.height,
+        margin: self.margin,
+        align_y: self.align_y,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct RadioGroupBuilder<Message> {
-    id: Option<String>,
-    header: Option<String>,
-    options: Vec<RadioOption>,
-    selected: Option<String>,
-    orientation: Orientation,
-    spacing: u16,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct RadioGroupBuilder<Message> { id: Option<String>,
+header: Option<String>,
+options: Vec<RadioOption>,
+selected: Option<String>,
+orientation: Orientation,
+spacing: u16,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> RadioGroupBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn header(mut self, header: impl Into<String>) -> Self {
-        self.header = Some(header.into());
-        self
-    }
+    #[track_caller]
+    pub fn header(mut self, header: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["header"]); self.header = Some(header.into());
+    self }
 
     /// Append an option.
-    pub fn option(mut self, id: impl Into<String>, label: impl Into<String>) -> Self {
-        self.options.push(RadioOption::new(id, label));
-        self
-    }
+    #[track_caller]
+    pub fn option(mut self, id: impl Into<String>, label: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["options"]); self.options.push(RadioOption::new(id, label));
+    self }
 
     /// Append a pre-built option (lets callers disable it).
-    pub fn option_item(mut self, option: RadioOption) -> Self {
-        self.options.push(option);
-        self
-    }
+    #[track_caller]
+    pub fn option_item(mut self, option: RadioOption) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["options"]); self.options.push(option);
+    self }
 
-    pub fn options(mut self, options: impl IntoIterator<Item = RadioOption>) -> Self {
-        self.options.extend(options);
-        self
-    }
+    #[track_caller]
+    pub fn options(mut self, options: impl IntoIterator<Item = RadioOption>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["options"]); self.options.extend(options);
+    self }
 
-    pub fn selected(mut self, id: impl Into<String>) -> Self {
-        self.selected = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected"]); self.selected = Some(id.into());
+    self }
 
-    pub fn horizontal(mut self) -> Self {
-        self.orientation = Orientation::Horizontal;
-        self
-    }
+    #[track_caller]
+    pub fn horizontal(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["orientation"]); self.orientation = Orientation::Horizontal;
+    self }
 
-    pub fn vertical(mut self) -> Self {
-        self.orientation = Orientation::Vertical;
-        self
-    }
+    #[track_caller]
+    pub fn vertical(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["orientation"]); self.orientation = Orientation::Vertical;
+    self }
 
-    pub fn spacing(mut self, spacing: u16) -> Self {
-        self.spacing = spacing;
-        self
-    }
+    #[track_caller]
+    pub fn spacing(mut self, spacing: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["spacing"]); self.spacing = spacing;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Selection callback: receives the newly selected option's id.
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for RadioGroupBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::RadioGroup(RadioGroupToken {
-            id: self.id,
-            header: self.header,
-            options: self.options,
-            selected: self.selected,
-            orientation: self.orientation,
-            spacing: self.spacing,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::RadioGroup(RadioGroupToken {
+        id: self.id,
+        header: self.header,
+        options: self.options,
+        selected: self.selected,
+        orientation: self.orientation,
+        spacing: self.spacing,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct CheckBoxBuilder<Message> {
-    id: Option<String>,
-    label: String,
-    checked: bool,
-    indeterminate: bool,
-    label_italic: bool,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct CheckBoxBuilder<Message> { id: Option<String>,
+label: String,
+checked: bool,
+indeterminate: bool,
+label_italic: bool,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> CheckBoxBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.hovered = hovered;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.pressed = pressed;
+    self }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.focused = focused;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.validation = validation;
+    self }
 
-    pub fn label_italic(mut self, italic: bool) -> Self {
-        self.label_italic = italic;
-        self
-    }
+    #[track_caller]
+    pub fn label_italic(mut self, italic: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["label_italic"]); self.label_italic = italic;
+    self }
 
     /// Put the checkbox in the mixed/indeterminate state (WinUI three-state).
-    pub fn indeterminate(mut self, indeterminate: bool) -> Self {
-        self.indeterminate = indeterminate;
-        self
-    }
+    #[track_caller]
+    pub fn indeterminate(mut self, indeterminate: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["indeterminate"]); self.indeterminate = indeterminate;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_toggle(
-        mut self,
-        map: impl Fn(bool) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::bool_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_toggle(mut self,
+    map: impl Fn(bool) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::bool_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for CheckBoxBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::CheckBox(CheckBoxToken {
-            id: self.id,
-            label: self.label,
-            checked: self.checked,
-            indeterminate: self.indeterminate,
-            label_italic: self.label_italic,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::CheckBox(CheckBoxToken {
+        id: self.id,
+        label: self.label,
+        checked: self.checked,
+        indeterminate: self.indeterminate,
+        label_italic: self.label_italic,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct NumberBoxBuilder<Message> {
-    id: Option<String>,
-    value: f32,
-    min: Option<f32>,
-    max: Option<f32>,
-    step: f32,
-    header: Option<String>,
-    placeholder: Option<String>,
-    spin_buttons: bool,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct NumberBoxBuilder<Message> { id: Option<String>,
+value: f32,
+min: Option<f32>,
+max: Option<f32>,
+step: f32,
+header: Option<String>,
+placeholder: Option<String>,
+spin_buttons: bool,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> NumberBoxBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn range(mut self, min: f32, max: f32) -> Self {
-        self.min = Some(min);
-        self.max = Some(max);
-        self
-    }
+    #[track_caller]
+    pub fn range(mut self, min: f32, max: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["min", "max", "value"]); self.min = Some(min);
+    self.max = Some(max);
+    self }
 
-    pub fn min(mut self, min: f32) -> Self {
-        self.min = Some(min);
-        self
-    }
+    #[track_caller]
+    pub fn min(mut self, min: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["min", "value"]); self.min = Some(min);
+    self }
 
-    pub fn max(mut self, max: f32) -> Self {
-        self.max = Some(max);
-        self
-    }
+    #[track_caller]
+    pub fn max(mut self, max: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max", "value"]); self.max = Some(max);
+    self }
 
-    pub fn step(mut self, step: f32) -> Self {
-        self.step = normalize_number_box_step(step);
-        self
-    }
+    #[track_caller]
+    pub fn step(mut self, step: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["step"]); self.step = normalize_number_box_step(step);
+    self }
 
-    pub fn header(mut self, header: impl Into<String>) -> Self {
-        self.header = Some(header.into());
-        self
-    }
+    #[track_caller]
+    pub fn header(mut self, header: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["header"]); self.header = Some(header.into());
+    self }
 
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.placeholder = Some(placeholder.into());
-        self
-    }
+    #[track_caller]
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["placeholder"]); self.placeholder = Some(placeholder.into());
+    self }
 
-    pub fn spin_buttons(mut self, spin_buttons: bool) -> Self {
-        self.spin_buttons = spin_buttons;
-        self
-    }
+    #[track_caller]
+    pub fn spin_buttons(mut self, spin_buttons: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["spin_buttons"]); self.spin_buttons = spin_buttons;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_change(
-        mut self,
-        map: impl Fn(f32) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::number_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_change(mut self,
+    map: impl Fn(f32) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::number_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for NumberBoxBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        let value = clamp_number_box_value(self.value, self.min, self.max);
-        View::new(ViewToken::NumberBox(NumberBoxToken {
-            id: self.id,
-            value,
-            min: self.min,
-            max: self.max,
-            step: normalize_number_box_step(self.step),
-            header: self.header,
-            placeholder: self.placeholder,
-            spin_buttons: self.spin_buttons,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let value = clamp_number_box_value(self.value, self.min, self.max);
+    view_from_builder!(self, ViewToken::NumberBox(NumberBoxToken {
+        id: self.id,
+        value,
+        min: self.min,
+        max: self.max,
+        step: normalize_number_box_step(self.step),
+        header: self.header,
+        placeholder: self.placeholder,
+        spin_buttons: self.spin_buttons,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct AutoSuggestBoxBuilder<Message> {
-    id: Option<String>,
-    text: String,
-    placeholder: Option<String>,
-    header: Option<String>,
-    suggestions: Vec<String>,
-    open: bool,
-    highlighted_index: Option<usize>,
-    width: Length,
-    state: ControlState,
-    change_action: Action<Message>,
-    submit_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct AutoSuggestBoxBuilder<Message> { id: Option<String>,
+text: String,
+placeholder: Option<String>,
+header: Option<String>,
+suggestions: Vec<String>,
+open: bool,
+highlighted_index: Option<usize>,
+width: Length,
+state: ControlState,
+change_action: Action<Message>,
+submit_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> AutoSuggestBoxBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.placeholder = Some(placeholder.into());
-        self
-    }
+    #[track_caller]
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["placeholder"]); self.placeholder = Some(placeholder.into());
+    self }
 
-    pub fn header(mut self, header: impl Into<String>) -> Self {
-        self.header = Some(header.into());
-        self
-    }
+    #[track_caller]
+    pub fn header(mut self, header: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["header"]); self.header = Some(header.into());
+    self }
 
     /// Set the suggestion list (the app filters these as the user types). Opens
     /// the dropdown automatically when non-empty unless overridden by [`open`].
-    pub fn suggestions(mut self, suggestions: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.suggestions = suggestions.into_iter().map(Into::into).collect();
-        self.open = !self.suggestions.is_empty();
-        self
-    }
+    #[track_caller]
+    pub fn suggestions(mut self, suggestions: impl IntoIterator<Item = impl Into<String>>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["suggestions"]); self.suggestions = suggestions.into_iter().map(Into::into).collect();
+    self.open = !self.suggestions.is_empty();
+    self }
 
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = open;
-        self
-    }
+    #[track_caller]
+    pub fn open(mut self, open: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["open"]); self.open = open;
+    self }
 
-    pub fn highlighted_index(mut self, index: Option<usize>) -> Self {
-        self.highlighted_index = index;
-        self
-    }
+    #[track_caller]
+    pub fn highlighted_index(mut self, index: Option<usize>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["highlighted_index"]); self.highlighted_index = index;
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// As-you-type callback (fires on each edit).
-    pub fn on_change(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.change_action = Action::text_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_change(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["on_change"]); self.change_action = Action::text_input(map);
+    self }
 
     /// Suggestion-chosen callback (receives the picked suggestion text).
-    pub fn on_submit(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.submit_action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_submit(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["on_submit"]); self.submit_action = Action::selection_input(map);
+    self.into_view() }
 
     /// Finish without a submit handler.
     pub fn build(self) -> View<Message> {
@@ -5089,127 +4825,109 @@ impl<Message> AutoSuggestBoxBuilder<Message> {
 }
 
 impl<Message> IntoView<Message> for AutoSuggestBoxBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        let highlighted_index = self
-            .highlighted_index
-            .filter(|index| *index < self.suggestions.len());
-        View::new(ViewToken::AutoSuggestBox(AutoSuggestBoxToken {
-            id: self.id,
-            text: self.text,
-            placeholder: self.placeholder,
-            header: self.header,
-            suggestions: self.suggestions,
-            open: self.open,
-            highlighted_index,
-            width: self.width,
-            state: self.state,
-            change_action: self.change_action,
-            submit_action: self.submit_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let highlighted_index = self
+        .highlighted_index
+        .filter(|index| *index < self.suggestions.len());
+    view_from_builder!(self, ViewToken::AutoSuggestBox(AutoSuggestBoxToken {
+        id: self.id,
+        text: self.text,
+        placeholder: self.placeholder,
+        header: self.header,
+        suggestions: self.suggestions,
+        open: self.open,
+        highlighted_index,
+        width: self.width,
+        state: self.state,
+        change_action: self.change_action,
+        submit_action: self.submit_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct SliderBuilder<Message> {
-    id: Option<String>,
-    value: f32,
-    min: f32,
-    max: f32,
-    step: f32,
-    width: Length,
-    state: ControlState,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct SliderBuilder<Message> { id: Option<String>,
+value: f32,
+min: f32,
+max: f32,
+step: f32,
+width: Length,
+state: ControlState,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> SliderBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn range(mut self, min: f32, max: f32) -> Self {
-        self.min = min;
-        self.max = max;
-        self
-    }
+    #[track_caller]
+    pub fn range(mut self, min: f32, max: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["min", "max", "value"]); self.min = min;
+    self.max = max;
+    self }
 
-    pub fn step(mut self, step: f32) -> Self {
-        self.step = step;
-        self
-    }
+    #[track_caller]
+    pub fn step(mut self, step: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["step"]); self.step = step;
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state", "preview_active"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state", "preview_active"]); self.state = state;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state", "preview_active"]); self.state.hovered = hovered;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state", "preview_active"]); self.state.pressed = pressed;
+    self }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state", "preview_active"]); self.state.focused = focused;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state", "preview_active"]); self.state.validation = validation;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_change(
-        mut self,
-        map: impl Fn(f32) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::number_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_change(mut self,
+    map: impl Fn(f32) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::number_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for SliderBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        let min = self.min.min(self.max);
-        let max = self.max.max(self.min);
-        let step = if self.step.is_finite() && self.step > 0.0 {
-            self.step
-        } else {
-            1.0
-        };
-        View::new(ViewToken::Slider(SliderToken {
-            id: self.id,
-            value: self.value.clamp(min, max),
-            min,
-            max,
-            step,
-            width: self.width,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let min = self.min.min(self.max);
+    let max = self.max.max(self.min);
+    let step = if self.step.is_finite() && self.step > 0.0 {
+        self.step
+    } else {
+        1.0
+    };
+    view_from_builder!(self, ViewToken::Slider(SliderToken {
+        id: self.id,
+        value: self.value.clamp(min, max),
+        min,
+        max,
+        step,
+        width: self.width,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
@@ -5224,338 +4942,304 @@ pub struct ComboBoxBuilder<Message> {
     state: ControlState,
     action: Action<Message>,
     a11y: A11yHint,
+    #[cfg(feature = "parity-diagnostics")]
+    provenance: ViewProvenance,
 }
 
 impl<Message> ComboBoxBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("id");
+    self }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
+    #[track_caller]
+    pub fn label(mut self, label: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["label", "labeled_width", "labeled_height"]); self.label = Some(label.into());
+    self }
 
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.placeholder = Some(placeholder.into());
-        self
-    }
+    #[track_caller]
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["placeholder"]); self.placeholder = Some(placeholder.into());
+    self }
 
-    pub fn selected(mut self, selected: impl Into<String>) -> Self {
-        self.selected = Some(selected.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, selected: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected", "selected_label"]); self.selected = Some(selected.into());
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("selected");
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width", "labeled_width"]); self.width = width;
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("width");
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height", "labeled_height"]); self.height = height;
+    #[cfg(feature = "parity-diagnostics")]
+    self.provenance.set("height");
+    self }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.state.enabled = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn enabled(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.enabled = enabled;
+    self }
 
-    pub fn state(mut self, state: ControlState) -> Self {
-        self.state = state;
-        self
-    }
+    #[track_caller]
+    pub fn state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state = state;
+    self }
 
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.hovered = hovered;
+    self }
 
-    pub fn pressed(mut self, pressed: bool) -> Self {
-        self.state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.pressed = pressed;
+    self }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.state.focused = focused;
-        self
-    }
+    #[track_caller]
+    pub fn focused(mut self, focused: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.focused = focused;
+    self }
 
-    pub fn validation(mut self, validation: ValidationState) -> Self {
-        self.state.validation = validation;
-        self
-    }
+    #[track_caller]
+    pub fn validation(mut self, validation: ValidationState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.state.validation = validation;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
-    pub fn on_change(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_change(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for ComboBoxBuilder<Message> {
+    #[track_caller]
     fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ComboBox(ComboBoxToken {
-            id: self.id,
-            label: self.label,
-            placeholder: self.placeholder,
-            items: self.items,
-            selected: self.selected,
-            width: self.width,
-            height: self.height,
-            state: self.state,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+        let selected = self
+            .selected
+            .filter(|selected| self.items.iter().any(|item| item.id == *selected));
+        let token = ViewToken::ComboBox(ComboBoxToken {
+        id: self.id,
+        label: self.label,
+        placeholder: self.placeholder,
+        items: self.items,
+        selected,
+        width: self.width,
+        height: self.height,
+        state: self.state,
+        action: self.action,
+        a11y: self.a11y,
+    });
+    #[cfg(feature = "parity-diagnostics")]
+    return View::with_provenance(token, self.provenance);
+    #[cfg(not(feature = "parity-diagnostics"))]
+    View::new(token) }
 }
 
 #[derive(Clone, Debug)]
-pub struct CommandBarBuilder<Message> {
-    id: Option<String>,
-    items: Vec<View<Message>>,
-    compact: bool,
-    width: Length,
-    align: Alignment,
-    distribution: LayoutDistribution,
-    a11y: A11yHint,
-}
+pub struct CommandBarBuilder<Message> { id: Option<String>,
+items: Vec<View<Message>>,
+compact: bool,
+width: Length,
+align: Alignment,
+distribution: LayoutDistribution,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> CommandBarBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn compact(mut self, compact: bool) -> Self {
-        self.compact = compact;
-        self
-    }
+    #[track_caller]
+    pub fn compact(mut self, compact: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["compact"]); self.compact = compact;
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn align(mut self, align: Alignment) -> Self {
-        self.align = align;
-        self
-    }
+    #[track_caller]
+    pub fn align(mut self, align: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["align"]); self.align = align;
+    self }
 
-    pub fn distribution(mut self, distribution: LayoutDistribution) -> Self {
-        self.distribution = distribution;
-        self
-    }
+    #[track_caller]
+    pub fn distribution(mut self, distribution: LayoutDistribution) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["distribution"]); self.distribution = distribution;
+    self }
 
-    pub fn space_between(mut self) -> Self {
-        self.distribution = LayoutDistribution::SpaceBetween;
-        self.width = Length::Fill;
-        self
-    }
+    #[track_caller]
+    pub fn space_between(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["distribution", "width"]); self.distribution = LayoutDistribution::SpaceBetween;
+    self.width = Length::Fill;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for CommandBarBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::CommandBar(CommandBarToken {
-            id: self.id,
-            items: self.items,
-            compact: self.compact,
-            width: self.width,
-            align: self.align,
-            distribution: self.distribution,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::CommandBar(CommandBarToken {
+        id: self.id,
+        items: self.items,
+        compact: self.compact,
+        width: self.width,
+        align: self.align,
+        distribution: self.distribution,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct NavigationViewBuilder<Message> {
-    id: Option<String>,
-    selected: Option<String>,
-    items: Vec<NavigationItem>,
-    footer_items: Vec<NavigationItem>,
-    content: Option<Box<View<Message>>>,
-    pane_display_mode: PaneDisplayMode,
-    header: Option<String>,
-    settings_visible: bool,
-    back_button_visible: bool,
-    action: Action<Message>,
-    back_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct NavigationViewBuilder<Message> { id: Option<String>,
+selected: Option<String>,
+items: Vec<NavigationItem>,
+footer_items: Vec<NavigationItem>,
+content: Option<Box<View<Message>>>,
+pane_display_mode: PaneDisplayMode,
+header: Option<String>,
+settings_visible: bool,
+back_button_visible: bool,
+action: Action<Message>,
+back_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> NavigationViewBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn selected(mut self, selected: impl Into<String>) -> Self {
-        self.selected = Some(selected.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, selected: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected"]); self.selected = Some(selected.into());
+    self }
 
-    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
-        self.content = Some(Box::new(content.into_view()));
-        self
-    }
+    #[track_caller]
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content"]); self.content = Some(Box::new(content.into_view()));
+    self }
 
     /// Set the pane layout mode (WinUI `PaneDisplayMode`).
-    pub fn pane_display_mode(mut self, mode: PaneDisplayMode) -> Self {
-        self.pane_display_mode = mode;
-        self
-    }
+    #[track_caller]
+    pub fn pane_display_mode(mut self, mode: PaneDisplayMode) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["pane_display_mode"]); self.pane_display_mode = mode;
+    self }
 
     /// Pane header text (WinUI `PaneHeader`).
-    pub fn header(mut self, header: impl Into<String>) -> Self {
-        self.header = Some(header.into());
-        self
-    }
+    #[track_caller]
+    pub fn header(mut self, header: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["header"]); self.header = Some(header.into());
+    self }
 
     /// Items pinned to the bottom of the pane (WinUI `FooterMenuItems`).
-    pub fn footer_items(mut self, items: impl IntoIterator<Item = NavigationItem>) -> Self {
-        self.footer_items = items.into_iter().collect();
-        self
-    }
+    #[track_caller]
+    pub fn footer_items(mut self, items: impl IntoIterator<Item = NavigationItem>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["footer_items"]); self.footer_items = items.into_iter().collect();
+    self }
 
-    pub fn footer_item(mut self, item: NavigationItem) -> Self {
-        self.footer_items.push(item);
-        self
-    }
+    #[track_caller]
+    pub fn footer_item(mut self, item: NavigationItem) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["footer_items"]); self.footer_items.push(item);
+    self }
 
     /// Show the built-in settings entry (WinUI `IsSettingsVisible`). Selecting it
     /// fires `on_select` with [`NavigationViewToken::SETTINGS_ID`].
-    pub fn settings_visible(mut self, visible: bool) -> Self {
-        self.settings_visible = visible;
-        self
-    }
+    #[track_caller]
+    pub fn settings_visible(mut self, visible: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["settings_visible"]); self.settings_visible = visible;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Show a back button that fires `message` when pressed (WinUI `BackRequested`).
-    pub fn back_button(mut self, message: Message) -> Self {
-        self.back_button_visible = true;
-        self.back_action = Action::message(message);
-        self
-    }
+    #[track_caller]
+    pub fn back_button(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["back_button", "back_action"]); self.back_button_visible = true;
+    self.back_action = Action::message(message);
+    self }
 
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for NavigationViewBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::NavigationView(NavigationViewToken {
-            id: self.id,
-            selected: self.selected,
-            items: self.items,
-            footer_items: self.footer_items,
-            content: self.content,
-            pane_display_mode: self.pane_display_mode,
-            header: self.header,
-            settings_visible: self.settings_visible,
-            back_button_visible: self.back_button_visible,
-            action: self.action,
-            back_action: self.back_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::NavigationView(NavigationViewToken {
+        id: self.id,
+        selected: self.selected,
+        items: self.items,
+        footer_items: self.footer_items,
+        content: self.content,
+        pane_display_mode: self.pane_display_mode,
+        header: self.header,
+        settings_visible: self.settings_visible,
+        back_button_visible: self.back_button_visible,
+        action: self.action,
+        back_action: self.back_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct DialogBuilder<Message> {
-    id: Option<String>,
-    title: String,
-    kind: DialogKind,
-    content: Option<Box<View<Message>>>,
-    primary: Option<CommandToken<Message>>,
-    secondary: Option<CommandToken<Message>>,
-    a11y: A11yHint,
-}
+pub struct DialogBuilder<Message> { id: Option<String>,
+title: String,
+kind: DialogKind,
+content: Option<Box<View<Message>>>,
+primary: Option<CommandToken<Message>>,
+secondary: Option<CommandToken<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> DialogBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn kind(mut self, kind: DialogKind) -> Self {
-        self.kind = kind;
-        self
-    }
+    #[track_caller]
+    pub fn kind(mut self, kind: DialogKind) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = kind;
+    self }
 
-    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
-        self.content = Some(Box::new(content.into_view()));
-        self
-    }
+    #[track_caller]
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content"]); self.content = Some(Box::new(content.into_view()));
+    self }
 
-    pub fn primary(mut self, command: CommandToken<Message>) -> Self {
-        self.primary = Some(command);
-        self
-    }
+    #[track_caller]
+    pub fn primary(mut self, command: CommandToken<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["primary"]); self.primary = Some(command);
+    self }
 
-    pub fn secondary(mut self, command: CommandToken<Message>) -> Self {
-        self.secondary = Some(command);
-        self
-    }
+    #[track_caller]
+    pub fn secondary(mut self, command: CommandToken<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["secondary"]); self.secondary = Some(command);
+    self }
 }
 
 impl<Message> IntoView<Message> for DialogBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Dialog(DialogToken {
-            id: self.id,
-            title: self.title,
-            kind: self.kind,
-            content: self.content,
-            primary: self.primary,
-            secondary: self.secondary,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Dialog(DialogToken {
+        id: self.id,
+        title: self.title,
+        kind: self.kind,
+        content: self.content,
+        primary: self.primary,
+        secondary: self.secondary,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct LayoutBuilder<Message> {
-    id: Option<String>,
-    kind: LayoutKind,
-    children: Vec<View<Message>>,
-    padding: u16,
-    padding_edges: Option<Edges>,
-    spacing: u16,
-    width: Length,
-    height: Length,
-    max_width: Option<u16>,
-    max_height: Option<u16>,
-    center_x: bool,
-    margin: Edges,
-    align: Alignment,
-    distribution: LayoutDistribution,
-    style: FluentStyle,
-    a11y: A11yHint,
-}
+pub struct LayoutBuilder<Message> { id: Option<String>,
+kind: LayoutKind,
+children: Vec<View<Message>>,
+padding: u16,
+padding_edges: Option<Edges>,
+spacing: u16,
+width: Length,
+height: Length,
+max_width: Option<u16>,
+max_height: Option<u16>,
+center_x: bool,
+margin: Edges,
+align: Alignment,
+distribution: LayoutDistribution,
+style: FluentStyle,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> LayoutBuilder<Message> {
+    #[track_caller]
     fn new(kind: LayoutKind, children: Vec<View<Message>>) -> Self {
         Self {
             id: None,
@@ -5574,138 +5258,189 @@ impl<Message> LayoutBuilder<Message> {
             distribution: LayoutDistribution::Start,
             style: FluentStyle::new(),
             a11y: A11yHint::default(),
+            #[cfg(feature = "parity-diagnostics")]
+            provenance: ViewProvenance::caller(),
         }
     }
 
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn padding(mut self, value: u16) -> Self {
-        self.padding = value;
-        self.padding_edges = None;
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = value;
+    self.padding_edges = None;
+    self }
 
-    pub fn padding_edges(mut self, value: Edges) -> Self {
-        self.padding_edges = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn padding_edges(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding_edges = Some(value);
+    self }
 
-    pub fn spacing(mut self, value: u16) -> Self {
-        self.spacing = value;
-        self
-    }
+    #[track_caller]
+    pub fn spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["spacing"]); self.spacing = value;
+    self }
 
-    pub fn width(mut self, value: Length) -> Self {
-        self.width = value;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, value: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = value;
+    self }
 
-    pub fn height(mut self, value: Length) -> Self {
-        self.height = value;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, value: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = value;
+    self }
 
-    pub fn align(mut self, value: Alignment) -> Self {
-        self.align = value;
-        self
-    }
+    #[track_caller]
+    pub fn align(mut self, value: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["align"]); self.align = value;
+    self }
 
-    pub fn distribution(mut self, value: LayoutDistribution) -> Self {
-        self.distribution = value;
-        self
-    }
+    #[track_caller]
+    pub fn distribution(mut self, value: LayoutDistribution) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["distribution"]); self.distribution = value;
+    self }
 
     /// Caps the layout's width, filling available space up to `value` dips.
-    pub fn max_width(mut self, value: u16) -> Self {
-        self.max_width = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn max_width(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_width"]); self.max_width = Some(value);
+    self }
 
     /// Caps the layout's height to `value` dips.
-    pub fn max_height(mut self, value: u16) -> Self {
-        self.max_height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn max_height(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_height"]); self.max_height = Some(value);
+    self }
 
     /// Centers the (bounded-width) layout horizontally within its parent.
     ///
     /// Equivalent to Tailwind `mx-auto`. Only has a visible effect when the
     /// layout's width is bounded (e.g. via [`max_width`](Self::max_width) or a
     /// fixed width); centering a fill-width layout is a no-op, matching CSS.
-    pub fn center_x(mut self, value: bool) -> Self {
-        self.center_x = value;
-        self
-    }
+    #[track_caller]
+    pub fn center_x(mut self, value: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["center_x"]); self.center_x = value;
+    self }
 
     /// Sets per-side outer spacing (margin) in dips.
-    pub fn margin(mut self, value: Edges) -> Self {
-        self.margin = value;
-        self
-    }
+    #[track_caller]
+    pub fn margin(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["margin"]); self.margin = value;
+    self }
 
-    pub fn space_between(mut self) -> Self {
-        self.distribution = LayoutDistribution::SpaceBetween;
-        self.width = Length::Fill;
-        self
-    }
+    #[track_caller]
+    pub fn space_between(mut self) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["distribution", "width"]); self.distribution = LayoutDistribution::SpaceBetween;
+    self.width = Length::Fill;
+    self }
 
+    #[track_caller]
     pub fn tw(mut self, classes: impl AsRef<str>) -> Self {
+        #[cfg(feature = "parity-diagnostics")]
+        self.provenance.set("style");
         let classes = classes.as_ref();
         self.style.extend(classes);
 
         for class in classes.split_whitespace() {
             if let Some(value) = class.strip_prefix("p-").and_then(utility_scale) {
                 self.padding = value;
+                #[cfg(feature = "parity-diagnostics")]
+                self.provenance.set("padding");
             } else if let Some(value) = class.strip_prefix("gap-").and_then(utility_scale) {
                 self.spacing = value;
+                #[cfg(feature = "parity-diagnostics")]
+                self.provenance.set("spacing");
             } else if let Some(value) = class.strip_prefix("max-w-").and_then(utility_scale) {
                 self.max_width = Some(value);
+                #[cfg(feature = "parity-diagnostics")]
+                self.provenance.set("max_width");
             } else if let Some(value) = class.strip_prefix("max-h-").and_then(utility_scale) {
                 self.max_height = Some(value);
+                #[cfg(feature = "parity-diagnostics")]
+                self.provenance.set("max_height");
             } else {
                 match class {
-                    "w-full" | "w-fill" => self.width = Length::Fill,
-                    "w-fit" | "w-auto" => self.width = Length::Shrink,
-                    "h-full" | "h-fill" => self.height = Length::Fill,
-                    "h-fit" | "h-auto" => self.height = Length::Shrink,
-                    "mx-auto" => self.center_x = true,
-                    "items-start" => self.align = Alignment::Start,
-                    "items-center" => self.align = Alignment::Center,
-                    "items-end" => self.align = Alignment::End,
-                    "items-stretch" => self.align = Alignment::Stretch,
+                    "w-full" | "w-fill" => {
+                        self.width = Length::Fill;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("width");
+                    }
+                    "w-fit" | "w-auto" => {
+                        self.width = Length::Shrink;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("width");
+                    }
+                    "h-full" | "h-fill" => {
+                        self.height = Length::Fill;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("height");
+                    }
+                    "h-fit" | "h-auto" => {
+                        self.height = Length::Shrink;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("height");
+                    }
+                    "mx-auto" => {
+                        self.center_x = true;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("center_x");
+                    }
+                    "items-start" => {
+                        self.align = Alignment::Start;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("align");
+                    }
+                    "items-center" => {
+                        self.align = Alignment::Center;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("align");
+                    }
+                    "items-end" => {
+                        self.align = Alignment::End;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("align");
+                    }
+                    "items-stretch" => {
+                        self.align = Alignment::Stretch;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set("align");
+                    }
                     "justify-between" | "space-between" => {
                         self.distribution = LayoutDistribution::SpaceBetween;
                         self.width = Length::Fill;
+                        #[cfg(feature = "parity-diagnostics")]
+                        self.provenance.set_many(&["distribution", "width"]);
                     }
                     _ => {
                         if let Some(value) = class.strip_prefix("mx-").and_then(utility_scale) {
                             self.margin.left = value;
                             self.margin.right = value;
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
                         } else if let Some(value) =
                             class.strip_prefix("my-").and_then(utility_scale)
                         {
                             self.margin.top = value;
                             self.margin.bottom = value;
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
                         } else if let Some(value) =
                             class.strip_prefix("mt-").and_then(utility_scale)
                         {
                             self.margin.top = value;
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
                         } else if let Some(value) =
                             class.strip_prefix("mr-").and_then(utility_scale)
                         {
                             self.margin.right = value;
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
                         } else if let Some(value) =
                             class.strip_prefix("mb-").and_then(utility_scale)
                         {
                             self.margin.bottom = value;
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
                         } else if let Some(value) =
                             class.strip_prefix("ml-").and_then(utility_scale)
                         {
                             self.margin.left = value;
-                        } else if let Some(value) = class.strip_prefix("m-").and_then(utility_scale)
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
+                        } else if let Some(value) =
+                            class.strip_prefix("m-").and_then(utility_scale)
                         {
                             self.margin = Edges {
                                 top: value,
@@ -5713,12 +5448,20 @@ impl<Message> LayoutBuilder<Message> {
                                 bottom: value,
                                 left: value,
                             };
-                        } else if let Some(value) = class.strip_prefix("w-").and_then(utility_scale)
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("margin");
+                        } else if let Some(value) =
+                            class.strip_prefix("w-").and_then(utility_scale)
                         {
                             self.width = Length::Fixed(value);
-                        } else if let Some(value) = class.strip_prefix("h-").and_then(utility_scale)
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("width");
+                        } else if let Some(value) =
+                            class.strip_prefix("h-").and_then(utility_scale)
                         {
                             self.height = Length::Fixed(value);
+                            #[cfg(feature = "parity-diagnostics")]
+                            self.provenance.set("height");
                         }
                     }
                 }
@@ -5730,664 +5473,560 @@ impl<Message> LayoutBuilder<Message> {
 }
 
 impl<Message> IntoView<Message> for LayoutBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Layout(LayoutToken {
-            id: self.id,
-            kind: self.kind,
-            children: self.children,
-            padding: self.padding,
-            padding_edges: self.padding_edges,
-            spacing: self.spacing,
-            width: self.width,
-            height: self.height,
-            max_width: self.max_width,
-            max_height: self.max_height,
-            center_x: self.center_x,
-            margin: self.margin,
-            align: self.align,
-            distribution: self.distribution,
-            style: self.style,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Layout(LayoutToken {
+        id: self.id,
+        kind: self.kind,
+        children: self.children,
+        padding: self.padding,
+        padding_edges: self.padding_edges,
+        spacing: self.spacing,
+        width: self.width,
+        height: self.height,
+        max_width: self.max_width,
+        max_height: self.max_height,
+        center_x: self.center_x,
+        margin: self.margin,
+        align: self.align,
+        distribution: self.distribution,
+        style: self.style,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct GridBuilder<Message> {
-    id: Option<String>,
-    rows: Vec<Length>,
-    columns: Vec<Length>,
-    row_spacing: u16,
-    column_spacing: u16,
-    padding: u16,
-    padding_edges: Option<Edges>,
-    width: Length,
-    height: Length,
-    align: Alignment,
-    children: Vec<GridChild<Message>>,
-    a11y: A11yHint,
-}
+pub struct GridBuilder<Message> { id: Option<String>,
+rows: Vec<Length>,
+columns: Vec<Length>,
+row_spacing: u16,
+column_spacing: u16,
+padding: u16,
+padding_edges: Option<Edges>,
+width: Length,
+height: Length,
+align: Alignment,
+children: Vec<GridChild<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> GridBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
     /// Declare the row tracks (WinUI `Grid.RowDefinitions`).
-    pub fn rows(mut self, rows: impl IntoIterator<Item = Length>) -> Self {
-        self.rows = rows.into_iter().collect();
-        self
-    }
+    #[track_caller]
+    pub fn rows(mut self, rows: impl IntoIterator<Item = Length>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["rows"]); self.rows = rows.into_iter().collect();
+    self }
 
     /// Declare the column tracks (WinUI `Grid.ColumnDefinitions`).
-    pub fn columns(mut self, columns: impl IntoIterator<Item = Length>) -> Self {
-        self.columns = columns.into_iter().collect();
-        self
-    }
+    #[track_caller]
+    pub fn columns(mut self, columns: impl IntoIterator<Item = Length>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["columns"]); self.columns = columns.into_iter().collect();
+    self }
 
     /// Gap between rows.
-    pub fn row_spacing(mut self, value: u16) -> Self {
-        self.row_spacing = value;
-        self
-    }
+    #[track_caller]
+    pub fn row_spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["row_spacing"]); self.row_spacing = value;
+    self }
 
     /// Gap between columns.
-    pub fn column_spacing(mut self, value: u16) -> Self {
-        self.column_spacing = value;
-        self
-    }
+    #[track_caller]
+    pub fn column_spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["column_spacing"]); self.column_spacing = value;
+    self }
 
     /// Set both row and column gaps at once.
-    pub fn spacing(mut self, value: u16) -> Self {
-        self.row_spacing = value;
-        self.column_spacing = value;
-        self
-    }
+    #[track_caller]
+    pub fn spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["row_spacing", "column_spacing"]); self.row_spacing = value;
+    self.column_spacing = value;
+    self }
 
-    pub fn padding(mut self, value: u16) -> Self {
-        self.padding = value;
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = value;
+    self }
 
-    pub fn padding_edges(mut self, edges: Edges) -> Self {
-        self.padding_edges = Some(edges);
-        self
-    }
+    #[track_caller]
+    pub fn padding_edges(mut self, edges: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding_edges = Some(edges);
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
-    pub fn align(mut self, align: Alignment) -> Self {
-        self.align = align;
-        self
-    }
+    #[track_caller]
+    pub fn align(mut self, align: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["align"]); self.align = align;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Place a child at `(row, column)` spanning a single cell.
-    pub fn cell(mut self, row: u16, column: u16, view: impl IntoView<Message>) -> Self {
-        self.children.push(GridChild::new(row, column, view));
-        self
-    }
+    #[track_caller]
+    pub fn cell(mut self, row: u16, column: u16, view: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["children"]); self.children.push(GridChild::new(row, column, view));
+    self }
 
     /// Place a child at `(row, column)` spanning `(row_span, column_span)` cells.
-    pub fn cell_span(
-        mut self,
-        row: u16,
-        column: u16,
-        row_span: u16,
-        column_span: u16,
-        view: impl IntoView<Message>,
-    ) -> Self {
-        self.children
-            .push(GridChild::new(row, column, view).span(row_span, column_span));
-        self
-    }
+    #[track_caller]
+    pub fn cell_span(mut self,
+    row: u16,
+    column: u16,
+    row_span: u16,
+    column_span: u16,
+    view: impl IntoView<Message>,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["children"]); self.children
+        .push(GridChild::new(row, column, view).span(row_span, column_span));
+    self }
 
     /// Add a pre-built [`GridChild`].
-    pub fn child(mut self, child: GridChild<Message>) -> Self {
-        self.children.push(child);
-        self
-    }
+    #[track_caller]
+    pub fn child(mut self, child: GridChild<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["children"]); self.children.push(child);
+    self }
 }
 
 impl<Message> IntoView<Message> for GridBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Grid(GridToken {
-            id: self.id,
-            rows: self.rows,
-            columns: self.columns,
-            row_spacing: self.row_spacing,
-            column_spacing: self.column_spacing,
-            padding: self.padding,
-            padding_edges: self.padding_edges,
-            width: self.width,
-            height: self.height,
-            align: self.align,
-            children: self.children,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Grid(GridToken {
+        id: self.id,
+        rows: self.rows,
+        columns: self.columns,
+        row_spacing: self.row_spacing,
+        column_spacing: self.column_spacing,
+        padding: self.padding,
+        padding_edges: self.padding_edges,
+        width: self.width,
+        height: self.height,
+        align: self.align,
+        children: self.children,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct WrapBuilder<Message> {
-    id: Option<String>,
-    children: Vec<View<Message>>,
-    max_columns: u16,
-    spacing: u16,
-    run_spacing: u16,
-    a11y: A11yHint,
-}
+pub struct WrapBuilder<Message> { id: Option<String>,
+children: Vec<View<Message>>,
+max_columns: u16,
+spacing: u16,
+run_spacing: u16,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> WrapBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
     /// Maximum number of items per row. The grid still reflows to fewer columns
     /// when the available width is too narrow (WinUI `ItemsWrapGrid`); this is
     /// the upper bound per row. Defaults to 1.
-    pub fn max_columns(mut self, value: u16) -> Self {
-        self.max_columns = value.max(1);
-        self
-    }
+    #[track_caller]
+    pub fn max_columns(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_columns"]); self.max_columns = value.max(1);
+    self }
 
     /// Gap between items within a row.
-    pub fn spacing(mut self, value: u16) -> Self {
-        self.spacing = value;
-        self
-    }
+    #[track_caller]
+    pub fn spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["spacing"]); self.spacing = value;
+    self }
 
     /// Gap between wrapped rows. Defaults to `spacing` when left unset.
-    pub fn run_spacing(mut self, value: u16) -> Self {
-        self.run_spacing = value;
-        self
-    }
+    #[track_caller]
+    pub fn run_spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["run_spacing"]); self.run_spacing = value;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for WrapBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        let run_spacing = if self.run_spacing == 0 {
-            self.spacing
-        } else {
-            self.run_spacing
-        };
-        View::new(ViewToken::Wrap(WrapToken {
-            id: self.id,
-            children: self.children,
-            max_columns: self.max_columns.max(1),
-            spacing: self.spacing,
-            run_spacing,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { let run_spacing = if self.run_spacing == 0 {
+        self.spacing
+    } else {
+        self.run_spacing
+    };
+    view_from_builder!(self, ViewToken::Wrap(WrapToken {
+        id: self.id,
+        children: self.children,
+        max_columns: self.max_columns.max(1),
+        spacing: self.spacing,
+        run_spacing,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct FlyoutBuilder<Message> {
-    id: Option<String>,
-    anchor: Box<View<Message>>,
-    content: Box<View<Message>>,
-    open: bool,
-    placement: FlyoutPlacement,
-    light_dismiss: FlyoutLightDismiss,
-    focus_behavior: FlyoutFocusBehavior,
-    a11y: A11yHint,
-}
+pub struct FlyoutBuilder<Message> { id: Option<String>,
+anchor: Box<View<Message>>,
+content: Box<View<Message>>,
+open: bool,
+placement: FlyoutPlacement,
+light_dismiss: FlyoutLightDismiss,
+focus_behavior: FlyoutFocusBehavior,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> FlyoutBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = open;
-        self
-    }
+    #[track_caller]
+    pub fn open(mut self, open: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["open"]); self.open = open;
+    self }
 
-    pub fn placement(mut self, placement: FlyoutPlacement) -> Self {
-        self.placement = placement;
-        self
-    }
+    #[track_caller]
+    pub fn placement(mut self, placement: FlyoutPlacement) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["placement"]); self.placement = placement;
+    self }
 
-    pub fn light_dismiss(mut self, enabled: bool) -> Self {
-        self.light_dismiss = FlyoutLightDismiss::from(enabled);
-        self
-    }
+    #[track_caller]
+    pub fn light_dismiss(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["light_dismiss"]); self.light_dismiss = FlyoutLightDismiss::from(enabled);
+    self }
 
-    pub fn light_dismiss_mode(mut self, mode: FlyoutLightDismiss) -> Self {
-        self.light_dismiss = mode;
-        self
-    }
+    #[track_caller]
+    pub fn light_dismiss_mode(mut self, mode: FlyoutLightDismiss) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["light_dismiss"]); self.light_dismiss = mode;
+    self }
 
-    pub fn focus_behavior(mut self, behavior: FlyoutFocusBehavior) -> Self {
-        self.focus_behavior = behavior;
-        self
-    }
+    #[track_caller]
+    pub fn focus_behavior(mut self, behavior: FlyoutFocusBehavior) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["focus_behavior"]); self.focus_behavior = behavior;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for FlyoutBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Flyout(FlyoutToken {
-            id: self.id,
-            anchor: self.anchor,
-            content: self.content,
-            open: self.open,
-            placement: self.placement,
-            light_dismiss: self.light_dismiss,
-            focus_behavior: self.focus_behavior,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Flyout(FlyoutToken {
+        id: self.id,
+        anchor: self.anchor,
+        content: self.content,
+        open: self.open,
+        placement: self.placement,
+        light_dismiss: self.light_dismiss,
+        focus_behavior: self.focus_behavior,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct OverlayBuilder<Message> {
-    id: Option<String>,
-    base: Box<View<Message>>,
-    layers: Vec<OverlayLayer<Message>>,
-    a11y: A11yHint,
-}
+pub struct OverlayBuilder<Message> { id: Option<String>,
+base: Box<View<Message>>,
+layers: Vec<OverlayLayer<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> OverlayBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
     /// Adds a layer drawn on top of the base (and any earlier layers).
-    pub fn layer(mut self, layer: OverlayLayer<Message>) -> Self {
-        self.layers.push(layer);
-        self
-    }
+    #[track_caller]
+    pub fn layer(mut self, layer: OverlayLayer<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["layers", "blocking_layers", "scrim_layers", "layout"]); self.layers.push(layer);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for OverlayBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Overlay(OverlayToken {
-            id: self.id,
-            base: self.base,
-            layers: self.layers,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Overlay(OverlayToken {
+        id: self.id,
+        base: self.base,
+        layers: self.layers,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct AdaptiveSwitchBuilder<Message> {
-    id: Option<String>,
-    breakpoint_width: u16,
-    wide: Box<View<Message>>,
-    narrow: Box<View<Message>>,
-    resolved_width: Option<f32>,
-    a11y: A11yHint,
-}
+pub struct AdaptiveSwitchBuilder<Message> { id: Option<String>,
+breakpoint_width: u16,
+wide: Box<View<Message>>,
+narrow: Box<View<Message>>,
+resolved_width: Option<f32>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> AdaptiveSwitchBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn breakpoint_width(mut self, breakpoint_width: u16) -> Self {
-        self.breakpoint_width = breakpoint_width;
-        self
-    }
+    #[track_caller]
+    pub fn breakpoint_width(mut self, breakpoint_width: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["breakpoint_width"]); self.breakpoint_width = breakpoint_width;
+    self }
 
     /// Pin the layout width used by schema/a11y/diff to resolve to a single
     /// painted branch (matches the iced `responsive` rule `width >= breakpoint`).
-    pub fn resolved_width(mut self, resolved_width: f32) -> Self {
-        self.resolved_width = Some(resolved_width);
-        self
-    }
+    #[track_caller]
+    pub fn resolved_width(mut self, resolved_width: f32) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["resolved_width", "resolved_branch"]); self.resolved_width = Some(resolved_width);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for AdaptiveSwitchBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::AdaptiveSwitch(AdaptiveSwitchToken {
-            id: self.id,
-            breakpoint_width: self.breakpoint_width,
-            wide: self.wide,
-            narrow: self.narrow,
-            resolved_width: self.resolved_width,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::AdaptiveSwitch(AdaptiveSwitchToken {
+        id: self.id,
+        breakpoint_width: self.breakpoint_width,
+        wide: self.wide,
+        narrow: self.narrow,
+        resolved_width: self.resolved_width,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct LazyBuilder<Message> {
-    id: Option<String>,
-    key: String,
-    content: Box<View<Message>>,
-    a11y: A11yHint,
-}
+pub struct LazyBuilder<Message> { id: Option<String>,
+key: String,
+content: Box<View<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> LazyBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for LazyBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Lazy(LazyToken {
-            id: self.id,
-            key: self.key,
-            content: self.content,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Lazy(LazyToken {
+        id: self.id,
+        key: self.key,
+        content: self.content,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ScrollViewBuilder<Message> {
-    id: Option<String>,
-    content: Option<Box<View<Message>>>,
-    horizontal: ScrollPolicy,
-    vertical: ScrollPolicy,
-    scrollbars_visible: bool,
-    a11y: A11yHint,
-}
+pub struct ScrollViewBuilder<Message> { id: Option<String>,
+content: Option<Box<View<Message>>>,
+horizontal: ScrollPolicy,
+vertical: ScrollPolicy,
+scrollbars_visible: bool,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ScrollViewBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn horizontal(mut self, policy: ScrollPolicy) -> Self {
-        self.horizontal = policy;
-        self
-    }
+    #[track_caller]
+    pub fn horizontal(mut self, policy: ScrollPolicy) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["horizontal"]); self.horizontal = policy;
+    self }
 
-    pub fn vertical(mut self, policy: ScrollPolicy) -> Self {
-        self.vertical = policy;
-        self
-    }
+    #[track_caller]
+    pub fn vertical(mut self, policy: ScrollPolicy) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["vertical"]); self.vertical = policy;
+    self }
 
-    pub fn scrollbars_visible(mut self, visible: bool) -> Self {
-        self.scrollbars_visible = visible;
-        self
-    }
+    #[track_caller]
+    pub fn scrollbars_visible(mut self, visible: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["scrollbars_visible"]); self.scrollbars_visible = visible;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Sets the accessibility help text (UIA automation hook) for this scroll view.
-    pub fn help_text(mut self, help_text: impl Into<String>) -> Self {
-        self.a11y.help_text = Some(help_text.into());
-        self
-    }
+    #[track_caller]
+    pub fn help_text(mut self, help_text: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["help_text"]); self.a11y.help_text = Some(help_text.into());
+    self }
 }
 
 impl<Message> IntoView<Message> for ScrollViewBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ScrollView(ScrollViewToken {
-            id: self.id,
-            content: self.content,
-            horizontal: self.horizontal,
-            vertical: self.vertical,
-            scrollbars_visible: self.scrollbars_visible,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ScrollView(ScrollViewToken {
+        id: self.id,
+        content: self.content,
+        horizontal: self.horizontal,
+        vertical: self.vertical,
+        scrollbars_visible: self.scrollbars_visible,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct PointerRegionBuilder<Message> {
-    id: Option<String>,
-    content: Box<View<Message>>,
-    width: Length,
-    height: Length,
-    move_action: PointerRegionAction<Message>,
-    left_down_action: PointerRegionAction<Message>,
-    left_up_action: PointerRegionAction<Message>,
-    double_click_action: PointerRegionAction<Message>,
-    right_down_action: Action<Message>,
-    wheel_action: PointerRegionAction<Message>,
-    escape_action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct PointerRegionBuilder<Message> { id: Option<String>,
+content: Box<View<Message>>,
+width: Length,
+height: Length,
+move_action: PointerRegionAction<Message>,
+left_down_action: PointerRegionAction<Message>,
+left_up_action: PointerRegionAction<Message>,
+double_click_action: PointerRegionAction<Message>,
+right_down_action: Action<Message>,
+wheel_action: PointerRegionAction<Message>,
+escape_action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> PointerRegionBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
-    pub fn on_move(
-        mut self,
-        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.move_action = PointerRegionAction::position(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_move(mut self,
+    map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["move"]); self.move_action = PointerRegionAction::position(map);
+    self }
 
-    pub fn on_left_down(
-        mut self,
-        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.left_down_action = PointerRegionAction::position(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_left_down(mut self,
+    map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["left_down"]); self.left_down_action = PointerRegionAction::position(map);
+    self }
 
-    pub fn on_left_up(
-        mut self,
-        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.left_up_action = PointerRegionAction::position(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_left_up(mut self,
+    map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["left_up"]); self.left_up_action = PointerRegionAction::position(map);
+    self }
 
-    pub fn on_double_click(
-        mut self,
-        map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.double_click_action = PointerRegionAction::position(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_double_click(mut self,
+    map: impl Fn(PointerPosition) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["double_click"]); self.double_click_action = PointerRegionAction::position(map);
+    self }
 
-    pub fn on_right_down(mut self, message: Message) -> Self {
-        self.right_down_action = Action::message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_right_down(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["right_down"]); self.right_down_action = Action::message(message);
+    self }
 
-    pub fn on_wheel(
-        mut self,
-        map: impl Fn(PointerWheel) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.wheel_action = PointerRegionAction::wheel(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_wheel(mut self,
+    map: impl Fn(PointerWheel) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["wheel"]); self.wheel_action = PointerRegionAction::wheel(map);
+    self }
 
-    pub fn on_escape(mut self, message: Message) -> Self {
-        self.escape_action = Action::message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_escape(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["escape"]); self.escape_action = Action::message(message);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for PointerRegionBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::PointerRegion(PointerRegionToken {
-            id: self.id,
-            content: self.content,
-            width: self.width,
-            height: self.height,
-            move_action: self.move_action,
-            left_down_action: self.left_down_action,
-            left_up_action: self.left_up_action,
-            double_click_action: self.double_click_action,
-            right_down_action: self.right_down_action,
-            wheel_action: self.wheel_action,
-            escape_action: self.escape_action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::PointerRegion(PointerRegionToken {
+        id: self.id,
+        content: self.content,
+        width: self.width,
+        height: self.height,
+        move_action: self.move_action,
+        left_down_action: self.left_down_action,
+        left_up_action: self.left_up_action,
+        double_click_action: self.double_click_action,
+        right_down_action: self.right_down_action,
+        wheel_action: self.wheel_action,
+        escape_action: self.escape_action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct CaptureOverlayBuilder {
-    id: Option<String>,
-    phase: CaptureOverlayPhase,
-    detection_depth: usize,
-    dragging: bool,
-    detected_rect: Option<CaptureOverlayRect>,
-    selection_rect: Option<CaptureOverlayRect>,
-    handles_visible: bool,
-    magnifier_visible: bool,
-    background: Option<CaptureOverlayBackground>,
-    cursor: Option<CaptureOverlayPoint>,
-    a11y: A11yHint,
-}
+pub struct CaptureOverlayBuilder { id: Option<String>,
+phase: CaptureOverlayPhase,
+detection_depth: usize,
+dragging: bool,
+detected_rect: Option<CaptureOverlayRect>,
+selection_rect: Option<CaptureOverlayRect>,
+handles_visible: bool,
+magnifier_visible: bool,
+background: Option<CaptureOverlayBackground>,
+cursor: Option<CaptureOverlayPoint>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl CaptureOverlayBuilder {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn detection_depth(mut self, detection_depth: usize) -> Self {
-        self.detection_depth = detection_depth;
-        self
-    }
+    #[track_caller]
+    pub fn detection_depth(mut self, detection_depth: usize) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["detection_depth"]); self.detection_depth = detection_depth;
+    self }
 
-    pub fn dragging(mut self, dragging: bool) -> Self {
-        self.dragging = dragging;
-        self
-    }
+    #[track_caller]
+    pub fn dragging(mut self, dragging: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["dragging"]); self.dragging = dragging;
+    self }
 
-    pub fn detected_rect(mut self, rect: CaptureOverlayRect) -> Self {
-        self.detected_rect = Some(rect);
-        self
-    }
+    #[track_caller]
+    pub fn detected_rect(mut self, rect: CaptureOverlayRect) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["detected_rect"]); self.detected_rect = Some(rect);
+    self }
 
-    pub fn selection_rect(mut self, rect: CaptureOverlayRect) -> Self {
-        self.selection_rect = Some(rect);
-        self
-    }
+    #[track_caller]
+    pub fn selection_rect(mut self, rect: CaptureOverlayRect) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selection_rect"]); self.selection_rect = Some(rect);
+    self }
 
-    pub fn handles_visible(mut self, handles_visible: bool) -> Self {
-        self.handles_visible = handles_visible;
-        self
-    }
+    #[track_caller]
+    pub fn handles_visible(mut self, handles_visible: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["handles_visible"]); self.handles_visible = handles_visible;
+    self }
 
-    pub fn magnifier_visible(mut self, magnifier_visible: bool) -> Self {
-        self.magnifier_visible = magnifier_visible;
-        self
-    }
+    #[track_caller]
+    pub fn magnifier_visible(mut self, magnifier_visible: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["magnifier_visible"]); self.magnifier_visible = magnifier_visible;
+    self }
 
-    pub fn background(mut self, background: CaptureOverlayBackground) -> Self {
-        self.background = Some(background);
-        self
-    }
+    #[track_caller]
+    pub fn background(mut self, background: CaptureOverlayBackground) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["has_background", "background_pixels"]); self.background = Some(background);
+    self }
 
-    pub fn cursor(mut self, cursor: CaptureOverlayPoint) -> Self {
-        self.cursor = Some(cursor);
-        self
-    }
+    #[track_caller]
+    pub fn cursor(mut self, cursor: CaptureOverlayPoint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["cursor"]); self.cursor = Some(cursor);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for CaptureOverlayBuilder {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::CaptureOverlay(CaptureOverlayToken {
-            id: self.id,
-            phase: self.phase,
-            detection_depth: self.detection_depth,
-            dragging: self.dragging,
-            detected_rect: self.detected_rect,
-            selection_rect: self.selection_rect,
-            handles_visible: self.handles_visible,
-            magnifier_visible: self.magnifier_visible,
-            background: self.background,
-            cursor: self.cursor,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::CaptureOverlay(CaptureOverlayToken {
+        id: self.id,
+        phase: self.phase,
+        detection_depth: self.detection_depth,
+        dragging: self.dragging,
+        detected_rect: self.detected_rect,
+        selection_rect: self.selection_rect,
+        handles_visible: self.handles_visible,
+        magnifier_visible: self.magnifier_visible,
+        background: self.background,
+        cursor: self.cursor,
+        a11y: self.a11y,
+    })) }
 }
 
 /// Builds an image view from a raw BGRA8 pixel file written by the platform
 /// screen-capture API.
+#[track_caller]
 pub fn image_bgra_file(
     path: impl Into<String>,
     pixel_width: u32,
     pixel_height: u32,
 ) -> ImageBuilder {
-    ImageBuilder {
-        id: None,
-        bgra_path: path.into(),
-        pixel_width,
-        pixel_height,
-        raster_path: None,
-        // Screenshot/magnifier dumps fill their bounds exactly (the historical
-        // behavior before generic stretch existed).
-        stretch: ImageStretch::Fill,
-        width: Length::Fill,
-        height: Length::Fill,
-        a11y: A11yHint::default(),
-    }
+    ImageBuilder { id: None,
+    bgra_path: path.into(),
+    pixel_width,
+    pixel_height,
+    raster_path: None,
+    // Screenshot/magnifier dumps fill their bounds exactly (the historical
+    // behavior before generic stretch existed).
+    stretch: ImageStretch::Fill,
+    width: Length::Fill,
+    height: Length::Fill,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// A generic image element from an encoded file or URI (WinUI `Image`):
@@ -6401,661 +6040,551 @@ pub fn image_bgra_file(
 /// image("assets/flags/zh.png").stretch(ImageStretch::Uniform).width(Length::Fixed(24));
 /// # }
 /// ```
+#[track_caller]
 pub fn image(path: impl Into<String>) -> ImageBuilder {
-    ImageBuilder {
-        id: None,
-        bgra_path: String::new(),
-        pixel_width: 0,
-        pixel_height: 0,
-        raster_path: Some(path.into()),
-        stretch: ImageStretch::default(),
-        width: Length::Shrink,
-        height: Length::Shrink,
-        a11y: A11yHint::default(),
-    }
+    ImageBuilder { id: None,
+    bgra_path: String::new(),
+    pixel_width: 0,
+    pixel_height: 0,
+    raster_path: Some(path.into()),
+    stretch: ImageStretch::default(),
+    width: Length::Shrink,
+    height: Length::Shrink,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// An embedded web view (WinUI `WebView2`) navigating to `url`.
+#[track_caller]
 pub fn web_view_url(url: impl Into<String>) -> WebViewBuilder {
-    WebViewBuilder {
-        id: None,
-        source: WebViewSource::Url(url.into()),
-        width: Length::Fill,
-        height: Length::Fill,
-        a11y: A11yHint::default(),
-    }
+    WebViewBuilder { id: None,
+    source: WebViewSource::Url(url.into()),
+    width: Length::Fill,
+    height: Length::Fill,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 /// An embedded web view (WinUI `WebView2`) rendering inline `html`.
+#[track_caller]
 pub fn web_view_html(html: impl Into<String>) -> WebViewBuilder {
-    WebViewBuilder {
-        id: None,
-        source: WebViewSource::Html(html.into()),
-        width: Length::Fill,
-        height: Length::Fill,
-        a11y: A11yHint::default(),
-    }
+    WebViewBuilder { id: None,
+    source: WebViewSource::Html(html.into()),
+    width: Length::Fill,
+    height: Length::Fill,
+    a11y: A11yHint::default(), #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance::caller(), }
 }
 
 #[derive(Clone, Debug)]
-pub struct WebViewBuilder {
-    id: Option<String>,
-    source: WebViewSource,
-    width: Length,
-    height: Length,
-    a11y: A11yHint,
-}
+pub struct WebViewBuilder { id: Option<String>,
+source: WebViewSource,
+width: Length,
+height: Length,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl WebViewBuilder {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for WebViewBuilder {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::WebView(WebViewToken {
-            id: self.id,
-            source: self.source,
-            width: self.width,
-            height: self.height,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::WebView(WebViewToken {
+        id: self.id,
+        source: self.source,
+        width: self.width,
+        height: self.height,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ImageBuilder {
-    id: Option<String>,
-    bgra_path: String,
-    pixel_width: u32,
-    pixel_height: u32,
-    raster_path: Option<String>,
-    stretch: ImageStretch,
-    width: Length,
-    height: Length,
-    a11y: A11yHint,
-}
+pub struct ImageBuilder { id: Option<String>,
+bgra_path: String,
+pixel_width: u32,
+pixel_height: u32,
+raster_path: Option<String>,
+stretch: ImageStretch,
+width: Length,
+height: Length,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl ImageBuilder {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn width(mut self, width: Length) -> Self {
-        self.width = width;
-        self
-    }
+    #[track_caller]
+    pub fn width(mut self, width: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["width"]); self.width = width;
+    self }
 
-    pub fn height(mut self, height: Length) -> Self {
-        self.height = height;
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, height: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = height;
+    self }
 
     /// Set the scaling mode (WinUI `Image.Stretch`).
-    pub fn stretch(mut self, stretch: ImageStretch) -> Self {
-        self.stretch = stretch;
-        self
-    }
+    #[track_caller]
+    pub fn stretch(mut self, stretch: ImageStretch) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["stretch"]); self.stretch = stretch;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for ImageBuilder {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Image(ImageToken {
-            id: self.id,
-            bgra_path: self.bgra_path,
-            pixel_width: self.pixel_width,
-            pixel_height: self.pixel_height,
-            raster_path: self.raster_path,
-            stretch: self.stretch,
-            width: self.width,
-            height: self.height,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Image(ImageToken {
+        id: self.id,
+        bgra_path: self.bgra_path,
+        pixel_width: self.pixel_width,
+        pixel_height: self.pixel_height,
+        raster_path: self.raster_path,
+        stretch: self.stretch,
+        width: self.width,
+        height: self.height,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct SettingsRowBuilder<Message> {
-    id: Option<String>,
-    title: String,
-    title_id: Option<String>,
-    description: Option<String>,
-    description_id: Option<String>,
-    icon: Option<IconToken>,
-    kind: SettingsRowKind,
-    margin: Edges,
-    align_x: Alignment,
-    content_align_x: Alignment,
-    content: Option<Box<View<Message>>>,
-    trailing: Vec<View<Message>>,
-    a11y: A11yHint,
-}
+pub struct SettingsRowBuilder<Message> { id: Option<String>,
+title: String,
+title_id: Option<String>,
+description: Option<String>,
+description_id: Option<String>,
+icon: Option<IconToken>,
+kind: SettingsRowKind,
+margin: Edges,
+align_x: Alignment,
+content_align_x: Alignment,
+content: Option<Box<View<Message>>>,
+trailing: Vec<View<Message>>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 #[derive(Clone, Debug)]
-pub struct ExpanderBuilder<Message> {
-    id: Option<String>,
-    title: String,
-    title_id: Option<String>,
-    description: Option<String>,
-    icon: Option<IconToken>,
-    expanded: bool,
-    header_state: ControlState,
-    header_style: FluentStyle,
-    content_style: FluentStyle,
-    content: Option<Box<View<Message>>>,
-    trailing: Vec<View<Message>>,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct ExpanderBuilder<Message> { id: Option<String>,
+title: String,
+title_id: Option<String>,
+description: Option<String>,
+icon: Option<IconToken>,
+expanded: bool,
+header_state: ControlState,
+header_style: FluentStyle,
+content_style: FluentStyle,
+content: Option<Box<View<Message>>>,
+trailing: Vec<View<Message>>,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ExpanderBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn title_id(mut self, id: impl Into<String>) -> Self {
-        self.title_id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn title_id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["title_id"]); self.title_id = Some(id.into());
+    self }
 
-    pub fn description(mut self, value: impl Into<String>) -> Self {
-        self.description = Some(value.into());
-        self
-    }
+    #[track_caller]
+    pub fn description(mut self, value: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["description"]); self.description = Some(value.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn expanded(mut self, expanded: bool) -> Self {
-        self.expanded = expanded;
-        self
-    }
+    #[track_caller]
+    pub fn expanded(mut self, expanded: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["expanded"]); self.expanded = expanded;
+    self }
 
-    pub fn header_state(mut self, state: ControlState) -> Self {
-        self.header_state = state;
-        self
-    }
+    #[track_caller]
+    pub fn header_state(mut self, state: ControlState) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.header_state = state;
+    self }
 
-    pub fn header_hovered(mut self, hovered: bool) -> Self {
-        self.header_state.hovered = hovered;
-        self
-    }
+    #[track_caller]
+    pub fn header_hovered(mut self, hovered: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.header_state.hovered = hovered;
+    self }
 
-    pub fn header_pressed(mut self, pressed: bool) -> Self {
-        self.header_state.pressed = pressed;
-        self
-    }
+    #[track_caller]
+    pub fn header_pressed(mut self, pressed: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["state"]); self.header_state.pressed = pressed;
+    self }
 
-    pub fn header_style(mut self, classes: impl AsRef<str>) -> Self {
-        self.header_style.extend(classes);
-        self
-    }
+    #[track_caller]
+    pub fn header_style(mut self, classes: impl AsRef<str>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["header_style"]); self.header_style.extend(classes);
+    self }
 
-    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
-        self.content = Some(Box::new(content.into_view()));
-        self
-    }
+    #[track_caller]
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content"]); self.content = Some(Box::new(content.into_view()));
+    self }
 
-    pub fn content_style(mut self, classes: impl AsRef<str>) -> Self {
-        self.content_style.extend(classes);
-        self
-    }
+    #[track_caller]
+    pub fn content_style(mut self, classes: impl AsRef<str>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content_style"]); self.content_style.extend(classes);
+    self }
 
-    pub fn trailing(mut self, children: impl IntoChildren<Message>) -> Self {
-        self.trailing = children.into_children();
-        self
-    }
+    #[track_caller]
+    pub fn trailing(mut self, children: impl IntoChildren<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["trailing"]); self.trailing = children.into_children();
+    self }
 
-    pub fn on_toggle(mut self, map: impl Fn(bool) -> Message + Send + Sync + 'static) -> Self {
-        self.action = Action::bool_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_toggle(mut self, map: impl Fn(bool) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::bool_input(map);
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 }
 
 impl<Message> IntoView<Message> for ExpanderBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::Expander(ExpanderToken {
-            id: self.id,
-            title: self.title,
-            title_id: self.title_id,
-            description: self.description,
-            icon: self.icon,
-            expanded: self.expanded,
-            header_state: self.header_state,
-            header_style: self.header_style,
-            content_style: self.content_style,
-            content: self.content,
-            trailing: self.trailing,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::Expander(ExpanderToken {
+        id: self.id,
+        title: self.title,
+        title_id: self.title_id,
+        description: self.description,
+        icon: self.icon,
+        expanded: self.expanded,
+        header_state: self.header_state,
+        header_style: self.header_style,
+        content_style: self.content_style,
+        content: self.content,
+        trailing: self.trailing,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 impl<Message> SettingsRowBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn description(mut self, value: impl Into<String>) -> Self {
-        self.description = Some(value.into());
-        self
-    }
+    #[track_caller]
+    pub fn description(mut self, value: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["description"]); self.description = Some(value.into());
+    self }
 
-    pub fn title_id(mut self, id: impl Into<String>) -> Self {
-        self.title_id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn title_id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["title_id"]); self.title_id = Some(id.into());
+    self }
 
-    pub fn description_id(mut self, id: impl Into<String>) -> Self {
-        self.description_id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn description_id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["description_id"]); self.description_id = Some(id.into());
+    self }
 
-    pub fn icon(mut self, icon: IconToken) -> Self {
-        self.icon = Some(icon);
-        self
-    }
+    #[track_caller]
+    pub fn icon(mut self, icon: IconToken) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["icon"]); self.icon = Some(icon);
+    self }
 
-    pub fn kind(mut self, kind: SettingsRowKind) -> Self {
-        self.kind = kind;
-        self
-    }
+    #[track_caller]
+    pub fn kind(mut self, kind: SettingsRowKind) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["kind"]); self.kind = kind;
+    self }
 
-    pub fn margin(mut self, margin: Edges) -> Self {
-        self.margin = margin;
-        self
-    }
+    #[track_caller]
+    pub fn margin(mut self, margin: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["margin"]); self.margin = margin;
+    self }
 
-    pub fn align_x(mut self, align_x: Alignment) -> Self {
-        self.align_x = align_x;
-        self
-    }
+    #[track_caller]
+    pub fn align_x(mut self, align_x: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["align_x"]); self.align_x = align_x;
+    self }
 
-    pub fn content_align_x(mut self, align_x: Alignment) -> Self {
-        self.content_align_x = align_x;
-        self
-    }
+    #[track_caller]
+    pub fn content_align_x(mut self, align_x: Alignment) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["content_align_x"]); self.content_align_x = align_x;
+    self }
 
-    pub fn content(mut self, content: impl IntoView<Message>) -> Self {
-        self.content = Some(Box::new(content.into_view()));
-        self
-    }
+    #[track_caller]
+    pub fn content(mut self, content: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["has_content"]); self.content = Some(Box::new(content.into_view()));
+    self }
 
-    pub fn trailing(mut self, children: impl IntoChildren<Message>) -> Self {
-        self.trailing = children.into_children();
-        self
-    }
+    #[track_caller]
+    pub fn trailing(mut self, children: impl IntoChildren<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["trailing"]); self.trailing = children.into_children();
+    self }
 }
 
 impl<Message> IntoView<Message> for SettingsRowBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::SettingsRow(SettingsRowToken {
-            id: self.id,
-            title: self.title,
-            title_id: self.title_id,
-            description: self.description,
-            description_id: self.description_id,
-            icon: self.icon,
-            kind: self.kind,
-            margin: self.margin,
-            align_x: self.align_x,
-            content_align_x: self.content_align_x,
-            content: self.content,
-            trailing: self.trailing,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::SettingsRow(SettingsRowToken {
+        id: self.id,
+        title: self.title,
+        title_id: self.title_id,
+        description: self.description,
+        description_id: self.description_id,
+        icon: self.icon,
+        kind: self.kind,
+        margin: self.margin,
+        align_x: self.align_x,
+        content_align_x: self.content_align_x,
+        content: self.content,
+        trailing: self.trailing,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ResultCardBuilder<Message> {
-    id: Option<String>,
-    item: ResultItem,
-    copy_action: Action<Message>,
-    speak_action: Action<Message>,
-    replace_action: Action<Message>,
-    retry_action: Action<Message>,
-    toggle_action: Action<Message>,
-    collapse_transition: CollapseTransition,
-    a11y: A11yHint,
-}
+pub struct ResultCardBuilder<Message> { id: Option<String>,
+item: ResultItem,
+copy_action: Action<Message>,
+speak_action: Action<Message>,
+replace_action: Action<Message>,
+retry_action: Action<Message>,
+toggle_action: Action<Message>,
+collapse_transition: CollapseTransition,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ResultCardBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn on_copy(mut self, message: Message) -> Self {
-        self.copy_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_copy(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["copy"]); self.copy_action = Action::Message(message);
+    self }
 
-    pub fn on_copy_item(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.copy_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_copy_item(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["copy"]); self.copy_action = Action::selection_input(map);
+    self }
 
-    pub fn on_speak(mut self, message: Message) -> Self {
-        self.speak_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_speak(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["speak"]); self.speak_action = Action::Message(message);
+    self }
 
-    pub fn on_speak_item(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.speak_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_speak_item(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["speak"]); self.speak_action = Action::selection_input(map);
+    self }
 
-    pub fn on_replace(mut self, message: Message) -> Self {
-        self.replace_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_replace(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["replace"]); self.replace_action = Action::Message(message);
+    self }
 
-    pub fn on_replace_item(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.replace_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_replace_item(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["replace"]); self.replace_action = Action::selection_input(map);
+    self }
 
-    pub fn on_retry(mut self, message: Message) -> Self {
-        self.retry_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_retry(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["retry"]); self.retry_action = Action::Message(message);
+    self }
 
-    pub fn on_retry_item(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.retry_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_retry_item(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["retry"]); self.retry_action = Action::selection_input(map);
+    self }
 
-    pub fn on_toggle(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.toggle_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_toggle(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["toggle"]); self.toggle_action = Action::selection_input(map);
+    self }
 
-    pub fn collapse_transition(mut self, transition: CollapseTransition) -> Self {
-        self.collapse_transition = transition;
-        self
-    }
+    #[track_caller]
+    pub fn collapse_transition(mut self, transition: CollapseTransition) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["collapse_transition_ms"]); self.collapse_transition = transition;
+    self }
 
-    pub fn collapse_transition_ms(mut self, duration_ms: u16) -> Self {
-        self.collapse_transition = CollapseTransition::new(duration_ms);
-        self
-    }
+    #[track_caller]
+    pub fn collapse_transition_ms(mut self, duration_ms: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["collapse_transition_ms"]); self.collapse_transition = CollapseTransition::new(duration_ms);
+    self }
 }
 
 impl<Message> IntoView<Message> for ResultCardBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ResultCard(ResultCardToken {
-            id: self.id,
-            item: self.item,
-            copy_action: self.copy_action,
-            speak_action: self.speak_action,
-            replace_action: self.replace_action,
-            retry_action: self.retry_action,
-            toggle_action: self.toggle_action,
-            collapse_transition: self.collapse_transition,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ResultCard(ResultCardToken {
+        id: self.id,
+        item: self.item,
+        copy_action: self.copy_action,
+        speak_action: self.speak_action,
+        replace_action: self.replace_action,
+        retry_action: self.retry_action,
+        toggle_action: self.toggle_action,
+        collapse_transition: self.collapse_transition,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ListViewBuilder<Message> {
-    id: Option<String>,
-    items: Vec<ListViewItem<Message>>,
-    selected: Option<String>,
-    spacing: u16,
-    max_height: Option<u16>,
-    virtualized: bool,
-    action: Action<Message>,
-    a11y: A11yHint,
-}
+pub struct ListViewBuilder<Message> { id: Option<String>,
+items: Vec<ListViewItem<Message>>,
+selected: Option<String>,
+spacing: u16,
+max_height: Option<u16>,
+virtualized: bool,
+action: Action<Message>,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ListViewBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
     /// Append a single item.
-    pub fn item(mut self, id: impl Into<String>, view: impl IntoView<Message>) -> Self {
-        self.items.push(ListViewItem::new(id, view));
-        self
-    }
+    #[track_caller]
+    pub fn item(mut self, id: impl Into<String>, view: impl IntoView<Message>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["items"]); self.items.push(ListViewItem::new(id, view));
+    self }
 
     /// Mark the selected item by id (WinUI `SelectedItem`).
-    pub fn selected(mut self, id: impl Into<String>) -> Self {
-        self.selected = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn selected(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["selected"]); self.selected = Some(id.into());
+    self }
 
-    pub fn spacing(mut self, spacing: u16) -> Self {
-        self.spacing = spacing;
-        self
-    }
+    #[track_caller]
+    pub fn spacing(mut self, spacing: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["spacing"]); self.spacing = spacing;
+    self }
 
-    pub fn max_height(mut self, max_height: u16) -> Self {
-        self.max_height = Some(max_height);
-        self
-    }
+    #[track_caller]
+    pub fn max_height(mut self, max_height: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_height"]); self.max_height = Some(max_height);
+    self }
 
     /// Toggle the virtualization hint (defaults to `true`).
-    pub fn virtualized(mut self, virtualized: bool) -> Self {
-        self.virtualized = virtualized;
-        self
-    }
+    #[track_caller]
+    pub fn virtualized(mut self, virtualized: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["virtualized"]); self.virtualized = virtualized;
+    self }
 
-    pub fn a11y(mut self, a11y: A11yHint) -> Self {
-        self.a11y = a11y;
-        self
-    }
+    #[track_caller]
+    pub fn a11y(mut self, a11y: A11yHint) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["a11y"]); self.a11y = a11y;
+    self }
 
     /// Selection callback: receives the clicked item's id.
-    pub fn on_select(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> View<Message> {
-        self.action = Action::selection_input(map);
-        self.into_view()
-    }
+    #[track_caller]
+    pub fn on_select(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> View<Message> { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["action"]); self.action = Action::selection_input(map);
+    self.into_view() }
 }
 
 impl<Message> IntoView<Message> for ListViewBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ListView(ListViewToken {
-            id: self.id,
-            items: self.items,
-            selected: self.selected,
-            spacing: self.spacing,
-            max_height: self.max_height,
-            virtualized: self.virtualized,
-            action: self.action,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ListView(ListViewToken {
+        id: self.id,
+        items: self.items,
+        selected: self.selected,
+        spacing: self.spacing,
+        max_height: self.max_height,
+        virtualized: self.virtualized,
+        action: self.action,
+        a11y: self.a11y,
+    })) }
 }
 
 #[derive(Clone, Debug)]
-pub struct ResultListBuilder<Message> {
-    id: Option<String>,
-    items: Vec<ResultItem>,
-    copy_action: Action<Message>,
-    speak_action: Action<Message>,
-    replace_action: Action<Message>,
-    retry_action: Action<Message>,
-    toggle_action: Action<Message>,
-    virtualized: bool,
-    height: Option<Length>,
-    max_height: Option<u16>,
-    spacing: Option<u16>,
-    padding: Option<Edges>,
-    border_width: Option<u16>,
-    collapse_transition: CollapseTransition,
-    a11y: A11yHint,
-}
+pub struct ResultListBuilder<Message> { id: Option<String>,
+items: Vec<ResultItem>,
+copy_action: Action<Message>,
+speak_action: Action<Message>,
+replace_action: Action<Message>,
+retry_action: Action<Message>,
+toggle_action: Action<Message>,
+virtualized: bool,
+height: Option<Length>,
+max_height: Option<u16>,
+spacing: Option<u16>,
+padding: Option<Edges>,
+border_width: Option<u16>,
+collapse_transition: CollapseTransition,
+a11y: A11yHint, #[cfg(feature = "parity-diagnostics")] provenance: ViewProvenance, }
 
 impl<Message> ResultListBuilder<Message> {
-    pub fn id(mut self, id: impl Into<String>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
+    #[track_caller]
+    pub fn id(mut self, id: impl Into<String>) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["id"]); self.id = Some(id.into());
+    self }
 
-    pub fn on_copy(mut self, message: Message) -> Self {
-        self.copy_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_copy(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["copy"]); self.copy_action = Action::Message(message);
+    self }
 
-    pub fn on_copy_item(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.copy_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_copy_item(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["copy"]); self.copy_action = Action::selection_input(map);
+    self }
 
-    pub fn on_speak(mut self, message: Message) -> Self {
-        self.speak_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_speak(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["speak"]); self.speak_action = Action::Message(message);
+    self }
 
-    pub fn on_speak_item(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.speak_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_speak_item(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["speak"]); self.speak_action = Action::selection_input(map);
+    self }
 
-    pub fn on_replace(mut self, message: Message) -> Self {
-        self.replace_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_replace(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["replace"]); self.replace_action = Action::Message(message);
+    self }
 
-    pub fn on_replace_item(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.replace_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_replace_item(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["replace"]); self.replace_action = Action::selection_input(map);
+    self }
 
-    pub fn on_retry(mut self, message: Message) -> Self {
-        self.retry_action = Action::Message(message);
-        self
-    }
+    #[track_caller]
+    pub fn on_retry(mut self, message: Message) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["retry"]); self.retry_action = Action::Message(message);
+    self }
 
-    pub fn on_retry_item(
-        mut self,
-        map: impl Fn(String) -> Message + Send + Sync + 'static,
-    ) -> Self {
-        self.retry_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_retry_item(mut self,
+    map: impl Fn(String) -> Message + Send + Sync + 'static,) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["retry"]); self.retry_action = Action::selection_input(map);
+    self }
 
-    pub fn on_toggle(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self {
-        self.toggle_action = Action::selection_input(map);
-        self
-    }
+    #[track_caller]
+    pub fn on_toggle(mut self, map: impl Fn(String) -> Message + Send + Sync + 'static) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["toggle"]); self.toggle_action = Action::selection_input(map);
+    self }
 
-    pub fn virtualized(mut self, enabled: bool) -> Self {
-        self.virtualized = enabled;
-        self
-    }
+    #[track_caller]
+    pub fn virtualized(mut self, enabled: bool) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["virtualized"]); self.virtualized = enabled;
+    self }
 
-    pub fn height(mut self, value: Length) -> Self {
-        self.height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn height(mut self, value: Length) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["height"]); self.height = Some(value);
+    self }
 
-    pub fn max_height(mut self, value: u16) -> Self {
-        self.max_height = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn max_height(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["max_height"]); self.max_height = Some(value);
+    self }
 
-    pub fn spacing(mut self, value: u16) -> Self {
-        self.spacing = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn spacing(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["spacing"]); self.spacing = Some(value);
+    self }
 
-    pub fn padding(mut self, value: Edges) -> Self {
-        self.padding = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn padding(mut self, value: Edges) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["padding"]); self.padding = Some(value);
+    self }
 
-    pub fn border_width(mut self, value: u16) -> Self {
-        self.border_width = Some(value);
-        self
-    }
+    #[track_caller]
+    pub fn border_width(mut self, value: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["border_width"]); self.border_width = Some(value);
+    self }
 
-    pub fn collapse_transition(mut self, transition: CollapseTransition) -> Self {
-        self.collapse_transition = transition;
-        self
-    }
+    #[track_caller]
+    pub fn collapse_transition(mut self, transition: CollapseTransition) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["collapse_transition_ms"]); self.collapse_transition = transition;
+    self }
 
-    pub fn collapse_transition_ms(mut self, duration_ms: u16) -> Self {
-        self.collapse_transition = CollapseTransition::new(duration_ms);
-        self
-    }
+    #[track_caller]
+    pub fn collapse_transition_ms(mut self, duration_ms: u16) -> Self { #[cfg(feature = "parity-diagnostics")] self.provenance.set_many(&["collapse_transition_ms"]); self.collapse_transition = CollapseTransition::new(duration_ms);
+    self }
 }
 
 impl<Message> IntoView<Message> for ResultListBuilder<Message> {
-    fn into_view(self) -> View<Message> {
-        View::new(ViewToken::ResultList(ResultListToken {
-            id: self.id,
-            items: self.items,
-            copy_action: self.copy_action,
-            speak_action: self.speak_action,
-            replace_action: self.replace_action,
-            retry_action: self.retry_action,
-            toggle_action: self.toggle_action,
-            virtualized: self.virtualized,
-            height: self.height,
-            max_height: self.max_height,
-            spacing: self.spacing,
-            padding: self.padding,
-            border_width: self.border_width,
-            collapse_transition: self.collapse_transition,
-            a11y: self.a11y,
-        }))
-    }
+    #[track_caller]
+    fn into_view(self) -> View<Message> { view_from_builder!(self, ViewToken::ResultList(ResultListToken {
+        id: self.id,
+        items: self.items,
+        copy_action: self.copy_action,
+        speak_action: self.speak_action,
+        replace_action: self.replace_action,
+        retry_action: self.retry_action,
+        toggle_action: self.toggle_action,
+        virtualized: self.virtualized,
+        height: self.height,
+        max_height: self.max_height,
+        spacing: self.spacing,
+        padding: self.padding,
+        border_width: self.border_width,
+        collapse_transition: self.collapse_transition,
+        a11y: self.a11y,
+    })) }
 }
 
 #[deprecated(note = "use ResultCardBuilder")]

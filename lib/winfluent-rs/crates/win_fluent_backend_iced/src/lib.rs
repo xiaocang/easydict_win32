@@ -35,9 +35,9 @@ use win_fluent::icon;
 #[cfg(all(windows, feature = "legacy-powershell-dialogs"))]
 use win_fluent::platform::FileDialogFilter;
 use win_fluent::platform::{
-    FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey, HotkeyModifier, PlatformCommand,
-    ProtocolRegistration, ShellVerb, TrayMenu, TrayMenuColor, TrayMenuPopupAnimation,
-    TrayMenuPresenterKind, TrayMenuPresenterStyle,
+    FileDialogOptions, FolderDialogOptions, Hotkey, HotkeyKey, HotkeyModifier,
+    NamedEventRegistration, PlatformCommand, ProtocolRegistration, ShellVerb, TrayMenu,
+    TrayMenuColor, TrayMenuPopupAnimation, TrayMenuPresenterKind, TrayMenuPresenterStyle,
 };
 use win_fluent::runtime::{Application as FluentApplication, DesktopIntegrationPlan, RuntimePlan};
 use win_fluent::screenshot::WindowScreenshot;
@@ -143,6 +143,8 @@ impl IcedAdapter {
     where
         Message: Clone + Send + 'static,
     {
+        #[cfg(feature = "parity-diagnostics")]
+        runtime_diagnostics::prepare_view(view);
         compile_view_with_text_editors_and_visual(
             view,
             |_| None::<&IcedTextEditorContent>,
@@ -170,6 +172,8 @@ impl IcedAdapter {
         Message: Clone + Send + 'static,
         Provider: Copy + Fn(&str) -> Option<&'a IcedTextEditorContent> + 'a,
     {
+        #[cfg(feature = "parity-diagnostics")]
+        runtime_diagnostics::prepare_view(view);
         compile_view_with_text_editors_and_visual(
             view,
             provider,
@@ -221,6 +225,419 @@ impl IcedAdapter {
             screenshot.scale_factor,
             screenshot.rgba.as_ref().to_vec(),
         )
+    }
+}
+
+/// Generation-scoped, in-memory facts collected by the iced renderer.
+///
+/// The sink is deliberately feature-gated: production builds retain the
+/// existing one-shot bounds writer and do not allocate diagnostic state.
+#[cfg(feature = "parity-diagnostics")]
+pub mod runtime_diagnostics {
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+    use std::sync::{LazyLock, Mutex};
+
+    use iced::Rectangle;
+    use win_fluent::{diagnostic_view_schema, DiagnosticNode, View};
+
+    use serde::{Deserialize, Serialize};
+
+    pub const RUNTIME_DIAGNOSTICS_SCHEMA: &str = "easydict.winfluent.runtime-diagnostics.v1";
+
+    #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+    pub struct RuntimeDiagnosticSource {
+        pub file: String,
+        pub line: u32,
+        pub column: u32,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    pub struct RuntimeDiagnosticNode {
+        pub path: String,
+        pub id: String,
+        pub kind: String,
+        pub x: f32,
+        pub y: f32,
+        pub width: f32,
+        pub height: f32,
+        pub declarative_values: BTreeMap<String, String>,
+        pub style_classes: Vec<String>,
+        pub constructor_source: Option<RuntimeDiagnosticSource>,
+        pub property_sources: BTreeMap<String, RuntimeDiagnosticSource>,
+        pub resolved_values: BTreeMap<String, String>,
+        pub token: Option<String>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub(crate) struct ProbeFacts {
+        pub(crate) path: String,
+        pub(crate) declarative_values: BTreeMap<String, String>,
+        pub(crate) style_classes: Vec<String>,
+        pub(crate) constructor_source: Option<RuntimeDiagnosticSource>,
+        pub(crate) property_sources: BTreeMap<String, RuntimeDiagnosticSource>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    pub struct RuntimeDiagnosticGeneration {
+        pub schema: String,
+        pub window_id: String,
+        pub generation: u64,
+        pub controls: Vec<RuntimeDiagnosticNode>,
+        pub observed_control_ids: Vec<String>,
+        pub missing_control_ids: Vec<String>,
+    }
+
+    #[derive(Debug)]
+    struct ActiveGeneration {
+        window_id: String,
+        generation: u64,
+        required: BTreeSet<String>,
+        controls: BTreeMap<String, RuntimeDiagnosticNode>,
+        completed: bool,
+    }
+
+    type FactsByIdentity = BTreeMap<String, VecDeque<ProbeFacts>>;
+
+    static ACTIVE: LazyLock<Mutex<Option<ActiveGeneration>>> = LazyLock::new(|| Mutex::new(None));
+    static COMPLETED: LazyLock<Mutex<BTreeMap<u64, RuntimeDiagnosticGeneration>>> =
+        LazyLock::new(|| Mutex::new(BTreeMap::new()));
+    static FACTS: LazyLock<Mutex<BTreeMap<u64, FactsByIdentity>>> =
+        LazyLock::new(|| Mutex::new(BTreeMap::new()));
+
+    fn source(source: win_fluent::SourceLocation) -> RuntimeDiagnosticSource {
+        RuntimeDiagnosticSource {
+            file: source.file.to_string(),
+            line: source.line,
+            column: source.column,
+        }
+    }
+
+    fn fact_key(kind: &str, id: &str, constructor_source: &RuntimeDiagnosticSource) -> String {
+        format!(
+            "{kind}\u{1f}{id}\u{1f}{}\u{1f}{}\u{1f}{}",
+            constructor_source.file, constructor_source.line, constructor_source.column
+        )
+    }
+
+    fn collect_facts(node: &DiagnosticNode, facts: &mut FactsByIdentity) {
+        if let Some(id) = node.id.as_deref() {
+            let constructor_source = source(node.provenance.constructor);
+            let key = fact_key(&node.kind, id, &constructor_source);
+            let declarative_values = node
+                .properties
+                .iter()
+                .map(|property| (property.name.clone(), property.value.clone()))
+                .collect();
+            let property_sources = node
+                .provenance
+                .properties
+                .iter()
+                .map(|property| (property.property.to_string(), source(property.source)))
+                .collect();
+            facts.entry(key).or_default().push_back(ProbeFacts {
+                path: node.path.to_string(),
+                declarative_values,
+                style_classes: node.style_classes.clone(),
+                constructor_source: Some(constructor_source),
+                property_sources,
+            });
+        }
+        for child in &node.children {
+            collect_facts(child, facts);
+        }
+    }
+
+    fn prepared_facts<Message>(view: &View<Message>) -> FactsByIdentity {
+        let schema = diagnostic_view_schema(view);
+        let mut prepared = BTreeMap::new();
+        collect_facts(&schema.root, &mut prepared);
+        prepared
+    }
+
+    /// Pins facts from a rebuilt view to the generation that will render it.
+    ///
+    /// Preview control prepares these facts before starting collection so
+    /// responsive widgets can be rebuilt repeatedly without consuming another
+    /// generation's structural paths or provenance.
+    pub fn prepare_generation_view<Message>(generation: u64, view: &View<Message>) {
+        let prepared = prepared_facts(view);
+        if let Ok(mut facts) = FACTS.lock() {
+            facts.insert(generation, prepared);
+        }
+    }
+
+    /// Prepares facts for callers that begin a generation before compiling its
+    /// view. Explicitly pinned generation facts are never overwritten here.
+    pub fn prepare_view<Message>(view: &View<Message>) {
+        let Some(generation) = active_generation() else {
+            return;
+        };
+        if FACTS
+            .lock()
+            .is_ok_and(|facts| facts.contains_key(&generation))
+        {
+            return;
+        }
+        let prepared = prepared_facts(view);
+        if let Ok(mut facts) = FACTS.lock() {
+            facts.entry(generation).or_insert(prepared);
+        }
+    }
+
+    pub(crate) fn take_probe_facts(
+        generation: u64,
+        kind: &str,
+        id: &str,
+        constructor_source: win_fluent::SourceLocation,
+    ) -> Option<ProbeFacts> {
+        let constructor_source = source(constructor_source);
+        let key = fact_key(kind, id, &constructor_source);
+        FACTS.lock().ok().and_then(|mut generations| {
+            let queue = generations.get_mut(&generation)?.get_mut(&key)?;
+            if queue.len() > 1 {
+                queue.pop_front()
+            } else {
+                queue.front().cloned()
+            }
+        })
+    }
+
+    impl RuntimeDiagnosticNode {
+        fn new(
+            path: String,
+            id: String,
+            kind: &str,
+            bounds: Rectangle,
+            facts: Option<ProbeFacts>,
+        ) -> Self {
+            let facts = facts.unwrap_or(ProbeFacts {
+                path,
+                declarative_values: BTreeMap::new(),
+                style_classes: Vec::new(),
+                constructor_source: None,
+                property_sources: BTreeMap::new(),
+            });
+            let mut resolved_values = BTreeMap::new();
+            resolved_values.insert("x".to_string(), format!("{:.2}", bounds.x));
+            resolved_values.insert("y".to_string(), format!("{:.2}", bounds.y));
+            resolved_values.insert("width".to_string(), format!("{:.2}", bounds.width));
+            resolved_values.insert("height".to_string(), format!("{:.2}", bounds.height));
+            Self {
+                path: facts.path,
+                id,
+                kind: kind.to_string(),
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+                declarative_values: facts.declarative_values,
+                style_classes: facts.style_classes,
+                constructor_source: facts.constructor_source,
+                property_sources: facts.property_sources,
+                resolved_values,
+                token: None,
+            }
+        }
+
+        pub fn has_source_facts(&self) -> bool {
+            self.path != self.id
+                && self
+                    .constructor_source
+                    .as_ref()
+                    .is_some_and(|source| source.line > 0 && source.file != "<unavailable>")
+                && !self.property_sources.is_empty()
+        }
+    }
+
+    /// Starts collecting a fresh generation. Any probes from prior
+    /// generations are ignored, making stale draw callbacks harmless.
+    pub fn begin_generation(
+        window_id: impl Into<String>,
+        generation: u64,
+        required_control_ids: impl IntoIterator<Item = String>,
+    ) {
+        let Ok(mut active) = ACTIVE.lock() else {
+            return;
+        };
+        *active = Some(ActiveGeneration {
+            window_id: window_id.into(),
+            generation,
+            required: required_control_ids.into_iter().collect(),
+            controls: BTreeMap::new(),
+            completed: false,
+        });
+        drop(active);
+        if let Ok(mut facts) = FACTS.lock() {
+            facts.retain(|prepared_generation, _| *prepared_generation == generation);
+        }
+    }
+
+    pub fn cancel_generation(generation: u64) {
+        let Ok(mut active) = ACTIVE.lock() else {
+            return;
+        };
+        if active
+            .as_ref()
+            .is_some_and(|current| current.generation == generation)
+        {
+            *active = None;
+        }
+    }
+    /// Takes the currently collected controls even when required IDs have not
+    /// completed. Timeout handling uses this off the draw path to preserve
+    /// partial diagnostic evidence.
+    pub fn take_active(generation: u64) -> Option<RuntimeDiagnosticGeneration> {
+        let active = {
+            let mut guard = ACTIVE.lock().ok()?;
+            if !guard
+                .as_ref()
+                .is_some_and(|current| current.generation == generation)
+            {
+                return None;
+            }
+            guard.take()?
+        };
+        let controls = active.controls.into_values().collect::<Vec<_>>();
+        let observed = controls
+            .iter()
+            .map(|control| control.id.clone())
+            .collect::<BTreeSet<_>>();
+        let source_observed = controls
+            .iter()
+            .filter(|control| control.has_source_facts())
+            .map(|control| control.id.clone())
+            .collect::<BTreeSet<_>>();
+        let missing_control_ids = active
+            .required
+            .difference(&source_observed)
+            .cloned()
+            .collect();
+        Some(RuntimeDiagnosticGeneration {
+            schema: RUNTIME_DIAGNOSTICS_SCHEMA.to_string(),
+            window_id: active.window_id,
+            generation: active.generation,
+            controls,
+            observed_control_ids: observed.into_iter().collect(),
+            missing_control_ids,
+        })
+    }
+
+    pub fn active_generation() -> Option<u64> {
+        ACTIVE
+            .lock()
+            .ok()
+            .and_then(|active| active.as_ref().map(|generation| generation.generation))
+    }
+
+    /// Records a probe after its child has drawn. This function never performs
+    /// filesystem or serialization work and silently ignores stale generations.
+    pub(crate) fn record_probe(
+        generation: u64,
+        path: impl Into<String>,
+        id: impl Into<String>,
+        kind: &str,
+        bounds: Rectangle,
+        facts: Option<ProbeFacts>,
+    ) {
+        if !bounds.width.is_finite()
+            || !bounds.height.is_finite()
+            || bounds.width <= 0.0
+            || bounds.height <= 0.0
+        {
+            return;
+        }
+        let path = path.into();
+        let id = id.into();
+        if id.trim().is_empty() {
+            return;
+        }
+
+        let Ok(mut active) = ACTIVE.lock() else {
+            return;
+        };
+        let Some(active) = active.as_mut() else {
+            return;
+        };
+        if active.generation != generation {
+            return;
+        }
+
+        let control = RuntimeDiagnosticNode::new(path, id.clone(), kind, bounds, facts);
+        if control.has_source_facts() {
+            active
+                .controls
+                .retain(|_, existing| existing.id != control.id || existing.has_source_facts());
+        } else if active
+            .controls
+            .values()
+            .any(|existing| existing.id == control.id && existing.has_source_facts())
+        {
+            return;
+        }
+        let key = format!("{}\u{1f}{}", control.path, id);
+        active.controls.insert(key, control);
+        let observed = active
+            .controls
+            .values()
+            .map(|control| control.id.as_str())
+            .collect::<BTreeSet<_>>();
+        let source_observed = active
+            .controls
+            .values()
+            .filter(|control| control.has_source_facts())
+            .map(|control| control.id.as_str())
+            .collect::<BTreeSet<_>>();
+        if !active.completed
+            && active
+                .required
+                .iter()
+                .all(|id| source_observed.contains(id.as_str()))
+        {
+            let controls = active.controls.values().cloned().collect::<Vec<_>>();
+            let observed_control_ids = observed.into_iter().map(str::to_string).collect();
+            let missing_control_ids = active
+                .required
+                .difference(
+                    &controls
+                        .iter()
+                        .filter(|control| control.has_source_facts())
+                        .map(|control| control.id.clone())
+                        .collect::<BTreeSet<_>>(),
+                )
+                .cloned()
+                .collect();
+            let completed = RuntimeDiagnosticGeneration {
+                schema: RUNTIME_DIAGNOSTICS_SCHEMA.to_string(),
+                window_id: active.window_id.clone(),
+                generation: active.generation,
+                controls,
+                observed_control_ids,
+                missing_control_ids,
+            };
+            if let Ok(mut completed_generations) = COMPLETED.lock() {
+                completed_generations.insert(active.generation, completed);
+                active.completed = true;
+            }
+        }
+    }
+
+    pub fn take_completed(generation: u64) -> Option<RuntimeDiagnosticGeneration> {
+        COMPLETED
+            .lock()
+            .ok()
+            .and_then(|mut completed| completed.remove(&generation))
+    }
+
+    pub fn clear() {
+        if let Ok(mut active) = ACTIVE.lock() {
+            *active = None;
+        }
+        if let Ok(mut completed) = COMPLETED.lock() {
+            completed.clear();
+        }
+        if let Ok(mut facts) = FACTS.lock() {
+            facts.clear();
+        }
     }
 }
 
@@ -665,7 +1082,10 @@ where
         &mut self,
         event: PlatformEvent,
     ) -> Option<iced::Task<IcedRuntimeMessage<App::Message>>> {
-        let message = map_platform_event(&self.app.subscription(), event)?;
+        let message =
+            map_platform_event(&self.app.subscription(), event.clone()).or_else(|| {
+                registered_named_event_message(&self.desktop_integration.named_events, &event)
+            })?;
         let task = self.app.update(message);
         self.rebuild_views();
         Some(iced::Task::batch([
@@ -723,6 +1143,7 @@ where
             window::close_events().map(IcedRuntimeMessage::WindowClosed),
             window::events().map(|(id, event)| IcedRuntimeMessage::WindowNativeEvent(id, event)),
             fluent_subscription(state.app.subscription(), tray_plan.as_ref()),
+            registered_named_event_subscriptions(&state.desktop_integration.named_events),
         ])
     }
 
@@ -1123,6 +1544,22 @@ where
             WindowCommand::SetTitle { id, title } => {
                 self.window_title_overrides.insert(id, title);
                 iced::Task::none()
+            }
+            WindowCommand::Resize { id, width, height } => {
+                if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+                    return iced::Task::none();
+                }
+                let mut options = self.visible_options_for_logical_window(&id);
+                options.width = width;
+                options.height = height;
+                self.update_opened_or_pending_window_options(&id, options);
+                self.with_logical_window(&id, move |window_id| {
+                    window::resize::<IcedRuntimeMessage<App::Message>>(
+                        window_id,
+                        Size::new(width, height),
+                    )
+                })
+                .unwrap_or_else(iced::Task::none)
             }
             WindowCommand::Open { options, view } => self.open_window_task(options, Some(view)),
             WindowCommand::ReplaceView { id, view } => {
@@ -1741,6 +2178,41 @@ fn apply_native_window_options(handle: &dyn window::Window, options: &WindowOpti
 
 fn close_requested_platform_event(window_id: &WindowId) -> PlatformEvent {
     PlatformEvent::Window(WindowEvent::CloseRequested(window_id.clone()))
+}
+
+fn registered_named_event_message<Message: Clone>(
+    registrations: &[NamedEventRegistration<Message>],
+    event: &PlatformEvent,
+) -> Option<Message> {
+    let PlatformEvent::NamedEventSignaled(signaled_name) = event else {
+        return None;
+    };
+    registrations
+        .iter()
+        .find(|registration| registration.name == *signaled_name)
+        .and_then(|registration| registration.action.press())
+}
+
+fn registered_named_event_subscriptions<Message>(
+    registrations: &[NamedEventRegistration<Message>],
+) -> Subscription<IcedRuntimeMessage<Message>>
+where
+    Message: Clone + Send + 'static,
+{
+    Subscription::batch(registrations.iter().map(|registration| {
+        IcedAdapter::named_event_subscription(registration.name.clone(), registration.auto_reset)
+            .map(|event| match event {
+                IcedNamedEvent::Signaled { name } => {
+                    IcedRuntimeMessage::PlatformEvent(PlatformEvent::NamedEventSignaled(name))
+                }
+                IcedNamedEvent::Error { name, message } => {
+                    IcedRuntimeMessage::PlatformEvent(PlatformEvent::Custom {
+                        kind: format!("named_event_error:{name}"),
+                        value: message,
+                    })
+                }
+            })
+    }))
 }
 
 fn fluent_subscription<Message>(
@@ -2488,7 +2960,22 @@ where
     };
 
     match view_bounds_probe_identity(view) {
-        Some((id, kind)) => BoundsProbe::new(id.to_string(), kind, element).into(),
+        Some((id, kind)) => {
+            #[cfg(feature = "parity-diagnostics")]
+            {
+                BoundsProbe::new_with_source(
+                    id.to_string(),
+                    kind,
+                    element,
+                    view.provenance().constructor,
+                )
+                .into()
+            }
+            #[cfg(not(feature = "parity-diagnostics"))]
+            {
+                BoundsProbe::new(id.to_string(), kind, element).into()
+            }
+        }
         None => element,
     }
 }
@@ -3919,11 +4406,54 @@ struct BoundsProbe<'a, Message> {
     id: String,
     kind: &'static str,
     content: IcedElement<'a, Message>,
+    #[cfg(feature = "parity-diagnostics")]
+    generation: Option<u64>,
+    #[cfg(feature = "parity-diagnostics")]
+    path: String,
+    #[cfg(feature = "parity-diagnostics")]
+    facts: Option<runtime_diagnostics::ProbeFacts>,
 }
 
 impl<'a, Message> BoundsProbe<'a, Message> {
     fn new(id: String, kind: &'static str, content: IcedElement<'a, Message>) -> Self {
-        Self { id, kind, content }
+        #[cfg(feature = "parity-diagnostics")]
+        let path = id.clone();
+        Self {
+            id,
+            kind,
+            content,
+            #[cfg(feature = "parity-diagnostics")]
+            generation: runtime_diagnostics::active_generation(),
+            #[cfg(feature = "parity-diagnostics")]
+            path,
+            #[cfg(feature = "parity-diagnostics")]
+            facts: None,
+        }
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    fn new_with_source(
+        id: String,
+        kind: &'static str,
+        content: IcedElement<'a, Message>,
+        constructor_source: win_fluent::SourceLocation,
+    ) -> Self {
+        let generation = runtime_diagnostics::active_generation();
+        let facts = generation.and_then(|generation| {
+            runtime_diagnostics::take_probe_facts(generation, kind, &id, constructor_source)
+        });
+        let path = facts
+            .as_ref()
+            .map(|facts| facts.path.clone())
+            .unwrap_or_else(|| id.clone());
+        Self {
+            id,
+            kind,
+            content,
+            generation,
+            path,
+            facts,
+        }
     }
 }
 
@@ -4004,7 +4534,6 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for BoundsProbe<'_, M
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
-        record_preview_bounds(&self.id, self.kind, layout.bounds());
         self.content.as_widget().draw(
             &tree.children[0],
             renderer,
@@ -4014,6 +4543,19 @@ impl<Message> Widget<Message, iced::Theme, iced::Renderer> for BoundsProbe<'_, M
             cursor,
             viewport,
         );
+        #[cfg(feature = "parity-diagnostics")]
+        if let Some(generation) = self.generation {
+            runtime_diagnostics::record_probe(
+                generation,
+                self.path.clone(),
+                self.id.clone(),
+                self.kind,
+                layout.bounds(),
+                self.facts.clone(),
+            );
+        }
+        #[cfg(not(feature = "parity-diagnostics"))]
+        record_preview_bounds(&self.id, self.kind, layout.bounds());
     }
 
     fn mouse_interaction(
@@ -11895,6 +12437,175 @@ mod tests {
         Pointer(PointerPosition),
         Wheel(PointerWheel),
         Run,
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    static DIAGNOSTICS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[cfg(feature = "parity-diagnostics")]
+    fn target_combo_diagnostic_view() -> View<Msg> {
+        column((combo_box([
+            ComboBoxItem::new("en", "English"),
+            ComboBoxItem::new("zh", "Chinese"),
+        ])
+        .id("TargetLangCombo")
+        .label("Target Language")
+        .selected("en")
+        .width(Length::Fixed(138))
+        .on_change(Msg::Pick),))
+        .id("ActionBarWide")
+        .into_view()
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn first_two_generations_reuse_full_source_facts_after_repeated_probe_builds() {
+        let _guard = DIAGNOSTICS_LOCK.lock().expect("diagnostics lock");
+        runtime_diagnostics::clear();
+
+        for generation in [1, 2] {
+            let view = target_combo_diagnostic_view();
+            let ViewToken::Layout(layout) = view.token() else {
+                panic!("expected action bar layout");
+            };
+            let target = &layout.children[0];
+            runtime_diagnostics::prepare_generation_view(generation, &view);
+            runtime_diagnostics::begin_generation(
+                "main",
+                generation,
+                ["TargetLangCombo".to_string()],
+            );
+
+            let mut facts = None;
+            for _ in 0..3 {
+                facts = runtime_diagnostics::take_probe_facts(
+                    generation,
+                    "ComboBox",
+                    "TargetLangCombo",
+                    target.provenance().constructor,
+                );
+                assert!(
+                    facts.as_ref().is_some_and(|facts| {
+                        facts.path != "TargetLangCombo"
+                            && facts.path.contains("TargetLangCombo")
+                            && facts.constructor_source.is_some()
+                            && facts.property_sources.contains_key("id")
+                            && facts.property_sources.contains_key("width")
+                    }),
+                    "generation {generation} must retain full facts across responsive rebuilds"
+                );
+            }
+
+            runtime_diagnostics::record_probe(
+                generation,
+                "TargetLangCombo",
+                "TargetLangCombo",
+                "ComboBox",
+                Rectangle::new(Point::new(0.0, 0.0), Size::new(138.0, 40.0)),
+                facts,
+            );
+            let completed = runtime_diagnostics::take_completed(generation)
+                .expect("source-bearing required probe completes generation");
+            let target = completed
+                .controls
+                .iter()
+                .find(|control| control.id == "TargetLangCombo")
+                .expect("target combo diagnostic");
+            assert!(target.has_source_facts());
+            assert_ne!(target.path, target.id);
+            assert!(target.constructor_source.is_some());
+            assert!(target.property_sources.contains_key("id"));
+            assert!(target.property_sources.contains_key("width"));
+        }
+
+        runtime_diagnostics::clear();
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn id_only_required_probe_never_completes_and_remains_missing() {
+        let _guard = DIAGNOSTICS_LOCK.lock().expect("diagnostics lock");
+        runtime_diagnostics::clear();
+        runtime_diagnostics::begin_generation("main", 1, ["TargetLangCombo".to_string()]);
+
+        runtime_diagnostics::record_probe(
+            1,
+            "TargetLangCombo",
+            "TargetLangCombo",
+            "ComboBox",
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(138.0, 40.0)),
+            None,
+        );
+
+        assert!(runtime_diagnostics::take_completed(1).is_none());
+        let partial = runtime_diagnostics::take_active(1).expect("partial generation");
+        assert_eq!(
+            partial.missing_control_ids,
+            vec!["TargetLangCombo".to_string()]
+        );
+        runtime_diagnostics::clear();
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn duplicate_ids_keep_distinct_structural_paths() {
+        let _guard = DIAGNOSTICS_LOCK.lock().expect("diagnostics lock");
+        runtime_diagnostics::clear();
+        let first: View<Msg> = row((text("first"),)).id("duplicate").into_view();
+        let second: View<Msg> = row((text("second"),)).id("duplicate").into_view();
+        let view: View<Msg> = column((first, second)).into_view();
+        let ViewToken::Layout(layout) = view.token() else {
+            panic!("expected duplicate layout");
+        };
+        runtime_diagnostics::prepare_generation_view(7, &view);
+        runtime_diagnostics::begin_generation("main", 7, ["not-rendered".to_string()]);
+
+        for child in &layout.children {
+            let facts = runtime_diagnostics::take_probe_facts(
+                7,
+                "Row",
+                "duplicate",
+                child.provenance().constructor,
+            );
+            runtime_diagnostics::record_probe(
+                7,
+                "duplicate",
+                "duplicate",
+                "Row",
+                Rectangle::new(Point::new(0.0, 0.0), Size::new(50.0, 20.0)),
+                facts,
+            );
+        }
+
+        let partial = runtime_diagnostics::take_active(7).expect("partial generation");
+        let paths = partial
+            .controls
+            .iter()
+            .filter(|control| control.id == "duplicate")
+            .map(|control| control.path.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.iter().all(|path| *path != "duplicate"));
+        runtime_diagnostics::clear();
+    }
+
+    #[test]
+    fn registered_named_event_signal_maps_to_registered_message() {
+        let registrations = vec![
+            NamedEventRegistration::new(r"Local\Easydict-Preview-Control").on_signal(Msg::Run),
+        ];
+
+        let message = registered_named_event_message(
+            &registrations,
+            &PlatformEvent::NamedEventSignaled(r"Local\Easydict-Preview-Control".to_string()),
+        );
+
+        assert!(matches!(message, Some(Msg::Run)));
+        assert!(registered_named_event_message(
+            &registrations,
+            &PlatformEvent::NamedEventSignaled(r"Local\Other".to_string()),
+        )
+        .is_none());
     }
 
     fn test_tray_menu_with_submenu() -> TrayMenu<Msg> {

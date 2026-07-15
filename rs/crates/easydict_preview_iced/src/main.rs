@@ -1,5 +1,9 @@
+#[cfg(feature = "parity-diagnostics")]
+use std::{collections::BTreeMap, time::Instant};
 use std::{fs, path::Path, time::Duration};
 
+#[cfg(feature = "parity-diagnostics")]
+pub mod control;
 use easydict_app::{
     capture_overlay_window_options, default_settings_storage_path, default_ui_language,
     fixed_window_options, load_settings_file, main_window_options_for_settings,
@@ -266,10 +270,437 @@ fn delayed_preview_scroll_ready(delay_ms: u64) -> Task<Message> {
     )
 }
 
+#[cfg(feature = "parity-diagnostics")]
+const PREVIEW_CONTROL_POLL_INTERVAL: Duration = Duration::from_millis(20);
+#[cfg(feature = "parity-diagnostics")]
+const PREVIEW_CONTROL_RENDER_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[cfg(feature = "parity-diagnostics")]
+struct PendingRender {
+    request: control::PreviewControlRequest,
+    schema: String,
+    started: Instant,
+    writing: bool,
+}
+
+#[cfg(feature = "parity-diagnostics")]
+struct PreviewControlRuntime {
+    launch: control::ControlLaunchSettings,
+    state: control::PreviewControlState,
+    startup_environment: BTreeMap<String, String>,
+    pending: Option<PendingRender>,
+    width: f32,
+    height: f32,
+}
+
 struct PreviewApp {
     inner: EasydictApp,
     pending_scroll: Option<PreviewScroll>,
     preview_mode: bool,
+    #[cfg(feature = "parity-diagnostics")]
+    control: Option<PreviewControlRuntime>,
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn delayed_control_message(generation: u64, timed_out: bool) -> Task<Message> {
+    Task::perform(
+        async move {
+            if !timed_out {
+                std::thread::sleep(PREVIEW_CONTROL_POLL_INTERVAL);
+            }
+        },
+        move |_| {
+            if timed_out {
+                Message::PreviewControlTimedOut(generation)
+            } else {
+                Message::PreviewControlArtifactsWritten(generation)
+            }
+        },
+    )
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn write_error_ack_task(
+    launch: control::ControlLaunchSettings,
+    generation: u64,
+    error: control::ControlError,
+) -> Task<Message> {
+    Task::perform(
+        async move {
+            let ack = control::PreviewControlAck::error(
+                launch.session_id,
+                generation,
+                error.code,
+                error.message,
+            );
+            if let Err(error) = control::write_ack(&launch.ack_path, &ack) {
+                eprintln!("Failed to write preview control acknowledgement: {error}");
+            }
+        },
+        move |_| Message::PreviewControlArtifactsWritten(generation),
+    )
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn write_generation_task(
+    launch: control::ControlLaunchSettings,
+    request: control::PreviewControlRequest,
+    schema: String,
+    generation: win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration,
+    render_duration_ms: u64,
+    failure: Option<(&'static str, String)>,
+) -> Task<Message> {
+    let request_generation = request.generation;
+    Task::perform(
+        async move {
+            let diagnostics = serde_json::to_string_pretty(&generation);
+            let artifact_paths = diagnostics
+                .as_deref()
+                .map_err(|error| error.to_string())
+                .and_then(|diagnostics| {
+                    control::write_runtime_artifacts(
+                        &launch.output_root,
+                        &request.artifact_stem,
+                        &schema,
+                        &control::bounds_snapshot(&generation),
+                        diagnostics,
+                    )
+                    .map_err(|error| error.to_string())
+                });
+            let mut ack = match (artifact_paths, failure) {
+                (Ok(paths), None) => control::PreviewControlAck::rendered(
+                    launch.session_id.clone(),
+                    request.generation,
+                    paths,
+                    generation.observed_control_ids.clone(),
+                    generation.missing_control_ids.clone(),
+                    render_duration_ms,
+                ),
+                (Ok(paths), Some((code, message))) => {
+                    let mut ack = control::PreviewControlAck::error(
+                        launch.session_id.clone(),
+                        request.generation,
+                        code,
+                        message,
+                    );
+                    ack.artifact_paths = paths;
+                    ack.observed_control_ids = generation.observed_control_ids.clone();
+                    ack.missing_control_ids = generation.missing_control_ids.clone();
+                    ack.render_duration_ms = Some(render_duration_ms);
+                    ack
+                }
+                (Err(message), _) => control::PreviewControlAck::error(
+                    launch.session_id.clone(),
+                    request.generation,
+                    control::ERR_INVALID_SESSION,
+                    message,
+                ),
+            };
+            ack.schema = control::CONTROL_ACK_SCHEMA.to_string();
+            if let Err(error) = control::write_ack(&launch.ack_path, &ack) {
+                eprintln!("Failed to write preview control acknowledgement: {error}");
+            }
+        },
+        move |_| Message::PreviewControlArtifactsWritten(request_generation),
+    )
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn measured_client_dimensions(
+    generation: &win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration,
+) -> Option<(f32, f32)> {
+    let root_id = format!("{}.window", generation.window_id);
+    generation
+        .controls
+        .iter()
+        .find(|control| control.id == root_id)
+        .map(|root| (root.width, root.height))
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn generation_required_control_ids(
+    window: &WindowId,
+    request: &control::PreviewControlRequest,
+) -> Vec<String> {
+    let mut required = request.required_control_ids.clone();
+    if request.width_dips.is_some() || request.height_dips.is_some() {
+        let root_id = format!("{}.window", window.as_str());
+        if !required.contains(&root_id) {
+            required.push(root_id);
+        }
+    }
+    required
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn missing_required_source_facts(
+    window: &WindowId,
+    request: &control::PreviewControlRequest,
+    generation: &win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration,
+) -> Vec<String> {
+    generation_required_control_ids(window, request)
+        .into_iter()
+        .filter(|required_id| {
+            !generation
+                .controls
+                .iter()
+                .any(|control| control.id == *required_id && control.has_source_facts())
+        })
+        .collect()
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn dimension_mismatch_message(
+    request: &control::PreviewControlRequest,
+    generation: &win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration,
+) -> String {
+    let requested_width = request
+        .width_dips
+        .map_or_else(|| "unchanged".to_string(), |value| format!("{value:.2}"));
+    let requested_height = request
+        .height_dips
+        .map_or_else(|| "unchanged".to_string(), |value| format!("{value:.2}"));
+    let measured = measured_client_dimensions(generation).map_or_else(
+        || "unavailable".to_string(),
+        |(width, height)| format!("{width:.2}x{height:.2}"),
+    );
+    format!(
+        "requested client size {requested_width}x{requested_height} DIP; measured client size {measured} DIP; required tolerance is 1 DIP"
+    )
+}
+
+#[cfg(feature = "parity-diagnostics")]
+#[derive(Debug, Eq, PartialEq)]
+enum GenerationSizeGate {
+    Ready,
+    Retry,
+    TimedOut(String),
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn generation_size_gate(
+    request: &control::PreviewControlRequest,
+    generation: &win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration,
+    timed_out: bool,
+) -> GenerationSizeGate {
+    if requested_dimensions_match(request, generation) {
+        GenerationSizeGate::Ready
+    } else if timed_out {
+        GenerationSizeGate::TimedOut(dimension_mismatch_message(request, generation))
+    } else {
+        GenerationSizeGate::Retry
+    }
+}
+
+#[cfg(feature = "parity-diagnostics")]
+fn requested_dimensions_match(
+    request: &control::PreviewControlRequest,
+    generation: &win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration,
+) -> bool {
+    let root_id = format!("{}.window", generation.window_id);
+    let Some(root) = generation
+        .controls
+        .iter()
+        .find(|control| control.id == root_id)
+    else {
+        return request.width_dips.is_none() && request.height_dips.is_none();
+    };
+    request
+        .width_dips
+        .is_none_or(|width| (root.width - width).abs() <= 1.0)
+        && request
+            .height_dips
+            .is_none_or(|height| (root.height - height).abs() <= 1.0)
+}
+
+impl PreviewApp {
+    #[cfg(feature = "parity-diagnostics")]
+    fn handle_control_signal(&mut self) -> Task<Message> {
+        let Some(runtime) = self.control.as_mut() else {
+            return Task::none();
+        };
+        let request = match control::read_request(&runtime.launch.request_path) {
+            Ok(request) => request,
+            Err(error) => {
+                return write_error_ack_task(
+                    runtime.launch.clone(),
+                    runtime.state.last_generation().saturating_add(1),
+                    error,
+                );
+            }
+        };
+        let generation = request.generation;
+        let environment = match control::request_environment(&runtime.startup_environment, &request)
+        {
+            Ok(environment) => environment,
+            Err(error) => {
+                return write_error_ack_task(runtime.launch.clone(), generation, error);
+            }
+        };
+        if let Err(error) = runtime
+            .state
+            .validate_and_accept(&request, &runtime.launch.output_root)
+        {
+            return write_error_ack_task(runtime.launch.clone(), generation, error);
+        }
+        if request.command == "shutdown" {
+            win_fluent_backend_iced::runtime_diagnostics::clear();
+            return Task::exit();
+        }
+
+        let width = request.width_dips.unwrap_or(runtime.width);
+        let height = request.height_dips.unwrap_or(runtime.height);
+        runtime.width = width;
+        runtime.height = height;
+        self.inner = EasydictApp {
+            state: EasydictUiState::preview_from_lookup(|name| environment.get(name).cloned()),
+        };
+        let window = WindowId::new(preview_window_id());
+        let schema = preview_generation_schema_on_large_stack(
+            self.inner.state.clone(),
+            window.as_str().to_string(),
+            generation,
+        );
+        self.control
+            .as_mut()
+            .expect("control runtime exists")
+            .pending = Some(PendingRender {
+            request: request.clone(),
+            schema,
+            started: Instant::now(),
+            writing: false,
+        });
+        let required_control_ids = generation_required_control_ids(&window, &request);
+        win_fluent_backend_iced::runtime_diagnostics::begin_generation(
+            window.as_str(),
+            generation,
+            required_control_ids,
+        );
+        Task::batch([
+            Task::window(WindowCommand::Resize {
+                id: window,
+                width,
+                height,
+            }),
+            delayed_control_message(generation, false),
+        ])
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    fn poll_control_generation(&mut self, generation: u64) -> Task<Message> {
+        let Some(runtime) = self.control.as_mut() else {
+            return Task::none();
+        };
+        let Some(pending) = runtime.pending.as_mut() else {
+            return Task::none();
+        };
+        if pending.request.generation != generation {
+            return Task::none();
+        }
+        if pending.writing {
+            runtime.pending = None;
+            return Task::none();
+        }
+        if let Some(completed) =
+            win_fluent_backend_iced::runtime_diagnostics::take_completed(generation)
+        {
+            let window = WindowId::new(preview_window_id());
+            let timed_out = pending.started.elapsed() >= PREVIEW_CONTROL_RENDER_TIMEOUT;
+            let missing_source_facts =
+                missing_required_source_facts(&window, &pending.request, &completed);
+            let failure = if missing_source_facts.is_empty() {
+                match generation_size_gate(&pending.request, &completed, timed_out) {
+                    GenerationSizeGate::Ready => None,
+                    GenerationSizeGate::TimedOut(message) => {
+                        Some((control::ERR_RENDER_TIMEOUT, message))
+                    }
+                    GenerationSizeGate::Retry => {
+                        win_fluent_backend_iced::runtime_diagnostics::begin_generation(
+                            window.as_str(),
+                            generation,
+                            generation_required_control_ids(&window, &pending.request),
+                        );
+                        return delayed_control_message(generation, false);
+                    }
+                }
+            } else if timed_out {
+                Some((
+                    control::ERR_RENDER_TIMEOUT,
+                    format!(
+                        "required controls did not settle with structural provenance: {}",
+                        missing_source_facts.join(", ")
+                    ),
+                ))
+            } else {
+                win_fluent_backend_iced::runtime_diagnostics::begin_generation(
+                    window.as_str(),
+                    generation,
+                    generation_required_control_ids(&window, &pending.request),
+                );
+                return delayed_control_message(generation, false);
+            };
+            pending.writing = true;
+            return write_generation_task(
+                runtime.launch.clone(),
+                pending.request.clone(),
+                pending.schema.clone(),
+                completed,
+                pending.started.elapsed().as_millis() as u64,
+                failure,
+            );
+        }
+        if pending.started.elapsed() >= PREVIEW_CONTROL_RENDER_TIMEOUT {
+            return delayed_control_message(generation, true);
+        }
+        delayed_control_message(generation, false)
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    fn time_out_control_generation(&mut self, generation: u64) -> Task<Message> {
+        let Some(runtime) = self.control.as_mut() else {
+            return Task::none();
+        };
+        let Some(pending) = runtime.pending.as_mut() else {
+            return Task::none();
+        };
+        if pending.request.generation != generation || pending.writing {
+            return Task::none();
+        }
+        let partial = win_fluent_backend_iced::runtime_diagnostics::take_active(generation)
+            .unwrap_or_else(|| {
+                win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration {
+                    schema: control::RUNTIME_DIAGNOSTICS_SCHEMA.to_string(),
+                    window_id: preview_window_id(),
+                    generation,
+                    controls: Vec::new(),
+                    observed_control_ids: Vec::new(),
+                    missing_control_ids: pending.request.required_control_ids.clone(),
+                }
+            });
+        let failure = if partial.missing_control_ids.is_empty() {
+            (
+                control::ERR_RENDER_TIMEOUT,
+                "preview generation did not complete before the internal timeout".to_string(),
+            )
+        } else {
+            (
+                control::ERR_MISSING_REQUIRED_CONTROL,
+                format!(
+                    "preview generation did not render required controls: {}",
+                    partial.missing_control_ids.join(", ")
+                ),
+            )
+        };
+        pending.writing = true;
+        write_generation_task(
+            runtime.launch.clone(),
+            pending.request.clone(),
+            pending.schema.clone(),
+            partial,
+            pending.started.elapsed().as_millis() as u64,
+            Some(failure),
+        )
+    }
 }
 
 impl Application for PreviewApp {
@@ -321,11 +752,38 @@ impl Application for PreviewApp {
             Task::none()
         };
 
+        #[cfg(feature = "parity-diagnostics")]
+        let control = {
+            let startup_environment = std::env::vars().collect::<BTreeMap<_, _>>();
+            match control::ControlLaunchSettings::from_lookup(|name| {
+                startup_environment.get(name).cloned()
+            }) {
+                Ok(Some(launch)) => {
+                    let options = preview_window_options();
+                    Some(PreviewControlRuntime {
+                        state: control::PreviewControlState::new(launch.session_id.clone()),
+                        launch,
+                        startup_environment,
+                        pending: None,
+                        width: options.width,
+                        height: options.height,
+                    })
+                }
+                Ok(None) => None,
+                Err(error) => {
+                    eprintln!("Invalid preview control launch settings: {error}");
+                    None
+                }
+            }
+        };
+
         (
             Self {
                 inner,
                 pending_scroll,
                 preview_mode,
+                #[cfg(feature = "parity-diagnostics")]
+                control,
             },
             Task::batch([initial_task, auto_toggle_task, preview_scroll_task]),
         )
@@ -344,6 +802,18 @@ impl Application for PreviewApp {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        #[cfg(feature = "parity-diagnostics")]
+        match message {
+            Message::PreviewControlSignaled => return self.handle_control_signal(),
+            Message::PreviewControlArtifactsWritten(generation) => {
+                return self.poll_control_generation(generation);
+            }
+            Message::PreviewControlTimedOut(generation) => {
+                return self.time_out_control_generation(generation);
+            }
+            _ => {}
+        }
+
         let is_preview_scroll_ready = message == Message::PreviewScrollReady;
         if is_preview_scroll_ready {
             if let Some(scroll) = self.pending_scroll.as_mut() {
@@ -360,8 +830,7 @@ impl Application for PreviewApp {
             return Task::none();
         }
 
-        let task = self.inner.update(message);
-        task
+        self.inner.update(message)
     }
 
     fn window_options(&self, window: &WindowId) -> Option<WindowOptions> {
@@ -382,7 +851,15 @@ impl Application for PreviewApp {
     }
 
     fn named_events(&self) -> Vec<NamedEventRegistration<Self::Message>> {
-        self.inner.named_events()
+        let mut events = self.inner.named_events();
+        #[cfg(feature = "parity-diagnostics")]
+        if let Some(control) = &self.control {
+            events.push(
+                NamedEventRegistration::new(control.launch.event_name.clone())
+                    .on_signal(Message::PreviewControlSignaled),
+            );
+        }
+        events
     }
 
     fn shell_verbs(&self) -> Vec<ShellVerb> {
@@ -402,40 +879,63 @@ impl Application for PreviewApp {
     }
 }
 
-fn dump_preview_schema_on_large_stack(state: EasydictUiState) {
-    if std::env::var("EASYDICT_PREVIEW_SCHEMA_PATH").is_err() {
-        return;
-    }
-
+fn preview_schema_snapshot_on_large_stack(state: EasydictUiState, window_id: String) -> String {
     std::thread::Builder::new()
         .name("easydict-preview-schema".to_string())
         .stack_size(8 * 1024 * 1024)
-        .spawn(move || dump_preview_schema_if_requested(&EasydictApp { state }))
+        .spawn(move || {
+            let app = EasydictApp { state };
+            let window_id = WindowId::new(window_id);
+            let view = if window_id.as_str() == "pop-button" {
+                pop_button_view_with_state(pop_button_preview_state())
+            } else {
+                app.view(&window_id)
+            };
+            view_schema(&view).snapshot()
+        })
         .expect("failed to spawn Easydict preview schema thread")
         .join()
-        .expect("Easydict preview schema thread panicked");
+        .expect("Easydict preview schema thread panicked")
 }
 
-fn dump_preview_schema_if_requested(app: &EasydictApp) {
+#[cfg(feature = "parity-diagnostics")]
+fn preview_generation_schema_on_large_stack(
+    state: EasydictUiState,
+    window_id: String,
+    generation: u64,
+) -> String {
+    std::thread::Builder::new()
+        .name("easydict-preview-generation-schema".to_string())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            let app = EasydictApp { state };
+            let window_id = WindowId::new(window_id);
+            let view = if window_id.as_str() == "pop-button" {
+                pop_button_view_with_state(pop_button_preview_state())
+            } else {
+                app.view(&window_id)
+            };
+            win_fluent_backend_iced::runtime_diagnostics::prepare_generation_view(
+                generation, &view,
+            );
+            view_schema(&view).snapshot()
+        })
+        .expect("failed to spawn Easydict preview generation schema thread")
+        .join()
+        .expect("Easydict preview generation schema thread panicked")
+}
+
+fn dump_preview_schema_on_large_stack(state: EasydictUiState) {
     let Ok(path) = std::env::var("EASYDICT_PREVIEW_SCHEMA_PATH") else {
         return;
     };
-
-    let window_id = WindowId::new(preview_window_id());
-    let view = if window_id.as_str() == "pop-button" {
-        pop_button_view_with_state(pop_button_preview_state())
-    } else {
-        app.view(&window_id)
-    };
-    let schema = view_schema(&view).snapshot();
-
+    let schema = preview_schema_snapshot_on_large_stack(state, preview_window_id());
     if let Some(parent) = Path::new(&path).parent() {
         if let Err(error) = fs::create_dir_all(parent) {
             eprintln!("Failed to create preview schema directory: {error}");
             return;
         }
     }
-
     if let Err(error) = fs::write(&path, schema) {
         eprintln!("Failed to write preview schema to {path}: {error}");
     }
@@ -473,6 +973,8 @@ mod tests {
                 retry_delay_ms: 1,
             }),
             preview_mode: true,
+            #[cfg(feature = "parity-diagnostics")]
+            control: None,
         };
 
         assert!(matches!(app.update(Message::Noop), Task::None));
@@ -502,6 +1004,8 @@ mod tests {
                 retry_delay_ms: 1,
             }),
             preview_mode: true,
+            #[cfg(feature = "parity-diagnostics")]
+            control: None,
         };
 
         let first = app.update(Message::PreviewScrollReady);
@@ -782,6 +1286,161 @@ mod tests {
         restore_env("EASYDICT_PREVIEW_WINDOW", previous_window);
         restore_env("EASYDICT_PREVIEW_WIDTH_DIPS", previous_width);
         restore_env("EASYDICT_PREVIEW_HEIGHT_DIPS", previous_height);
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn first_generation_waits_for_requested_client_size_after_launch_resize() {
+        let request = control::PreviewControlRequest {
+            session_id: "session".to_string(),
+            generation: 1,
+            command: "render".to_string(),
+            scenario: "main.target-language-dropdown-open".to_string(),
+            artifact_stem: "main-open.g1".to_string(),
+            width_dips: Some(846.0),
+            height_dips: Some(913.0),
+            overrides: BTreeMap::new(),
+            required_control_ids: Vec::new(),
+        };
+        let window = WindowId::new("main");
+        assert_eq!(
+            generation_required_control_ids(&window, &request),
+            vec!["main.window".to_string()]
+        );
+
+        let generation_at = |width, height| {
+            let root = win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticNode {
+                path: "main.window".to_string(),
+                id: "main.window".to_string(),
+                kind: "Page".to_string(),
+                x: 0.0,
+                y: 0.0,
+                width,
+                height,
+                declarative_values: BTreeMap::new(),
+                style_classes: Vec::new(),
+                constructor_source: None,
+                property_sources: BTreeMap::new(),
+                resolved_values: BTreeMap::new(),
+                token: None,
+            };
+            win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration {
+                schema: control::RUNTIME_DIAGNOSTICS_SCHEMA.to_string(),
+                window_id: "main".to_string(),
+                generation: 1,
+                controls: vec![root],
+                observed_control_ids: vec!["main.window".to_string()],
+                missing_control_ids: Vec::new(),
+            }
+        };
+
+        let launch_size_draw = generation_at(750.0, 600.0);
+        assert_eq!(
+            generation_size_gate(&request, &launch_size_draw, false),
+            GenerationSizeGate::Retry
+        );
+        let GenerationSizeGate::TimedOut(message) =
+            generation_size_gate(&request, &launch_size_draw, true)
+        else {
+            panic!("a persistent resize mismatch must time out");
+        };
+        assert!(message.contains("requested client size 846.00x913.00 DIP"));
+        assert!(message.contains("measured client size 750.00x600.00 DIP"));
+
+        let resized_draw = generation_at(846.0, 913.0);
+        assert_eq!(
+            generation_size_gate(&request, &resized_draw, false),
+            GenerationSizeGate::Ready
+        );
+    }
+
+    #[cfg(feature = "parity-diagnostics")]
+    #[test]
+    fn first_two_generations_require_full_target_combo_provenance_before_ack() {
+        let window = WindowId::new("main");
+        let request = control::PreviewControlRequest {
+            session_id: "session".to_string(),
+            generation: 1,
+            command: "render".to_string(),
+            scenario: "main.target-language-dropdown-open".to_string(),
+            artifact_stem: "main-open.g1".to_string(),
+            width_dips: None,
+            height_dips: None,
+            overrides: BTreeMap::new(),
+            required_control_ids: vec!["TargetLangCombo".to_string()],
+        };
+        let source = win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticSource {
+            file: "crates\\easydict_app\\src\\ui.rs".to_string(),
+            line: 2301,
+            column: 9,
+        };
+
+        for generation in [1, 2] {
+            let target =
+                win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticNode {
+                    path: "root/0:main.root/1:ModeSwitchOverlay/0:main.surface/1:QuickTranslateContent/0:QuickTranslateContent.Content/1:main.quick.action_bar/0:ActionBarWide/3:TargetLangCombo".to_string(),
+                    id: "TargetLangCombo".to_string(),
+                    kind: "ComboBox".to_string(),
+                    x: 0.0,
+                    y: 0.0,
+                    width: 138.0,
+                    height: 40.0,
+                    declarative_values: BTreeMap::from([(
+                        "width".to_string(),
+                        "fixed:138".to_string(),
+                    )]),
+                    style_classes: Vec::new(),
+                    constructor_source: Some(source.clone()),
+                    property_sources: BTreeMap::from([
+                        ("id".to_string(), source.clone()),
+                        ("width".to_string(), source.clone()),
+                    ]),
+                    resolved_values: BTreeMap::new(),
+                    token: None,
+                };
+            let diagnostics =
+                win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration {
+                    schema: control::RUNTIME_DIAGNOSTICS_SCHEMA.to_string(),
+                    window_id: "main".to_string(),
+                    generation,
+                    controls: vec![target],
+                    observed_control_ids: vec!["TargetLangCombo".to_string()],
+                    missing_control_ids: Vec::new(),
+                };
+
+            assert!(
+                missing_required_source_facts(&window, &request, &diagnostics).is_empty(),
+                "generation {generation} should be acknowledgement-ready"
+            );
+        }
+
+        let short_target = win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticNode {
+            path: "TargetLangCombo".to_string(),
+            id: "TargetLangCombo".to_string(),
+            kind: "ComboBox".to_string(),
+            x: 0.0,
+            y: 0.0,
+            width: 138.0,
+            height: 40.0,
+            declarative_values: BTreeMap::new(),
+            style_classes: Vec::new(),
+            constructor_source: None,
+            property_sources: BTreeMap::new(),
+            resolved_values: BTreeMap::new(),
+            token: None,
+        };
+        let unsettled = win_fluent_backend_iced::runtime_diagnostics::RuntimeDiagnosticGeneration {
+            schema: control::RUNTIME_DIAGNOSTICS_SCHEMA.to_string(),
+            window_id: "main".to_string(),
+            generation: 1,
+            controls: vec![short_target],
+            observed_control_ids: vec!["TargetLangCombo".to_string()],
+            missing_control_ids: Vec::new(),
+        };
+        assert_eq!(
+            missing_required_source_facts(&window, &request, &unsettled),
+            vec!["TargetLangCombo".to_string()]
+        );
     }
 
     #[test]

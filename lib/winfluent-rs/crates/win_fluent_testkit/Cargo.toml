@@ -7,6 +7,10 @@ version.workspace = true
 [dependencies]
 win_fluent = { path = "../win_fluent" }
 
+[features]
+default = []
+parity-diagnostics = ["win_fluent/parity-diagnostics"]
+
 [lib]
 path = "src/lib.rs"
 

@@ -235,4 +235,10 @@ pub enum WindowCommand<Message> {
         id: WindowId,
         enabled: bool,
     },
+    /// Resize a native window through the runtime's internal command path.
+    Resize {
+        id: WindowId,
+        width: f32,
+        height: f32,
+    },
 }

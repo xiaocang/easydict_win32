@@ -1650,17 +1650,19 @@ impl EasydictUiState {
     }
 
     pub fn preview_from_env() -> Self {
-        let scenario = std::env::var("EASYDICT_PREVIEW_SCENARIO")
-            .ok()
+        Self::preview_from_lookup(|name| std::env::var(name).ok())
+    }
+
+    pub fn preview_from_lookup(mut lookup: impl FnMut(&str) -> Option<String>) -> Self {
+        let scenario = lookup("EASYDICT_PREVIEW_SCENARIO")
             .map(|value| PreviewScenario::from_id(&value))
             .unwrap_or(PreviewScenario::Initial);
-        let theme = std::env::var("EASYDICT_PREVIEW_THEME")
-            .ok()
+        let theme = lookup("EASYDICT_PREVIEW_THEME")
             .map(|value| theme_from_id(&value))
             .unwrap_or(ThemeMode::System);
 
         let mut state = Self::preview(scenario, theme);
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_UI_LANGUAGE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_UI_LANGUAGE") {
             let value = value.trim();
             if !value.is_empty() {
                 state.settings.ui_language = value.to_string();
@@ -1669,34 +1671,31 @@ impl EasydictUiState {
             }
         }
         let mut settings_seed_changed = false;
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_MOUSE_SELECTION_TRANSLATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_MOUSE_SELECTION_TRANSLATE") {
             state.settings.mouse_selection_translate = env_truthy(&value);
             settings_seed_changed = true;
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_FIXED_ALWAYS_ON_TOP") {
             state.settings.fixed_always_on_top = env_truthy(&value);
             settings_seed_changed = true;
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_HIDE_EMPTY_SERVICE_RESULTS") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_HIDE_EMPTY_SERVICE_RESULTS") {
             state.settings.hide_empty_service_results = env_truthy(&value);
             settings_seed_changed = true;
         }
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_IMPORTED_MDX")
             .is_some_and(|value| env_truthy(&value))
         {
             apply_preview_imported_mdx_dictionary(&mut state.settings);
             settings_seed_changed = true;
         }
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_OLLAMA_MODEL_EMPTY")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_OLLAMA_MODEL_EMPTY")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings.ollama_model.clear();
             settings_seed_changed = true;
         }
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_OPENAI_MODEL_EMPTY")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_OPENAI_MODEL_EMPTY")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings.open_ai_model.clear();
@@ -1705,29 +1704,28 @@ impl EasydictUiState {
         if settings_seed_changed {
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_TRANSLATE_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_MAIN_TRANSLATE_STATE") {
             state.main_translate_button_state = preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SOURCE_TEXT_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SOURCE_TEXT_STATE") {
             state.source_text_state = preview_control_state_from_id(&value);
             state.source_text_focused = state.source_text_state.focused;
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_DETECTED_LANGUAGE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_MAIN_DETECTED_LANGUAGE") {
             let value = value.trim();
             state.detected_language = (!value.is_empty()).then(|| value.to_string());
         }
         let main_effective_source_language =
-            std::env::var("EASYDICT_PREVIEW_MAIN_EFFECTIVE_SOURCE_LANGUAGE")
-                .ok()
+            lookup("EASYDICT_PREVIEW_MAIN_EFFECTIVE_SOURCE_LANGUAGE")
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty());
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_MAIN_SOURCE_LANGUAGE") {
             let value = value.trim();
             if !value.is_empty() {
                 state.source_language = preview_language_id(value);
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_MAIN_TARGET_LANGUAGE") {
             let value = value.trim();
             if !value.is_empty() {
                 state.target_language = preview_language_id(value);
@@ -1735,13 +1733,13 @@ impl EasydictUiState {
                     !state.target_language.eq_ignore_ascii_case("auto");
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MAIN_OPEN_DROPDOWN") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_MAIN_OPEN_DROPDOWN") {
             let value = value.trim().to_ascii_lowercase();
             if matches!(value.as_str(), "source" | "target") {
                 state.main_open_language_dropdown = Some(value);
             }
         }
-        if let Ok(service_id) = std::env::var("EASYDICT_PREVIEW_MAIN_GRAMMAR_CAPABLE_SERVICE") {
+        if let Some(service_id) = lookup("EASYDICT_PREVIEW_MAIN_GRAMMAR_CAPABLE_SERVICE") {
             let service_id = service_id.trim();
             if !service_id.is_empty() {
                 if let Some(result) = state
@@ -1759,9 +1757,8 @@ impl EasydictUiState {
             &mut state,
             main_effective_source_language.as_deref(),
         );
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_STATE") {
-            let service_id = std::env::var("EASYDICT_PREVIEW_RESULT_HEADER_SERVICE_ID")
-                .ok()
+        if let Some(value) = lookup("EASYDICT_PREVIEW_RESULT_HEADER_STATE") {
+            let service_id = lookup("EASYDICT_PREVIEW_RESULT_HEADER_SERVICE_ID")
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| "google".to_string());
             if let Some(result) = state
@@ -1772,7 +1769,7 @@ impl EasydictUiState {
                 result.header_state = preview_control_state_from_id(&value);
             }
         }
-        if let Ok(service_id) = std::env::var("EASYDICT_PREVIEW_RESULT_COLLAPSED_SERVICE_ID") {
+        if let Some(service_id) = lookup("EASYDICT_PREVIEW_RESULT_COLLAPSED_SERVICE_ID") {
             let service_id = service_id.trim();
             if !service_id.is_empty() {
                 for result in &mut state.results {
@@ -1782,37 +1779,37 @@ impl EasydictUiState {
                 }
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_INPUT_MODE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_LONG_DOC_INPUT_MODE") {
             state.long_document.input_mode = long_document_input_mode_from_preview(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_OUTPUT_MODE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_LONG_DOC_OUTPUT_MODE") {
             state.long_document.output_mode = long_document_output_mode_from_preview(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_LONG_DOC_SERVICE_STATE") {
             state.long_document.service_combo_state = preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_LONG_DOC_SERVICE_DROPDOWN") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_LONG_DOC_SERVICE_DROPDOWN") {
             state.long_document.service_dropdown_open =
                 env_truthy(&value) || matches_preview_open(&value);
             if state.long_document.service_dropdown_open {
                 state.long_document.service_combo_state = ControlState::default().hovered(true);
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_TTS_SPEED_STATE") {
             state.settings.tts_speed_slider_state = preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_AUTO_PLAY_STATE") {
             state.settings.auto_play_translation_toggle_state =
                 preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_IMPORT_MDX_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_IMPORT_MDX_STATE") {
             state.settings.import_mdx_button_state = preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_INTERNATIONAL_TOGGLE_STATE") {
             state.settings.international_services_toggle_state =
                 preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_DEEPL_EXPANDER_STATE") {
             let control_state = preview_control_state_from_id(&value);
             state.settings.deepl_service_expander_state = control_state.clone();
             state
@@ -1820,9 +1817,9 @@ impl EasydictUiState {
                 .service_expander_states
                 .insert("deepl".to_string(), control_state);
         }
-        if let (Ok(service_id), Ok(value)) = (
-            std::env::var("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_ID"),
-            std::env::var("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATE"),
+        if let (Some(service_id), Some(value)) = (
+            lookup("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_ID"),
+            lookup("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATE"),
         ) {
             let service_id = service_id.trim();
             if !service_id.is_empty() {
@@ -1832,7 +1829,7 @@ impl EasydictUiState {
                 );
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATES") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_SERVICE_EXPANDER_STATES") {
             for (service_id, state_id) in preview_service_expander_state_pairs(&value) {
                 state.settings.service_expander_states.insert(
                     service_id.to_string(),
@@ -1840,8 +1837,8 @@ impl EasydictUiState {
                 );
             }
         }
-        if let Ok(value) =
-            std::env::var("EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS")
+        if let Some(value) =
+            lookup("EASYDICT_PREVIEW_SETTINGS_EXPANDED_SERVICE_CONFIGURATIONS")
         {
             for service_id in value
                 .split(',')
@@ -1861,92 +1858,86 @@ impl EasydictUiState {
                 }
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_PROVIDER") {
             let provider = normalize_local_ai_provider(&value);
             state.settings.local_ai_provider = provider;
             state.settings.local_ai_status =
                 local_ai_provider_status(&state.settings.local_ai_provider).to_string();
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_SETTINGS_LOCAL_AI_STATUS") {
             let value = value.trim();
             if !value.is_empty() {
                 state.settings.local_ai_status = value.to_string();
             }
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_CAPTURE_OVERLAY_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_CAPTURE_OVERLAY_STATE") {
             apply_capture_overlay_preview(&mut state, &value);
             // Freeze the desktop like the real capture flow so the preview
             // overlay dims a screenshot instead of a flat surface.
             state.capture_background = capture_screen_background();
         }
-        if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_SECTION") {
+        if let Some(section) = lookup("EASYDICT_PREVIEW_SETTINGS_SECTION") {
             state.settings.selected_section = SettingsSection::from_id(&section);
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
-        if let Ok(profile) = std::env::var("EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE") {
+        if let Some(profile) = lookup("EASYDICT_PREVIEW_SETTINGS_VIEW_SERVICE_PROFILE") {
             apply_settings_view_service_preview_profile(&mut state.settings, &profile);
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
-        if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_HOVERED_SECTION") {
+        if let Some(section) = lookup("EASYDICT_PREVIEW_SETTINGS_HOVERED_SECTION") {
             state.settings.hovered_section = Some(SettingsSection::from_id(&section));
         }
-        if let Ok(section) = std::env::var("EASYDICT_PREVIEW_SETTINGS_PRESSED_SECTION") {
+        if let Some(section) = lookup("EASYDICT_PREVIEW_SETTINGS_PRESSED_SECTION") {
             let section = SettingsSection::from_id(&section);
             state.settings.pressed_section = Some(section);
             state.settings.hovered_section.get_or_insert(section);
         }
-        if std::env::var("EASYDICT_PREVIEW_SCROLL_PERCENT")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SCROLL_PERCENT")
             .and_then(|value| value.trim().parse::<f32>().ok())
             .is_some_and(|value| value > 0.0)
         {
             state.settings.scrollbars_visible = true;
         }
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_TAB_SWITCHING")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings.tab_switching = true;
         }
 
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_OPEN")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_OPEN")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings_open = true;
         }
 
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_UNSAVED_DIALOG")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_UNSAVED_DIALOG")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings.unsaved_changes = true;
             state.settings.show_unsaved_changes_dialog = true;
         }
-        if std::env::var("EASYDICT_PREVIEW_SETTINGS_UNSAVED_CHANGES")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_SETTINGS_UNSAVED_CHANGES")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings.unsaved_changes = true;
             state.settings.show_unsaved_changes_dialog = false;
         }
 
-        if std::env::var("EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED")
-            .ok()
+        if lookup("EASYDICT_PREVIEW_TRANSLATION_LANGUAGES_EXPANDED")
             .is_some_and(|value| env_truthy(&value))
         {
             state.settings.translation_languages_expanded = true;
             state.saved_settings = sanitized_settings_snapshot(&state.settings);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_MINI_TRANSLATE_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_MINI_TRANSLATE_STATE") {
             state.mini.translate_button_state = preview_control_state_from_id(&value);
         }
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE") {
+        if let Some(value) = lookup("EASYDICT_PREVIEW_FIXED_TRANSLATE_STATE") {
             state.fixed.translate_button_state = preview_control_state_from_id(&value);
         }
-        apply_floating_preview_control_states_from_env(&mut state.mini, "MINI");
-        apply_floating_preview_control_states_from_env(&mut state.fixed, "FIXED");
-        if let Ok(value) = std::env::var("EASYDICT_PREVIEW_FLOATING_CONTENT") {
+        apply_floating_preview_control_states_from_lookup(&mut state.mini, "MINI", &mut lookup);
+        apply_floating_preview_control_states_from_lookup(&mut state.fixed, "FIXED", &mut lookup);
+        if let Some(value) = lookup("EASYDICT_PREVIEW_FLOATING_CONTENT") {
             if matches!(
                 value.trim().to_ascii_lowercase().as_str(),
                 "empty" | "blank" | "initial"
@@ -1961,8 +1952,8 @@ impl EasydictUiState {
                 state.fixed.results = preview_empty_fixed_results();
             }
         }
-        apply_floating_preview_languages_from_env(&mut state.mini, "MINI");
-        apply_floating_preview_languages_from_env(&mut state.fixed, "FIXED");
+        apply_floating_preview_languages_from_lookup(&mut state.mini, "MINI", &mut lookup);
+        apply_floating_preview_languages_from_lookup(&mut state.fixed, "FIXED", &mut lookup);
         refresh_floating_quick_query_mode_preview(&mut state.mini, &state.settings, None);
         refresh_floating_quick_query_mode_preview(&mut state.fixed, &state.settings, None);
 
@@ -3091,6 +3082,10 @@ impl EasydictUiState {
             Message::WindowEvent(event) => {
                 apply_window_runtime_event(self, &event);
             }
+            #[cfg(feature = "parity-diagnostics")]
+            Message::PreviewControlSignaled
+            | Message::PreviewControlArtifactsWritten(_)
+            | Message::PreviewControlTimedOut(_) => {}
             Message::PreviewScrollReady
             | Message::Noop
             | Message::QuickTranslate
@@ -3144,9 +3139,10 @@ impl EasydictUiState {
     }
 }
 
-fn apply_floating_preview_control_states_from_env(
+fn apply_floating_preview_control_states_from_lookup(
     floating: &mut FloatingWindowState,
     window_kind: &str,
+    lookup: &mut impl FnMut(&str) -> Option<String>,
 ) {
     for (suffix, state) in [
         ("SOURCE_LANGUAGE_STATE", &mut floating.source_language_state),
@@ -3157,22 +3153,23 @@ fn apply_floating_preview_control_states_from_env(
         ("CLOSE_STATE", &mut floating.close_button_state),
     ] {
         let name = format!("EASYDICT_PREVIEW_{window_kind}_{suffix}");
-        if let Ok(value) = std::env::var(name) {
+        if let Some(value) = lookup(&name) {
             *state = preview_control_state_from_id(&value);
         }
     }
 }
 
-fn apply_floating_preview_languages_from_env(
+fn apply_floating_preview_languages_from_lookup(
     floating: &mut FloatingWindowState,
     window_kind: &str,
+    lookup: &mut impl FnMut(&str) -> Option<String>,
 ) {
     for (suffix, language) in [
         ("SOURCE_LANGUAGE", &mut floating.source_language),
         ("TARGET_LANGUAGE", &mut floating.target_language),
     ] {
         let name = format!("EASYDICT_PREVIEW_{window_kind}_{suffix}");
-        if let Ok(value) = std::env::var(name) {
+        if let Some(value) = lookup(&name) {
             let value = value.trim();
             if !value.is_empty() {
                 *language = preview_language_id(value);
@@ -5403,12 +5400,29 @@ pub enum Message {
     PopButtonAutoDismiss(u64),
     PopButtonClicked,
     PreviewScrollReady,
+    #[cfg(feature = "parity-diagnostics")]
+    PreviewControlSignaled,
+    #[cfg(feature = "parity-diagnostics")]
+    PreviewControlArtifactsWritten(u64),
+    #[cfg(feature = "parity-diagnostics")]
+    PreviewControlTimedOut(u64),
     Noop,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preview_from_lookup_reads_only_supplied_values() {
+        let state = EasydictUiState::preview_from_lookup(|name| match name {
+            "EASYDICT_PREVIEW_SCENARIO" => Some("initial".to_string()),
+            "EASYDICT_PREVIEW_THEME" => Some("dark".to_string()),
+            "EASYDICT_PREVIEW_UI_LANGUAGE" => Some("zh-CN".to_string()),
+            _ => None,
+        });
+
+        assert_eq!(state.settings.ui_language, "zh-CN");
+    }
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());

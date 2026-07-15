@@ -12,6 +12,10 @@ pub mod performance;
 pub mod platform;
 pub mod prelude;
 pub mod runtime;
+
+#[cfg(feature = "parity-diagnostics")]
+pub mod provenance;
+
 pub mod schema;
 pub mod screenshot;
 pub mod state;
@@ -42,7 +46,15 @@ pub use platform::{
     TrayMenuPopupAnimation, TrayMenuPresenterKind, TrayMenuPresenterStyle,
 };
 pub use runtime::{Application, DesktopIntegrationPlan, RuntimeError, RuntimePlan};
+
+#[cfg(feature = "parity-diagnostics")]
+pub use provenance::{PropertyProvenance, SourceLocation, ViewProvenance};
 pub use schema::{view_schema, SchemaNode, SchemaProperty, ViewSchema, VIEW_SCHEMA_VERSION};
+#[cfg(feature = "parity-diagnostics")]
+pub use schema::{
+    diagnostic_diff_views, diagnostic_view_schema, DiagnosticChange, DiagnosticNode,
+    DiagnosticViewDiff, DiagnosticViewSchema,
+};
 pub use screenshot::{ScreenshotError, WindowScreenshot};
 pub use state::{
     CommonVisualState, ControlState, FocusVisualState, SelectionVisualState, ValidationSeverity,

@@ -8,6 +8,7 @@ version.workspace = true
 default = []
 legacy-powershell-dialogs = []
 legacy-powershell-tts = ["win_fluent_platform_win/legacy-powershell-tts"]
+parity-diagnostics = ["win_fluent/parity-diagnostics", "dep:serde", "dep:serde_json"]
 
 [dependencies]
 easydict_windows_shell = { path = "../../../easydict-windows-shell" }
@@ -23,6 +24,9 @@ iced = { version = "0.14.0", default-features = false, features = [
 ] }
 win_fluent = { path = "../win_fluent" }
 win_fluent_platform_win = { path = "../win_fluent_platform_win", default-features = false }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
 
 [dev-dependencies]
 win_fluent_testkit = { path = "../win_fluent_testkit" }

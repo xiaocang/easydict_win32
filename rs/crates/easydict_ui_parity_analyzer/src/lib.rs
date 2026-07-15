@@ -17,6 +17,9 @@ use walkdir::WalkDir;
 const DOTNET_SUFFIX: &str = "-dotnet-winui-reference.png";
 const RUST_SUFFIX: &str = "-rust-win-fluent-iced.png";
 const PIXEL_DELTA_TOLERANCE: i16 = 12;
+const MANIFEST_V2_SCHEMA_VERSION: &str = "easydict.ui-parity-manifest.v2";
+const MANIFEST_V1_SCHEMA_VERSION: &str = "easydict.ui-parity.manifest.v1";
+const ACTIONS_SCHEMA_VERSION: &str = "easydict.ui-parity-actions.v1";
 
 pub fn run_cli(args: impl IntoIterator<Item = OsString>) -> i32 {
     match run(args) {
@@ -6562,11 +6565,19 @@ fn load_pairs_from_manifest(path: &Path) -> Result<Vec<ScreenshotPair>, String> 
         .unwrap_or_else(|| PathBuf::from("."));
     let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let value = serde_json::from_str::<Value>(&text).map_err(|error| error.to_string())?;
+    if let Some(schema) = get_string(&value, "SchemaVersion") {
+        if schema != MANIFEST_V1_SCHEMA_VERSION && schema != MANIFEST_V2_SCHEMA_VERSION {
+            return Err(format!("unsupported UI parity manifest schema '{schema}'"));
+        }
+    }
     let scenarios = get_array(&value, "Scenarios").cloned().unwrap_or_default();
     let mut pairs = Vec::new();
 
     for scenario_value in scenarios {
         let scenario = parse_manifest_scenario(&scenario_value)?;
+        if let Some(runtime_path) = scenario.runtime_diagnostics_path.as_deref() {
+            validate_runtime_diagnostics_path(runtime_path)?;
+        }
         let reference_path = resolve_manifest_path(&manifest_dir, &scenario.reference_screenshot);
         let candidate_path = resolve_manifest_path(&manifest_dir, &scenario.candidate_screenshot);
         if !reference_path.exists() || !candidate_path.exists() {
@@ -6634,6 +6645,61 @@ fn resolve_manifest_path(base: &Path, path: &str) -> PathBuf {
     } else {
         base.join(candidate)
     }
+}
+///
+/// Runtime artifacts deliberately use a relative path contract. Rejecting
+/// rooted paths and parent components here prevents a manifest from escaping
+/// the capture root when it is consumed by the analyzer.
+pub fn validate_runtime_diagnostics_path(path: &str) -> Result<(), String> {
+    let normalized = path.replace('\\', "/");
+    let rooted = normalized.starts_with('/')
+        || normalized.starts_with("//")
+        || (normalized.len() >= 2
+            && normalized.as_bytes()[1] == b':'
+            && normalized.as_bytes()[0].is_ascii_alphabetic());
+    if rooted {
+        return Err(format!(
+            "runtime diagnostics path must be capture-root-relative, got absolute path '{path}'"
+        ));
+    }
+    if normalized.split('/').any(|component| component == "..") {
+        return Err(format!(
+            "runtime diagnostics path must not contain traversal, got '{path}'"
+        ));
+    }
+    if normalized.trim().is_empty() {
+        return Err("runtime diagnostics path must not be empty".to_string());
+    }
+    Ok(())
+}
+
+/// Writes a v2 manifest while validating all runtime diagnostic paths.
+pub fn write_manifest_v2(
+    path: impl AsRef<Path>,
+    generated_at_utc: &str,
+    ui_language: &str,
+    scenarios: &[Value],
+) -> Result<(), String> {
+    for scenario in scenarios {
+        if let Some(runtime_path) = get_string(scenario, "RuntimeDiagnosticsPath") {
+            validate_runtime_diagnostics_path(&runtime_path)?;
+        }
+    }
+    let manifest = serde_json::json!({
+        "SchemaVersion": MANIFEST_V2_SCHEMA_VERSION,
+        "GeneratedAtUtc": generated_at_utc,
+        "UiLanguage": ui_language,
+        "Scenarios": scenarios,
+    });
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    fs::write(
+        path,
+        serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -10106,11 +10172,13 @@ fn write_reports(
 ) -> Result<(), String> {
     fs::create_dir_all(&options.output_dir).map_err(|error| error.to_string())?;
     write_json(&options.output_dir.join("ui-parity-report.json"), report)?;
+    let actions = build_actionable_diagnostics(report, options)?;
     fs::write(
         options.output_dir.join("ui-parity-report.md"),
-        markdown_report(report),
+        markdown_report_with_actions(report, &actions),
     )
     .map_err(|error| error.to_string())?;
+    write_json(&options.output_dir.join("ui-parity-actions.json"), &actions)?;
     write_json(
         &options.output_dir.join("ui-parity-coverage.json"),
         coverage,
@@ -10144,6 +10212,961 @@ fn write_reports(
         &options.output_dir.join("ui-parity-thresholds.json"),
         &ParityGatePolicy::create(report, options),
     )
+}
+
+fn build_actionable_diagnostics(
+    report: &ParityReport,
+    options: &CliOptions,
+) -> Result<ActionableDiagnosticsOutput, String> {
+    let manifest_root = options
+        .manifest_path
+        .as_deref()
+        .and_then(Path::parent)
+        .unwrap_or(options.screenshot_root.as_path());
+    let mut actions = Vec::new();
+    let mut classifications = Vec::new();
+
+    for scenario in &report.scenarios {
+        let Some(metadata) = scenario.metadata.as_ref() else {
+            continue;
+        };
+        let runtime = metadata
+            .runtime_diagnostics_path
+            .as_deref()
+            .and_then(|path| {
+                validate_runtime_diagnostics_path(path).ok()?;
+                let path = manifest_root.join(path.replace('/', std::path::MAIN_SEPARATOR_STR));
+                fs::read_to_string(path)
+                    .ok()
+                    .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            });
+        let runtime_controls = runtime.as_ref().map(runtime_controls).unwrap_or_default();
+        let enriched_metadata =
+            metadata_with_runtime_candidate_evidence(metadata, &runtime_controls);
+        let summary = compare_ui_summaries(Some(&enriched_metadata));
+        if let (Some(reference_summary), true) = (
+            metadata.reference_ui_summary.as_ref(),
+            !runtime_controls.is_empty(),
+        ) {
+            if let Some(reference_dimensions) =
+                reference_summary.visible_control_dimensions.as_ref()
+            {
+                for control in &runtime_controls {
+                    let id = runtime_control_id(control);
+                    let Some(reference) = get_case_insensitive_dimension(reference_dimensions, &id)
+                    else {
+                        continue;
+                    };
+                    if runtime_has_property_evidence(control)
+                        && control_reference_facts_missing(reference, control)
+                    {
+                        classifications.push(EvidenceClassification {
+                            scenario_id: scenario.scenario_id.clone(),
+                            code: "needs-reference-token".to_string(),
+                            control_id: Some(id),
+                            view_path: runtime_view_path(control),
+                            property: None,
+                            rust_source: runtime_rust_source(control),
+                            helper: None,
+                            token: None,
+                            message: "Candidate runtime property evidence exists but the reference value is unavailable; provide the authoritative reference token/fact.".to_string(),
+                            evidence_paths: action_evidence_paths(scenario, metadata),
+                        });
+                    }
+                }
+            }
+        }
+        if let Some(summary) = summary {
+            for delta in &summary.control_dimension_deltas {
+                let runtime_control = runtime_controls
+                    .iter()
+                    .find(|control| runtime_control_id(control).eq_ignore_ascii_case(&delta.id));
+                let property_source = runtime_control
+                    .and_then(|control| runtime_property_source(control, delta.property));
+                let (helper, token) = runtime_control
+                    .map(runtime_helper_and_token)
+                    .unwrap_or((None, None));
+                if positional_delta_needs_ancestor_layout_source(
+                    delta.property,
+                    property_source.as_deref(),
+                    helper.as_deref(),
+                    token.as_deref(),
+                ) {
+                    let ancestor = runtime_control.and_then(|control| {
+                        nearest_ancestor_layout_source(&runtime_controls, control, delta.property)
+                    });
+                    let source_candidate = ancestor.as_ref().map_or_else(
+                        || "no source-bearing structural ancestor was captured".to_string(),
+                        |candidate| {
+                            format!(
+                                "ancestor '{}' property '{}' at '{}'",
+                                candidate.view_path, candidate.property, candidate.rust_source
+                            )
+                        },
+                    );
+                    classifications.push(EvidenceClassification {
+                        scenario_id: scenario.scenario_id.clone(),
+                        code: "needs-ancestor-layout-source".to_string(),
+                        control_id: Some(delta.id.clone()),
+                        view_path: ancestor
+                            .as_ref()
+                            .map(|candidate| candidate.view_path.clone()),
+                        property: ancestor
+                            .as_ref()
+                            .map(|candidate| candidate.property.clone()),
+                        rust_source: ancestor
+                            .as_ref()
+                            .map(|candidate| candidate.rust_source.clone()),
+                        helper: ancestor
+                            .as_ref()
+                            .and_then(|candidate| candidate.helper.clone()),
+                        token: ancestor
+                            .as_ref()
+                            .and_then(|candidate| candidate.token.clone()),
+                        message: format!(
+                            "Control '{}' {} differs (reference {}, candidate {}); inspect source candidate {} before editing because the leaf has no exact positional setter.",
+                            delta.id,
+                            delta.property,
+                            delta.reference,
+                            delta.candidate,
+                            source_candidate
+                        ),
+                        evidence_paths: action_evidence_paths(scenario, metadata),
+                    });
+                    continue;
+                }
+                let declarative_value = runtime_control
+                    .and_then(|control| runtime_declarative_property_value(control, delta.property))
+                    .or_else(|| {
+                        manifest_candidate_property_value(metadata, &delta.id, delta.property)
+                    });
+                if resolved_dimension_delta_needs_backend_evidence(
+                    delta.property,
+                    &delta.reference,
+                    declarative_value.as_deref(),
+                    helper.as_deref(),
+                    token.as_deref(),
+                ) {
+                    let leaf_source = property_source.clone();
+                    let backend_helper = helper.clone().or_else(|| {
+                        runtime_control.and_then(|control| {
+                            runtime_backend_dimension_helper(control, delta.property)
+                        })
+                    });
+                    let message = format!(
+                        "Control '{}' resolved {} differs (reference {}, candidate {}) even though declarative {} already matches the reference; inspect leaf source candidate '{}' and backend helper '{}' before editing.",
+                        delta.id,
+                        delta.property,
+                        delta.reference,
+                        delta.candidate,
+                        declarative_value.as_deref().unwrap_or_default(),
+                        leaf_source
+                            .as_deref()
+                            .unwrap_or("unavailable leaf dimension setter"),
+                        backend_helper
+                            .as_deref()
+                            .unwrap_or("unavailable backend layout helper")
+                    );
+                    classifications.push(EvidenceClassification {
+                        scenario_id: scenario.scenario_id.clone(),
+                        code: "needs-backend-resolved-layout-evidence".to_string(),
+                        control_id: Some(delta.id.clone()),
+                        view_path: runtime_control.and_then(runtime_view_path),
+                        property: Some(delta.property.to_string()),
+                        rust_source: leaf_source,
+                        helper: backend_helper,
+                        token: token.clone(),
+                        message,
+                        evidence_paths: action_evidence_paths(scenario, metadata),
+                    });
+                    continue;
+                }
+                let source =
+                    property_source.or_else(|| runtime_control.and_then(runtime_rust_source));
+                actions.push(ActionableDiagnostic {
+                    scenario_id: scenario.scenario_id.clone(),
+                    control_id: delta.id.clone(),
+                    view_path: runtime_control
+                        .and_then(runtime_view_path)
+                        .unwrap_or_else(|| delta.id.clone()),
+                    property: delta.property.to_string(),
+                    reference_value: Some(delta.reference.clone()),
+                    candidate_value: Some(delta.candidate.clone()),
+                    delta: Some(round2(delta.delta_abs)),
+                    severity: "warning".to_string(),
+                    layer_hint: dimension_layer_hint(delta.property),
+                    region: region_for_control(metadata, &delta.id),
+                    token,
+                    helper,
+                    rust_source: source.or_else(|| metadata.rust_source.clone()),
+                    dotnet_source: runtime_control
+                        .and_then(runtime_dotnet_source)
+                        .or_else(|| metadata.dotnet_source.clone())
+                        .or_else(|| metadata.reference_source_path.clone()),
+                    evidence_paths: action_evidence_paths(scenario, metadata),
+                    verification_scenarios: vec![scenario.scenario_id.clone()],
+                });
+            }
+            for state_delta in &summary.missing_required_control_states {
+                actions.push(ActionableDiagnostic {
+                    scenario_id: scenario.scenario_id.clone(),
+                    control_id: state_delta.id.clone(),
+                    view_path: state_delta.id.clone(),
+                    property: state_delta.required_state.clone(),
+                    reference_value: Some("true".to_string()),
+                    candidate_value: state_delta.candidate_state.clone(),
+                    delta: None,
+                    severity: "error".to_string(),
+                    layer_hint: "contract".to_string(),
+                    region: region_for_control(metadata, &state_delta.id),
+                    token: None,
+                    helper: None,
+                    rust_source: runtime_controls
+                        .iter()
+                        .find(|control| {
+                            runtime_control_id(control).eq_ignore_ascii_case(&state_delta.id)
+                        })
+                        .and_then(runtime_rust_source),
+                    dotnet_source: metadata.reference_source_path.clone(),
+                    evidence_paths: action_evidence_paths(scenario, metadata),
+                    verification_scenarios: vec![scenario.scenario_id.clone()],
+                });
+            }
+            for missing in &summary.missing_control_bounds_evidence {
+                classifications.push(EvidenceClassification {
+                    scenario_id: scenario.scenario_id.clone(),
+                    code: "needs-runtime-property-evidence".to_string(),
+                    control_id: Some(missing.id.clone()),
+                    view_path: None,
+                    property: None,
+                    rust_source: None,
+                    helper: None,
+                    token: None,
+                    message: format!(
+                        "Control '{}' has reference bounds but no comparable candidate runtime property evidence.",
+                        missing.id
+                    ),
+                    evidence_paths: action_evidence_paths(scenario, metadata),
+                });
+            }
+        }
+        if scenario.status != ScoreStatus::Pass
+            && actions
+                .iter()
+                .all(|action| action.scenario_id != scenario.scenario_id)
+            && classifications
+                .iter()
+                .all(|classification| classification.scenario_id != scenario.scenario_id)
+        {
+            classifications.push(EvidenceClassification {
+                scenario_id: scenario.scenario_id.clone(),
+                code: "needs-runtime-property-evidence".to_string(),
+                control_id: None,
+                view_path: None,
+                property: None,
+                rust_source: None,
+                helper: None,
+                token: None,
+                message: "Scenario is below its score gate but has no comparable property delta."
+                    .to_string(),
+                evidence_paths: action_evidence_paths(scenario, metadata),
+            });
+        }
+    }
+
+    actions.sort_by(compare_actionable_diagnostics);
+    let mut groups = BTreeMap::<(String, String, String), ActionableRootCause>::new();
+    for (index, action) in actions.iter().enumerate() {
+        let key = (
+            action
+                .rust_source
+                .as_deref()
+                .map(rust_source_file)
+                .unwrap_or_default(),
+            action
+                .helper
+                .clone()
+                .or_else(|| action.token.clone())
+                .unwrap_or_default(),
+            action.property.clone(),
+        );
+        let root = groups.entry(key).or_insert_with(|| ActionableRootCause {
+            rust_source: action.rust_source.clone(),
+            helper: action.helper.clone(),
+            token: action.token.clone(),
+            property: action.property.clone(),
+            action_indices: Vec::new(),
+            scenario_ids: Vec::new(),
+        });
+        root.action_indices.push(index);
+        if !root.scenario_ids.iter().any(|id| id == &action.scenario_id) {
+            root.scenario_ids.push(action.scenario_id.clone());
+        }
+    }
+    let root_causes = groups.into_values().collect::<Vec<_>>();
+    classifications.sort_by(|left, right| {
+        left.scenario_id
+            .cmp(&right.scenario_id)
+            .then_with(|| left.code.cmp(&right.code))
+            .then_with(|| left.control_id.cmp(&right.control_id))
+    });
+    Ok(ActionableDiagnosticsOutput {
+        schema: ACTIONS_SCHEMA_VERSION.to_string(),
+        generated_at_utc: now_string(),
+        actions,
+        root_causes,
+
+        evidence_classifications: classifications,
+    })
+}
+
+fn runtime_property_objects(value: &Value) -> Vec<&Value> {
+    [
+        "resolved_values",
+        "resolvedValues",
+        "ResolvedValues",
+        "resolved",
+        "Resolved",
+        "declarative_values",
+        "declarativeValues",
+        "DeclarativeValues",
+        "declarative",
+        "Declarative",
+    ]
+    .iter()
+    .filter_map(|key| get_object(value, key))
+    .collect()
+}
+
+fn runtime_has_property_evidence(value: &Value) -> bool {
+    !runtime_property_objects(value).is_empty()
+}
+
+fn control_reference_facts_missing(dimension: &ManifestControlDimension, control: &Value) -> bool {
+    let evidence = runtime_property_objects(control);
+    if evidence.is_empty() {
+        return false;
+    }
+    let properties = [
+        ("width", dimension.width.as_ref()),
+        ("labeledwidth", dimension.labeled_width.as_ref()),
+        ("height", dimension.height.as_ref()),
+        ("labeledheight", dimension.labeled_height.as_ref()),
+        ("padding", dimension.padding.as_ref()),
+        ("margin", dimension.margin.as_ref()),
+        ("spacing", dimension.spacing.as_ref()),
+    ];
+    properties.iter().any(|(name, reference)| {
+        reference.is_none()
+            && evidence.iter().any(|evidence| {
+                evidence.as_object().is_some_and(|object| {
+                    object
+                        .keys()
+                        .any(|key| normalized_runtime_property(key) == *name)
+                })
+            })
+    })
+}
+
+fn normalized_runtime_property(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn runtime_property_value(value: &Value, property: &str) -> Option<String> {
+    let property = normalized_runtime_property(property);
+    runtime_property_objects(value)
+        .into_iter()
+        .filter_map(Value::as_object)
+        .find_map(|object| {
+            object.iter().find_map(|(key, value)| {
+                if normalized_runtime_property(key) != property {
+                    return None;
+                }
+                value
+                    .as_str()
+                    .map(ToString::to_string)
+                    .or_else(|| value.as_f64().map(|number| number.to_string()))
+                    .or_else(|| value.as_bool().map(|flag| flag.to_string()))
+            })
+        })
+}
+fn runtime_declarative_property_value(value: &Value, property: &str) -> Option<String> {
+    let property = normalized_runtime_property(property);
+    [
+        "declarative_values",
+        "declarativeValues",
+        "DeclarativeValues",
+        "declarative",
+        "Declarative",
+    ]
+    .iter()
+    .filter_map(|key| get_object(value, key).and_then(Value::as_object))
+    .find_map(|object| {
+        object.iter().find_map(|(key, value)| {
+            (normalized_runtime_property(key) == property)
+                .then(|| {
+                    value
+                        .as_str()
+                        .map(ToString::to_string)
+                        .or_else(|| value.as_f64().map(|number| number.to_string()))
+                })
+                .flatten()
+        })
+    })
+}
+
+fn manifest_candidate_property_value(
+    metadata: &ManifestScenario,
+    control_id: &str,
+    property: &str,
+) -> Option<String> {
+    let dimension = metadata
+        .candidate_ui_summary
+        .as_ref()?
+        .visible_control_dimensions
+        .as_ref()
+        .and_then(|dimensions| get_case_insensitive_dimension(dimensions, control_id))?;
+    match normalized_runtime_property(property).as_str() {
+        "width" => dimension.width.clone(),
+        "height" => dimension.height.clone(),
+        "maxwidth" => dimension.max_width.clone(),
+        "minwidth" => dimension.min_width.clone(),
+        "maxheight" => dimension.max_height.clone(),
+        "minheight" => dimension.min_height.clone(),
+        "labeledwidth" => dimension.labeled_width.clone(),
+        "labeledheight" => dimension.labeled_height.clone(),
+        _ => None,
+    }
+}
+
+#[derive(Debug)]
+struct AncestorLayoutSource {
+    view_path: String,
+    property: String,
+    rust_source: String,
+    helper: Option<String>,
+    token: Option<String>,
+}
+
+fn nearest_ancestor_layout_source(
+    controls: &[Value],
+    control: &Value,
+    positional_property: &str,
+) -> Option<AncestorLayoutSource> {
+    let control_path = runtime_view_path(control)?;
+    let properties: &[&str] = match normalized_runtime_property(positional_property).as_str() {
+        "left" => &["spacing", "padding", "margin", "align"],
+        "top" => &["align", "padding", "margin", "spacing"],
+        _ => return None,
+    };
+
+    controls
+        .iter()
+        .filter_map(|ancestor| {
+            let view_path = runtime_view_path(ancestor)?;
+            let suffix = control_path.strip_prefix(&view_path)?;
+            if !suffix.starts_with('/') {
+                return None;
+            }
+            let (property, rust_source) = properties.iter().find_map(|property| {
+                runtime_property_source(ancestor, property)
+                    .map(|source| ((*property).to_string(), source))
+            })?;
+            let (helper, token) = runtime_helper_and_token(ancestor);
+            Some(AncestorLayoutSource {
+                view_path,
+                property,
+                rust_source,
+                helper,
+                token,
+            })
+        })
+        .max_by_key(|candidate| candidate.view_path.len())
+}
+
+fn positional_delta_needs_ancestor_layout_source(
+    property: &str,
+    property_source: Option<&str>,
+    helper: Option<&str>,
+    token: Option<&str>,
+) -> bool {
+    matches!(
+        normalized_runtime_property(property).as_str(),
+        "left" | "top"
+    ) && [property_source, helper, token]
+        .into_iter()
+        .all(|value| value.is_none_or(|value| value.trim().is_empty()))
+}
+
+fn resolved_dimension_delta_needs_backend_evidence(
+    property: &str,
+    reference_value: &str,
+    declarative_value: Option<&str>,
+    helper: Option<&str>,
+    token: Option<&str>,
+) -> bool {
+    if !matches!(
+        normalized_runtime_property(property).as_str(),
+        "width"
+            | "height"
+            | "maxwidth"
+            | "minwidth"
+            | "maxheight"
+            | "minheight"
+            | "labeledwidth"
+            | "labeledheight"
+    ) || [helper, token]
+        .into_iter()
+        .any(|value| value.is_some_and(|value| !value.trim().is_empty()))
+    {
+        return false;
+    }
+    declarative_value
+        .and_then(|value| dimension_value_delta_abs(reference_value, value))
+        .is_some_and(|delta| delta <= 0.01)
+}
+fn runtime_dimension_value(value: &Value, property: &str) -> Option<String> {
+    let property = normalized_runtime_property(property);
+    [
+        "resolved_values",
+        "resolvedValues",
+        "ResolvedValues",
+        "resolved",
+        "Resolved",
+    ]
+    .iter()
+    .filter_map(|key| get_object(value, key).and_then(Value::as_object))
+    .find_map(|object| {
+        object.iter().find_map(|(key, value)| {
+            (normalized_runtime_property(key) == property)
+                .then(|| {
+                    value
+                        .as_str()
+                        .map(ToString::to_string)
+                        .or_else(|| value.as_f64().map(|number| number.to_string()))
+                })
+                .flatten()
+        })
+    })
+    .or_else(|| get_f64(value, property.as_str()).map(|number| number.to_string()))
+    .or_else(|| runtime_property_value(value, &property))
+}
+
+fn runtime_number(value: &Value, property: &str) -> Option<f64> {
+    get_f64(value, property).or_else(|| {
+        runtime_property_value(value, property).and_then(|value| value.parse::<f64>().ok())
+    })
+}
+
+fn runtime_control_dimension(value: &Value) -> ManifestControlDimension {
+    let bounds_dips = ["x", "y", "width", "height"]
+        .iter()
+        .map(|property| runtime_number(value, property))
+        .collect::<Option<Vec<_>>>()
+        .map(|values| ManifestControlBoundsDips {
+            left: values[0],
+            top: values[1],
+            width: values[2],
+            height: values[3],
+        });
+    ManifestControlDimension {
+        kind: get_string(value, "kind").or_else(|| get_string(value, "Kind")),
+        state: runtime_property_value(value, "state"),
+        width: runtime_dimension_value(value, "width"),
+        labeled_width: runtime_property_value(value, "labeled_width"),
+        height: runtime_dimension_value(value, "height"),
+        labeled_height: runtime_property_value(value, "labeled_height"),
+        bounds_dips,
+        max_width: runtime_property_value(value, "max_width"),
+        min_width: runtime_property_value(value, "min_width"),
+        min_height: runtime_property_value(value, "min_height"),
+        max_height: runtime_property_value(value, "max_height"),
+        padding: runtime_property_value(value, "padding"),
+        spacing: runtime_property_value(value, "spacing"),
+        row_spacing: runtime_property_value(value, "row_spacing"),
+        column_spacing: runtime_property_value(value, "column_spacing"),
+        columns: runtime_property_value(value, "columns"),
+        maximum_rows_or_columns: runtime_property_value(value, "maximum_rows_or_columns"),
+        margin: runtime_property_value(value, "margin"),
+    }
+}
+fn merge_runtime_control_dimension(
+    mut existing: ManifestControlDimension,
+    runtime: ManifestControlDimension,
+) -> ManifestControlDimension {
+    let ManifestControlDimension {
+        kind,
+        state,
+        width,
+        labeled_width,
+        height,
+        labeled_height,
+        bounds_dips,
+        max_width,
+        min_width,
+        min_height,
+        max_height,
+        padding,
+        spacing,
+        row_spacing,
+        column_spacing,
+        columns,
+        maximum_rows_or_columns,
+        margin,
+    } = runtime;
+    if kind.is_some() {
+        existing.kind = kind;
+    }
+    if state.is_some() {
+        existing.state = state;
+    }
+    if width.is_some() {
+        existing.width = width;
+    }
+    if labeled_width.is_some() {
+        existing.labeled_width = labeled_width;
+    }
+    if height.is_some() {
+        existing.height = height;
+    }
+    if labeled_height.is_some() {
+        existing.labeled_height = labeled_height;
+    }
+    if bounds_dips.is_some() {
+        existing.bounds_dips = bounds_dips;
+    }
+    if max_width.is_some() {
+        existing.max_width = max_width;
+    }
+    if min_width.is_some() {
+        existing.min_width = min_width;
+    }
+    if min_height.is_some() {
+        existing.min_height = min_height;
+    }
+    if max_height.is_some() {
+        existing.max_height = max_height;
+    }
+    if padding.is_some() {
+        existing.padding = padding;
+    }
+    if spacing.is_some() {
+        existing.spacing = spacing;
+    }
+    if row_spacing.is_some() {
+        existing.row_spacing = row_spacing;
+    }
+    if column_spacing.is_some() {
+        existing.column_spacing = column_spacing;
+    }
+    if columns.is_some() {
+        existing.columns = columns;
+    }
+    if maximum_rows_or_columns.is_some() {
+        existing.maximum_rows_or_columns = maximum_rows_or_columns;
+    }
+    if margin.is_some() {
+        existing.margin = margin;
+    }
+    existing
+}
+
+fn metadata_with_runtime_candidate_evidence(
+    metadata: &ManifestScenario,
+    controls: &[Value],
+) -> ManifestScenario {
+    let mut enriched = metadata.clone();
+    if controls.is_empty() || enriched.reference_ui_summary.is_none() {
+        return enriched;
+    }
+    let candidate = enriched
+        .candidate_ui_summary
+        .get_or_insert_with(|| ManifestUiSummary {
+            visible_control_counts: BTreeMap::new(),
+            visible_automation_ids: Some(Vec::new()),
+            visible_control_dimensions: Some(BTreeMap::new()),
+            visible_texts: None,
+        });
+    let ids = candidate
+        .visible_automation_ids
+        .get_or_insert_with(Vec::new);
+    let dimensions = candidate
+        .visible_control_dimensions
+        .get_or_insert_with(BTreeMap::new);
+    for control in controls {
+        let id = runtime_control_id(control);
+        if id.is_empty() {
+            continue;
+        }
+        if !ids
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(&id))
+        {
+            ids.push(id.clone());
+        }
+        let runtime = runtime_control_dimension(control);
+        let existing_key = dimensions
+            .keys()
+            .find(|candidate| candidate.eq_ignore_ascii_case(&id))
+            .cloned();
+        let dimension = match existing_key.and_then(|key| dimensions.remove(&key)) {
+            Some(existing) => merge_runtime_control_dimension(existing, runtime),
+            None => runtime,
+        };
+        dimensions.insert(id, dimension);
+    }
+    enriched
+}
+
+fn dimension_layer_hint(property: &str) -> String {
+    if matches!(
+        property.to_ascii_lowercase().as_str(),
+        "state" | "is_enabled" | "is_checked" | "is_expanded"
+    ) {
+        "interaction".to_string()
+    } else if property.to_ascii_lowercase().contains("color")
+        || property.to_ascii_lowercase().contains("font")
+        || property.to_ascii_lowercase().contains("foreground")
+        || property.to_ascii_lowercase().contains("background")
+    {
+        "visual".to_string()
+    } else {
+        "geometry".to_string()
+    }
+}
+
+fn region_for_control(metadata: &ManifestScenario, control_id: &str) -> Option<String> {
+    metadata
+        .regions
+        .iter()
+        .find(|region| region.name.eq_ignore_ascii_case(control_id))
+        .map(|region| region.name.clone())
+        .or_else(|| metadata.regions.first().map(|region| region.name.clone()))
+}
+
+fn action_evidence_paths(scenario: &ScenarioResult, metadata: &ManifestScenario) -> Vec<String> {
+    let mut paths = vec![
+        scenario.reference_path.clone(),
+        scenario.candidate_path.clone(),
+    ];
+    if let Some(path) = &metadata.runtime_diagnostics_path {
+        paths.push(path.clone());
+    }
+    paths
+}
+
+fn compare_actionable_diagnostics(
+    left: &ActionableDiagnostic,
+    right: &ActionableDiagnostic,
+) -> std::cmp::Ordering {
+    actionable_priority(right)
+        .cmp(&actionable_priority(left))
+        .then_with(|| {
+            let left_magnitude = left.delta.unwrap_or_default()
+                / left
+                    .reference_value
+                    .as_deref()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    .unwrap_or(1.0)
+                    .abs()
+                    .max(1.0);
+            let right_magnitude = right.delta.unwrap_or_default()
+                / right
+                    .reference_value
+                    .as_deref()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    .unwrap_or(1.0)
+                    .abs()
+                    .max(1.0);
+            right_magnitude
+                .partial_cmp(&left_magnitude)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .then_with(|| left.scenario_id.cmp(&right.scenario_id))
+        .then_with(|| left.control_id.cmp(&right.control_id))
+        .then_with(|| left.property.cmp(&right.property))
+}
+
+fn actionable_priority(action: &ActionableDiagnostic) -> u8 {
+    if action.severity == "error"
+        && (action.layer_hint == "interaction" || action.layer_hint == "contract")
+    {
+        4
+    } else if action.layer_hint == "geometry" {
+        3
+    } else if action.layer_hint == "visual" {
+        2
+    } else if action.severity == "warning" {
+        1
+    } else {
+        0
+    }
+}
+
+fn runtime_controls(value: &Value) -> Vec<Value> {
+    fn visit(value: &Value, controls: &mut Vec<Value>) {
+        if let Some(object) = value.as_object() {
+            if object.keys().any(|key| {
+                matches!(
+                    key.to_ascii_lowercase().as_str(),
+                    "controlid" | "automationid" | "id"
+                )
+            }) {
+                controls.push(value.clone());
+            }
+
+            for child in object.values() {
+                visit(child, controls);
+            }
+        } else if let Some(items) = value.as_array() {
+            for child in items {
+                visit(child, controls);
+            }
+        }
+    }
+    let mut controls = Vec::new();
+    visit(value, &mut controls);
+    controls
+}
+
+fn rust_source_file(source: &str) -> String {
+    let mut end = source.len();
+    for _ in 0..2 {
+        let Some(index) = source[..end].rfind(':') else {
+            break;
+        };
+        if source[index + 1..end].parse::<u32>().is_err() {
+            break;
+        }
+        end = index;
+    }
+    source[..end].to_string()
+}
+
+fn runtime_control_id(value: &Value) -> String {
+    [
+        "controlId",
+        "automationId",
+        "id",
+        "ControlId",
+        "AutomationId",
+        "Id",
+    ]
+    .iter()
+    .find_map(|key| get_string(value, key))
+    .unwrap_or_default()
+}
+
+fn runtime_view_path(value: &Value) -> Option<String> {
+    ["viewPath", "path", "ViewPath", "Path"]
+        .iter()
+        .find_map(|key| get_string(value, key))
+}
+
+fn runtime_property_source(value: &Value, property: &str) -> Option<String> {
+    for key in ["property_sources", "propertySources", "PropertySources"] {
+        if let Some(properties) = get_object(value, key).and_then(Value::as_object) {
+            if let Some(source) = properties.iter().find_map(|(name, source)| {
+                (normalized_runtime_property(name) == normalized_runtime_property(property))
+                    .then_some(source)
+            }) {
+                return format_runtime_source(source);
+            }
+        }
+    }
+
+    let provenance = get_object(value, "provenance").or_else(|| get_object(value, "Provenance"))?;
+    let properties =
+        get_array(provenance, "properties").or_else(|| get_array(provenance, "Properties"))?;
+    for item in properties {
+        let name = get_string(item, "property")
+            .or_else(|| get_string(item, "Property"))
+            .unwrap_or_default();
+        if normalized_runtime_property(&name) == normalized_runtime_property(property) {
+            if let Some(source) = get_object(item, "source").or_else(|| get_object(item, "Source"))
+            {
+                return format_runtime_source(source);
+            }
+        }
+    }
+
+    None
+}
+
+fn runtime_dotnet_source(value: &Value) -> Option<String> {
+    [
+        "dotnetSource",
+        "referenceSource",
+        "DotnetSource",
+        "ReferenceSource",
+    ]
+    .iter()
+    .find_map(|key| get_string(value, key))
+}
+
+fn format_runtime_source(source: &Value) -> Option<String> {
+    if let Some(source) = source.as_str() {
+        return Some(source.to_string());
+    }
+    let file = get_string(source, "file").or_else(|| get_string(source, "File"))?;
+    let line = get_u32(source, "line").or_else(|| get_u32(source, "Line"));
+    let column = get_u32(source, "column").or_else(|| get_u32(source, "Column"));
+    Some(match (line, column) {
+        (Some(line), Some(column)) => format!("{file}:{line}:{column}"),
+        (Some(line), None) => format!("{file}:{line}"),
+        _ => file,
+    })
+}
+
+fn runtime_rust_source(value: &Value) -> Option<String> {
+    for key in ["rustSource", "source", "RustSource", "Source"] {
+        if let Some(source) = get_string(value, key) {
+            return Some(source);
+        }
+        if let Some(source) = get_object(value, key) {
+            if let Some(source) = format_runtime_source(source) {
+                return Some(source);
+            }
+        }
+    }
+    [
+        "constructor_source",
+        "constructorSource",
+        "ConstructorSource",
+    ]
+    .iter()
+    .find_map(|key| get_case(value, key))
+    .and_then(format_runtime_source)
+}
+
+fn runtime_helper_and_token(value: &Value) -> (Option<String>, Option<String>) {
+    let helper = ["helper", "Helper"]
+        .iter()
+        .find_map(|key| get_string(value, key));
+    let token = ["token", "tokenKey", "Token", "TokenKey"]
+        .iter()
+        .find_map(|key| get_string(value, key));
+    (helper, token)
+}
+
+fn runtime_backend_dimension_helper(value: &Value, property: &str) -> Option<String> {
+    let kind = get_string(value, "kind").or_else(|| get_string(value, "Kind"))?;
+    match (
+        normalized_runtime_property(&kind).as_str(),
+        normalized_runtime_property(property).as_str(),
+    ) {
+        ("combobox", "height" | "labeledheight") => {
+            Some("win_fluent_backend_iced::combo_box_padding_for_height".to_string())
+        }
+        ("combobox", "width" | "labeledwidth" | "minwidth" | "maxwidth") => {
+            Some("win_fluent_backend_iced::compile_combo_box".to_string())
+        }
+        _ => None,
+    }
 }
 
 fn write_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
@@ -10354,6 +11377,55 @@ fn markdown_report(report: &ParityReport) -> String {
             ));
         }
         out.push('\n');
+    }
+    out
+}
+
+fn markdown_report_with_actions(
+    report: &ParityReport,
+    actions: &ActionableDiagnosticsOutput,
+) -> String {
+    let mut out = markdown_report(report);
+    out.push_str("\n## Actionable Diagnostics\n\n");
+    if actions.actions.is_empty() {
+        out.push_str("No actionable property deltas were found.\n");
+    } else {
+        out.push_str("| Rank | Scenario | Control | View path | Property | Reference | Candidate | Delta | Severity | Rust source | Token | Helper |\n");
+        out.push_str(
+            "| ---: | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- |\n",
+        );
+        for (index, action) in actions.actions.iter().enumerate() {
+            out.push_str(&format!(
+                "| {} | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` |\n",
+                index + 1,
+                markdown_escape_table(&action.scenario_id),
+                markdown_escape_table(&action.control_id),
+                markdown_escape_table(&action.view_path),
+                markdown_escape_table(&action.property),
+                markdown_escape_table(action.reference_value.as_deref().unwrap_or("n/a")),
+                markdown_escape_table(action.candidate_value.as_deref().unwrap_or("n/a")),
+                action.delta.map(|value| format!("{value:.2}")).unwrap_or_else(|| "n/a".to_string()),
+                action.severity,
+                markdown_escape_table(action.rust_source.as_deref().unwrap_or("unavailable")),
+                markdown_escape_table(action.token.as_deref().unwrap_or("null")),
+                markdown_escape_table(action.helper.as_deref().unwrap_or("null")),
+            ));
+        }
+    }
+    if !actions.evidence_classifications.is_empty() {
+        out.push_str("\n### Evidence classifications\n\n");
+        for item in &actions.evidence_classifications {
+            out.push_str(&format!(
+                "- `{}` `{}`{}: {}\n",
+                item.scenario_id,
+                item.code,
+                item.control_id
+                    .as_deref()
+                    .map(|id| format!(" `{id}`"))
+                    .unwrap_or_default(),
+                item.message
+            ));
+        }
     }
     out
 }
@@ -12023,6 +13095,63 @@ struct EvidenceAudit {
     candidate_dimension_without_bounds_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActionableDiagnostic {
+    scenario_id: String,
+    control_id: String,
+    view_path: String,
+    property: String,
+    reference_value: Option<String>,
+    candidate_value: Option<String>,
+    delta: Option<f64>,
+    severity: String,
+    layer_hint: String,
+    region: Option<String>,
+    token: Option<String>,
+    helper: Option<String>,
+    rust_source: Option<String>,
+    dotnet_source: Option<String>,
+    evidence_paths: Vec<String>,
+    verification_scenarios: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActionableRootCause {
+    rust_source: Option<String>,
+    helper: Option<String>,
+    token: Option<String>,
+    property: String,
+    action_indices: Vec<usize>,
+    scenario_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EvidenceClassification {
+    scenario_id: String,
+    code: String,
+    control_id: Option<String>,
+    view_path: Option<String>,
+    property: Option<String>,
+    rust_source: Option<String>,
+    helper: Option<String>,
+    token: Option<String>,
+    message: String,
+    evidence_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActionableDiagnosticsOutput {
+    schema: String,
+    generated_at_utc: String,
+    actions: Vec<ActionableDiagnostic>,
+    root_causes: Vec<ActionableRootCause>,
+    evidence_classifications: Vec<EvidenceClassification>,
+}
+
 impl EvidenceAudit {
     fn has_gaps(&self) -> bool {
         self.missing_candidate_automation_id_count > 0
@@ -12365,11 +13494,11 @@ impl ScenarioScoringProfile {
                 0.10,
                 66.0,
             ),
+
             (_, _, true) => Self::new("default-semantic", 0.36, 0.15, 0.22, 0.15, 0.06, 0.06, 70.0),
             (_, _, false) => Self::new("default-visual", 0.42, 0.18, 0.24, 0.0, 0.08, 0.08, 70.0),
         }
     }
-
     fn new(
         id: &str,
         ssim_weight: f64,
@@ -12434,6 +13563,9 @@ struct ManifestScenario {
     reference_screenshot: String,
     candidate_screenshot: String,
     side_by_side_screenshot: Option<String>,
+    runtime_diagnostics_path: Option<String>,
+    rust_source: Option<String>,
+    dotnet_source: Option<String>,
     reference_source_kind: Option<String>,
     reference_source_path: Option<String>,
     reference_source_last_write_time_utc: Option<String>,
@@ -13249,6 +14381,9 @@ fn parse_manifest_scenario(value: &Value) -> Result<ManifestScenario, String> {
         candidate_screenshot: get_string(value, "CandidateScreenshot")
             .ok_or("manifest scenario omitted CandidateScreenshot")?,
         side_by_side_screenshot: get_string(value, "SideBySideScreenshot"),
+        runtime_diagnostics_path: get_string(value, "RuntimeDiagnosticsPath"),
+        rust_source: get_string(value, "RustSource"),
+        dotnet_source: get_string(value, "DotnetSource"),
         reference_source_kind: get_string(value, "ReferenceSourceKind"),
         reference_source_path: get_string(value, "ReferenceSourcePath"),
         reference_source_last_write_time_utc: get_string(value, "ReferenceSourceLastWriteTimeUtc"),
@@ -13692,6 +14827,9 @@ mod tests {
             reference_screenshot: "reference.png".to_string(),
             candidate_screenshot: "candidate.png".to_string(),
             side_by_side_screenshot: None,
+            runtime_diagnostics_path: None,
+            rust_source: None,
+            dotnet_source: None,
             reference_source_kind: None,
             reference_source_path: None,
             reference_source_last_write_time_utc: None,
@@ -18963,5 +20101,397 @@ fn open_ai_service_expander(state: &SettingsState) -> View<Message> {
         assert_eq!(code, 0);
         let summary = fs::read_to_string(summary_path).expect("summary markdown");
         assert!(summary.contains("No screenshot directory was produced."));
+    }
+    #[test]
+    fn runtime_diagnostics_paths_are_relative_and_traversal_safe() {
+        assert!(validate_runtime_diagnostics_path("diagnostics/main-open.json").is_ok());
+        assert!(validate_runtime_diagnostics_path("C:/outside.json").is_err());
+        assert!(validate_runtime_diagnostics_path("/outside.json").is_err());
+        assert!(validate_runtime_diagnostics_path("diagnostics/../outside.json").is_err());
+        assert!(validate_runtime_diagnostics_path("").is_err());
+    }
+
+    #[test]
+    fn manifest_v2_writer_emits_schema_and_rejects_bad_runtime_path() {
+        let dir = tempdir().expect("temp dir");
+        let path = dir.path().join("ui-parity-manifest.json");
+        let scenario = serde_json::json!({
+            "ScenarioId": "main.open",
+            "ReferenceScreenshot": "reference.png",
+            "CandidateScreenshot": "candidate.png",
+            "RuntimeDiagnosticsPath": "diagnostics/main-open.json",
+        });
+        write_manifest_v2(&path, "2026-01-01T00:00:00Z", "en-US", &[scenario])
+            .expect("v2 manifest should write");
+        let value: Value =
+            serde_json::from_str(&fs::read_to_string(path).expect("manifest")).expect("json");
+        assert_eq!(
+            value.get("SchemaVersion").and_then(Value::as_str),
+            Some(MANIFEST_V2_SCHEMA_VERSION)
+        );
+        let bad = serde_json::json!({
+            "ReferenceScreenshot": "reference.png",
+            "CandidateScreenshot": "candidate.png",
+            "RuntimeDiagnosticsPath": "../escape.json",
+        });
+        assert!(write_manifest_v2(dir.path().join("bad.json"), "", "", &[bad]).is_err());
+    }
+
+    #[test]
+    fn target_lang_combo_runtime_diagnostics_keep_exact_action_and_classify_residuals() {
+        let dir = tempdir().expect("temp dir");
+        let reference = dir.path().join(format!("main.target-open{DOTNET_SUFFIX}"));
+        let candidate = dir.path().join(format!("main.target-open{RUST_SUFFIX}"));
+        create_synthetic_frame(false)
+            .save(&reference)
+            .expect("save reference");
+        create_synthetic_frame(false)
+            .save(&candidate)
+            .expect("save candidate");
+
+        let diagnostics_dir = dir.path().join("diagnostics");
+        fs::create_dir(&diagnostics_dir).expect("create diagnostics dir");
+        fs::write(
+            diagnostics_dir.join("main-target-open.json"),
+            serde_json::json!({
+                "schema": "easydict.winfluent.runtime-diagnostics.v1",
+                "window_id": "main.window",
+                "generation": 7,
+                "controls": [{
+                    "path": "root/children[3]",
+                    "id": "ActionBarWide",
+                    "kind": "Row",
+                    "x": 16.0,
+                    "y": 84.0,
+                    "width": 800.0,
+                    "height": 48.0,
+                    "declarative_values": {
+                        "align": "Center",
+                        "margin": "Edges { top: 8, right: 0, bottom: 8, left: 0 }",
+                        "padding": "0",
+                        "spacing": "8"
+                    },
+                    "property_sources": {
+                        "align": {
+                            "file": "rs/crates/easydict_app/src/ui.rs",
+                            "line": 2323,
+                            "column": 10
+                        },
+                        "margin": {
+                            "file": "rs/crates/easydict_app/src/ui.rs",
+                            "line": 2324,
+                            "column": 10
+                        },
+                        "spacing": {
+                            "file": "rs/crates/easydict_app/src/ui.rs",
+                            "line": 2323,
+                            "column": 10
+                        }
+                    },
+                    "resolved_values": {
+                        "x": "16.00",
+                        "y": "84.00",
+                        "width": "800.00",
+                        "height": "48.00"
+                    },
+                    "token": null
+                }, {
+                    "path": "root/children[3]/children[1]",
+                    "id": "TargetLangCombo",
+                    "kind": "ComboBox",
+                    "x": 436.0,
+                    "y": 92.0,
+                    "width": 132.0,
+                    "height": 32.0,
+                    "declarative_values": {
+                        "width": "Fixed(128)",
+                        "height": "Fixed(30)",
+                        "min_width": "96",
+                        "padding": "8"
+                    },
+                    "style_classes": ["ComboBox.Standard"],
+                    "constructor_source": {
+                        "file": "rs/crates/easydict_app/src/ui.rs",
+                        "line": 401,
+                        "column": 13
+                    },
+                    "property_sources": {
+                        "width": {
+                            "file": "rs/crates/easydict_app/src/ui.rs",
+                            "line": 412,
+                            "column": 18
+                        },
+                        "height": {
+                            "file": "rs/crates/easydict_app/src/ui.rs",
+                            "line": 413,
+                            "column": 18
+                        }
+                    },
+                    "resolved_values": {
+                        "x": "436.00",
+                        "y": "92.00",
+                        "width": "132.00",
+                        "height": "32.00"
+                    },
+                    "token": null
+                }],
+                "observed_control_ids": ["ActionBarWide", "TargetLangCombo"],
+                "missing_control_ids": []
+            })
+            .to_string(),
+        )
+        .expect("write runtime diagnostics");
+
+        let manifest_path = dir.path().join("ui-parity-manifest.json");
+        fs::write(
+            &manifest_path,
+            serde_json::json!({
+                "SchemaVersion": MANIFEST_V2_SCHEMA_VERSION,
+                "Scenarios": [{
+                    "ScenarioId": "main.target-language-dropdown-open",
+                    "WindowKind": "main",
+                    "Theme": "system",
+                    "ReferenceScreenshot": reference.file_name().and_then(|value| value.to_str()).unwrap(),
+                    "CandidateScreenshot": candidate.file_name().and_then(|value| value.to_str()).unwrap(),
+                    "RuntimeDiagnosticsPath": "diagnostics/main-target-open.json",
+                    "Regions": [],
+                    "RequiredSemanticTags": ["TargetLangCombo"],
+                    "ReferenceUiSummary": {
+                        "VisibleControlCounts": {"ComboBox": 1},
+                        "VisibleAutomationIds": ["TargetLangCombo"],
+                        "VisibleControlDimensions": {
+                            "TargetLangCombo": {
+                                "Kind": "ComboBox",
+                                "Width": "120",
+                                "Height": "30",
+                                "BoundsDips": {
+                                    "Left": 438.0,
+                                    "Top": 90.0,
+                                    "Width": 120.0,
+                                    "Height": 30.0
+                                }
+                            }
+                        }
+                    },
+                    "CandidateUiSummary": {
+                        "VisibleControlCounts": {"ComboBox": 1},
+                        "VisibleAutomationIds": ["TargetLangCombo"]
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("write v2 manifest");
+        let output = dir.path().join("out");
+
+        let code = run([
+            OsString::from("easydict_ui_parity_analyzer"),
+            OsString::from("--screenshot-root"),
+            dir.path().as_os_str().to_os_string(),
+            OsString::from("--manifest"),
+            manifest_path.as_os_str().to_os_string(),
+            OsString::from("--manifest-only"),
+            OsString::from("--output-dir"),
+            output.as_os_str().to_os_string(),
+        ])
+        .expect("analyzer should run");
+
+        assert_eq!(code, 0);
+        let actions: Value = serde_json::from_str(
+            &fs::read_to_string(output.join("ui-parity-actions.json")).expect("actions json"),
+        )
+        .expect("actions value");
+        let action = actions
+            .get("actions")
+            .and_then(Value::as_array)
+            .and_then(|actions| {
+                actions.iter().find(|action| {
+                    action.get("controlId").and_then(Value::as_str) == Some("TargetLangCombo")
+                        && action.get("property").and_then(Value::as_str) == Some("width")
+                })
+            })
+            .expect("TargetLangCombo width action");
+        assert_eq!(
+            action.get("viewPath").and_then(Value::as_str),
+            Some("root/children[3]/children[1]")
+        );
+        assert_eq!(
+            action.get("candidateValue").and_then(Value::as_str),
+            Some("132.00")
+        );
+        assert_eq!(
+            action.get("rustSource").and_then(Value::as_str),
+            Some("rs/crates/easydict_app/src/ui.rs:412:18")
+        );
+        for property in ["top", "height"] {
+            assert!(
+                actions
+                    .get("actions")
+                    .and_then(Value::as_array)
+                    .is_none_or(|items| items.iter().all(|action| {
+                        action.get("controlId").and_then(Value::as_str) != Some("TargetLangCombo")
+                            || action.get("property").and_then(Value::as_str) != Some(property)
+                    })),
+                "{property} must not produce a leaf edit"
+            );
+        }
+        let classifications = actions
+            .get("evidenceClassifications")
+            .and_then(Value::as_array)
+            .expect("residual classifications");
+        let ancestor = classifications
+            .iter()
+            .find(|classification| {
+                classification.get("code").and_then(Value::as_str)
+                    == Some("needs-ancestor-layout-source")
+                    && classification.get("controlId").and_then(Value::as_str)
+                        == Some("TargetLangCombo")
+                    && classification.get("property").and_then(Value::as_str) == Some("align")
+            })
+            .expect("TargetLangCombo top ancestor-layout classification");
+        assert!(ancestor
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains("top differs (reference 90.00, candidate 92.00)")
+            }));
+        assert_eq!(
+            ancestor.get("viewPath").and_then(Value::as_str),
+            Some("root/children[3]")
+        );
+        assert_eq!(
+            ancestor.get("property").and_then(Value::as_str),
+            Some("align")
+        );
+        assert_eq!(
+            ancestor.get("rustSource").and_then(Value::as_str),
+            Some("rs/crates/easydict_app/src/ui.rs:2323:10")
+        );
+        assert!(ancestor.get("token").is_some_and(Value::is_null));
+        assert!(ancestor
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains(
+                    "ancestor 'root/children[3]' property 'align' at 'rs/crates/easydict_app/src/ui.rs:2323:10'",
+                )
+            }));
+        let horizontal_ancestor = classifications
+            .iter()
+            .find(|classification| {
+                classification.get("code").and_then(Value::as_str)
+                    == Some("needs-ancestor-layout-source")
+                    && classification.get("controlId").and_then(Value::as_str)
+                        == Some("TargetLangCombo")
+                    && classification.get("property").and_then(Value::as_str) == Some("spacing")
+            })
+            .expect("TargetLangCombo left ancestor-layout classification");
+        assert_eq!(
+            horizontal_ancestor.get("viewPath").and_then(Value::as_str),
+            Some("root/children[3]")
+        );
+        assert_eq!(
+            horizontal_ancestor
+                .get("rustSource")
+                .and_then(Value::as_str),
+            Some("rs/crates/easydict_app/src/ui.rs:2323:10")
+        );
+        assert!(horizontal_ancestor
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains("left differs (reference 438.00, candidate 436.00)")
+            }));
+        let backend = classifications
+            .iter()
+            .find(|classification| {
+                classification.get("code").and_then(Value::as_str)
+                    == Some("needs-backend-resolved-layout-evidence")
+                    && classification.get("controlId").and_then(Value::as_str)
+                        == Some("TargetLangCombo")
+            })
+            .expect("TargetLangCombo height backend-layout classification");
+        assert!(backend
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains(
+                    "resolved height differs (reference 30, candidate 32.00) even though declarative Fixed(30)",
+                )
+            }));
+        assert_eq!(
+            backend.get("viewPath").and_then(Value::as_str),
+            Some("root/children[3]/children[1]")
+        );
+        assert_eq!(
+            backend.get("property").and_then(Value::as_str),
+            Some("height")
+        );
+        assert_eq!(
+            backend.get("rustSource").and_then(Value::as_str),
+            Some("rs/crates/easydict_app/src/ui.rs:413:18")
+        );
+        assert_eq!(
+            backend.get("helper").and_then(Value::as_str),
+            Some("win_fluent_backend_iced::combo_box_padding_for_height")
+        );
+        assert!(backend.get("token").is_some_and(Value::is_null));
+        assert!(backend
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains("leaf source candidate 'rs/crates/easydict_app/src/ui.rs:413:18'")
+                    && message.contains(
+                        "backend helper 'win_fluent_backend_iced::combo_box_padding_for_height'",
+                    )
+            }));
+        assert!(classifications.iter().all(|classification| {
+            classification.get("code").and_then(Value::as_str)
+                != Some("needs-runtime-property-evidence")
+        }));
+    }
+
+    #[test]
+    fn actionable_diagnostic_serialization_uses_exact_camel_case_fields() {
+        let action = ActionableDiagnostic {
+            scenario_id: "main.open".to_string(),
+            control_id: "TargetLangCombo".to_string(),
+            view_path: "main.window/target_language".to_string(),
+            property: "width".to_string(),
+            reference_value: Some("120".to_string()),
+            candidate_value: Some("128".to_string()),
+            delta: Some(8.0),
+            severity: "warning".to_string(),
+            layer_hint: "geometry".to_string(),
+            region: Some("content".to_string()),
+            token: None,
+            helper: Some("target_language_combo".to_string()),
+            rust_source: Some("ui.rs:10:5".to_string()),
+            dotnet_source: Some("MainPage.xaml:20".to_string()),
+            evidence_paths: vec!["diagnostics/main.json".to_string()],
+            verification_scenarios: vec!["main.open".to_string()],
+        };
+        let value = serde_json::to_value(action).expect("action json");
+        for key in [
+            "scenarioId",
+            "controlId",
+            "viewPath",
+            "property",
+            "referenceValue",
+            "candidateValue",
+            "delta",
+            "severity",
+            "layerHint",
+            "region",
+            "token",
+            "helper",
+            "rustSource",
+            "dotnetSource",
+            "evidencePaths",
+            "verificationScenarios",
+        ] {
+            assert!(value.get(key).is_some(), "missing exact field {key}");
+        }
+        assert_eq!(rust_source_file("ui.rs:10:5"), "ui.rs");
     }
 }

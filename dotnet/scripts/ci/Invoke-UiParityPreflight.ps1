@@ -104,25 +104,49 @@ function Invoke-LoggedCommand {
     $stdoutPath = Join-Path $LogRoot "$index-$safeName.stdout.log"
     $stderrPath = Join-Path $LogRoot "$index-$safeName.stderr.log"
     $commandLine = Format-CommandLine -FilePath $FilePath -Arguments $Arguments
+    $startedAtUtc = [DateTimeOffset]::UtcNow
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $exitCode = $null
 
-    $process = Start-Process `
-        -FilePath $FilePath `
-        -ArgumentList $Arguments `
-        -NoNewWindow `
-        -Wait `
-        -PassThru `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath
-
-    $command = [ordered]@{
-        Name = $Name
-        CommandLine = $commandLine
-        ExitCode = [int]$process.ExitCode
-        StdoutPath = $stdoutPath
-        StderrPath = $stderrPath
+    try {
+        $process = Start-Process `
+            -FilePath $FilePath `
+            -ArgumentList $Arguments `
+            -NoNewWindow `
+            -Wait `
+            -PassThru `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath
+        $exitCode = [int]$process.ExitCode
+    } finally {
+        $stopwatch.Stop()
+        $command = [ordered]@{
+            Name = $Name
+            CommandLine = $commandLine
+            StartedAtUtc = $startedAtUtc.ToString("O", [System.Globalization.CultureInfo]::InvariantCulture)
+            DurationMs = [int64]$stopwatch.Elapsed.TotalMilliseconds
+            ExitCode = $exitCode
+            StdoutPath = $stdoutPath
+            StderrPath = $stderrPath
+        }
+        $script:Commands.Add([pscustomobject]$command) | Out-Null
     }
-    $script:Commands.Add([pscustomobject]$command) | Out-Null
+
     return [pscustomobject]$command
+}
+
+function Get-RunMetrics {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+
+    try {
+        return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    } catch {
+        return $null
+    }
 }
 
 function Get-PropertyValue {
@@ -321,6 +345,8 @@ function Write-PreflightArtifacts {
     $reportSummary = Get-ReportSummary -ReportJsonPath (Join-Path $script:Analysis "ui-parity-report.json")
     $reportPath = Join-Path $script:Analysis "ui-parity-report.md"
     $coveragePath = Join-Path $script:Analysis "ui-parity-coverage.md"
+    $runMetricsPath = Join-Path $script:Captures "ui-parity-run-metrics.json"
+    $runMetrics = Get-RunMetrics -Path $runMetricsPath
 
     $preflight = [ordered]@{
         SchemaVersion = "easydict.ui-parity.preflight.v1"
@@ -347,6 +373,8 @@ function Write-PreflightArtifacts {
         ManifestPath = $script:ManifestPath
         AnalyzerReportPath = $reportPath
         CoverageReportPath = $coveragePath
+        RunMetricsPath = $runMetricsPath
+        RunMetrics = $runMetrics
         ReferenceScreenshotCount = $screenshotSummary.ReferenceScreenshotCount
         CandidateScreenshotCount = $screenshotSummary.CandidateScreenshotCount
         SideBySideScreenshotCount = $screenshotSummary.SideBySideScreenshotCount
@@ -411,10 +439,12 @@ function Write-PreflightArtifacts {
     $summary.Add("- Manifest: $script:ManifestPath")
     $summary.Add("- Analyzer report: $reportPath")
     $summary.Add("- Coverage report: $coveragePath")
+    $summary.Add("- Run metrics: $runMetricsPath")
     $summary.Add("")
     $summary.Add("## Commands")
     foreach ($command in $script:Commands) {
-        $summary.Add("- $($command.Name): exit $($command.ExitCode)")
+        $duration = if ($null -eq $command.DurationMs) { "n/a" } else { "$($command.DurationMs) ms" }
+        $summary.Add("- $($command.Name): exit $($command.ExitCode), started $($command.StartedAtUtc), duration $duration")
     }
     $summary.Add("")
     $summary.Add("## Scenario counts")
@@ -423,6 +453,12 @@ function Write-PreflightArtifacts {
     $summary.Add("- accepted: 0")
     $summary.Add("- low-score: $($reportSummary.LowScore)")
     $summary.Add("- harness-invalid: $harnessInvalid")
+    $metricsHarnessInvalid = if ($null -ne $runMetrics) { $runMetrics.harnessInvalid } else { "n/a" }
+    $metricsTimeouts = if ($null -ne $runMetrics) { $runMetrics.rustTimeouts } else { "n/a" }
+    $summary.Add("- Rust render requests: $(if ($null -ne $runMetrics) { $runMetrics.rustRenderRequests } else { 'n/a' })")
+    $summary.Add("- Rust render durations (ms): $(if ($null -ne $runMetrics) { ($runMetrics.rustRenderDurationsMs -join ', ') } else { 'n/a' })")
+    $summary.Add("- Rust timeouts: $metricsTimeouts")
+    $summary.Add("- Metrics harness-invalid: $metricsHarnessInvalid")
     $summary.Add("- missing: $missingCount")
     $summary.Add("")
     $summary.Add("## One root cause this run")
@@ -441,6 +477,7 @@ function Write-PreflightArtifacts {
     Write-Host "Manifest: $script:ManifestPath"
     Write-Host "Analysis: $script:Analysis"
     $previewLine = if ([string]::IsNullOrWhiteSpace($script:RustPreviewExePath) -or -not (Test-Path -LiteralPath $script:RustPreviewExePath)) { "missing" } else { $script:RustPreviewExePath }
+    Write-Host "Run metrics: $runMetricsPath"
     Write-Host "Rust preview exe: $previewLine"
     Write-Host "Reference screenshots: $($screenshotSummary.ReferenceScreenshotCount)"
     Write-Host "Candidate screenshots: $($screenshotSummary.CandidateScreenshotCount)"
@@ -492,13 +529,33 @@ $env:SCREENSHOT_OUTPUT_DIR = $script:Captures
 $env:EASYDICT_UIA_DOTNET_RUST_PARITY = "1"
 $env:EASYDICT_UIA_PARITY_UI_LANGUAGE = $UiLanguage
 $env:EASYDICT_UIA_PARITY_THEME = $Theme
+$selectedDropdownOptionIndexes = @(
+    $DropdownOptionIndexes -split ',' |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+)
+$script:RustPreviewSessionGate = (
+    $Scope -eq "main" -and
+    $MainOperationsScope -in @("dropdown-open", "dropdown-open-only", "dropdowns", "dropdown-options") -and
+    $MainDropdown -eq "target"
+)
+$expectedDropdownOptionCount = if ($selectedDropdownOptionIndexes.Count -gt 0) {
+    $selectedDropdownOptionIndexes.Count
+} else {
+    9
+}
+$script:ExpectedRustRenderCount = if ($MainOperationsScope -in @("dropdowns", "dropdown-options")) {
+    1 + $expectedDropdownOptionCount
+} else {
+    1
+}
 
 try {
     if (-not $SkipBuild) {
         $cargoBuild = Invoke-LoggedCommand `
             -Name "cargo-build-rust-preview" `
             -FilePath "cargo" `
-            -Arguments @("build", "--manifest-path", $rustManifestPath, "-p", "easydict_preview_iced") `
+            -Arguments @("build", "--manifest-path", $rustManifestPath, "-p", "easydict_preview_iced", "--features", "parity-diagnostics") `
             -LogRoot $script:Logs
         if ($cargoBuild.ExitCode -ne 0) {
             Complete-Preflight -Status "fail" -FailureCategory "preflight-build-failed" -FailureMessage "Rust preview build failed."
@@ -592,6 +649,30 @@ try {
             "--filter",
             $scopeFilters[$Scope]) `
         -LogRoot $script:Logs
+
+    if ($script:RustPreviewSessionGate) {
+        $sessionMetricsPath = Join-Path $script:Captures "ui-parity-run-metrics.json"
+        $sessionMetrics = Get-RunMetrics -Path $sessionMetricsPath
+        if ($null -eq $sessionMetrics) {
+            Complete-Preflight -Status "fail" -FailureCategory "preflight-rust-preview-session-gate-failed" -FailureMessage "Rust preview session did not write run metrics."
+        }
+
+        $sessionDurations = @($sessionMetrics.rustRenderDurationsMs)
+        $sessionFailed = (
+            [int]$sessionMetrics.rustProcessStarts -ne 1 -or
+            [int]$sessionMetrics.rustRenderRequests -ne $script:ExpectedRustRenderCount -or
+            [int]$sessionMetrics.rustTimeouts -ne 0 -or
+            [int]$sessionMetrics.harnessInvalid -ne 0 -or
+            $sessionDurations.Count -ne $script:ExpectedRustRenderCount
+        )
+        if (-not $sessionFailed -and $sessionDurations.Count -gt 0) {
+            $sessionFailed = (($sessionDurations | Measure-Object -Maximum).Maximum -gt 5000)
+        }
+        if ($sessionFailed) {
+            $metricsSummary = "processes=$($sessionMetrics.rustProcessStarts), renders=$($sessionMetrics.rustRenderRequests)/$($script:ExpectedRustRenderCount), timeouts=$($sessionMetrics.rustTimeouts), harnessInvalid=$($sessionMetrics.harnessInvalid), durationsMs=$($sessionDurations -join ',')"
+            Complete-Preflight -Status "fail" -FailureCategory "preflight-rust-preview-session-gate-failed" -FailureMessage "Rust preview session gate failed: $metricsSummary."
+        }
+    }
 
     $screenshots = Get-ScreenshotPairSummary -CapturesDir $script:Captures
     $manifest = Get-ManifestSummary -Path $script:ManifestPath

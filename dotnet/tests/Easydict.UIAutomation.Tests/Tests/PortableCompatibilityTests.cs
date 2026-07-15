@@ -53,8 +53,8 @@ public sealed class PortableCompatibilityTests : IDisposable
         var statusBar = status!;
         var statusText = string.Join(
             " ",
-            new[] { statusBar.Name }
-                .Concat(statusBar.FindAllDescendants(cf => cf.ByControlType(ControlType.Text)).Select(element => element.Name)));
+            statusBar.FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
+                .Select(element => element.Name));
         statusText.Should().Contain("Windows AI baseline");
         _output.WriteLine(ScreenshotHelper.CaptureWindow(window, "portable-settings-success"));
     }

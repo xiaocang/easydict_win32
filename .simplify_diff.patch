@@ -1,0 +1,1046 @@
+diff --git a/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml b/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml
+index 4cd31ce..aadf4d7 100644
+--- a/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml
++++ b/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml
+@@ -100,16 +100,17 @@
+                         <DataTemplate>
+                             <Button Click="OnSettingsTabClick"
+                                     Tag="{Binding Id}"
++                                    AutomationProperties.AutomationId="{Binding AutomationId}"
+                                     Style="{StaticResource SettingsTabButtonStyle}"
+                                     Width="86"
+                                     Height="76"
+                                     Margin="0,0,10,10"
+                                     Padding="0"
+-                                    Background="{ThemeResource SettingsTabBackgroundBrush}"
+-                                    BorderBrush="{ThemeResource SettingsTabBorderBrush}"
++                                    Background="{Binding Background}"
++                                    BorderBrush="{Binding BorderBrush}"
+                                     BorderThickness="1"
+                                     CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+-                                    Foreground="{ThemeResource SettingsTabForegroundBrush}"
++                                    Foreground="{Binding Foreground}"
+                                     HorizontalAlignment="Left"
+                                     ToolTipService.ToolTip="{Binding Tooltip}">
+                                 <Grid>
+@@ -118,18 +119,18 @@
+                                                 VerticalAlignment="Center">
+                                         <FontIcon Glyph="{Binding IconGlyph}"
+                                                   FontSize="22"
+-                                                  Foreground="{ThemeResource SettingsTabForegroundBrush}"
++                                                  Foreground="{Binding Foreground}"
+                                                   HorizontalAlignment="Center"/>
+                                         <TextBlock Text="{Binding Label}"
+                                                    FontSize="12"
+-                                                   Foreground="{ThemeResource SettingsTabForegroundBrush}"
++                                                   Foreground="{Binding Foreground}"
+                                                    TextAlignment="Center"
+                                                    HorizontalAlignment="Center"/>
+                                     </StackPanel>
+ 
+                                     <Border
+-                                        Background="{ThemeResource SettingsTabSelectedBackgroundBrush}"
+-                                        BorderBrush="{ThemeResource SettingsTabSelectedBorderBrush}"
++                                        Background="{Binding SelectedBackground}"
++                                        BorderBrush="{Binding SelectedBorderBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="{ThemeResource EasydictControlCornerRadius}"
+                                         Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+@@ -140,11 +141,11 @@
+                                                 Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+                                         <FontIcon Glyph="{Binding IconGlyph}"
+                                                   FontSize="22"
+-                                                  Foreground="{ThemeResource SettingsTabSelectedForegroundBrush}"
++                                                  Foreground="{Binding SelectedForeground}"
+                                                   HorizontalAlignment="Center"/>
+                                         <TextBlock Text="{Binding Label}"
+                                                    FontSize="12"
+-                                                   Foreground="{ThemeResource SettingsTabSelectedForegroundBrush}"
++                                                   Foreground="{Binding SelectedForeground}"
+                                                    TextAlignment="Center"
+                                                    HorizontalAlignment="Center"/>
+                                     </StackPanel>
+diff --git a/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml.cs b/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml.cs
+index 6964c48..63bc425 100644
+--- a/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml.cs
++++ b/dotnet/src/Easydict.WinUI/Views/SettingsPage.xaml.cs
+@@ -37,9 +37,16 @@ internal sealed class SettingsTabItem : INotifyPropertyChanged
+     private bool _isSelected;
+     private string _label = string.Empty;
+     private string _tooltip = string.Empty;
++    private Brush? _background;
++    private Brush? _borderBrush;
++    private Brush? _foreground;
++    private Brush? _selectedBackground;
++    private Brush? _selectedBorderBrush;
++    private Brush? _selectedForeground;
+ 
+     public required SettingsTabId Id { get; init; }
+     public required string IconGlyph { get; init; }
++    public string AutomationId => $"SettingsTab_{Id}";
+ 
+     public string Label
+     {
+@@ -71,6 +78,96 @@ internal sealed class SettingsTabItem : INotifyPropertyChanged
+         }
+     }
+ 
++    public Brush? Background
++    {
++        get => _background;
++        private set
++        {
++            if (ReferenceEquals(_background, value))
++            {
++                return;
++            }
++
++            _background = value;
++            OnPropertyChanged();
++        }
++    }
++
++    public Brush? BorderBrush
++    {
++        get => _borderBrush;
++        private set
++        {
++            if (ReferenceEquals(_borderBrush, value))
++            {
++                return;
++            }
++
++            _borderBrush = value;
++            OnPropertyChanged();
++        }
++    }
++
++    public Brush? Foreground
++    {
++        get => _foreground;
++        private set
++        {
++            if (ReferenceEquals(_foreground, value))
++            {
++                return;
++            }
++
++            _foreground = value;
++            OnPropertyChanged();
++        }
++    }
++
++    public Brush? SelectedBackground
++    {
++        get => _selectedBackground;
++        private set
++        {
++            if (ReferenceEquals(_selectedBackground, value))
++            {
++                return;
++            }
++
++            _selectedBackground = value;
++            OnPropertyChanged();
++        }
++    }
++
++    public Brush? SelectedBorderBrush
++    {
++        get => _selectedBorderBrush;
++        private set
++        {
++            if (ReferenceEquals(_selectedBorderBrush, value))
++            {
++                return;
++            }
++
++            _selectedBorderBrush = value;
++            OnPropertyChanged();
++        }
++    }
++
++    public Brush? SelectedForeground
++    {
++        get => _selectedForeground;
++        private set
++        {
++            if (ReferenceEquals(_selectedForeground, value))
++            {
++                return;
++            }
++
++            _selectedForeground = value;
++            OnPropertyChanged();
++        }
++    }
++
+     public bool IsSelected
+     {
+         get => _isSelected;
+@@ -88,11 +185,24 @@ internal sealed class SettingsTabItem : INotifyPropertyChanged
+ 
+     public event PropertyChangedEventHandler? PropertyChanged;
+ 
+-    public void RefreshThemeBindings()
++    public void RefreshThemeBindings(FrameworkElement? themeRoot)
+     {
++        Background = CreateBrush("SettingsTabBackgroundColor", themeRoot);
++        BorderBrush = CreateBrush("SettingsTabBorderColor", themeRoot);
++        Foreground = CreateBrush("SettingsTabForegroundColor", themeRoot);
++        SelectedBackground = CreateBrush("SettingsTabSelectedBackgroundColor", themeRoot);
++        SelectedBorderBrush = CreateBrush("SettingsTabSelectedBorderColor", themeRoot);
++        SelectedForeground = CreateBrush("SettingsTabSelectedForegroundColor", themeRoot);
+         OnPropertyChanged(nameof(IsSelected));
+     }
+ 
++    private static Brush? CreateBrush(string colorKey, FrameworkElement? themeRoot)
++    {
++        return ThemeResourceService.GetColor(colorKey, themeRoot) is { } color
++            ? new SolidColorBrush(color)
++            : null;
++    }
++
+     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+ }
+@@ -418,6 +528,7 @@ public sealed partial class SettingsPage : Page
+     public void ApplyThemeChrome()
+     {
+         var minimal = MinimalThemeService.IsActive;
++        Background = CreateThemeBrush("FloatingWindowBackgroundColor");
+         SaveButton.Shadow = minimal ? null : new ThemeShadow();
+         if (LoadingOverlayRing is not null)
+         {
+@@ -433,7 +544,84 @@ public sealed partial class SettingsPage : Page
+ 
+         foreach (var tab in _settingsTabs)
+         {
+-            tab.RefreshThemeBindings();
++            tab.RefreshThemeBindings(this);
++        }
++
++        RefreshSettingsControlChrome();
++    }
++
++    private void RefreshSettingsControlChrome()
++    {
++        var sectionStyle = Resources["SettingsSectionStyle"] as Style;
++        var cardBackground = CreateThemeBrush("EasydictCardBackgroundColor");
++        var cardBorder = CreateThemeBrush("EasydictCardBorderColor");
++        var comboBackground = CreateThemeBrush("EasydictCardBackgroundColor");
++        var comboForeground = CreateThemeBrush("QueryTextColor");
++        var comboBorder = CreateThemeBrush("FloatingInputBorderColor");
++        var textBackground = CreateThemeBrush("FloatingInputBackgroundColor");
++        var textForeground = CreateThemeBrush("QueryTextColor");
++        var textBorder = CreateThemeBrush("FloatingInputBorderColor");
++        var placeholderForeground = ThemeResourceService.GetBrush("TextControlPlaceholderForeground", this);
++
++        var pending = new Queue<DependencyObject>();
++        pending.Enqueue(this);
++        while (pending.Count > 0)
++        {
++            var current = pending.Dequeue();
++
++            if (current is Border border && ReferenceEquals(border.Style, sectionStyle))
++            {
++                border.Background = cardBackground;
++                border.BorderBrush = cardBorder;
++            }
++            else if (current is ComboBox comboBox)
++            {
++                comboBox.Background = comboBackground;
++                comboBox.Foreground = comboForeground;
++                comboBox.BorderBrush = comboBorder;
++            }
++            else if (current is TextBox textBox)
++            {
++                textBox.Background = textBackground;
++                textBox.Foreground = textForeground;
++                textBox.BorderBrush = textBorder;
++                textBox.PlaceholderForeground = placeholderForeground;
++            }
++            else if (current is PasswordBox passwordBox)
++            {
++                passwordBox.Background = textBackground;
++                passwordBox.Foreground = textForeground;
++                passwordBox.BorderBrush = textBorder;
++            }
++
++            EnqueueVisualChildren(current, pending);
++        }
++    }
++
++    private Brush? CreateThemeBrush(string colorKey)
++    {
++        return ThemeResourceService.GetColor(colorKey, this) is { } color
++            ? new SolidColorBrush(color)
++            : null;
++    }
++
++    private static void EnqueueVisualChildren(
++        DependencyObject parent,
++        Queue<DependencyObject> pending)
++    {
++        int count;
++        try
++        {
++            count = VisualTreeHelper.GetChildrenCount(parent);
++        }
++        catch
++        {
++            return;
++        }
++
++        for (var i = 0; i < count; i++)
++        {
++            pending.Enqueue(VisualTreeHelper.GetChild(parent, i));
+         }
+     }
+ 
+@@ -3466,6 +3654,8 @@ public sealed partial class SettingsPage : Page
+ 
+         // Apply theme immediately
+         App.ApplyTheme(selectedTag);
++        ApplyThemeChrome();
++        DispatcherQueue.TryEnqueue(ApplyThemeChrome);
+ 
+         // Show the save button (in case other settings were changed)
+         SaveButton.Visibility = Visibility.Visible;
+diff --git a/dotnet/tests/Easydict.UIAutomation.Tests/Infrastructure/ScrollHelper.cs b/dotnet/tests/Easydict.UIAutomation.Tests/Infrastructure/ScrollHelper.cs
+index f2615b3..812b365 100644
+--- a/dotnet/tests/Easydict.UIAutomation.Tests/Infrastructure/ScrollHelper.cs
++++ b/dotnet/tests/Easydict.UIAutomation.Tests/Infrastructure/ScrollHelper.cs
+@@ -1,3 +1,4 @@
++using System.Drawing;
+ using FlaUI.Core.AutomationElements;
+ using FlaUI.Core.Input;
+ 
+@@ -37,15 +38,24 @@ public static class ScrollHelper
+     {
+         if (scrollViewer.Patterns.Scroll.IsSupported)
+         {
+-            var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
+-            // -1 means "do not change" for horizontal scroll
+-            scrollPattern.SetScrollPercent(-1, verticalPercent);
+-            log?.Invoke($"ScrollPattern: scrolled to {verticalPercent}%");
++            try
++            {
++                var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
++                // -1 means "do not change" for horizontal scroll
++                scrollPattern.SetScrollPercent(-1, verticalPercent);
++                log?.Invoke($"ScrollPattern: scrolled to {verticalPercent}%");
++            }
++            catch (InvalidOperationException ex)
++            {
++                log?.Invoke($"ScrollPattern failed ({ex.Message}), falling back to Mouse.Scroll");
++                MoveMouseToScrollTarget(scrollViewer, log);
++                Mouse.Scroll(verticalPercent <= 0 ? 15 : -15);
++            }
+         }
+         else
+         {
+             log?.Invoke("ScrollPattern not available, falling back to Mouse.Scroll");
+-            Mouse.MoveTo(scrollViewer.GetClickablePoint());
++            MoveMouseToScrollTarget(scrollViewer, log);
+             Mouse.Scroll(-15);
+         }
+ 
+@@ -70,56 +80,92 @@ public static class ScrollHelper
+         Func<AutomationElement?> finder,
+         Action<string>? log = null)
+     {
++        var currentResult = finder();
++        if (currentResult is { IsOffscreen: false })
++        {
++            return currentResult;
++        }
++
+         if (scrollViewer.Patterns.Scroll.IsSupported)
+         {
+-            var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
++            try
++            {
++                var scrollPattern = scrollViewer.Patterns.Scroll.Pattern;
+ 
+-            // Jump to the expected location first
+-            scrollPattern.SetScrollPercent(-1, startPercent);
+-            log?.Invoke($"ScrollPattern: jumped to {startPercent}%");
+-            Thread.Sleep(ScrollSettleMs);
++                // Jump to the expected location first
++                scrollPattern.SetScrollPercent(-1, startPercent);
++                log?.Invoke($"ScrollPattern: jumped to {startPercent}%");
++                Thread.Sleep(ScrollSettleMs);
+ 
+-            var result = finder();
+-            if (result != null) return result;
++                var result = finder();
++                if (result != null) return result;
+ 
+-            // Scan forward from startPercent to 100% in small steps
+-            for (var percent = startPercent + ScanStepPercent; percent <= 100; percent += ScanStepPercent)
++                // Scan forward from startPercent to 100% in small steps
++                for (var percent = startPercent + ScanStepPercent; percent <= 100; percent += ScanStepPercent)
++                {
++                    scrollPattern.SetScrollPercent(-1, percent);
++                    log?.Invoke($"ScrollPattern: scanning at {percent}%");
++                    Thread.Sleep(ScanSettleMs);
++
++                    result = finder();
++                    if (result != null) return result;
++                }
++
++                // If not found scanning forward, scan backward from startPercent to 0%
++                for (var percent = startPercent - ScanStepPercent; percent >= 0; percent -= ScanStepPercent)
++                {
++                    scrollPattern.SetScrollPercent(-1, percent);
++                    log?.Invoke($"ScrollPattern: scanning back at {percent}%");
++                    Thread.Sleep(ScanSettleMs);
++
++                    result = finder();
++                    if (result != null) return result;
++                }
++            }
++            catch (InvalidOperationException ex)
+             {
+-                scrollPattern.SetScrollPercent(-1, percent);
+-                log?.Invoke($"ScrollPattern: scanning at {percent}%");
+-                Thread.Sleep(ScanSettleMs);
+-
+-                result = finder();
+-                if (result != null) return result;
++                log?.Invoke($"ScrollPattern failed ({ex.Message}), falling back to Mouse.Scroll");
+             }
++        }
+ 
+-            // If not found scanning forward, scan backward from startPercent to 0%
+-            for (var percent = startPercent - ScanStepPercent; percent >= 0; percent -= ScanStepPercent)
+-            {
+-                scrollPattern.SetScrollPercent(-1, percent);
+-                log?.Invoke($"ScrollPattern: scanning back at {percent}%");
+-                Thread.Sleep(ScanSettleMs);
++        log?.Invoke("ScrollPattern not available or failed, falling back to Mouse.Scroll");
++        MoveMouseToScrollTarget(scrollViewer, log);
+ 
+-                result = finder();
+-                if (result != null) return result;
+-            }
++        // Scroll down incrementally and check at each step
++        for (int i = 0; i < 20; i++)
++        {
++            Mouse.Scroll(-5);
++            Thread.Sleep(ScanSettleMs);
++
++            var result = finder();
++            if (result != null) return result;
+         }
+-        else
++
++        return null;
++    }
++
++    private static void MoveMouseToScrollTarget(
++        AutomationElement scrollViewer,
++        Action<string>? log)
++    {
++        try
+         {
+-            log?.Invoke("ScrollPattern not available, falling back to Mouse.Scroll");
+             Mouse.MoveTo(scrollViewer.GetClickablePoint());
++            return;
++        }
++        catch (Exception ex)
++        {
++            log?.Invoke($"Clickable point unavailable ({ex.Message}), using element center");
++        }
+ 
+-            // Scroll down incrementally and check at each step
+-            for (int i = 0; i < 20; i++)
+-            {
+-                Mouse.Scroll(-5);
+-                Thread.Sleep(ScanSettleMs);
+-
+-                var result = finder();
+-                if (result != null) return result;
+-            }
++        var bounds = scrollViewer.BoundingRectangle;
++        if (bounds.Width <= 0 || bounds.Height <= 0)
++        {
++            return;
+         }
+ 
+-        return null;
++        Mouse.MoveTo(new Point(
++            bounds.Left + (bounds.Width / 2),
++            bounds.Top + (bounds.Height / 2)));
+     }
+ }
+diff --git a/dotnet/tests/Easydict.UIAutomation.Tests/Tests/ThemeContrastTests.cs b/dotnet/tests/Easydict.UIAutomation.Tests/Tests/ThemeContrastTests.cs
+new file mode 100644
+index 0000000..e18c845
+--- /dev/null
++++ b/dotnet/tests/Easydict.UIAutomation.Tests/Tests/ThemeContrastTests.cs
+@@ -0,0 +1,563 @@
++using System.Drawing;
++using System.Runtime.InteropServices;
++using System.Text.Json;
++using System.Text.Json.Nodes;
++using Easydict.UIAutomation.Tests.Infrastructure;
++using FlaUI.Core.AutomationElements;
++using FlaUI.Core.Tools;
++using FluentAssertions;
++using Microsoft.Win32;
++using Xunit;
++using Xunit.Abstractions;
++
++namespace Easydict.UIAutomation.Tests.Tests;
++
++[Trait("Category", "UIAutomation")]
++[Collection("UIAutomation")]
++public sealed class ThemeContrastTests : IDisposable
++{
++    private const string PersonalizeRegistryPath =
++        @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
++    private const string AppsUseLightThemeValue = "AppsUseLightTheme";
++    private const string SystemUsesLightThemeValue = "SystemUsesLightTheme";
++
++    private readonly ITestOutputHelper _output;
++    private readonly Dictionary<string, int?> _originalThemeValues = new(StringComparer.OrdinalIgnoreCase);
++    private readonly Dictionary<string, string?> _settingsSnapshots = new(StringComparer.OrdinalIgnoreCase);
++    private AppLauncher? _launcher;
++
++    public ThemeContrastTests(ITestOutputHelper output)
++    {
++        _output = output;
++    }
++
++    [Fact]
++    public void SettingsPage_ExplicitLightTheme_OnDarkWindowsTheme_ShouldRenderLightControls()
++    {
++        SnapshotAndSetPersistedAppTheme("System");
++        ForceWindowsTheme(light: false);
++
++        _launcher = new AppLauncher();
++        _launcher.LaunchAuto(TimeSpan.FromSeconds(45));
++
++        var window = _launcher.GetMainWindow();
++        Thread.Sleep(2000);
++
++        var themeCombo = FindAppThemeCombo(window);
++        SelectThemeComboItem(themeCombo, themeIndex: 1);
++
++        WaitForPersistedAppTheme("Light", TimeSpan.FromSeconds(5))
++            .Should().Be("Light", "explicit Light must persist before screenshot validation");
++
++        Thread.Sleep(1200);
++        PrepareSettingsWindowForScreenshot(window);
++
++        var path = ScreenshotHelper.CaptureWindowPhysical(
++            window,
++            "40_settings_light_on_dark_system_contrast");
++        _output.WriteLine($"Light-on-dark-system settings screenshot saved: {path}");
++
++        AssertSettingsLightPalette(window, path);
++    }
++
++    private ComboBox FindAppThemeCombo(Window window)
++    {
++        ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900));
++        window.SetForeground();
++        Thread.Sleep(500);
++
++        var settingsButton = Retry.WhileNull(
++            () => window.FindFirstDescendant(cf => cf.ByAutomationId("SettingsButton")),
++            TimeSpan.FromSeconds(5)).Result;
++
++        settingsButton.Should().NotBeNull("main page SettingsButton must be available");
++        InvokeOrClick(settingsButton!);
++        Thread.Sleep(2000);
++
++        var scrollViewer = Retry.WhileNull(
++            () => window.FindFirstDescendant(cf => cf.ByAutomationId("MainScrollViewer")),
++            TimeSpan.FromSeconds(15)).Result;
++
++        scrollViewer.Should().NotBeNull("settings MainScrollViewer must appear after opening settings");
++
++        var element = Retry.WhileNull(
++            () =>
++            {
++                var combo = window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"));
++                return combo is { IsOffscreen: false } ? combo : null;
++            },
++            TimeSpan.FromSeconds(5)).Result;
++
++        if (element is null)
++        {
++            try
++            {
++                element = ScrollHelper.ScrollToFind(
++                    scrollViewer!,
++                    startPercent: 70,
++                    () => window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo")),
++                    _output.WriteLine);
++            }
++            catch (InvalidOperationException ex)
++            {
++                _output.WriteLine($"ScrollToFind AppThemeCombo failed, falling back to existing UIA element: {ex.Message}");
++                element = window.FindFirstDescendant(cf => cf.ByAutomationId("AppThemeCombo"));
++                TryScrollIntoView(element);
++            }
++        }
++
++        var themeCombo = element?.AsComboBox();
++
++        themeCombo.Should().NotBeNull("AppThemeCombo must be visible on the General settings tab");
++        return themeCombo!;
++    }
++
++    private void TryScrollIntoView(AutomationElement? element)
++    {
++        if (element is null)
++        {
++            return;
++        }
++
++        try
++        {
++            if (element.Patterns.ScrollItem.IsSupported)
++            {
++                element.Patterns.ScrollItem.Pattern.ScrollIntoView();
++                Thread.Sleep(800);
++            }
++        }
++        catch (Exception ex)
++        {
++            _output.WriteLine($"ScrollItem fallback failed: {ex.Message}");
++        }
++    }
++
++    private void SelectThemeComboItem(ComboBox themeCombo, int themeIndex)
++    {
++        themeCombo.Expand();
++        Thread.Sleep(500);
++
++        var items = themeCombo.Items;
++        _output.WriteLine(
++            $"AppThemeCombo exposed {items.Length} item(s): {string.Join(", ", items.Select(i => $"'{i.Name}'"))}");
++
++        items.Length.Should().BeGreaterThan(themeIndex, "Light theme item must be available at index 1");
++        items[themeIndex].Click();
++    }
++
++    private void PrepareSettingsWindowForScreenshot(Window window)
++    {
++        ScreenshotHelper.TrySetWindowPhysicalBounds(window, new Rectangle(0, 0, 900, 900));
++        Thread.Sleep(500);
++        window.SetForeground();
++        Thread.Sleep(500);
++    }
++
++    private void AssertSettingsLightPalette(Window window, string screenshotPath)
++    {
++        using var bitmap = new Bitmap(screenshotPath);
++        var windowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
++        var dpiScale = ScreenshotHelper.GetWindowDpiScale(window);
++        _output.WriteLine($"Settings light contrast DPI scale: {dpiScale:0.###}");
++
++        AssertElementRegionIsLight(
++            "selected General settings tab",
++            FindRequired(window, "SettingsTab_General"),
++            bitmap,
++            windowBounds,
++            dpiScale,
++            relativeX: 0.12,
++            relativeY: 0.12,
++            relativeWidth: 0.25,
++            relativeHeight: 0.25,
++            minBrightness: 170);
++
++        AssertElementRegionIsLight(
++            "unselected Services settings tab",
++            FindRequired(window, "SettingsTab_Services"),
++            bitmap,
++            windowBounds,
++            dpiScale,
++            relativeX: 0.12,
++            relativeY: 0.12,
++            relativeWidth: 0.25,
++            relativeHeight: 0.25,
++            minBrightness: 170);
++
++        AssertElementRegionIsLight(
++            "AppThemeCombo field",
++            FindRequired(window, "AppThemeCombo"),
++            bitmap,
++            windowBounds,
++            dpiScale,
++            relativeX: 0.12,
++            relativeY: 0.20,
++            relativeWidth: 0.52,
++            relativeHeight: 0.55,
++            minBrightness: 150);
++    }
++
++    private static AutomationElement FindRequired(Window window, string automationId)
++    {
++        var element = Retry.WhileNull(
++            () => window.FindFirstDescendant(cf => cf.ByAutomationId(automationId)),
++            TimeSpan.FromSeconds(5)).Result;
++
++        element.Should().NotBeNull($"{automationId} must be present for screenshot palette validation");
++        return element!;
++    }
++
++    private void AssertElementRegionIsLight(
++        string label,
++        AutomationElement element,
++        Bitmap bitmap,
++        Rectangle windowBounds,
++        double dpiScale,
++        double relativeX,
++        double relativeY,
++        double relativeWidth,
++        double relativeHeight,
++        double minBrightness)
++    {
++        var elementRect = ToScreenshotPixelRect(bitmap, element.BoundingRectangle, windowBounds, dpiScale);
++        var sampleRect = ToRelativeSampleRect(
++            bitmap,
++            elementRect,
++            relativeX,
++            relativeY,
++            relativeWidth,
++            relativeHeight);
++        var sample = AverageRegion(bitmap, sampleRect);
++
++        _output.WriteLine(
++            $"{label}: element={elementRect}, sample={sampleRect}, avg rgb=({sample.R:0.0}, {sample.G:0.0}, {sample.B:0.0}), brightness={sample.Brightness:0.0}");
++
++        sample.Brightness.Should().BeGreaterThan(
++            minBrightness,
++            $"{label} must use the explicit Light palette when Windows app theme is dark");
++    }
++
++    private static Rectangle ToScreenshotPixelRect(
++        Bitmap bitmap,
++        Rectangle elementBounds,
++        Rectangle windowBounds,
++        double dpiScale)
++    {
++        var left = (int)Math.Round((elementBounds.Left - windowBounds.Left) * dpiScale);
++        var top = (int)Math.Round((elementBounds.Top - windowBounds.Top) * dpiScale);
++        var right = (int)Math.Round((elementBounds.Right - windowBounds.Left) * dpiScale);
++        var bottom = (int)Math.Round((elementBounds.Bottom - windowBounds.Top) * dpiScale);
++
++        return ClipRect(Rectangle.FromLTRB(left, top, right, bottom), bitmap.Width, bitmap.Height);
++    }
++
++    private static Rectangle ToRelativeSampleRect(
++        Bitmap bitmap,
++        Rectangle elementRect,
++        double relativeX,
++        double relativeY,
++        double relativeWidth,
++        double relativeHeight)
++    {
++        var sample = new Rectangle(
++            elementRect.Left + (int)Math.Round(elementRect.Width * relativeX),
++            elementRect.Top + (int)Math.Round(elementRect.Height * relativeY),
++            Math.Max(1, (int)Math.Round(elementRect.Width * relativeWidth)),
++            Math.Max(1, (int)Math.Round(elementRect.Height * relativeHeight)));
++
++        return ClipRect(sample, bitmap.Width, bitmap.Height);
++    }
++
++    private static Rectangle ClipRect(Rectangle rect, int maxWidth, int maxHeight)
++    {
++        var left = Math.Clamp(rect.Left, 0, maxWidth - 1);
++        var top = Math.Clamp(rect.Top, 0, maxHeight - 1);
++        var right = Math.Clamp(rect.Right, left + 1, maxWidth);
++        var bottom = Math.Clamp(rect.Bottom, top + 1, maxHeight);
++        return Rectangle.FromLTRB(left, top, right, bottom);
++    }
++
++    private static PaletteSample AverageRegion(Bitmap bitmap, Rectangle rect)
++    {
++        double r = 0;
++        double g = 0;
++        double b = 0;
++        var count = 0;
++
++        for (var y = rect.Top; y < rect.Bottom; y++)
++        {
++            for (var x = rect.Left; x < rect.Right; x++)
++            {
++                var color = bitmap.GetPixel(x, y);
++                r += color.R;
++                g += color.G;
++                b += color.B;
++                count++;
++            }
++        }
++
++        r /= count;
++        g /= count;
++        b /= count;
++        var brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
++        return new PaletteSample(r, g, b, brightness);
++    }
++
++    private void SnapshotAndSetPersistedAppTheme(string theme)
++    {
++        foreach (var path in GetSettingsFileCandidates().Distinct(StringComparer.OrdinalIgnoreCase))
++        {
++            if (!_settingsSnapshots.ContainsKey(path))
++            {
++                _settingsSnapshots[path] = File.Exists(path) ? File.ReadAllText(path) : null;
++            }
++
++            if (File.Exists(path))
++            {
++                WriteAppTheme(path, theme);
++            }
++        }
++    }
++
++    private static void WriteAppTheme(string path, string theme)
++    {
++        JsonNode root;
++        try
++        {
++            root = JsonNode.Parse(File.ReadAllText(path)) ?? new JsonObject();
++        }
++        catch
++        {
++            root = new JsonObject();
++        }
++
++        root["AppTheme"] = theme;
++        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
++    }
++
++    private static string WaitForPersistedAppTheme(string expectedTheme, TimeSpan timeout)
++    {
++        var deadline = DateTime.UtcNow + timeout;
++        string current;
++        do
++        {
++            current = ReadPersistedAppTheme();
++            if (string.Equals(current, expectedTheme, StringComparison.OrdinalIgnoreCase))
++            {
++                return current;
++            }
++
++            Thread.Sleep(200);
++        }
++        while (DateTime.UtcNow < deadline);
++
++        return current;
++    }
++
++    private static string ReadPersistedAppTheme()
++    {
++        try
++        {
++            var settingsPath = GetSettingsFileCandidates()
++                .Distinct(StringComparer.OrdinalIgnoreCase)
++                .FirstOrDefault(File.Exists);
++            if (!File.Exists(settingsPath))
++            {
++                return "<missing settings.json>";
++            }
++
++            using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
++            if (!document.RootElement.TryGetProperty("AppTheme", out var appTheme))
++            {
++                return "<missing AppTheme>";
++            }
++
++            return appTheme.ValueKind == JsonValueKind.String
++                ? appTheme.GetString() ?? "<missing AppTheme>"
++                : "<unreadable AppTheme>";
++        }
++        catch (Exception ex)
++        {
++            return $"<error: {ex.Message}>";
++        }
++    }
++
++    private static IEnumerable<string> GetSettingsFileCandidates()
++    {
++        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
++        var packageFamilyName = Environment.GetEnvironmentVariable("EASYDICT_PACKAGE_FAMILY_NAME");
++
++        foreach (var familyName in GetPackageFamilyNameCandidates(localAppData, packageFamilyName))
++        {
++            yield return Path.Combine(
++                localAppData,
++                "Packages",
++                familyName,
++                "LocalCache",
++                "Local",
++                "Easydict",
++                "settings.json");
++        }
++
++        yield return Path.Combine(localAppData, "Easydict", "settings.json");
++    }
++
++    private static IEnumerable<string> GetPackageFamilyNameCandidates(
++        string localAppData,
++        string? packageFamilyName)
++    {
++        if (!string.IsNullOrWhiteSpace(packageFamilyName))
++        {
++            yield return packageFamilyName;
++        }
++
++        var packagesRoot = Path.Combine(localAppData, "Packages");
++        if (!Directory.Exists(packagesRoot))
++        {
++            yield break;
++        }
++
++        string[] packagePaths;
++        try
++        {
++            packagePaths = Directory.GetDirectories(packagesRoot, "xiaocang.EasydictforWindows_*");
++        }
++        catch
++        {
++            yield break;
++        }
++
++        foreach (var path in packagePaths)
++        {
++            var familyName = Path.GetFileName(path);
++            if (!string.IsNullOrWhiteSpace(familyName))
++            {
++                yield return familyName;
++            }
++        }
++    }
++
++    private void ForceWindowsTheme(bool light)
++    {
++        CaptureOriginalThemeValues();
++
++        using var key = Registry.CurrentUser.CreateSubKey(PersonalizeRegistryPath);
++        key.Should().NotBeNull("Windows theme registry key must be writable for UI regression setup");
++
++        var value = light ? 1 : 0;
++        key!.SetValue(AppsUseLightThemeValue, value, RegistryValueKind.DWord);
++        key.SetValue(SystemUsesLightThemeValue, value, RegistryValueKind.DWord);
++        BroadcastThemeChange();
++    }
++
++    private void CaptureOriginalThemeValues()
++    {
++        if (_originalThemeValues.Count > 0)
++        {
++            return;
++        }
++
++        _originalThemeValues[AppsUseLightThemeValue] = ReadThemeDword(AppsUseLightThemeValue);
++        _originalThemeValues[SystemUsesLightThemeValue] = ReadThemeDword(SystemUsesLightThemeValue);
++    }
++
++    private static int? ReadThemeDword(string name)
++    {
++        using var key = Registry.CurrentUser.OpenSubKey(PersonalizeRegistryPath);
++        return key?.GetValue(name) is int value ? value : null;
++    }
++
++    private void RestoreWindowsTheme()
++    {
++        if (_originalThemeValues.Count == 0)
++        {
++            return;
++        }
++
++        using var key = Registry.CurrentUser.CreateSubKey(PersonalizeRegistryPath);
++        if (key is null)
++        {
++            return;
++        }
++
++        foreach (var (name, value) in _originalThemeValues)
++        {
++            if (value.HasValue)
++            {
++                key.SetValue(name, value.Value, RegistryValueKind.DWord);
++            }
++            else
++            {
++                key.DeleteValue(name, throwOnMissingValue: false);
++            }
++        }
++
++        BroadcastThemeChange();
++    }
++
++    private void RestoreSettingsSnapshots()
++    {
++        foreach (var (path, content) in _settingsSnapshots)
++        {
++            if (content is null)
++            {
++                if (File.Exists(path))
++                {
++                    File.Delete(path);
++                }
++
++                continue;
++            }
++
++            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
++            File.WriteAllText(path, content);
++        }
++    }
++
++    private static void InvokeOrClick(AutomationElement element)
++    {
++        if (element.Patterns.Invoke.IsSupported)
++        {
++            element.Patterns.Invoke.Pattern.Invoke();
++            return;
++        }
++
++        element.Click();
++    }
++
++    private static void BroadcastThemeChange()
++    {
++        SendMessageTimeout(
++            new IntPtr(0xffff),
++            0x001a,
++            UIntPtr.Zero,
++            "ImmersiveColorSet",
++            0x0002,
++            1000,
++            out _);
++    }
++
++    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
++    private static extern IntPtr SendMessageTimeout(
++        IntPtr hWnd,
++        uint msg,
++        UIntPtr wParam,
++        string lParam,
++        uint flags,
++        uint timeout,
++        out UIntPtr result);
++
++    private readonly record struct PaletteSample(
++        double R,
++        double G,
++        double B,
++        double Brightness);
++
++    public void Dispose()
++    {
++        _launcher?.Dispose();
++        RestoreSettingsSnapshots();
++        RestoreWindowsTheme();
++    }
++}

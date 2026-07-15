@@ -1,0 +1,491 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Polyglot.TextLayout</name>
+    </assembly>
+    <members>
+        <member name="T:Polyglot.TextLayout.FontFitting.FontFitRequest">
+            <summary>
+            Input for font size fitting. Supports two modes:
+            block-rect (MaxWidth + MaxHeight) and line-width
+            (LineWidths with optional MaxLineCount / MaxHeight / LineHeights).
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.Text">
+            <summary>Text to fit.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.StartFontSize">
+            <summary>Starting font size in points (typically from BlockTextStyle.FontSize).</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.MinFontSize">
+            <summary>Minimum font size to try before declaring truncation.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.MaxWidth">
+            <summary>Block rect mode: maximum width for all lines.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.MaxHeight">
+            <summary>Block rect mode: maximum total height for all lines.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.LineHeightMultiplier">
+            <summary>Line height multiplier applied to font size.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.LineWidths">
+            <summary>Line rect mode: per-line maximum widths.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.MaxLineCount">
+            <summary>Line rect mode: maximum number of visible lines. Defaults to LineWidths.Count.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.LineHeights">
+            <summary>Line rect mode: per-line heights (for font-size ceiling).</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.FontFitting.FontFitRequest.NormalizeWhitespace">
+            <summary>Whether to normalize whitespace during preparation.</summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.FontFitting.FontFitResult">
+            <summary>
+            Result of font size fitting.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.FontFitting.FontFitResult.#ctor(System.Double,System.Double,System.Boolean,System.Boolean,System.Int32)">
+            <summary>
+            Result of font size fitting.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.FontFitting.FontFitSolver">
+            <summary>
+            Binary-search font size solver. Finds the largest font size in
+            [MinFontSize, StartFontSize] such that the text fits the given constraints.
+            ~6 iterations for 24pt→6pt at 0.25pt precision (vs 36 linear steps at 0.5pt).
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.FontFitting.FontFitSolver.Solve(Polyglot.TextLayout.FontFitting.FontFitRequest,Polyglot.TextLayout.ITextLayoutEngine,System.Func{System.Double,Polyglot.TextLayout.ITextMeasurer})">
+            <summary>
+            Solves for the optimal font size.
+            </summary>
+            <param name="request">Fitting constraints and text.</param>
+            <param name="engine">Layout engine for prepare + layout.</param>
+            <param name="measurerFactory">
+            Creates an <see cref="T:Polyglot.TextLayout.ITextMeasurer"/> for a given font size.
+            Called once per binary-search iteration.
+            </param>
+        </member>
+        <member name="T:Polyglot.TextLayout.ITextLayoutEngine">
+            <summary>
+            Two-phase text layout engine inspired by Pretext's prepare-then-layout architecture.
+            The preparation phase segments and measures text. The layout phase uses pure arithmetic
+            for line breaking — no measurement calls.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.Prepare(Polyglot.TextLayout.Preparation.TextPrepareRequest,Polyglot.TextLayout.ITextMeasurer)">
+            <summary>
+            Preparation phase: normalize, segment, measure, and cache text data.
+            The result is reusable for multiple layout calls at the same font size.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.Layout(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double)">
+            <summary>
+            Count-only layout: returns line count and max width without allocating line strings.
+            Fast path for font fitting.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.LayoutWithLines(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double)">
+            <summary>
+            Fixed-width layout: produces line strings and geometry.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.Layout(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Collections.Generic.IReadOnlyList{System.Double})">
+            <summary>
+            Variable-width count-only layout: returns line count without allocating line strings.
+            Fast path for font fitting with per-line widths.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.LayoutWithLines(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Collections.Generic.IReadOnlyList{System.Double})">
+            <summary>
+            Variable-width layout: each line can have a different max width.
+            If text exceeds the number of widths, continues using the last width.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.WalkLineRanges(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double,System.Action{Polyglot.TextLayout.Layout.LayoutLineRange})">
+            <summary>
+            Geometry-only walk: calls <paramref name="onLine"/> for each line without allocating strings.
+            Returns total line count.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextLayoutEngine.LayoutNextLine(Polyglot.TextLayout.Preparation.PreparedParagraph,Polyglot.TextLayout.Layout.LayoutCursor,System.Double)">
+            <summary>
+            Incremental layout: lays out one line at a time starting from <paramref name="start"/>.
+            Returns null when all text has been consumed.
+            Used for MuPdf content stream generation where each line emits PDF operators.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.ITextMeasurer">
+            <summary>
+            Measures text advance widths in points at a specific font and size.
+            Implementations are stateful with respect to font/size — create a new instance
+            when font size changes (e.g., during font fitting iterations).
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextMeasurer.MeasureSegment(System.String)">
+            <summary>
+            Measures the advance width of a multi-character text segment.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.ITextMeasurer.MeasureGrapheme(System.String)">
+            <summary>
+            Measures the advance width of a single grapheme cluster.
+            Used for breaking long segments and CJK per-character layout.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Layout.LayoutCursor">
+            <summary>
+            A position within a <see cref="T:Polyglot.TextLayout.Preparation.PreparedParagraph"/> for incremental layout.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Layout.LayoutCursor.#ctor(System.Int32,System.Int32)">
+            <summary>
+            A position within a <see cref="T:Polyglot.TextLayout.Preparation.PreparedParagraph"/> for incremental layout.
+            </summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Layout.LayoutCursor.Start">
+            <summary>Starting cursor at the beginning of text.</summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Layout.LayoutLine">
+            <summary>
+            A laid-out line of text with content and geometry.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Layout.LayoutLine.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Double,System.String)">
+            <summary>
+            A laid-out line of text with content and geometry.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Layout.LayoutLineRange">
+            <summary>
+            Geometry-only line range without string allocation.
+            Used by <see cref="M:Polyglot.TextLayout.ITextLayoutEngine.WalkLineRanges(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double,System.Action{Polyglot.TextLayout.Layout.LayoutLineRange})"/> for fast counting and width probing.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Layout.LayoutLineRange.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Double)">
+            <summary>
+            Geometry-only line range without string allocation.
+            Used by <see cref="M:Polyglot.TextLayout.ITextLayoutEngine.WalkLineRanges(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double,System.Action{Polyglot.TextLayout.Layout.LayoutLineRange})"/> for fast counting and width probing.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Layout.LayoutLinesResult">
+            <summary>
+            Full layout result with line text and geometry.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Layout.LayoutLinesResult.#ctor(System.Collections.Generic.IReadOnlyList{Polyglot.TextLayout.Layout.LayoutLine},System.Double,System.Boolean)">
+            <summary>
+            Full layout result with line text and geometry.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Layout.LayoutResult">
+            <summary>
+            Count-only layout result — no line strings allocated. Fast path for font fitting.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Layout.LayoutResult.#ctor(System.Int32,System.Double,System.Boolean)">
+            <summary>
+            Count-only layout result — no line strings allocated. Fast path for font fitting.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Preparation.PreparedParagraph">
+            <summary>
+            The output of the preparation phase: segmented, measured, and cached text data.
+            All arrays are parallel with the same length (<see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Count"/>).
+            Layout operations use these arrays without further measurement calls.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Segments">
+            <summary>Segment text values.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Widths">
+            <summary>Measured advance width of each segment in points.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Kinds">
+            <summary>Layout classification of each segment.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.LineEndFitAdvances">
+            <summary>
+            Advance width contribution when this segment is at the end of a line.
+            For Space segments: 0 (trailing whitespace hangs past the margin).
+            For SoftHyphen segments: <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.DiscretionaryHyphenWidth"/> (adds visible hyphen).
+            For all others: equals <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Widths"/>[i].
+            Inspired by Pretext's lineEndFitAdvances.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemeWidths">
+            <summary>
+            Per-grapheme widths within each segment. Populated eagerly during <c>Prepare()</c>
+            for <see cref="F:Polyglot.TextLayout.Segmentation.SegmentKind.Word"/> segments with more than one grapheme cluster.
+            Null for all other segment kinds (CjkGrapheme, Space, HardBreak, punctuation).
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemePrefixSums">
+            <summary>
+            Prefix sums of <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemeWidths"/> for binary-search line breaking
+            of long segments. <c>GraphemePrefixSums[i][k]</c> = sum of first k+1 grapheme widths
+            in segment i. Populated eagerly during <c>Prepare()</c> alongside <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemeWidths"/>.
+            Null when <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemeWidths"/> is null for that segment.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Graphemes">
+            <summary>
+            Grapheme strings for segments that have been grapheme-decomposed.
+            Used to reconstruct text when a segment is broken mid-grapheme.
+            Populated eagerly during <c>Prepare()</c> alongside <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemeWidths"/>.
+            Null when <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.GraphemeWidths"/> is null for that segment.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.IsProhibitedLineStart">
+            <summary>
+            True when the segment's first character is prohibited from starting a line
+            per Japanese kinsoku shori rules (JIS X 4051). Includes closing brackets,
+            CJK periods/commas, small kana, prolonged sound mark, iteration marks.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.IsProhibitedLineEnd">
+            <summary>
+            True when the segment's last character is prohibited from ending a line
+            per Japanese kinsoku shori rules. Includes opening brackets and CJK opening marks.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.HardBreakIndices">
+            <summary>
+            Indices of <see cref="F:Polyglot.TextLayout.Segmentation.SegmentKind.HardBreak"/> segments within the segments array.
+            Empty when there are no hard breaks. Used for chunk-based fast-path optimization.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.DiscretionaryHyphenWidth">
+            <summary>
+            Width of a discretionary hyphen character, measured once during preparation.
+            Used as <see cref="P:Polyglot.TextLayout.Preparation.PreparedParagraph.LineEndFitAdvances"/> value for <see cref="F:Polyglot.TextLayout.Segmentation.SegmentKind.SoftHyphen"/> segments.
+            Zero when no soft-hyphens are present in the text.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.IsSingleChunk">
+            <summary>True when there are no hard breaks — enables simplified layout path.</summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.PreparedParagraph.Count">
+            <summary>Number of segments.</summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Preparation.TextPrepareRequest">
+            <summary>
+            Input for the text preparation phase.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.TextPrepareRequest.Text">
+            <summary>
+            The text to prepare for layout.
+            </summary>
+        </member>
+        <member name="P:Polyglot.TextLayout.Preparation.TextPrepareRequest.NormalizeWhitespace">
+            <summary>
+            When true, whitespace is normalized (collapse runs, trim trailing before \n).
+            Matches pdf2zh converter.py:488 behavior used in current WrapTextByWidth.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Segmentation.KinsokuTable">
+            <summary>
+            Japanese line-breaking rules (kinsoku shori) per JIS X 4051 / CSS Text Level 3.
+            Defines characters that cannot start or end a line in CJK typesetting.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.KinsokuTable.IsProhibitedLineStart(System.Char)">
+            <summary>
+            Characters that must not appear at the start of a line.
+            Includes closing brackets, CJK periods/commas, small kana, prolonged sound mark,
+            iteration marks, and fullwidth terminal punctuation.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.KinsokuTable.IsProhibitedLineEnd(System.Char)">
+            <summary>
+            Characters that must not appear at the end of a line.
+            Includes opening brackets and CJK opening marks.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.KinsokuTable.IsLeftSticky(System.Char)">
+            <summary>
+            Left-sticky punctuation that attaches to the preceding CJK character.
+            These ASCII punctuation marks should not start a line when they follow CJK text.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Segmentation.ScriptClassifier">
+            <summary>
+            Classifies characters by script family for segmentation and line-breaking decisions.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory">
+            <summary>
+            Layout-relevant classification for a single character.
+            </summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.Cjk">
+            <summary>CJK ideograph, kana, hangul, or fullwidth form.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.Latin">
+            <summary>Latin script or any non-CJK / non-special character.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.Space">
+            <summary>Whitespace that allows a soft break (space, tab, CR).</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.HardBreak">
+            <summary>Mandatory line terminator (LF).</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.OpenPunctuation">
+            <summary>Opening bracket / quote that groups with the following segment.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.ClosePunctuation">
+            <summary>Closing bracket / quote / terminal punctuation that groups with the preceding segment.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.SoftHyphen">
+            <summary>Soft hyphen (U+00AD): hidden break opportunity.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.ScriptClassifier.CharCategory.Other">
+            <summary>Anything that does not fit the other categories.</summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.ScriptClassifier.Classify(System.Char)">
+            <summary>
+            Classifies a single character into a layout-relevant category.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.ScriptClassifier.IsCjk(System.Char)">
+            <summary>
+            Returns true for CJK ideographs, kana, hangul, and fullwidth forms.
+            Matches the ranges used by both MuPdfExportService.IsCjkCharacter and
+            PdfExportService.IsCjkCharacter/TokenizeForWrapping.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.ScriptClassifier.IsOpenPunctuation(System.Char)">
+            <summary>
+            Returns true for opening brackets/quotes that should group with the following segment.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.ScriptClassifier.IsClosePunctuation(System.Char)">
+            <summary>
+            Returns true for closing brackets/quotes/terminal punctuation that should
+            group with the preceding segment.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.ScriptClassifier.EnumerateGraphemes(System.String)">
+            <summary>
+            Enumerates grapheme clusters in a string using StringInfo (UAX29).
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Segmentation.SegmentKind">
+            <summary>
+            Classifies a text segment for line-breaking decisions.
+            </summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.Word">
+            <summary>Latin/Cyrillic/Greek word run, possibly with trailing punctuation.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.CjkGrapheme">
+            <summary>Single CJK character — breakable at any boundary.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.Space">
+            <summary>One or more spaces or tabs (collapsible whitespace).</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.HardBreak">
+            <summary>Hard line break (\n).</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.FormulaPlaceholder">
+            <summary>Atomic formula placeholder — not breakable internally.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.OpenPunctuation">
+            <summary>Opening punctuation that groups with the following segment: ( [ { etc.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.ClosePunctuation">
+            <summary>Closing punctuation that groups with the preceding segment: ) ] } . , ; : ! ? etc.</summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.Segmentation.SegmentKind.SoftHyphen">
+            <summary>Soft hyphen (U+00AD) — zero width normally, visible hyphen at line break.</summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.Segmentation.TextSegmenter">
+            <summary>
+            Segments text into layout-aware tokens for line breaking.
+            Produces parallel arrays of (segment string, kind) for efficient iteration.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.TextSegmenter.Segment(System.String,System.Boolean)">
+            <summary>
+            Segments text into layout-aware tokens.
+            Whitespace is normalized: consecutive spaces/tabs collapse to a single space.
+            Hard breaks (\n) are preserved.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.TextSegmenter.ClassifyRune(System.Text.Rune,System.Char)">
+            <summary>
+            Classifies a Rune, falling back to char-based classification for BMP characters.
+            Handles supplementary CJK planes (Extension B+) via Rune.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.Segmentation.TextSegmenter.NormalizeWhitespace(System.String)">
+            <summary>
+            Normalizes whitespace: collapses consecutive spaces/tabs to a single space.
+            Preserves \n as hard breaks. Trims trailing spaces before hard breaks.
+            </summary>
+        </member>
+        <member name="T:Polyglot.TextLayout.TextLayoutEngine">
+            <summary>
+            Core text layout engine. Greedy first-fit line breaking with:
+            - Punctuation grouping (close-punct never starts a line, open-punct never ends a line)
+            - Long-segment binary search on grapheme prefix sums
+            - Space trimming at line start (matches pdf2zh converter.py:488)
+            </summary>
+        </member>
+        <member name="F:Polyglot.TextLayout.TextLayoutEngine.Instance">
+            <summary>Singleton instance.</summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.Prepare(Polyglot.TextLayout.Preparation.TextPrepareRequest,Polyglot.TextLayout.ITextMeasurer)">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.Layout(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double)">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.LayoutWithLines(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double)">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.Layout(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Collections.Generic.IReadOnlyList{System.Double})">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.LayoutWithLines(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Collections.Generic.IReadOnlyList{System.Double})">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.WalkLineRanges(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Double,System.Action{Polyglot.TextLayout.Layout.LayoutLineRange})">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.LayoutNextLine(Polyglot.TextLayout.Preparation.PreparedParagraph,Polyglot.TextLayout.Layout.LayoutCursor,System.Double)">
+            <inheritdoc/>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.LayoutNextLineCore(Polyglot.TextLayout.Preparation.PreparedParagraph,Polyglot.TextLayout.Layout.LayoutCursor,System.Double,System.Boolean)">
+            <summary>
+            Core line-breaking algorithm. Greedy first-fit with punctuation grouping.
+            - Close-punctuation never starts a line (grouped with preceding content, with overflow check)
+            - Open-punctuation never ends a line (if it would be the last token, defer to next line)
+            - Kinsoku line-start prohibition: CJK chars like small kana, prolonged sound marks,
+              and iteration marks never start a line (carried to the preceding line)
+            - Left-sticky punctuation: ASCII punct (. , ! ? etc.) after CJK sticks to preceding char
+            - Trailing spaces trimmed from width calculation consistently
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.IsLeftStickyBreak(System.String,Polyglot.TextLayout.Segmentation.SegmentKind)">
+            <summary>
+            Checks whether breaking before this segment would violate left-sticky rules.
+            ASCII punctuation (. , ! ? : ; ) ] } % " …) should stick to preceding CJK content.
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.LayoutLineFromMidSegment(Polyglot.TextLayout.Preparation.PreparedParagraph,Polyglot.TextLayout.Layout.LayoutCursor,System.Double,System.Boolean)">
+            <summary>
+            Resume layout from the middle of a segment (after a long-segment break).
+            </summary>
+        </member>
+        <member name="M:Polyglot.TextLayout.TextLayoutEngine.BreakLongSegment(Polyglot.TextLayout.Preparation.PreparedParagraph,System.Int32,System.Double,System.Int32,System.Boolean)">
+            <summary>
+            Binary search on grapheme prefix sums to break a long segment.
+            </summary>
+        </member>
+    </members>
+</doc>

@@ -1,0 +1,843 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>UglyToad.PdfPig.Tokens</name>
+    </assembly>
+    <members>
+        <member name="T:UglyToad.PdfPig.Tokens.ArrayToken">
+            <summary>
+            An array object is a one-dimensional collection of objects arranged sequentially.
+            PDF arrays may be heterogeneous; that is, an array's elements may be any combination of numbers, strings,
+            dictionaries, or any other objects, including other arrays.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.ArrayToken.Data">
+            <summary>
+            The tokens contained in this array.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.ArrayToken.Length">
+            <summary>
+            The number of tokens in this array.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.ArrayToken.Item(System.Int32)">
+            <summary>
+            Indexer into <see cref="P:UglyToad.PdfPig.Tokens.ArrayToken.Data"/> for convenience.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.ArrayToken.#ctor(System.Collections.Generic.IReadOnlyList{UglyToad.PdfPig.Tokens.IToken})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.ArrayToken"/>.
+            </summary>
+            <param name="data">The tokens contained by this array.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.ArrayToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.ArrayToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.BooleanToken">
+            <summary>
+            The boolean object either <see cref="P:UglyToad.PdfPig.Tokens.BooleanToken.True"/> (<see langword="true"/>) or <see cref="P:UglyToad.PdfPig.Tokens.BooleanToken.False"/> (<see langword="true"/>).
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.BooleanToken.True">
+            <summary>
+            The boolean token corresponding to <see langword="true"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.BooleanToken.False">
+            <summary>
+            The boolean token corresponding to <see langword="false"/> 
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.BooleanToken.Data">
+            <summary>
+            The value true/false of this boolean token.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.BooleanToken.#ctor(System.Boolean)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.BooleanToken"/>.
+            </summary>
+            <param name="data">The value of the boolean.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.BooleanToken.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.BooleanToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.BooleanToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.CommentToken">
+            <summary>
+            A comment from a PDF document. Any occurrence of the percent sign character (%) outside a string or stream
+            introduces a comment. The comment consists of all characters between the percent sign and the end of the line.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.CommentToken.Data">
+            <summary>
+            The text of the comment (excluding the initial percent '%' sign).
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.CommentToken.#ctor(System.String)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.CommentToken"/>.
+            </summary>
+            <param name="data">The text of the comment.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.CommentToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.CommentToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.DictionaryToken">
+            <summary>
+            A dictionary object is an associative table containing pairs of objects, known as the dictionary's entries. 
+            The key must be a <see cref="T:UglyToad.PdfPig.Tokens.NameToken"/> and the value may be an kind of <see cref="T:UglyToad.PdfPig.Tokens.IToken"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.DictionaryToken.Data">
+            <summary>
+            The key value pairs in this dictionary.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.#ctor(System.Collections.Generic.IReadOnlyDictionary{UglyToad.PdfPig.Tokens.NameToken,UglyToad.PdfPig.Tokens.IToken})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.DictionaryToken"/>.
+            </summary>
+            <param name="data">The data this dictionary will contain.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.TryGet(UglyToad.PdfPig.Tokens.NameToken,UglyToad.PdfPig.Tokens.IToken@)">
+            <summary>
+            Try and get the entry with a given name.
+            </summary>
+            <param name="name">The name of the entry to retrieve.</param>
+            <param name="token">The token, if it is found.</param>
+            <returns><see langword="true"/> if the token is found, <see langword="false"/> otherwise.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.TryGet``1(UglyToad.PdfPig.Tokens.NameToken,``0@)">
+            <summary>
+            Try and get the entry with a given name and a specific data type.
+            </summary>
+            <typeparam name="T">The expected data type of the dictionary value.</typeparam>
+            <param name="name">The name of the entry to retrieve.</param>
+            <param name="token">The token, if it is found.</param>
+            <returns><see langword="true"/> if the token is found with this type, <see langword="false"/> otherwise.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.ContainsKey(UglyToad.PdfPig.Tokens.NameToken)">
+            <summary>
+            Whether the dictionary contains an entry with this name.
+            </summary>
+            <param name="name">The name to check.</param>
+            <returns><see langword="true"/> if the token is found, <see langword="false"/> otherwise.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.With(UglyToad.PdfPig.Tokens.NameToken,UglyToad.PdfPig.Tokens.IToken)">
+            <summary>
+            Create a copy of this dictionary with the additional entry (or override the value of the existing entry).
+            </summary>
+            <param name="key">The key of the entry to create or override.</param>
+            <param name="value">The value of the entry to create or override.</param>
+            <returns>A new <see cref="T:UglyToad.PdfPig.Tokens.DictionaryToken"/> with the entry created or modified.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.With(System.String,UglyToad.PdfPig.Tokens.IToken)">
+            <summary>
+            Create a copy of this dictionary with the additional entry (or override the value of the existing entry).
+            </summary>
+            <param name="key">The key of the entry to create or override.</param>
+            <param name="value">The value of the entry to create or override.</param>
+            <returns>A new <see cref="T:UglyToad.PdfPig.Tokens.DictionaryToken"/> with the entry created or modified.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.Without(UglyToad.PdfPig.Tokens.NameToken)">
+            <summary>
+            Creates a copy of this dictionary with the entry with the specified key removed (if it exists).
+            </summary>
+            <param name="key">The key of the entry to remove.</param>
+            <returns>A new <see cref="T:UglyToad.PdfPig.Tokens.DictionaryToken"/> with the entry removed.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.Without(System.String)">
+            <summary>
+            Creates a copy of this dictionary with the entry with the specified key removed (if it exists).
+            </summary>
+            <param name="key">The key of the entry to remove.</param>
+            <returns>A new <see cref="T:UglyToad.PdfPig.Tokens.DictionaryToken"/> with the entry removed.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.With(System.Collections.Generic.IReadOnlyDictionary{System.String,UglyToad.PdfPig.Tokens.IToken})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.DictionaryToken"/>.
+            </summary>
+            <param name="data">The data this dictionary will contain.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.Equals(UglyToad.PdfPig.Tokens.DictionaryToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.DictionaryToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.EndOfLineToken">
+            <summary>
+            Represents an End Of Line marker found in Adobe Type 1 font files and the cross-reference table.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.EndOfLineToken.Token">
+            <summary>
+            The instance of the end of line token.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.EndOfLineToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.HexToken">
+            <summary>
+            A token containing string data where the string is encoded as hexadecimal.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.HexToken.Data">
+            <summary>
+            The string contained in the hex data.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.HexToken.Bytes">
+            <summary>
+            The bytes of the hex data.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.HexToken.Memory">
+            <summary>
+            The memory of the hex data.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.HexToken.#ctor(System.ReadOnlySpan{System.Char})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.HexToken"/> from the provided hex characters.
+            </summary>
+            <param name="characters">A set of hex characters 0-9, A - F, a - f representing a string.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.HexToken.ConvertPair(System.Char,System.Char)">
+            <summary>
+            Convert two hex characters to a byte.
+            </summary>
+            <param name="high">The high nibble.</param>
+            <param name="low">The low nibble.</param>
+            <returns>The byte.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.HexToken.ConvertHexBytesToInt(UglyToad.PdfPig.Tokens.HexToken)">
+            <summary>
+            Convert the bytes in this hex token to an integer.
+            </summary>
+            <param name="token">The token containing the data to convert.</param>
+            <returns>The integer corresponding to the bytes.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.HexToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.HexToken.GetHexString">
+            <summary>
+            Converts the binary data back to a hex string representation.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.IDataToken`1">
+            <inheritdoc />
+            <summary>
+            A token from a PDF document which contains data in some format.
+            </summary>
+            <typeparam name="T">The type of the data this token contains.</typeparam>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.IDataToken`1.Data">
+            <summary>
+            The data this token contains.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.IndirectReferenceToken">
+            <summary>
+            A reference to an indirect object (see <see cref="T:UglyToad.PdfPig.Tokens.ObjectToken"/>).
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.IndirectReferenceToken.Data">
+            <summary>
+            The identifier for an object in the PDF file.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.IndirectReferenceToken.#ctor(UglyToad.PdfPig.Core.IndirectReference)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.IndirectReferenceToken"/>.
+            </summary>
+            <param name="data">The identifier for the object this references.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.IndirectReferenceToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.IndirectReferenceToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.InlineImageDataToken">
+            <summary>
+            Inline image data is used to embed images in PDF content streams. The content is wrapped by ID and ED tags in a BI operation.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.InlineImageDataToken.Data">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.InlineImageDataToken.#ctor(System.Memory{System.Byte})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.InlineImageDataToken"/>.
+            </summary>
+            <param name="data"></param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.InlineImageDataToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.IToken">
+            <summary>
+            A marker interface for tokens from the PDF file contents.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.NameToken">
+            <inheritdoc />
+            <summary>
+            A name object is an atomic symbol uniquely defined by a sequence of characters.
+            Each name is considered identical if it has the same sequence of characters. Names are used in
+            PDF documents to identify dictionary keys and other elements of a PDF document.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NameToken.Off">
+            "OFF", to be used for OCGs, not for Acroform
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NameToken.OffAcroform">
+            "Off", to be used for Acroform, not for OCGs
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NameToken.Tx">
+            Acro form field type for text field. 
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NameToken.Data">
+            <inheritdoc />
+            <summary>
+            The string representation of the name.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.Create(System.String)">
+            <summary>
+            Creates a new <see cref="T:UglyToad.PdfPig.Tokens.NameToken"/> with the given name, ensuring only one instance of each
+            <see cref="T:UglyToad.PdfPig.Tokens.NameToken"/> can exist.
+            </summary>
+            <param name="name">The string representation of the name for the token to create.</param>
+            <returns>The created or existing token.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.Equals(UglyToad.PdfPig.Tokens.NameToken)">
+            <summary>
+            Are these names identical?
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.op_Implicit(UglyToad.PdfPig.Tokens.NameToken)~System.String">
+            <summary>
+            Convert the name token to a string implicitly.
+            </summary>
+            <param name="name">The name token to convert.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.op_Equality(UglyToad.PdfPig.Tokens.NameToken,UglyToad.PdfPig.Tokens.NameToken)">
+            <summary>
+            Checks if two names are equal.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.op_Inequality(UglyToad.PdfPig.Tokens.NameToken,UglyToad.PdfPig.Tokens.NameToken)">
+            <summary>
+            Checks two names for lack of equality.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NameToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.NullToken">
+            <summary>
+            The null object has a type and value that are unequal to those of any other object.
+            There is only one object of type null, denoted by the keyword null.
+            An indirect object reference to a nonexistent object is treated the same as the null object. 
+            Specifying the null object as the value of a dictionary entry is equivalent to omitting the entry entirely.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NullToken.Instance">
+            <summary>
+            The single instance of the <see cref="T:UglyToad.PdfPig.Tokens.NullToken"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NullToken.Data">
+            <summary>
+            <see langword="null"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NullToken.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NullToken.Equals(UglyToad.PdfPig.Tokens.NullToken)">
+            <summary>
+            Whether two null tokens are equal.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NullToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NullToken.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NullToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.NumericToken">
+            <inheritdoc />
+            <summary>
+            PDF supports integer and real numbers. Integer objects represent mathematical integers within a certain interval centered at 0.
+            Real objects  approximate mathematical real numbers, but with limited range and precision.
+            This token represents both types and they are used interchangeably in the specification.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.MinusOne">
+            <summary>
+            Single instance of numeric token for -1.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Zero">
+            <summary>
+            Single instance of numeric token for 0.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.One">
+            <summary>
+            Single instance of numeric token for 1.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Two">
+            <summary>
+            Single instance of numeric token for 2.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Three">
+            <summary>
+            Single instance of numeric token for 3.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Four">
+            <summary>
+            Single instance of numeric token for 4.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Five">
+            <summary>
+            Single instance of numeric token for 5.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Six">
+            <summary>
+            Single instance of numeric token for 6.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Seven">
+            <summary>
+            Single instance of numeric token for 7.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Eight">
+            <summary>
+            Single instance of numeric token for 8.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Nine">
+            <summary>
+            Single instance of numeric token for 9.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Ten">
+            <summary>
+            Single instance of numeric token for 10.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Eleven">
+            <summary>
+            Single instance of numeric token for 11.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Twelve">
+            <summary>
+            Single instance of numeric token for 12.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Thirteen">
+            <summary>
+            Single instance of numeric token for 13.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Fourteen">
+            <summary>
+            Single instance of numeric token for 14.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Fifteen">
+            <summary>
+            Single instance of numeric token for 15.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Sixteen">
+            <summary>
+            Single instance of numeric token for 16.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Seventeen">
+            <summary>
+            Single instance of numeric token for 17.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Eighteen">
+            <summary>
+            Single instance of numeric token for 18.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Nineteen">
+            <summary>
+            Single instance of numeric token for 19.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.Twenty">
+            <summary>
+            Single instance of numeric token for 20.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.OneHundred">
+            <summary>
+            Single instance of numeric token for 100.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.FiveHundred">
+            <summary>
+            Single instance of numeric token for 500.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.NumericToken.OneThousand">
+            <summary>
+            Single instance of numeric token for 1000.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NumericToken.Data">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NumericToken.HasDecimalPlaces">
+            <summary>
+            Whether the number represented has a non-zero decimal part.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NumericToken.Int">
+            <summary>
+            The value of this number as an <see langword="int"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NumericToken.Long">
+            <summary>
+            The value of this number as a <see langword="long"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.NumericToken.Double">
+            <summary>
+            The value of this number as a <see langword="double"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NumericToken.#ctor(System.Int32)">
+            <summary>
+            Create a <see cref="T:UglyToad.PdfPig.Tokens.NumericToken"/>.
+            </summary>
+            <param name="value">The number to represent.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NumericToken.#ctor(System.Double)">
+            <summary>
+            Create a <see cref="T:UglyToad.PdfPig.Tokens.NumericToken"/>.
+            </summary>
+            <param name="value">The number to represent.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NumericToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NumericToken.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.NumericToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.ObjectToken">
+            <summary>
+            Any object in a PDF file may be labeled as an indirect object. This gives the object a unique object identifier by which other objects can refer to it.
+            These objects contain inner data of any type.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.ObjectToken.Position">
+            <summary>
+            The offset to the start of the object number from the start of the file in bytes.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.ObjectToken.Number">
+            <summary>
+            The object and generation number of the object.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.ObjectToken.Data">
+            <summary>
+            The inner data of the object.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.ObjectToken.#ctor(UglyToad.PdfPig.Core.XrefLocation,UglyToad.PdfPig.Core.IndirectReference,UglyToad.PdfPig.Tokens.IToken)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.ObjectToken"/> from the PDF document at the given offset with the identifier and inner data.
+            </summary>
+            <param name="position">The offset in bytes from the start of the file for this object.</param>
+            <param name="number">The identifier for this object.</param>
+            <param name="data">The data contained in this object.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.ObjectToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.ObjectToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.OperatorToken">
+            <inheritdoc />
+            <summary>
+            An operator token encountered in a page content or Adobe Type 1 font stream.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Bt">
+            <summary>
+            Begin text.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Def">
+            <summary>
+            Def.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Dict">
+            <summary>
+            Dict.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Dup">
+            <summary>
+            Dup.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Eexec">
+            <summary>
+            Eexec.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.EndObject">
+            <summary>
+            End object.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.EndStream">
+            <summary>
+            End stream.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Et">
+            <summary>
+            End text.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.For">
+            <summary>
+            For.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.N">
+            <summary>
+            N.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Put">
+            <summary>
+            Put.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.QPop">
+            <summary>
+            Pop.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.QPush">
+            <summary>
+            Push.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.R">
+            <summary>
+            R.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Re">
+            <summary>
+            Rectangle.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Readonly">
+            <summary>
+            Readonly.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.StartObject">
+            <summary>
+            Object.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.StartStream">
+            <summary>
+            Stream.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Tf">
+            <summary>
+            Set font and size.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.WStar">
+            <summary>
+            Modify clipping.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.Xref">
+            <summary>
+            Cross reference.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.OperatorToken.StartXref">
+            <summary>
+            Cross reference section offset.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.OperatorToken.Data">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.OperatorToken.Create(System.ReadOnlySpan{System.Char})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.OperatorToken"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.OperatorToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.OperatorToken.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.OperatorToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.StreamToken">
+            <summary>
+            A stream consists of a dictionary followed by zero or more bytes bracketed between the keywords stream and endstream.
+            The bytes may be compressed by application of zero or more filters which are run in the order specified in the <see cref="P:UglyToad.PdfPig.Tokens.StreamToken.StreamDictionary"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.StreamToken.StreamDictionary">
+            <summary>
+            The dictionary specifying the length of the stream, any applied compression filters and additional information.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.StreamToken.Data">
+            <summary>
+            The compressed byte data of the stream.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StreamToken.#ctor(UglyToad.PdfPig.Tokens.DictionaryToken,System.Byte[])">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.StreamToken"/>.
+            </summary>
+            <param name="streamDictionary">The stream dictionary.</param>
+            <param name="data">The stream data.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StreamToken.#ctor(UglyToad.PdfPig.Tokens.DictionaryToken,System.Memory{System.Byte})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.StreamToken"/>.
+            </summary>
+            <param name="streamDictionary">The stream dictionary.</param>
+            <param name="data">The stream data.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StreamToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StreamToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.StringToken">
+            <summary>
+            Represents a string of text contained in a PDF document.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.StringToken.Data">
+            <summary>
+            The string in the token.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokens.StringToken.EncodedWith">
+            <summary>
+            The encoding used to generate the <see langword="string"/> in <see cref="P:UglyToad.PdfPig.Tokens.StringToken.Data"/>
+            from the bytes in the file.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StringToken.#ctor(System.String,UglyToad.PdfPig.Tokens.StringToken.Encoding)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokens.StringToken"/>.
+            </summary>
+            <param name="data">The string data for the token to contain.</param>
+            <param name="encodedWith">The encoding used to generate the <see cref="P:UglyToad.PdfPig.Tokens.StringToken.Data"/>.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StringToken.GetBytes">
+            <summary>
+            Convert the <see langword="string"/> in <see cref="P:UglyToad.PdfPig.Tokens.StringToken.Data"/> back to bytes.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StringToken.Equals(UglyToad.PdfPig.Tokens.IToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokens.StringToken.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokens.StringToken.Encoding">
+            <summary>
+            The encoding used to convert the underlying file bytes to the string.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.StringToken.Encoding.Iso88591">
+            <summary>
+            <see cref="F:UglyToad.PdfPig.Core.OtherEncodings.Iso88591"/>.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.StringToken.Encoding.Utf16">
+            <summary>
+            UTF-16.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.StringToken.Encoding.Utf16BE">
+            <summary>
+            UTF-16 Big Endian.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokens.StringToken.Encoding.PdfDocEncoding">
+            <summary>
+            The PdfDocEncoding for strings in the body of a PDF file.
+            </summary>
+        </member>
+    </members>
+</doc>

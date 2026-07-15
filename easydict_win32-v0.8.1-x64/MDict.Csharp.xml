@@ -1,0 +1,929 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>MDict.Csharp</name>
+    </assembly>
+    <members>
+        <member name="T:MDict.Csharp.Models.MDictOptions">
+            <summary>
+            MDict options for configuring the behavior of the MDict parser.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MDictOptions.Passcode">
+            <summary>
+            The passcode for decrypting the MDict file, if it is encrypted.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MDictOptions.Debug">
+            <summary>
+            Debug mode flag. If true, enables debug output.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MDictOptions.Resort">
+            <summary>
+            Indicates whether to resort the keyword list after loading.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MDictOptions.IsStripKey">
+            <summary>
+            Indicates whether to strip keys (remove special characters).
+            This is useful for normalizing keys before searching.
+            Default is true, meaning keys will be stripped.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MDictOptions.IsCaseSensitive">
+            <summary>
+            Indicates whether the keys are case-sensitive.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MDictOptions.EncryptType">
+            <summary>
+            The type of encryption used in the MDict file.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.MDictHeader">
+            <summary>
+            Represents the header of an MDict dictionary.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.KeyHeader">
+            <summary>
+            Represents the key header of an MDict dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyHeader.KeywordBlocksNum">
+            <summary>
+            Gets or sets the number of keyword blocks in the dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyHeader.KeywordNum">
+            <summary>
+            Gets or sets the total number of keywords in the dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyHeader.KeyInfoUnpackSize">
+            <summary>
+            Gets or sets the unpacked size of the key info block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyHeader.KeyInfoPackedSize">
+            <summary>
+            Gets or sets the packed size of the key info block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyHeader.KeywordBlockPackedSize">
+            <summary>
+            Gets or sets the packed size of the keyword block.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.KeyInfoItem">
+            <summary>
+            Represents an item in the key info list of the MDict dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.FirstKey">
+            <summary>
+            Gets or sets the first key in the key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.LastKey">
+            <summary>
+            Gets or sets the last key in the key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockPackSize">
+            <summary>
+            Gets or sets the packed size of the key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockPackAccumulator">
+            <summary>
+            Gets or sets the accumulated offset for the packed key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockUnpackSize">
+            <summary>
+            Gets or sets the unpacked size of the key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockUnpackAccumulator">
+            <summary>
+            Gets or sets the accumulated offset for the unpacked key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockEntriesNum">
+            <summary>
+            Gets or sets the number of entries in the key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockEntriesNumAccumulator">
+            <summary>
+            Gets or sets the accumulated number of entries in the key block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyInfoItem.KeyBlockInfoIndex">
+            <summary>
+            Gets or sets the index of the key block info in the key info list.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.KeyWordItem">
+            <summary>
+            Represents a keyword item in the MDict dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyWordItem.RecordStartOffset">
+            <summary>
+            Gets or sets the start offset of the record for this keyword.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyWordItem.RecordEndOffset">
+            <summary>
+            Gets or sets the end offset of the record for this keyword.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyWordItem.KeyText">
+            <summary>
+            Gets or sets the text of the keyword.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.KeyWordItem.KeyBlockIdx">
+            <summary>
+            Gets or sets the index of the key block that this keyword belongs to.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.RecordHeader">
+            <summary>
+            Represents the header information for a record in the MDict dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordHeader.RecordBlocksNum">
+            <summary>
+            Gets or sets the number of record blocks in the dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordHeader.EntriesNum">
+            <summary>
+            Gets or sets the total number of entries in the dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordHeader.RecordInfoCompSize">
+            <summary>
+            Gets or sets the unpacked size of the record info block.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordHeader.RecordBlockCompSize">
+            <summary>
+            Gets or sets the packed size of the record info block.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.RecordInfo">
+            <summary>
+            Represents information about a record in the MDict dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordInfo.PackSize">
+            <summary>
+            Gets or sets the start offset of the record in the packed data.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordInfo.PackAccumulateOffset">
+            <summary>
+            Gets or sets the accumulated offset for the packed record data.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordInfo.UnpackSize">
+            <summary>
+            Gets or sets the unpacked size of the record data.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.RecordInfo.UnpackAccumulatorOffset">
+            <summary>
+            Gets or sets the accumulated offset for the unpacked record data.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.MdictMeta">
+            <summary>
+            Represents metadata for an MDict dictionary file.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Fname">
+            <summary>
+            The file name of the MDict dictionary.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Passcode">
+            <summary>
+            The passcode used to decrypt the MDict file, if it is encrypted.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Ext">
+            <summary>
+            The file extension of the MDict dictionary, default is "mdx".
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Version">
+            <summary>
+            The version of the MDict engine that generated this dictionary file.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.NumWidth">
+            <summary>
+            The width of the number used in the dictionary, either 4 or 8 bytes.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.NumFmt">
+            <summary>
+            The number format used in the dictionary, either UInt32 or UInt64.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Encoding">
+            <summary>
+            The encoding used in the MDict dictionary, such as "UTF-8", "UTF-16", "BIG5", or "GB18030".
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Decoder">
+            <summary>
+            The text decoder used to decode byte arrays into strings based on the encoding.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MdictMeta.Encrypt">
+            <summary>
+            The encryption type used in the MDict file.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.BaseDict">
+            <summary>
+            Base class for MDict file model.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Models.BaseDict.FileName">
+            <summary>
+            File path of this dictionary file.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.#ctor(System.String,System.String,MDict.Csharp.Models.MDictOptions)">
+            <summary>
+            BaseMDict constructor
+            </summary>
+            <param name="fname"></param>
+            <param name="passcode"></param>
+            <param name="options"></param>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.SplitKeyBlock(System.Byte[],System.Int32)">
+            <summary>
+            STEP 4.2. split keys from key block
+            split key from key block buffer
+            @param {Buffer} keyBlock key block buffer
+            @param {number} keyBlockIdx
+            </summary>
+            <param name="keyBlock"></param>
+            <param name="keyBlockIdx"></param>
+            <returns></returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.ReadHeader">
+            <summary>
+            STEP 1. read dictionary header
+            Get mdx header info (xml content to object)
+            [0:4], 4 bytes header length (header_byte_size), big-endian, 4 bytes, 16 bits
+            [4:header_byte_size + 4] header_bytes
+            [header_bytes_size + 4:header_bytes_size +8] adler32 checksum
+            should be:
+            <c>zlib.adler32(header_bytes) &amp; 0xffffffff == adler32</c>
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.ReadKeyHeader">
+            <summary>
+            STEP 2. read key block header
+            read key block header
+            </summary>
+            <exception cref="T:System.Exception"></exception>
+            <exception cref="T:System.NotSupportedException"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.ReadKeyInfos">
+            <summary>
+            STEP 3. read key block info, if you want quick search, read at here already enough
+            read key block info
+            key block info list
+            </summary>
+            <exception cref="T:System.InvalidOperationException"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.DecodeKeyInfo(System.Byte[])">
+            <summary>
+            STEP 3.1. decode key block info, this function will invokde in `_readKeyBlockInfo`
+            and decode the first key and last key infomation, etc.
+            @param { Uint8Array } keyInfoBuff key block info buffer
+            </summary>
+            <param name="keyInfoBuff"></param>
+            <returns></returns>
+            <exception cref="T:System.InvalidOperationException"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.UnpackKeyBlock(System.Byte[],System.Int32)">
+            <summary>
+            step 4.1. decode key block
+            find the key block by the phrase
+            </summary>
+            <param name="kbPackedBuff"></param>
+            <param name="unpackSize"></param>
+            <returns></returns>
+            <exception cref="T:System.Exception"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.ReadKeyBlocks">
+            <summary>
+            STEP 4. decode key block
+            decode key block return the total keys list,
+            Note: this method runs very slow, please do not use this unless special target
+            </summary>
+            <exception cref="T:System.InvalidOperationException"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.ReadRecordHeader">
+            <summary>
+            STEP 5. decode record header,
+            includes:
+            [0:8 / 4]    - record block number
+            [8:16 / 4:8] - num entries the key-value entries number
+            [16:24 / 8:12] - record block info size
+            [24:32 / 12:16] - record block size
+            </summary>
+            <exception cref="T:System.InvalidOperationException"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Models.BaseDict.ReadRecordBlocks">
+            <summary>
+            STEP 7. read all records block,
+            this is a slow method, do not use!
+            </summary>
+            <exception cref="T:System.InvalidOperationException"></exception>
+        </member>
+        <member name="T:MDict.Csharp.Models.TextDecoder">
+            <summary>
+            A class for decoding byte arrays into strings using various encodings.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.TextDecoder.#ctor">
+            <summary>
+            Default constructor that initializes the decoder to use UTF-8 encoding.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.TextDecoder.#ctor(MDict.Csharp.Models.TextDecoder.DecoderType)">
+            <summary>
+            Constructor that initializes the decoder with a specific encoding type.
+            </summary>
+            <param name="type"></param>
+        </member>
+        <member name="M:MDict.Csharp.Models.TextDecoder.Decode(System.Byte[])">
+            <summary>
+            Decodes a byte array into a string using the specified encoding type.
+            </summary>
+            <param name="buf"></param>
+            <returns></returns>
+        </member>
+        <member name="T:MDict.Csharp.Models.TextDecoder.DecoderType">
+            <summary>
+            Enumeration of supported decoder types.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Models.TextDecoder.DecoderType.UTF16LE">
+            <summary>
+            Decodes using UTF-16 Little Endian encoding.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Models.TextDecoder.DecoderType.UTF8">
+            <summary>
+            Decodes using UTF-8 encoding.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Models.TextDecoder.DecoderType.Big5">
+            <summary>
+            Decodes using Big5 encoding.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Models.TextDecoder.DecoderType.GB18030">
+            <summary>
+            Decodes using GB18030 encoding.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.Dict">
+            <summary>
+            MDict file model for MDict.
+            </summary>
+            <remarks>
+            After a series of tests, it was found that mdx format files have significant issues with word sorting.
+            1. Case sensitivity issues, such as the coexistence of a-zA-Z and aA-zZ.
+            2. Multilingual issues, where English and Chinese characters are compared, generally English should precede Chinese.
+            3. Minor language issues.
+            These issues can occur, and cannot be resolved through the settings in the dictionary header.
+            Therefore, it is not possible to quickly index using the internal keyInfoList.
+            Under modern computer performance conditions, directly traversing all entries can yield good results.
+            So the current strategy is to read all entries and sort them internally.
+            </remarks>
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.#ctor(System.String,MDict.Csharp.Models.MDictOptions)">
+            <summary>
+            Constructor for MDict.
+            </summary>
+            <param name="fname"></param>
+            <param name="options"></param>
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.LookupKeyBlockByWord(System.String,System.Boolean)">
+            lookupKeyInfoItem lookup the `keyInfoItem`
+            the `keyInfoItem` contains key-word record block location: recordStartOffset
+            the `recordStartOffset` should indicate the unpacked record data relative offset
+            @param word the target word phrase
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.LookupRecordByKeyBlock(MDict.Csharp.Models.KeyWordItem)">
+            locate the record meaning buffer by `keyListItem`
+            the `KeyBlockItem.recordStartOffset` should indicate the record block info location
+            use the record block info, we can get the `recordBuffer`, then we need decrypt and decompress
+            use decompressed `recordBuffer` we can get the total block which contains meanings
+            then, use:
+             const start = item.recordStartOffset - recordBlockInfo.unpackAccumulatorOffset;
+             const end = item.recordEndOffset - recordBlockInfo.unpackAccumulatorOffset;
+             the finally meaning's buffer is `unpackRecordBlockBuff[start, end]`
+            @param item
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.LookupPartialKeyBlockListByKeyInfoId(System.Int32)">
+            lookupPartialKeyInfoListById
+            decode key block by key block id, and we can get the partial key list
+            the key list just contains the partial key list
+            @param {number} keyInfoId key block id
+            @return {KeyWordItem[]}
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.LookupKeyInfoByWord(System.String,System.Collections.Generic.List{MDict.Csharp.Models.KeyInfoItem})">
+            lookupInfoBlock reduce word find the nearest key block
+            @param {string} word searching phrase
+            @param keyInfoList
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.ReduceRecordBlockInfo(System.Int32)">
+            find record which record start locate
+            @param {number} recordStart record start offset
+        </member>
+        <member name="M:MDict.Csharp.Models.Dict.Close">
+            <summary>
+            Close the MDict instance and release resources.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.FileScanner">
+            <summary>
+            Example usage:
+            using (var scanner = new FileScanner("path/to/file.bin"))
+            {
+                var buffer = scanner.ReadBuffer(10, 16);
+                var numberBytes = scanner.ReadNumber(100, 4);
+                int number = BitConverter.ToInt32(numberBytes, 0);
+            }
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.FileScanner.#ctor(System.String)">
+            <summary>
+            Constructor to initialize the FileScanner with a file path.
+            </summary>
+            <param name="filepath"></param>
+        </member>
+        <member name="M:MDict.Csharp.Models.FileScanner.Close">
+            <summary>
+            Close the file stream if it is open.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.FileScanner.ReadBuffer(System.Int64,System.Int32)">
+            <summary>
+            Read a buffer from a specific file offset with specified length
+            </summary>
+            <param name="offset"></param>
+            <param name="length"></param>
+            <returns></returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.FileScanner.ReadNumber(System.Int64,System.Int32)">
+            <summary>
+            Read a binary number from a specific file offset
+            </summary>
+            <param name="offset"></param>
+            <param name="length"></param>
+            <returns></returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.FileScanner.Dispose">
+            <summary>
+            Dispose method to close the file stream when done.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.MddDict">
+            <summary>
+            MDict Mdd file model.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.MddDict.#ctor(System.String,MDict.Csharp.Models.MDictOptions)">
+            <summary>
+            Create a new instance with the specified file name and options.
+            </summary>
+            <param name="fname"></param>
+            <param name="options"></param>
+        </member>
+        <member name="T:MDict.Csharp.Models.MddDict.LocateResult">
+            <summary>
+            Result of locating a resource key in the Mdd file.
+            </summary>
+            <param name="KeyText"></param>
+            <param name="Definition"></param>
+        </member>
+        <member name="M:MDict.Csharp.Models.MddDict.LocateResult.#ctor(System.String,System.String)">
+            <summary>
+            Result of locating a resource key in the Mdd file.
+            </summary>
+            <param name="KeyText"></param>
+            <param name="Definition"></param>
+        </member>
+        <member name="P:MDict.Csharp.Models.MddDict.LocateResult.KeyText">
+            <summary></summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.MddDict.LocateResult.Definition">
+            <summary></summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.MddDict.Locate(System.String)">
+            <summary>
+            Locate the resource key
+            </summary>
+            <param name="resourceKey">Resource key</param>
+            <returns>The key text and base64-encoded definition</returns>
+        </member>
+        <member name="T:MDict.Csharp.Models.MdxDict">
+            <summary>
+            MDX file model for MDict.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.#ctor(System.String,MDict.Csharp.Models.MDictOptions)">
+            <summary>
+            Create a new instance with the specified file name and options.
+            </summary>
+            <param name="fname"></param>
+            <param name="options"></param>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.Lookup(System.String)">
+            <summary>
+            Lookup the definition of a word.
+            </summary>
+            <param name="word">
+            The word to look up. It should be a full word.
+            </param>
+            <returns>
+            A tuple containing the key text and its definition.
+            </returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.Fetch(MDict.Csharp.Models.KeyWordItem)">
+            <summary>
+            Fetch the definition of a keyword item.
+            </summary>
+            <param name="keywordItem">
+            The keyword item to fetch the definition for.
+            </param>
+            <returns>
+            A tuple containing the key text and its definition.
+            </returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.Prefix(System.String)">
+            <summary>
+            Fetch the definition of a keyword item by its prefix.
+            </summary>
+            <param name="prefix">
+            The prefix to search for. It should be a word prefix.
+            </param>
+            <returns>
+            A list of keyword items that start with the given prefix.
+            </returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.Associate(System.String)">
+            <summary>
+            Associate a phrase with its keyword items.
+            </summary>
+            <param name="phrase">
+            The phrase to associate with keyword items. It should be a full word or phrase.
+            </param>
+            <returns>
+            A list of keyword items associated with the given phrase.
+            </returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.Suggest(System.String,System.UInt32)">
+             <summary>
+             Suggest keyword items based on a phrase and an edit distance.
+             </summary>
+             <param name="phrase">
+            The phrase to associate with keyword items. It should be a full word or phrase.
+             </param>
+             <param name="distance">
+             The maximum edit distance allowed for suggestions, like 3 or 5.
+             </param>
+             <returns>
+             A list of keyword items that are suggested based on the given phrase and edit distance.
+             </returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.FuzzySearch(System.String,System.Int32,System.UInt32)">
+            <summary>
+            Perform a fuzzy search for words based on a given word, fuzzy size, and edit distance gap.
+            </summary>
+            <param name="word">
+            The word to search for. It should be a full word or phrase.
+            </param>
+            <param name="fuzzySize">
+            The maximum number of fuzzy words to return. It should be a positive integer.
+            </param>
+            <param name="distance">
+            The maximum edit distance allowed for fuzzy search, like 3 or 5.
+            </param>
+            <returns>
+            A list of fuzzy words that match the given word within the specified edit distance.
+            </returns>
+        </member>
+        <member name="M:MDict.Csharp.Models.MdxDict.EnumerateKeys">
+            <summary>
+            Enumerates all dictionary keys in normalized sort order.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Models.FuzzyWord">
+            <summary>
+            Represents a fuzzy word with its edit distance.
+            </summary>
+        </member>
+        <member name="P:MDict.Csharp.Models.FuzzyWord.Ed">
+            <summary>
+            The edit distance of the fuzzy word from the original word.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Models.FuzzyWord.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:MDict.Csharp.Models.FuzzyWord.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:MDict.Csharp.Utils.LatinUtils">
+            <summary>
+            Example usage:
+            string input = "café";
+            
+            bool has = LatinHelper.HasLatinies(input); // true
+            string replaced = LatinHelper.ReplaceLatinies(input); // "cafe\u9999"
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.LatinUtils.ReplaceLatinies(System.String)">
+            <summary>
+            Replace Latin combining diacritical marks with '\u9999'
+            </summary>
+            <param name="word">The input string to process</param>
+            <returns>A string with Latin diacritics replaced by '\u9999'</returns>
+        </member>
+        <member name="M:MDict.Csharp.Utils.LatinUtils.HasLatinies(System.String)">
+            <summary>
+            Check if a word contains Latin combining diacritical marks
+            </summary>
+            <param name="word">The input string to check</param>
+            <returns>True if it contains Latin diacritics, otherwise false</returns>
+        </member>
+        <member name="M:MDict.Csharp.Utils.LatinUtils.LatinDiacriticRegex">
+            <remarks>
+            Pattern:<br/>
+            <code>[\\u0300-\\u036f]</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match a character in the set [\u0300-\u036F].<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="T:MDict.Csharp.Utils.MeasureUtils">
+            <summary>
+            Example usage:
+            <code>
+            var mem = new MemoryMeasurer();
+            mem.Measure("Start");
+            
+            var timedFn = PerformanceUtils.MeasureTimeFn(() =>
+            
+            {
+                // Simulate work
+                System.Threading.Thread.Sleep(300);
+            }, "Sleep300");
+            
+            timedFn();
+            
+            mem.Measure("After Sleep");
+            
+            var timedCalc = PerformanceUtils.MeasureTimeFn(() =>
+            {
+                return Enumerable.Range(0, 1000000).Sum(x => x);
+            }, "SumCalc");
+            
+            var result = timedCalc();
+            Console.WriteLine($"Sum Result: {result}");
+            
+            mem.Measure("After Calculation");
+            </code>
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.MeasureUtils.MeasureTimeFn``1(System.Func{``0},System.String)">
+            <summary>
+            Measure the time cost of a function call (generic version with return value).
+            </summary>
+            <typeparam name="T">Return type of the function</typeparam>
+            <param name="fn">The callee function</param>
+            <param name="name">Function name (optional)</param>
+            <returns>A wrapped function that logs the time taken</returns>
+        </member>
+        <member name="M:MDict.Csharp.Utils.MeasureUtils.MeasureTimeFn(System.Action,System.String)">
+            <summary>
+            Measure the time cost of a function call (void version).
+            </summary>
+            <param name="fn">The callee action</param>
+            <param name="name">Function name (optional)</param>
+            <returns>A wrapped action that logs the time taken</returns>
+        </member>
+        <member name="M:MDict.Csharp.Utils.MeasureUtils.Measure(System.String)">
+            <summary>
+            Measure memory usage at the current step and print the memory usage
+            including differences from the previous measurement.
+            </summary>
+            <param name="category">The label or category name for this measurement step</param>
+        </member>
+        <member name="T:MDict.Csharp.Utils.Ripemd128">
+            <summary>
+            Example usage:
+            <code>
+            byte[] input = System.Text.Encoding.UTF8.GetBytes("abc");
+            byte[] digest = RIPEMD128.ComputeHash(input);
+            Console.WriteLine(BitConverter.ToString(digest).Replace("-", "").ToLower());
+            </code>
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Ripemd128.Rotl(System.UInt32,System.Int32)">
+            <summary>
+            Swap high and low bits of a 32-bit int.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Ripemd128.Concat(System.Byte[],System.Byte[])">
+            <summary>
+            Concat 2 typed array.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Utils.Utils.REGEXP_STRIPKEY">
+            <summary>
+            模式映射，用于剥离特定关键字中的字符
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.NewByteArray(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            从给定的 Buffer 创建一个新的 byte[]。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.ReadUTF16(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            从 Buffer 中读取 UTF-16 编码的字符串。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.GetExtension(System.String,System.String)">
+            <summary>
+            获取文件名的扩展名。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.TripleMin(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            返回三个数字中的最小值。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.LevenshteinDistance(System.String,System.String)">
+            <summary>
+            计算两个字符串之间的 Levenshtein 距离。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.ParseHeader(System.String)">
+            <summary>
+            解析 XML 格式的头部文本，提取属性。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.FastDecrypt(System.Byte[],System.Byte[])">
+            <summary>
+            使用简单的加密算法快速解密数据。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.SalsaDecrypt(System.Byte[],System.Byte[])">
+            <summary>
+            Decrypt data using Salsa20/8 (8 rounds) with an 8-byte zero IV.
+            Used for type-2 encrypted MDX key block headers.
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.DecryptRegcodeByEmail(System.Byte[],System.String)">
+            <summary>
+            Derive the encryption key from a registration code and email address (RegisterBy=EMail).
+            Key derivation: emailDigest = RIPEMD128(email UTF-16LE), then Salsa20/8(regcode, emailDigest).
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.DecryptRegcodeByDeviceId(System.Byte[],System.Byte[])">
+            <summary>
+            Derive the encryption key from a registration code and device ID (RegisterBy=DeviceID).
+            Key derivation: deviceIdDigest = RIPEMD128(deviceId), then Salsa20/8(regcode, deviceIdDigest).
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.MdxDecrypt(System.Byte[])">
+            <summary>
+            解密 MDX 格式的压缩块。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.AppendBuffer(System.Byte[],System.Byte[])">
+            <summary>
+            将两个 ArrayBuffer 连接成一个新的 Buffer。
+            </summary>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.IsTrue(System.String)">
+            <summary>
+            Checks whether the given string represents a true value.
+            </summary>
+            <param name="v">The string to check.</param>
+            <returns>True if the string represents a true value; otherwise, false.</returns>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.WordCompare(System.String,System.String)">
+            <summary>
+            Compares two words in a case-insensitive manner with additional logic.
+            </summary>
+            <param name="word1">First word.</param>
+            <param name="word2">Second word.</param>
+            <returns>
+            0 if equal, -1 if word1 is less, 1 if word1 is greater.
+            </returns>
+            <exception cref="T:System.ArgumentException"></exception>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.UnescapeEntities(System.String)">
+            <summary>
+            Unescapes HTML entities in the given text.
+            </summary>
+            <param name="text">The input string containing entities.</param>
+            <returns>The unescaped string.</returns>
+        </member>
+        <member name="M:MDict.Csharp.Utils.Utils.SubstituteStylesheet(System.Collections.Generic.Dictionary{System.String,System.String[]},System.String)">
+            <summary>
+            Applies styles from a style sheet to marked text fragments.
+            </summary>
+            <param name="styleSheet">Dictionary mapping style indices to style wrappers.</param>
+            <param name="txt">Text containing style markers in the form of `number`.</param>
+            <returns>Styled text.</returns>
+        </member>
+        <member name="T:MDict.Csharp.Utils.NumFmt">
+            <summary>
+            Enumeration for number formats.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Utils.NumFmt.UInt8">
+            <summary>
+            Represents an 8-bit unsigned integer.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Utils.NumFmt.UInt16">
+            <summary>
+            Represents a 16-bit unsigned integer.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Utils.NumFmt.UInt32">
+            <summary>
+            Represents a 32-bit unsigned integer.
+            </summary>
+        </member>
+        <member name="F:MDict.Csharp.Utils.NumFmt.UInt64">
+            <summary>
+            Represents a 64-bit unsigned integer.
+            </summary>
+        </member>
+        <member name="T:MDict.Csharp.Utils.Zlib">
+            <summary>
+            A utility class for decompressing data.
+            </summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the LatinDiacriticRegex method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.LatinDiacriticRegex_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Utilities">
+            <summary>Helper methods used by generated <see cref="T:System.Text.RegularExpressions.Regex"/>-derived implementations.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout">
+            <summary>Default timeout value set in <see cref="T:System.AppContext"/>, or <see cref="F:System.Text.RegularExpressions.Regex.InfiniteMatchTimeout"/> if none was set.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_hasTimeout">
+            <summary>Whether <see cref="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout"/> is non-infinite.</summary>
+        </member>
+    </members>
+</doc>

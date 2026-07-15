@@ -1,0 +1,1595 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>UglyToad.PdfPig.Core</name>
+    </assembly>
+    <members>
+        <member name="T:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1">
+            <summary>
+            Pooled Buffer Writer
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.#ctor">
+            <summary>
+            PooledBufferWriter constructor
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.#ctor(System.Int32)">
+            <summary>
+            Constructs a PooledBufferWriter
+            </summary>
+            <param name="size">The size of the initial buffer</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.Advance(System.Int32)">
+            <summary>
+            Advanced the current position
+            </summary>
+            <param name="count"></param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.Write(`0)">
+            <summary>
+            Writes the provided value
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.Write(System.ReadOnlySpan{`0})">
+            <summary>
+            Writes the provided values
+            </summary>
+            <param name="values"></param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.GetMemory(System.Int32)">
+            <summary>
+            Returns a writeable block of memory that can be written to
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.GetSpan(System.Int32)">
+            <summary>
+            Returns a span that can be written to
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.WrittenCount">
+            <summary>
+            Returns the number of bytes written to the buffer
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.WrittenMemory">
+            <summary>
+            Returns the committed data as Memory
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.WrittenSpan">
+            <summary>
+            Returns the committed data as a Span
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.Reset(System.Boolean)">
+            <summary>
+            Resets the internal state so the instance can be reused before disposal
+            </summary>
+            <param name="clearArray"></param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ArrayPoolBufferWriter`1.Dispose">
+            <summary>
+            Disposes the buffer and returns any rented memory to the pool
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.FillingRule">
+            <summary>
+            Rules for determining which points lie inside/outside a path.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.FillingRule.None">
+            <summary>
+            No rule.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.FillingRule.EvenOdd">
+            <summary>
+            This even-odd rule determines whether a point is inside a path by drawing a ray from that point in 
+            any direction and simply counting the number of path segments that cross the ray, regardless of 
+            direction. If this number is odd, the point is inside; if even, the point is outside. This yields 
+            the same results as the nonzero winding number rule for paths with simple shapes, but produces 
+            different results for more complex shapes.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.FillingRule.NonZeroWinding">
+            <summary>
+            The nonzero winding number rule determines whether a given point is inside a path by conceptually
+            drawing a ray from that point to infinity in any direction and then examining the places where a 
+            segment of the path crosses the ray. Starting with a count of 0, the rule adds 1 each time a path 
+            segment crosses the ray from left to right and subtracts 1 each time a segment crosses from right 
+            to left. After counting all the crossings, if the result is 0, the point is outside the path; 
+            otherwise, it is inside.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.IDeepCloneable`1">
+            <summary>
+            Indicates the type may be cloned making entirely independent copies.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IDeepCloneable`1.DeepClone">
+            <summary>
+            Clone the type including all referenced data.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.IInputBytes">
+            <inheritdoc />
+            <summary>
+            The input bytes for a PDF document.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.IInputBytes.CurrentOffset">
+            <summary>
+            The current offset in bytes.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IInputBytes.MoveNext">
+            <summary>
+            Moves to the next byte if available.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.IInputBytes.CurrentByte">
+            <summary>
+            The current byte.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.IInputBytes.Length">
+            <summary>
+            The length of the data in bytes.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IInputBytes.Peek">
+            <summary>
+            Returns the next byte if available.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IInputBytes.IsAtEnd">
+            <summary>
+            Whether we are at the end of the available data.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IInputBytes.Seek(System.Int64)">
+            <summary>
+            Move to a given position.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IInputBytes.Read(System.Span{System.Byte})">
+            <summary>
+            Fill the buffer with bytes starting from the current position.
+            </summary>
+            <param name="buffer">A buffer with a length corresponding to the number of bytes to read.</param>
+            <returns>The number of bytes successfully read.</returns>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.IndirectReference">
+            <summary>
+            Used to uniquely identify and refer to objects in the PDF file.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.IndirectReference.ObjectNumber">
+            <summary>
+            A positive integer object number.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.IndirectReference.Generation">
+            <summary>
+            A non-negative integer generation number which starts as 0 and increases if the file is updated incrementally.
+            <para>The maximum generation number is 65,535.</para>
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.#ctor(System.Int64,System.Int32)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.IndirectReference"/>
+            </summary>
+            <param name="objectNumber">The object number.</param>
+            <param name="generation">The generation number.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.ComputeInternalHash(System.Int64,System.Int32)">
+            <summary>
+            Calculate the internal hash value for the given object number and generation number.
+            </summary>
+            <param name="num">The object number.</param>
+            <param name="gen">The generation number.</param>
+            <returns>The internal hash for the given values.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.Equals(UglyToad.PdfPig.Core.IndirectReference)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.op_Equality(UglyToad.PdfPig.Core.IndirectReference,UglyToad.PdfPig.Core.IndirectReference)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IndirectReference.op_Inequality(UglyToad.PdfPig.Core.IndirectReference,UglyToad.PdfPig.Core.IndirectReference)">
+            <inheritdoc/>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.IWriteable">
+            <summary>
+            Indicates that a data structure can be written to an output stream.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.IWriteable.Write(System.IO.Stream)">
+            <summary>
+            Write the data to the output stream.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.MemoryHelper">
+            <summary>
+            Memory extensions.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryHelper.AsReadOnlyMemoryStream(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Gets a read-only <see cref="T:System.IO.MemoryStream"/> from a ReadOnlyMemory&lt;byte&gt;, attempting without memory allocation.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryHelper.AsMemory(System.IO.MemoryStream)">
+            <summary>
+            Gets the Memory&lt;byte&gt; from a <see cref="T:System.IO.MemoryStream"/>, attempting without memory allocation.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.MemoryInputBytes">
+            <inheritdoc />
+            <summary>
+            Input bytes from a byte array.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.#ctor(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.MemoryInputBytes"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.MemoryInputBytes.CurrentOffset">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.MoveNext">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.MemoryInputBytes.CurrentByte">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.MemoryInputBytes.Length">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.Peek">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.IsAtEnd">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.Seek(System.Int64)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.Read(System.Span{System.Byte})">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.MemoryInputBytes.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.OctalHelpers">
+            <summary>
+            Interprets numbers in octal format.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.OctalHelpers.CharacterToShort(System.Char)">
+            <summary>
+            Read a short.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.OctalHelpers.FromOctalDigits(System.ReadOnlySpan{System.Int16})">
+            <summary>
+            Read an integer from octal digits.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.OtherEncodings">
+            <summary>
+            Convenience access to frequently used encodings.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.OtherEncodings.Iso88591">
+            <summary>
+            Latin 1 Encoding: ISO 8859-1 is a single-byte encoding that can represent the first 256 Unicode characters.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.OtherEncodings.StringAsLatin1Bytes(System.String)">
+            <summary>
+            Convert the string to bytes using the ISO 8859-1 encoding.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.OtherEncodings.BytesAsLatin1String(System.ReadOnlySpan{System.Byte})">
+            <summary>
+            Convert the bytes to string using the ISO 8859-1 encoding.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfDocEncoding">
+            <summary>
+            <para>
+            PDFDocEncoding, defined in the spec for text strings in PDF objects (but not content stream contents,
+            Type 1 font contents, etc).
+            </para>
+            <para>
+            Matches ASCII for code points 32 - 126.
+            </para>
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfDocEncoding.TryConvertBytesToString(System.ReadOnlySpan{System.Byte},System.String@)">
+            <summary>
+            Try to convert raw bytes to a PdfDocEncoding encoded string. If unsupported characters are encountered
+            meaning we cannot safely round-trip the value to bytes this will instead return false.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfDocEncoding.StringToBytes(System.String)">
+            <summary>
+            Map from string back to bytes. This is not a reversible operation for all inputs.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfDocumentFormatException">
+            <inheritdoc />
+            <summary>
+            This exception will be thrown where the contents of the PDF document do not match the specification in such a way that it
+            renders the document unreadable.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfDocumentFormatException.#ctor">
+            <inheritdoc />
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Exceptions.PdfDocumentFormatException" />.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfDocumentFormatException.#ctor(System.String)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfDocumentFormatException.#ctor(System.String,System.Exception)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfLine">
+            <summary>
+            A line in a PDF file.
+            </summary>
+            <remarks>
+            PDF coordinates are defined with the origin at the lower left (0, 0).
+            The Y-axis extends vertically upwards and the X-axis horizontally to the right.
+            Unless otherwise specified on a per-page basis, units in PDF space are equivalent to a typographic point (1/72 inch).
+            </remarks>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfLine.Length">
+            <summary>
+            Length of the line.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfLine.Point1">
+            <summary>
+            First point of the line.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfLine.Point2">
+            <summary>
+            Second point of the line.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.#ctor(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfLine"/>.
+            </summary>
+            <param name="x1">The x coordinate of the first point on the line.</param>
+            <param name="y1">The y coordinate of the first point on the line.</param>
+            <param name="x2">The x coordinate of the second point on the line.</param>
+            <param name="y2">The y coordinate of the second point on the line.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfLine"/>.
+            </summary>
+            <param name="point1">First point of the line.</param>
+            <param name="point2">Second point of the line.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.GetBoundingRectangle">
+            <summary>
+            The rectangle completely containing the <see cref="T:UglyToad.PdfPig.Core.PdfLine"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.Equals(System.Object)">
+            <summary>
+            Returns a value indicating whether this <see cref="T:UglyToad.PdfPig.Core.PdfLine"/> is equal to a specified <see cref="T:UglyToad.PdfPig.Core.PdfLine"/> .
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.Equals(UglyToad.PdfPig.Core.PdfLine)">
+            <summary>
+            Returns a value indicating whether this <see cref="T:UglyToad.PdfPig.Core.PdfLine"/> is equal to a specified <see cref="T:UglyToad.PdfPig.Core.PdfLine"/> .
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.GetHashCode">
+            <summary>
+            Returns the hash code for this <see cref="T:UglyToad.PdfPig.Core.PdfLine"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.op_Equality(UglyToad.PdfPig.Core.PdfLine,UglyToad.PdfPig.Core.PdfLine)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfLine.op_Inequality(UglyToad.PdfPig.Core.PdfLine,UglyToad.PdfPig.Core.PdfLine)">
+            <inheritdoc/>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfPoint">
+            <summary>
+            A point in a PDF file.
+            </summary>
+            <remarks>
+            PDF coordinates are defined with the origin at the lower left (0, 0).
+            The Y-axis extends vertically upwards and the X-axis horizontally to the right.
+            Unless otherwise specified on a per-page basis, units in PDF space are equivalent to a typographic point (1/72 inch).
+            </remarks>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfPoint.Origin">
+            <summary>
+            The origin of the coordinates system.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfPoint.X">
+            <summary>
+            The X coordinate for this point. (Horizontal axis).
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfPoint.Y">
+            <summary>
+            The Y coordinate of this point. (Vertical axis).
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.#ctor(System.Int32,System.Int32)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> at this position.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.#ctor(System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> at this position.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.MoveX(System.Double)">
+            <summary>
+            Creates a new <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> which is the current point moved in the x direction relative to its current position by a value.
+            </summary>
+            <param name="dx">The distance to move the point in the x direction relative to its current location.</param>
+            <returns>A new point shifted on the x axis by the given delta value.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.MoveY(System.Double)">
+            <summary>
+            Creates a new <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> which is the current point moved in the y direction relative to its current position by a value.
+            </summary>
+            <param name="dy">The distance to move the point in the y direction relative to its current location.</param>
+            <returns>A new point shifted on the y axis by the given delta value.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.Translate(System.Double,System.Double)">
+            <summary>
+            Creates a new <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> which is the current point moved in the x and y directions relative to its current position by a value.
+            </summary>
+            <param name="dx">The distance to move the point in the x direction relative to its current location.</param>
+            <param name="dy">The distance to move the point in the y direction relative to its current location.</param>
+            <returns>A new point shifted on the y axis by the given delta value.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.Equals(System.Object)">
+            <summary>
+            Returns a value indicating whether this <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> is equal to a specified <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> .
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.Equals(UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Returns a value indicating whether this <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> is equal to a specified <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/> .
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.GetHashCode">
+            <summary>
+            Returns the hash code for this <see cref="T:UglyToad.PdfPig.Core.PdfPoint"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.op_Equality(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfPoint.op_Inequality(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <inheritdoc/>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfRange">
+            <summary>
+            This class will be used to signify a range. a(min) &lt;= a* &lt;= a(max)
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRange.#ctor(System.Collections.Generic.IEnumerable{System.Double})">
+            <summary>
+            Constructor assumes a starting index of 0.
+            </summary>
+            <param name="range">The array that describes the range.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRange.#ctor(System.Collections.Generic.IEnumerable{System.Double},System.Int32)">
+            <summary>
+            Constructor with an index into an array. Because some arrays specify
+            multiple ranges ie [0, 1, 0, 2, 2, 3]. It is convenient for this
+            class to take an index into an array. So if you want this range to
+            represent 0, 2 in the above example then you would say <c>new PDRange(array, 1)</c>.
+            </summary>
+            <param name="range">The array that describes the index</param>
+            <param name="index">The range index into the array for the start of the range.</param>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRange.Min">
+            <summary>
+            The minimum value of the range.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRange.Max">
+            <summary>
+            The maximum value of the range.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfRectangle">
+            <summary>
+            A rectangle in a PDF file.
+            </summary>
+            <remarks>
+            PDF coordinates are defined with the origin at the lower left (0, 0).
+            The Y-axis extends vertically upwards and the X-axis horizontally to the right.
+            Unless otherwise specified on a per-page basis, units in PDF space are equivalent to a typographic point (1/72 inch).
+            </remarks>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.TopLeft">
+            <summary>
+            Top left point of the rectangle.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.TopRight">
+            <summary>
+            Top right point of the rectangle.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.BottomRight">
+            <summary>
+            Bottom right point of the rectangle.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.BottomLeft">
+            <summary>
+            Bottom left point of the rectangle.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Centroid">
+            <summary>
+            Centroid point of the rectangle.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Width">
+            <summary>
+            Width of the rectangle.
+            <para>A positive number.</para>
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Height">
+            <summary>
+            Height of the rectangle.
+            <para>A positive number.</para>
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Rotation">
+            <summary>
+            Rotation angle of the rectangle. Counterclockwise, in degrees.
+            <para>-180 ≤ θ ≤ 180</para>
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Area">
+            <summary>
+            Area of the rectangle.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Left">
+            <summary>
+            Left. This value is only valid if the rectangle is not rotated, check <see cref="P:UglyToad.PdfPig.Core.PdfRectangle.Rotation"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Top">
+            <summary>
+            Top. This value is only valid if the rectangle is not rotated, check <see cref="P:UglyToad.PdfPig.Core.PdfRectangle.Rotation"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Right">
+            <summary>
+            Right. This value is only valid if the rectangle is not rotated, check <see cref="P:UglyToad.PdfPig.Core.PdfRectangle.Rotation"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfRectangle.Bottom">
+            <summary>
+            Bottom. This value is only valid if the rectangle is not rotated, check <see cref="P:UglyToad.PdfPig.Core.PdfRectangle.Rotation"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/>.
+            </summary>
+            <param name="bottomLeft">Bottom left point of the rectangle.</param>
+            <param name="topRight">Top right point of the rectangle.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.#ctor(System.Int16,System.Int16,System.Int16,System.Int16)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/>.
+            </summary>
+            <param name="x1">Bottom left point's x coordinate of the rectangle.</param>
+            <param name="y1">Bottom left point's y coordinate of the rectangle.</param>
+            <param name="x2">Top right point's x coordinate of the rectangle.</param>
+            <param name="y2">Top right point's y coordinate of the rectangle.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.#ctor(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/>.
+            </summary>
+            <param name="x1">Bottom left point's x coordinate of the rectangle.</param>
+            <param name="y1">Bottom left point's y coordinate of the rectangle.</param>
+            <param name="x2">Top right point's x coordinate of the rectangle.</param>
+            <param name="y2">Top right point's y coordinate of the rectangle.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.Translate(System.Double,System.Double)">
+            <summary>
+            Creates a new <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/> which is the current rectangle moved in the x and y directions relative to its current position by a value.
+            </summary>
+            <param name="dx">The distance to move the rectangle in the x direction relative to its current location.</param>
+            <param name="dy">The distance to move the rectangle in the y direction relative to its current location.</param>
+            <returns>A new rectangle shifted on the y axis by the given delta value.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.GetT">
+            <summary>
+            -π ≤ θ ≤ π
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.Equals(UglyToad.PdfPig.Core.PdfRectangle)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.op_Equality(UglyToad.PdfPig.Core.PdfRectangle,UglyToad.PdfPig.Core.PdfRectangle)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfRectangle.op_Inequality(UglyToad.PdfPig.Core.PdfRectangle,UglyToad.PdfPig.Core.PdfRectangle)">
+            <inheritdoc/>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath">
+            <summary>
+            A supbpath is made up of a sequence of connected segments.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.Commands">
+            <summary>
+            The sequence of commands which form this <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.IsDrawnAsRectangle">
+            <summary>
+            True if the <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/> was originaly drawn using the rectangle ('re') operator.
+            <para>Always false if paths are clipped.</para>
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.IsClockwise">
+            <summary>
+            Return true if points are organised in a clockwise order. Works only with closed paths.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.IsCounterClockwise">
+            <summary>
+            Return true if points are organised in a counterclockwise order. Works only with closed paths.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.GetCentroid">
+            <summary>
+            Get the <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/>'s centroid point.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Simplify(System.Int32)">
+            <summary>
+            Simplify this <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/> by converting everything to <see cref="T:UglyToad.PdfPig.Core.PdfLine"/>s.
+            </summary>
+            <param name="n">Number of lines required (minimum is 1).</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.MoveTo(System.Double,System.Double)">
+            <summary>
+            Add a <see cref="T:UglyToad.PdfPig.Core.PdfSubpath.Move"/> command to the path.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.LineTo(System.Double,System.Double)">
+            <summary>
+            Add a <see cref="T:UglyToad.PdfPig.Core.PdfSubpath.Line"/> command to the path.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Rectangle(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Add a rectangle following the pdf specification (m, l, l, l, c) path. A new subpath is created.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurveTo(System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Add a <see cref="T:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve"/> to the path.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurveTo(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Add a <see cref="T:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve"/> to the path.
+            <para>Only used in fonts.</para>
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CloseSubpath">
+            <summary>
+            Close the path.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.IsClosed">
+            <summary>
+            Determines if the path is currently closed.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.GetBoundingRectangle">
+            <summary>
+            Gets a <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/> which entirely contains the geometry of the defined subpath.
+            </summary>
+            <returns>For subpaths which don't define any geometry this returns <see langword="null"/>.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.GetDrawnRectangle">
+            <summary>
+            If <see cref="P:UglyToad.PdfPig.Core.PdfSubpath.IsDrawnAsRectangle"/> then returns the rectangle dimensions specified. Otherwise returns <see langword="null"/>.
+            </summary>
+            <remarks>
+            Since a rectangle is interpreted as a move command followed by 3 lines and a close command this condenses the 5 commands back into a single rectangle.
+            </remarks>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.GetBoundingRectangle(System.Collections.Generic.IReadOnlyList{UglyToad.PdfPig.Core.PdfSubpath})">
+            <summary>
+            Gets a <see cref="T:UglyToad.PdfPig.Core.PdfRectangle"/> which entirely contains the geometry of the defined path.
+            </summary>
+            <returns>For paths which don't define any geometry this returns <see langword="null"/>.</returns>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.IPathCommand">
+            <summary>
+            A command in a <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.IPathCommand.GetBoundingRectangle">
+            <summary>
+            Returns the smallest rectangle which contains the path region given by this command.
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.IPathCommand.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <summary>
+            Converts from the path command to an SVG string representing the path operation.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.Close">
+            <summary>
+            Close the current <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Close.GetBoundingRectangle">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Close.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Close.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Close.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.Move">
+            <summary>
+            Move drawing of the current <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/> to the specified location.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.Move.Location">
+            <summary>
+            The location to move to.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Move.#ctor(UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfSubpath.Move"/> path command.
+            </summary>
+            <param name="location"></param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Move.GetBoundingRectangle">
+            <summary>
+            Returns <see langword="null"/> since this generates no visible path.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Move.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Move.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Move.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.Line">
+            <summary>
+            Draw a straight line between two points.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.Line.From">
+            <summary>
+            The start of the line.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.Line.To">
+            <summary>
+            The end of the line.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.Line.Length">
+            <summary>
+            Length of the line.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Line.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.PdfSubpath.Line"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Line.GetBoundingRectangle">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Line.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Line.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Line.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve">
+            <summary>
+            Draw a quadratic Bezier-curve given by the start, control and end points.
+            <para>Only used in fonts.</para>
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a quadratic Bezier-curve at the provided points.
+            <para>Only used in fonts.</para>
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.ControlPoint">
+            <summary>
+            The control point of the curve.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.TrySolve(System.Boolean,System.Double,System.Double,System.ValueTuple{System.Double,System.Double}@)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.ToLines(System.Int32)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.QuadraticBezierCurve.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve">
+            <summary>
+            Draw a cubic Bezier-curve given by the start, control and end points.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a cubic Bezier-curve at the provided points.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.FirstControlPoint">
+            <summary>
+            The first control point of the curve.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.SecondControlPoint">
+            <summary>
+            The second control point of the curve.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.TrySolve(System.Boolean,System.Double,System.Double,System.ValueTuple{System.Double,System.Double}@)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.ToLines(System.Int32)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.CubicBezierCurve.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve">
+            <summary>
+            Draw a Bezier-curve given by the start, control and end points.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.StartPoint">
+            <summary>
+            The start point of the Bezier-curve.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.EndPoint">
+            <summary>
+            The end point of the curve.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.#ctor(UglyToad.PdfPig.Core.PdfPoint,UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Create a Bezier-curve at the provided points.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.GetBoundingRectangle">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.WriteSvg(System.Text.StringBuilder,System.Double)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.TrySolve(System.Boolean,System.Double,System.Double,System.ValueTuple{System.Double,System.Double}@)">
+            <summary>
+            TODO
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.ValueWithT(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Calculate the value of the Quadratic Bezier-curve at t.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.ValueWithT(System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Calculate the value of the Cubic Bezier-curve at t.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.BezierCurve.ToLines(System.Int32)">
+            <summary>
+            Converts the bezier curve into approximated lines.
+            </summary>
+            <param name="n">Number of lines required (minimum is 1).</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.Equals(System.Object)">
+            <summary>
+            Compares two <see cref="T:UglyToad.PdfPig.Core.PdfSubpath"/>s for equality. Paths will only be considered equal if the commands which construct the paths are in the same order.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.PdfSubpath.GetHashCode">
+            <summary>
+            Get the hash code. Paths will only have the same hash code if the commands which construct the paths are in the same order.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.ReadHelper">
+            <summary>
+            Helper methods for reading from PDF files.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.ReadHelper.AsciiLineFeed">
+            <summary>
+            The line-feed '\n' character.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.ReadHelper.AsciiCarriageReturn">
+            <summary>
+            The carriage return '\r' character.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.ReadLine(UglyToad.PdfPig.Core.IInputBytes)">
+            <summary>
+            Read a string from the input until a newline.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.SkipSpaces(UglyToad.PdfPig.Core.IInputBytes)">
+            <summary>
+            Skip any whitespace characters.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsEndOfName(System.Int32)">
+            <summary>
+            Whether the given character value is the end of a PDF Name token.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsWhitespace(System.Byte)">
+            <summary>
+            Determines if a character is whitespace or not, this includes newlines.
+            </summary>
+            <remarks>
+            These values are specified in table 1 (page 12) of ISO 32000-1:2008.
+            </remarks>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsEndOfLine(System.Char)">
+            <summary>
+            Whether the character is an end of line character.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsEndOfLine(System.Byte)">
+            <summary>
+            Whether the character is an end of line character.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsLineFeed(System.Nullable{System.Byte})">
+            <summary>
+            Whether the character is an line feed '\n' character.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsCarriageReturn(System.Byte)">
+            <summary>
+            Whether the character is a carriage return '\r' character.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsString(UglyToad.PdfPig.Core.IInputBytes,System.String)">
+            <summary>
+            Whether the given string is at this position in the input.
+            Resets to the current offset once read.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsString(UglyToad.PdfPig.Core.IInputBytes,System.ReadOnlySpan{System.Byte})">
+            <summary>
+            Whether the given string is at this position in the input.
+            Resets to the current offset once read.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.ReadLong(UglyToad.PdfPig.Core.IInputBytes)">
+            <summary>
+            Read a long from the input.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsDigit(System.Int32)">
+            <summary>
+            Whether the given value is a digit or not.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.ReadInt(UglyToad.PdfPig.Core.IInputBytes)">
+            <summary>
+            Read an int from the input.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsHex(System.Byte)">
+            <summary>
+            Whether the given character value is a valid hex value.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsHex(System.Char)">
+            <summary>
+            Whether the given character value is a valid hex value.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.ReadHelper.IsValidUtf8(System.Byte[])">
+            <summary>
+            Whether the given input bytes are valid UTF8.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.StackDepthGuard">
+            <summary>
+            Provides a guard for tracking and limiting the depth of nested stack operations, such as recursive calls or
+            nested parsing.
+            </summary>
+            <remarks>Use this class to prevent excessive stack usage by enforcing a maximum nesting depth. This is
+            particularly useful in scenarios where untrusted or deeply nested input could cause stack overflows or
+            performance issues.</remarks>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.StackDepthGuard.Infinite">
+            <summary>
+            Represents a stack depth guard with no effective limit on the allowed depth.
+            </summary>
+            <remarks>Use this instance when stack depth restrictions are not required.</remarks>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StackDepthGuard.#ctor(System.Int32)">
+            <summary>
+            Initializes a new instance of the StackDepthGuard class with the specified maximum stack depth.
+            </summary>
+            <param name="maxStackDepth">The maximum allowed stack depth for guarded operations. Must be a positive integer.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StackDepthGuard.Enter">
+            <summary>
+            Increments the current nesting depth and checks against the maximum allowed stack depth.
+            </summary>
+            <exception cref="T:UglyToad.PdfPig.Core.PdfDocumentFormatException">Thrown if the maximum allowed nesting depth is exceeded.</exception>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StackDepthGuard.Exit">
+            <summary>
+            Decreases the current depth level by one, ensuring that the depth does not become negative.
+            </summary>
+            <remarks>If the current depth is already zero, calling this method has no effect. This method
+            is typically used to track or manage nested operations or scopes where depth must remain
+            non-negative.</remarks>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.StreamInputBytes">
+            <inheritdoc />
+            <summary>
+            Input bytes from a stream.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.StreamInputBytes.CurrentOffset">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.StreamInputBytes.CurrentByte">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.StreamInputBytes.Length">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.#ctor(System.IO.Stream,System.Boolean)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.StreamInputBytes"/>.
+            </summary>
+            <param name="stream">The stream to use, should be readable and seekable.</param>
+            <param name="shouldDispose">Whether this class should dispose the stream once finished.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.MoveNext">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.Peek">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.IsAtEnd">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.Seek(System.Int64)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.Read(System.Span{System.Byte})">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.StreamInputBytes.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.TextRenderingMode">
+            <summary>
+            The text rendering mode determines whether showing text causes glyph outlines to be stroked, filled, used as a clipping boundary,
+             or some combination of the three.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.Fill">
+            <summary>
+            Fill text.
+            </summary>
+            <remarks>
+            Corresponds to filling the entire letter region.
+            </remarks>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.Stroke">
+            <summary>
+            Stroke text.
+            </summary>
+            <remarks>
+            Corresponds to drawing the border/outline of the letter.
+            </remarks>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.FillThenStroke">
+            <summary>
+            Fill then stroke text.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.Neither">
+            <summary>
+            Neither fill nor stroke text thereby causing text to become invisible.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.FillClip">
+            <summary>
+            Fill the text and add to the clipping path.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.StrokeClip">
+            <summary>
+            Stroke the text and add to the clipping path.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.FillThenStrokeClip">
+            <summary>
+            Fill then stroke the text and then add to the clipping path.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TextRenderingMode.NeitherClip">
+            <summary>
+            Neither fill nor stroke but add to the clipping path.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.TransformationMatrix">
+            <summary>
+            Specifies the conversion from the transformed coordinate space to the original untransformed coordinate space.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.Identity">
+            <summary>
+            The default <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.GetTranslationMatrix(System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> with the X and Y translation values set.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.GetScaleMatrix(System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> with the X and Y scaling values set.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.GetRotationMatrix(System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> with the X and Y scaling values set.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.A">
+            <summary>
+            The value at (0, 0) - The scale for the X dimension.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.B">
+            <summary>
+            The value at (0, 1).
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.C">
+            <summary>
+            The value at (1, 0).
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.D">
+            <summary>
+            The value at (1, 1) - The scale for the Y dimension.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.E">
+            <summary>
+            The value at (2, 0) - translation in X.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.F">
+            <summary>
+            The value at (2, 1) - translation in Y.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Core.TransformationMatrix.Item(System.Int32,System.Int32)">
+            <summary>
+            Get the value at the specific row and column.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.Rows">
+            <summary>
+            The number of rows in the matrix.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.TransformationMatrix.Columns">
+            <summary>
+            The number of columns in the matrix.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.#ctor(System.ReadOnlySpan{System.Double})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/>.
+            </summary>
+            <param name="value">The 9 values of the matrix.</param>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.#ctor(System.Double,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Transform(UglyToad.PdfPig.Core.PdfPoint)">
+            <summary>
+            Transform a point using this transformation matrix.
+            </summary>
+            <param name="original">The original point.</param>
+            <returns>A new point which is the result of applying this transformation matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Transform(System.Double,System.Double)">
+            <summary>
+            Transform a point using this transformation matrix.
+            </summary>
+            <param name="x">The original point X coordinate.</param>
+            <param name="y">The original point Y coordinate.</param>
+            <returns>A new point which is the result of applying this transformation matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.TransformX(System.Double)">
+            <summary>
+            Transform an X coordinate using this transformation matrix.
+            </summary>
+            <param name="x">The X coordinate.</param>
+            <returns>The transformed X coordinate.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.TransformY(System.Double)">
+            <summary>
+            Transform an Y coordinate using this transformation matrix.
+            </summary>
+            <param name="y">The Y coordinate.</param>
+            <returns>The transformed Y coordinate.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Transform(UglyToad.PdfPig.Core.PdfRectangle)">
+            <summary>
+            Transform a rectangle using this transformation matrix.
+            </summary>
+            <param name="original">The original rectangle.</param>
+            <returns>A new rectangle which is the result of applying this transformation matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Transform(UglyToad.PdfPig.Core.PdfSubpath)">
+            <summary>
+            Transform a subpath using this transformation matrix.
+            </summary>
+            <param name="subpath">The original subpath.</param>
+            <returns>A new subpath which is the result of applying this transformation matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Transform(System.Collections.Generic.IEnumerable{UglyToad.PdfPig.Core.PdfSubpath})">
+            <summary>
+            Transform a path using this transformation matrix.
+            </summary>
+            <param name="path">The original path.</param>
+            <returns>A new path which is the result of applying this transformation matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Translate(System.Double,System.Double)">
+            <summary>
+            Generate a <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> translated by the specified amount.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.FromValues(System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> from the 6 values provided in the default PDF order.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.FromValues(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> from the 4 values provided in the default PDF order.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.FromArray(System.ReadOnlySpan{System.Double})">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Core.TransformationMatrix"/> from the values.
+            </summary>
+            <param name="values">Either all 9 values of the matrix, 6 values in the default PDF order or the 4 values of the top left square.</param>
+            <returns></returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Multiply(UglyToad.PdfPig.Core.TransformationMatrix@)">
+            <summary>
+            Multiplies one transformation matrix by another without modifying either matrix. Order is: (this * matrix).
+            </summary>
+            <param name="matrix">The matrix to multiply</param>
+            <returns>The resulting matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Multiply(System.Double)">
+            <summary>
+            Multiplies the matrix by a scalar value without modifying this matrix.
+            </summary>
+            <param name="scalar">The value to multiply.</param>
+            <returns>A new matrix which is multiplied by the scalar value.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Inverse">
+            <summary>
+            Get the inverse of the current matrix.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.GetScalingFactorX">
+            <summary>
+            Get the X scaling component of the current matrix.
+            </summary>
+            <returns>The scaling factor for the x dimension in this matrix.</returns>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Equals(UglyToad.PdfPig.Core.TransformationMatrix)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.Equals(UglyToad.PdfPig.Core.TransformationMatrix,UglyToad.PdfPig.Core.TransformationMatrix)">
+            <summary>
+            Determines whether 2 transformation matrices are equal.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.op_Equality(UglyToad.PdfPig.Core.TransformationMatrix,UglyToad.PdfPig.Core.TransformationMatrix)">
+            <inheritdoc/>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.TransformationMatrix.op_Inequality(UglyToad.PdfPig.Core.TransformationMatrix,UglyToad.PdfPig.Core.TransformationMatrix)">
+            <inheritdoc/>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.Union`2">
+            <summary>
+            Defines a type which is a union of two types.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Match(System.Action{`0},System.Action{`1})">
+            <summary>
+            Take an action for the item of the given type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Match``1(System.Func{`0,``0},System.Func{`1,``0})">
+            <summary>
+            Run a func against the item of the given type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.TryGetFirst(`0@)">
+            <summary>
+            Get the item if it is of the specific type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.TryGetSecond(`1@)">
+            <summary>
+            Get the item if it is of the specific type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.One(`0)">
+            <summary>
+            Create a value of the first type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Two(`1)">
+            <summary>
+            Create a value of the second type.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.Union`2.Case1">
+            <summary>
+            The type representing items of the first type in a union.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.Union`2.Case1.Item">
+            <summary>
+            The item.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case1.#ctor(`0)">
+            <summary>
+            Create first type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case1.Match(System.Action{`0},System.Action{`1})">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case1.Match``1(System.Func{`0,``0},System.Func{`1,``0})">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case1.TryGetFirst(`0@)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case1.TryGetSecond(`1@)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case1.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.Union`2.Case2">
+            <summary>
+            The type representing items of the second type in a union.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.Union`2.Case2.Item">
+            <summary>
+            The item.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case2.#ctor(`1)">
+            <summary>
+            Create second type.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case2.Match(System.Action{`0},System.Action{`1})">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case2.Match``1(System.Func{`0,``0},System.Func{`1,``0})">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case2.TryGetFirst(`0@)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case2.TryGetSecond(`1@)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.Union`2.Case2.ToString">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.WritingExtensions">
+            <summary>
+            Handles writing specified data types to an output stream in a valid PDF compliant format.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.WritingExtensions.WriteUInt(System.IO.Stream,System.Int64)">
+            <summary>
+            Write the <see langword="long"/> to the stream as a <see langword="uint"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.WritingExtensions.WriteUInt(System.IO.Stream,System.UInt32)">
+            <summary>
+            Write the <see langword="uint"/> to the stream as a <see langword="uint"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.WritingExtensions.WriteUShort(System.IO.Stream,System.Int32)">
+            <summary>
+            Write the <see langword="int"/> to the stream as a <see langword="ushort"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.WritingExtensions.WriteUShort(System.IO.Stream,System.UInt16)">
+            <summary>
+            Write the <see langword="ushort"/> to the stream as a <see langword="ushort"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.WritingExtensions.WriteShort(System.IO.Stream,System.UInt16)">
+            <summary>
+            Write the <see langword="ushort"/> to the stream as a <see langword="short"/>.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.WritingExtensions.WriteShort(System.IO.Stream,System.Int16)">
+            <summary>
+            Write the <see langword="short"/> to the stream as a <see langword="short"/>.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.XrefEntryType">
+            <summary>
+            Indicates where an object is located in the Xref.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.XrefEntryType.Free">
+            <summary>
+            Free object.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.XrefEntryType.File">
+            <summary>
+            Located as an object in the file.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.XrefEntryType.ObjectStream">
+            <summary>
+            Located in a compressed object stream.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Core.XrefLocation">
+            <summary>
+            Information about where an object is located in the file according to the Xref (or brute force parsing).
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.XrefLocation.Type">
+            <summary>
+            Which type of location is indicated.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.XrefLocation.Value1">
+            <summary>
+            If <see cref="F:UglyToad.PdfPig.Core.XrefLocation.Type"/> is <see cref="F:UglyToad.PdfPig.Core.XrefEntryType.File"/> then byte offset, otherwise <see cref="F:UglyToad.PdfPig.Core.XrefEntryType.ObjectStream"/> this is the stream number.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Core.XrefLocation.Value2">
+            <summary>
+            If <see cref="F:UglyToad.PdfPig.Core.XrefLocation.Type"/> is <see cref="F:UglyToad.PdfPig.Core.XrefEntryType.ObjectStream"/> then the index of the object in the stream.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.XrefLocation.File(System.Int64)">
+            <summary>
+            Create a location mapped to a byte offset in the file.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Core.XrefLocation.Stream(System.Int64,System.Int32)">
+            <summary>
+            Create a location mapped to an index inside and object stream.
+            </summary>
+        </member>
+    </members>
+</doc>

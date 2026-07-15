@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Easydict.Llm.Streaming</name>
+    </assembly>
+    <members>
+        <member name="T:Easydict.Llm.Streaming.ChatRole">
+            <summary>
+            Role in a chat conversation for LLM services.
+            </summary>
+        </member>
+        <member name="F:Easydict.Llm.Streaming.ChatRole.System">
+            <summary>System / instruction role.</summary>
+        </member>
+        <member name="F:Easydict.Llm.Streaming.ChatRole.User">
+            <summary>End-user role.</summary>
+        </member>
+        <member name="F:Easydict.Llm.Streaming.ChatRole.Assistant">
+            <summary>Assistant (model) role.</summary>
+        </member>
+        <member name="T:Easydict.Llm.Streaming.ChatMessage">
+            <summary>
+            A message in a chat conversation.
+            </summary>
+        </member>
+        <member name="M:Easydict.Llm.Streaming.ChatMessage.#ctor(Easydict.Llm.Streaming.ChatRole,System.String)">
+            <summary>
+            A message in a chat conversation.
+            </summary>
+        </member>
+        <member name="P:Easydict.Llm.Streaming.ChatMessage.RoleString">
+            <summary>
+            Get the role as a string for API requests.
+            </summary>
+        </member>
+        <member name="T:Easydict.Llm.Streaming.SseParser">
+            <summary>
+            Parses Server-Sent Events (SSE) for OpenAI chat completions streaming format.
+            Handles: data: {"choices":[{"delta":{"content":"..."}}]} and [DONE]
+            </summary>
+        </member>
+        <member name="M:Easydict.Llm.Streaming.SseParser.ParseStreamAsync(System.IO.Stream,System.Threading.CancellationToken)">
+            <summary>
+            Parse SSE stream and yield content chunks.
+            </summary>
+            <param name="responseStream">HTTP response stream containing SSE data.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <returns>Async enumerable of content strings extracted from SSE events.</returns>
+        </member>
+        <member name="M:Easydict.Llm.Streaming.SseParser.ExtractContent(System.String)">
+            <summary>
+            Extract content from OpenAI chat completion delta JSON.
+            Expected format: {"choices":[{"delta":{"content":"text"}}]}
+            </summary>
+        </member>
+    </members>
+</doc>

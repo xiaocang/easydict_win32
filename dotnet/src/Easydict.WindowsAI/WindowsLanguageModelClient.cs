@@ -22,7 +22,10 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     private const int PackageResourceInUseHResult = unchecked((int)0x80073D02);
     private const int UnspecifiedFailureHResult = unchecked((int)0x80004005);
 
-    private readonly record struct WindowsBuildInfo(string? CurrentBuild, int? Ubr);
+    internal readonly record struct WindowsBuildInfo(string? CurrentBuild, int? Ubr);
+
+    private readonly Func<WindowsBuildInfo> _buildInfoProvider;
+    private readonly Func<AIFeatureReadyState?> _readyStateProvider;
 
     // Signatures of the broker-side init failure that surface as the generic
     // 0x80004005 from the WinRT facade. Matched against exception.ToString()
@@ -41,6 +44,19 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     /// </summary>
     public static Func<string, string?>? HintLocalizer { get; set; }
 
+    public WindowsLanguageModelClient()
+        : this(TryGetWindowsBuildInfo, TryGetRawReadyState)
+    {
+    }
+
+    internal WindowsLanguageModelClient(
+        Func<WindowsBuildInfo> buildInfoProvider,
+        Func<AIFeatureReadyState?> readyStateProvider)
+    {
+        _buildInfoProvider = buildInfoProvider;
+        _readyStateProvider = readyStateProvider;
+    }
+
     private static string Localize(string resourceKey, string defaultText)
     {
         var localized = HintLocalizer?.Invoke(resourceKey);
@@ -51,38 +67,60 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
 
     public WindowsAIReadyState GetReadyState()
     {
-        try
+        var buildInfo = _buildInfoProvider();
+        var osBuild = FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version);
+        if (WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(osBuild, buildInfo.Ubr))
         {
-            var fingerprint = GetHealthFingerprint();
-            if (WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(fingerprint)
-                || IsWindowsAIBaselineMissing(fingerprint))
-            {
-                return WindowsAIReadyState.UnsupportedWindowsAIBaseline;
-            }
-        }
-        catch
-        {
-            // Baseline diagnostics are best-effort. Fall through to the WinRT
-            // readiness check if we cannot read the OS build/UBR fingerprint.
+            return WindowsAIReadyState.UnsupportedWindowsAIBaseline;
         }
 
         try
         {
-            return MapReadyState(LanguageModel.GetReadyState());
+            var rawReadyState = _readyStateProvider();
+            if (rawReadyState is not { } state)
+            {
+                return WindowsAIReadyState.NotSupportedOnCurrentSystem;
+            }
+
+            var fingerprint = BuildHealthFingerprint(buildInfo, rawReadyState);
+            if (IsWindowsAIBaselineMissing(fingerprint))
+            {
+                return WindowsAIReadyState.UnsupportedWindowsAIBaseline;
+            }
+
+            return MapReadyState(state);
         }
         catch
         {
-            // GetReadyState should never throw, but if the WinRT activation itself
-            // fails (missing runtime, unsupported OS), treat it as not-supported.
             return WindowsAIReadyState.NotSupportedOnCurrentSystem;
         }
     }
 
     public WindowsAIHealthFingerprint GetHealthFingerprint()
     {
+        var buildInfo = _buildInfoProvider();
+        var osBuild = FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version);
+        if (WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(osBuild, buildInfo.Ubr))
+        {
+            return new WindowsAIHealthFingerprint(
+                OsBuild: osBuild,
+                Ubr: buildInfo.Ubr,
+                WindowsAppSdkVersion: "not-probed",
+                ProcessArchitecture: RuntimeInformation.ProcessArchitecture.ToString(),
+                BackendName: "PhiSilica",
+                ComponentMarker: "Microsoft.Windows.AI.Text; readyState=not-probed",
+                WindowsActivated: TryGetWindowsActivationStatus(),
+                PhiSilicaAiComponentsPresent: null);
+        }
+
+        return BuildHealthFingerprint(buildInfo, _readyStateProvider());
+    }
+
+    private static WindowsAIHealthFingerprint BuildHealthFingerprint(
+        WindowsBuildInfo buildInfo,
+        AIFeatureReadyState? rawReadyState)
+    {
         var languageModelAssembly = typeof(LanguageModel).Assembly.GetName();
-        var rawReadyState = TryGetRawReadyState();
-        var buildInfo = TryGetWindowsBuildInfo();
         return new WindowsAIHealthFingerprint(
             OsBuild: FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version),
             Ubr: buildInfo.Ubr,
@@ -93,6 +131,7 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
             WindowsActivated: TryGetWindowsActivationStatus(),
             PhiSilicaAiComponentsPresent: TryGetPhiSilicaAiComponentsPresence(rawReadyState));
     }
+
 
     public async Task<WindowsAIReadyState> EnsureReadyAsync(
         CancellationToken cancellationToken,

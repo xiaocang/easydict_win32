@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>UglyToad.PdfPig.Tokenization</name>
+    </assembly>
+    <members>
+        <member name="M:UglyToad.PdfPig.Tokenization.DictionaryTokenizer.#ctor(System.Boolean,UglyToad.PdfPig.Core.StackDepthGuard,System.Collections.Generic.IReadOnlyList{UglyToad.PdfPig.Tokens.NameToken},System.Boolean)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokenization.DictionaryTokenizer"/>.
+            </summary>
+            <param name="usePdfDocEncoding">
+            Whether to read strings using the PdfDocEncoding.
+            </param>
+            <param name="stackDepthGuard"></param>
+            <param name="requiredKeys">
+            Can be provided to recover from errors with missing dictionary end symbols if the
+            set of keys expected in the dictionary are known.
+            </param>
+            <param name="useLenientParsing">Whether to use lenient parsing.</param>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokenization.EndOfLineTokenizer">
+            <summary>
+            Read an <see cref="T:UglyToad.PdfPig.Tokens.EndOfLineToken"/>.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.EndOfLineTokenizer.ReadsNextByte">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.EndOfLineTokenizer.TryTokenize(System.Byte,UglyToad.PdfPig.Core.IInputBytes,UglyToad.PdfPig.Tokens.IToken@)">
+            <inheritdoc />
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokenization.ITokenizer">
+            <summary>
+            Reads tokens from input data.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.ITokenizer.ReadsNextByte">
+            <summary>
+            Whether this tokenizer type reads the byte following the token itself to detect if the token has ended.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.ITokenizer.TryTokenize(System.Byte,UglyToad.PdfPig.Core.IInputBytes,UglyToad.PdfPig.Tokens.IToken@)">
+            <summary>
+            Try and read the token of the corresponding type from the input.
+            </summary>
+            <param name="currentByte">The byte read to detect this is the correct tokenizer to use.</param>
+            <param name="inputBytes">The input data.</param>
+            <param name="token">The token of the corresponding type if read.</param>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner">
+            <summary>
+            The default <see cref="T:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner"/> for reading PostScript/PDF style data.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.CurrentTokenStart">
+            <summary>
+            The offset in the input data at which the <see cref="P:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.CurrentToken"/> starts.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.CurrentToken">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.CurrentPosition">
+            <inheritdoc />
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.Length">
+            <inheritdoc />
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.isStream">
+            <summary>
+            '%' only identifies comments outside of PDF streams and strings, inside these we should ignore it.
+            </summary>
+            <remarks>
+            PDFBox skips all of a line following a comment character inside streams, see:
+            https://github.com/apache/pdfbox/blob/0e1c42dace1c3a2631d5309f662de5628b80fda6/pdfbox/src/main/java/org/apache/pdfbox/pdfparser/BaseParser.java#L1319
+            </remarks>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.#ctor(UglyToad.PdfPig.Core.IInputBytes,System.Boolean,UglyToad.PdfPig.Core.StackDepthGuard,UglyToad.PdfPig.Tokenization.Scanner.ScannerScope,System.Collections.Generic.IReadOnlyDictionary{UglyToad.PdfPig.Tokens.NameToken,System.Collections.Generic.IReadOnlyList{UglyToad.PdfPig.Tokens.NameToken}},System.Boolean,System.Boolean)">
+            <summary>
+            Create a new <see cref="T:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner"/> from the input.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.TryReadToken``1(``0@)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.Seek(System.Int64)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.MoveNext">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.RegisterCustomTokenizer(System.Byte,UglyToad.PdfPig.Tokenization.ITokenizer)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.DeregisterCustomTokenizer(UglyToad.PdfPig.Tokenization.ITokenizer)">
+            <inheritdoc />
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.CoreTokenScanner.RecoverFromIncorrectEndImage(System.Int64)">
+            <summary>
+            Handles the situation where "EI" was encountered in the inline image data but was
+            not the end of the image.
+            </summary>
+            <param name="lastEndImageOffset">The offset of the "E" of the "EI" marker which was incorrectly read.</param>
+            <returns>The set of bytes from the incorrect "EI" to the correct "EI" including the incorrect "EI".</returns>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner">
+            <inheritdoc />
+            <summary>
+            A <see cref="T:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner" /> that supports seeking in the underlying input data.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner.Seek(System.Int64)">
+            <summary>
+            Move to the specified position.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner.CurrentPosition">
+            <summary>
+            The current position in the input.
+            </summary>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner.Length">
+            <summary>
+            The length of the data represented by this scanner.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner.RegisterCustomTokenizer(System.Byte,UglyToad.PdfPig.Tokenization.ITokenizer)">
+            <summary>
+            Add support for a custom type of tokenizer.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner.DeregisterCustomTokenizer(UglyToad.PdfPig.Tokenization.ITokenizer)">
+            <summary>
+            Remove support for a custom type of tokenizer added with <see cref="M:UglyToad.PdfPig.Tokenization.Scanner.ISeekableTokenScanner.RegisterCustomTokenizer(System.Byte,UglyToad.PdfPig.Tokenization.ITokenizer)"/>.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner">
+            <summary>
+            Scan input for PostScript/PDF tokens.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner.MoveNext">
+            <summary>
+            Read the next token in the input.
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="P:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner.CurrentToken">
+            <summary>
+            The currently read token.
+            </summary>
+        </member>
+        <member name="M:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner.TryReadToken``1(``0@)">
+            <summary>
+            Try reading a token of the specific type.
+            </summary>
+        </member>
+        <member name="T:UglyToad.PdfPig.Tokenization.Scanner.ScannerScope">
+            <summary>
+            The current scope of the <see cref="T:UglyToad.PdfPig.Tokenization.Scanner.ITokenScanner"/>.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokenization.Scanner.ScannerScope.None">
+            <summary>
+            Reading normally.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokenization.Scanner.ScannerScope.Array">
+            <summary>
+            Reading inside an array.
+            </summary>
+        </member>
+        <member name="F:UglyToad.PdfPig.Tokenization.Scanner.ScannerScope.Dictionary">
+            <summary>
+            Reading inside a dictionary.
+            </summary>
+        </member>
+        <member name="M:System.Text.ValueStringBuilder.Grow(System.Int32)">
+            <summary>
+            Resize the internal buffer either by doubling current buffer size or
+            by adding <paramref name="additionalCapacityBeyondPos"/> to
+            <see cref="F:System.Text.ValueStringBuilder._pos"/> whichever is greater.
+            </summary>
+            <param name="additionalCapacityBeyondPos">
+            Number of chars requested beyond current position.
+            </param>
+        </member>
+    </members>
+</doc>

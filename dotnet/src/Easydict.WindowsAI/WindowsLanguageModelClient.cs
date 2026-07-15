@@ -53,8 +53,8 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
         Func<WindowsBuildInfo> buildInfoProvider,
         Func<AIFeatureReadyState?> readyStateProvider)
     {
-        _buildInfoProvider = buildInfoProvider;
-        _readyStateProvider = readyStateProvider;
+        _buildInfoProvider = buildInfoProvider ?? throw new ArgumentNullException(nameof(buildInfoProvider));
+        _readyStateProvider = readyStateProvider ?? throw new ArgumentNullException(nameof(readyStateProvider));
     }
 
     private static string Localize(string resourceKey, string defaultText)
@@ -69,7 +69,8 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     {
         var buildInfo = _buildInfoProvider();
         var osBuild = FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version);
-        if (WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(osBuild, buildInfo.Ubr))
+        if (!string.IsNullOrWhiteSpace(buildInfo.CurrentBuild)
+            && WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(osBuild, buildInfo.Ubr))
         {
             return WindowsAIReadyState.UnsupportedWindowsAIBaseline;
         }
@@ -100,7 +101,8 @@ public sealed class WindowsLanguageModelClient : IWindowsLanguageModelClient
     {
         var buildInfo = _buildInfoProvider();
         var osBuild = FormatFullWindowsBuild(buildInfo.CurrentBuild, buildInfo.Ubr, Environment.OSVersion.Version);
-        if (WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(osBuild, buildInfo.Ubr))
+        if (!string.IsNullOrWhiteSpace(buildInfo.CurrentBuild)
+            && WindowsAIBaselineDiagnostics.IsBelowMinimumOsBaseline(osBuild, buildInfo.Ubr))
         {
             return new WindowsAIHealthFingerprint(
                 OsBuild: osBuild,

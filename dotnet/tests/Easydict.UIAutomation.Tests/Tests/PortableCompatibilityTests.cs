@@ -49,10 +49,12 @@ public sealed class PortableCompatibilityTests : IDisposable
         expander.Should().NotBeNull();
         expander!.Patterns.ExpandCollapse.PatternOrDefault?.Expand();
         var status = Retry.WhileNull(() => window.FindFirstDescendant(cf => cf.ByAutomationId("WindowsLocalAIStatusBar")), TimeSpan.FromSeconds(15)).Result;
+        status.Should().NotBeNull("Windows AI status must render");
+        var statusBar = status!;
         var statusText = string.Join(
             " ",
-            new[] { status!.Name }
-                .Concat(status.FindAllDescendants(cf => cf.ByControlType(ControlType.Text)).Select(element => element.Name)));
+            new[] { statusBar.Name }
+                .Concat(statusBar.FindAllDescendants(cf => cf.ByControlType(ControlType.Text)).Select(element => element.Name)));
         statusText.Should().Contain("Windows AI baseline");
         _output.WriteLine(ScreenshotHelper.CaptureWindow(window, "portable-settings-success"));
     }

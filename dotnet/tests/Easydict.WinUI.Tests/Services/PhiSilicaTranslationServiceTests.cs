@@ -5,6 +5,7 @@ using Easydict.TranslationService.Models;
 using Easydict.WindowsAI;
 using Easydict.WindowsAI.Services;
 using FluentAssertions;
+using Microsoft.Windows.AI;
 using Xunit;
 
 namespace Easydict.WinUI.Tests.Services;
@@ -105,6 +106,65 @@ public class PhiSilicaTranslationServiceTests
         fingerprint.ComponentMarker.Should().Be("Microsoft.Windows.AI.Text; readyState=not-probed");
         fingerprint.PhiSilicaAiComponentsPresent.Should().BeNull();
         probeCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void GetReadyState_MissingRegistryBuild_StillProbesLanguageModel()
+    {
+        var probeCount = 0;
+        var client = new WindowsLanguageModelClient(
+            () => new WindowsLanguageModelClient.WindowsBuildInfo(null, null),
+            () =>
+            {
+                probeCount++;
+                return AIFeatureReadyState.NotReady;
+            });
+
+        client.GetReadyState().Should().Be(WindowsAIReadyState.NotReady);
+        probeCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void GetHealthFingerprint_MissingRegistryBuild_StillProbesLanguageModel()
+    {
+        var probeCount = 0;
+        var client = new WindowsLanguageModelClient(
+            () => new WindowsLanguageModelClient.WindowsBuildInfo(null, null),
+            () =>
+            {
+                probeCount++;
+                return AIFeatureReadyState.NotReady;
+            });
+
+        var fingerprint = client.GetHealthFingerprint();
+
+        fingerprint.WindowsAppSdkVersion.Should().NotBe("not-probed");
+        fingerprint.ComponentMarker.Should().EndWith("readyState=NotReady");
+        probeCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Constructor_NullBuildInfoProvider_Throws()
+    {
+        var action = () => new WindowsLanguageModelClient(
+            null!,
+            () => AIFeatureReadyState.NotReady);
+
+        action.Should()
+            .Throw<ArgumentNullException>()
+            .WithParameterName("buildInfoProvider");
+    }
+
+    [Fact]
+    public void Constructor_NullReadyStateProvider_Throws()
+    {
+        var action = () => new WindowsLanguageModelClient(
+            () => new WindowsLanguageModelClient.WindowsBuildInfo(null, null),
+            null!);
+
+        action.Should()
+            .Throw<ArgumentNullException>()
+            .WithParameterName("readyStateProvider");
     }
 
     [Fact]

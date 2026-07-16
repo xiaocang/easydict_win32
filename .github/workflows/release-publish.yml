@@ -441,11 +441,43 @@ jobs:
           path: dotnet/msix/Easydict-${{ github.ref_name }}-${{ matrix.platform }}.msix
           retention-days: 7
 
+  portable-downlevel-smoke:
+    name: Portable downlevel Settings smoke
+    needs: [prepare, publish-msix]
+    runs-on: windows-2022
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+      - name: Download portable ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: easydict-zip-x64
+          path: .
+      - name: Run portable Settings smoke
+        shell: pwsh
+        run: |
+          & ./dotnet/scripts/ci/Invoke-PortableSettingsSmoke.ps1 `
+            -ZipPath "easydict_win32-${{ github.ref_name }}-x64.zip" `
+            -ExpectedOsBuild 20348 `
+            -ResultsDirectory "portable-settings-smoke"
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-settings-smoke-windows-2022
+          path: portable-settings-smoke
+
   # Create MSIX bundle containing all architectures and upload all release assets
   create-bundle:
     name: Create MSIX Bundle
     runs-on: windows-latest
-    needs: [prepare, publish-msix]
+    needs: [prepare, publish-msix, portable-downlevel-smoke]
 
     steps:
       - name: Download all MSIX artifacts

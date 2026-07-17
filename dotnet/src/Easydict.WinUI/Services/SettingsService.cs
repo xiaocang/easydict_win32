@@ -415,6 +415,7 @@ public sealed class SettingsService
 
     // TTS settings
     public double TtsSpeed { get; set; } = 1.0;
+    public string SelectedTtsVoiceId { get; set; } = string.Empty;
     public bool AutoPlayTranslation { get; set; } = false;
 
     // UI Language (for localization)
@@ -787,6 +788,7 @@ public sealed class SettingsService
 
         AlwaysOnTop = GetValue(nameof(AlwaysOnTop), false);
         TtsSpeed = GetValue(nameof(TtsSpeed), 1.0);
+        SelectedTtsVoiceId = GetValue(nameof(SelectedTtsVoiceId), string.Empty);
         AutoPlayTranslation = GetValue(nameof(AutoPlayTranslation), false);
         UILanguage = GetValue(nameof(UILanguage), "");
         AppTheme = GetValue(nameof(AppTheme), "System");
@@ -1027,6 +1029,7 @@ public sealed class SettingsService
 
         _settings[nameof(AlwaysOnTop)] = AlwaysOnTop;
         _settings[nameof(TtsSpeed)] = TtsSpeed;
+        _settings[nameof(SelectedTtsVoiceId)] = SelectedTtsVoiceId;
         _settings[nameof(AutoPlayTranslation)] = AutoPlayTranslation;
         _settings[nameof(UILanguage)] = UILanguage;
         _settings[nameof(AppTheme)] = AppTheme;

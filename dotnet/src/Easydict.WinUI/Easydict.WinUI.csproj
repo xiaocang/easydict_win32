@@ -229,6 +229,7 @@
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.*" />
         <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3967.48" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
+        <PackageReference Include="System.Speech" Version="8.0.0" />
 
         <Manifest Include="$(ApplicationManifest)" />
     </ItemGroup>

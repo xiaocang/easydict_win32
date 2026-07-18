@@ -1549,6 +1549,8 @@ public sealed partial class SettingsPage : Page
     {
         TtsSettingsHeaderText.Text = loc.GetString("TtsSettingsHeader");
         TtsSpeedLabelText.Text = loc.GetString("TtsSpeedLabel");
+        TtsVoiceLabelText.Text = loc.GetString("TtsVoiceLabel");
+        ToolTipService.SetToolTip(TtsVoiceRefreshButton, loc.GetString("TtsVoiceRefreshTooltip"));
         AutoPlayTranslationToggle.Header = loc.GetString("AutoPlayTranslation");
     }
 
@@ -2956,9 +2958,12 @@ public sealed partial class SettingsPage : Page
             _ = Task.Run(() => TextToSpeechService.Instance.GetAllVoices())
                 .ContinueWith(t => DispatcherQueue.TryEnqueue(() => 
                 {
-                    TtsVoiceCombo.SelectionChanged -= OnTtsVoiceSelectionChanged;
-                    PopulateTtsVoiceCombo(t.Result);
-                    TtsVoiceCombo.SelectionChanged += OnTtsVoiceSelectionChanged;
+                    if (!t.IsFaulted && !t.IsCanceled)
+                    {
+                        TtsVoiceCombo.SelectionChanged -= OnTtsVoiceSelectionChanged;
+                        PopulateTtsVoiceCombo(t.Result);
+                        TtsVoiceCombo.SelectionChanged += OnTtsVoiceSelectionChanged;
+                    }
                 }), 
                 TaskScheduler.Default);
 
@@ -5945,9 +5950,12 @@ public sealed partial class SettingsPage : Page
         _ = Task.Run(() => TextToSpeechService.Instance.RefreshVoices())
             .ContinueWith(t => DispatcherQueue.TryEnqueue(() =>
             {
-                TtsVoiceCombo.SelectionChanged -= OnTtsVoiceSelectionChanged;
-                PopulateTtsVoiceCombo(t.Result);
-                TtsVoiceCombo.SelectionChanged += OnTtsVoiceSelectionChanged;
+                if (!t.IsFaulted && !t.IsCanceled)
+                {
+                    TtsVoiceCombo.SelectionChanged -= OnTtsVoiceSelectionChanged;
+                    PopulateTtsVoiceCombo(t.Result);
+                    TtsVoiceCombo.SelectionChanged += OnTtsVoiceSelectionChanged;
+                }
 
                 TtsVoiceRefreshButton.IsEnabled = true;
                 TtsVoiceCombo.IsEnabled = true;

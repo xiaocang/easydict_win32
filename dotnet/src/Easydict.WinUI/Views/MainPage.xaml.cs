@@ -2335,19 +2335,26 @@ namespace Easydict.WinUI.Views
 
         /// <summary>
         /// Play the source text using text-to-speech with the detected language voice.
+        /// If this button is already playing, stop it instead.
         /// </summary>
         private async void OnSourcePlayClicked(object sender, RoutedEventArgs e)
         {
+            var tts = TextToSpeechService.Instance;
+
+            if (SourcePlayIcon.Glyph == "\uE71A")
+            {
+                tts.Stop();
+                SourcePlayIcon.Glyph = "\uE768";
+                return;
+            }
+
             var text = InputTextBox.Text;
             if (string.IsNullOrWhiteSpace(text))
                 return;
 
-            // Use detected language if available, otherwise default to English
             var language = _lastDetectedLanguage != TranslationLanguage.Auto
                 ? _lastDetectedLanguage
                 : TranslationLanguage.English;
-
-            var tts = TextToSpeechService.Instance;
 
             void ResetIcon()
             {
@@ -2355,17 +2362,31 @@ namespace Easydict.WinUI.Views
                 DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
             }
 
-            SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
-            tts.PlaybackEnded += ResetIcon;
+            SourcePlayIcon.Glyph = "\uE71A";
             try
             {
                 await tts.SpeakAsync(text, language);
+                if (!tts.IsPlaying)
+                {
+                    SourcePlayIcon.Glyph = "\uE768";
+                }
+                else
+                {
+                    tts.PlaybackEnded += ResetIcon;
+                }
             }
             catch (Exception ex)
             {
-                ResetIcon();
+                SourcePlayIcon.Glyph = "\uE768";
                 Debug.WriteLine($"[TTS Error]: {ex.Message}");
             }
+        }
+
+        private void NotifyAutoPlayTts(ServiceQueryResult serviceResult)
+        {
+            foreach (var control in _resultControls)
+                if (ReferenceEquals(control.ServiceResult, serviceResult) && control is ServiceResultItem sri)
+                { sri.NotifyTtsPlaying(); break; }
         }
 
         private async void OnInputTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
@@ -2678,6 +2699,7 @@ namespace Easydict.WinUI.Views
                                     {
                                         _hasAutoPlayedCurrentQuery = true;
                                         _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                                        NotifyAutoPlayTts(serviceResult);
                                     }
                                 }
                             });
@@ -2959,6 +2981,7 @@ namespace Easydict.WinUI.Views
                         {
                             _hasAutoPlayedCurrentQuery = true;
                             _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                            NotifyAutoPlayTts(serviceResult);
                         }
                     }
                 });
@@ -3225,6 +3248,7 @@ namespace Easydict.WinUI.Views
                     {
                         _hasAutoPlayedCurrentQuery = true;
                         _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                        NotifyAutoPlayTts(serviceResult);
                     }
                 }
             });

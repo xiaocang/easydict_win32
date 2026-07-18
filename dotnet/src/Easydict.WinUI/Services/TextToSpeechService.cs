@@ -46,6 +46,7 @@ public sealed class TextToSpeechService : IDisposable
     private SpeechSynthesisStream? _currentStream;
     private volatile System.Speech.Synthesis.SpeechSynthesizer? _activeSapiSynth;
     private volatile bool _isSapiPlaying;
+    private volatile bool _isWinRtPlaying;
     private CancellationTokenSource? _activeSpeakCts;
     private bool _isDisposed;
 
@@ -57,7 +58,7 @@ public sealed class TextToSpeechService : IDisposable
     /// <summary>
     /// Whether audio is currently playing.
     /// </summary>
-    public bool IsPlaying => (_mediaPlayer?.PlaybackSession?.PlaybackState == MediaPlaybackState.Playing) || _isSapiPlaying;
+    public bool IsPlaying => _isWinRtPlaying || _isSapiPlaying;
 
     private TextToSpeechService()
     {
@@ -106,12 +107,6 @@ public sealed class TextToSpeechService : IDisposable
 
         var ct = newCts.Token;
 
-        if (_semaphore.CurrentCount == 0 && !IsPlaying && _activeSapiSynth == null)
-        {
-            Debug.WriteLine("[TTS] Recovering from orphaned semaphore lock");
-            try { _semaphore.Release(); } catch { }
-        }
-
         await _semaphore.WaitAsync(ct);
         try
         {
@@ -123,10 +118,20 @@ public sealed class TextToSpeechService : IDisposable
                 if (voice.IsSapi5)
                 {
                     var sapi = new System.Speech.Synthesis.SpeechSynthesizer();
-                    _activeSapiSynth = sapi;
 
-                    sapi.SelectVoice(voice.DisplayName);
-                    sapi.SetOutputToDefaultAudioDevice();
+                    try
+                    {
+                        sapi.SelectVoice(voice.DisplayName);
+                        sapi.SetOutputToDefaultAudioDevice();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[TTS] Error initializing SAPI 5 voice: {ex}");
+                        sapi.Dispose();
+                        return;
+                    }
+
+                    _activeSapiSynth = sapi;
 
                     var tcs = new TaskCompletionSource<bool>();
 
@@ -186,6 +191,7 @@ public sealed class TextToSpeechService : IDisposable
             _mediaPlayer.MediaOpened += OnMediaOpened;
             _mediaPlayer.MediaEnded += OnMediaEnded;
             _mediaPlayer.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
+            _isWinRtPlaying = true;
         }
         catch (OperationCanceledException)
         {
@@ -200,6 +206,7 @@ public sealed class TextToSpeechService : IDisposable
         {
             _semaphore.Release();
             Interlocked.CompareExchange(ref _activeSpeakCts, null, newCts);
+            newCts.Dispose();
         }
     }
 
@@ -209,8 +216,8 @@ public sealed class TextToSpeechService : IDisposable
     public void Stop()
     {
         _isSapiPlaying = false;
+        _isWinRtPlaying = false;
         _activeSapiSynth?.SpeakAsyncCancelAll();
-        _activeSapiSynth?.Dispose();
         _activeSapiSynth = null;
 
         if (_mediaPlayer is { PlaybackSession.PlaybackState: MediaPlaybackState.Playing })
@@ -228,11 +235,13 @@ public sealed class TextToSpeechService : IDisposable
 
     private void OnMediaEnded(MediaPlayer sender, object args)
     {
+        _isWinRtPlaying = false;
         PlaybackEnded?.Invoke();
     }
 
     private void CleanupPlayback()
     {
+        _isWinRtPlaying = false;
         if (_mediaPlayer != null)
         {
             _mediaPlayer.MediaOpened -= OnMediaOpened;

@@ -1463,32 +1463,37 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
         {
             var tts = TextToSpeechService.Instance;
 
-            // Reset the icon back to the speaker glyph on the UI thread.
-            void ResetIconGlyph()
+            if (speakerIcon.Glyph == "\uE71A")
             {
-                DispatcherQueue.TryEnqueue(() => speakerIcon.Glyph = "\uE767");
+                tts.Stop();
+                speakerIcon.Glyph = "\uE767";
+                return;
             }
 
-            // Handler for playback completion; unsubscribes itself and resets the icon.
             void OnPlaybackEnded()
             {
                 tts.PlaybackEnded -= OnPlaybackEnded;
-                ResetIconGlyph();
+                DispatcherQueue.TryEnqueue(() => speakerIcon.Glyph = "\uE767");
             }
 
-            speakerIcon.Glyph = "\uE71A"; // Stop icon
-            tts.PlaybackEnded += OnPlaybackEnded;
+            speakerIcon.Glyph = "\uE71A";
 
             try
             {
                 await tts.SpeakAsync(ttsText, ttsLanguage);
+                if (!tts.IsPlaying)
+                {
+                    speakerIcon.Glyph = "\uE767";
+                }
+                else
+                {
+                    tts.PlaybackEnded += OnPlaybackEnded;
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                // Ensure we always detach the handler and reset the icon,
-                // even if SpeakAsync fails, is cancelled, or playback ends early.
-                tts.PlaybackEnded -= OnPlaybackEnded;
-                ResetIconGlyph();
+                speakerIcon.Glyph = "\uE767";
+                Debug.WriteLine($"[TTS Error]: {ex.Message}");
             }
         };
 
@@ -1787,39 +1792,58 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     private async void OnPlayClicked(object sender, RoutedEventArgs e)
     {
+        var tts = TextToSpeechService.Instance;
+
+        if (PlayIcon.Glyph == "\uE71A")
+        {
+            tts.Stop();
+            PlayIcon.Glyph = "\uE768";
+            return;
+        }
+
         var result = _serviceResult?.Result;
         if (result == null || string.IsNullOrEmpty(result.TranslatedText))
             return;
 
-        var tts = TextToSpeechService.Instance;
-
-        // Reset the icon back to the play glyph on the UI thread.
-        void ResetIconGlyph()
-        {
-            DispatcherQueue.TryEnqueue(() => PlayIcon.Glyph = "\uE768");
-        }
-
-        // Handler for playback completion; unsubscribes itself and resets the icon.
         void OnPlaybackEnded()
         {
             tts.PlaybackEnded -= OnPlaybackEnded;
-            ResetIconGlyph();
+            DispatcherQueue.TryEnqueue(() => PlayIcon.Glyph = "\uE768");
         }
 
-        PlayIcon.Glyph = "\uE71A"; // Stop icon
-        tts.PlaybackEnded += OnPlaybackEnded;
+        PlayIcon.Glyph = "\uE71A";
 
         try
         {
             await tts.SpeakAsync(result.TranslatedText, result.TargetLanguage);
+            if (!tts.IsPlaying)
+            {
+                PlayIcon.Glyph = "\uE768";
+            }
+            else
+            {
+                tts.PlaybackEnded += OnPlaybackEnded;
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            // Ensure we always detach the handler and reset the icon,
-            // even if SpeakAsync fails, is cancelled, or playback ends early.
-            tts.PlaybackEnded -= OnPlaybackEnded;
-            ResetIconGlyph();
+            PlayIcon.Glyph = "\uE768";
+            Debug.WriteLine($"[TTS Error]: {ex.Message}");
         }
+    }
+
+    internal void NotifyTtsPlaying()
+    {
+        var tts = TextToSpeechService.Instance;
+        PlayIcon.Glyph = "\uE71A";
+
+        void OnPlaybackEnded()
+        {
+            tts.PlaybackEnded -= OnPlaybackEnded;
+            DispatcherQueue.TryEnqueue(() => PlayIcon.Glyph = "\uE768");
+        }
+
+        tts.PlaybackEnded += OnPlaybackEnded;
     }
 
     /// <summary>

@@ -1101,6 +1101,12 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>TTS 読み上げ速度 (0.5x - 3.0x)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>音声</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>音声リストを更新</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>翻訳結果を自動再生</value>
   </data>

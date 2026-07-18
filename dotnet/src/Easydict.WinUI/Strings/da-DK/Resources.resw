@@ -531,6 +531,12 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>TTS-læsehastighed (0,5× – 3,0×)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>Stemme</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>Opdater stemmer</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Afspil oversættelse automatisk</value>
   </data>

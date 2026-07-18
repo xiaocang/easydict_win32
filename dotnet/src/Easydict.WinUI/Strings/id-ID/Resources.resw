@@ -889,6 +889,12 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>Kecepatan Pembacaan TTS (0,5× – 3,0×)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>Suara</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>Segarkan suara</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Putar terjemahan otomatis</value>
   </data>

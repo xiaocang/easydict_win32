@@ -49,29 +49,6 @@ public sealed class TextToSpeechService : IDisposable
     private TaskCompletionSource? _winRtPlaybackCompletion;
     private bool _isDisposed;
 
-    /// <summary>
-    /// Raised on the caller's thread when playback finishes or is stopped.
-    /// </summary>
-    public event Action? PlaybackEnded;
-
-    /// <summary>
-    /// Whether audio is currently playing.
-    /// </summary>
-    public bool IsPlaying
-    {
-        get
-        {
-            if (_sapiPlayback.IsPlaying)
-            {
-                return true;
-            }
-
-            lock (_playbackLock)
-            {
-                return _winRtPlaybackCompletion != null;
-            }
-        }
-    }
 
     private TextToSpeechService()
         : this(new LatestSpeechRequestGate())
@@ -83,7 +60,6 @@ public sealed class TextToSpeechService : IDisposable
         _requestGate = requestGate ?? throw new ArgumentNullException(nameof(requestGate));
         _synthesizer = new SpeechSynthesizer();
         _sapiPlayback = new SapiPlaybackController(() => new SystemSapiSpeechSynthesizer());
-        _sapiPlayback.PlaybackEnded += () => PlaybackEnded?.Invoke();
     }
 
     /// <summary>
@@ -261,10 +237,6 @@ public sealed class TextToSpeechService : IDisposable
         }
 
         completion?.TrySetResult();
-        if (completion != null)
-        {
-            PlaybackEnded?.Invoke();
-        }
     }
 
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
@@ -290,10 +262,6 @@ public sealed class TextToSpeechService : IDisposable
         }
 
         completion?.TrySetException(exception);
-        if (completion != null)
-        {
-            PlaybackEnded?.Invoke();
-        }
     }
 
     private (MediaPlayer Player, Task Completion) PrepareWinRtPlayback(
@@ -332,7 +300,6 @@ public sealed class TextToSpeechService : IDisposable
 
     private void StopWinRtPlayback(MediaPlayer? expectedPlayer = null)
     {
-        var stopped = false;
         lock (_playbackLock)
         {
             if (_mediaPlayer == null ||
@@ -350,28 +317,15 @@ public sealed class TextToSpeechService : IDisposable
                 // Cleanup below still owns the current playback state.
             }
 
-            stopped = _winRtPlaybackCompletion != null;
             CleanupPlaybackCore();
-        }
-
-        if (stopped)
-        {
-            PlaybackEnded?.Invoke();
         }
     }
 
     private void CleanupPlayback()
     {
-        bool stopped;
         lock (_playbackLock)
         {
-            stopped = _winRtPlaybackCompletion != null;
             CleanupPlaybackCore();
-        }
-
-        if (stopped)
-        {
-            PlaybackEnded?.Invoke();
         }
     }
 

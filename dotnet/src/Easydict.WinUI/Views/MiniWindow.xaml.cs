@@ -50,6 +50,7 @@ public sealed partial class MiniWindow : Window
     private readonly List<IServiceResultView> _resultControls = new();
     private readonly TargetLanguageSelector _targetLanguageSelector;
     private TranslationLanguage _lastDetectedLanguage = TranslationLanguage.Auto;
+    private readonly LatestPlaybackTaskObserver _sourcePlaybackObserver = new();
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
     private bool _isPinned;
@@ -1286,8 +1287,8 @@ public sealed partial class MiniWindow : Window
                                 if (!string.IsNullOrEmpty(targetText))
                                 {
                                     _hasAutoPlayedCurrentQuery = true;
-                                    _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
-                                    NotifyAutoPlayTts(serviceResult);
+                                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                                    NotifyAutoPlayTts(serviceResult, playbackTask);
                                 }
                             }
 
@@ -1750,8 +1751,8 @@ public sealed partial class MiniWindow : Window
                 if (!string.IsNullOrEmpty(targetText))
                 {
                     _hasAutoPlayedCurrentQuery = true;
-                    _ = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
-                    NotifyAutoPlayTts(serviceResult);
+                    var playbackTask = TextToSpeechService.Instance.SpeakAsync(targetText, targetLanguage);
+                    NotifyAutoPlayTts(serviceResult, playbackTask);
                 }
             }
 
@@ -1878,12 +1879,13 @@ public sealed partial class MiniWindow : Window
     /// Play the source text using text-to-speech with the detected language voice.
     /// If this button is already playing, stop it instead.
     /// </summary>
-    private async void OnSourcePlayClicked(object sender, RoutedEventArgs e)
+    private void OnSourcePlayClicked(object sender, RoutedEventArgs e)
     {
         var tts = TextToSpeechService.Instance;
 
         if (SourcePlayIcon.Glyph == "\uE71A")
         {
+            _sourcePlaybackObserver.Invalidate();
             tts.Stop();
             SourcePlayIcon.Glyph = "\uE768";
             return;
@@ -1897,38 +1899,32 @@ public sealed partial class MiniWindow : Window
             ? _lastDetectedLanguage
             : TranslationLanguage.English;
 
-        void OnPlaybackEnded()
-        {
-            tts.PlaybackEnded -= OnPlaybackEnded;
-            DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
-        }
-
         SourcePlayIcon.Glyph = "\uE71A";
+        var playbackTask = tts.SpeakAsync(text, language);
+        _ = _sourcePlaybackObserver.ObserveAsync(
+            playbackTask,
+            (generation, error) => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_sourcePlaybackObserver.IsCurrent(generation))
+                {
+                    return;
+                }
 
-        try
-        {
-            await tts.SpeakAsync(text, language);
-            if (!tts.IsPlaying)
-            {
                 SourcePlayIcon.Glyph = "\uE768";
-            }
-            else
-            {
-                tts.PlaybackEnded += OnPlaybackEnded;
-            }
-        }
-        catch (Exception ex)
-        {
-            SourcePlayIcon.Glyph = "\uE768";
-            Debug.WriteLine($"[TTS Error]: {ex.Message}");
-        }
+                if (error != null)
+                {
+                    Debug.WriteLine($"[TTS Error]: {error.Message}");
+                }
+            }));
     }
 
-    private void NotifyAutoPlayTts(ServiceQueryResult serviceResult)
+    private void NotifyAutoPlayTts(
+        ServiceQueryResult serviceResult,
+        Task playbackTask)
     {
         foreach (var control in _resultControls)
             if (ReferenceEquals(control.ServiceResult, serviceResult) && control is ServiceResultItem sri)
-            { sri.NotifyTtsPlaying(); break; }
+            { sri.NotifyTtsPlaying(playbackTask); break; }
     }
 
     private void SetSourceTextState(bool expanded)

@@ -125,6 +125,133 @@ public class TextToSpeechLifecycleTests
     }
 
     [Fact]
+    public async Task SpeakAsync_WhenPlaybackCompletes_ClearsStateAndDisposesExactlyOnce()
+    {
+        // Arrange
+        var synthesizer = new FakeSapiSpeechSynthesizer();
+        var controller = new SapiPlaybackController(() => synthesizer);
+        var playbackEndedCount = 0;
+        controller.PlaybackEnded += () => Interlocked.Increment(ref playbackEndedCount);
+
+        var playback = controller.SpeakAsync("voice", "hello", 0, CancellationToken.None);
+        await synthesizer.Started.Task.WaitAsync(TestTimeout);
+
+        // Act
+        synthesizer.Complete();
+        await playback.WaitAsync(TestTimeout);
+
+        // Assert
+        controller.IsPlaying.Should().BeFalse();
+        synthesizer.DisposeCount.Should().Be(1);
+        playbackEndedCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ObserveAsync_ImmediateFailure_CompletesLatestWithError()
+    {
+        // Arrange
+        var observer = new LatestPlaybackTaskObserver();
+        Exception? observedError = null;
+        var completionCount = 0;
+
+        // Act
+        await observer.ObserveAsync(
+            Task.FromException(new InvalidOperationException("Voice is unavailable.")),
+            (_, error) =>
+            {
+                observedError = error;
+                completionCount++;
+            });
+
+        // Assert
+        completionCount.Should().Be(1);
+        observedError.Should().BeOfType<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task ObserveAsync_ReplacedPlayback_OnlyCompletesLatest()
+    {
+        // Arrange
+        var observer = new LatestPlaybackTaskObserver();
+        var firstPlayback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondPlayback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstCompletionCount = 0;
+        var secondCompletionCount = 0;
+
+        var firstObservation = observer.ObserveAsync(
+            firstPlayback.Task,
+            (_, _) => firstCompletionCount++);
+        var secondObservation = observer.ObserveAsync(
+            secondPlayback.Task,
+            (_, _) => secondCompletionCount++);
+
+        // Act
+        firstPlayback.SetCanceled();
+        await firstObservation.WaitAsync(TestTimeout);
+        secondPlayback.SetResult();
+        await secondObservation.WaitAsync(TestTimeout);
+
+        // Assert
+        firstCompletionCount.Should().Be(0);
+        secondCompletionCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ObserveAsync_DeferredReset_DoesNotMutateReplacement()
+    {
+        // Arrange
+        var observer = new LatestPlaybackTaskObserver();
+        int? completedGeneration = null;
+        await observer.ObserveAsync(
+            Task.CompletedTask,
+            (generation, _) => completedGeneration = generation);
+        completedGeneration.Should().NotBeNull();
+        observer.IsCurrent(completedGeneration!.Value).Should().BeTrue();
+
+        var replacementPlayback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var replacementObservation = observer.ObserveAsync(
+            replacementPlayback.Task,
+            (_, _) => { });
+
+        // Act: simulate the first completion's already-queued UI callback.
+        var glyph = "Stop";
+        if (observer.IsCurrent(completedGeneration.Value))
+        {
+            glyph = "Play";
+        }
+
+        replacementPlayback.SetResult();
+        await replacementObservation.WaitAsync(TestTimeout);
+
+        // Assert
+        glyph.Should().Be("Stop");
+    }
+
+    [Fact]
+    public async Task Invalidate_BeforeCancellation_SuppressesStoppedPlaybackReset()
+    {
+        // Arrange
+        var observer = new LatestPlaybackTaskObserver();
+        var playback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var completionCount = 0;
+        var observation = observer.ObserveAsync(
+            playback.Task,
+            (_, _) => completionCount++);
+
+        // Act
+        observer.Invalidate();
+        playback.SetCanceled();
+        await observation.WaitAsync(TestTimeout);
+
+        // Assert
+        completionCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Stop_CancelsActivePlayback_AndOwnerDisposesExactlyOnce()
     {
         // Arrange
@@ -200,6 +327,11 @@ public class TextToSpeechLifecycleTests
         public void SpeakAsync(string text)
         {
             Started.TrySetResult(true);
+        }
+
+        public void Complete()
+        {
+            SpeakCompleted?.Invoke(new SapiPlaybackCompletedEventArgs(null, IsCanceled: false));
         }
 
         public void CancelAll()

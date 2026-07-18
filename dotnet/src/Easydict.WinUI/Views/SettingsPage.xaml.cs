@@ -1553,7 +1553,8 @@ public sealed partial class SettingsPage : Page
         TtsSettingsHeaderText.Text = loc.GetString("TtsSettingsHeader");
         TtsSpeedLabelText.Text = loc.GetString("TtsSpeedLabel");
         AutoPlayTranslationToggle.Header = loc.GetString("AutoPlayTranslation");
-        TtsVoiceCombo.Header = loc.GetString("TtsVoiceLabel");
+        TtsVoiceLabelText.Text = loc.GetString("TtsVoiceLabel");
+        AutomationProperties.SetName(TtsVoiceCombo, TtsVoiceLabelText.Text);
         TtsVoicePreviewButtonText.Text = loc.GetString("TtsVoicePreviewButton");
         AutomationProperties.SetName(TtsVoicePreviewButton, TtsVoicePreviewButtonText.Text);
         var voiceRefreshText = loc.GetString("TtsVoiceRefreshTooltip");

@@ -52,6 +52,57 @@ internal sealed class LatestSpeechRequestGate
     }
 }
 
+internal sealed class LatestPlaybackTaskObserver
+{
+    private int _generation;
+
+    internal void Invalidate()
+    {
+        Interlocked.Increment(ref _generation);
+    }
+
+    internal bool IsCurrent(int generation)
+    {
+        return Volatile.Read(ref _generation) == generation;
+    }
+
+    internal Task ObserveAsync(
+        Task playbackTask,
+        Action<int, Exception?> onCompleted)
+    {
+        ArgumentNullException.ThrowIfNull(playbackTask);
+        ArgumentNullException.ThrowIfNull(onCompleted);
+
+        var generation = Interlocked.Increment(ref _generation);
+        return ObserveCoreAsync(playbackTask, generation, onCompleted);
+    }
+
+    private async Task ObserveCoreAsync(
+        Task playbackTask,
+        int generation,
+        Action<int, Exception?> onCompleted)
+    {
+        Exception? error = null;
+        try
+        {
+            await playbackTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation is an expected playback completion path.
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+        }
+
+        if (IsCurrent(generation))
+        {
+            onCompleted(generation, error);
+        }
+    }
+}
+
 internal readonly record struct SapiPlaybackCompletedEventArgs(Exception? Error, bool IsCanceled);
 
 internal interface ISapiSpeechSynthesizer : IDisposable

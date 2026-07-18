@@ -166,6 +166,65 @@ public static class ScreenshotHelper
         return path;
     }
 
+    /// <summary>
+    /// Capture a padded region around elements after the test has moved their
+    /// window to the primary monitor's physical origin.
+    /// </summary>
+    public static string CaptureElementsPhysical(
+        Window window,
+        string name,
+        int padding,
+        params AutomationElement[] elements)
+    {
+        if (elements.Length == 0)
+        {
+            throw new ArgumentException("At least one element is required.", nameof(elements));
+        }
+
+        var left = double.MaxValue;
+        var top = double.MaxValue;
+        var right = double.MinValue;
+        var bottom = double.MinValue;
+        foreach (var element in elements)
+        {
+            var bounds = element.BoundingRectangle;
+            left = Math.Min(left, Convert.ToDouble(bounds.Left));
+            top = Math.Min(top, Convert.ToDouble(bounds.Top));
+            right = Math.Max(right, Convert.ToDouble(bounds.Right));
+            bottom = Math.Max(bottom, Convert.ToDouble(bounds.Bottom));
+        }
+
+        var dpiScale = GetWindowDpiScale(window);
+        var captureBounds = Rectangle.FromLTRB(
+            (int)Math.Floor(left * dpiScale),
+            (int)Math.Floor(top * dpiScale),
+            (int)Math.Ceiling(right * dpiScale),
+            (int)Math.Ceiling(bottom * dpiScale));
+        captureBounds.Inflate(
+            (int)Math.Ceiling(padding * dpiScale),
+            (int)Math.Ceiling(padding * dpiScale));
+        captureBounds = IntersectWithVirtualScreen(captureBounds);
+
+        using var bitmap = new Bitmap(
+            captureBounds.Width,
+            captureBounds.Height,
+            PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.CopyFromScreen(
+                captureBounds.Left,
+                captureBounds.Top,
+                0,
+                0,
+                captureBounds.Size,
+                CopyPixelOperation.SourceCopy);
+        }
+
+        var path = SaveBitmap(bitmap, name);
+        ValidateSavedScreenshot(path, name);
+        return path;
+    }
+
     private static string CaptureWindowViaUia(Window window, string name)
     {
         var image = Capture.Element(window);

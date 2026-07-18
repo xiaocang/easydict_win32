@@ -71,6 +71,11 @@ public class SettingsPageTests : IDisposable
     public void SettingsPage_TtsVoiceRefresh_ShouldRemainUsable()
     {
         var window = _launcher.GetMainWindow();
+        ScreenshotHelper.TrySetWindowPhysicalBounds(
+                window,
+                new Rectangle(0, 0, 600, 700))
+            .Should()
+            .BeTrue("the TTS screenshot requires a deterministic on-screen window");
         Thread.Sleep(2000);
 
         var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
@@ -96,29 +101,82 @@ public class SettingsPageTests : IDisposable
             .NotBeNull("clicking General should reveal its settings content");
         Thread.Sleep(800);
 
-        ScrollHelper.ScrollToPercent(scrollViewer!, 100, _output.WriteLine);
+        var viewportBounds = scrollViewer!.BoundingRectangle;
+        AutomationElement? refreshButton = null;
+        var voiceCombo = ScrollHelper.ScrollToFind(
+            scrollViewer,
+            startPercent: 70,
+            () =>
+            {
+                var combo = FindRenderedByAutomationId(window, "TtsVoiceCombo", scrollViewer);
+                var refresh = FindRenderedByAutomationId(
+                    window,
+                    "TtsVoiceRefreshButton",
+                    scrollViewer);
+                if (combo?.IsOffscreen != false || refresh?.IsOffscreen != false)
+                {
+                    return null;
+                }
 
-        var voiceCombo = Retry.WhileNull(
-            () => FindRenderedByAutomationId(window, "TtsVoiceCombo", scrollViewer),
-            TimeSpan.FromSeconds(10)).Result;
-        var refreshButton = Retry.WhileNull(
-            () => FindRenderedByAutomationId(window, "TtsVoiceRefreshButton", scrollViewer),
-            TimeSpan.FromSeconds(10)).Result;
+                var comboBounds = combo.BoundingRectangle;
+                var refreshBounds = refresh.BoundingRectangle;
+                if (comboBounds.Left < viewportBounds.Left ||
+                    comboBounds.Right > viewportBounds.Right ||
+                    comboBounds.Top < viewportBounds.Top ||
+                    comboBounds.Bottom > viewportBounds.Bottom ||
+                    refreshBounds.Left < viewportBounds.Left ||
+                    refreshBounds.Right > viewportBounds.Right ||
+                    refreshBounds.Top < viewportBounds.Top ||
+                    refreshBounds.Bottom > viewportBounds.Bottom)
+                {
+                    return null;
+                }
+
+                refreshButton = refresh;
+                return combo;
+            },
+            _output.WriteLine);
         voiceCombo.Should().NotBeNull("the TTS voice selector should be visible");
         refreshButton.Should().NotBeNull("the TTS voice refresh button should be visible");
+        voiceCombo!.IsOffscreen.Should().BeFalse("the TTS voice selector must be user-visible");
+        refreshButton!.IsOffscreen.Should().BeFalse("the refresh button must be user-visible");
         var voiceComboBounds = voiceCombo!.BoundingRectangle;
         var refreshButtonBounds = refreshButton!.BoundingRectangle;
         _output.WriteLine(
             $"TTS row bounds: combo={voiceComboBounds}, refresh={refreshButtonBounds}");
-        Math.Abs(voiceComboBounds.Bottom - refreshButtonBounds.Bottom)
+        var voiceComboCenterY = voiceComboBounds.Top + voiceComboBounds.Height / 2;
+        var refreshButtonCenterY = refreshButtonBounds.Top + refreshButtonBounds.Height / 2;
+        Math.Abs(voiceComboCenterY - refreshButtonCenterY)
             .Should()
-            .BeLessOrEqualTo(2, "the TTS voice selector and refresh button should share a row");
-        var alignmentPath = ScreenshotHelper.CaptureWindow(
+            .BeLessOrEqualTo(2, "the TTS voice selector and refresh button should be centered on the same row");
+        var captureWindowBounds = ScreenshotHelper.GetWindowPhysicalBounds(window);
+        ScreenshotHelper.TrySetWindowPhysicalBounds(
+                window,
+                new Rectangle(
+                    captureWindowBounds.Left,
+                    -500,
+                    captureWindowBounds.Width,
+                    captureWindowBounds.Height))
+            .Should()
+            .BeTrue("the TTS settings row must be positioned inside the physical capture");
+        Thread.Sleep(500);
+        voiceCombo = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "TtsVoiceCombo", scrollViewer),
+            TimeSpan.FromSeconds(10)).Result;
+        refreshButton = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "TtsVoiceRefreshButton", scrollViewer),
+            TimeSpan.FromSeconds(10)).Result;
+        voiceCombo.Should().NotBeNull("the shifted TTS voice selector must remain visible");
+        refreshButton.Should().NotBeNull("the shifted TTS refresh button must remain visible");
+        var alignmentPath = ScreenshotHelper.CaptureElementsPhysical(
             window,
-            "18_settings_tts_voice_alignment");
+            "18_settings_tts_voice_alignment",
+            40,
+            voiceCombo!,
+            refreshButton!);
         _output.WriteLine($"Screenshot saved: {alignmentPath}");
 
-        ClickElement(refreshButton!, "TtsVoice.RefreshButton");
+        ClickElementWithMouse(refreshButton!, "TtsVoice.RefreshButton");
 
         var refreshedVoiceCombo = Retry.WhileNull(
             () =>

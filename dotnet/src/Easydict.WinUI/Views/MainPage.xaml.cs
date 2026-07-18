@@ -2349,22 +2349,25 @@ namespace Easydict.WinUI.Views
 
             var tts = TextToSpeechService.Instance;
 
-            void ResetIcon()
+
+            if (SourcePlayIcon.Glyph == "\uE71A")
             {
-                tts.PlaybackEnded -= ResetIcon;
-                DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
+                tts.Stop();
+                return;
             }
 
             SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
-            tts.PlaybackEnded += ResetIcon;
             try
             {
                 await tts.SpeakAsync(text, language);
             }
             catch (Exception ex)
             {
-                ResetIcon();
                 Debug.WriteLine($"[TTS Error]: {ex.Message}");
+            }
+            finally
+            {
+                SourcePlayIcon.Glyph = "\uE768";
             }
         }
 

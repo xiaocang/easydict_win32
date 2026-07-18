@@ -935,6 +935,18 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>Velocità di lettura TTS (0,5× – 3,0×)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>Voce</value>
+  </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Automatico (in base alla lingua)</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>Aggiorna l'elenco delle voci</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Riproduci esempio</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Riproduci automaticamente la traduzione</value>
   </data>

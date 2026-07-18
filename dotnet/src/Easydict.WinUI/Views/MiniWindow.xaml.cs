@@ -1885,21 +1885,14 @@ public sealed partial class MiniWindow : Window
 
         var tts = TextToSpeechService.Instance;
 
-        // Reset the icon back to the play glyph on the UI thread.
-        void ResetIconGlyph()
-        {
-            DispatcherQueue.TryEnqueue(() => SourcePlayIcon.Glyph = "\uE768");
-        }
 
-        // Handler for playback completion; unsubscribes itself and resets the icon.
-        void OnPlaybackEnded()
+        if (SourcePlayIcon.Glyph == "\uE71A")
         {
-            tts.PlaybackEnded -= OnPlaybackEnded;
-            ResetIconGlyph();
+            tts.Stop();
+            return;
         }
 
         SourcePlayIcon.Glyph = "\uE71A"; // Stop icon
-        tts.PlaybackEnded += OnPlaybackEnded;
 
         try
         {
@@ -1907,10 +1900,7 @@ public sealed partial class MiniWindow : Window
         }
         finally
         {
-            // Ensure we always detach the handler and reset the icon,
-            // even if SpeakAsync fails, is cancelled, or playback ends early.
-            tts.PlaybackEnded -= OnPlaybackEnded;
-            ResetIconGlyph();
+            SourcePlayIcon.Glyph = "\uE768";
         }
     }
 

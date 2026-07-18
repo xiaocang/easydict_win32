@@ -1179,6 +1179,18 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>TTS Reading Speed (0.5x - 3.0x)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>Voice</value>
+  </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Automatic (match by language)</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>Refresh voice list</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Play sample</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Auto-play translation</value>
   </data>

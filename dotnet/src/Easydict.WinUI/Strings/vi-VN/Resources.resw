@@ -943,6 +943,18 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>Tốc độ đọc TTS (0,5× – 3,0×)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>Giọng nói</value>
+  </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Tự động (khớp theo ngôn ngữ)</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>Làm mới danh sách giọng nói</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Phát mẫu</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Tự động phát bản dịch</value>
   </data>

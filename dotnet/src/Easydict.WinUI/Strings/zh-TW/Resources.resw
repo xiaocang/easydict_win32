@@ -1134,6 +1134,18 @@
   <data name="TtsSpeedLabel" xml:space="preserve">
     <value>TTS 朗讀速度 (0.5x - 3.0x)</value>
   </data>
+  <data name="TtsVoiceLabel" xml:space="preserve">
+    <value>語音</value>
+  </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>自動（依語言配對）</value>
+  </data>
+  <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
+    <value>重新整理語音清單</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>播放範例</value>
+  </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>自動朗讀譯文</value>
   </data>

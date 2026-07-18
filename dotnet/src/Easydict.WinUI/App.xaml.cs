@@ -57,6 +57,13 @@ namespace Easydict.WinUI
         private PopButtonService? _popButtonService;
         private OcrTranslateService? _ocrTranslateService;
         private AppWindow? _appWindow;
+
+        // ponytail: per-invoke epoch + CTS prevents stale slow-path continuations
+        // from overwriting the singleton MiniWindow/FixedWindow with old text.
+        private CancellationTokenSource? _miniWindowCts;
+        private CancellationTokenSource? _fixedWindowCts;
+        private int _miniInvokeEpoch;
+        private int _fixedInvokeEpoch;
         private bool? _lastSystemDark;
         private int _systemThemeRefreshQueued;
         private nint _themeSubclassHwnd;
@@ -568,22 +575,20 @@ namespace Easydict.WinUI
         {
             try
             {
-                if (MiniWindowService.Instance.IsVisible
-                    && MiniWindowService.Instance.IsForeground)
-                {
-                    _window?.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        MiniWindowService.Instance.Hide();
-                    });
-                    return;
-                }
+                var cts = new CancellationTokenSource();
+                var previousCts = Interlocked.Exchange(ref _miniWindowCts, cts);
+                try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
+                var epoch = Interlocked.Increment(ref _miniInvokeEpoch);
 
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
                 await RaceShowWindowWithSelectionAsync(
                     showEmpty: MiniWindowService.Instance.Show,
-                    showWithText: MiniWindowService.Instance.ShowWithText).ConfigureAwait(false);
+                    showWithText: MiniWindowService.Instance.ShowWithText,
+                    cts,
+                    epoch,
+                    () => Volatile.Read(ref _miniInvokeEpoch)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -595,22 +600,20 @@ namespace Easydict.WinUI
         {
             try
             {
-                if (FixedWindowService.Instance.IsVisible
-                    && FixedWindowService.Instance.IsForeground)
-                {
-                    _window?.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        FixedWindowService.Instance.Hide();
-                    });
-                    return;
-                }
+                var cts = new CancellationTokenSource();
+                var previousCts = Interlocked.Exchange(ref _fixedWindowCts, cts);
+                try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
+                var epoch = Interlocked.Increment(ref _fixedInvokeEpoch);
 
                 // Capture source window before getting text (which may change focus)
                 TextInsertionService.CaptureSourceWindow();
 
                 await RaceShowWindowWithSelectionAsync(
                     showEmpty: FixedWindowService.Instance.Show,
-                    showWithText: FixedWindowService.Instance.ShowWithText).ConfigureAwait(false);
+                    showWithText: FixedWindowService.Instance.ShowWithText,
+                    cts,
+                    epoch,
+                    () => Volatile.Read(ref _fixedInvokeEpoch)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -631,10 +634,17 @@ namespace Easydict.WinUI
         /// user sees instant response, and the translation is filled in when the selection
         /// eventually arrives. Keeps the UI thread free of UIA / ClipWait waits during the
         /// hotkey-to-Activated path.
+        ///
+        /// <paramref name="cts"/> cancels stale continuations from prior invocations.
+        /// <paramref name="invokeEpoch"/> is the generation number that the caller
+        /// bumped; stale continuations whose epoch no longer matches are dropped.
         /// </summary>
         private async Task RaceShowWindowWithSelectionAsync(
             Action showEmpty,
-            Action<string> showWithText)
+            Action<string> showWithText,
+            CancellationTokenSource cts,
+            int invokeEpoch,
+            Func<int> readCurrentEpoch)
         {
             var dispatcher = _window?.DispatcherQueue;
             if (dispatcher is null) return;
@@ -673,6 +683,8 @@ namespace Easydict.WinUI
             _ = textTask.ContinueWith(t =>
             {
                 if (t.Status != TaskStatus.RanToCompletion) return;
+                if (cts.Token.IsCancellationRequested) return;
+                if (invokeEpoch != readCurrentEpoch()) return;
                 var text = t.Result;
                 if (string.IsNullOrWhiteSpace(text)) return;
                 dispatcher.TryEnqueue(() => showWithText(text));

@@ -32,11 +32,15 @@ public sealed class OcrTranslateService
 
         using var cts = new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentCts, cts);
-        try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
+        if (previousCts != null)
+        {
+            previousCts.Cancel();
+            _captureService.CancelCurrentCapture();
+        }
 
         try
         {
-            var capture = await _captureService.CaptureRegionAsync();
+            var capture = await _captureService.CaptureRegionAsync(cts.Token);
             if (capture is null) return;
 
             cts.Token.ThrowIfCancellationRequested();
@@ -104,11 +108,15 @@ public sealed class OcrTranslateService
 
         using var cts = new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentCts, cts);
-        try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
+        if (previousCts != null)
+        {
+            previousCts.Cancel();
+            _captureService.CancelCurrentCapture();
+        }
 
         try
         {
-            var capture = await _captureService.CaptureRegionAsync();
+            var capture = await _captureService.CaptureRegionAsync(cts.Token);
             if (capture is null) return;
 
             cts.Token.ThrowIfCancellationRequested();

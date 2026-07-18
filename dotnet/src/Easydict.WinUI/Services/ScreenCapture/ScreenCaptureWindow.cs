@@ -27,7 +27,8 @@ namespace Easydict.WinUI.Services.ScreenCapture;
 public sealed class ScreenCaptureWindow : IDisposable
 {
     // Window class and style constants
-    private const string WindowClassName = "EasydictScreenCapture";
+    private static int _windowClassCounter;
+    private readonly string _windowClassName = $"EasydictScreenCapture_{Interlocked.Increment(ref _windowClassCounter)}";
     private const int WS_POPUP = unchecked((int)0x80000000);
     private const int WS_EX_TOPMOST = 0x00000008;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -45,6 +46,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_DESTROY = 0x0002;
     private const int WM_SETCURSOR = 0x0020;
+    private const int WM_USER_CANCEL = 0x0400 + 100;
 
     // Virtual keys
     private const int VK_ESCAPE = 0x1B;
@@ -102,6 +104,7 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     // Result
     private TaskCompletionSource<ScreenCaptureResult?>? _resultTcs;
+    private CancellationTokenRegistration _cancellationReg;
     private bool _disposed;
 
     // Tips rendering
@@ -156,11 +159,23 @@ public sealed class ScreenCaptureWindow : IDisposable
     /// Returns null if the user cancels. This runs a message loop and should be
     /// called from a thread that can pump messages (typically a dedicated STA thread
     /// so the UI thread is NOT blocked).
+    /// <paramref name="cancellationToken"/> tears down the overlay without returning a result.
     /// </summary>
-    public Task<ScreenCaptureResult?> CaptureAsync()
+    public Task<ScreenCaptureResult?> CaptureAsync(CancellationToken cancellationToken = default)
     {
         _resultTcs = new TaskCompletionSource<ScreenCaptureResult?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (cancellationToken.CanBeCanceled)
+        {
+            _cancellationReg = cancellationToken.Register(() =>
+            {
+                if (_hwnd != IntPtr.Zero)
+                    PostMessage(_hwnd, WM_USER_CANCEL, 0, 0);
+                else
+                    _resultTcs?.TrySetResult(null);
+            });
+        }
 
         // Run the capture on a dedicated STA thread so the main UI thread stays responsive
         var thread = new Thread(RunCaptureLoop)
@@ -199,6 +214,17 @@ public sealed class ScreenCaptureWindow : IDisposable
         {
             Cleanup();
         }
+    }
+
+    /// <summary>
+    /// Cancels the capture overlay from any thread. Safe to call after capture completes (no-op).
+    /// </summary>
+    public void Cancel()
+    {
+        if (_hwnd != IntPtr.Zero)
+            PostMessage(_hwnd, WM_USER_CANCEL, 0, 0);
+        else
+            _resultTcs?.TrySetResult(null);
     }
 
     private void CaptureDesktop()
@@ -273,7 +299,7 @@ public sealed class ScreenCaptureWindow : IDisposable
             cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
             hInstance = GetModuleHandle(null),
-            lpszClassName = WindowClassName,
+            lpszClassName = _windowClassName,
             style = 0x0008, // CS_DBLCLKS
             hCursor = LoadCursor(IntPtr.Zero, 32515), // IDC_CROSS
         };
@@ -282,7 +308,7 @@ public sealed class ScreenCaptureWindow : IDisposable
 
         _hwnd = CreateWindowEx(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            WindowClassName,
+            _windowClassName,
             "Easydict Screen Capture",
             WS_POPUP | WS_VISIBLE,
             _virtualLeft, _virtualTop, _desktopWidth, _desktopHeight,
@@ -386,6 +412,10 @@ public sealed class ScreenCaptureWindow : IDisposable
 
             case WM_DESTROY:
                 PostQuitMessage(0);
+                return IntPtr.Zero;
+
+            case WM_USER_CANCEL:
+                CancelCapture();
                 return IntPtr.Zero;
 
             default:
@@ -952,6 +982,8 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void Cleanup()
     {
+        _cancellationReg.Dispose();
+
         // Release cached tips DC/bitmap
         if (TipsDc != IntPtr.Zero && _tipsOldBitmap != IntPtr.Zero)
         {
@@ -999,7 +1031,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         _desktopBitmapHandle?.Dispose();
         _desktopBitmapHandle = null;
 
-        try { UnregisterClass(WindowClassName, GetModuleHandle(null)); }
+        try { UnregisterClass(_windowClassName, GetModuleHandle(null)); }
         catch (ExternalException) { }
     }
 
@@ -1110,6 +1142,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int nExitCode);
+    [DllImport("user32.dll")] private static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern nint SetFocus(nint hwnd);
     [DllImport("user32.dll")] private static extern nint LoadCursor(nint hInstance, int lpCursorName);

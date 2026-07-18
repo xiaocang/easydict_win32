@@ -66,12 +66,21 @@ public static class TextInsertionService
     private static IntPtr _sourceWindowHandle;
 
     /// <summary>
-    /// Records the currently focused window as the source window.
+    /// Records the currently focused window as the source window, unless the foreground
+    /// belongs to Easydict itself (in which case the previous non-Easydict source is kept).
     /// Call this before showing any Easydict window.
     /// </summary>
     public static void CaptureSourceWindow()
     {
-        _sourceWindowHandle = GetForegroundWindow();
+        var fg = GetForegroundWindow();
+        if (fg != IntPtr.Zero
+            && GetWindowThreadProcessId(fg, out var pid) != 0
+            && pid == Environment.ProcessId)
+        {
+            Debug.WriteLine($"[TextInsertionService] Foreground is Easydict ({fg}), keeping source: {_sourceWindowHandle}");
+            return;
+        }
+        _sourceWindowHandle = fg;
         Debug.WriteLine($"[TextInsertionService] Captured source window: {_sourceWindowHandle}");
     }
 

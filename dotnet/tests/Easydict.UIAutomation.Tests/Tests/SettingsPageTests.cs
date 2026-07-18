@@ -39,11 +39,12 @@ public class SettingsPageTests : IDisposable
         var window = _launcher.GetMainWindow();
         Thread.Sleep(2000);
 
+
         var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
 
         if (settingsButton != null)
         {
-            settingsButton.Click();
+            ClickElement(settingsButton, "SettingsPage.SettingsButton");
             WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15))
                 .Should()
                 .NotBeNull("Settings should open inside the main window");
@@ -64,6 +65,193 @@ public class SettingsPageTests : IDisposable
             DumpButtonDiagnostics(window, "SettingsPage_ShouldOpenFromMainWindow");
             ScreenshotHelper.CaptureWindow(window, "05_settings_button_not_found");
         }
+    }
+
+    [Fact]
+    public void SettingsPage_TtsVoiceRefresh_ShouldRemainUsable()
+    {
+        var window = _launcher.GetMainWindow();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on the main window");
+        ClickElement(settingsButton!, "TtsVoice.SettingsButton");
+
+        var scrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
+        scrollViewer.Should().NotBeNull("Settings should open before testing TTS voices");
+        var generalTab = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "SettingsTab_General"),
+            TimeSpan.FromSeconds(10)).Result;
+        generalTab.Should().NotBeNull("the General settings tab should be available");
+        window.SetForeground();
+        ClickElementWithMouse(generalTab!, "TtsVoice.GeneralTab");
+        Retry.WhileNull(
+                () => FindRenderedByAutomationId(
+                    window,
+                    "SettingsGeneralBehaviorHeader",
+                    scrollViewer),
+                TimeSpan.FromSeconds(10))
+            .Result
+            .Should()
+            .NotBeNull("clicking General should reveal its settings content");
+        Thread.Sleep(800);
+
+        ScrollHelper.ScrollToPercent(scrollViewer!, 100, _output.WriteLine);
+
+        var voiceCombo = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "TtsVoiceCombo", scrollViewer),
+            TimeSpan.FromSeconds(10)).Result;
+        var refreshButton = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "TtsVoiceRefreshButton", scrollViewer),
+            TimeSpan.FromSeconds(10)).Result;
+        voiceCombo.Should().NotBeNull("the TTS voice selector should be visible");
+        refreshButton.Should().NotBeNull("the TTS voice refresh button should be visible");
+        var voiceComboBounds = voiceCombo!.BoundingRectangle;
+        var refreshButtonBounds = refreshButton!.BoundingRectangle;
+        _output.WriteLine(
+            $"TTS row bounds: combo={voiceComboBounds}, refresh={refreshButtonBounds}");
+        Math.Abs(voiceComboBounds.Bottom - refreshButtonBounds.Bottom)
+            .Should()
+            .BeLessOrEqualTo(2, "the TTS voice selector and refresh button should share a row");
+        var alignmentPath = ScreenshotHelper.CaptureWindow(
+            window,
+            "18_settings_tts_voice_alignment");
+        _output.WriteLine($"Screenshot saved: {alignmentPath}");
+
+        ClickElement(refreshButton!, "TtsVoice.RefreshButton");
+
+        var refreshedVoiceCombo = Retry.WhileNull(
+            () =>
+            {
+                var currentCombo = FindRenderedByAutomationId(
+                    window, "TtsVoiceCombo", scrollViewer);
+                var currentRefresh = FindRenderedByAutomationId(
+                    window, "TtsVoiceRefreshButton", scrollViewer);
+                return currentCombo?.IsEnabled == true && currentRefresh?.IsEnabled == true
+                    ? currentCombo
+                    : null;
+            },
+            TimeSpan.FromSeconds(15)).Result;
+        refreshedVoiceCombo
+            .Should()
+            .NotBeNull("voice refresh should always restore enabled controls");
+
+        Thread.Sleep(800);
+        ScrollHelper.ScrollToPercent(scrollViewer!, 100, _output.WriteLine);
+        Thread.Sleep(800);
+
+        var voiceComboControl = refreshedVoiceCombo!.AsComboBox();
+        voiceComboControl.Should().NotBeNull("the TTS voice selector should expose ComboBox");
+        voiceComboControl!.Expand();
+        Thread.Sleep(400);
+        var voiceItems = voiceComboControl.Items;
+        voiceItems.Should().HaveCountGreaterThan(
+            1,
+            "Windows should expose Auto plus at least one installed TTS voice");
+        var selectedIndex = Array.FindIndex(
+            voiceItems,
+            item => item.Patterns.SelectionItem.PatternOrDefault?.IsSelected.Value == true);
+        voiceComboControl.Select(selectedIndex == 0 ? 1 : 0);
+
+        Retry.WhileNull(
+                () => FindRenderedByAutomationId(window, "SaveButton"),
+                TimeSpan.FromSeconds(5))
+            .Result
+            .Should()
+            .NotBeNull("changing the selected TTS voice must reveal Save Settings");
+
+        var previewButton = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "TtsVoicePreviewButton", scrollViewer),
+            TimeSpan.FromSeconds(10)).Result;
+        previewButton.Should().NotBeNull("a fixed-example TTS playback button should be available");
+        previewButton!.Name.Should().NotBeNullOrWhiteSpace(
+            "the TTS preview button should have a localized accessible name");
+        ClickElement(previewButton, "TtsVoice.PreviewButton");
+        Thread.Sleep(500);
+
+
+    }
+
+    [Fact]
+    public void SettingsPage_TtsChange_ShouldRequireSaveAndDiscardCleanly()
+    {
+        var window = _launcher.GetMainWindow();
+        window.SetForeground();
+        Thread.Sleep(2000);
+
+        var settingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        settingsButton.Should().NotBeNull("SettingsButton must exist on the main window");
+        ClickElement(settingsButton!, "TtsSave.SettingsButton");
+
+        var scrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
+        scrollViewer.Should().NotBeNull("Settings should open before changing TTS");
+        var generalTab = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "SettingsTab_General"),
+            TimeSpan.FromSeconds(10)).Result;
+        generalTab.Should().NotBeNull("the General settings tab should be available");
+        ClickElementWithMouse(generalTab!, "TtsSave.GeneralTab");
+
+        var speedSlider = ScrollHelper.ScrollToFind(
+            scrollViewer!,
+            70,
+            () => FindRenderedByAutomationId(window, "TtsSpeedSlider", scrollViewer),
+            _output.WriteLine);
+        speedSlider.Should().NotBeNull("the TTS speed slider should be rendered");
+
+        var rangeValue = speedSlider!.Patterns.RangeValue.PatternOrDefault;
+        rangeValue.Should().NotBeNull("the TTS speed slider should expose RangeValue");
+        var originalValue = rangeValue!.Value.Value;
+        var targetValue = Math.Abs(originalValue - rangeValue.Minimum.Value) < 0.01
+            ? rangeValue.Maximum.Value
+            : rangeValue.Minimum.Value;
+        rangeValue.SetValue(targetValue);
+
+        Retry.WhileNull(
+                () => FindRenderedByAutomationId(window, "SaveButton"),
+                TimeSpan.FromSeconds(5))
+            .Result
+            .Should()
+            .NotBeNull("changing TTS must reveal Save Settings");
+
+        var backButton = WaitForBackButton(window, TimeSpan.FromSeconds(10));
+        backButton.Should().NotBeNull("settings should expose a back button");
+        ClickElement(backButton!, "TtsSave.BackButton");
+
+        var discardButton = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "SecondaryButton"),
+            TimeSpan.FromSeconds(10)).Result;
+        discardButton.Should().NotBeNull("discarding unsaved TTS changes should be offered");
+        ClickElement(discardButton!, "TtsSave.DiscardButton");
+        Thread.Sleep(1500);
+        window = _launcher.GetMainWindow();
+
+        var reopenedSettingsButton = WaitForSettingsButton(window, TimeSpan.FromSeconds(10));
+        reopenedSettingsButton.Should().NotBeNull("discard should return to the main page");
+        ClickElementWithMouse(reopenedSettingsButton!, "TtsSave.ReopenSettingsButton");
+
+        var reopenedScrollViewer = WaitForSettingsScrollViewer(window, TimeSpan.FromSeconds(15));
+        reopenedScrollViewer.Should().NotBeNull("settings should reopen after discarding");
+        var reopenedGeneralTab = Retry.WhileNull(
+            () => FindRenderedByAutomationId(window, "SettingsTab_General"),
+            TimeSpan.FromSeconds(10)).Result;
+        reopenedGeneralTab.Should().NotBeNull("the General tab should remain available");
+        ClickElementWithMouse(reopenedGeneralTab!, "TtsSave.ReopenedGeneralTab");
+
+        var reopenedSpeedSlider = ScrollHelper.ScrollToFind(
+            reopenedScrollViewer!,
+            70,
+            () => FindRenderedByAutomationId(
+                window,
+                "TtsSpeedSlider",
+                reopenedScrollViewer),
+            _output.WriteLine);
+        reopenedSpeedSlider.Should().NotBeNull("the TTS speed slider should render after reopening");
+        reopenedSpeedSlider!.Patterns.RangeValue.Pattern.Value.Value
+            .Should()
+            .BeApproximately(
+                originalValue,
+                0.01,
+                "discarded TTS changes must not become effective");
     }
 
     [Fact]
@@ -379,6 +567,47 @@ public class SettingsPageTests : IDisposable
             return element != null && IsOnScreenOrUnknown(element)
                 ? element
                 : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static AutomationElement? FindRenderedByAutomationId(
+        Window window,
+        string automationId,
+        AutomationElement? viewport = null)
+    {
+        try
+        {
+            var viewportBounds = (viewport ?? window).BoundingRectangle;
+            AutomationElement? largestElement = null;
+            var largestArea = 0d;
+
+            foreach (var element in window.FindAllDescendants(
+                         cf => cf.ByAutomationId(automationId)))
+            {
+                var bounds = element.BoundingRectangle;
+                var area = bounds.Width * bounds.Height;
+                if (bounds.Width > 1 &&
+                    bounds.Height > 1 &&
+                    bounds.Right > viewportBounds.Left &&
+                    bounds.Left < viewportBounds.Right &&
+                    bounds.Bottom > viewportBounds.Top &&
+                    bounds.Top < viewportBounds.Bottom &&
+                    area > largestArea)
+                {
+                    largestElement = element;
+                    largestArea = area;
+                }
+            }
+
+            return largestElement;
         }
         catch (COMException)
         {

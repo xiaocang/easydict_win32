@@ -534,8 +534,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>Stemme</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Automatisk (tilpas efter sprog)</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>Opdater stemmer</value>
+    <value>Opdater stemmelisten</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Afspil eksempel</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Afspil oversættelse automatisk</value>

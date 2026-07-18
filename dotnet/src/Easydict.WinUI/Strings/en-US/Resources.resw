@@ -1182,8 +1182,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>Voice</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Automatic (match by language)</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>Refresh Voices</value>
+    <value>Refresh voice list</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Play sample</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Auto-play translation</value>

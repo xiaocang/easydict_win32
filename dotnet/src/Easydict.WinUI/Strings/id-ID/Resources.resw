@@ -892,8 +892,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>Suara</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Otomatis (cocokkan berdasarkan bahasa)</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>Segarkan suara</value>
+    <value>Segarkan daftar suara</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Putar contoh</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Putar terjemahan otomatis</value>

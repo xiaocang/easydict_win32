@@ -1104,8 +1104,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>음성</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>자동(언어에 맞춤)</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
     <value>음성 목록 새로 고침</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>샘플 재생</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>번역 결과 자동 재생</value>

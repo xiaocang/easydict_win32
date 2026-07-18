@@ -898,10 +898,16 @@
     <value>ความเร็วในการอ่าน TTS (0.5× – 3.0×)</value>
   </data>
   <data name="TtsVoiceLabel" xml:space="preserve">
-    <value>Voice</value>
+    <value>เสียง</value>
+  </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>อัตโนมัติ (จับคู่ตามภาษา)</value>
   </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>Refresh Voices</value>
+    <value>รีเฟรชรายการเสียง</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>เล่นตัวอย่าง</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>เล่นคำแปลอัตโนมัติ</value>

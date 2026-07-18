@@ -1062,8 +1062,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>Stimme</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Automatisch (nach Sprache)</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
     <value>Stimmen aktualisieren</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Beispiel abspielen</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Übersetzung automatisch wiedergeben</value>

@@ -1104,8 +1104,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>音声</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>自動（言語に合わせる）</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>音声リストを更新</value>
+    <value>音声一覧を更新</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>サンプルを再生</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>翻訳結果を自動再生</value>

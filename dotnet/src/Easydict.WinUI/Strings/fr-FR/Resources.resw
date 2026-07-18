@@ -1062,8 +1062,14 @@
   <data name="TtsVoiceLabel" xml:space="preserve">
     <value>Voix</value>
   </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>Automatique (selon la langue)</value>
+  </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>Actualiser les voix</value>
+    <value>Actualiser la liste des voix</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>Lire l’exemple</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>Lecture automatique de la traduction</value>

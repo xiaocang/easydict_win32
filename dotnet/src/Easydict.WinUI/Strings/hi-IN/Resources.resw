@@ -532,10 +532,16 @@
     <value>TTS पठन गति (0.5× – 3.0×)</value>
   </data>
   <data name="TtsVoiceLabel" xml:space="preserve">
-    <value>Voice</value>
+    <value>आवाज़</value>
+  </data>
+  <data name="TtsVoiceAuto" xml:space="preserve">
+    <value>स्वचालित (भाषा के अनुसार मिलान)</value>
   </data>
   <data name="TtsVoiceRefreshTooltip" xml:space="preserve">
-    <value>Refresh Voices</value>
+    <value>आवाज़ों की सूची रीफ़्रेश करें</value>
+  </data>
+  <data name="TtsVoicePreviewButton" xml:space="preserve">
+    <value>नमूना चलाएँ</value>
   </data>
   <data name="AutoPlayTranslation" xml:space="preserve">
     <value>अनुवाद स्वचालित रूप से चलाएँ</value>

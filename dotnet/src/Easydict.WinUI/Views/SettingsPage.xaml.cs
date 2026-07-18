@@ -5983,6 +5983,11 @@ public sealed partial class SettingsPage : Page
 
     private async void OnTtsVoicePreviewClicked(object sender, RoutedEventArgs e)
     {
+        if (_isUnloaded || _isTornDown)
+        {
+            return;
+        }
+
         var tts = TextToSpeechService.Instance;
         if (TtsVoicePreviewIcon.Glyph == "\uE71A")
         {
@@ -5990,6 +5995,7 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+        var lifetimeToken = _lifetimeCts.Token;
         TtsVoicePreviewIcon.Glyph = "\uE71A";
         try
         {
@@ -5997,11 +6003,15 @@ public sealed partial class SettingsPage : Page
                 TtsVoicePreviewText,
                 TranslationLanguage.English,
                 _pendingTtsVoiceId,
-                TtsSpeedSlider.Value);
+                TtsSpeedSlider.Value,
+                lifetimeToken);
         }
         finally
         {
-            TtsVoicePreviewIcon.Glyph = "\uE768";
+            if (!_isUnloaded && !_isTornDown)
+            {
+                TtsVoicePreviewIcon.Glyph = "\uE768";
+            }
         }
     }
 

@@ -125,6 +125,7 @@ public sealed partial class ServiceResultItem : UserControl, IServiceResultView
 
     public void Cleanup()
     {
+        _ttsPlaybackObserver.Invalidate();
         Debug.WriteLine(
             $"[ServiceResultItem] Cleanup serviceId={_cachedServiceId ?? _serviceResult?.ServiceId ?? "<none>"} webViewInitialized={_webViewInitialized}");
 

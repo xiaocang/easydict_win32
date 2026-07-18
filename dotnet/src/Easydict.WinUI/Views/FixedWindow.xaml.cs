@@ -719,6 +719,8 @@ public sealed partial class FixedWindow : Window
             }
 
             _isClosing = true;
+            // Stop any already-initialized TTS audio immediately.
+            TextToSpeechService.StopIfInitialized();
             SaveWindowPosition();
             await CleanupResourcesAsync();
         }
@@ -2072,6 +2074,9 @@ public sealed partial class FixedWindow : Window
     /// </summary>
     public void HideWindow()
     {
+        // Stop any already-initialized TTS audio immediately.
+        TextToSpeechService.StopIfInitialized();
+
         SaveWindowPosition();
         _appWindow?.Hide();
     }

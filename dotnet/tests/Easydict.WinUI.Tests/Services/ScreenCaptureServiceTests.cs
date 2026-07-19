@@ -8,61 +8,89 @@ namespace Easydict.WinUI.Tests.Services;
 public class ScreenCaptureServiceTests
 {
     [Fact]
-    public void CancelCurrentCapture_DoesNotThrow_WhenNoCaptureInProgress()
+    public void CancelCurrentCapture_DoesNotThrow_WhenIdle()
     {
         var service = new ScreenCaptureService();
-        var exception = Record.Exception(() => service.CancelCurrentCapture());
-        exception.Should().BeNull();
+
+        var single = Record.Exception(() => service.CancelCurrentCapture());
+        var consequent = Record.Exception(() => service.CancelCurrentCapture());
+
+        single.Should().BeNull();
+        consequent.Should().BeNull();
     }
 
     [Fact]
-    public async Task CaptureRegionAsync_CancelledToken_ReturnsNull()
+    public async Task CaptureRegionAsync_ThrowsOnPreCancelledToken()
     {
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         var service = new ScreenCaptureService();
-        // Cancelled token causes WaitAsync before the STA thread even spawns
         var exception = await Record.ExceptionAsync(
             async () => await service.CaptureRegionAsync(cts.Token));
 
-        exception.Should().NotBeNull()
-            .And.Subject.Should()
-            .BeAssignableTo<OperationCanceledException>();
+        exception.Should()
+            .BeAssignableTo<OperationCanceledException>(
+                "WaitAsync must propagate cancellation before semaphore entry");
     }
 
     [Fact]
-    public async Task CaptureRegionAsync_PreCancelledMidFlow_ReturnsNull()
+    public async Task CaptureRegionAsync_SemaphoreSurvivesCancellationCycle()
     {
-        using var cts = new CancellationTokenSource();
+        // Regression: Bug 2 (Silent OCR second invocation deadlock).
+        // If the semaphore leaks after any cancellation, subsequent calls hang.
+        // Run three capture→cancel cycles sequentially; each must complete.
         var service = new ScreenCaptureService();
 
-        // CaptureRegionAsync has a minimum execution time since it spawns an STA thread.
-        // Cancel immediately — this validates the SemaphoreSlim + CancellationToken
-        // integration doesn't hang or deadlock.
+        for (var i = 0; i < 3; i++)
+        {
+            using var cts = new CancellationTokenSource(5000);
+            var task = service.CaptureRegionAsync(cts.Token);
+            await Task.Yield(); // let the STA thread spin up
+            service.CancelCurrentCapture();
+            await task.WaitAsync(cts.Token);
+        }
+    }
+
+    [Fact]
+    public async Task CaptureRegionAsync_TokenCancellationReleasesSemaphore()
+    {
+        // Regression: Bug 2 — token cancellation, like CancelCurrentCapture,
+        // must release the semaphore so a queued caller doesn't deadlock.
+        using var ctsA = new CancellationTokenSource();
+        var service = new ScreenCaptureService();
+
+        var taskA = service.CaptureRegionAsync(ctsA.Token);
+        await Task.Yield();
+        ctsA.Cancel();
+
+        try { await taskA; } catch (OperationCanceledException) { }
+
+        using var ctsB = new CancellationTokenSource(5000);
+        await service
+            .CaptureRegionAsync(ctsB.Token)
+            .WaitAsync(ctsB.Token);
+    }
+
+    [Fact]
+    public async Task CancelCurrentCapture_TerminatesActiveCapture()
+    {
+        // Regression: Bug 3 (pop button fired during OCR capture).
+        // CancelCurrentCapture must terminate the overlay via WM_USER_CANCEL
+        // so that RunOcrPipelineAsync's CTS cancellation actually tears down
+        // the capture and releases the semaphore.
+        using var cts = new CancellationTokenSource(10000);
+        var service = new ScreenCaptureService();
+
         var task = service.CaptureRegionAsync(cts.Token);
-        cts.Cancel();
+        await Task.Yield(); // let overlay initialize
 
-        try { await task; } catch (OperationCanceledException) { }
-
-        // After cancellation, the semaphore should be released so a second call succeeds.
-        var exception = await Record.ExceptionAsync(
-            async () =>
-            {
-                using var cts2 = new CancellationTokenSource(5000);
-                await service.CaptureRegionAsync(cts2.Token);
-            });
-
-        exception.Should().BeNull("semaphore should be released after token cancellation");
-    }
-
-    [Fact]
-    public void CancelCurrentCapture_NoopAfterCompletion()
-    {
-        var service = new ScreenCaptureService();
-        // Cancel called twice should not throw
         service.CancelCurrentCapture();
-        var exception = Record.Exception(() => service.CancelCurrentCapture());
-        exception.Should().BeNull();
+
+        // The task must complete (not hang) — result is null because we
+        // cancelled, not because the overlay never opened.
+        var result = await task.WaitAsync(cts.Token);
+        result.Should().BeNull(
+            "CancelCurrentCapture must terminate the overlay via WM_USER_CANCEL");
     }
 }

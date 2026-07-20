@@ -1358,4 +1358,37 @@
   <data name="ShowSwapButton" xml:space="preserve">
     <value>교체 버튼 표시</value>
   </data>
+  <data name="ClaudeCode_EnableToggle" xml:space="preserve">
+    <value>Claude Code 사용</value>
+  </data>
+  <data name="Codex_EnableToggle" xml:space="preserve">
+    <value>Codex 사용</value>
+  </data>
+  <data name="ClaudeCode_Description" xml:space="preserve">
+    <value>로컬에 설치된 Claude Code CLI로 번역합니다. Claude 구독을 사용하므로 API 키가 필요 없습니다. CLI가 설치되어 로그인되어 있어야 합니다.</value>
+  </data>
+  <data name="Codex_Description" xml:space="preserve">
+    <value>로컬에 설치된 OpenAI Codex CLI로 번역합니다. ChatGPT 구독을 사용하므로 API 키가 필요 없습니다. CLI가 설치되어 로그인되어 있어야 합니다.</value>
+  </data>
+  <data name="AgentCli_InstallLinkText" xml:space="preserve">
+    <value>설치 가이드</value>
+  </data>
+  <data name="Codex_ModelPlaceholder" xml:space="preserve">
+    <value>CLI 기본값</value>
+  </data>
+  <data name="Codex_ReasoningEffort" xml:space="preserve">
+    <value>추론 수준</value>
+  </data>
+  <data name="Codex_EffortDefault" xml:space="preserve">
+    <value>기본값</value>
+  </data>
+  <data name="AgentCliRiskTitle" xml:space="preserve">
+    <value>이 서비스를 사용하시겠습니까?</value>
+  </data>
+  <data name="AgentCliRiskMessage" xml:space="preserve">
+    <value>이 서비스는 개인 구독 계정으로 로컬 AI 에이전트 CLI를 실행합니다. 번역할 때마다 구독 할당량이 소모되며, 자동화된 사용은 제공업체의 서비스 약관의 적용을 받을 수 있습니다. CLI가 설치되어 로그인되어 있어야 합니다.</value>
+  </data>
+  <data name="AgentCliRiskConfirm" xml:space="preserve">
+    <value>사용</value>
+  </data>
 </root>

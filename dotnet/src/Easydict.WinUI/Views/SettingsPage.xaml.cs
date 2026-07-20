@@ -10,6 +10,7 @@ using System.Text.Json;
 using Easydict.TranslationService;
 using Easydict.TranslationService.Models;
 using Easydict.TranslationService.Services;
+using Easydict.TranslationService.Services.AgentCli;
 using TranslationLanguage = Easydict.TranslationService.Models.Language;
 using Easydict.OpenVINO.Services;
 using Easydict.WindowsAI.Services;
@@ -191,6 +192,7 @@ public sealed partial class SettingsPage : Page
     private bool _suppressTtsVoiceSelectionChanged;
     private string _pendingTtsVoiceId = string.Empty;
     private bool _hasUnsavedChanges; // Track whether any settings have been modified since last save
+    private bool _suppressAgentCliToggleDialog; // Reentrancy guard while reverting an agent CLI toggle
     private bool _isMainWindowReorderModeEnabled;
     private bool _isMiniWindowReorderModeEnabled;
     private bool _isFixedWindowReorderModeEnabled;
@@ -1378,6 +1380,19 @@ public sealed partial class SettingsPage : Page
         YoudaoUseOfficialApiToggle.Header = loc.GetString("UseOfficialApi");
         YoudaoUseOfficialApiToggle.OnContent = loc.GetString("OfficialApi");
         YoudaoUseOfficialApiToggle.OffContent = loc.GetString("WebFree");
+        ClaudeCodeEnabledToggle.Header = loc.GetString("ClaudeCode_EnableToggle");
+        ClaudeCodeModelCombo.Header = loc.GetString("Model");
+        ClaudeCodeDescriptionText.Text = loc.GetString("ClaudeCode_Description");
+        ClaudeCodeInstallLink.Content = loc.GetString("AgentCli_InstallLinkText");
+        ClaudeCodeInstallLink.NavigateUri = new Uri(ClaudeCodeService.InstallDocumentationUrl);
+        CodexEnabledToggle.Header = loc.GetString("Codex_EnableToggle");
+        CodexModelBox.Header = loc.GetString("Model");
+        CodexModelBox.PlaceholderText = loc.GetString("Codex_ModelPlaceholder");
+        CodexReasoningEffortCombo.Header = loc.GetString("Codex_ReasoningEffort");
+        CodexEffortDefaultItem.Content = loc.GetString("Codex_EffortDefault");
+        CodexDescriptionText.Text = loc.GetString("Codex_Description");
+        CodexInstallLink.Content = loc.GetString("AgentCli_InstallLinkText");
+        CodexInstallLink.NavigateUri = new Uri(CodexCliService.InstallDocumentationUrl);
 
         // Refresh button for Ollama
         RefreshOllamaButton.Content = loc.GetString("Refresh");
@@ -1398,6 +1413,8 @@ public sealed partial class SettingsPage : Page
         TestCaiyunButton.Content = testButtonText;
         TestNiuTransButton.Content = testButtonText;
         TestVolcanoButton.Content = testButtonText;
+        TestClaudeCodeButton.Content = testButtonText;
+        TestCodexButton.Content = testButtonText;
 
         // Free Services section
         if (FreeServicesHeaderText != null)
@@ -2255,6 +2272,15 @@ public sealed partial class SettingsPage : Page
         YoudaoAppSecretBox.PasswordChanged += OnSettingChanged;
         YoudaoUseOfficialApiToggle.Toggled += OnSettingChanged;
 
+        // Agent CLI services (Claude Code / Codex)
+        ClaudeCodeEnabledToggle.Toggled += OnSettingChanged;
+        ClaudeCodeEnabledToggle.Toggled += OnAgentCliEnabledToggled;
+        ClaudeCodeModelCombo.SelectionChanged += OnSettingChanged;
+        CodexEnabledToggle.Toggled += OnSettingChanged;
+        CodexEnabledToggle.Toggled += OnAgentCliEnabledToggled;
+        CodexModelBox.TextChanged += OnSettingChanged;
+        CodexReasoningEffortCombo.SelectionChanged += OnSettingChanged;
+
         // Layout detection changes
         LayoutDetectionModeCombo.SelectionChanged += OnLayoutDetectionModeChanged;
         VisionLayoutServiceCombo.SelectionChanged += OnSettingChanged;
@@ -2358,6 +2384,14 @@ public sealed partial class SettingsPage : Page
         YoudaoAppKeyBox.PasswordChanged -= OnSettingChanged;
         YoudaoAppSecretBox.PasswordChanged -= OnSettingChanged;
         YoudaoUseOfficialApiToggle.Toggled -= OnSettingChanged;
+
+        ClaudeCodeEnabledToggle.Toggled -= OnSettingChanged;
+        ClaudeCodeEnabledToggle.Toggled -= OnAgentCliEnabledToggled;
+        ClaudeCodeModelCombo.SelectionChanged -= OnSettingChanged;
+        CodexEnabledToggle.Toggled -= OnSettingChanged;
+        CodexEnabledToggle.Toggled -= OnAgentCliEnabledToggled;
+        CodexModelBox.TextChanged -= OnSettingChanged;
+        CodexReasoningEffortCombo.SelectionChanged -= OnSettingChanged;
 
         LayoutDetectionModeCombo.SelectionChanged -= OnLayoutDetectionModeChanged;
         VisionLayoutServiceCombo.SelectionChanged -= OnSettingChanged;
@@ -2697,7 +2731,12 @@ public sealed partial class SettingsPage : Page
             || !SameSecret(VolcanoSecretAccessKeyBox.Password, _settings.VolcanoSecretAccessKey)
             || !SameSecret(YoudaoAppKeyBox.Password, _settings.YoudaoAppKey)
             || !SameSecret(YoudaoAppSecretBox.Password, _settings.YoudaoAppSecret)
-            || YoudaoUseOfficialApiToggle.IsOn != _settings.YoudaoUseOfficialApi;
+            || YoudaoUseOfficialApiToggle.IsOn != _settings.YoudaoUseOfficialApi
+            || ClaudeCodeEnabledToggle.IsOn != _settings.ClaudeCodeEnabled
+            || !SameSetting(GetEditableComboValue(ClaudeCodeModelCombo, ClaudeCodeService.DefaultModel), _settings.ClaudeCodeModel)
+            || CodexEnabledToggle.IsOn != _settings.CodexEnabled
+            || !SameSetting(CodexModelBox.Text?.Trim() ?? "", _settings.CodexModel)
+            || !SameSetting(GetTagComboValue(CodexReasoningEffortCombo, ""), _settings.CodexReasoningEffort);
     }
 
     private bool GeneralTabSettingsDifferFromSettings()
@@ -2943,6 +2982,13 @@ public sealed partial class SettingsPage : Page
             YoudaoAppSecretBox.Password = _settings.YoudaoAppSecret ?? string.Empty;
             YoudaoUseOfficialApiToggle.IsOn = _settings.YoudaoUseOfficialApi;
 
+            // Agent CLI settings (Claude Code / Codex)
+            ClaudeCodeEnabledToggle.IsOn = _settings.ClaudeCodeEnabled;
+            SetEditableComboValue(ClaudeCodeModelCombo, _settings.ClaudeCodeModel);
+            CodexEnabledToggle.IsOn = _settings.CodexEnabled;
+            CodexModelBox.Text = _settings.CodexModel;
+            SetTagComboValue(CodexReasoningEffortCombo, _settings.CodexReasoningEffort, "");
+
             // Restore test status indicators
             RestoreTestStatusIndicators();
 
@@ -3106,7 +3152,9 @@ public sealed partial class SettingsPage : Page
             ["doubao"] = DoubaoStatusText,
             ["caiyun"] = CaiyunStatusText,
             ["niutrans"] = NiuTransStatusText,
-            ["volcano"] = VolcanoStatusText
+            ["volcano"] = VolcanoStatusText,
+            ["claude-code"] = ClaudeCodeStatusText,
+            ["codex"] = CodexStatusText
         };
 
         foreach (var (serviceId, indicator) in statusMap)
@@ -4288,6 +4336,13 @@ public sealed partial class SettingsPage : Page
         _settings.YoudaoAppSecret = string.IsNullOrWhiteSpace(youdaoAppSecret) ? null : youdaoAppSecret;
         _settings.YoudaoUseOfficialApi = YoudaoUseOfficialApiToggle.IsOn;
 
+        // Save Agent CLI settings (Claude Code / Codex)
+        _settings.ClaudeCodeEnabled = ClaudeCodeEnabledToggle.IsOn;
+        _settings.ClaudeCodeModel = GetEditableComboValue(ClaudeCodeModelCombo, ClaudeCodeService.DefaultModel);
+        _settings.CodexEnabled = CodexEnabledToggle.IsOn;
+        _settings.CodexModel = CodexModelBox.Text?.Trim() ?? "";
+        _settings.CodexReasoningEffort = GetTagComboValue(CodexReasoningEffortCombo, "");
+
         // Save encrypted MDX dictionary credentials from dynamic UI
         SaveEncryptedMdxCredentials();
 
@@ -4902,6 +4957,8 @@ public sealed partial class SettingsPage : Page
             "caiyun" => new CaiyunService(httpClient),
             "niutrans" => new NiuTransService(httpClient),
             "volcano" => new VolcanoService(httpClient),
+            "claude-code" => new ClaudeCodeService(httpClient),
+            "codex" => new CodexCliService(httpClient),
             _ => null
         };
     }
@@ -5319,6 +5376,86 @@ public sealed partial class SettingsPage : Page
                     string.IsNullOrWhiteSpace(secretAccessKey) ? "" : secretAccessKey);
             }
         }, TestVolcanoButton, VolcanoStatusText);
+    }
+
+    /// <summary>
+    /// Test Claude Code CLI configuration. The probe instance is force-enabled
+    /// so the test exercises the CLI regardless of the toggle state.
+    /// </summary>
+    private async void OnTestClaudeCode(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("claude-code", service =>
+        {
+            if (service is ClaudeCodeService claudeCode)
+            {
+                claudeCode.Configure(
+                    enabled: true,
+                    GetEditableComboValue(ClaudeCodeModelCombo, ClaudeCodeService.DefaultModel));
+            }
+        }, TestClaudeCodeButton, ClaudeCodeStatusText);
+    }
+
+    /// <summary>
+    /// Test Codex CLI configuration. The probe instance is force-enabled
+    /// so the test exercises the CLI regardless of the toggle state.
+    /// </summary>
+    private async void OnTestCodex(object sender, RoutedEventArgs e)
+    {
+        await TestServiceAsync("codex", service =>
+        {
+            if (service is CodexCliService codex)
+            {
+                codex.Configure(
+                    enabled: true,
+                    CodexModelBox.Text?.Trim(),
+                    GetTagComboValue(CodexReasoningEffortCombo, ""));
+            }
+        }, TestCodexButton, CodexStatusText);
+    }
+
+    /// <summary>
+    /// Risk acknowledgment shown when enabling an agent CLI service (Claude
+    /// Code / Codex), mirroring the upstream macOS gate: translation queries
+    /// consume the user's subscription quota and require a signed-in CLI.
+    /// Reverts the toggle if the user cancels.
+    /// </summary>
+    private async void OnAgentCliEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || _suppressAgentCliToggleDialog) return;
+        if (sender is not ToggleSwitch toggle || !toggle.IsOn) return;
+
+        // Only prompt when moving from persisted-off to on.
+        var alreadyEnabled = ReferenceEquals(toggle, ClaudeCodeEnabledToggle)
+            ? _settings.ClaudeCodeEnabled
+            : _settings.CodexEnabled;
+        if (alreadyEnabled) return;
+
+        var loc = LocalizationService.Instance;
+        var dialog = new ContentDialog
+        {
+            Title = loc.GetString("AgentCliRiskTitle"),
+            Content = loc.GetString("AgentCliRiskMessage"),
+            PrimaryButtonText = loc.GetString("AgentCliRiskConfirm"),
+            CloseButtonText = loc.GetString("Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.XamlRoot
+        };
+
+        var result = await ShowDialogAsync(dialog);
+        if (result != ContentDialogResult.Primary)
+        {
+            // Reverting IsOn re-fires Toggled; the suppress flag skips the
+            // dialog while OnSettingChanged still recomputes the dirty state.
+            _suppressAgentCliToggleDialog = true;
+            try
+            {
+                toggle.IsOn = false;
+            }
+            finally
+            {
+                _suppressAgentCliToggleDialog = false;
+            }
+        }
     }
 
     #region Layout Detection

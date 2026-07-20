@@ -1358,4 +1358,37 @@
   <data name="ShowSwapButton" xml:space="preserve">
     <value>入れ替えボタンを表示</value>
   </data>
+  <data name="ClaudeCode_EnableToggle" xml:space="preserve">
+    <value>Claude Code を有効にする</value>
+  </data>
+  <data name="Codex_EnableToggle" xml:space="preserve">
+    <value>Codex を有効にする</value>
+  </data>
+  <data name="ClaudeCode_Description" xml:space="preserve">
+    <value>ローカルにインストールされた Claude Code CLI で翻訳します。Claude サブスクリプションを利用するため API キーは不要です。CLI のインストールとサインインが必要です。</value>
+  </data>
+  <data name="Codex_Description" xml:space="preserve">
+    <value>ローカルにインストールされた OpenAI Codex CLI で翻訳します。ChatGPT サブスクリプションを利用するため API キーは不要です。CLI のインストールとサインインが必要です。</value>
+  </data>
+  <data name="AgentCli_InstallLinkText" xml:space="preserve">
+    <value>インストールガイド</value>
+  </data>
+  <data name="Codex_ModelPlaceholder" xml:space="preserve">
+    <value>CLI デフォルト</value>
+  </data>
+  <data name="Codex_ReasoningEffort" xml:space="preserve">
+    <value>推論レベル</value>
+  </data>
+  <data name="Codex_EffortDefault" xml:space="preserve">
+    <value>デフォルト</value>
+  </data>
+  <data name="AgentCliRiskTitle" xml:space="preserve">
+    <value>このサービスを有効にしますか？</value>
+  </data>
+  <data name="AgentCliRiskMessage" xml:space="preserve">
+    <value>このサービスは個人のサブスクリプションアカウントでローカル AI エージェント CLI を実行します。翻訳ごとにサブスクリプションの利用枠を消費し、自動化された利用はプロバイダーの利用規約の対象となる場合があります。CLI のインストールとサインインが必要です。</value>
+  </data>
+  <data name="AgentCliRiskConfirm" xml:space="preserve">
+    <value>有効にする</value>
+  </data>
 </root>

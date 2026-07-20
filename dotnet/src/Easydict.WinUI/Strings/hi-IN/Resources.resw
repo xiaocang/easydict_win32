@@ -941,4 +941,37 @@
   <data name="ShowSwapButton" xml:space="preserve">
     <value>स्वैप बटन दिखाएं</value>
   </data>
+  <data name="ClaudeCode_EnableToggle" xml:space="preserve">
+    <value>Enable Claude Code</value>
+  </data>
+  <data name="Codex_EnableToggle" xml:space="preserve">
+    <value>Enable Codex</value>
+  </data>
+  <data name="ClaudeCode_Description" xml:space="preserve">
+    <value>Translate with the locally installed Claude Code CLI using your Claude subscription — no API key needed. The CLI must be installed and signed in.</value>
+  </data>
+  <data name="Codex_Description" xml:space="preserve">
+    <value>Translate with the locally installed OpenAI Codex CLI using your ChatGPT subscription — no API key needed. The CLI must be installed and signed in.</value>
+  </data>
+  <data name="AgentCli_InstallLinkText" xml:space="preserve">
+    <value>Installation guide</value>
+  </data>
+  <data name="Codex_ModelPlaceholder" xml:space="preserve">
+    <value>CLI default</value>
+  </data>
+  <data name="Codex_ReasoningEffort" xml:space="preserve">
+    <value>Reasoning Effort</value>
+  </data>
+  <data name="Codex_EffortDefault" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="AgentCliRiskTitle" xml:space="preserve">
+    <value>Enable this service?</value>
+  </data>
+  <data name="AgentCliRiskMessage" xml:space="preserve">
+    <value>This service runs a local AI agent CLI with your personal subscription account. Each translation consumes your subscription quota, and automated use may be subject to the provider's terms of service. The CLI must already be installed and signed in. Enable at your own discretion.</value>
+  </data>
+  <data name="AgentCliRiskConfirm" xml:space="preserve">
+    <value>Enable</value>
+  </data>
 </root>

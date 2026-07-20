@@ -4,6 +4,7 @@ using Easydict.OpenVINO.Services;
 using Easydict.TranslationService;
 using Easydict.TranslationService.LocalModels;
 using Easydict.TranslationService.Services;
+using Easydict.TranslationService.Services.AgentCli;
 using Easydict.WindowsAI.Services;
 
 namespace Easydict.WinUI.Services;
@@ -456,6 +457,24 @@ public sealed class TranslationManagerService : IDisposable
                 volcano.Configure(
                     _settings.VolcanoAccessKeyId ?? "",
                     _settings.VolcanoSecretAccessKey ?? "");
+            }
+        });
+
+        // Configure Claude Code CLI
+        _translationManager.ConfigureService("claude-code", service =>
+        {
+            if (service is ClaudeCodeService claudeCode)
+            {
+                claudeCode.Configure(_settings.ClaudeCodeEnabled, _settings.ClaudeCodeModel);
+            }
+        });
+
+        // Configure Codex CLI
+        _translationManager.ConfigureService("codex", service =>
+        {
+            if (service is CodexCliService codex)
+            {
+                codex.Configure(_settings.CodexEnabled, _settings.CodexModel, _settings.CodexReasoningEffort);
             }
         });
 

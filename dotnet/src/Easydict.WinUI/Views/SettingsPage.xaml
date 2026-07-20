@@ -1464,6 +1464,113 @@
                             </StackPanel>
                         </Expander>
 
+                        <!-- Claude Code (local agent CLI) -->
+                        <Expander HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Tag="claude-code">
+                            <Expander.Header>
+                                <Grid>
+                                    <TextBlock Text="Claude Code"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="ClaudeCodeStatusText"
+                                            Text="✓"
+                                            FontWeight="SemiBold"
+                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,0,8,0"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Padding="0,8">
+                                <ToggleSwitch x:Name="ClaudeCodeEnabledToggle"
+                                        Header="Enable Claude Code"/>
+                                <ComboBox x:Name="ClaudeCodeModelCombo"
+                                        Header="Model"
+                                        Width="280"
+                                        IsEditable="True">
+                                    <ComboBoxItem Content="sonnet"
+                                            Tag="sonnet"/>
+                                    <ComboBoxItem Content="opus"
+                                            Tag="opus"/>
+                                    <ComboBoxItem Content="haiku"
+                                            Tag="haiku"/>
+                                </ComboBox>
+                                <TextBlock x:Name="ClaudeCodeDescriptionText"
+                                           Text="Translate with the locally installed Claude Code CLI using your Claude subscription — no API key needed. The CLI must be installed and signed in."
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                                <HyperlinkButton x:Name="ClaudeCodeInstallLink"
+                                        Content="Installation guide"
+                                        FontSize="12"
+                                        Padding="0"/>
+                                <Button x:Name="TestClaudeCodeButton"
+                                        Content="Test"
+                                        Click="OnTestClaudeCode"
+                                        Padding="8,4"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- Codex (local agent CLI) -->
+                        <Expander HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Tag="codex">
+                            <Expander.Header>
+                                <Grid>
+                                    <TextBlock Text="Codex"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="CodexStatusText"
+                                            Text="✓"
+                                            FontWeight="SemiBold"
+                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,0,8,0"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Spacing="12"
+                                    Padding="0,8">
+                                <ToggleSwitch x:Name="CodexEnabledToggle"
+                                        Header="Enable Codex"/>
+                                <TextBox x:Name="CodexModelBox"
+                                        Header="Model"
+                                        Width="280"
+                                        HorizontalAlignment="Left"
+                                        PlaceholderText="CLI default"/>
+                                <ComboBox x:Name="CodexReasoningEffortCombo"
+                                        Header="Reasoning Effort"
+                                        Width="280">
+                                    <ComboBoxItem x:Name="CodexEffortDefaultItem"
+                                            Content="Default"
+                                            Tag=""/>
+                                    <ComboBoxItem Content="minimal"
+                                            Tag="minimal"/>
+                                    <ComboBoxItem Content="low"
+                                            Tag="low"/>
+                                    <ComboBoxItem Content="medium"
+                                            Tag="medium"/>
+                                    <ComboBoxItem Content="high"
+                                            Tag="high"/>
+                                </ComboBox>
+                                <TextBlock x:Name="CodexDescriptionText"
+                                           Text="Translate with the locally installed OpenAI Codex CLI using your ChatGPT subscription — no API key needed. The CLI must be installed and signed in."
+                                           FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"/>
+                                <HyperlinkButton x:Name="CodexInstallLink"
+                                        Content="Installation guide"
+                                        FontSize="12"
+                                        Padding="0"/>
+                                <Button x:Name="TestCodexButton"
+                                        Content="Test"
+                                        Click="OnTestCodex"
+                                        Padding="8,4"/>
+                            </StackPanel>
+                        </Expander>
+
                         <!-- Imported MDX Dictionaries (dynamically populated) -->
                         <StackPanel x:Name="ImportedMdxConfigPanel"
                                 Spacing="8"/>

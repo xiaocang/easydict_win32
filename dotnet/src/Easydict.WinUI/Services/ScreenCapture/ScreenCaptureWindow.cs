@@ -27,11 +27,13 @@ namespace Easydict.WinUI.Services.ScreenCapture;
 public sealed class ScreenCaptureWindow : IDisposable
 {
     // Window class and style constants
-    private const string WindowClassName = "EasydictScreenCapture";
+    private static int _windowClassCounter;
+    private readonly string _windowClassName = $"EasydictScreenCapture_{Interlocked.Increment(ref _windowClassCounter)}";
     private const int WS_POPUP = unchecked((int)0x80000000);
     private const int WS_EX_TOPMOST = 0x00000008;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_VISIBLE = 0x10000000;
+    private const int HwndMessage = -3;
 
     // Messages
     private const int WM_PAINT = 0x000F;
@@ -45,6 +47,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_DESTROY = 0x0002;
     private const int WM_SETCURSOR = 0x0020;
+    private const int WM_USER_CANCEL = 0x0400 + 100;
 
     // Virtual keys
     private const int VK_ESCAPE = 0x1B;
@@ -100,9 +103,16 @@ public sealed class ScreenCaptureWindow : IDisposable
     // Drag threshold in pixels — must move beyond this to start free-form selection
     private const int DragThreshold = 5;
 
-    // Result
+    // Result and lifecycle
     private TaskCompletionSource<ScreenCaptureResult?>? _resultTcs;
-    private bool _disposed;
+    private ScreenCaptureResult? _captureResult;
+    private CancellationTokenRegistration _cancellationReg;
+    private readonly object _lifecycleLock = new();
+    private readonly ScreenCaptureLifecycleProbe? _lifecycleProbe;
+    private int _cancellationRequested;
+    private int _captureStarted;
+    private int _cleanupCompleted;
+    private int _disposed;
 
     // Tips rendering
     private SafeGdiObjectHandle? _tipsFont;
@@ -150,38 +160,87 @@ public sealed class ScreenCaptureWindow : IDisposable
         public uint time;
         public POINT pt;
     }
+    public ScreenCaptureWindow()
+    {
+    }
+
+    internal ScreenCaptureWindow(ScreenCaptureLifecycleProbe lifecycleProbe)
+    {
+        _lifecycleProbe = lifecycleProbe;
+    }
 
     /// <summary>
     /// Shows the capture overlay and waits for the user to select a region.
-    /// Returns null if the user cancels. This runs a message loop and should be
-    /// called from a thread that can pump messages (typically a dedicated STA thread
-    /// so the UI thread is NOT blocked).
+    /// Returns null if the user cancels, after the overlay and GDI resources have been torn down.
+    /// This runs a message loop on a dedicated STA thread so the UI thread is not blocked.
     /// </summary>
-    public Task<ScreenCaptureResult?> CaptureAsync()
+    public Task<ScreenCaptureResult?> CaptureAsync(CancellationToken cancellationToken = default)
     {
-        _resultTcs = new TaskCompletionSource<ScreenCaptureResult?>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        // Run the capture on a dedicated STA thread so the main UI thread stays responsive
-        var thread = new Thread(RunCaptureLoop)
+        lock (_lifecycleLock)
         {
-            IsBackground = true,
-            Name = "ScreenCaptureThread"
-        };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        return _resultTcs.Task;
+            if (Interlocked.Exchange(ref _captureStarted, 1) != 0)
+                throw new InvalidOperationException("A screen capture can only be started once.");
+
+            _resultTcs = new TaskCompletionSource<ScreenCaptureResult?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            if (cancellationToken.CanBeCanceled)
+                _cancellationReg = cancellationToken.Register(RequestCancellation);
+
+            // Run the capture on a dedicated STA thread so the main UI thread stays responsive.
+            var thread = new Thread(RunCaptureLoop)
+            {
+                IsBackground = true,
+                Name = "ScreenCaptureThread"
+            };
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+
+            return _resultTcs.Task;
+        }
     }
 
     private void RunCaptureLoop()
     {
+        var failed = false;
         try
         {
-            CaptureDesktop();
-            CreateOverlayWindow();
-            _windowDetector.TakeSnapshot(_hwnd);
-            InitializeTips();
+            _lifecycleProbe?.ThreadStarted.TrySetResult();
+            _lifecycleProbe?.BeforeCaptureGate?.Wait();
+
+            if (Volatile.Read(ref _cancellationRequested) != 0)
+                return;
+
+            var isLifecycleProbe = _lifecycleProbe is not null;
+            if (!isLifecycleProbe)
+                CaptureDesktop();
+
+            if (Volatile.Read(ref _cancellationRequested) != 0)
+                return;
+
+            CreateCaptureWindow(isLifecycleProbe);
+
+            if (Volatile.Read(ref _cancellationRequested) != 0)
+            {
+                DestroyCurrentWindow();
+                return;
+            }
+
+            if (!isLifecycleProbe)
+            {
+                _windowDetector.TakeSnapshot(Volatile.Read(ref _hwnd));
+                InitializeTips();
+            }
+
+            if (Volatile.Read(ref _cancellationRequested) != 0)
+            {
+                DestroyCurrentWindow();
+                return;
+            }
+
+            _lifecycleProbe?.Ready.TrySetResult();
 
             // Win32 message loop
             while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -192,13 +251,39 @@ public sealed class ScreenCaptureWindow : IDisposable
         }
         catch (Exception ex)
         {
+            _lifecycleProbe?.Ready.TrySetException(ex);
+            failed = true;
             Debug.WriteLine($"[ScreenCapture] Error in capture loop: {ex.Message}");
-            _resultTcs?.TrySetResult(null);
+            DestroyCurrentWindow();
         }
         finally
         {
             Cleanup();
+            _lifecycleProbe?.Closed.TrySetResult();
+            _resultTcs?.TrySetResult(
+                Volatile.Read(ref _cancellationRequested) != 0 || failed ? null : _captureResult);
         }
+    }
+
+    /// <summary>
+    /// Cancels the capture overlay from any thread. Safe to call after capture completes (no-op).
+    /// </summary>
+    public void Cancel() => RequestCancellation();
+
+    private void RequestCancellation()
+    {
+        Interlocked.Exchange(ref _cancellationRequested, 1);
+
+        var hwnd = Volatile.Read(ref _hwnd);
+        if (hwnd != IntPtr.Zero)
+            PostMessage(hwnd, WM_USER_CANCEL, 0, 0);
+    }
+
+    private void DestroyCurrentWindow()
+    {
+        var hwnd = Volatile.Read(ref _hwnd);
+        if (hwnd != IntPtr.Zero)
+            DestroyWindow(hwnd);
     }
 
     private void CaptureDesktop()
@@ -264,7 +349,7 @@ public sealed class ScreenCaptureWindow : IDisposable
         Debug.WriteLine($"[ScreenCapture] Desktop captured: {_desktopWidth}×{_desktopHeight} at ({_virtualLeft},{_virtualTop})");
     }
 
-    private void CreateOverlayWindow()
+    private void CreateCaptureWindow(bool isMessageOnly)
     {
         _wndProc = WndProc;
 
@@ -273,23 +358,37 @@ public sealed class ScreenCaptureWindow : IDisposable
             cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
             hInstance = GetModuleHandle(null),
-            lpszClassName = WindowClassName,
+            lpszClassName = _windowClassName,
             style = 0x0008, // CS_DBLCLKS
             hCursor = LoadCursor(IntPtr.Zero, 32515), // IDC_CROSS
         };
 
-        RegisterClassEx(ref wc);
+        if (RegisterClassEx(ref wc) == 0)
+            throw new InvalidOperationException("Failed to register the screen capture window class.");
 
-        _hwnd = CreateWindowEx(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            WindowClassName,
+        var hwnd = CreateWindowEx(
+            isMessageOnly ? 0 : WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            _windowClassName,
             "Easydict Screen Capture",
-            WS_POPUP | WS_VISIBLE,
-            _virtualLeft, _virtualTop, _desktopWidth, _desktopHeight,
-            IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
+            isMessageOnly ? 0 : WS_POPUP | WS_VISIBLE,
+            isMessageOnly ? 0 : _virtualLeft,
+            isMessageOnly ? 0 : _virtualTop,
+            isMessageOnly ? 0 : _desktopWidth,
+            isMessageOnly ? 0 : _desktopHeight,
+            isMessageOnly ? (nint)HwndMessage : IntPtr.Zero,
+            IntPtr.Zero,
+            wc.hInstance,
+            IntPtr.Zero);
 
-        SetForegroundWindow(_hwnd);
-        SetFocus(_hwnd);
+        if (hwnd == IntPtr.Zero)
+            throw new InvalidOperationException("Failed to create the screen capture window.");
+
+        Volatile.Write(ref _hwnd, hwnd);
+        if (!isMessageOnly)
+        {
+            SetForegroundWindow(hwnd);
+            SetFocus(hwnd);
+        }
     }
 
     private nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
@@ -385,7 +484,12 @@ public sealed class ScreenCaptureWindow : IDisposable
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
             case WM_DESTROY:
+                Volatile.Write(ref _hwnd, IntPtr.Zero);
                 PostQuitMessage(0);
+                return IntPtr.Zero;
+
+            case WM_USER_CANCEL:
+                CancelCapture();
                 return IntPtr.Zero;
 
             default:
@@ -823,17 +927,12 @@ public sealed class ScreenCaptureWindow : IDisposable
             return;
         }
 
-        // Extract pixels from frozen desktop bitmap
-        var result = ExtractRegion(sel);
-        _resultTcs?.TrySetResult(result);
-        DestroyWindow(_hwnd);
+        // Extract pixels from frozen desktop bitmap.
+        _captureResult = ExtractRegion(sel);
+        DestroyCurrentWindow();
     }
 
-    private void CancelCapture()
-    {
-        _resultTcs?.TrySetResult(null);
-        DestroyWindow(_hwnd);
-    }
+    private void CancelCapture() => DestroyCurrentWindow();
 
     /// <summary>
     /// Show a confirmation dialog before cancelling. If user says Yes, cancel.
@@ -952,6 +1051,11 @@ public sealed class ScreenCaptureWindow : IDisposable
 
     private void Cleanup()
     {
+        if (Interlocked.Exchange(ref _cleanupCompleted, 1) != 0)
+            return;
+
+        _cancellationReg.Dispose();
+
         // Release cached tips DC/bitmap
         if (TipsDc != IntPtr.Zero && _tipsOldBitmap != IntPtr.Zero)
         {
@@ -999,15 +1103,22 @@ public sealed class ScreenCaptureWindow : IDisposable
         _desktopBitmapHandle?.Dispose();
         _desktopBitmapHandle = null;
 
-        try { UnregisterClass(WindowClassName, GetModuleHandle(null)); }
+        try { UnregisterClass(_windowClassName, GetModuleHandle(null)); }
         catch (ExternalException) { }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        Cleanup();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        RequestCancellation();
+
+        lock (_lifecycleLock)
+        {
+            if (Volatile.Read(ref _captureStarted) == 0)
+                Cleanup();
+        }
     }
 
     // --- P/Invoke declarations ---
@@ -1110,6 +1221,7 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int nExitCode);
+    [DllImport("user32.dll")] private static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern nint SetFocus(nint hwnd);
     [DllImport("user32.dll")] private static extern nint LoadCursor(nint hInstance, int lpCursorName);
@@ -1125,4 +1237,18 @@ public sealed class ScreenCaptureWindow : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int MessageBoxW(nint hwnd, string text, string caption, uint type);
     [DllImport("msimg32.dll")] private static extern bool AlphaBlend(nint hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, nint hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn);
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint hwnd);
+}
+
+internal sealed class ScreenCaptureLifecycleProbe
+{
+    public TaskCompletionSource ThreadStarted { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public TaskCompletionSource Ready { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public TaskCompletionSource Closed { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public ManualResetEventSlim? BeforeCaptureGate { get; init; }
 }

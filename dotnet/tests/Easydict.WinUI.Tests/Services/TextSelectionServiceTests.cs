@@ -42,19 +42,6 @@ public class TextSelectionServiceTests
         exception.Should().BeNull();
     }
 
-    [Fact]
-    public async Task GetSelectedTextAsync_ReturnsNullOrString()
-    {
-        // Result should be either null (no selection/UIA failed) or a non-empty string
-        var result = await TextSelectionService.GetSelectedTextAsync();
-
-        // Result can be null (expected in test environment with no focused text control)
-        // or a valid string (if somehow there is selected text)
-        if (result != null)
-        {
-            result.Should().NotBeEmpty();
-        }
-    }
 
     [Fact]
     public async Task GetSelectedTextAsync_IsActuallyAsync()

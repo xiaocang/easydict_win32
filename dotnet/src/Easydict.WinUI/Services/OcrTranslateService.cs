@@ -12,8 +12,9 @@ public sealed class OcrTranslateService
     private readonly ScreenCaptureService _captureService = new();
     private readonly DispatcherQueue _dispatcherQueue;
 
+
     // Concurrency guard: only one OCR operation can run at a time.
-    // Owned by OcrTranslateAsync/SilentOcrAsync — only those methods create and dispose.
+    // Owned by RunOcrPipelineAsync — only that method creates and disposes.
     // Other code may Cancel() but must NOT Dispose().
     private CancellationTokenSource? _currentCts;
 
@@ -30,67 +31,15 @@ public sealed class OcrTranslateService
     {
         Debug.WriteLine("[OcrTranslate] Starting OCR translate flow...");
 
-        using var cts = new CancellationTokenSource();
-        var previousCts = Interlocked.Exchange(ref _currentCts, cts);
-        try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
+        var text = await RunOcrPipelineAsync("OcrTranslate").ConfigureAwait(false);
+        if (text is null) return;
 
-        try
+        if (!_dispatcherQueue.TryEnqueue(() =>
         {
-            var capture = await _captureService.CaptureRegionAsync();
-            if (capture is null) return;
-
-            cts.Token.ThrowIfCancellationRequested();
-
-            using (capture)
-            {
-                var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
-                LogOcrDiagnostics("OcrTranslate", ocrOptions);
-                var ocrEngine = OcrServiceFactory.Create(ocrOptions);
-                var preferredLanguage = GetPreferredOcrLanguage();
-                var ocrResult = await ocrEngine.RecognizeAsync(
-                    capture, preferredLanguage, cts.Token);
-
-                if (string.IsNullOrWhiteSpace(ocrResult.Text))
-                {
-                    Debug.WriteLine("[OcrTranslate] No text recognized");
-                    return;
-                }
-
-                Debug.WriteLine($"[OcrTranslate] Recognized {ocrResult.Text.Length} chars, showing in MiniWindow");
-
-                // Marshal to UI thread to show the MiniWindow
-                if (!_dispatcherQueue.TryEnqueue(() =>
-                {
-                    MiniWindowService.Instance.ShowWithText(ocrResult.Text);
-                }))
-                {
-                    Debug.WriteLine("[OcrTranslate] Failed to enqueue UI update — dispatcher shut down?");
-                }
-            }
-        }
-        catch (TimeoutException ex)
+            MiniWindowService.Instance.ShowWithText(text);
+        }))
         {
-            var message = $"[OcrTranslate] OCR request timed out: {ex.Message}";
-            Debug.WriteLine(message);
-            App.LogToFile(message);
-        }
-        catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-        {
-            Debug.WriteLine("[OcrTranslate] Operation cancelled");
-        }
-        catch (OperationCanceledException ex)
-        {
-            var message = $"[OcrTranslate] OCR operation cancelled unexpectedly: {ex.Message}";
-            Debug.WriteLine(message);
-            App.LogToFile(message);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[OcrTranslate] Error: {ex.Message}");
-        }
-        finally
-        {
-            Interlocked.CompareExchange(ref _currentCts, null, cts);
+            Debug.WriteLine("[OcrTranslate] Failed to enqueue MiniWindow show — dispatcher shut down?");
         }
     }
 
@@ -102,76 +51,100 @@ public sealed class OcrTranslateService
     {
         Debug.WriteLine("[OcrTranslate] Starting silent OCR flow...");
 
+        var text = await RunOcrPipelineAsync("SilentOcr").ConfigureAwait(false);
+        if (text is null) return;
+
+        if (!_dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                dataPackage.SetText(text);
+                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+                Debug.WriteLine($"[OcrTranslate] Silent OCR: {text.Length} chars → clipboard");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[OcrTranslate] Silent OCR clipboard error: {ex.Message}");
+            }
+        }))
+        {
+            Debug.WriteLine("[OcrTranslate] Failed to enqueue clipboard write — dispatcher shut down?");
+        }
+    }
+
+    private async Task<string?> RunOcrPipelineAsync(string label)
+    {
         using var cts = new CancellationTokenSource();
         var previousCts = Interlocked.Exchange(ref _currentCts, cts);
-        try { previousCts?.Cancel(); } catch (ObjectDisposedException) { }
-
         try
         {
-            var capture = await _captureService.CaptureRegionAsync();
-            if (capture is null) return;
+            CancelPreviousOperation(previousCts);
+            var capture = await _captureService.CaptureRegionAsync(cts.Token).ConfigureAwait(false);
+            if (capture is null) return null;
 
             cts.Token.ThrowIfCancellationRequested();
 
             using (capture)
             {
                 var ocrOptions = OcrServiceOptions.FromSettings(SettingsService.Instance);
-                LogOcrDiagnostics("SilentOcr", ocrOptions);
+                LogOcrDiagnostics(label, ocrOptions);
                 var ocrEngine = OcrServiceFactory.Create(ocrOptions);
                 var preferredLanguage = GetPreferredOcrLanguage();
                 var ocrResult = await ocrEngine.RecognizeAsync(
-                    capture, preferredLanguage, cts.Token);
+                    capture, preferredLanguage, cts.Token).ConfigureAwait(false);
+
+                cts.Token.ThrowIfCancellationRequested();
 
                 if (string.IsNullOrWhiteSpace(ocrResult.Text))
                 {
-                    Debug.WriteLine("[OcrTranslate] No text recognized (silent)");
-                    return;
+                    Debug.WriteLine($"[OcrTranslate] No text recognized ({label})");
+                    return null;
                 }
 
-                Debug.WriteLine($"[OcrTranslate] Silent OCR: {ocrResult.Text.Length} chars → clipboard");
-
-                // Copy to clipboard on UI thread
-                if (!_dispatcherQueue.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
-                        dataPackage.SetText(ocrResult.Text);
-                        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[OcrTranslate] Clipboard error: {ex.Message}");
-                    }
-                }))
-                {
-                    Debug.WriteLine("[OcrTranslate] Failed to enqueue clipboard write — dispatcher shut down?");
-                }
+                Debug.WriteLine($"[OcrTranslate] {label}: {ocrResult.Text.Length} chars recognized");
+                return ocrResult.Text;
             }
         }
         catch (TimeoutException ex)
         {
-            var message = $"[OcrTranslate] Silent OCR request timed out: {ex.Message}";
+            var message = $"[OcrTranslate] {label} timed out: {ex.Message}";
             Debug.WriteLine(message);
             App.LogToFile(message);
+            return null;
         }
         catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
         {
-            Debug.WriteLine("[OcrTranslate] Silent OCR cancelled");
+            Debug.WriteLine($"[OcrTranslate] {label} cancelled");
+            return null;
         }
         catch (OperationCanceledException ex)
         {
-            var message = $"[OcrTranslate] Silent OCR operation cancelled unexpectedly: {ex.Message}";
+            var message = $"[OcrTranslate] {label} cancelled unexpectedly: {ex.Message}";
             Debug.WriteLine(message);
             App.LogToFile(message);
+            return null;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[OcrTranslate] Silent OCR error: {ex.Message}");
+            Debug.WriteLine($"[OcrTranslate] {label} error: {ex.Message}");
+            return null;
         }
         finally
         {
             Interlocked.CompareExchange(ref _currentCts, null, cts);
+        }
+    }
+
+    internal static void CancelPreviousOperation(CancellationTokenSource? previousCts)
+    {
+        try
+        {
+            previousCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The previous operation owner completed between the exchange and cancellation.
         }
     }
 

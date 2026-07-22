@@ -74,7 +74,7 @@ public sealed class PopButtonService : IDisposable
     /// </summary>
     public async void OnDragSelectionEnd(MouseHookService.POINT mouseScreenPoint)
     {
-        if (!_isEnabled || _isDisposed) return;
+        if (!_isEnabled || _isDisposed || ScreenCaptureService.IsCaptureInProgress) return;
 
         // Check if the foreground app is excluded BEFORE any delay or clipboard access
         var processName = GetForegroundProcessName();

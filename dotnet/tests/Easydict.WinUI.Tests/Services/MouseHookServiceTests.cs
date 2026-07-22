@@ -402,4 +402,36 @@ public class MouseHookServiceTests
         _detector.IsLeftButtonDown.Should().BeFalse();
         _detector.IsDragging.Should().BeFalse();
     }
+    [Fact]
+    public void ProcessMouseMessage_ThrowingScrollSubscriber_DoesNotEscape()
+    {
+        using var service = new MouseHookService();
+        service.OnMouseScroll += () => throw new InvalidOperationException("test");
+
+        Action process = () => service.ProcessMouseMessage(0x020A, Pt(100, 100));
+
+        process.Should().NotThrow();
+    }
+
+    [Fact]
+    public void ProcessMouseMessage_ThrowingExclusionPredicate_SkipsDragDispatch()
+    {
+        using var service = new MouseHookService
+        {
+            IsCurrentAppExcluded = () => throw new InvalidOperationException("test")
+        };
+        var dragDispatches = 0;
+        service.OnDragSelectionEnd += _ => dragDispatches++;
+
+        Action process = () =>
+        {
+            service.ProcessMouseMessage(0x0201, Pt(100, 100));
+            service.ProcessMouseMessage(0x0200, Pt(200, 100));
+            service.ProcessMouseMessage(0x0202, Pt(200, 100));
+        };
+
+        process.Should().NotThrow();
+        dragDispatches.Should().Be(0);
+    }
+
 }

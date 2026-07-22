@@ -119,32 +119,56 @@ public sealed class WindowDetector
 
     private bool EnumWindowProc(nint hwnd, nint lParam)
     {
-        if (hwnd == _ownWindowHandle) return true;
-        if (!IsWindowVisible(hwnd)) return true;
-
-        // Skip desktop background windows (Progman = desktop, WorkerW = wallpaper worker)
-        var className = GetWindowClassName(hwnd);
-        if (className is "Progman" or "WorkerW")
-            return true;
-
-        // Skip windows with zero size
-        if (!GetWindowRect(hwnd, out var rect)) return true;
-        if (rect.Width <= 0 || rect.Height <= 0) return true;
-
-        var info = new WindowInfo { Hwnd = hwnd, Rect = rect };
-
-        // Enumerate child windows
-        EnumChildWindows(hwnd, (childHwnd, _) =>
+        try
         {
-            if (!IsWindowVisible(childHwnd)) return true;
-            if (!GetWindowRect(childHwnd, out var childRect)) return true;
-            if (childRect.Width <= 0 || childRect.Height <= 0) return true;
+            if (hwnd == _ownWindowHandle) return true;
+            if (!IsWindowVisible(hwnd)) return true;
 
-            info.Children.Add(new WindowInfo { Hwnd = childHwnd, Rect = childRect });
-            return true;
-        }, IntPtr.Zero);
+            // Skip desktop background windows (Progman = desktop, WorkerW = wallpaper worker)
+            var className = GetWindowClassName(hwnd);
+            if (className is "Progman" or "WorkerW")
+                return true;
 
-        _topLevelWindows.Add(info);
+            // Skip windows with zero size
+            if (!GetWindowRect(hwnd, out var rect)) return true;
+            if (rect.Width <= 0 || rect.Height <= 0) return true;
+
+            var info = new WindowInfo { Hwnd = hwnd, Rect = rect };
+
+            // Enumerate child windows
+            EnumChildWindows(hwnd, (childHwnd, _) =>
+            {
+                try
+                {
+                    if (!IsWindowVisible(childHwnd)) return true;
+                    if (!GetWindowRect(childHwnd, out var childRect)) return true;
+                    if (childRect.Width <= 0 || childRect.Height <= 0) return true;
+
+                    info.Children.Add(new WindowInfo { Hwnd = childHwnd, Rect = childRect });
+                }
+                catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+                {
+                    CrashDiagnostics.LogException(
+                        "WindowDetector.EnumChildWindows",
+                        ex,
+                        isTerminating: false,
+                        isHandled: true);
+                }
+
+                return true;
+            }, IntPtr.Zero);
+
+            _topLevelWindows.Add(info);
+        }
+        catch (Exception ex) when (!CrashDiagnostics.IsProcessFatal(ex))
+        {
+            CrashDiagnostics.LogException(
+                "WindowDetector.EnumWindows",
+                ex,
+                isTerminating: false,
+                isHandled: true);
+        }
+
         return true;
     }
 

@@ -4370,7 +4370,7 @@ public sealed partial class SettingsPage : Page
         ResetServiceReorderModes();
 
         // Reload hotkeys immediately
-        App.LogToFile("[SettingsPage] Triggering hotkey reload");
+        CrashDiagnostics.Log("[SettingsPage] Triggering hotkey reload");
         var hotkeyFailures = App.HotkeyService?.ReloadHotkeys();
 
         // Refresh window service results to pick up new EnabledQuery settings
